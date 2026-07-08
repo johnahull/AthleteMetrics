@@ -20,7 +20,8 @@ if (!process.env.NODE_ENV) {
 
 // Validate all required environment configuration once, at startup. This folds
 // in the SESSION_SECRET length/entropy/production rules and fails fast (with a
-// readable report) on any misconfiguration. See packages/api/config/env.ts.
+// readable report) on any misconfiguration. The returned config is also cached
+// for typed retrieval elsewhere via getEnv(). See packages/api/config/env.ts.
 validateEnvOrExit();
 
 const app = express();

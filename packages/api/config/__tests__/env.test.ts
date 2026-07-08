@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { parseEnv, validateEnvOrExit } from '../env';
+import { parseEnv, validateEnvOrExit, getEnv } from '../env';
 
 // A strong 64-char secret (no repeated halves, no common words); and a strong
 // 32-char secret (valid outside production, too short for production).
@@ -34,6 +34,15 @@ describe('parseEnv', () => {
 
   it('rejects a missing DATABASE_URL', () => {
     expect(() => parseEnv(base({ DATABASE_URL: undefined }))).toThrow();
+  });
+
+  it('rejects a DATABASE_URL that is not a postgres connection string', () => {
+    expect(() => parseEnv(base({ DATABASE_URL: 'not-a-url' }))).toThrow(/postgres/i);
+  });
+
+  it('accepts both postgres:// and postgresql:// schemes', () => {
+    expect(parseEnv(base({ DATABASE_URL: 'postgres://localhost:5432/test' })).DATABASE_URL).toContain('postgres://');
+    expect(parseEnv(base({ DATABASE_URL: 'postgresql://localhost:5432/test' })).DATABASE_URL).toContain('postgresql://');
   });
 
   it('rejects a missing SESSION_SECRET', () => {
@@ -79,6 +88,11 @@ describe('validateEnvOrExit', () => {
   it('returns the validated config on success', () => {
     const env = validateEnvOrExit(base() as any);
     expect(env.DATABASE_URL).toContain('postgresql://');
+  });
+
+  it('caches the validated config for retrieval via getEnv()', () => {
+    const env = validateEnvOrExit(base({ SESSION_SECRET: STRONG_SECRET }) as any);
+    expect(getEnv()).toBe(env);
   });
 
   it('exits(1) and prints ONLY the SESSION_SECRET hint for a secret-only failure', () => {
