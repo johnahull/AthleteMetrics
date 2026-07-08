@@ -18,6 +18,10 @@ import { z } from 'zod';
 export const DEFAULT_NODE_ENV = 'production';
 
 // Weak-secret detection (repeated chars/patterns and common words).
+// NOTE: /^(.*)\1$/ uses a backreference that can backtrack super-linearly on
+// near-repeating input. This is safe here because SESSION_SECRET comes from the
+// operator's environment (not user input) and is short and bounded, so it is not
+// a ReDoS vector.
 const WEAK_SECRET_PATTERNS = [
   /^(.)\1+$/,           // single repeated character
   /^(..)\1+$/,          // repeated 2-char pattern

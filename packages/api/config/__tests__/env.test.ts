@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { parseEnv } from '../env';
+import { describe, it, expect, vi } from 'vitest';
+import { parseEnv, validateEnvOrExit } from '../env';
 
 // A strong 64-char secret (no repeated halves, no common words); and a strong
 // 32-char secret (valid outside production, too short for production).
@@ -66,5 +66,40 @@ describe('parseEnv', () => {
   it('accepts a strong 64+ char SESSION_SECRET in production', () => {
     const env = parseEnv(base({ NODE_ENV: 'production', SESSION_SECRET: STRONG_SECRET }));
     expect(env.NODE_ENV).toBe('production');
+  });
+});
+
+describe('validateEnvOrExit', () => {
+  function withMocks(fn: (exit: any, err: any) => void) {
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try { fn(exit, err); } finally { exit.mockRestore(); err.mockRestore(); }
+  }
+
+  it('returns the validated config on success', () => {
+    const env = validateEnvOrExit(base() as any);
+    expect(env.DATABASE_URL).toContain('postgresql://');
+  });
+
+  it('exits(1) and prints ONLY the SESSION_SECRET hint for a secret-only failure', () => {
+    withMocks((exit, err) => {
+      validateEnvOrExit(base({ SESSION_SECRET: 'shortsecret' }) as any);
+      expect(exit).toHaveBeenCalledWith(1);
+      const out = err.mock.calls.flat().join('\n');
+      expect(out).toMatch(/SESSION_SECRET/);
+      expect(out).toMatch(/openssl rand -hex 64/);
+      expect(out).not.toMatch(/valid PostgreSQL connection string/);
+    });
+  });
+
+  it('exits(1) and prints ONLY the DATABASE_URL hint for a db-only failure', () => {
+    withMocks((exit, err) => {
+      validateEnvOrExit(base({ DATABASE_URL: undefined }) as any);
+      expect(exit).toHaveBeenCalledWith(1);
+      const out = err.mock.calls.flat().join('\n');
+      expect(out).toMatch(/DATABASE_URL/);
+      expect(out).toMatch(/valid PostgreSQL connection string/);
+      expect(out).not.toMatch(/openssl rand/);
+    });
   });
 });
