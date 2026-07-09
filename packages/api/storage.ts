@@ -56,15 +56,16 @@ export interface IStorage {
   authenticateUser(username: string, password: string): Promise<User | null>;
   authenticateUserByEmail(email: string, password: string): Promise<User | null>;
   getUserByEmail(email: string): Promise<User | undefined>;
-  getUsersByEmail(email: string): Promise<User[]>;
+  // executor?: pass a transaction handle to run within an existing db.transaction.
+  getUsersByEmail(email: string, executor?: any): Promise<User[]>;
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByGoogleId(googleId: string): Promise<User | null>;
   getUserByAppleId(appleId: string): Promise<User | null>;
-  createUser(user: InsertUser | InsertOAuthUser): Promise<User>;
+  createUser(user: InsertUser | InsertOAuthUser, executor?: any): Promise<User>;
   getUsers(): Promise<User[]>;
-  getUser(id: string): Promise<User | undefined>;
+  getUser(id: string, executor?: any): Promise<User | undefined>;
   getUsersBatch(ids: string[]): Promise<Map<string, User>>;
-  updateUser(id: string, user: Partial<InsertUser>): Promise<User>;
+  updateUser(id: string, user: Partial<InsertUser>, executor?: any): Promise<User>;
   deleteUser(id: string): Promise<void>;
   hardDeleteUser(id: string): Promise<void>;
   getUserOrganizations(userId: string): Promise<(UserOrganization & { organization: Organization })[]>;
@@ -100,7 +101,7 @@ export interface IStorage {
   updateTeamMembership(teamId: string, userId: string, membershipData: { leftAt?: Date; season?: string }): Promise<any>;
 
   // User Management
-  addUserToOrganization(userId: string, organizationId: string, role: string): Promise<UserOrganization>;
+  addUserToOrganization(userId: string, organizationId: string, role: string, executor?: any): Promise<UserOrganization>;
   addUserToTeam(userId: string, teamId: string): Promise<UserTeam>;
   removeUserFromOrganization(userId: string, organizationId: string, validateLastAdmin?: boolean): Promise<void>;
   removeUserFromTeam(userId: string, teamId: string): Promise<void>;
@@ -467,10 +468,10 @@ export class DatabaseStorage implements IStorage {
     return user || undefined;
   }
 
-  async getUsersByEmail(email: string): Promise<User[]> {
+  async getUsersByEmail(email: string, executor: any = db): Promise<User[]> {
     // Use PostgreSQL array search with ANY operator to find ALL users with the email
     // Order by createdAt ASC for deterministic results (oldest user first)
-    const matchingUsers = await db.select().from(users).where(
+    const matchingUsers = await executor.select().from(users).where(
       and(
         sql`${email} = ANY(${users.emails})`,
         whereUserNotDeleted() // Exclude soft-deleted users
@@ -545,7 +546,7 @@ export class DatabaseStorage implements IStorage {
       .where(eq(accountLinkingTokens.token, hashToken(token)));
   }
 
-  async createUser(user: InsertUser | InsertOAuthUser): Promise<User> {
+  async createUser(user: InsertUser | InsertOAuthUser, executor: any = db): Promise<User> {
     // Check if this is an OAuth user (has googleId or appleId but no password)
     const isOAuthUser = ((user as any).googleId || (user as any).appleId) && !user.password;
 
@@ -605,7 +606,7 @@ export class DatabaseStorage implements IStorage {
       }
     });
 
-    const [newUser] = await db.insert(users).values(finalData).returning();
+    const [newUser] = await executor.insert(users).values(finalData).returning();
     return newUser;
   }
 
@@ -636,8 +637,8 @@ export class DatabaseStorage implements IStorage {
       .orderBy(asc(invitations.createdAt));
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(
+  async getUser(id: string, executor: any = db): Promise<User | undefined> {
+    const [user] = await executor.select().from(users).where(
       and(
         eq(users.id, id),
         whereUserNotDeleted() // Exclude soft-deleted users
@@ -669,7 +670,7 @@ export class DatabaseStorage implements IStorage {
       );
   }
 
-  async updateUser(id: string, user: Partial<InsertUser>): Promise<User> {
+  async updateUser(id: string, user: Partial<InsertUser>, executor: any = db): Promise<User> {
     // List of valid database columns that can be updated
     const validUserColumns = [
       'username', 'emails', 'password', 'firstName', 'lastName',
@@ -699,7 +700,7 @@ export class DatabaseStorage implements IStorage {
 
     // Update computed fields if relevant data changed
     if (user.firstName || user.lastName) {
-      const currentUser = await this.getUser(id);
+      const currentUser = await this.getUser(id, executor);
       if (currentUser) {
         const firstName = user.firstName || currentUser.firstName;
         const lastName = user.lastName || currentUser.lastName;
@@ -711,7 +712,7 @@ export class DatabaseStorage implements IStorage {
       updateData.birthYear = new Date(user.birthDate).getFullYear();
     }
 
-    const [updatedUser] = await db.update(users)
+    const [updatedUser] = await executor.update(users)
       .set(updateData)
       .where(eq(users.id, id))
       .returning();
@@ -1442,21 +1443,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   // User Management
-  async addUserToOrganization(userId: string, organizationId: string, role: string): Promise<UserOrganization> {
+  async addUserToOrganization(userId: string, organizationId: string, role: string, executor: any = db): Promise<UserOrganization> {
     // Validate that role is organization-specific only
     if (!['org_admin', 'coach', 'athlete'].includes(role)) {
       throw new Error(`Invalid organization role: ${role}. Must be org_admin, coach, or athlete`);
     }
 
     // First remove any existing roles for this user in this organization
-    await db.delete(userOrganizations)
+    await executor.delete(userOrganizations)
       .where(and(
         eq(userOrganizations.userId, userId),
         eq(userOrganizations.organizationId, organizationId)
       ));
 
     // Then insert the new single role
-    const [userOrg] = await db.insert(userOrganizations).values({
+    const [userOrg] = await executor.insert(userOrganizations).values({
       userId,
       organizationId,
       role
@@ -1696,7 +1697,7 @@ export class DatabaseStorage implements IStorage {
     }
   ): Promise<{ user: User; invitation: Invitation }> {
     // Use database transaction with row-level locking to prevent race conditions
-    return await db.transaction(async (tx: any) => {
+    const { user, invitation } = await db.transaction(async (tx: any) => {
       // Lock the invitation row with SELECT FOR UPDATE
       // This prevents concurrent acceptance attempts
       const [invitation] = await tx.select()
@@ -1726,7 +1727,7 @@ export class DatabaseStorage implements IStorage {
         console.log("Invitation linked to existing athlete:", invitation.playerId);
 
         // Get the existing athlete/user
-        const existingUser = await this.getUser(invitation.playerId);
+        const existingUser = await this.getUser(invitation.playerId, tx);
 
         if (!existingUser) {
           throw new Error("Linked athlete not found");
@@ -1739,12 +1740,12 @@ export class DatabaseStorage implements IStorage {
           password: userInfo.password,
           isActive: true,
           ...legalData
-        });
+        }, tx);
 
         console.log("Updated existing athlete with credentials:", user.id);
       } else {
         // Check if a user with this email already exists
-        const existingUsers = await this.getUsersByEmail(invitation.email);
+        const existingUsers = await this.getUsersByEmail(invitation.email, tx);
 
         if (existingUsers.length > 0) {
           // Warn if multiple users found (should be rare after migration)
@@ -1785,7 +1786,7 @@ export class DatabaseStorage implements IStorage {
 
           // Only update if there's something to update
           if (Object.keys(updateData).length > 0) {
-            user = await this.updateUser(existingUser.id, updateData);
+            user = await this.updateUser(existingUser.id, updateData, tx);
             console.log("[Invitation] Updated existing user for invitation:", user.id);
           } else {
             user = existingUser;
@@ -1814,7 +1815,7 @@ export class DatabaseStorage implements IStorage {
           }
 
           try {
-            user = await this.createUser(createUserData);
+            user = await this.createUser(createUserData, tx);
             console.log("User created successfully:", user.id);
           } catch (error) {
             console.error("Error creating user:", error);
@@ -1833,19 +1834,12 @@ export class DatabaseStorage implements IStorage {
         organizationId: invitation.organizationId,
         role: orgRole
       });
-      await this.addUserToOrganization(user.id, invitation.organizationId, orgRole);
+      await this.addUserToOrganization(user.id, invitation.organizationId, orgRole, tx);
 
-      // Add user to teams if specified
-      if (invitation.teamIds && invitation.teamIds.length > 0) {
-        for (const teamId of invitation.teamIds) {
-          try {
-            await this.addUserToTeam(user.id, teamId);
-          } catch (error) {
-            // May already be in team - that's okay
-            console.log("User may already be in team:", error);
-          }
-        }
-      }
+      // NOTE: team membership is added AFTER the transaction commits (see below).
+      // It is best-effort (errors are swallowed) and must not run inside the
+      // transaction: a swallowed failure would poison the transaction, and a
+      // separate-connection insert cannot see the not-yet-committed user.
 
       // Mark the invitation as used and accepted (using transaction connection)
       await tx.update(invitations)
@@ -1895,6 +1889,31 @@ export class DatabaseStorage implements IStorage {
 
       return { user, invitation };
     });
+
+    // Best-effort team membership, AFTER the transaction has committed so the
+    // user row is visible on a fresh connection and a failure here cannot roll
+    // back the accepted invitation (it is intentionally non-critical).
+    if (invitation.teamIds && invitation.teamIds.length > 0) {
+      // Sequential (not Promise.all): addUserToTeam is a non-atomic
+      // check-then-insert, so concurrent calls for a duplicated team id would
+      // race and create duplicate roster rows. De-duplicate and process one at a
+      // time. Best-effort: the invitation is already accepted, so a genuine
+      // failure (e.g. the team was deleted between invite and acceptance) is
+      // logged at error level for remediation but must not block the user.
+      for (const teamId of [...new Set(invitation.teamIds)] as string[]) {
+        try {
+          await this.addUserToTeam(user.id, teamId);
+        } catch (error) {
+          console.error(
+            `[Invitation] Failed to add user ${user.id} to team ${teamId} after acceptance; ` +
+            `roster membership was NOT created and may need manual remediation:`,
+            error
+          );
+        }
+      }
+    }
+
+    return { user, invitation };
   }
 
   // Email Verification
@@ -2115,7 +2134,13 @@ export class DatabaseStorage implements IStorage {
         .where(eq(membershipRequests.id, id))
         .returning();
 
-      // Add user to organization
+      // Add user to organization.
+      // NOTE: full atomicity of approval is NOT yet achieved here — linkAthleteAccounts
+      // above transfers measurements/roster and deactivates the old athlete on the
+      // pooled db handle, outside this transaction. Rather than thread tx through only
+      // this call (a mixed state that could partially roll back and corrupt data), keep
+      // it consistent with those writes (no tx). Threading tx through linkAthleteAccounts
+      // to make the whole approval atomic is a separate, larger change.
       await this.addUserToOrganization(request.userId, request.organizationId, 'athlete');
 
       return updated;
