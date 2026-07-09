@@ -33,8 +33,12 @@ import { assembleTrends } from './report-trends';
 import { computeDistribution } from './report-distributions';
 import { assembleTeamTrends, computeTeamDistribution } from './report-team-charts';
 import { buildCohortLabel } from './cohort-label';
+import { pickLatestInWindow, toReportFvProfile } from './report-fv';
+import { SprintFvService } from './sprint-fv-service';
+import { checkSprintFvEnabled } from '../middleware/require-sprint-fv-enabled';
 import { resolveChartSelection, resolveTeamChartSelection, type ChartSelection } from '@shared/report-charts';
 import type { ReportTrends, ReportDistributions, TeamReportTrends, TeamReportDistributions } from '@shared/report-trends-types';
+import type { ReportFvProfile } from '@shared/report-fv-types';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
 
 interface TimeframeConfig {
@@ -152,8 +156,12 @@ interface IndividualReportData {
   orgBranding?: OrgBranding;
   trends?: ReportTrends; // present only when reportConfig.showTrends is true
   distributions?: ReportDistributions;
+  fvProfile?: ReportFvProfile; // present only when charts.fvProfile is selected and the sprint-FV flag is on
   comparisonLabel?: string; // cohort name for the "Where You Stand" caption (undefined = org-wide)
 }
+
+// Read-only lookups of stored F-V profiles (same pattern as sprint-fv-routes.ts).
+const sprintFvService = new SprintFvService();
 
 export class ReportService extends BaseService {
   // Cache for metric info to prevent N+1 queries
@@ -550,6 +558,23 @@ export class ReportService extends BaseService {
       if (Object.keys(distributions).length === 0) distributions = undefined;
     }
 
+    // Latest in-window sprint F-V profile, when selected. Gated on the
+    // sprint-FV feature flag (site + org, fails closed) so a report can't
+    // surface F-V data for an org that has the module off.
+    let fvProfile: ReportFvProfile | undefined;
+    if (chartSelection.fvProfile) {
+      const flag = await checkSprintFvEnabled(report.organizationId);
+      if (flag.enabled) {
+        const { profiles } = await sprintFvService.listByOrganization(report.organizationId, {
+          userId: athleteId,
+          dateFrom: startDate,
+          dateTo: endDate,
+        });
+        const latest = pickLatestInWindow(profiles, startDate, endDate);
+        if (latest) fvProfile = toReportFvProfile(latest);
+      }
+    }
+
     // Human label for the peer cohort (names the group in the "Where You Stand"
     // caption). Undefined when no filter narrows the cohort → frontend says "your group".
     const comparisonLabel = await this.resolveComparisonLabel(report.organizationId, config.filters);
@@ -616,6 +641,7 @@ export class ReportService extends BaseService {
       eventContext,
       trends,
       distributions,
+      fvProfile,
       comparisonLabel,
     };
   }

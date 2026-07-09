@@ -1,5 +1,6 @@
 import type { MetricExplanation } from '@shared/metric-explanations';
 import type { ReportTrends, ReportDistributions, TeamReportTrends, TeamReportDistributions } from '@shared/report-trends-types';
+import type { ReportFvProfile } from '@shared/report-fv-types';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
 import type { ChartSelection, TeamChartSelection } from '@shared/report-charts';
 
@@ -143,6 +144,7 @@ export interface IndividualReportData {
   orgBranding?: OrgBranding;
   trends?: ReportTrends;
   distributions?: ReportDistributions;
+  fvProfile?: ReportFvProfile; // present only when charts.fvProfile is selected and the sprint-FV flag is on
   comparisonLabel?: string; // cohort name for the "Where You Stand" caption (undefined = org-wide)
 }
 

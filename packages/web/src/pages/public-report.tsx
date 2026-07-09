@@ -25,6 +25,8 @@ import { ReportMetricsGlossary } from "@/components/reports/ReportMetricsGlossar
 import { TrendSection } from "@/components/reports/TrendSection";
 import { PercentileRadarSection } from "@/components/reports/PercentileRadarSection";
 import { DistributionSection } from "@/components/reports/DistributionSection";
+import { FvProfileSection } from "@/components/reports/FvProfileSection";
+import type { ReportFvProfile } from "@shared/report-fv-types";
 import { resolveChartSelection, resolveTeamChartSelection } from "@shared/report-charts";
 import { TierProgressChart } from "@/components/charts/TierProgressChart";
 import { BenchmarkStandingBar } from "@/components/charts/BenchmarkStandingBar";
@@ -84,6 +86,7 @@ export default function PublicReport() {
   const metricLabels = (snapshotData.metricLabels ?? {}) as Record<string, string>;
   const metricUnits = (snapshotData.metricUnits ?? {}) as Record<string, string>;
   const trends = snapshotData.trends as ReportTrends | undefined;
+  const fvProfile = snapshotData.fvProfile as ReportFvProfile | undefined;
   const sel = resolveChartSelection(snapshotData.reportConfig);
   // Team charts: separate resolver + payload fields (mirrors TeamReportView).
   // Does NOT touch the individual `sel` computation above.
@@ -543,6 +546,13 @@ export default function PublicReport() {
                 metricUnits={metricUnits}
                 percentiles={snapshotData.athlete?.percentiles}
                 comparisonLabel={snapshotData.comparisonLabel}
+              />
+            )}
+
+            {sel.fvProfile && fvProfile && (
+              <FvProfileSection
+                athleteName={snapshotData.athlete?.userName ?? ''}
+                fvProfile={fvProfile}
               />
             )}
 

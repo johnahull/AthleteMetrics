@@ -62,6 +62,7 @@ const reportConfigSchema = z.object({
     benchmarkStanding: z.boolean().default(true),
     trends: z.boolean().default(true),
     distribution: z.boolean().default(true),
+    fvProfile: z.boolean().default(true),
     leaderboard: z.boolean().default(true),
     tierDistribution: z.boolean().default(true),
     boxSwarm: z.boolean().default(true),
@@ -154,6 +155,27 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     },
     enabled: !!organizationContext,
   });
+
+  // Sprint-FV feature flags (site AND org must be on) gate the Force-Velocity
+  // chart option. Same source of truth the sidebar uses for the /sprint-fv nav.
+  const { data: siteSettings } = useQuery<{ sprintFvEnabled?: boolean }>({
+    queryKey: ["/api/site-settings/public"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/site-settings/public");
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const { data: wizardOrg } = useQuery<{ sprintFvEnabled?: boolean }>({
+    queryKey: [`/api/organizations/${organizationContext}`],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/organizations/${organizationContext}`);
+      return res.json();
+    },
+    enabled: !!organizationContext,
+    staleTime: 5 * 60 * 1000,
+  });
+  const fvEnabled = (siteSettings?.sprintFvEnabled ?? false) && (wizardOrg?.sprintFvEnabled ?? false);
 
   // Fetch enabled benchmarks for the organization using standardized hook
   const { data: enabledBenchmarks, isLoading: benchmarksLoading, error: benchmarksError } = useOrganizationBenchmarks(
@@ -257,6 +279,10 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     ['benchmarkStanding', 'Benchmark standing', 'Where the athlete sits vs each benchmark'],
     ['trends', 'Progress over time', 'Trend line per metric (needs ≥2 measurements)'],
     ['distribution', 'Where you stand (distribution)', 'The group spread with the athlete marked'],
+    // Only offered when the sprint-FV module is enabled for the site AND org.
+    ...(fvEnabled
+      ? [['fvProfile', 'Force-Velocity profile', 'Latest sprint F-V profile in the report window (KPIs, chart, analysis)'] as const]
+      : []),
   ];
   const teamChartItems: ReadonlyArray<readonly [ChartItemKey, string, string]> = [
     ['benchmarkStanding', 'Benchmark standing', `Where the ${labels.team.toLowerCase()} average sits vs each benchmark`],
@@ -386,6 +412,8 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
           benchmarkStanding: data.charts.benchmarkStanding,
           trends: data.charts.trends,
           distribution: data.charts.distribution,
+          // Never persist true while the sprint-FV feature is off for this org.
+          fvProfile: fvEnabled ? data.charts.fvProfile : false,
         };
 
     if (data.teamIds?.length || data.gender || data.positions?.length) {

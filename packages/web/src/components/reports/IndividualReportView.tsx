@@ -28,6 +28,7 @@ import { ReportMetricsGlossary } from "./ReportMetricsGlossary";
 import { TrendSection } from "@/components/reports/TrendSection";
 import { PercentileRadarSection } from "@/components/reports/PercentileRadarSection";
 import { DistributionSection } from "@/components/reports/DistributionSection";
+import { FvProfileSection } from "@/components/reports/FvProfileSection";
 import { resolveChartSelection } from "@shared/report-charts";
 import { TierProgressChart } from "@/components/charts/TierProgressChart";
 import { BenchmarkStandingBar } from "@/components/charts/BenchmarkStandingBar";
@@ -359,6 +360,10 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
           percentiles={athlete.percentiles}
           comparisonLabel={reportData.comparisonLabel}
         />
+      )}
+
+      {sel.fvProfile && reportData.fvProfile && (
+        <FvProfileSection athleteName={athlete.userName} fvProfile={reportData.fvProfile} />
       )}
 
       {metricExplanations && (

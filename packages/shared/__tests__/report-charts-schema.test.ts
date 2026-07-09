@@ -46,4 +46,28 @@ describe('insertReportSchema / updateReportSchema — config.charts', () => {
 
     expect(result.config?.charts).toEqual(teamChartsPayload);
   });
+
+  // Same stripping failure mode as above, for the individual-report fvProfile key.
+  it('insertReportSchema retains charts.fvProfile (no silent stripping)', () => {
+    const result = insertReportSchema.parse({
+      organizationId: 'org-1',
+      name: 'Individual Report',
+      reportType: 'individual',
+      config: {
+        timeframe: { type: 'preset', preset: 'season' },
+        metrics: ['VERTICAL_JUMP'],
+        charts: { radar: true, fvProfile: true },
+      },
+    });
+
+    expect(result.config.charts).toEqual({ radar: true, fvProfile: true });
+  });
+
+  it('updateReportSchema retains charts.fvProfile (no silent stripping)', () => {
+    const result = updateReportSchema.parse({
+      config: { charts: { fvProfile: false } },
+    });
+
+    expect(result.config?.charts).toEqual({ fvProfile: false });
+  });
 });
