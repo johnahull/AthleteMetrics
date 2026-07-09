@@ -59,6 +59,11 @@ const envSchema = z
     BASE_URL: z.string().optional(),
   })
   .superRefine((env, ctx) => {
+    // If SESSION_SECRET is missing or not a string, the base z.string() check
+    // has already reported it. Skip the strength checks so we never read
+    // `.length` on undefined — defensive against a future Zod running this
+    // refinement on a dirty parse (today it aborts the field and skips this).
+    if (typeof env.SESSION_SECRET !== 'string') return;
     if (WEAK_SECRET_PATTERNS.some((p) => p.test(env.SESSION_SECRET))) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -85,6 +90,9 @@ export function parseEnv(source: NodeJS.ProcessEnv | Record<string, string | und
   return envSchema.parse(source);
 }
 
+// Populated once at startup by validateEnvOrExit(). Last-write-wins by design:
+// startup calls it exactly once, so the only repeat callers are unit tests,
+// which intentionally overwrite it with their own fixture.
 let cachedEnv: Env | null = null;
 
 /**

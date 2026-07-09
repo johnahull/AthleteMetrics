@@ -95,6 +95,21 @@ describe('validateEnvOrExit', () => {
     expect(getEnv()).toBe(env);
   });
 
+  it('reports a missing SESSION_SECRET in production without throwing a TypeError', () => {
+    // Regression: superRefine read `.length` on an undefined secret. Because
+    // index.ts defaults NODE_ENV to 'production' before validating, a prod
+    // deploy missing SESSION_SECRET hit `undefined.length` → raw TypeError
+    // instead of the clean report + process.exit(1).
+    withMocks((exit, err) => {
+      expect(() =>
+        validateEnvOrExit(base({ NODE_ENV: 'production', SESSION_SECRET: undefined }) as any),
+      ).not.toThrow();
+      expect(exit).toHaveBeenCalledWith(1);
+      const out = err.mock.calls.flat().join('\n');
+      expect(out).toMatch(/SESSION_SECRET/);
+    });
+  });
+
   it('exits(1) and prints ONLY the SESSION_SECRET hint for a secret-only failure', () => {
     withMocks((exit, err) => {
       validateEnvOrExit(base({ SESSION_SECRET: 'shortsecret' }) as any);
