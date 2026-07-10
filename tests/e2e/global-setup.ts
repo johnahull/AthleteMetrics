@@ -549,13 +549,18 @@ async function globalSetup(config: FullConfig) {
         ),
       });
       if (!existingOrgMembership) {
-        await db.insert(schema.userOrganizations).values({
-          userId: athleteUser.id,
-          organizationId: organization.id,
-          role: 'athlete',
-        });
+        await retryDatabaseOperation(
+          async () => await db.insert(schema.userOrganizations).values({
+            userId: athleteUser.id,
+            organizationId: organization.id,
+            role: 'athlete',
+          }),
+          `Assign athlete ${athleteSeed.username} to organization`
+        );
       }
 
+      // `team` is guaranteed non-null here (assigned by the findFirst/insert block
+      // above); the guard is retained only for TypeScript's null-narrowing.
       if (team) {
         const existingTeamMembership = await db.query.userTeams.findFirst({
           where: and(
@@ -564,12 +569,15 @@ async function globalSetup(config: FullConfig) {
           ),
         });
         if (!existingTeamMembership) {
-          await db.insert(schema.userTeams).values({
-            userId: athleteUser.id,
-            teamId: team.id,
-            season: '2024-Fall',
-            isActive: true,
-          });
+          await retryDatabaseOperation(
+            async () => await db.insert(schema.userTeams).values({
+              userId: athleteUser.id,
+              teamId: team.id,
+              season: '2024-Fall',
+              isActive: true,
+            }),
+            `Assign athlete ${athleteSeed.username} to team`
+          );
         }
       }
     }
