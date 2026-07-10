@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './fixtures/e2e-base';
 import { clearAuthState, loginWithCredentials } from './helpers/auth';
 
 /**

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures/e2e-base';
 import { loginAsDefaultUser } from './helpers/auth';
 
 test.describe('Dashboard Timeline View (Mobile)', () => {

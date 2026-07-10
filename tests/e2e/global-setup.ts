@@ -49,6 +49,9 @@ import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 import type { Role } from '@shared/role-types';
 import { retryDatabaseOperation } from './constants';
 import { getEnvironmentConfig } from './config';
+// Single source of truth for the per-worker credentials/count shared with the
+// worker-auth fixture (tests/e2e/fixtures/e2e-base.ts).
+import { WORKER_PASSWORD, WORKER_COUNT } from './fixtures/e2e-base';
 
 // ES module equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -582,6 +585,51 @@ async function globalSetup(config: FullConfig) {
       }
     }
     console.log(`    ✅ Seeded ${athleteSeeds.length} athlete users`);
+
+    // ── Per-worker isolated environments ────────────────────────────────────
+    // Each parallel worker gets its OWN user + org + team + seeded athletes so
+    // concurrent specs never share a session/user/org — the root cause of the
+    // ~50% session-validation 401s and data pollution in CI. The e2e-base.ts
+    // fixture logs each worker in as e2e-worker-<parallelIndex>.
+    console.log('  🧩 Creating per-worker isolated environments...');
+    // WORKER_COUNT + WORKER_PASSWORD imported from the fixture (single source).
+    const workerHashed = await bcrypt.hash(WORKER_PASSWORD, BCRYPT_SALT_ROUNDS);
+    for (let w = 0; w < WORKER_COUNT; w++) {
+      const orgName = `E2E Worker Org ${w}`;
+      let workerOrg = await db.query.organizations.findFirst({ where: eq(schema.organizations.name, orgName) });
+      if (!workerOrg) {
+        const [created] = await db.insert(schema.organizations).values({ name: orgName }).returning();
+        workerOrg = created;
+      }
+      const wUsername = `e2e-worker-${w}`;
+      // org_admin (NOT site admin) so the client auto-selects its single org.
+      const [workerUser] = await retryDatabaseOperation(
+        async () => await db.insert(schema.users)
+          .values({ username: wUsername, password: workerHashed, firstName: 'E2E', lastName: `Worker${w}`, fullName: `E2E Worker${w}`, emails: [`${wUsername}@test.com`], isSiteAdmin: false, isActive: true })
+          .onConflictDoUpdate({ target: schema.users.username, set: { password: workerHashed, isSiteAdmin: false, isActive: true, updatedAt: new Date() } })
+          .returning(),
+        `Upsert worker user ${wUsername}`
+      );
+      const exWo = await db.query.userOrganizations.findFirst({ where: and(eq(schema.userOrganizations.userId, workerUser.id), eq(schema.userOrganizations.organizationId, workerOrg.id)) });
+      if (!exWo) await db.insert(schema.userOrganizations).values({ userId: workerUser.id, organizationId: workerOrg.id, role: 'org_admin' });
+      let workerTeam = await db.query.teams.findFirst({ where: and(eq(schema.teams.organizationId, workerOrg.id), eq(schema.teams.name, `Worker ${w} Team`)) });
+      if (!workerTeam) {
+        const [t] = await db.insert(schema.teams).values({ organizationId: workerOrg.id, name: `Worker ${w} Team`, level: 'HS', season: '2024-Fall', isArchived: false }).returning();
+        workerTeam = t;
+      }
+      for (const ln of ['Smith', 'Johnson', 'Williams']) {
+        const aUser = `e2e-w${w}-${ln.toLowerCase()}`;
+        const [athlete] = await db.insert(schema.users)
+          .values({ username: aUser, password: workerHashed, firstName: 'E2E', lastName: ln, fullName: `E2E ${ln}`, emails: [`${aUser}@test.com`], isSiteAdmin: false, isActive: true })
+          .onConflictDoUpdate({ target: schema.users.username, set: { lastName: ln, isActive: true, updatedAt: new Date() } })
+          .returning();
+        const exAo = await db.query.userOrganizations.findFirst({ where: and(eq(schema.userOrganizations.userId, athlete.id), eq(schema.userOrganizations.organizationId, workerOrg.id)) });
+        if (!exAo) await db.insert(schema.userOrganizations).values({ userId: athlete.id, organizationId: workerOrg.id, role: 'athlete' });
+        const exAt = await db.query.userTeams.findFirst({ where: and(eq(schema.userTeams.userId, athlete.id), eq(schema.userTeams.teamId, workerTeam.id)) });
+        if (!exAt) await db.insert(schema.userTeams).values({ userId: athlete.id, teamId: workerTeam.id, season: '2024-Fall', isActive: true });
+      }
+    }
+    console.log(`    ✅ Created ${WORKER_COUNT} per-worker environments`);
 
     // Write test configuration to JSON file for tests to read
     // (process.env doesn't persist from global-setup to test workers)

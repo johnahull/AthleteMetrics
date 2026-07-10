@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures/e2e-base';
 import { loginAsDefaultUser, loginAsAthlete, loginAsCoach } from './helpers/auth';
 import { navigateTo } from './helpers/navigation';
 import path from 'path';
