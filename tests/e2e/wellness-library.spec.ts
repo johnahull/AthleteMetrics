@@ -131,7 +131,7 @@ test.describe('Wellness Template Library', () => {
       await page.waitForTimeout(500);
 
       // Check that results are filtered (may show "Daily Wellness" or empty state)
-      const emptyState = page.locator('text=No templates found');
+      const emptyState = page.locator('text=/No templates match your filters/');
       const templateCards = page.locator('[data-testid^="template-card-"]');
 
       const hasResults = await templateCards.count() > 0;
@@ -150,7 +150,7 @@ test.describe('Wellness Template Library', () => {
       await page.waitForTimeout(500);
 
       // Should show empty state
-      await expect(page.locator('text=No templates found')).toBeVisible();
+      await expect(page.locator('text=/No templates match your filters/')).toBeVisible();
     });
 
     test('should clear search when input is cleared', async ({ page }) => {
@@ -167,7 +167,7 @@ test.describe('Wellness Template Library', () => {
       await page.waitForTimeout(300);
 
       // Should show all templates again
-      const emptyState = page.locator('text=No templates found');
+      const emptyState = page.locator('text=/No templates match your filters/');
       await expect(emptyState).not.toBeVisible();
     });
   });
@@ -553,7 +553,7 @@ test.describe('Wellness Template Library', () => {
       await page.waitForTimeout(500);
 
       // Should show empty state
-      await expect(page.locator('text=No templates found')).toBeVisible();
+      await expect(page.locator('text=/No templates match your filters/')).toBeVisible();
     });
 
     test('should show "Clear filters" button in empty state', async ({ page }) => {
@@ -583,7 +583,7 @@ test.describe('Wellness Template Library', () => {
       await page.waitForTimeout(500);
 
       // Empty state should disappear
-      await expect(page.locator('text=No templates found')).not.toBeVisible();
+      await expect(page.locator('text=/No templates match your filters/')).not.toBeVisible();
 
       // Search should be cleared
       await expect(searchInput).toHaveValue('');
