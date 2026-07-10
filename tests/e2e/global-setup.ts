@@ -427,8 +427,13 @@ async function globalSetup(config: FullConfig) {
           console.log(`      ✅ Already assigned to organization`);
         }
 
-        // For multi-org testing: assign coach to second organization as well
-        if (userConfig.role === 'coach') {
+        // For multi-org testing: assign coach to second organization as well.
+        // Skip when the coach IS the primary auth user (same-user mode — e.g. CI,
+        // where every E2E_*_USERNAME maps to one admin). A user in >1 org defeats
+        // the client's "auto-select org when the user has exactly one" logic
+        // (auth.tsx), which otherwise leaves every org-scoped page stranded on the
+        // "Please select an organization" empty state.
+        if (userConfig.role === 'coach' && userConfig.username !== username) {
           const existingSecondAssignment = await db.query.userOrganizations.findFirst({
             where: and(
               eq(schema.userOrganizations.userId, currentUserId),
