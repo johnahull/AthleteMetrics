@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAs } from './helpers/auth';
+import { isSameUserMode } from './fixtures/test-users';
 
 /**
  * TIER 1 CRITICAL: Sidebar Navigation E2E Tests
@@ -112,6 +113,10 @@ test.describe('Sidebar Navigation Tests', () => {
   });
 
   test.describe('Coach Sidebar Navigation', () => {
+    // These assert coach-specific restrictions ("should NOT see ..."), which
+    // fail in same-user mode where loginAs('coach') resolves to the site admin.
+    test.skip(isSameUserMode(), 'coach restrictions not testable when all roles map to one user');
+
     test('coach should NOT see "Settings" link in sidebar', async ({ page }) => {
       await loginAs(page, 'coach');
 

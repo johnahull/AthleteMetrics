@@ -26,26 +26,26 @@ test.describe('Wellness Template Library', () => {
   test.describe('Library Navigation', () => {
     test('should show Library tab in wellness navigation', async ({ page }) => {
       // Check that Library tab exists
-      const libraryTab = page.locator('button[value="library"]');
+      const libraryTab = page.locator('[role="tab"]:text-is("Library")');
       await expect(libraryTab).toBeVisible();
       await expect(libraryTab).toHaveText(/Library/i);
     });
 
     test('should navigate to Library tab when clicked', async ({ page }) => {
       // Click Library tab
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
 
       // Verify Library content is displayed
       await expect(page.locator('text=Template Library')).toBeVisible();
     });
 
     test('should show default view when Library tab is opened', async ({ page }) => {
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
 
       // Check for category tabs
-      await expect(page.locator('button[value="all"]')).toBeVisible();
-      await expect(page.locator('button[value="general"]')).toBeVisible();
-      await expect(page.locator('button[value="recovery"]')).toBeVisible();
+      await expect(page.locator('[role="tab"]:text-is("All")')).toBeVisible();
+      await expect(page.locator('[role="tab"]:text-is("General")')).toBeVisible();
+      await expect(page.locator('[role="tab"]:text-is("Recovery")')).toBeVisible();
 
       // Check for search bar
       await expect(page.locator('input[placeholder*="Search templates"]')).toBeVisible();
@@ -54,21 +54,24 @@ test.describe('Wellness Template Library', () => {
 
   test.describe('Category Filtering', () => {
     test('should display all categories', async ({ page }) => {
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
 
       const categories = ['all', 'general', 'recovery', 'performance', 'injury', 'training'];
 
       for (const category of categories) {
-        const tab = page.locator(`button[value="${category}"]`);
+        // Category tabs are Radix TabsTrigger (role="tab"); their visible label
+        // is the capitalized category value (all → "All").
+        const label = category.charAt(0).toUpperCase() + category.slice(1);
+        const tab = page.locator(`[role="tab"]:text-is("${label}")`);
         await expect(tab).toBeVisible();
       }
     });
 
     test('should filter templates by category when tab is clicked', async ({ page }) => {
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
 
       // Click Recovery category
-      await page.click('button[value="recovery"]');
+      await page.click('[role="tab"]:text-is("Recovery")');
 
       // Wait for filtering
       await page.waitForTimeout(500);
@@ -85,22 +88,22 @@ test.describe('Wellness Template Library', () => {
     });
 
     test('should show category counts in tabs', async ({ page }) => {
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
 
       // Category tabs may show counts like "Recovery (2)"
-      const allTab = page.locator('button[value="all"]');
+      const allTab = page.locator('[role="tab"]:text-is("All")');
       await expect(allTab).toBeVisible();
     });
 
     test('should show all templates when "All" category is selected', async ({ page }) => {
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
 
       // Click Recovery first
-      await page.click('button[value="recovery"]');
+      await page.click('[role="tab"]:text-is("Recovery")');
       await page.waitForTimeout(300);
 
       // Then click All
-      await page.click('button[value="all"]');
+      await page.click('[role="tab"]:text-is("All")');
       await page.waitForTimeout(300);
 
       // Should show all templates again
@@ -111,14 +114,14 @@ test.describe('Wellness Template Library', () => {
 
   test.describe('Search Functionality', () => {
     test('should have search input visible', async ({ page }) => {
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
 
       const searchInput = page.locator('input[placeholder*="Search templates"]');
       await expect(searchInput).toBeVisible();
     });
 
     test('should filter templates by search query', async ({ page }) => {
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
 
       // Type in search
       const searchInput = page.locator('input[placeholder*="Search templates"]');
@@ -128,7 +131,7 @@ test.describe('Wellness Template Library', () => {
       await page.waitForTimeout(500);
 
       // Check that results are filtered (may show "Daily Wellness" or empty state)
-      const emptyState = page.locator('text=No templates found');
+      const emptyState = page.locator('text=/No templates match your filters/');
       const templateCards = page.locator('[data-testid^="template-card-"]');
 
       const hasResults = await templateCards.count() > 0;
@@ -139,7 +142,7 @@ test.describe('Wellness Template Library', () => {
     });
 
     test('should show empty state when no results match search', async ({ page }) => {
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
 
       const searchInput = page.locator('input[placeholder*="Search templates"]');
       await searchInput.fill('zzzznonexistenttemplatexyz123');
@@ -147,11 +150,11 @@ test.describe('Wellness Template Library', () => {
       await page.waitForTimeout(500);
 
       // Should show empty state
-      await expect(page.locator('text=No templates found')).toBeVisible();
+      await expect(page.locator('text=/No templates match your filters/')).toBeVisible();
     });
 
     test('should clear search when input is cleared', async ({ page }) => {
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
 
       const searchInput = page.locator('input[placeholder*="Search templates"]');
 
@@ -164,14 +167,14 @@ test.describe('Wellness Template Library', () => {
       await page.waitForTimeout(300);
 
       // Should show all templates again
-      const emptyState = page.locator('text=No templates found');
+      const emptyState = page.locator('text=/No templates match your filters/');
       await expect(emptyState).not.toBeVisible();
     });
   });
 
   test.describe('Tag Filtering', () => {
     test('should show tag filter section', async ({ page }) => {
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
 
       // Tag filters may be visible if templates have tags
       await page.waitForTimeout(500);
@@ -185,7 +188,7 @@ test.describe('Wellness Template Library', () => {
     });
 
     test('should filter templates when tag is clicked', async ({ page }) => {
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
       await page.waitForTimeout(500);
 
       // Try to find and click a tag filter
@@ -206,7 +209,7 @@ test.describe('Wellness Template Library', () => {
     });
 
     test('should allow multi-select tag filtering', async ({ page }) => {
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
       await page.waitForTimeout(500);
 
       const tagFilters = page.locator('[data-testid^="tag-filter-"]');
@@ -231,7 +234,7 @@ test.describe('Wellness Template Library', () => {
 
   test.describe('Template Cards Display', () => {
     test('should display template cards with correct information', async ({ page }) => {
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
       await page.waitForTimeout(500);
 
       const templateCard = page.locator('[data-testid^="template-card-"]').first();
@@ -252,7 +255,7 @@ test.describe('Wellness Template Library', () => {
     });
 
     test('should show system template badge for seeded templates', async ({ page }) => {
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
       await page.waitForTimeout(500);
 
       // Look for sparkle icon or "System Template" text
@@ -264,7 +267,7 @@ test.describe('Wellness Template Library', () => {
     });
 
     test('should show preview and clone buttons on template cards', async ({ page }) => {
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
       await page.waitForTimeout(500);
 
       const templateCard = page.locator('[data-testid^="template-card-"]').first();
@@ -282,7 +285,7 @@ test.describe('Wellness Template Library', () => {
     });
 
     test('should show tag chips on template cards', async ({ page }) => {
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
       await page.waitForTimeout(500);
 
       const templateCard = page.locator('[data-testid^="template-card-"]').first();
@@ -301,7 +304,7 @@ test.describe('Wellness Template Library', () => {
 
   test.describe('Template Preview Modal', () => {
     test('should open preview modal when Preview button is clicked', async ({ page }) => {
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
       await page.waitForTimeout(500);
 
       const previewBtn = page.locator('button:has-text("Preview")').first();
@@ -316,7 +319,7 @@ test.describe('Wellness Template Library', () => {
     });
 
     test('should display template details in preview modal', async ({ page }) => {
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
       await page.waitForTimeout(500);
 
       const previewBtn = page.locator('button:has-text("Preview")').first();
@@ -338,7 +341,7 @@ test.describe('Wellness Template Library', () => {
     });
 
     test('should show clone button in preview modal', async ({ page }) => {
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
       await page.waitForTimeout(500);
 
       const previewBtn = page.locator('button:has-text("Preview")').first();
@@ -356,7 +359,7 @@ test.describe('Wellness Template Library', () => {
     });
 
     test('should close modal when Cancel or X is clicked', async ({ page }) => {
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
       await page.waitForTimeout(500);
 
       const previewBtn = page.locator('button:has-text("Preview")').first();
@@ -386,7 +389,7 @@ test.describe('Wellness Template Library', () => {
 
   test.describe('Template Cloning', () => {
     test('should clone template when Clone button is clicked', async ({ page }) => {
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
       await page.waitForTimeout(500);
 
       const cloneBtn = page.locator('button:has-text("Clone")').first();
@@ -394,13 +397,13 @@ test.describe('Wellness Template Library', () => {
 
       if (btnExists) {
         // Get initial template count
-        await page.click('button[value="templates"]');
+        await page.click('[role="tab"]:text-is("Templates")');
         await page.waitForTimeout(500);
 
         const initialCount = await page.locator('[data-testid^="template-row-"]').count();
 
         // Go back to library
-        await page.click('button[value="library"]');
+        await page.click('[role="tab"]:text-is("Library")');
         await page.waitForTimeout(500);
 
         // Click clone
@@ -415,7 +418,7 @@ test.describe('Wellness Template Library', () => {
 
         if (toastVisible) {
           // Navigate to templates tab
-          await page.click('button[value="templates"]');
+          await page.click('[role="tab"]:text-is("Templates")');
           await page.waitForTimeout(1000);
 
           // Should have one more template
@@ -426,7 +429,7 @@ test.describe('Wellness Template Library', () => {
     });
 
     test('should show loading state while cloning', async ({ page }) => {
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
       await page.waitForTimeout(500);
 
       const cloneBtn = page.locator('button:has-text("Clone")').first();
@@ -442,7 +445,7 @@ test.describe('Wellness Template Library', () => {
     });
 
     test('should preserve template structure when cloning', async ({ page }) => {
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
       await page.waitForTimeout(500);
 
       // Open preview to see original
@@ -465,7 +468,7 @@ test.describe('Wellness Template Library', () => {
         await page.waitForTimeout(2000);
 
         // Go to templates tab
-        await page.click('button[value="templates"]');
+        await page.click('[role="tab"]:text-is("Templates")');
         await page.waitForTimeout(1000);
 
         // Should find cloned template (may have same or similar name)
@@ -477,7 +480,7 @@ test.describe('Wellness Template Library', () => {
 
   test.describe('Template Builder Integration', () => {
     test('should show category dropdown in TemplateBuilder', async ({ page }) => {
-      await page.click('button[value="templates"]');
+      await page.click('[role="tab"]:text-is("Templates")');
       await page.waitForTimeout(500);
 
       // Click "Create Template" button
@@ -495,7 +498,7 @@ test.describe('Wellness Template Library', () => {
     });
 
     test('should show tags input in TemplateBuilder', async ({ page }) => {
-      await page.click('button[value="templates"]');
+      await page.click('[role="tab"]:text-is("Templates")');
       await page.waitForTimeout(500);
 
       const createBtn = page.locator('button:has-text("Create Template")');
@@ -512,7 +515,7 @@ test.describe('Wellness Template Library', () => {
     });
 
     test('should allow adding tags to custom template', async ({ page }) => {
-      await page.click('button[value="templates"]');
+      await page.click('[role="tab"]:text-is("Templates")');
       await page.waitForTimeout(500);
 
       const createBtn = page.locator('button:has-text("Create Template")');
@@ -541,7 +544,7 @@ test.describe('Wellness Template Library', () => {
 
   test.describe('Empty States', () => {
     test('should show empty state when no templates match filters', async ({ page }) => {
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
       await page.waitForTimeout(500);
 
       // Search for non-existent template
@@ -550,11 +553,11 @@ test.describe('Wellness Template Library', () => {
       await page.waitForTimeout(500);
 
       // Should show empty state
-      await expect(page.locator('text=No templates found')).toBeVisible();
+      await expect(page.locator('text=/No templates match your filters/')).toBeVisible();
     });
 
     test('should show "Clear filters" button in empty state', async ({ page }) => {
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
       await page.waitForTimeout(500);
 
       const searchInput = page.locator('input[placeholder*="Search templates"]');
@@ -567,7 +570,7 @@ test.describe('Wellness Template Library', () => {
     });
 
     test('should clear filters when "Clear filters" is clicked', async ({ page }) => {
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
       await page.waitForTimeout(500);
 
       const searchInput = page.locator('input[placeholder*="Search templates"]');
@@ -580,7 +583,7 @@ test.describe('Wellness Template Library', () => {
       await page.waitForTimeout(500);
 
       // Empty state should disappear
-      await expect(page.locator('text=No templates found')).not.toBeVisible();
+      await expect(page.locator('text=/No templates match your filters/')).not.toBeVisible();
 
       // Search should be cleared
       await expect(searchInput).toHaveValue('');
@@ -590,11 +593,11 @@ test.describe('Wellness Template Library', () => {
   test.describe('Responsive Design', () => {
     test('should display correctly on mobile viewport', async ({ page }) => {
       await page.setViewportSize({ width: 375, height: 667 });
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
       await page.waitForTimeout(500);
 
       // Category tabs should be visible (may scroll)
-      const allTab = page.locator('button[value="all"]');
+      const allTab = page.locator('[role="tab"]:text-is("All")');
       await expect(allTab).toBeVisible();
 
       // Search should be visible
@@ -604,7 +607,7 @@ test.describe('Wellness Template Library', () => {
 
     test('should display correctly on tablet viewport', async ({ page }) => {
       await page.setViewportSize({ width: 768, height: 1024 });
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
       await page.waitForTimeout(500);
 
       // Should show 2-column grid on tablet
@@ -618,7 +621,7 @@ test.describe('Wellness Template Library', () => {
 
     test('should display correctly on desktop viewport', async ({ page }) => {
       await page.setViewportSize({ width: 1920, height: 1080 });
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
       await page.waitForTimeout(500);
 
       // Should show 3-column grid on desktop
@@ -634,7 +637,7 @@ test.describe('Wellness Template Library', () => {
   test.describe('Loading States', () => {
     test('should show loading state while fetching library', async ({ page }) => {
       // Navigate to library (first load)
-      await page.click('button[value="library"]');
+      await page.click('[role="tab"]:text-is("Library")');
 
       // Should show loading skeletons or spinner
       const loadingState = page.locator('[data-testid="skeleton-card"]').or(page.locator('text=Loading'));

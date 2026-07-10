@@ -427,8 +427,13 @@ async function globalSetup(config: FullConfig) {
           console.log(`      ✅ Already assigned to organization`);
         }
 
-        // For multi-org testing: assign coach to second organization as well
-        if (userConfig.role === 'coach') {
+        // For multi-org testing: assign coach to second organization as well.
+        // Skip when the coach IS the primary auth user (same-user mode — e.g. CI,
+        // where every E2E_*_USERNAME maps to one admin). A user in >1 org defeats
+        // the client's "auto-select org when the user has exactly one" logic
+        // (auth.tsx), which otherwise leaves every org-scoped page stranded on the
+        // "Please select an organization" empty state.
+        if (userConfig.role === 'coach' && userConfig.username !== username) {
           const existingSecondAssignment = await db.query.userOrganizations.findFirst({
             where: and(
               eq(schema.userOrganizations.userId, currentUserId),
@@ -502,6 +507,81 @@ async function globalSetup(config: FullConfig) {
         }
       }
     }
+
+    // Seed dedicated athlete users so athlete-search, roster, and analytics specs
+    // have data to work with. In same-user mode (CI) the auth user is the only
+    // role-mapped account, so without these there are literally no athletes to
+    // list or search. firstName 'E2E' keeps them within global-teardown's cleanup
+    // (which reclaims users by firstName='E2E' and this org's memberships).
+    console.log('  🏃 Seeding athlete users...');
+    const athleteSeeds = [
+      { username: 'e2e-athlete-smith', lastName: 'Smith' },
+      { username: 'e2e-athlete-johnson', lastName: 'Johnson' },
+      { username: 'e2e-athlete-williams', lastName: 'Williams' },
+    ];
+    const athleteHashed = await bcrypt.hash('AthletePassword123!', BCRYPT_SALT_ROUNDS);
+    for (const athleteSeed of athleteSeeds) {
+      const fullName = `E2E ${athleteSeed.lastName}`;
+      const [athleteUser] = await retryDatabaseOperation(
+        async () => await db.insert(schema.users)
+          .values({
+            username: athleteSeed.username,
+            password: athleteHashed,
+            firstName: 'E2E',
+            lastName: athleteSeed.lastName,
+            fullName,
+            emails: [`${athleteSeed.username}@test.com`],
+            isSiteAdmin: false,
+            isActive: true,
+          })
+          .onConflictDoUpdate({
+            target: schema.users.username,
+            set: { firstName: 'E2E', lastName: athleteSeed.lastName, fullName, isActive: true, updatedAt: new Date() },
+          })
+          .returning(),
+        `Upsert athlete ${athleteSeed.username}`
+      );
+
+      const existingOrgMembership = await db.query.userOrganizations.findFirst({
+        where: and(
+          eq(schema.userOrganizations.userId, athleteUser.id),
+          eq(schema.userOrganizations.organizationId, organization.id)
+        ),
+      });
+      if (!existingOrgMembership) {
+        await retryDatabaseOperation(
+          async () => await db.insert(schema.userOrganizations).values({
+            userId: athleteUser.id,
+            organizationId: organization.id,
+            role: 'athlete',
+          }),
+          `Assign athlete ${athleteSeed.username} to organization`
+        );
+      }
+
+      // `team` is guaranteed non-null here (assigned by the findFirst/insert block
+      // above); the guard is retained only for TypeScript's null-narrowing.
+      if (team) {
+        const existingTeamMembership = await db.query.userTeams.findFirst({
+          where: and(
+            eq(schema.userTeams.userId, athleteUser.id),
+            eq(schema.userTeams.teamId, team.id)
+          ),
+        });
+        if (!existingTeamMembership) {
+          await retryDatabaseOperation(
+            async () => await db.insert(schema.userTeams).values({
+              userId: athleteUser.id,
+              teamId: team.id,
+              season: '2024-Fall',
+              isActive: true,
+            }),
+            `Assign athlete ${athleteSeed.username} to team`
+          );
+        }
+      }
+    }
+    console.log(`    ✅ Seeded ${athleteSeeds.length} athlete users`);
 
     // Write test configuration to JSON file for tests to read
     // (process.env doesn't persist from global-setup to test workers)
