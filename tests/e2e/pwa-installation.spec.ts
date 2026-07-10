@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures/e2e-base';
 
 test.describe('PWA Installation', () => {
   test.beforeEach(async ({ page }) => {

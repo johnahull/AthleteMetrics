@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures/e2e-base';
 import { loginAsCoach, loginAsAthlete, logout, clearAuthState } from './helpers/auth';
 
 /**

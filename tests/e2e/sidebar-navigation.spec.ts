@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures/e2e-base';
 import { loginAs } from './helpers/auth';
 import { isSameUserMode } from './fixtures/test-users';
 

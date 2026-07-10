@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures/e2e-base';
 import { loginAs, loginAsDefaultUser } from './helpers/auth';
 import { goToAthletes, navigateTo } from './helpers/navigation';
 import { canTestRoleAuthorization } from './fixtures/test-users';

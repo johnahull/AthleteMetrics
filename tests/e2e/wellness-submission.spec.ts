@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures/e2e-base';
 
 /**
  * E2E Tests: Wellness Submission (Public, No Auth)
