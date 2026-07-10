@@ -495,6 +495,61 @@ describe('ReportWizard Component', () => {
     });
   });
 
+  describe('Force-Velocity chart option', () => {
+    const navigateToChartsStep = async () => {
+      await waitFor(() => {
+        expect(screen.getByText('Individual Report')).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByLabelText(/Individual Report/i, { exact: false }));
+      // Step 1 (type) → 2 (athletes) → 3 (name) → ... → 8 (charts). Name is
+      // validated on step 3; athlete selection is only enforced on submit.
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+      await waitFor(() => {
+        const nameInput = screen.getByLabelText(/Report Name/i);
+        fireEvent.change(nameInput, { target: { value: 'FV Test' } });
+      });
+      for (let i = 0; i < 5; i++) {
+        fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+      }
+    };
+
+    it('shows the Force-Velocity option when site and org flags are enabled', async () => {
+      mockApiRequest.mockImplementation((method: string, url: string) => {
+        if (url.includes('/site-settings/public')) {
+          return Promise.resolve({ ok: true, json: async () => ({ sprintFvEnabled: true }) });
+        }
+        if (url.includes(`/organizations/${mockOrganizationContext}`)) {
+          return Promise.resolve({ ok: true, json: async () => ({ id: mockOrganizationContext, sprintFvEnabled: true }) });
+        }
+        return Promise.resolve({ ok: true, json: async () => [] });
+      });
+
+      renderWithQueryClient(
+        <ReportWizard open={true} onClose={mockOnClose} onSuccess={mockOnSuccess} />
+      );
+      await navigateToChartsStep();
+
+      await waitFor(() => {
+        expect(screen.getByText('Force-Velocity profile')).toBeInTheDocument();
+      });
+    });
+
+    it('hides the Force-Velocity option when the feature flags are off', async () => {
+      // Default mockApiRequest returns [] for the flag endpoints → flags falsy
+      renderWithQueryClient(
+        <ReportWizard open={true} onClose={mockOnClose} onSuccess={mockOnSuccess} />
+      );
+      await navigateToChartsStep();
+
+      await waitFor(() => {
+        // Another chart option confirms we reached the charts step
+        expect(screen.getByText('All-around profile (radar)')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('Force-Velocity profile')).not.toBeInTheDocument();
+    });
+  });
+
   describe('Custom Benchmarks', () => {
     const mockCustomBenchmarks = [
       {
