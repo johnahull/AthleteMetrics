@@ -9,11 +9,12 @@ import { test, expect } from './fixtures/e2e-base';
 
 test.describe('Command Palette', () => {
   test.beforeEach(async ({ page }) => {
-    // Navigate to the app and wait for it to be interactive before any test
-    // presses Ctrl+K — otherwise the global keyboard listener may not be mounted
-    // yet and the palette never opens (the palette input then times out).
+    // Navigate to the app and wait for the authenticated shell (sidebar/nav) to
+    // mount before any test presses Ctrl+K — that's the deterministic signal the
+    // global keyboard listener is registered. (networkidle is unreliable here:
+    // the app has background polling that keeps the network "active".)
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.locator('aside, nav').first().waitFor({ state: 'visible', timeout: 15000 });
   });
 
   test.describe('Basic Functionality', () => {

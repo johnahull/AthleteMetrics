@@ -49,6 +49,9 @@ import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 import type { Role } from '@shared/role-types';
 import { retryDatabaseOperation } from './constants';
 import { getEnvironmentConfig } from './config';
+// Single source of truth for the per-worker credentials/count shared with the
+// worker-auth fixture (tests/e2e/fixtures/e2e-base.ts).
+import { WORKER_PASSWORD, WORKER_COUNT } from './fixtures/e2e-base';
 
 // ES module equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -581,8 +584,8 @@ async function globalSetup(config: FullConfig) {
     // ~50% session-validation 401s and data pollution in CI. The e2e-base.ts
     // fixture logs each worker in as e2e-worker-<parallelIndex>.
     console.log('  🧩 Creating per-worker isolated environments...');
-    const WORKER_COUNT = 6; // >= max CI workers; spare envs are harmless
-    const workerHashed = await bcrypt.hash('WorkerPass123!', BCRYPT_SALT_ROUNDS);
+    // WORKER_COUNT + WORKER_PASSWORD imported from the fixture (single source).
+    const workerHashed = await bcrypt.hash(WORKER_PASSWORD, BCRYPT_SALT_ROUNDS);
     for (let w = 0; w < WORKER_COUNT; w++) {
       const orgName = `E2E Worker Org ${w}`;
       let workerOrg = await db.query.organizations.findFirst({ where: eq(schema.organizations.name, orgName) });

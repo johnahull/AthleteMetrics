@@ -352,6 +352,35 @@ async function cleanupDatabase(
       // Continue cleanup
     }
 
+    // 8b. Per-worker isolation cleanup. Worker users belong to per-worker orgs
+    // (E2E Worker Org N), not just the primary org, so clear ALL their org/team
+    // memberships by userId first — otherwise the user deletes below hit the
+    // user_organizations FK. Then drop the per-worker orgs + teams so they don't
+    // accumulate on a long-lived shared test DB.
+    if (e2eUsers.length > 0) {
+      const allUserIds = e2eUsers.map((u) => u.id);
+      try {
+        await db.delete(schema.userTeams).where(inArray(schema.userTeams.userId, allUserIds));
+        await db.delete(schema.userOrganizations).where(inArray(schema.userOrganizations.userId, allUserIds));
+      } catch (error) {
+        console.warn('    ⚠ Failed to clear all E2E memberships:', error instanceof Error ? error.message : String(error));
+      }
+    }
+    console.log('  🧩 Deleting per-worker orgs/teams...');
+    try {
+      const workerOrgs = await db.query.organizations.findMany({
+        where: like(schema.organizations.name, 'E2E Worker Org %'),
+      });
+      if (workerOrgs.length > 0) {
+        const workerOrgIds = workerOrgs.map((o) => o.id);
+        await db.delete(schema.teams).where(inArray(schema.teams.organizationId, workerOrgIds));
+        await db.delete(schema.organizations).where(inArray(schema.organizations.id, workerOrgIds));
+        console.log(`    ✓ Deleted ${workerOrgs.length} per-worker orgs (+ teams)`);
+      }
+    } catch (error) {
+      console.warn('    ⚠ Failed to delete per-worker orgs/teams:', error instanceof Error ? error.message : String(error));
+    }
+
     // 9. Delete E2E test users
     if (e2eUsers.length > 0) {
       console.log('  👥 Deleting test users...');
