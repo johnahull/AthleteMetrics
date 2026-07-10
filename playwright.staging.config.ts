@@ -24,8 +24,14 @@ export default defineConfig({
   timeout: 60 * 1000,
 
   // Test execution configuration
-  fullyParallel: true, // Run tests in parallel for faster execution
-  workers: process.env.CI ? 4 : 4, // 4 workers in CI (optimized for speed with chromium-only), 4 locally
+  // NOTE: specs share ONE seeded org + admin user + session, so they are NOT
+  // isolated for concurrent execution — parallel workers clobber each other's
+  // data (a spec deletes/creates rows another spec is asserting on). Every spec
+  // passes in isolation; the parallel pollution was a large part of the CI
+  // failures. Run CI serially to eliminate concurrent races. Proper long-term
+  // fix: per-worker org/user namespacing so parallelism can be restored.
+  fullyParallel: false,
+  workers: process.env.CI ? 1 : 4, // serial in CI for isolation; parallel locally
 
   // Retry strategy:
   // - CI environments (process.env.CI): 1 retry for network flakiness/staging server issues
