@@ -9,8 +9,11 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Command Palette', () => {
   test.beforeEach(async ({ page }) => {
-    // Navigate to the app - these tests will use the staging environment
+    // Navigate to the app and wait for it to be interactive before any test
+    // presses Ctrl+K — otherwise the global keyboard listener may not be mounted
+    // yet and the palette never opens (the palette input then times out).
     await page.goto('/');
+    await page.waitForLoadState('networkidle');
   });
 
   test.describe('Basic Functionality', () => {
@@ -67,11 +70,12 @@ test.describe('Command Palette', () => {
       // Type search query
       await page.getByPlaceholder(/search/i).fill('Smith');
 
-      // Should show "Athletes" group heading
-      await expect(page.getByText('Athletes')).toBeVisible();
+      // Should show "Athletes" group heading. Scope to the palette dialog —
+      // page.getByText('Athletes') also matches the nav's "Global Athletes"
+      // link behind the modal, which trips Playwright's strict-mode check.
+      await expect(page.getByRole('dialog').getByText('Athletes', { exact: true })).toBeVisible();
 
-      // Should show at least one athlete result
-      // (Assumes test data exists - will be seeded in test setup)
+      // Should show at least one athlete result (seeded in global-setup)
       await expect(page.locator('[data-type="athlete"]').first()).toBeVisible();
     });
 
