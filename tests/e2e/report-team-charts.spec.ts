@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures/e2e-base';
 import { readFileSync, statSync } from 'fs';
 import { loginAsDefaultUser } from './helpers/auth';
 

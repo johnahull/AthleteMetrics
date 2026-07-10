@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, Page } from './fixtures/e2e-base';
 
 /**
  * Comprehensive E2E Test Suite for AthleteMetrics Staging Environment

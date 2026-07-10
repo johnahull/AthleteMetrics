@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures/e2e-base';
 import { loginAs, loginWithCredentials, logout } from './helpers/auth';
 import { navigateTo, expectCurrentUrl } from './helpers/navigation';
 import { clickWithMultipleFallbacks } from './helpers/selectors';
