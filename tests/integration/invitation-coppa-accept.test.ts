@@ -93,6 +93,8 @@ async function seedInvitation(params: {
   playerId?: string;
   firstName?: string;
   lastName?: string;
+  birthDate?: string;
+  parentEmail?: string;
 }): Promise<string> {
   const rawToken = crypto.randomUUID();
   const expiresAt = new Date();
@@ -107,6 +109,8 @@ async function seedInvitation(params: {
     role: params.role ?? 'athlete',
     invitedBy: inviterUserId,
     playerId: params.playerId,
+    birthDate: params.birthDate,
+    parentEmail: params.parentEmail,
     token: hashToken(rawToken),
     expiresAt,
   });
@@ -562,5 +566,91 @@ describe('POST /api/invitations/:token/accept — COPPA age gate', () => {
       .send(payload);
 
     expect(res.status).toBe(400);
+  });
+});
+
+// ============================================================================
+// Phase 2 — coach-provided birthDate/parentEmail on the invitation itself
+// ============================================================================
+
+describe('POST /api/invitations/:token/accept — coach-provided COPPA data', () => {
+  it('[LEGAL] invitation carries under-13 DOB + parentEmail; form omits both → VPC to coach-provided email, no session', async () => {
+    const ts = Date.now();
+    const coachParentEmail = `coach-parent-${ts}@testinvcoppa.local`;
+    const token = await seedInvitation({
+      email: `invdata-${ts}@testinvcoppa.local`,
+      birthDate: under13Dob(),
+      parentEmail: coachParentEmail,
+    });
+    const payload = acceptPayload(); // no birthDate, no parentEmail
+
+    vi.mocked(emailMocks.sendParentalConsentRequest).mockClear();
+
+    const res = await request(app)
+      .post(`/api/invitations/${token}/accept`)
+      .send(payload);
+
+    expect(res.status).toBe(200);
+    expect(res.body.requiresParentalConsent).toBe(true);
+    expect(hasSessionCookie(res)).toBe(false);
+
+    const dbUser = await getUserByUsername(payload.username as string);
+    expect(dbUser).toBeDefined();
+    createdUserIds.push(dbUser.id);
+    expect(dbUser.coppaStatus).toBe('pending_consent');
+
+    // Consent email went to the coach-provided parent email
+    expect(emailMocks.sendParentalConsentRequest).toHaveBeenCalledWith(
+      coachParentEmail,
+      expect.anything()
+    );
+  });
+
+  it('invitation under-13 DOB wins over adult form DOB → VPC path', async () => {
+    const ts = Date.now();
+    const token = await seedInvitation({
+      email: `invdob-${ts}@testinvcoppa.local`,
+      birthDate: under13Dob(),
+      parentEmail: `coach-parent2-${ts}@testinvcoppa.local`,
+    });
+    // Form lies: says adult
+    const payload = acceptPayload({ birthDate: exactlyAge(20) });
+
+    const res = await request(app)
+      .post(`/api/invitations/${token}/accept`)
+      .send(payload);
+
+    expect(res.status).toBe(200);
+    expect(res.body.requiresParentalConsent).toBe(true);
+    expect(hasSessionCookie(res)).toBe(false);
+  });
+
+  it('form parentEmail differing from the invitation parentEmail → form value used for consent', async () => {
+    const ts = Date.now();
+    const formParentEmail = `form-parent-${ts}@testinvcoppa.local`;
+    const token = await seedInvitation({
+      email: `invpe-${ts}@testinvcoppa.local`,
+      birthDate: under13Dob(),
+      parentEmail: `coach-parent3-${ts}@testinvcoppa.local`,
+    });
+    const payload = acceptPayload({ birthDate: under13Dob(), parentEmail: formParentEmail });
+
+    vi.mocked(emailMocks.sendParentalConsentRequest).mockClear();
+
+    const res = await request(app)
+      .post(`/api/invitations/${token}/accept`)
+      .send(payload);
+
+    expect(res.status).toBe(200);
+    expect(res.body.requiresParentalConsent).toBe(true);
+
+    const dbUser = await getUserByUsername(payload.username as string);
+    createdUserIds.push(dbUser.id);
+
+    // Fresher form value wins over the coach-provided one
+    expect(emailMocks.sendParentalConsentRequest).toHaveBeenCalledWith(
+      formParentEmail,
+      expect.anything()
+    );
   });
 });
