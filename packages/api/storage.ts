@@ -1690,6 +1690,15 @@ export class DatabaseStorage implements IStorage {
       lastName: string;
       legalAcceptedAt?: string;
       legalAcceptedVersion?: string;
+      // COPPA classification computed by the route (age checks live there).
+      // Persisted fail-closed inside this transaction so a crash after commit
+      // but before VPC initiation still leaves under-13 users login-blocked.
+      coppa?: {
+        birthDate: string;
+        isMinor: boolean;
+        under13: boolean;
+        parentEmail?: string;
+      };
     },
     auditContext?: {
       ipAddress?: string;
@@ -1735,10 +1744,25 @@ export class DatabaseStorage implements IStorage {
 
         // Update the existing user with credentials
         // Note: updateUser will hash the password, so pass the plain password
+        const coppaUpdate: Partial<InsertUser> = {};
+        if (userInfo.coppa) {
+          if (!existingUser.birthDate) {
+            coppaUpdate.birthDate = userInfo.coppa.birthDate;
+          }
+          coppaUpdate.isMinor = userInfo.coppa.isMinor;
+          if (userInfo.coppa.isMinor && userInfo.coppa.parentEmail && !existingUser.parentEmail) {
+            coppaUpdate.parentEmail = userInfo.coppa.parentEmail;
+          }
+          // Never downgrade a confirmed consent
+          if (userInfo.coppa.under13 && existingUser.coppaStatus !== 'consented') {
+            coppaUpdate.coppaStatus = 'pending_consent';
+          }
+        }
         user = await this.updateUser(invitation.playerId, {
           username: userInfo.username,
           password: userInfo.password,
           isActive: true,
+          ...coppaUpdate,
           ...legalData
         }, tx);
 
@@ -1784,6 +1808,20 @@ export class DatabaseStorage implements IStorage {
             console.log("[Invitation] Updating OAuth-only user with password");
           }
 
+          // COPPA: non-destructive — only classify users who have no birthDate
+          // on record; never overwrite an existing birthDate or a confirmed
+          // consent, and only fill parentEmail when currently empty.
+          if (userInfo.coppa && !existingUser.birthDate) {
+            updateData.birthDate = userInfo.coppa.birthDate;
+            updateData.isMinor = userInfo.coppa.isMinor;
+            if (userInfo.coppa.isMinor && userInfo.coppa.parentEmail && !existingUser.parentEmail) {
+              updateData.parentEmail = userInfo.coppa.parentEmail;
+            }
+            if (userInfo.coppa.under13 && existingUser.coppaStatus !== 'consented') {
+              updateData.coppaStatus = 'pending_consent';
+            }
+          }
+
           // Only update if there's something to update
           if (Object.keys(updateData).length > 0) {
             user = await this.updateUser(existingUser.id, updateData, tx);
@@ -1801,6 +1839,15 @@ export class DatabaseStorage implements IStorage {
             firstName: userInfo.firstName,
             lastName: userInfo.lastName,
             role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete" | "parent",
+            // COPPA: mirror registration (registration-routes.ts) — under-13 is
+            // created pending_consent so a failed VPC initiation still leaves
+            // the account login-blocked (fail-closed).
+            ...(userInfo.coppa ? {
+              birthDate: userInfo.coppa.birthDate,
+              isMinor: userInfo.coppa.isMinor,
+              parentEmail: userInfo.coppa.isMinor ? userInfo.coppa.parentEmail : undefined,
+              coppaStatus: (userInfo.coppa.under13 ? 'pending_consent' : 'not_applicable') as 'pending_consent' | 'not_applicable',
+            } : {}),
             ...legalData
           };
 
