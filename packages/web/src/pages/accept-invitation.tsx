@@ -118,6 +118,17 @@ export default function AcceptInvitation() {
           lastName: data.athleteData.lastName
         }));
       }
+
+      // COPPA prefill: coach-provided birthDate/parentEmail captured at
+      // invite-create time. Fields stay editable — the accepter may correct
+      // them, and the server re-validates either way.
+      if (data.birthDate || data.parentEmail) {
+        setFormData(prev => ({
+          ...prev,
+          birthDate: prev.birthDate || (data.birthDate ?? ''),
+          parentEmail: prev.parentEmail || (data.parentEmail ?? ''),
+        }));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load invitation');
     } finally {
