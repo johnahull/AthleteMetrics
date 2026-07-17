@@ -67,7 +67,12 @@ function ageWithOffset(years: number, daysOffset: number): string {
   const d = new Date();
   d.setFullYear(d.getFullYear() - years);
   d.setDate(d.getDate() + daysOffset);
-  return d.toISOString().split('T')[0];
+  // Format in LOCAL time — toISOString() (UTC) can shift a day across the
+  // 13th-birthday boundary in non-UTC timezones (see tests/shared/age-helpers.ts).
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 /** Under-13 date of birth (12 years old — 13th birthday is tomorrow) */
@@ -622,6 +627,174 @@ describe('POST /api/invitations/:token/accept — coach-provided COPPA data', ()
 
     expect(res.status).toBe(200);
     expect(res.body.requiresParentalConsent).toBe(true);
+    expect(hasSessionCookie(res)).toBe(false);
+  });
+
+  it('parent invitation is NOT age-classified by the linked child: parent of an under-13 athlete can accept', async () => {
+    const ts = Date.now();
+    // Under-13 athlete already in the system (the linked child)
+    const [child] = await db.insert(users).values({
+      username: `invexistchild${ts}`,
+      firstName: 'Linked',
+      lastName: 'Child',
+      fullName: 'Linked Child',
+      password: 'placeholder-hash',
+      emails: [`child-${ts}@testinvcoppa.local`],
+      birthDate: under13Dob(),
+      isMinor: true,
+      role: 'athlete',
+      coppaStatus: 'pending_consent',
+    }).returning({ id: users.id });
+    createdUserIds.push(child.id);
+
+    // Parent invitation: playerId stores the CHILD's id
+    const token = await seedInvitation({
+      email: `parent-role-${ts}@testinvcoppa.local`,
+      role: 'parent',
+      playerId: child.id,
+    });
+    // Parent enters their own adult DOB
+    const payload = acceptPayload({ birthDate: exactlyAge(40) });
+
+    const res = await request(app)
+      .post(`/api/invitations/${token}/accept`)
+      .send(payload);
+
+    // Must NOT be blocked as "role requires an adult" (child's DOB must not classify the parent)
+    expect(res.status).toBe(200);
+    expect(res.body.requiresParentalConsent).toBeFalsy();
+    expect(hasSessionCookie(res)).toBe(true);
+
+    // Parent's row must not have inherited the child's minor status
+    const parentRow = await getUserByUsername(payload.username as string);
+    // Parent-role invites with playerId reuse the parent-link path; the account row is new
+    if (parentRow) {
+      createdUserIds.push(parentRow.id);
+      expect(parentRow.isMinor).toBe(false);
+      expect(parentRow.coppaStatus).toBe('not_applicable');
+    }
+  });
+
+  it('[LEGAL] email-matched under-13 row with default not_applicable status is blocked (no session, moved to pending_consent)', async () => {
+    const ts = Date.now();
+    const email = `backfill-${ts}@testinvcoppa.local`;
+    // Server knows the DOB but the status was never classified (column default)
+    const [existing] = await db.insert(users).values({
+      username: `invexistbackfill${ts}`,
+      firstName: 'Backfilled',
+      lastName: 'Minor',
+      fullName: 'Backfilled Minor',
+      emails: [email],
+      password: 'placeholder-hash',
+      birthDate: under13Dob(),
+      coppaStatus: 'not_applicable',
+      isMinor: false,
+      role: 'athlete',
+    }).returning({ id: users.id });
+    createdUserIds.push(existing.id);
+
+    const token = await seedInvitation({ email });
+    // The child lies with an adult DOB and provides no parent email
+    const payload = acceptPayload({ birthDate: exactlyAge(20) });
+
+    const res = await request(app)
+      .post(`/api/invitations/${token}/accept`)
+      .send(payload);
+
+    // Server-known DOB wins → under-13 → parent email required → 400 (no session either way)
+    expect(res.status).toBe(400);
+    expect(hasSessionCookie(res)).toBe(false);
+
+    // With a parent email supplied, the accept completes but is gated
+    const token2 = await seedInvitation({ email });
+    const payload2 = acceptPayload({
+      birthDate: exactlyAge(20),
+      parentEmail: `parent-backfill-${ts}@testinvcoppa.local`,
+    });
+    const res2 = await request(app)
+      .post(`/api/invitations/${token2}/accept`)
+      .send(payload2);
+
+    expect(res2.status).toBe(200);
+    expect(res2.body.requiresParentalConsent).toBe(true);
+    expect(hasSessionCookie(res2)).toBe(false);
+
+    const [row] = await db.select().from(users).where(eq(users.id, existing.id));
+    expect(row.coppaStatus).toBe('pending_consent');
+  });
+
+  it('[LEGAL] consent_revoked linked player → 403 BEFORE the invitation is consumed', async () => {
+    const ts = Date.now();
+    const [revoked] = await db.insert(users).values({
+      username: `invexistrevoked${ts}`,
+      firstName: 'Revoked',
+      lastName: 'Minor',
+      fullName: 'Revoked Minor',
+      emails: [`revoked-${ts}@testinvcoppa.local`],
+      password: 'placeholder-hash',
+      birthDate: under13Dob(),
+      isMinor: true,
+      role: 'athlete',
+      coppaStatus: 'consent_revoked',
+    }).returning({ id: users.id });
+    createdUserIds.push(revoked.id);
+
+    const token = await seedInvitation({
+      email: `revoked-${ts}@testinvcoppa.local`,
+      playerId: revoked.id,
+    });
+    const payload = acceptPayload({
+      birthDate: under13Dob(),
+      parentEmail: `parent-revoked-${ts}@testinvcoppa.local`,
+    });
+
+    const res = await request(app)
+      .post(`/api/invitations/${token}/accept`)
+      .send(payload);
+
+    expect(res.status).toBe(403);
+    expect(hasSessionCookie(res)).toBe(false);
+
+    // The invitation must remain usable (support can resolve, then retry)
+    const [inv] = await db.select().from(invitations)
+      .where(eq(invitations.token, hashToken(token)));
+    expect(inv.isUsed).toBe(false);
+
+    // Revocation must NOT be silently re-opened
+    const [row] = await db.select().from(users).where(eq(users.id, revoked.id));
+    expect(row.coppaStatus).toBe('consent_revoked');
+  });
+
+  it('[LEGAL] needs_parent_email user gets NO session via invite accept', async () => {
+    const ts = Date.now();
+    const email = `needsparent-${ts}@testinvcoppa.local`;
+    const [existing] = await db.insert(users).values({
+      username: `invexistneeds${ts}`,
+      firstName: 'Needs',
+      lastName: 'ParentEmail',
+      fullName: 'Needs ParentEmail',
+      emails: [email],
+      password: 'placeholder-hash',
+      birthDate: under13Dob(),
+      isMinor: true,
+      role: 'athlete',
+      coppaStatus: 'needs_parent_email',
+    }).returning({ id: users.id });
+    createdUserIds.push(existing.id);
+
+    const token = await seedInvitation({ email });
+    const payload = acceptPayload({
+      birthDate: under13Dob(),
+      parentEmail: `parent-needs-${ts}@testinvcoppa.local`,
+    });
+
+    const res = await request(app)
+      .post(`/api/invitations/${token}/accept`)
+      .send(payload);
+
+    expect(res.status).toBe(200);
+    expect(res.body.requiresParentalConsent).toBe(true);
+    // LEGAL: login blocks needs_parent_email; invite accept must not hand out a session
     expect(hasSessionCookie(res)).toBe(false);
   });
 

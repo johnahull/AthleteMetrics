@@ -1735,8 +1735,11 @@ export class DatabaseStorage implements IStorage {
         legalAcceptedVersion: userInfo.legalAcceptedVersion || getLegalAcceptanceTimestamp()
       } : {};
 
-      // Check if invitation is linked to an existing athlete (playerId)
-      if (invitation.playerId) {
+      // Check if invitation is linked to an existing athlete (playerId).
+      // For PARENT invitations playerId stores the CHILD the parent should be
+      // linked to — the parent needs their own account (email-match/create
+      // below), not a credential takeover of the child's row.
+      if (invitation.playerId && invitation.role !== 'parent') {
         console.log("Invitation linked to existing athlete:", invitation.playerId);
 
         // Get the existing athlete/user
@@ -1757,8 +1760,12 @@ export class DatabaseStorage implements IStorage {
           if (userInfo.coppa.isMinor && userInfo.coppa.parentEmail && !existingUser.parentEmail) {
             coppaUpdate.parentEmail = userInfo.coppa.parentEmail;
           }
-          // Never downgrade a confirmed consent
-          if (userInfo.coppa.under13 && existingUser.coppaStatus !== 'consented') {
+          // Never override a resolved consent state: 'consented' must not be
+          // downgraded, and 'consent_revoked' must not be silently re-opened
+          // (revocation is resolved through support, not by re-accepting).
+          if (userInfo.coppa.under13
+            && existingUser.coppaStatus !== 'consented'
+            && existingUser.coppaStatus !== 'consent_revoked') {
             coppaUpdate.coppaStatus = 'pending_consent';
           }
         }
@@ -1812,17 +1819,27 @@ export class DatabaseStorage implements IStorage {
             console.log("[Invitation] Updating OAuth-only user with password");
           }
 
-          // COPPA: non-destructive — only classify users who have no birthDate
-          // on record; never overwrite an existing birthDate or a confirmed
-          // consent, and only fill parentEmail when currently empty.
-          if (userInfo.coppa && !existingUser.birthDate) {
-            updateData.birthDate = userInfo.coppa.birthDate;
-            updateData.isMinor = userInfo.coppa.isMinor;
+          // COPPA: non-destructive for identity data — never overwrite an
+          // existing birthDate, only fill parentEmail when currently empty.
+          // The STATUS update, however, must apply regardless of whether the
+          // row already has a birthDate: an under-13 row can exist with the
+          // 'not_applicable' column default (e.g. backfill or roster import),
+          // and skipping the status here would hand it a session.
+          if (userInfo.coppa) {
+            if (!existingUser.birthDate) {
+              updateData.birthDate = userInfo.coppa.birthDate;
+              updateData.isMinor = userInfo.coppa.isMinor;
+            }
             if (userInfo.coppa.isMinor && userInfo.coppa.parentEmail && !existingUser.parentEmail) {
               updateData.parentEmail = userInfo.coppa.parentEmail;
             }
-            if (userInfo.coppa.under13 && existingUser.coppaStatus !== 'consented') {
+            // Never override a resolved consent state ('consented' or
+            // 'consent_revoked' — the latter is resolved via support).
+            if (userInfo.coppa.under13
+              && existingUser.coppaStatus !== 'consented'
+              && existingUser.coppaStatus !== 'consent_revoked') {
               updateData.coppaStatus = 'pending_consent';
+              updateData.isMinor = true;
             }
           }
 

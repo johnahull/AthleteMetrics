@@ -66,7 +66,12 @@ function ageWithOffset(years: number, daysOffset: number): string {
   const d = new Date();
   d.setFullYear(d.getFullYear() - years);
   d.setDate(d.getDate() + daysOffset);
-  return d.toISOString().split('T')[0];
+  // Format in LOCAL time — toISOString() (UTC) can shift a day across the
+  // 13th-birthday boundary in non-UTC timezones (see tests/shared/age-helpers.ts).
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 /** Under-13 date of birth (12 years old — 13th birthday is tomorrow) */
@@ -304,7 +309,7 @@ describe('POST /api/invitations — COPPA invite-create validation', () => {
     expect(rows[0].parentEmail).toBe(parentEmail);
   });
 
-  it('GET /api/invitations/:token returns birthDate and parentEmail for prefill', async () => {
+  it('[LEGAL] GET /api/invitations/:token exposes parentEmailOnFile flag but never the raw PII', async () => {
     const parentEmail = `${TEST_PREFIX}parent3_${uniqueId()}@example.com`;
     const payload = invitePayload({ birthDate: under13Dob(), parentEmail });
 
@@ -320,7 +325,10 @@ describe('POST /api/invitations — COPPA invite-create validation', () => {
 
     const getRes = await request(app).get(`/api/invitations/${token}`);
     expect(getRes.status).toBe(200);
-    expect(getRes.body.birthDate).toBe(payload.birthDate);
-    expect(getRes.body.parentEmail).toBe(parentEmail);
+    // The child's DOB and the parent's email must NOT leak to token bearers
+    expect(getRes.body.birthDate).toBeUndefined();
+    expect(getRes.body.parentEmail).toBeUndefined();
+    // The form only learns that a parent email exists (relaxes required field)
+    expect(getRes.body.parentEmailOnFile).toBe(true);
   });
 });

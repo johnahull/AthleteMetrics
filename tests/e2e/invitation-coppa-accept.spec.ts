@@ -24,7 +24,11 @@ function dobForAge(age: number): string {
   const d = new Date();
   d.setFullYear(d.getFullYear() - age);
   d.setDate(d.getDate() - 1);
-  return d.toISOString().split('T')[0];
+  // Local-time formatting — toISOString() can shift a day in non-UTC timezones
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 /** Login as org admin and create an athlete invitation; returns the invite link. */

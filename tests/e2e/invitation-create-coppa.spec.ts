@@ -8,8 +8,9 @@ import { getUserByRole } from './fixtures/test-users';
  * 1. The athlete invite modal shows an optional Date of Birth field.
  * 2. Entering an under-13 DOB reveals a required parent-email field with the
  *    COPPA alert, and submit is blocked without it.
- * 3. An invitation created with coach-provided birthDate/parentEmail prefills
- *    the accept page and completes to the consent holding screen.
+ * 3. An invitation created with coach-provided birthDate/parentEmail keeps
+ *    that PII server-side (token bearers only see parentEmailOnFile) and the
+ *    accept completes to the consent holding screen without re-entering it.
  *
  * Requires an E2E environment with seeded role users (org_admin) — like the
  * other invitation specs, this cannot run against a bare local dev DB.
@@ -22,7 +23,11 @@ function dobForAge(age: number): string {
   const d = new Date();
   d.setFullYear(d.getFullYear() - age);
   d.setDate(d.getDate() - 1);
-  return d.toISOString().split('T')[0];
+  // Local-time formatting — toISOString() can shift a day in non-UTC timezones
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 test.describe('COPPA: invite-create age capture', () => {
@@ -72,7 +77,7 @@ test.describe('COPPA: invite-create age capture', () => {
     await expect(page.locator('[data-testid="button-send-invitation"]')).toBeHidden({ timeout: 10000 });
   });
 
-  test('coach-provided DOB/parent email prefill the accept page and reach the consent holding screen', async ({ page, request }) => {
+  test('coach-provided parent email is applied server-side (never exposed) and the accept reaches the consent holding screen', async ({ page, request }) => {
     const admin = getUserByRole('org_admin');
 
     const loginRes = await request.post(`${BASE_URL}/api/auth/login`, {
@@ -105,11 +110,21 @@ test.describe('COPPA: invite-create age capture', () => {
     await page.goto((inviteLink as string).replace(/^https?:\/\/[^/]+/, BASE_URL));
     await page.waitForLoadState('networkidle');
 
-    // Prefill: DOB and parent email arrive from the invitation
-    await expect(page.locator('#birthDate')).toHaveValue(dobForAge(12));
-    await expect(page.locator('#parentEmail')).toHaveValue(parentEmail);
+    // PII must NOT be prefilled — the raw DOB/parent email never leave the
+    // server. The child enters their own DOB; the coach-provided parent
+    // email is applied server-side as a fallback.
+    await expect(page.locator('#birthDate')).toHaveValue('');
+    await page.locator('#birthDate').fill(dobForAge(12));
 
-    // Complete the rest and land on the consent holding screen
+    // Under-13 + parent email on file → field visible but NOT required
+    const parentField = page.locator('#parentEmail');
+    await expect(parentField).toBeVisible();
+    await expect(parentField).toHaveValue('');
+    await expect(parentField).not.toHaveAttribute('required', '');
+    await expect(page.getByText(/coach already provided a parent\/guardian email/i)).toBeVisible();
+
+    // Complete the rest, leaving parent email blank → server falls back to
+    // the coach-provided value and the consent holding screen appears
     await page.locator('#username').fill(`e2ecoppapre${RUN_ID}`);
     await page.locator('#password').fill('ValidPass1!!');
     await page.locator('#confirmPassword').fill('ValidPass1!!');
