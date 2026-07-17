@@ -23,6 +23,8 @@ import {
 } from "@shared/legal-acceptance";
 import { db } from "../db";
 import { parentAthleteLinks } from "@shared/schema/tables/coppa";
+import { isUnder13, isMinorAge } from "@shared/coppa-utils";
+import { coppaService } from "../services/coppa-service";
 import crypto from "crypto";
 import { hashToken } from "../lib/token-hash";
 
@@ -820,11 +822,25 @@ export function registerInvitationRoutes(app: Express) {
   app.post("/api/invitations/:token/accept", authLimiter, async (req, res) => {
     try {
       const { token } = req.params;
-      const { password, firstName, lastName, username, legalAcceptedAt } = req.body;
+      const { password, firstName, lastName, username, legalAcceptedAt, birthDate, parentEmail } = req.body;
 
       // Validate legal acceptance is provided and valid
       if (!legalAcceptedAt) {
         return res.status(400).json({ message: MISSING_ACCEPTANCE_MESSAGE });
+      }
+
+      // COPPA format checks (role/age-dependent rules run after the invitation
+      // is fetched, since requiredness depends on invitation.role).
+      // Note: the frontend requires birthDate for every role; the server only
+      // requires it for athletes — intentional belt-and-suspenders.
+      if (birthDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(String(birthDate))) {
+        return res.status(400).json({ message: "birthDate must be in YYYY-MM-DD format" });
+      }
+      const normalizedParentEmail: string | undefined = typeof parentEmail === 'string' && parentEmail.trim() !== ''
+        ? parentEmail.trim().toLowerCase()
+        : undefined;
+      if (normalizedParentEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedParentEmail)) {
+        return res.status(400).json({ message: "parentEmail must be a valid email address" });
       }
 
       if (!validateLegalAcceptanceTimestamp(legalAcceptedAt)) {
@@ -911,6 +927,47 @@ export function registerInvitationRoutes(app: Express) {
         return res.status(429).json({ message: "Too many failed attempts. This invitation has been locked." });
       }
 
+      // ── COPPA age classification (P0-11) ────────────────────────────────
+      // Effective birthDate precedence: linked player record (server-known,
+      // coach-entered) wins over the form value — a form entry cannot
+      // reclassify someone the server already knows the age of.
+      // All validation failures below early-return 400 BEFORE acceptInvitation:
+      // the catch block increments attemptCount and locks the invitation.
+      let effectiveBirthDate: string | undefined =
+        typeof birthDate === 'string' && birthDate !== '' ? birthDate : undefined;
+      if (invitation.playerId) {
+        const linkedPlayer = await storage.getUser(invitation.playerId);
+        if (linkedPlayer?.birthDate) {
+          effectiveBirthDate = String(linkedPlayer.birthDate);
+        }
+      }
+
+      if (invitation.role === 'athlete' && !effectiveBirthDate) {
+        return res.status(400).json({ message: "Date of birth is required to accept an athlete invitation." });
+      }
+
+      let under13 = false;
+      let minor = false;
+      if (effectiveBirthDate) {
+        try {
+          under13 = isUnder13(effectiveBirthDate);
+          minor = isMinorAge(effectiveBirthDate);
+        } catch {
+          return res.status(400).json({ message: "Invalid date of birth." });
+        }
+      }
+      const teenMinor = minor && !under13;
+
+      if (under13 && invitation.role !== 'athlete') {
+        return res.status(400).json({ message: "This invitation role requires an adult. Please contact your organization." });
+      }
+      if (under13 && !normalizedParentEmail) {
+        return res.status(400).json({ message: "A parent or guardian email is required for athletes under 13." });
+      }
+      if (normalizedParentEmail && normalizedParentEmail === invitation.email.toLowerCase()) {
+        return res.status(400).json({ message: "Parent email must be different from the athlete's email." });
+      }
+
       const result = await storage.acceptInvitation(
         token,
         {
@@ -921,6 +978,14 @@ export function registerInvitationRoutes(app: Express) {
           lastName,
           legalAcceptedAt,
           legalAcceptedVersion: getLegalAcceptanceTimestamp(), // Format: "2024-12-13"
+          ...(effectiveBirthDate ? {
+            coppa: {
+              birthDate: effectiveBirthDate,
+              isMinor: minor,
+              under13,
+              parentEmail: minor ? normalizedParentEmail : undefined,
+            }
+          } : {}),
         },
         {
           ipAddress: req.ip,
@@ -948,6 +1013,71 @@ export function registerInvitationRoutes(app: Express) {
           console.error('[InvitationAcceptance] Failed to create parent athlete link:', linkError);
           // Non-fatal: user account and org membership already created
         }
+      }
+
+      // ── COPPA session gate ──────────────────────────────────────────────
+      // Gate on the FINAL user row, not just the form-derived classification:
+      // an existing account joining a new org may already be pending_consent
+      // or consent_revoked, and must not receive a session here that the
+      // login route would refuse.
+      if (result.user.coppaStatus === 'consent_revoked') {
+        return res.status(403).json({
+          message: "Parental consent for this account was revoked. Please contact your organization or support to re-initiate consent."
+        });
+      }
+
+      if (result.user.coppaStatus === 'pending_consent') {
+        // Under-13: initiate VPC AFTER the accept transaction committed
+        // (initiateConsent runs its own transaction and sends the parent
+        // email). No session, no welcome email — confirmConsent notifies
+        // the athlete when the parent approves.
+        const consentParentEmail = normalizedParentEmail || result.user.parentEmail;
+        let consentEmailSent: boolean | undefined;
+        if (consentParentEmail) {
+          const coppaResult = await coppaService.initiateConsent({
+            athleteUserId: result.user.id,
+            parentEmail: consentParentEmail,
+            organizationId: invitation.organizationId,
+            ip: req.ip,
+            userAgent: req.get('User-Agent'),
+          });
+          consentEmailSent = coppaResult.emailSent;
+          console.log(`[InvitationAcceptance] Minor accepted invite: ${result.user.id}, VPC initiated: ${coppaResult.success}, emailSent: ${coppaResult.emailSent}`);
+        }
+
+        const consentMessage = consentEmailSent === false
+          ? "Your account has been created. We were unable to send the consent email to your parent. Please ask them to visit the consent page directly, or try again later."
+          : "Your account has been created. A consent email has been sent to your parent or guardian. You'll be able to log in once they approve your account.";
+
+        return res.json({
+          success: true,
+          requiresParentalConsent: true,
+          message: consentMessage,
+        });
+      }
+
+      // Teen minor (13-17) with a parent email: record the link and notify
+      // the parent (informational, not a consent request), then continue to
+      // the normal session flow. Conflict-safe: Path A/B users may already
+      // have a link row for this parent.
+      if (teenMinor && normalizedParentEmail) {
+        try {
+          await db.insert(parentAthleteLinks).values({
+            parentEmail: normalizedParentEmail,
+            athleteUserId: result.user.id,
+            organizationId: invitation.organizationId,
+            isActive: true,
+          }).onConflictDoNothing();
+        } catch (linkError) {
+          console.error('[InvitationAcceptance] Failed to create teen parent link:', linkError);
+          // Non-fatal: account creation already succeeded
+        }
+        emailService.sendParentNotification({
+          parentEmail: normalizedParentEmail,
+          athleteFirstName: result.user.firstName,
+        }).catch((err: unknown) => {
+          console.error('[InvitationAcceptance] Failed to send parent notification email:', err);
+        });
       }
 
       // Send welcome email
