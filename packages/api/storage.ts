@@ -1628,6 +1628,8 @@ export class DatabaseStorage implements IStorage {
     role: string;
     invitedBy: string;
     playerId?: string;
+    birthDate?: string | null;
+    parentEmail?: string | null;
     expiresAt: Date;
   }): Promise<Invitation> {
     const token = crypto.randomUUID();
@@ -1643,6 +1645,8 @@ export class DatabaseStorage implements IStorage {
       role: data.role,
       invitedBy: data.invitedBy,
       playerId: data.playerId, // Store athlete ID consistently
+      birthDate: data.birthDate,
+      parentEmail: data.parentEmail,
       token: hashToken(token), // Store only the hash; the raw token is emailed
       expiresAt,
     }).returning();
@@ -1690,6 +1694,15 @@ export class DatabaseStorage implements IStorage {
       lastName: string;
       legalAcceptedAt?: string;
       legalAcceptedVersion?: string;
+      // COPPA classification computed by the route (age checks live there).
+      // Persisted fail-closed inside this transaction so a crash after commit
+      // but before VPC initiation still leaves under-13 users login-blocked.
+      coppa?: {
+        birthDate: string;
+        isMinor: boolean;
+        under13: boolean;
+        parentEmail?: string;
+      };
     },
     auditContext?: {
       ipAddress?: string;
@@ -1722,8 +1735,11 @@ export class DatabaseStorage implements IStorage {
         legalAcceptedVersion: userInfo.legalAcceptedVersion || getLegalAcceptanceTimestamp()
       } : {};
 
-      // Check if invitation is linked to an existing athlete (playerId)
-      if (invitation.playerId) {
+      // Check if invitation is linked to an existing athlete (playerId).
+      // For PARENT invitations playerId stores the CHILD the parent should be
+      // linked to — the parent needs their own account (email-match/create
+      // below), not a credential takeover of the child's row.
+      if (invitation.playerId && invitation.role !== 'parent') {
         console.log("Invitation linked to existing athlete:", invitation.playerId);
 
         // Get the existing athlete/user
@@ -1735,10 +1751,29 @@ export class DatabaseStorage implements IStorage {
 
         // Update the existing user with credentials
         // Note: updateUser will hash the password, so pass the plain password
+        const coppaUpdate: Partial<InsertUser> = {};
+        if (userInfo.coppa) {
+          if (!existingUser.birthDate) {
+            coppaUpdate.birthDate = userInfo.coppa.birthDate;
+          }
+          coppaUpdate.isMinor = userInfo.coppa.isMinor;
+          if (userInfo.coppa.isMinor && userInfo.coppa.parentEmail && !existingUser.parentEmail) {
+            coppaUpdate.parentEmail = userInfo.coppa.parentEmail;
+          }
+          // Never override a resolved consent state: 'consented' must not be
+          // downgraded, and 'consent_revoked' must not be silently re-opened
+          // (revocation is resolved through support, not by re-accepting).
+          if (userInfo.coppa.under13
+            && existingUser.coppaStatus !== 'consented'
+            && existingUser.coppaStatus !== 'consent_revoked') {
+            coppaUpdate.coppaStatus = 'pending_consent';
+          }
+        }
         user = await this.updateUser(invitation.playerId, {
           username: userInfo.username,
           password: userInfo.password,
           isActive: true,
+          ...coppaUpdate,
           ...legalData
         }, tx);
 
@@ -1784,6 +1819,30 @@ export class DatabaseStorage implements IStorage {
             console.log("[Invitation] Updating OAuth-only user with password");
           }
 
+          // COPPA: non-destructive for identity data — never overwrite an
+          // existing birthDate, only fill parentEmail when currently empty.
+          // The STATUS update, however, must apply regardless of whether the
+          // row already has a birthDate: an under-13 row can exist with the
+          // 'not_applicable' column default (e.g. backfill or roster import),
+          // and skipping the status here would hand it a session.
+          if (userInfo.coppa) {
+            if (!existingUser.birthDate) {
+              updateData.birthDate = userInfo.coppa.birthDate;
+              updateData.isMinor = userInfo.coppa.isMinor;
+            }
+            if (userInfo.coppa.isMinor && userInfo.coppa.parentEmail && !existingUser.parentEmail) {
+              updateData.parentEmail = userInfo.coppa.parentEmail;
+            }
+            // Never override a resolved consent state ('consented' or
+            // 'consent_revoked' — the latter is resolved via support).
+            if (userInfo.coppa.under13
+              && existingUser.coppaStatus !== 'consented'
+              && existingUser.coppaStatus !== 'consent_revoked') {
+              updateData.coppaStatus = 'pending_consent';
+              updateData.isMinor = true;
+            }
+          }
+
           // Only update if there's something to update
           if (Object.keys(updateData).length > 0) {
             user = await this.updateUser(existingUser.id, updateData, tx);
@@ -1801,6 +1860,15 @@ export class DatabaseStorage implements IStorage {
             firstName: userInfo.firstName,
             lastName: userInfo.lastName,
             role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete" | "parent",
+            // COPPA: mirror registration (registration-routes.ts) — under-13 is
+            // created pending_consent so a failed VPC initiation still leaves
+            // the account login-blocked (fail-closed).
+            ...(userInfo.coppa ? {
+              birthDate: userInfo.coppa.birthDate,
+              isMinor: userInfo.coppa.isMinor,
+              parentEmail: userInfo.coppa.isMinor ? userInfo.coppa.parentEmail : undefined,
+              coppaStatus: (userInfo.coppa.under13 ? 'pending_consent' : 'not_applicable') as 'pending_consent' | 'not_applicable',
+            } : {}),
             ...legalData
           };
 

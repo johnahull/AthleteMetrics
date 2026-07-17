@@ -1605,6 +1605,9 @@ export const insertInvitationSchema = createInsertSchema(invitations).omit({
   email: z.string().email("Invalid email format"),
   role: z.enum(["athlete", "coach", "org_admin", "parent"]), // Removed site_admin from invitations
   teamIds: z.array(z.string()).optional(),
+  // COPPA: coach-provided age data captured at invite-create time
+  birthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "birthDate must be in YYYY-MM-DD format").optional().nullable(),
+  parentEmail: z.string().email("Invalid parent email format").trim().toLowerCase().optional().nullable(),
 });
 
 export const insertMeasurementSchema = createInsertSchema(measurements).omit({
