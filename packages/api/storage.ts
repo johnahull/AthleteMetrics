@@ -1628,6 +1628,8 @@ export class DatabaseStorage implements IStorage {
     role: string;
     invitedBy: string;
     playerId?: string;
+    birthDate?: string | null;
+    parentEmail?: string | null;
     expiresAt: Date;
   }): Promise<Invitation> {
     const token = crypto.randomUUID();
@@ -1643,6 +1645,8 @@ export class DatabaseStorage implements IStorage {
       role: data.role,
       invitedBy: data.invitedBy,
       playerId: data.playerId, // Store athlete ID consistently
+      birthDate: data.birthDate,
+      parentEmail: data.parentEmail,
       token: hashToken(token), // Store only the hash; the raw token is emailed
       expiresAt,
     }).returning();

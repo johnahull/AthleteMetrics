@@ -167,7 +167,7 @@ export function registerInvitationRoutes(app: Express) {
    */
   app.post("/api/invitations", createLimiter, requireAuth, async (req, res) => {
     try {
-      const { email, firstName, lastName, role, organizationId, teamIds, athleteId } = req.body;
+      const { email, firstName, lastName, role, organizationId, teamIds, athleteId, birthDate, parentEmail } = req.body;
 
       // Get current user info for invitedBy
       const invitedById = req.session.user?.id;
@@ -175,6 +175,45 @@ export function registerInvitationRoutes(app: Express) {
       if (!invitedById) {
         return res.status(401).json({ message: "Authentication required" });
       }
+
+      // ── COPPA invite-create validation (coppa-compliance-spec, "Invitation
+      // flow modification") ─────────────────────────────────────────────────
+      // birthDate is optional (the coach may not know it; the accept-time age
+      // gate is the backstop), but an under-13 athlete invitation cannot be
+      // created without a parentEmail — the VPC email must be able to fire at
+      // accept even if the athlete's form omits it.
+      if (birthDate !== undefined && birthDate !== null && !/^\d{4}-\d{2}-\d{2}$/.test(String(birthDate))) {
+        return res.status(400).json({ message: "birthDate must be in YYYY-MM-DD format" });
+      }
+      const normalizedInviteParentEmail: string | undefined =
+        typeof parentEmail === 'string' && parentEmail.trim() !== ''
+          ? parentEmail.trim().toLowerCase()
+          : undefined;
+      if (normalizedInviteParentEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedInviteParentEmail)) {
+        return res.status(400).json({ message: "parentEmail must be a valid email address" });
+      }
+
+      /** Under-13/parent-email rules for one effective birthDate + invitee email. */
+      const validateInviteCoppa = (effectiveBirthDate: string | undefined | null, inviteeEmail: string, effectiveParentEmail: string | undefined): string | null => {
+        if (!effectiveBirthDate) return null;
+        let under13: boolean;
+        try {
+          under13 = isUnder13(effectiveBirthDate);
+        } catch {
+          return "Invalid birthDate.";
+        }
+        if (!under13) return null;
+        if (role !== 'athlete') {
+          return "This invitation role requires an adult. Remove the under-13 birth date or invite as an athlete.";
+        }
+        if (!effectiveParentEmail) {
+          return "A parent or guardian email is required to invite an athlete under 13 (COPPA).";
+        }
+        if (effectiveParentEmail === inviteeEmail.toLowerCase()) {
+          return "Parent email must be different from the athlete's email.";
+        }
+        return null;
+      };
 
       // Handle athlete invitation (send to all their emails)
       if (athleteId && role === "athlete") {
@@ -216,6 +255,16 @@ export function registerInvitationRoutes(app: Express) {
           return res.status(400).json({ message: "Athlete has no email addresses on file" });
         }
 
+        // COPPA: the linked athlete record is the server-known source of age
+        // truth; a request-provided parentEmail overrides the record's.
+        const recordBirthDate = athlete.birthDate ? String(athlete.birthDate) : (birthDate ?? undefined);
+        const recordParentEmail = normalizedInviteParentEmail
+          ?? (athlete.parentEmail ? String(athlete.parentEmail).toLowerCase() : undefined);
+        const athleteCoppaError = validateInviteCoppa(recordBirthDate, athleteEmails[0] ?? '', recordParentEmail);
+        if (athleteCoppaError) {
+          return res.status(400).json({ message: athleteCoppaError });
+        }
+
         // Fetch invitations for this organization to avoid N+1 query
         const existingInvitations = await storage.getInvitationsByOrganization(organizationId);
 
@@ -245,6 +294,8 @@ export function registerInvitationRoutes(app: Express) {
               role,
               invitedBy: invitedById,
               playerId: athlete.id,
+              birthDate: recordBirthDate,
+              parentEmail: recordParentEmail,
               expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // Expires in 7 days
             });
             invitations.push(invitation);
@@ -346,6 +397,12 @@ export function registerInvitationRoutes(app: Express) {
         }
       }
 
+      // COPPA: an under-13 athlete invitation requires a parent email
+      const coppaError = validateInviteCoppa(birthDate ?? undefined, String(email), normalizedInviteParentEmail);
+      if (coppaError) {
+        return res.status(400).json({ message: coppaError });
+      }
+
       // Validate and clamp expiry days between 1 and 90 days
       const expiryDays = Math.max(1, Math.min(90, parseInt(process.env.INVITATION_EXPIRY_DAYS || '7', 10)));
       const invitation = await storage.createInvitation({
@@ -358,6 +415,8 @@ export function registerInvitationRoutes(app: Express) {
         invitedBy: invitedById,
         // For parent invitations, store athleteId in playerId field to preserve the link
         playerId: (role === 'parent' && athleteId) ? athleteId : undefined,
+        birthDate: birthDate ?? undefined,
+        parentEmail: normalizedInviteParentEmail,
         expiresAt: new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000)
       });
 
@@ -760,7 +819,11 @@ export function registerInvitationRoutes(app: Express) {
         role: invitation.role,
         organizationId: invitation.organizationId,
         teamIds: invitation.teamIds,
-        playerId: invitation.playerId // Include player/user ID if this is for an existing athlete
+        playerId: invitation.playerId, // Include player/user ID if this is for an existing athlete
+        // COPPA prefill for the accept form. Exposed to any token bearer —
+        // the same trust level as the invitee email already returned above.
+        birthDate: invitation.birthDate,
+        parentEmail: invitation.parentEmail
       };
 
       res.json(responseData);
