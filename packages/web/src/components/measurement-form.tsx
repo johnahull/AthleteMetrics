@@ -21,12 +21,36 @@ import { FormErrorSummary } from "@/components/ui/form-error-summary";
 import { useFormErrors } from "@/hooks/useFormErrors";
 import { z } from "zod";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
+import { PairedInputFields } from "@/components/measurement/PairedInputFields";
+import { LastSetContextLine } from "@/components/measurement/LastSetContextLine";
 
 // Create dynamic measurement schema that accepts any metric string
 // Backend will validate against org-enabled metrics
 const dynamicMeasurementSchema = insertMeasurementSchema.omit({ metric: true }).extend({
   metric: z.string().min(1, "Metric is required"),
 });
+
+/**
+ * Extract a structured `{message, field}` from an apiRequest error.
+ * apiRequest throws `Error("<status>: <raw body>")`. The body for
+ * PairedInputValidationError is `{"message":"...","field":"..."}`. Returns
+ * null if the body isn't a recognizable structured error.
+ */
+function parseFieldError(
+  error: Error,
+): { message: string; field: 'primaryValue' | 'auxiliaryValue' | 'formula' } | null {
+  if (!error?.message) return null;
+  const stripped = error.message.replace(/^\d+:\s*/, '');
+  try {
+    const parsed = JSON.parse(stripped);
+    if (parsed && typeof parsed.message === 'string' && typeof parsed.field === 'string') {
+      return parsed;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
 
 type DynamicInsertMeasurement = z.infer<typeof dynamicMeasurementSchema>;
 
@@ -68,6 +92,7 @@ export default function MeasurementForm() {
       metric: firstMetricCode,
       value: 0,
       flyInDistance: undefined,
+      auxiliaryValue: undefined,
       notes: "",
       teamId: "",
       season: "",
@@ -112,29 +137,43 @@ export default function MeasurementForm() {
       queryClient.invalidateQueries({ queryKey: ["/api/measurements"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/search/global"] });
+      // Invalidate the last-set context too — the measurement we just created
+      // may now be the "last set" the next entry should reference.
+      queryClient.invalidateQueries({ queryKey: ["last-set-context"] });
       toast({
         title: "Success",
         description: "Measurement added successfully",
       });
-      form.reset({
-        userId: "",
-        date: new Date().toISOString().split('T')[0],
-        metric: firstMetricCode,
-        value: 0,
-        flyInDistance: undefined,
-        notes: "",
-        teamId: "",
-        season: "",
-      });
-      setSelectedAthlete(null);
-      resetTeamState();
+      // Batch-entry preservation per plan §6: keep athlete + metric + date +
+      // team + season after a successful submit so a coach can log the next
+      // working set without re-picking everything. Clear only the inputs that
+      // belong to "this set" (value / auxiliary / fly-in / notes), and return
+      // focus to the primary value input. To start a totally fresh entry,
+      // coach changes the athlete/metric explicitly.
+      form.resetField("value", { defaultValue: 0 });
+      form.resetField("auxiliaryValue", { defaultValue: undefined });
+      form.resetField("flyInDistance", { defaultValue: undefined });
+      form.resetField("notes", { defaultValue: "" });
+      form.clearErrors();
       setOverrideCalculated(false);
+      // Defer focus until after the reset has propagated through React state.
+      setTimeout(() => form.setFocus("value"), 0);
     },
     onError: (error) => {
       console.error("Measurement creation error:", error);
+      // Backend PairedInputValidationError responses include {message, field}
+      // — surface the message inline on the offending input rather than as a
+      // generic toast. apiRequest throws Error("<status>: <raw body>"), so we
+      // strip the status prefix and try to JSON-parse what's left.
+      const fieldErr = parseFieldError(error);
+      if (fieldErr && fieldErr.field === 'auxiliaryValue') {
+        form.setError('auxiliaryValue', { type: 'server', message: fieldErr.message });
+      } else if (fieldErr && fieldErr.field === 'primaryValue') {
+        form.setError('value', { type: 'server', message: fieldErr.message });
+      }
       toast({
         title: "Error",
-        description: `Failed to add measurement: ${error.message}`,
+        description: fieldErr?.message ?? `Failed to add measurement: ${error.message}`,
         variant: "destructive",
       });
     },
@@ -443,9 +482,36 @@ export default function MeasurementForm() {
           </div>
         )}
 
+        {/* Last-set context: shown when an athlete + metric is selected and
+            the athlete has prior measurements. Click-to-copy pulls the source
+            values back into the form (the original load/reps for paired-input,
+            or the raw value for single-value metrics). Helps batch entry and
+            quick "did they beat last time?" comparisons. */}
+        {selectedAthlete && selectedMetric && (
+          <LastSetContextLine
+            athleteId={selectedAthlete.id}
+            metric={selectedMetric}
+          />
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Value - Only show if not a derived metric OR if override is checked */}
-          {(!selectedMetric?.isDerived || overrideCalculated || calculationPreview?.calculatedValue === null) && (
+          {/* Paired-input metrics (e.g., 1RM-est) get a dedicated component with
+              relabeled primary input, auxiliary stepper, live preview, and
+              tiered guardrails. Mutually exclusive with the default Value field
+              and with the derived-metric calculation preview. */}
+          {selectedMetric?.auxiliaryInputConfig ? (
+            <PairedInputFields
+              metricCode={selectedMetric.code}
+              config={selectedMetric.auxiliaryInputConfig}
+              disabled={createMeasurementMutation.isPending}
+              onMetricSwitch={(newCode) => {
+                form.setValue("metric", newCode, { shouldValidate: true });
+                form.setValue("auxiliaryValue", undefined as any, { shouldValidate: false });
+              }}
+            />
+          ) : (
+            /* Value - Only show if not a derived metric OR if override is checked */
+            (!selectedMetric?.isDerived || overrideCalculated || calculationPreview?.calculatedValue === null) && (
             <FormField
               control={form.control}
               name="value"
@@ -479,7 +545,7 @@ export default function MeasurementForm() {
                 </FormItem>
               )}
             />
-          )}
+          ))}
 
           {/* Fly-In Distance (only for FLY10_TIME) */}
           {metric === "FLY10_TIME" && (
