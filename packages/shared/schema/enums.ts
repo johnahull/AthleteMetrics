@@ -141,3 +141,12 @@ export const coppaStatusEnum = ['not_applicable', 'pending_consent', 'needs_pare
  * Parental consent record status
  */
 export const consentStatusEnum = ['pending', 'confirmed', 'revoked', 'expired'] as const;
+
+/**
+ * Waiver submission status enum (Jotform webhook intake)
+ * - received: payload accepted and persisted, processing not yet finished
+ * - processed: athlete record created/matched and waiver linked successfully
+ * - failed: processing raised an error after persisting the raw payload
+ */
+export const waiverSubmissionStatusEnum = ['received', 'processed', 'failed'] as const;
+export type WaiverSubmissionStatus = (typeof waiverSubmissionStatusEnum)[number];
