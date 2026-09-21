@@ -21,13 +21,27 @@
 -- submission lifecycle), even though it's server-generated like the rest of
 -- the schema's naive-TIMESTAMP columns.
 --
--- Safe to re-run: ALTER COLUMN ... TYPE is idempotent when the column is
--- already TIMESTAMPTZ (no-op). Existing naive values are interpreted as UTC
--- via the USING clause, matching how they were actually written (new Date()
--- / Date.parse() are always UTC-based in Node).
+-- Safe to re-run: each ALTER is guarded by the column's current data_type.
+-- Without the guard, rerunning `... USING signed_at AT TIME ZONE 'UTC'` after
+-- the column is already TIMESTAMPTZ would first collapse it to a naive
+-- timestamp (AT TIME ZONE on a timestamptz strips the zone), then implicitly
+-- re-widen that naive value back to TIMESTAMPTZ using the *session's*
+-- timezone rather than UTC — silently shifting the stored instant on any
+-- non-UTC session. The guard makes a second run a true no-op instead.
 
-ALTER TABLE waiver_submissions
-  ALTER COLUMN signed_at TYPE TIMESTAMPTZ USING signed_at AT TIME ZONE 'UTC';
+DO $$
+BEGIN
+  IF (SELECT data_type FROM information_schema.columns
+      WHERE table_name = 'waiver_submissions' AND column_name = 'signed_at')
+     <> 'timestamp with time zone' THEN
+    ALTER TABLE waiver_submissions
+      ALTER COLUMN signed_at TYPE TIMESTAMPTZ USING signed_at AT TIME ZONE 'UTC';
+  END IF;
 
-ALTER TABLE waiver_submissions
-  ALTER COLUMN processed_at TYPE TIMESTAMPTZ USING processed_at AT TIME ZONE 'UTC';
+  IF (SELECT data_type FROM information_schema.columns
+      WHERE table_name = 'waiver_submissions' AND column_name = 'processed_at')
+     <> 'timestamp with time zone' THEN
+    ALTER TABLE waiver_submissions
+      ALTER COLUMN processed_at TYPE TIMESTAMPTZ USING processed_at AT TIME ZONE 'UTC';
+  END IF;
+END $$;
