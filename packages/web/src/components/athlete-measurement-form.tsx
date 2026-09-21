@@ -13,6 +13,7 @@ import { Save } from "lucide-react";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
 import { PairedInputFields } from "@/components/measurement/PairedInputFields";
 import { LastSetContextLine } from "@/components/measurement/LastSetContextLine";
+import { parseFieldError } from "@/lib/parse-field-error";
 import { z } from "zod";
 
 interface AthleteMeasurementFormProps {
@@ -28,26 +29,6 @@ const dynamicMeasurementSchema = insertMeasurementSchema.omit({ metric: true }).
 });
 
 type DynamicInsertMeasurement = z.infer<typeof dynamicMeasurementSchema>;
-
-/**
- * Extract a structured `{message, field}` from an apiRequest error.
- * Mirrors measurement-form.tsx — see comment there.
- */
-function parseFieldError(
-  error: Error,
-): { message: string; field: 'primaryValue' | 'auxiliaryValue' | 'formula' } | null {
-  if (!error?.message) return null;
-  const stripped = error.message.replace(/^\d+:\s*/, '');
-  try {
-    const parsed = JSON.parse(stripped);
-    if (parsed && typeof parsed.message === 'string' && typeof parsed.field === 'string') {
-      return parsed;
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
 
 export default function AthleteMeasurementForm({ athleteId, athleteName, onSuccess }: AthleteMeasurementFormProps) {
   const { toast } = useToast();
@@ -209,7 +190,7 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
                 disabled={createMeasurementMutation.isPending}
                 onMetricSwitch={(newCode) => {
                   form.setValue("metric", newCode, { shouldValidate: true });
-                  form.setValue("auxiliaryValue", undefined as any, { shouldValidate: false });
+                  form.setValue("auxiliaryValue", undefined, { shouldValidate: false });
                 }}
               />
             ) : (

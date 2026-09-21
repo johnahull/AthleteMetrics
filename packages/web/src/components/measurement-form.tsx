@@ -23,34 +23,13 @@ import { z } from "zod";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { PairedInputFields } from "@/components/measurement/PairedInputFields";
 import { LastSetContextLine } from "@/components/measurement/LastSetContextLine";
+import { parseFieldError } from "@/lib/parse-field-error";
 
 // Create dynamic measurement schema that accepts any metric string
 // Backend will validate against org-enabled metrics
 const dynamicMeasurementSchema = insertMeasurementSchema.omit({ metric: true }).extend({
   metric: z.string().min(1, "Metric is required"),
 });
-
-/**
- * Extract a structured `{message, field}` from an apiRequest error.
- * apiRequest throws `Error("<status>: <raw body>")`. The body for
- * PairedInputValidationError is `{"message":"...","field":"..."}`. Returns
- * null if the body isn't a recognizable structured error.
- */
-function parseFieldError(
-  error: Error,
-): { message: string; field: 'primaryValue' | 'auxiliaryValue' | 'formula' } | null {
-  if (!error?.message) return null;
-  const stripped = error.message.replace(/^\d+:\s*/, '');
-  try {
-    const parsed = JSON.parse(stripped);
-    if (parsed && typeof parsed.message === 'string' && typeof parsed.field === 'string') {
-      return parsed;
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
 
 type DynamicInsertMeasurement = z.infer<typeof dynamicMeasurementSchema>;
 
@@ -506,7 +485,7 @@ export default function MeasurementForm() {
               disabled={createMeasurementMutation.isPending}
               onMetricSwitch={(newCode) => {
                 form.setValue("metric", newCode, { shouldValidate: true });
-                form.setValue("auxiliaryValue", undefined as any, { shouldValidate: false });
+                form.setValue("auxiliaryValue", undefined, { shouldValidate: false });
               }}
             />
           ) : (
