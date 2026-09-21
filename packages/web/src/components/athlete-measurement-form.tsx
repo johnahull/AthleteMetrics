@@ -11,6 +11,8 @@ import { apiRequest } from "@/lib/queryClient";
 import { insertMeasurementSchema, type InsertMeasurement } from "@shared/schema";
 import { Save } from "lucide-react";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
+import { PairedInputFields } from "@/components/measurement/PairedInputFields";
+import { LastSetContextLine } from "@/components/measurement/LastSetContextLine";
 import { z } from "zod";
 
 interface AthleteMeasurementFormProps {
@@ -26,6 +28,26 @@ const dynamicMeasurementSchema = insertMeasurementSchema.omit({ metric: true }).
 });
 
 type DynamicInsertMeasurement = z.infer<typeof dynamicMeasurementSchema>;
+
+/**
+ * Extract a structured `{message, field}` from an apiRequest error.
+ * Mirrors measurement-form.tsx — see comment there.
+ */
+function parseFieldError(
+  error: Error,
+): { message: string; field: 'primaryValue' | 'auxiliaryValue' | 'formula' } | null {
+  if (!error?.message) return null;
+  const stripped = error.message.replace(/^\d+:\s*/, '');
+  try {
+    const parsed = JSON.parse(stripped);
+    if (parsed && typeof parsed.message === 'string' && typeof parsed.field === 'string') {
+      return parsed;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
 
 export default function AthleteMeasurementForm({ athleteId, athleteName, onSuccess }: AthleteMeasurementFormProps) {
   const { toast } = useToast();
@@ -61,26 +83,36 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
         title: "Success",
         description: "Measurement added successfully",
       });
-      form.reset({
-        userId: athleteId,
-        date: new Date().toISOString().split('T')[0],
-        metric: firstMetricCode,
-        value: 0,
-        flyInDistance: undefined,
-        notes: "",
-      });
+      // Invalidate last-set context so the next entry references this submission
+      queryClient.invalidateQueries({ queryKey: ["last-set-context"] });
+      // Batch-entry preservation: keep metric + date so the athlete can log a
+      // second working set without re-picking the metric. Clear only the
+      // values, then return focus to the primary input field.
+      form.resetField("value", { defaultValue: 0 });
+      form.resetField("auxiliaryValue", { defaultValue: undefined });
+      form.resetField("flyInDistance", { defaultValue: undefined });
+      form.resetField("notes", { defaultValue: "" });
+      form.clearErrors();
+      setTimeout(() => form.setFocus("value"), 0);
       onSuccess?.();
     },
-    onError: () => {
+    onError: (error: Error) => {
+      const fieldErr = parseFieldError(error);
+      if (fieldErr && fieldErr.field === 'auxiliaryValue') {
+        form.setError('auxiliaryValue', { type: 'server', message: fieldErr.message });
+      } else if (fieldErr && fieldErr.field === 'primaryValue') {
+        form.setError('value', { type: 'server', message: fieldErr.message });
+      }
       toast({
         title: "Error",
-        description: "Failed to add measurement",
+        description: fieldErr?.message ?? "Failed to add measurement",
         variant: "destructive",
       });
     },
   });
 
   const metric = form.watch("metric");
+  const selectedMetric = availableMetrics.find((m) => m.code === metric);
   // Get unit from metric config dynamically
   const units = availableMetrics.find(m => m.code === metric)?.unit || "";
 
@@ -99,6 +131,13 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          {/* Last-set context: shown when a metric is selected and the athlete
+              has prior measurements for it. Click-to-copy seeds the form with
+              the previous values, useful for matching/beating a prior set. */}
+          {selectedMetric && (
+            <LastSetContextLine athleteId={athleteId} metric={selectedMetric} />
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Date */}
             <FormField
@@ -161,40 +200,53 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
               )}
             />
 
-            {/* Value */}
-            <FormField
-              control={form.control}
-              name="value"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>
-                    Value <span className="text-red-500">*</span>
-                  </FormLabel>
-                  <div className="flex">
-                    <FormControl>
-                      <Input 
-                        {...field}
-                        type="number"
-                        step="0.01"
-                        placeholder="Enter value"
-                        disabled={createMeasurementMutation.isPending}
-                        className={units ? "rounded-r-none" : ""}
-                        data-testid="input-measurement-value"
-                        onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                        value={field.value || ''}
-                      />
-                    </FormControl>
-                    {units && (
-                      <div className="px-4 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600 text-sm">
-                        {units}
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-500">Units auto-selected based on metric</p>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* Paired-input metrics (e.g. 1RM-est) take over the Value slot
+                with a richer (load + reps + live preview) component. */}
+            {selectedMetric?.auxiliaryInputConfig ? (
+              <PairedInputFields
+                metricCode={selectedMetric.code}
+                config={selectedMetric.auxiliaryInputConfig}
+                disabled={createMeasurementMutation.isPending}
+                onMetricSwitch={(newCode) => {
+                  form.setValue("metric", newCode, { shouldValidate: true });
+                  form.setValue("auxiliaryValue", undefined as any, { shouldValidate: false });
+                }}
+              />
+            ) : (
+              <FormField
+                control={form.control}
+                name="value"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Value <span className="text-red-500">*</span>
+                    </FormLabel>
+                    <div className="flex">
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="number"
+                          step="0.01"
+                          placeholder="Enter value"
+                          disabled={createMeasurementMutation.isPending}
+                          className={units ? "rounded-r-none" : ""}
+                          data-testid="input-measurement-value"
+                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                          value={field.value || ''}
+                        />
+                      </FormControl>
+                      {units && (
+                        <div className="px-4 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600 text-sm">
+                          {units}
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500">Units auto-selected based on metric</p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             {/* Fly-In Distance (only for FLY10_TIME) */}
             {metric === "FLY10_TIME" && (

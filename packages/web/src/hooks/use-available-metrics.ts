@@ -10,6 +10,17 @@ import { useOrganizationMetrics } from '@/lib/metrics-api';
 import { useCustomOrgMetrics } from '@/lib/custom-metrics-api';
 import type { MetricType } from '@shared/analytics-types';
 
+export interface AuxiliaryInputConfig {
+  label: string;              // Auxiliary input label (e.g., "Reps")
+  unit: string;               // Auxiliary input unit (e.g., "reps")
+  validationMin?: number;
+  validationMax?: number;
+  required: boolean;
+  computeFormula: string;
+  primaryInputLabel: string;  // e.g., "Weight Lifted"
+  primaryInputUnit: string;   // e.g., "lbs"
+}
+
 export interface AvailableMetric {
   code: string;
   label: string;
@@ -22,6 +33,10 @@ export interface AvailableMetric {
   formula?: string;
   dependentMetrics?: string[];
   isCustom?: boolean; // True if this is an organization-specific custom metric
+  // Paired-input metric config — when set, the metric expects (primary, auxiliary)
+  // inputs and the server computes the stored value via auxiliaryInputConfig.computeFormula.
+  // See packages/api/services/paired-input-compute.ts for the server-side flow.
+  auxiliaryInputConfig?: AuxiliaryInputConfig;
 }
 
 /**
@@ -89,6 +104,7 @@ export function useAvailableMetrics(): {
     isDerived?: boolean;
     formula?: string | null;
     dependentMetrics?: string[] | null;
+    auxiliaryInputConfig?: AuxiliaryInputConfig | null;
   }>>({
     queryKey: ['activeMetrics'],
     queryFn: async () => {
@@ -128,6 +144,7 @@ export function useAvailableMetrics(): {
           formula: om.siteMetric.formula || undefined,
           dependentMetrics: om.siteMetric.dependentMetrics || undefined,
           isCustom: false,
+          auxiliaryInputConfig: om.siteMetric.auxiliaryInputConfig || undefined,
         }));
       result.push(...siteMetricsList);
 
@@ -147,6 +164,7 @@ export function useAvailableMetrics(): {
             formula: cm.formula || undefined,
             dependentMetrics: cm.dependentMetrics || undefined,
             isCustom: true,
+            auxiliaryInputConfig: cm.auxiliaryInputConfig || undefined,
           }));
         result.push(...customMetricsList);
       }
@@ -166,6 +184,7 @@ export function useAvailableMetrics(): {
           formula: sm.formula || undefined,
           dependentMetrics: sm.dependentMetrics || undefined,
           isCustom: false,
+          auxiliaryInputConfig: sm.auxiliaryInputConfig || undefined,
         }));
       result.push(...fallback);
     }
