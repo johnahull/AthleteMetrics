@@ -29,10 +29,21 @@ import { registerWebhookRoutes } from "../routes/webhook-routes";
 
 const SHARED_SECRET = "s3cret-test-token";
 
+/** Shaped like a real `pg` unique-violation error so `getPgError()` finds it. */
+class UniqueViolationError extends Error {
+  code = "23505";
+  constraint: string;
+  constructor(constraint: string) {
+    super(`duplicate key value violates unique constraint "${constraint}"`);
+    this.constraint = constraint;
+  }
+}
+
 function buildInMemoryStore() {
   const submissions = new Map<string, WaiverSubmission>();
   const users = new Map<string, User>();
   const usersByEmail = new Map<string, User>();
+  const usernames = new Set<string>();
   const auditLogs: InsertAuditLog[] = [];
 
   let nextId = 0;
@@ -91,6 +102,11 @@ function buildInMemoryStore() {
     },
     async createUser(data: InsertUser) {
       const d = data as any;
+      // Real Postgres enforces `users_username_unique` — mirror that here so
+      // tests can exercise the service's collision-retry behavior.
+      if (usernames.has(d.username)) {
+        throw new UniqueViolationError("users_username_unique");
+      }
       const created = {
         id: id(),
         username: d.username,
@@ -103,6 +119,7 @@ function buildInMemoryStore() {
         isActive: d.isActive ?? true,
         createdAt: new Date(),
       } as unknown as User;
+      usernames.add(created.username);
       users.set(created.id, created);
       for (const e of created.emails ?? []) usersByEmail.set(e.toLowerCase(), created);
       return created;
@@ -258,6 +275,9 @@ describe("POST /api/webhooks/jotform-waiver", () => {
       resourceType: "waiver_submission",
       resourceId: submission.id,
     });
+    // A new athlete user was created for this submission.
+    const details = JSON.parse(infra.auditLogs[0].details as string);
+    expect(details.athleteAutoCreated).toBe(true);
   });
 
   it("is idempotent on duplicate submissionID — no double-create", async () => {
@@ -308,6 +328,53 @@ describe("POST /api/webhooks/jotform-waiver", () => {
     expect(infra.users.size).toBe(1);
     const [submission] = Array.from(infra.submissions.values());
     expect(submission.athleteUserId).toBe(existing.id);
+    // No new athlete was created — an existing user was matched instead.
+    const details = JSON.parse(infra.auditLogs[0].details as string);
+    expect(details.athleteAutoCreated).toBe(false);
+  });
+
+  it("retries with a suffixed username when the derived username collides", async () => {
+    // Both submissions derive the same base username: the email local-part
+    // is identical ("pat.athlete") and the submissionIds share the same last
+    // 6 characters ("111111"), which is what deriveUsername keys off of.
+    const first = await request(app)
+      .post("/api/webhooks/jotform-waiver")
+      .query({ secret: SHARED_SECRET })
+      .type("form")
+      .send(jotformBody({
+        submissionID: "AAA111111",
+        rawRequest: JSON.stringify({
+          name: { first: "Pat", last: "First" },
+          email: "pat.athlete@example.com",
+        }),
+      }));
+    expect(first.status).toBe(200);
+    expect(first.body.status).toBe("created");
+
+    const second = await request(app)
+      .post("/api/webhooks/jotform-waiver")
+      .query({ secret: SHARED_SECRET })
+      .type("form")
+      .send(jotformBody({
+        submissionID: "BBB111111",
+        rawRequest: JSON.stringify({
+          name: { first: "Pat", last: "Second" },
+          // Different domain, same local-part — same deriveUsername candidate
+          // as the first submission.
+          email: "pat.athlete@otherdomain.com",
+        }),
+      }));
+
+    // The collision must be handled, not surfaced as a failed submission.
+    expect(second.status).toBe(200);
+    expect(second.body.status).toBe("created");
+    expect(second.body.athleteUserId).toBeTypeOf("string");
+    expect(second.body.athleteUserId).not.toBe(first.body.athleteUserId);
+
+    // Two distinct users, with two distinct (non-colliding) usernames.
+    expect(infra.users.size).toBe(2);
+    const usernames = Array.from(infra.users.values()).map((u) => u.username);
+    expect(new Set(usernames).size).toBe(2);
   });
 
   it("uses constant-time secret comparison (smoke test)", () => {
