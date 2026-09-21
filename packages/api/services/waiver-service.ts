@@ -23,6 +23,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { storage } from "../storage";
+import { getPgError, PG_UNIQUE_VIOLATION } from "../lib/pg-error";
 import {
   waiverSubmissions,
   type WaiverSubmission,
@@ -30,6 +31,7 @@ import {
   users,
   type User,
   type InsertUser,
+  type InsertOAuthUser,
   type InsertAuditLog,
 } from "@shared/schema";
 
@@ -72,7 +74,11 @@ export interface WaiverStore {
   markProcessed(id: string, athleteUserId: string | null): Promise<void>;
   markFailed(id: string, errorMessage: string): Promise<void>;
   findUserByEmail(email: string): Promise<User | undefined>;
-  createUser(data: InsertUser): Promise<User>;
+  // Mirrors storage.createUser's real signature: athlete accounts created
+  // from waiver intake have no password (invitation-pending, like OAuth
+  // signups), so InsertOAuthUser (password optional) is what callers here
+  // actually construct.
+  createUser(data: InsertUser | InsertOAuthUser): Promise<User>;
   createAuditLog(data: InsertAuditLog): Promise<void>;
 }
 
@@ -239,6 +245,55 @@ function deriveUsername(email: string, submissionId: string): string {
   return `${cleaned || "athlete"}_${suffix}`.toLowerCase();
 }
 
+const MAX_USERNAME_ATTEMPTS = 5;
+
+function isUsernameCollision(err: unknown): boolean {
+  const pgError = getPgError(err);
+  return pgError?.code === PG_UNIQUE_VIOLATION && pgError?.constraint === "users_username_unique";
+}
+
+/**
+ * Create the athlete user auto-created from a waiver submission, retrying
+ * with a numeric suffix on username collision. `deriveUsername` is only a
+ * candidate — two athletes whose email local-part and submissionId tail both
+ * happen to match will collide on the DB's users_username_unique constraint.
+ */
+async function createAthleteUser(
+  store: WaiverStore,
+  params: { email: string; submissionId: string; firstName: string; lastName: string },
+): Promise<User> {
+  const baseUsername = deriveUsername(params.email, params.submissionId);
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= MAX_USERNAME_ATTEMPTS; attempt++) {
+    const username = attempt === 1 ? baseUsername : `${baseUsername}_${attempt}`;
+    try {
+      // `fullName` and `birthYear` are computed inside storage.createUser, so
+      // we deliberately do not provide them here. `password` is also
+      // computed there (placeholder hash for invitation-pending accounts) —
+      // InsertOAuthUser reflects that password is optional for this shape.
+      return await store.createUser({
+        username,
+        emails: [params.email],
+        firstName: params.firstName,
+        lastName: params.lastName,
+        // `role` here only satisfies InsertOAuthUser's type — role is
+        // actually stored on userOrganizations, not this users row (see
+        // storage.createUser's validUserColumns comment).
+        role: "athlete",
+        isActive: true,
+        isSiteAdmin: false,
+      } satisfies InsertOAuthUser);
+    } catch (err) {
+      if (!isUsernameCollision(err)) throw err;
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`Failed to create athlete user after ${MAX_USERNAME_ATTEMPTS} username attempts`);
+}
+
 // ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------
@@ -287,26 +342,21 @@ export async function processJotformWaiver(
   // 4. Match-or-create the athlete user.
   try {
     let athleteUserId: string | null = null;
+    let wasCreated = false;
 
     if (fields.athleteEmail) {
       const matched = await store.findUserByEmail(fields.athleteEmail);
       if (matched) {
         athleteUserId = matched.id;
       } else {
-        const first = fields.athleteFirstName ?? "Waiver";
-        const last = fields.athleteLastName ?? "Athlete";
-        // `fullName` and `birthYear` are computed inside storage.createUser,
-        // so we deliberately do not provide them here. `password` is also
-        // computed (placeholder hash inserted for invitation-pending accounts).
-        const created = await store.createUser({
-          username: deriveUsername(fields.athleteEmail, submissionId),
-          emails: [fields.athleteEmail],
-          firstName: first,
-          lastName: last,
-          isActive: true,
-          isSiteAdmin: false,
-        } as unknown as InsertUser);
+        const created = await createAthleteUser(store, {
+          email: fields.athleteEmail,
+          submissionId,
+          firstName: fields.athleteFirstName ?? "Waiver",
+          lastName: fields.athleteLastName ?? "Athlete",
+        });
         athleteUserId = created.id;
+        wasCreated = true;
       }
     }
 
@@ -328,9 +378,7 @@ export async function processJotformWaiver(
         parentName: fields.parentName ?? null,
         parentEmail: fields.parentEmail ?? null,
         pdfUrl: fields.pdfUrl ?? null,
-        athleteAutoCreated: !!athleteUserId && !fields.athleteEmail
-          ? false
-          : (athleteUserId ? "see athlete_user_id" : false),
+        athleteAutoCreated: wasCreated,
         timestamp: new Date().toISOString(),
       }),
       ipAddress: context.ipAddress ?? null,

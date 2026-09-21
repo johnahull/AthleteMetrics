@@ -38,14 +38,18 @@ export const waiverSubmissions = pgTable("waiver_submissions", {
   // actually downloading and re-hosting the PDF binary is intentionally
   // deferred — see TODO in waiver-service.ts.
   pdfUrl: text("pdf_url"),
-  signedAt: timestamp("signed_at"),
+  // signedAt is parsed from an externally-authored Jotform timestamp (carries
+  // its own UTC offset) — TIMESTAMPTZ so its on-disk value doesn't depend on
+  // session timezone, unlike this schema's other (internally-generated,
+  // naive-TIMESTAMP) timestamp columns. See migrations/0141_*.
+  signedAt: timestamp("signed_at", { withTimezone: true }),
   // Lifecycle
   status: text("status", { enum: waiverSubmissionStatusEnum }).default("received").notNull(),
   errorMessage: text("error_message"),
   // Full raw payload (Jotform `rawRequest` parsed JSON plus envelope) for
   // manual recovery if processing fails partway through.
   rawPayload: jsonb("raw_payload").notNull(),
-  processedAt: timestamp("processed_at"),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   athleteUserIdx: index("waiver_submissions_athlete_user_id_idx").on(table.athleteUserId),
