@@ -52,10 +52,17 @@ export function PairedInputFields({
           ? "warn"
           : "block";
 
-  const switchTargetCode =
-    metricCode.includes("BENCH") || metricCode.includes("OHP") || metricCode.includes("PUSH")
+  // Only offer a redirect when there's a bodyweight-count equivalent that
+  // makes sense for the metric being blocked. Lower-body lifts (squat,
+  // deadlift, ...) have no sensible push-up/pull-up substitute, so — unlike
+  // the previous behavior of defaulting anything unmatched to PULLUPS_MAX —
+  // those fall through to `null` and the redirect button is hidden.
+  const switchTargetCode: "PUSHUPS_MAX" | "PULLUPS_MAX" | null =
+    /BENCH|OHP|PUSH/.test(metricCode)
       ? "PUSHUPS_MAX"
-      : "PULLUPS_MAX";
+      : /PULL|ROW|CHIN/.test(metricCode)
+        ? "PULLUPS_MAX"
+        : null;
 
   // Live preview: debounced fetch when both inputs are valid
   useEffect(() => {
@@ -228,9 +235,15 @@ export function PairedInputFields({
                     disabled={disabled}
                     className="rounded-none text-center"
                     data-testid="paired-auxiliary-input"
-                    onChange={(e) =>
-                      field.onChange(e.target.value === "" ? null : parseInt(e.target.value, 10))
-                    }
+                    onChange={(e) => {
+                      // A browser's type="number" input can accept values
+                      // (e.g. a leading-dot decimal like ".5") that parseInt
+                      // can't parse, returning NaN. typeof NaN === "number",
+                      // so an unguarded NaN would silently evaluate as the
+                      // highest guardrail tier. Treat it the same as empty.
+                      const parsed = parseInt(e.target.value, 10);
+                      field.onChange(e.target.value === "" || Number.isNaN(parsed) ? null : parsed);
+                    }}
                     value={typeof field.value === "number" ? field.value : ""}
                   />
                 </FormControl>
@@ -338,12 +351,14 @@ export function PairedInputFields({
             className="mt-3 text-xs text-gray-700 bg-white border border-gray-300 rounded px-3 py-2"
             data-testid="reps-redirect-prompt"
           >
-            <div className="font-medium mb-1">Use a count metric for high-rep sets</div>
+            <div className="font-medium mb-1">
+              {switchTargetCode ? "Use a count metric for high-rep sets" : "Estimate unreliable at this rep count"}
+            </div>
             <p className="text-gray-600 mb-2">
-              {config.label} above 15 makes the 1RM estimate unreliable. Track this as a count
-              instead.
+              {config.label} above 15 makes the 1RM estimate unreliable.
+              {switchTargetCode ? " Track this as a count instead." : ""}
             </p>
-            {onMetricSwitch && (
+            {onMetricSwitch && switchTargetCode && (
               <Button
                 type="button"
                 size="sm"
