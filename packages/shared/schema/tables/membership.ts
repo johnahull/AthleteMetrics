@@ -30,6 +30,10 @@ export const invitations = pgTable("invitations", {
   playerId: varchar("player_id").references(() => users.id, { onDelete: 'set null' }), // Reference to existing athlete (kept as playerId for DB compatibility). NULL if user was deleted (preserves invitation history)
   role: text("role").notNull(), // "athlete", "coach", "org_admin"
   invitedBy: varchar("invited_by").references(() => users.id, { onDelete: 'set null' }), // User who sent invitation. NULL if user was deleted (preserves invitation history)
+  // COPPA: coach-provided age data captured at invite-create time. An athlete
+  // invitation with an under-13 birthDate cannot be created without parentEmail.
+  birthDate: date("birth_date"),
+  parentEmail: text("parent_email"),
   token: text("token").notNull().unique(),
   // Enhanced tracking fields
   status: text("status").default("pending"), // "pending", "accepted", "expired", "cancelled" - made nullable for backward compatibility
