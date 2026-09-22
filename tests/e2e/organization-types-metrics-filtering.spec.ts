@@ -11,7 +11,7 @@
  * Total: 15+ test scenarios focusing on type-based content filtering
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures/e2e-base';
 import { loginWithCredentials } from './helpers/auth';
 import { getUserByRole } from './fixtures/test-users';
 

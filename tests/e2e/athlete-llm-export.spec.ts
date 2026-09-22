@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './fixtures/e2e-base';
 import { readFileSync } from 'fs';
 import { loginAsDefaultUser, loginAs } from './helpers/auth';
 import { canTestRoleAuthorization, hasUserCredentials } from './fixtures/test-users';

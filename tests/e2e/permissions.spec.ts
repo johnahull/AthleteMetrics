@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures/e2e-base';
 import { loginWithCredentials, logout } from './helpers/auth';
 import { goToAthletes, goToDashboard, goToOrganizations } from './helpers/navigation';
 import { getUserByRole, isSameUserMode } from './fixtures/test-users';
