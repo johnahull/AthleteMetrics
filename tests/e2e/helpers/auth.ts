@@ -25,6 +25,15 @@ export async function loginWithCredentials(
   password: string,
   shouldSucceed: boolean = true
 ): Promise<void> {
+  // Clear any existing session cookie (e.g. the shared storageState session) before
+  // logging in. Express-session's regenerate() — used to prevent session fixation on
+  // login — destroys whatever session the incoming request's cookie points to before
+  // creating the new one (see express-session's Store.prototype.regenerate). Without
+  // this, an explicit login from a context that still carries the shared storageState
+  // cookie silently destroys that shared session as a side effect, breaking every other
+  // test relying on it.
+  await page.context().clearCookies();
+
   // Navigate to login page
   await page.goto(`${TESTING_URL}/login`);
   await page.waitForLoadState('networkidle');

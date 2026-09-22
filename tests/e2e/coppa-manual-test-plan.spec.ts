@@ -122,6 +122,12 @@ async function dismissOnboarding(page: Page) {
 
 /** Login and dismiss any onboarding dialog that appears. */
 async function loginAndDismissOnboarding(page: Page, username: string, password: string) {
+  // Clear any existing session cookie (e.g. the shared storageState session) first —
+  // express-session's regenerate() destroys whatever session the incoming request's
+  // cookie points to before creating the new one, so logging in from a context that
+  // still carries the shared storageState cookie would silently kill it.
+  await page.context().clearCookies();
+
   await page.goto(`${BASE_URL}/login`);
   await page.waitForLoadState('networkidle');
 
