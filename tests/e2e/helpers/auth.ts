@@ -11,6 +11,23 @@ import { clickWithFallback, clickWithMultipleFallbacks } from './selectors';
 const TESTING_URL = process.env.TESTING_URL || process.env.STAGING_URL || 'http://localhost:5000';
 
 /**
+ * Fetch a CSRF token for the current session and attach it as a context-level
+ * header so every subsequent page.request.* call (used throughout the E2E suite
+ * to set up test data directly via the API) automatically carries it.
+ *
+ * The app enforces CSRF tokens on all authenticated, state-changing /api/* routes
+ * (packages/api/routes.ts). page.request calls share the browser context's cookies
+ * but — unlike the app's own React client — never fetch or attach a CSRF token on
+ * their own, so without this every page.request.post/put/patch/delete call would
+ * be rejected with 403 "CSRF token missing".
+ */
+export async function setCsrfHeader(page: Page): Promise<void> {
+  const response = await page.request.get(`${TESTING_URL}/api/csrf-token`);
+  const { csrfToken } = await response.json();
+  await page.context().setExtraHTTPHeaders({ 'x-csrf-token': csrfToken });
+}
+
+/**
  * Login with specific credentials
  *
  * @param page - Playwright Page object
@@ -57,6 +74,8 @@ export async function loginWithCredentials(
     // Verify we're logged in (should redirect away from /login)
     const currentUrl = page.url();
     expect(currentUrl).not.toContain('/login');
+
+    await setCsrfHeader(page);
   } else {
     // Wait a moment for any error messages to appear
     await page.waitForLoadState('networkidle');
@@ -109,6 +128,7 @@ export async function loginAsDefaultUser(page: Page): Promise<void> {
   if (!currentUrl.includes('/login')) {
     // Already authenticated via storageState - no need to login
     console.log('✓ Already authenticated via storageState, skipping login');
+    await setCsrfHeader(page);
     return;
   }
 

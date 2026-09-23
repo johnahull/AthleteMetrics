@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { clearAuthState, loginWithCredentials } from './helpers/auth';
+import { clearAuthState, loginWithCredentials, setCsrfHeader } from './helpers/auth';
 
 /**
  * COPPA Manual Test Plan — End-to-End Workflow Verification
@@ -146,6 +146,10 @@ async function loginAndDismissOnboarding(page: Page, username: string, password:
   if (page.url().includes('/login')) {
     await page.waitForURL(url => !url.pathname.includes('/login'), { timeout: 10000 }).catch(() => {});
     await dismissOnboarding(page);
+  }
+
+  if (!page.url().includes('/login')) {
+    await setCsrfHeader(page);
   }
 }
 
