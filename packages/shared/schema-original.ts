@@ -2652,6 +2652,8 @@ export type SportCode = (typeof sportCodeEnum)[number];
 // Site Settings validation schemas
 export const AI_MODELS = [
   "gpt-5-nano",
+  "gpt-6-luna",
+  "gpt-6-sol",
   "gemini-2.0-flash-lite",
   "gemini-2.5-flash-lite",
   "claude-haiku-3",

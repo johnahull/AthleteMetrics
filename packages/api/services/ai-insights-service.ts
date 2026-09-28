@@ -2,7 +2,7 @@
  * AI Coaching Insights Service
  *
  * Generates AI-powered coaching insights for performance reports using multiple AI providers.
- * Supports 7 AI models across 3 providers (OpenAI, Google, Anthropic) with budget and premium tiers.
+ * Supports 9 AI models across 3 providers (OpenAI, Google, Anthropic) with budget and premium tiers.
  */
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
@@ -11,13 +11,20 @@ import Anthropic from "@anthropic-ai/sdk";
 
 // AI Model Configurations
 export const AI_MODELS = {
-  // Budget Tier (5 models)
+  // Budget Tier (6 models)
   "gpt-5-nano": {
     provider: "openai" as const,
     model: "gpt-5-nano",
     tier: "budget" as const,
     costPer1M: { input: 0.05, output: 0.40 },
     description: "OpenAI GPT-5 Nano - Cheapest & Fast",
+  },
+  "gpt-6-luna": {
+    provider: "openai" as const,
+    model: "gpt-6-luna",
+    tier: "budget" as const,
+    costPer1M: { input: 0.10, output: 0.50 },
+    description: "OpenAI GPT-6 Luna - Fast & Affordable",
   },
   "gemini-2.0-flash-lite": {
     provider: "google" as const,
@@ -47,7 +54,14 @@ export const AI_MODELS = {
     costPer1M: { input: 0.80, output: 4.00 },
     description: "Anthropic Claude Haiku 4.5 - Cost-Effective Claude 4",
   },
-  // Premium Tier (2 models)
+  // Premium Tier (3 models)
+  "gpt-6-sol": {
+    provider: "openai" as const,
+    model: "gpt-6-sol",
+    tier: "premium" as const,
+    costPer1M: { input: 2.00, output: 10.00 },
+    description: "OpenAI GPT-6 Sol - Flagship Reasoning",
+  },
   "gemini-2.5-pro": {
     provider: "google" as const,
     model: "gemini-2.5-pro",
@@ -240,8 +254,8 @@ class OpenAIProvider implements AIProvider {
 
   async generateInsights(prompt: string): Promise<string> {
     try {
-      // GPT-5 models use different parameters than older models
-      const isGpt5Model = this.modelName.startsWith('gpt-5');
+      // GPT-5 and GPT-6 models use different parameters than older models
+      const usesReasoningParams = /^gpt-[56]/.test(this.modelName);
 
       const requestParams: any = {
         model: this.modelName,
@@ -257,8 +271,8 @@ class OpenAIProvider implements AIProvider {
         ],
       };
 
-      if (isGpt5Model) {
-        // GPT-5 models use reasoning_effort and verbosity instead of temperature
+      if (usesReasoningParams) {
+        // GPT-5/6 models use reasoning_effort instead of temperature
         requestParams.reasoning_effort = "low";
         requestParams.max_completion_tokens = 2048;
       } else {
