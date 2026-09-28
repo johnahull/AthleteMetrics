@@ -1,0 +1,56 @@
+name: Migrate Testing Database
+
+# Keeps the shared testing DB on the same migrations as staging and production.
+# Staging and production migrate on deploy; the testing service is deployed by hand
+# and PR previews skip migrations (IS_PR_ENVIRONMENT), so without this workflow the
+# testing DB (and every PR preview that shares it) drifts behind develop.
+#
+# Runs only for what has been merged to develop. Migrations from unmerged PRs are
+# not applied here, so the testing DB never gets ahead of staging/production.
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'migrations/**'
+      - 'drizzle/**'
+      - 'scripts/run-migrations.js'
+      - 'scripts/apply-manual-migrations.js'
+      - '.github/workflows/testing-migrate.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: testing-migrate
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    name: Apply migrations to testing DB
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup project
+        uses: ./.github/actions/setup
+
+      - name: Run drizzle migrations
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.TESTING_DATABASE_PUBLIC_URL }}
+
+      - name: Run manual SQL migrations
+        run: npm run db:migrate:manual
+        env:
+          DATABASE_URL: ${{ secrets.TESTING_DATABASE_PUBLIC_URL }}
+
+      - name: Verify migration completion
+        run: node scripts/verify-migration-completion.js
+        env:
+          DATABASE_URL: ${{ secrets.TESTING_DATABASE_PUBLIC_URL }}
