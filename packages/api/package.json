@@ -28,7 +28,7 @@
     "express-validator": "^7.2.1",
     "helmet": "^8.2.0",
     "iconv-lite": "^0.7.2",
-    "isomorphic-dompurify": "^3.8.0",
+    "isomorphic-dompurify": "^4.3.0",
     "memorystore": "^1.6.8",
     "multer": "^2.4.0",
     "nanoid": "^5.1.11",
