@@ -339,7 +339,8 @@ class AnthropicProvider implements AIProvider {
         // Newer Claude models reject a non-default temperature, and run adaptive thinking (whose
         // tokens count against max_tokens) unless told otherwise
         ...(this.requestStyle === "no-sampling"
-          ? // between_tools is documented by Anthropic but not yet in this SDK version's types
+          ? // between_tools is Anthropic's documented way to turn thinking off on Claude Sonnet 5.5
+            // (`disabled` returns a 400 there); this SDK version's types don't list it yet
             { thinking: { type: "between_tools" } as unknown as Anthropic.ThinkingConfigParam }
           : { temperature: 0.7 }),
         system: "You are an expert athletic performance coach analyzing athlete data to provide actionable coaching insights.",
@@ -463,7 +464,7 @@ export async function generateCoachingInsights(
 ): Promise<string> {
   try {
     // Defensive validation: ensure model key exists in AI_MODELS
-    if (!(modelKey in AI_MODELS)) {
+    if (!Object.prototype.hasOwnProperty.call(AI_MODELS, modelKey)) {
       throw new Error(`Invalid AI model: ${modelKey}`);
     }
 

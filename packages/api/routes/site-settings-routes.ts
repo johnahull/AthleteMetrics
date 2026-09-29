@@ -11,8 +11,8 @@ import { requireSiteAdmin } from "../middleware";
 import { storage } from "../storage";
 import { updateSiteSettingsSchema } from "@shared/schema";
 import { AI_MODELS as AI_MODELS_CONFIG, isModelAvailable } from "../services/ai-insights-service";
-import { checkModelsLive } from "../services/ai-model-availability";
-import { AI_MODEL_REGISTRY, DEFAULT_AI_MODEL_KEY, findModelsNearRetirement, type AIModelDefinition } from "@shared/ai-models";
+import { checkModelsLive, isModelKnownUnavailable } from "../services/ai-model-availability";
+import { AI_MODEL_REGISTRY, DEFAULT_AI_MODEL_KEY, findModelsNearRetirement, getAIModel, type AIModelDefinition } from "@shared/ai-models";
 
 // Type for authenticated request with session
 interface AuthenticatedRequest extends Request {
@@ -127,6 +127,14 @@ router.patch("/", requireSiteAdmin, async (req: AuthenticatedRequest, res: Respo
         console.error(`AI Service Error: Missing API key ${modelAvailability.envVar} for provider ${modelAvailability.provider}`);
         return res.status(400).json({
           message: "Selected model is not available. Please contact administrator."
+        });
+      }
+
+      // Reject a model its provider is known to have stopped serving (unknown status stays allowed)
+      const modelDefinition = getAIModel(validated.aiModel);
+      if (modelDefinition && (await isModelKnownUnavailable(modelDefinition))) {
+        return res.status(400).json({
+          message: "Selected model is no longer offered by its provider. Please choose another model.",
         });
       }
 

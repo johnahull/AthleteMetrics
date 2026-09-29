@@ -170,6 +170,10 @@ export const SELECTABLE_AI_MODEL_KEYS = AI_MODEL_REGISTRY.filter((m) => m.select
   (m) => m.key,
 ) as unknown as readonly [SelectableAIModelKey, ...SelectableAIModelKey[]];
 
+if (SELECTABLE_AI_MODEL_KEYS.length === 0) {
+  throw new Error('ai-models.ts: at least one model must be selectable');
+}
+
 /** Look up any model, including retired ones. */
 export function getAIModel(key: string): AIModelDefinition | undefined {
   return AI_MODEL_REGISTRY.find((m) => m.key === key);

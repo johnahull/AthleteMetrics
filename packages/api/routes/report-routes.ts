@@ -1620,7 +1620,7 @@ export function registerReportRoutes(app: Express) {
       let modelKey = (siteSettings?.aiModel || DEFAULT_AI_MODEL_KEY) as string;
 
       // A stored model that is no longer selectable (retired/replaced) falls back to the default
-      if (!(modelKey in AI_MODELS)) {
+      if (!Object.prototype.hasOwnProperty.call(AI_MODELS, modelKey)) {
         console.warn(`Stored AI model "${modelKey}" is no longer selectable; using ${DEFAULT_AI_MODEL_KEY}`);
         modelKey = DEFAULT_AI_MODEL_KEY;
       }

@@ -14,7 +14,7 @@ vi.mock('@anthropic-ai/sdk', () => ({
 
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
-import { checkModelsLive, clearAvailabilityCache } from '../ai-model-availability';
+import { checkModelsLive, clearAvailabilityCache, isModelKnownUnavailable } from '../ai-model-availability';
 
 async function* asyncIter<T>(items: T[]) {
   for (const item of items) yield item;
@@ -148,5 +148,34 @@ describe('checkModelsLive', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('isModelKnownUnavailable', () => {
+  beforeEach(() => {
+    clearAvailabilityCache();
+    openaiList.mockReset().mockReturnValue(asyncIter([{ id: 'gpt-6-luna' }]));
+    vi.stubEnv('OPENAI_API_KEY', 'openai-secret');
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  const luna = { key: 'gpt-6-luna', provider: 'openai', apiModelId: 'gpt-6-luna' } as const;
+  const sol = { key: 'gpt-6-sol', provider: 'openai', apiModelId: 'gpt-6-sol' } as const;
+
+  it('is true only when the provider answered without the model', async () => {
+    expect(await isModelKnownUnavailable(sol)).toBe(true);
+    expect(await isModelKnownUnavailable(luna)).toBe(false);
+  });
+
+  it('is false when availability is unknown (no key or provider failure)', async () => {
+    vi.stubEnv('OPENAI_API_KEY', '');
+    expect(await isModelKnownUnavailable(sol)).toBe(false);
+
+    vi.stubEnv('OPENAI_API_KEY', 'openai-secret');
+    clearAvailabilityCache();
+    openaiList.mockReset().mockImplementation(() => {
+      throw new Error('network down');
+    });
+    expect(await isModelKnownUnavailable(sol)).toBe(false);
   });
 });

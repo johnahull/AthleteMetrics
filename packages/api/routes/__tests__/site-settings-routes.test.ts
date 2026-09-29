@@ -40,9 +40,13 @@ vi.mock("../../services/ai-insights-service", () => ({
 }));
 
 // Mock live model availability so tests never call provider APIs
-const { checkModelsLiveMock } = vi.hoisted(() => ({ checkModelsLiveMock: vi.fn() }));
+const { checkModelsLiveMock, isModelKnownUnavailableMock } = vi.hoisted(() => ({
+  checkModelsLiveMock: vi.fn(),
+  isModelKnownUnavailableMock: vi.fn().mockResolvedValue(false),
+}));
 vi.mock("../../services/ai-model-availability", () => ({
   checkModelsLive: checkModelsLiveMock,
+  isModelKnownUnavailable: isModelKnownUnavailableMock,
 }));
 
 // Mock session data for testing
@@ -389,6 +393,21 @@ describe("Site Settings API Routes", () => {
       } finally {
         await request(app).patch("/api/site-settings").send({ aiModel: "gpt-5-nano" });
       }
+    });
+
+    it("should reject a model the provider is known to have stopped serving", async () => {
+      mockSessionUser = {
+        id: testSiteAdminId,
+        email: `siteadmin-settings-${Date.now()}@test.com`,
+        role: "site_admin",
+        isSiteAdmin: true,
+      };
+      isModelKnownUnavailableMock.mockResolvedValueOnce(true);
+
+      const response = await request(app).patch("/api/site-settings").send({ aiModel: "gpt-6-sol" });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toContain("no longer offered");
     });
 
     it("should validate AI model and reject invalid models", async () => {

@@ -123,6 +123,19 @@ async function getProviderModelIds(provider: AIProviderName): Promise<Set<string
 }
 
 /**
+ * True only when the provider responded and does not list the model. Unknown (no API key, provider
+ * outage) is false, so saving a model stays possible when a provider can't be reached.
+ */
+export async function isModelKnownUnavailable(model: {
+  key: string;
+  provider: AIProviderName;
+  apiModelId: string;
+}): Promise<boolean> {
+  const live = await checkModelsLive([model]).catch(() => ({}) as Record<string, boolean | null>);
+  return live[model.key] === false;
+}
+
+/**
  * For each model, true if its provider currently lists the ID, false if the provider responded
  * without it, null if unknown (no API key or the provider call failed).
  */
