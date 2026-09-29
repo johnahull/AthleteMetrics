@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   AI_MODEL_REGISTRY,
   DEFAULT_AI_MODEL_KEY,
+  ESTIMATED_TOKENS_PER_REPORT,
   SELECTABLE_AI_MODEL_KEYS,
+  estimateCostPer100Reports,
   findModelsNearRetirement,
   getAIModel,
 } from '../ai-models';
@@ -105,3 +107,25 @@ describe('findModelsNearRetirement', () => {
     expect(findModelsNearRetirement(new Date('2027-01-15'), 30, models).map((m) => m.key)).toEqual(['soon']);
   });
 });
+
+describe('estimateCostPer100Reports', () => {
+  it('prices the assumed tokens per report at the per-million rates, times 100 reports', () => {
+    // 1,000 input + 1,000 output tokens per report
+    expect(ESTIMATED_TOKENS_PER_REPORT).toEqual({ input: 1000, output: 1000 });
+    expect(estimateCostPer100Reports({ input: 0.1, output: 0.5 })).toBeCloseTo(0.06, 6); // GPT-6 Luna
+    expect(estimateCostPer100Reports({ input: 2, output: 10 })).toBeCloseTo(1.2, 6); // GPT-6 Sol / Sonnet 5.5
+    expect(estimateCostPer100Reports({ input: 1, output: 5 })).toBeCloseTo(0.6, 6); // Haiku 4.5
+  });
+
+  it('scales linearly with price', () => {
+    const base = estimateCostPer100Reports({ input: 0.1, output: 0.5 });
+    expect(estimateCostPer100Reports({ input: 0.2, output: 1 })).toBeCloseTo(base * 2, 9);
+  });
+
+  it('is not the old formula, which was about 10x too small', () => {
+    // old: (input * 0.5 + output * 1.5) / 10000 * 100
+    const old = (0.1 * 0.5 + 0.5 * 1.5) / 10000 * 100;
+    expect(estimateCostPer100Reports({ input: 0.1, output: 0.5 })).toBeGreaterThan(old * 5);
+  });
+});
+
