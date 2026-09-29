@@ -28,7 +28,7 @@ export async function requireWellnessEnabled(
     if (siteSettingsResult.length === 0) {
       // No site settings record - create default one with wellness enabled
       await db.insert(siteSettings).values({
-        aiModel: 'gpt-5-nano',
+        aiModel: 'gpt-6-luna',
         wellnessModuleEnabled: true,
       });
     } else {

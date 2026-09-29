@@ -592,7 +592,7 @@ export const accountLinkingTokens = pgTable("account_linking_tokens", {
 // Site Settings - Global site configuration (singleton table)
 export const siteSettings = pgTable("site_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  aiModel: text("ai_model").notNull().default("gpt-5-nano"),
+  aiModel: text("ai_model").notNull().default("gpt-6-luna"),
   wellnessModuleEnabled: boolean("wellness_module_enabled").notNull().default(true),
   // Push notification global settings
   pushNotificationsEnabled: boolean("push_notifications_enabled").notNull().default(true),
@@ -2652,6 +2652,8 @@ export type SportCode = (typeof sportCodeEnum)[number];
 // Site Settings validation schemas
 export const AI_MODELS = [
   "gpt-5-nano",
+  "gpt-6-luna",
+  "gpt-6-sol",
   "gemini-2.0-flash-lite",
   "gemini-2.5-flash-lite",
   "claude-haiku-3",

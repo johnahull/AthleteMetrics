@@ -24,7 +24,7 @@ export default function AdminPage() {
     enabled: !!user?.isSiteAdmin, // Only fetch if user is site admin
   });
 
-  const [selectedModel, setSelectedModel] = useState<string>("gpt-5-nano");
+  const [selectedModel, setSelectedModel] = useState<string>("gpt-6-luna");
   const [wellnessEnabled, setWellnessEnabled] = useState<boolean>(true);
   const [sprintFvEnabled, setSprintFvEnabled] = useState<boolean>(false);
 
@@ -140,10 +140,12 @@ export default function AdminPage() {
   // AI Model pricing data
   const aiModels = [
     { value: "gpt-5-nano", label: "GPT-5 Nano", tier: "Budget", inputPrice: 0.05, outputPrice: 0.40 },
+    { value: "gpt-6-luna", label: "GPT-6 Luna", tier: "Budget", inputPrice: 0.10, outputPrice: 0.50 },
     { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite", tier: "Budget", inputPrice: 0.075, outputPrice: 0.30 },
     { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite", tier: "Budget", inputPrice: 0.10, outputPrice: 0.40 },
     { value: "claude-haiku-3", label: "Claude Haiku 3", tier: "Budget", inputPrice: 0.25, outputPrice: 1.25 },
     { value: "claude-haiku-4.5", label: "Claude Haiku 4.5", tier: "Budget", inputPrice: 0.80, outputPrice: 4.00 },
+    { value: "gpt-6-sol", label: "GPT-6 Sol", tier: "Premium", inputPrice: 2.00, outputPrice: 10.00 },
     { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro", tier: "Premium", inputPrice: 1.25, outputPrice: 10.00 },
     { value: "claude-sonnet-4.5", label: "Claude Sonnet 4.5", tier: "Premium", inputPrice: 3.00, outputPrice: 15.00 },
   ];

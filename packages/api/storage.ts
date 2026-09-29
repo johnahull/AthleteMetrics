@@ -5648,7 +5648,7 @@ export class DatabaseStorage implements IStorage {
       const [created] = await db
         .insert(siteSettings)
         .values({
-          aiModel: settings.aiModel || 'gpt-5-nano',
+          aiModel: settings.aiModel || 'gpt-6-luna',
           wellnessModuleEnabled: settings.wellnessModuleEnabled ?? true,
           sprintFvEnabled: settings.sprintFvEnabled ?? false,
           updatedBy: settings.updatedBy,

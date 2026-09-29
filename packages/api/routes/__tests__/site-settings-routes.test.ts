@@ -25,9 +25,11 @@ vi.mock("../../services/ai-insights-service", () => ({
   AI_MODELS: {
     "gpt-5-nano": { provider: "openai", model: "gpt-5-nano", tier: "budget", description: "Test", costPer1M: { input: 0.05, output: 0.4 } },
     "claude-haiku-3": { provider: "anthropic", model: "claude-haiku-3", tier: "budget", description: "Test", costPer1M: { input: 0.25, output: 1.25 } },
+    "gpt-6-luna": { provider: "openai", model: "gpt-6-luna", tier: "budget", description: "Test", costPer1M: { input: 0.1, output: 0.5 } },
+    "gpt-6-sol": { provider: "openai", model: "gpt-6-sol", tier: "premium", description: "Test", costPer1M: { input: 2, output: 10 } },
   },
   isModelAvailable: vi.fn((modelKey: string) => {
-    const validModels = ["gpt-5-nano", "gemini-2.0-flash-lite", "gemini-2.5-flash-lite", "claude-haiku-3", "claude-haiku-4.5", "gemini-2.5-pro", "claude-sonnet-4.5"];
+    const validModels = ["gpt-5-nano", "gemini-2.0-flash-lite", "gemini-2.5-flash-lite", "claude-haiku-3", "claude-haiku-4.5", "gemini-2.5-pro", "claude-sonnet-4.5", "gpt-6-luna", "gpt-6-sol"];
     if (validModels.includes(modelKey)) {
       return { provider: "openai", available: true, envVar: "TEST_API_KEY" };
     }
@@ -319,6 +321,31 @@ describe("Site Settings API Routes", () => {
 
       expect(response.status).toBe(200);
       expect(response.body.aiModel).toBe("gpt-5-nano");
+    });
+
+    it.each(["gpt-6-luna", "gpt-6-sol"])("should accept %s as AI model", async (aiModel) => {
+      mockSessionUser = {
+        id: testSiteAdminId,
+        email: `siteadmin-settings-${Date.now()}@test.com`,
+        role: "site_admin",
+        isSiteAdmin: true,
+      };
+
+      // Start from a different model so the audit-log path (model change) runs
+      const reset = await request(app).patch("/api/site-settings").send({ aiModel: "gpt-5-nano" });
+      expect(reset.status).toBe(200);
+
+      try {
+        const response = await request(app)
+          .patch("/api/site-settings")
+          .send({ aiModel });
+
+        expect(response.status).toBe(200);
+        expect(response.body.aiModel).toBe(aiModel);
+      } finally {
+        // Restore the shared singleton row so later tests/environments see the default
+        await request(app).patch("/api/site-settings").send({ aiModel: "gpt-5-nano" });
+      }
     });
 
     it("should validate AI model and reject invalid models", async () => {
