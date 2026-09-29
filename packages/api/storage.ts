@@ -1,3 +1,4 @@
+import { DEFAULT_AI_MODEL_KEY } from "@shared/ai-models";
 import {
   organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs, emailVerificationTokens, accountLinkingTokens, passwordResetTokens, athleteProfiles,
   siteMetrics, organizationMetrics,
@@ -5648,7 +5649,7 @@ export class DatabaseStorage implements IStorage {
       const [created] = await db
         .insert(siteSettings)
         .values({
-          aiModel: settings.aiModel || 'gpt-6-luna',
+          aiModel: settings.aiModel || DEFAULT_AI_MODEL_KEY,
           wellnessModuleEnabled: settings.wellnessModuleEnabled ?? true,
           sprintFvEnabled: settings.sprintFvEnabled ?? false,
           updatedBy: settings.updatedBy,

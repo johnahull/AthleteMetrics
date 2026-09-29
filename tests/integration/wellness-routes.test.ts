@@ -100,7 +100,7 @@ beforeAll(async () => {
 
   // Insert fresh site settings with wellness enabled
   await db.insert(siteSettings).values({
-    aiModel: 'claude-sonnet-4.5',
+    aiModel: 'claude-sonnet-5.5',
     wellnessModuleEnabled: true,
   });
 

@@ -53,20 +53,29 @@ test.describe('Coaching Insights - Site Admin Configuration', () => {
     const modelSelect = page.locator('[data-testid="ai-model-select"]').first();
     await modelSelect.click();
 
-    // Verify all 7 models are available
-    await expect(page.locator('text=GPT-5 Nano')).toBeVisible();
-    await expect(page.locator('text=Gemini 2.0 Flash Lite')).toBeVisible();
-    await expect(page.locator('text=Gemini 2.5 Flash Lite')).toBeVisible();
-    await expect(page.locator('text=Claude Haiku 3')).toBeVisible();
-    await expect(page.locator('text=Claude Haiku 4.5')).toBeVisible();
-    await expect(page.locator('text=Gemini 2.5 Pro')).toBeVisible();
-    await expect(page.locator('text=Claude Sonnet 4.5')).toBeVisible();
+    // Verify the selectable models are listed (list comes from packages/shared/ai-models.ts)
+    for (const label of [
+      'GPT-5 Nano',
+      'GPT-6 Luna',
+      'Gemini 2.5 Flash Lite',
+      'Claude Haiku 4.5',
+      'GPT-6 Sol',
+      'Gemini 2.5 Pro',
+      'Claude Sonnet 5.5',
+    ]) {
+      await expect(page.getByRole('option', { name: new RegExp(label) })).toBeVisible();
+    }
+
+    // Retired models are not offered
+    for (const retired of ['Gemini 2.0 Flash Lite', 'Claude Haiku 3', 'Claude Sonnet 4.5']) {
+      await expect(page.getByRole('option', { name: new RegExp(retired) })).toHaveCount(0);
+    }
 
     // Select a premium model
-    await page.click('text=Claude Sonnet 4.5');
+    await page.getByRole('option', { name: /GPT-6 Sol/ }).click();
 
     // Verify selection saved
-    await expect(page.locator('text=Settings updated')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('text=AI model updated successfully!')).toBeVisible({ timeout: 5000 });
   });
 
   test('should allow site admin to enable AI for specific organization', async ({ page }) => {

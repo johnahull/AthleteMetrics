@@ -4,6 +4,7 @@
  */
 
 import express, { type Express } from "express";
+import { DEFAULT_AI_MODEL_KEY, getAIModel } from "@shared/ai-models";
 import rateLimit from "express-rate-limit";
 import { ReportService } from "../services/report-service";
 import { planChartPageBreaks } from "./pdf-chart-layout";
@@ -1616,11 +1617,12 @@ export function registerReportRoutes(app: Express) {
       const { AI_MODELS, generateCoachingInsights, isModelAvailable } = await import("../services/ai-insights-service");
       type AIModelKey = keyof typeof AI_MODELS;
 
-      const modelKey = (siteSettings?.aiModel || "gpt-6-luna") as string;
+      let modelKey = (siteSettings?.aiModel || DEFAULT_AI_MODEL_KEY) as string;
 
-      // Validate model key exists in AI_MODELS
+      // A stored model that is no longer selectable (retired/replaced) falls back to the default
       if (!(modelKey in AI_MODELS)) {
-        return res.status(500).json({ message: "Invalid AI model configuration. Please contact your administrator." });
+        console.warn(`Stored AI model "${modelKey}" is no longer selectable; using ${DEFAULT_AI_MODEL_KEY}`);
+        modelKey = DEFAULT_AI_MODEL_KEY;
       }
 
       // Validate API key is available for the selected model's provider using shared utility
@@ -4555,7 +4557,9 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
       doc.setFontSize(8);
       doc.setTextColor(100, 100, 100);
       const generatedDate = new Date(report.coachingInsightsGeneratedAt).toLocaleString();
-      const modelText = report.coachingInsightsModel ? ` (${report.coachingInsightsModel})` : '';
+      const modelText = report.coachingInsightsModel
+        ? ` (${getAIModel(report.coachingInsightsModel)?.label ?? report.coachingInsightsModel})`
+        : '';
       doc.text(`Generated: ${generatedDate}${modelText}`, 14, yPos);
       doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
       yPos += 10;
