@@ -5,7 +5,7 @@ inputs:
   node-version:
     description: 'Node.js version to use'
     required: false
-    default: '20'
+    default: '24.21.0'
   cache-key-suffix:
     description: 'Optional suffix for cache key (useful for matrix builds)'
     required: false
