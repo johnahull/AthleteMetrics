@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { AI_MODELS as SERVICE_MODELS } from '../ai-insights-service';
-import { AI_MODELS as VALIDATION_MODELS } from '@shared/schema-original';
+import { AI_MODELS as VALIDATION_MODELS, siteSettings } from '@shared/schema-original';
+import { siteSettings as modularSiteSettings } from '@shared/schema/tables/settings';
 import { AI_MODELS as CONSTANT_MODELS } from '@shared/schema/constants';
 
 /**
@@ -18,5 +19,13 @@ describe('AI model keys', () => {
 
   it('shared AIModel constant matches the service config', () => {
     expect([...CONSTANT_MODELS].sort()).toEqual(serviceKeys);
+  });
+
+  it.each([
+    ['schema-original', siteSettings],
+    ['schema/tables/settings', modularSiteSettings],
+  ])('site_settings.ai_model defaults to gpt-6-luna (%s)', (_name, table) => {
+    expect(table.aiModel.default).toBe('gpt-6-luna');
+    expect(serviceKeys).toContain('gpt-6-luna');
   });
 });

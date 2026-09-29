@@ -7,6 +7,8 @@
 UPDATE site_settings SET ai_model = 'gpt-5-nano' WHERE ai_model IN ('gpt-6-luna', 'gpt-6-sol');
 UPDATE reports SET coaching_insights_model = NULL WHERE coaching_insights_model IN ('gpt-6-luna', 'gpt-6-sol');
 
+ALTER TABLE site_settings ALTER COLUMN ai_model SET DEFAULT 'gpt-5-nano';
+
 COMMENT ON COLUMN site_settings.ai_model IS 'Default AI model for coaching insights generation. Must be one of: gpt-5-nano, gemini-2.0-flash-lite, gemini-2.5-flash-lite, claude-haiku-3, claude-haiku-4.5, gemini-2.5-pro, claude-sonnet-4.5';
 
 ALTER TABLE site_settings DROP CONSTRAINT IF EXISTS site_settings_ai_model_check;

@@ -10,7 +10,7 @@ import { users } from "./core";
 
 export const siteSettings = pgTable("site_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  aiModel: text("ai_model").notNull().default("gpt-5-nano"),
+  aiModel: text("ai_model").notNull().default("gpt-6-luna"),
   wellnessModuleEnabled: boolean("wellness_module_enabled").notNull().default(true),
   sprintFvEnabled: boolean("sprint_fv_enabled").notNull().default(false),
   // Push notification global settings

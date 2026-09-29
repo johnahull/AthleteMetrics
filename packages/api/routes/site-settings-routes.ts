@@ -79,7 +79,7 @@ router.get("/", requireSiteAdmin, async (req, res) => {
     if (!settings) {
       // Return default settings if none exist
       return res.json({
-        aiModel: "gpt-5-nano",
+        aiModel: "gpt-6-luna",
         wellnessModuleEnabled: true,
         sprintFvEnabled: false,
         updatedAt: new Date().toISOString(),
@@ -143,7 +143,7 @@ router.patch("/", requireSiteAdmin, async (req: AuthenticatedRequest, res: Respo
 
     // Get previous settings for audit log
     const previousSettings = await storage.getSiteSettings();
-    const previousModel = previousSettings?.aiModel || 'gpt-5-nano';
+    const previousModel = previousSettings?.aiModel || 'gpt-6-luna';
     const previousWellness = previousSettings?.wellnessModuleEnabled ?? true;
     const previousSprintFv = previousSettings?.sprintFvEnabled ?? false;
 

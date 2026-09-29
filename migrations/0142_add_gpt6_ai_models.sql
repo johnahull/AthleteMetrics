@@ -3,6 +3,10 @@
 -- Rebuilds the two CHECK constraints introduced in 0036 (site_settings) and
 -- 0038 (reports). Idempotent: constraints are dropped if present, then re-added.
 
+-- New default for fresh databases / inserts without an explicit model.
+-- Existing rows keep whatever model the site admin already selected.
+ALTER TABLE site_settings ALTER COLUMN ai_model SET DEFAULT 'gpt-6-luna';
+
 COMMENT ON COLUMN site_settings.ai_model IS 'Default AI model for coaching insights generation. Must be one of: gpt-5-nano, gpt-6-luna, gpt-6-sol, gemini-2.0-flash-lite, gemini-2.5-flash-lite, claude-haiku-3, claude-haiku-4.5, gemini-2.5-pro, claude-sonnet-4.5';
 
 ALTER TABLE site_settings DROP CONSTRAINT IF EXISTS site_settings_ai_model_check;

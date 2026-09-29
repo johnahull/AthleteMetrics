@@ -24,7 +24,7 @@ export default function AdminPage() {
     enabled: !!user?.isSiteAdmin, // Only fetch if user is site admin
   });
 
-  const [selectedModel, setSelectedModel] = useState<string>("gpt-5-nano");
+  const [selectedModel, setSelectedModel] = useState<string>("gpt-6-luna");
   const [wellnessEnabled, setWellnessEnabled] = useState<boolean>(true);
   const [sprintFvEnabled, setSprintFvEnabled] = useState<boolean>(false);
 
