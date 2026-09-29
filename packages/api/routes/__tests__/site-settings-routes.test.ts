@@ -31,7 +31,7 @@ vi.mock("../../services/ai-insights-service", () => ({
     "claude-sonnet-5.5": { provider: "anthropic", model: "claude-sonnet-5-5", tier: "premium", description: "Test", costPer1M: { input: 2, output: 10 } },
   },
   isModelAvailable: vi.fn((modelKey: string) => {
-    const validModels = ["gpt-5-nano", "gemini-2.5-flash-lite", "claude-haiku-4.5", "gemini-2.5-pro", "claude-sonnet-5.5", "gpt-6-luna", "gpt-6-sol"];
+    const validModels = ["gpt-5-nano", "claude-haiku-4.5", "claude-sonnet-5.5", "gpt-6-luna", "gpt-6-sol"];
     if (validModels.includes(modelKey)) {
       return { provider: "openai", available: true, envVar: "TEST_API_KEY" };
     }
@@ -558,7 +558,7 @@ describe("Site Settings API Routes", () => {
       expect(byKey["gpt-6-luna"]).toMatchObject({ label: "GPT-6 Luna", live: true, available: true, retireAfter: null });
       expect(byKey["gpt-6-sol"]).toMatchObject({ live: false });
       // Not reported by the (mocked) live check -> unknown
-      expect(byKey["gemini-2.5-pro"].live).toBeNull();
+      expect(byKey["claude-haiku-4.5"].live).toBeNull();
       expect(byKey["gpt-5-nano"].retireAfter).toBe(getAIModel("gpt-5-nano")?.retireAfter ?? null);
       // Retired models are never offered
       expect(byKey["claude-haiku-3"]).toBeUndefined();

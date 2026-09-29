@@ -57,17 +57,15 @@ test.describe('Coaching Insights - Site Admin Configuration', () => {
     for (const label of [
       'GPT-5 Nano',
       'GPT-6 Luna',
-      'Gemini 2.5 Flash Lite',
       'Claude Haiku 4.5',
       'GPT-6 Sol',
-      'Gemini 2.5 Pro',
       'Claude Sonnet 5.5',
     ]) {
       await expect(page.getByRole('option', { name: new RegExp(label) })).toBeVisible();
     }
 
     // Retired models are not offered
-    for (const retired of ['Gemini 2.0 Flash Lite', 'Claude Haiku 3', 'Claude Sonnet 4.5']) {
+    for (const retired of ['Gemini 2.0 Flash Lite', 'Gemini 2.5 Flash Lite', 'Gemini 2.5 Pro', 'Claude Haiku 3', 'Claude Sonnet 4.5']) {
       await expect(page.getByRole('option', { name: new RegExp(retired) })).toHaveCount(0);
     }
 

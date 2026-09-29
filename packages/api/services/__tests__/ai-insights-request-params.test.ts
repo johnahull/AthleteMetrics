@@ -54,7 +54,7 @@ describe('AI_MODELS (derived from the registry)', () => {
     expect(AI_MODELS['claude-sonnet-5.5'].model).toBe('claude-sonnet-5-5');
   });
 
-  it.each(['claude-haiku-3', 'gemini-2.0-flash-lite', 'claude-sonnet-4.5'])(
+  it.each(['claude-haiku-3', 'gemini-2.0-flash-lite', 'claude-sonnet-4.5', 'gemini-2.5-flash-lite', 'gemini-2.5-pro'])(
     'does not offer retired model %s',
     (key) => {
       expect(Object.keys(AI_MODELS)).not.toContain(key);
@@ -145,8 +145,8 @@ describe('model-not-found errors', () => {
   });
 
   it('does not treat an unrelated error that merely mentions 404 as a missing model', async () => {
-    googleSpy.mockReset().mockRejectedValue(new Error('upstream gateway said 404 somewhere in its body'));
-    await expect(generateCoachingInsights('gemini-2.5-pro', reportData)).rejects.toThrow(
+    anthropicSpy.mockReset().mockRejectedValue(new Error('upstream gateway said 404 somewhere in its body'));
+    await expect(generateCoachingInsights('claude-haiku-4.5', reportData)).rejects.toThrow(
       'AI service temporarily unavailable',
     );
   });
@@ -154,7 +154,6 @@ describe('model-not-found errors', () => {
   it.each([
     ['openai', 'gpt-6-luna', openaiSpy],
     ['anthropic', 'claude-sonnet-5.5', anthropicSpy],
-    ['google', 'gemini-2.5-pro', googleSpy],
   ] as const)('%s 404 becomes a configuration error naming the model server-side', async (_p, key, spy) => {
     spy.mockReset().mockRejectedValue(Object.assign(new Error('404 model not found'), { status: 404 }));
     await expect(generateCoachingInsights(key, reportData)).rejects.toThrow(

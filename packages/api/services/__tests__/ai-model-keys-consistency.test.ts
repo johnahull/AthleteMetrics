@@ -25,7 +25,7 @@ describe('AI model keys', () => {
     expect(serviceKeys).toEqual([...SELECTABLE_AI_MODEL_KEYS].sort());
   });
 
-  it.each(['claude-haiku-3', 'gemini-2.0-flash-lite', 'claude-sonnet-4.5'])(
+  it.each(['claude-haiku-3', 'gemini-2.0-flash-lite', 'claude-sonnet-4.5', 'gemini-2.5-flash-lite', 'gemini-2.5-pro'])(
     'settings schema rejects retired model %s',
     (aiModel) => {
       expect(updateSiteSettingsSchema.safeParse({ aiModel }).success).toBe(false);
