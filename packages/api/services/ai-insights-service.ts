@@ -233,6 +233,11 @@ class GoogleProvider implements AIProvider {
   }
 }
 
+/** True for GPT-5/GPT-6 family models (e.g. gpt-5-nano, gpt-6-luna), but not gpt-50 or gpt-4o */
+export function usesReasoningParams(modelName: string): boolean {
+  return /^gpt-[56](?![0-9])/.test(modelName);
+}
+
 // OpenAI Provider
 class OpenAIProvider implements AIProvider {
   private client: OpenAI;
@@ -255,7 +260,7 @@ class OpenAIProvider implements AIProvider {
   async generateInsights(prompt: string): Promise<string> {
     try {
       // GPT-5 and GPT-6 models use different parameters than older models
-      const usesReasoningParams = /^gpt-[56]/.test(this.modelName);
+      const reasoningModel = usesReasoningParams(this.modelName);
 
       const requestParams: any = {
         model: this.modelName,
@@ -271,7 +276,7 @@ class OpenAIProvider implements AIProvider {
         ],
       };
 
-      if (usesReasoningParams) {
+      if (reasoningModel) {
         // GPT-5/6 models use reasoning_effort instead of temperature
         requestParams.reasoning_effort = "low";
         requestParams.max_completion_tokens = 2048;

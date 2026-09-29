@@ -8,12 +8,9 @@ vi.mock('openai', () => ({
   })),
 }));
 
-import { AI_MODELS, generateCoachingInsights, ReportData } from '../ai-insights-service';
+import { AI_MODELS, generateCoachingInsights, usesReasoningParams, ReportData } from '../ai-insights-service';
 
-/**
- * Verifies the OpenAI request shape for reasoning-style models (GPT-5 / GPT-6):
- * reasoning_effort + max_completion_tokens, never temperature / max_tokens.
- */
+// OpenAI request shape for reasoning models (GPT-5 / GPT-6)
 
 const reportData: ReportData = {
   reportType: 'team',
@@ -65,4 +62,14 @@ describe('OpenAI provider request parameters', () => {
       expect(params).not.toHaveProperty('max_tokens');
     },
   );
+});
+
+describe('usesReasoningParams', () => {
+  it.each(['gpt-5-nano', 'gpt-5.1', 'gpt-6-luna', 'gpt-6-sol'])('is true for %s', (name) => {
+    expect(usesReasoningParams(name)).toBe(true);
+  });
+
+  it.each(['gpt-4o', 'gpt-4o-mini', 'gpt-50', 'gpt-60-turbo', 'gpt-7-x'])('is false for %s', (name) => {
+    expect(usesReasoningParams(name)).toBe(false);
+  });
 });
