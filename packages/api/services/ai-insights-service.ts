@@ -137,8 +137,7 @@ function isModelNotFound(error: any): boolean {
   return (
     error?.status === 404 ||
     error?.error?.type === "not_found_error" ||
-    error?.code === "model_not_found" ||
-    /\b404\b/.test(error?.message ?? "")
+    error?.code === "model_not_found"
   );
 }
 
@@ -352,8 +351,11 @@ class AnthropicProvider implements AIProvider {
         ],
       });
 
-      // Never return a cut-off or refused response as if it were complete insights
-      if (message.stop_reason === "max_tokens" || message.stop_reason === "refusal") {
+      // Never return a refused response, or (for no-sampling models, new to this code path) a
+      // cut-off one, as if it were complete insights. Other models keep returning whatever text
+      // they produced, as before.
+      const cutOff = message.stop_reason === "max_tokens" && this.requestStyle === "no-sampling";
+      if (cutOff || message.stop_reason === "refusal") {
         throw new Error(`Anthropic returned no text content (stop reason: ${message.stop_reason})`);
       }
 

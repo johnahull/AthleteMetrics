@@ -110,7 +110,7 @@ describe('request parameters', () => {
   });
 
   it.each(['max_tokens', 'refusal'])(
-    'does not return a %s Anthropic response as if it were complete insights',
+    'does not return a %s Sonnet 5.5 response as if it were complete insights',
     async (stopReason) => {
       vi.spyOn(console, 'error').mockImplementation(() => {});
       anthropicSpy.mockResolvedValue({
@@ -120,6 +120,20 @@ describe('request parameters', () => {
       await expect(generateCoachingInsights('claude-sonnet-5.5', reportData)).rejects.toThrow();
     },
   );
+
+  it('still rejects a refusal for legacy-style Anthropic models', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    anthropicSpy.mockResolvedValue({ stop_reason: 'refusal', content: [] });
+    await expect(generateCoachingInsights('claude-haiku-4.5', reportData)).rejects.toThrow();
+  });
+
+  it('keeps returning text that fills max_tokens for legacy-style Anthropic models (unchanged behaviour)', async () => {
+    anthropicSpy.mockResolvedValue({
+      stop_reason: 'max_tokens',
+      content: [{ type: 'text', text: 'long but usable insights' }],
+    });
+    expect(await generateCoachingInsights('claude-haiku-4.5', reportData)).toBe('long but usable insights');
+  });
 });
 
 describe('model-not-found errors', () => {
@@ -128,6 +142,13 @@ describe('model-not-found errors', () => {
     vi.stubEnv('ANTHROPIC_API_KEY', 'test-key');
     vi.stubEnv('GOOGLE_AI_API_KEY', 'test-key');
     vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  it('does not treat an unrelated error that merely mentions 404 as a missing model', async () => {
+    googleSpy.mockReset().mockRejectedValue(new Error('upstream gateway said 404 somewhere in its body'));
+    await expect(generateCoachingInsights('gemini-2.5-pro', reportData)).rejects.toThrow(
+      'AI service temporarily unavailable',
+    );
   });
 
   it.each([
