@@ -65,11 +65,11 @@ const EXPECTED_STRUCTURE = {
 
   // Total migrations expected across both systems:
   // - Drizzle migrations (0000-0006 in drizzle/migrations/): tracked in drizzle.__drizzle_migrations
-  // - Manual migrations (0014-0117 in migrations/): tracked in manual_migrations
-  // Updated 2026-04-15 for COPPA (0111-0116) and Sprint F-V (0117) release
+  // - Manual migrations (0014-0141 in migrations/): tracked in manual_migrations
+  // Updated 2026-09-28 to match develop (138 manual files through 0141)
   minDrizzleMigrationCount: 7,    // Drizzle migrations with snapshots
-  minManualMigrationCount: 90,    // Manual SQL migrations (0014+, excluding _down files)
-  minTotalMigrationCount: 97,     // Total across both systems
+  minManualMigrationCount: 138,   // Manual SQL migrations (0014+, excluding _down files)
+  minTotalMigrationCount: 145,    // Total across both systems
 };
 
 async function verifyColumns(client) {
