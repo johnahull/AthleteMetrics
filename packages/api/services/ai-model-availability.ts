@@ -43,25 +43,25 @@ function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([promise, deadline]).finally(() => clearTimeout(timer));
 }
 
-async function listOpenAI(apiKey: string): Promise<Set<string>> {
+async function listOpenAI(apiKey: string, signal: AbortSignal): Promise<Set<string>> {
   const client = new OpenAI({ apiKey, timeout: LOOKUP_DEADLINE_MS, maxRetries: 0 });
   const ids = new Set<string>();
-  for await (const model of client.models.list()) {
+  for await (const model of client.models.list({ signal })) {
     ids.add(model.id);
   }
   return ids;
 }
 
-async function listAnthropic(apiKey: string): Promise<Set<string>> {
+async function listAnthropic(apiKey: string, signal: AbortSignal): Promise<Set<string>> {
   const client = new Anthropic({ apiKey, timeout: LOOKUP_DEADLINE_MS, maxRetries: 0 });
   const ids = new Set<string>();
-  for await (const model of client.models.list({ limit: 1000 })) {
+  for await (const model of client.models.list({ limit: 1000 }, { signal })) {
     ids.add(model.id);
   }
   return ids;
 }
 
-async function listGoogle(apiKey: string): Promise<Set<string>> {
+async function listGoogle(apiKey: string, signal: AbortSignal): Promise<Set<string>> {
   const ids = new Set<string>();
   let pageToken: string | undefined;
   do {
@@ -69,7 +69,7 @@ async function listGoogle(apiKey: string): Promise<Set<string>> {
     // Key goes in a header so it never ends up in URLs or logs
     const res = await fetch(url, {
       headers: { "x-goog-api-key": apiKey },
-      signal: AbortSignal.timeout(LOOKUP_DEADLINE_MS),
+      signal,
     });
     if (!res.ok) {
       throw new Error(`Google models list failed with status ${res.status}`);
@@ -83,7 +83,7 @@ async function listGoogle(apiKey: string): Promise<Set<string>> {
   return ids;
 }
 
-const listers: Record<AIProviderName, (apiKey: string) => Promise<Set<string>>> = {
+const listers: Record<AIProviderName, (apiKey: string, signal: AbortSignal) => Promise<Set<string>>> = {
   openai: listOpenAI,
   anthropic: listAnthropic,
   google: listGoogle,
@@ -92,7 +92,10 @@ const listers: Record<AIProviderName, (apiKey: string) => Promise<Set<string>>> 
 async function fetchAndCache(provider: AIProviderName, apiKey: string): Promise<Set<string> | null> {
   let ids: Set<string> | null = null;
   try {
-    ids = await withDeadline(listers[provider](apiKey), LOOKUP_DEADLINE_MS);
+    // One signal covers the whole lookup (every page), and cancels the request when it expires;
+    // the race below is a backstop for a call that ignores the signal.
+    const signal = AbortSignal.timeout(LOOKUP_DEADLINE_MS);
+    ids = await withDeadline(listers[provider](apiKey, signal), LOOKUP_DEADLINE_MS);
   } catch (error: any) {
     // Log only safe fields; never the key
     console.error(`AI model availability check failed for provider ${provider}:`, {

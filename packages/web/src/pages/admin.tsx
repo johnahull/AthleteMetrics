@@ -170,7 +170,7 @@ export default function AdminPage() {
   }));
 
   const renderModelItem = (model: (typeof aiModels)[number]) => (
-    <SelectItem key={model.value} value={model.value} disabled={model.disabled}>
+    <SelectItem key={model.value} value={model.value} disabled={model.disabled} title={model.note ?? undefined}>
       <div className="flex items-center justify-between w-full gap-4">
         <span>{model.label}</span>
         <div className="ml-auto flex items-center gap-2">
@@ -288,6 +288,9 @@ export default function AdminPage() {
                 <span className="font-medium">Estimated Cost:</span>
                 <span className="text-muted-foreground">${estimatedCostPer100} per 100 reports</span>
               </div>
+              {selectedModelData.note && (
+                <p className="text-xs text-muted-foreground">{selectedModelData.note}</p>
+              )}
             </div>
           )}
         </CardContent>

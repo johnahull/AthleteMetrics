@@ -77,6 +77,30 @@ describe('checkModelsLive', () => {
     expect(String(fetchMock.mock.calls[1][0])).toContain('pageToken=p2');
   });
 
+  it('gives each provider call an abort signal so a timed-out lookup is cancelled', async () => {
+    await checkModelsLive([models[0], models[2]]);
+    expect(openaiList.mock.calls[0][0]).toEqual({ signal: expect.any(AbortSignal) });
+    expect(anthropicList.mock.calls[0][1]).toEqual({ signal: expect.any(AbortSignal) });
+  });
+
+  it('shares one abort signal (one overall budget) across all Google pages', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ models: [{ name: 'models/gemini-2.5-flash-lite' }], nextPageToken: 'p2' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ models: [{ name: 'models/gemini-2.5-pro' }] }),
+      });
+
+    await checkModelsLive([models[3]]);
+
+    const [first, second] = fetchMock.mock.calls.map(([, init]) => init.signal);
+    expect(first).toBeInstanceOf(AbortSignal);
+    expect(second).toBe(first);
+  });
+
   it('returns null (unknown) when the provider key is missing', async () => {
     vi.stubEnv('OPENAI_API_KEY', '');
     const live = await checkModelsLive([models[0]]);
