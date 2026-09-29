@@ -4,6 +4,7 @@
  */
 
 import type { Response, NextFunction } from "express";
+import { DEFAULT_AI_MODEL_KEY } from "@shared/ai-models";
 import type { AuthenticatedRequest } from "../middleware";
 import { db } from "../db";
 import { siteSettings, organizations, userOrganizations } from "@shared/schema";
@@ -28,7 +29,7 @@ export async function requireWellnessEnabled(
     if (siteSettingsResult.length === 0) {
       // No site settings record - create default one with wellness enabled
       await db.insert(siteSettings).values({
-        aiModel: 'gpt-6-luna',
+        aiModel: DEFAULT_AI_MODEL_KEY,
         wellnessModuleEnabled: true,
       });
     } else {

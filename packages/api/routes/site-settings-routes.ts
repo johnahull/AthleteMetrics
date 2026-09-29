@@ -11,6 +11,8 @@ import { requireSiteAdmin } from "../middleware";
 import { storage } from "../storage";
 import { updateSiteSettingsSchema } from "@shared/schema";
 import { AI_MODELS as AI_MODELS_CONFIG, isModelAvailable } from "../services/ai-insights-service";
+import { checkModelsLive, isModelKnownUnavailable } from "../services/ai-model-availability";
+import { AI_MODEL_REGISTRY, DEFAULT_AI_MODEL_KEY, findModelsNearRetirement, getAIModel, type AIModelDefinition } from "@shared/ai-models";
 
 // Type for authenticated request with session
 interface AuthenticatedRequest extends Request {
@@ -79,7 +81,7 @@ router.get("/", requireSiteAdmin, async (req, res) => {
     if (!settings) {
       // Return default settings if none exist
       return res.json({
-        aiModel: "gpt-6-luna",
+        aiModel: DEFAULT_AI_MODEL_KEY,
         wellnessModuleEnabled: true,
         sprintFvEnabled: false,
         updatedAt: new Date().toISOString(),
@@ -128,6 +130,14 @@ router.patch("/", requireSiteAdmin, async (req: AuthenticatedRequest, res: Respo
         });
       }
 
+      // Reject a model its provider is known to have stopped serving (unknown status stays allowed)
+      const modelDefinition = getAIModel(validated.aiModel);
+      if (modelDefinition && (await isModelKnownUnavailable(modelDefinition))) {
+        return res.status(400).json({
+          message: "Selected model is no longer offered by its provider. Please choose another model.",
+        });
+      }
+
       updateData.aiModel = validated.aiModel;
     }
 
@@ -143,7 +153,7 @@ router.patch("/", requireSiteAdmin, async (req: AuthenticatedRequest, res: Respo
 
     // Get previous settings for audit log
     const previousSettings = await storage.getSiteSettings();
-    const previousModel = previousSettings?.aiModel || 'gpt-6-luna';
+    const previousModel = previousSettings?.aiModel || DEFAULT_AI_MODEL_KEY;
     const previousWellness = previousSettings?.wellnessModuleEnabled ?? true;
     const previousSprintFv = previousSettings?.sprintFvEnabled ?? false;
 
@@ -218,24 +228,39 @@ router.patch("/", requireSiteAdmin, async (req: AuthenticatedRequest, res: Respo
 });
 
 /**
- * GET /api/ai-models
- * Get list of available AI models with pricing and tiers
+ * GET /api/site-settings/ai-models
+ * Get list of selectable AI models with pricing, tiers and live status
+ * - available: the provider's API key is configured on the server
+ * - live: the provider currently lists the model (null = unknown: no key or provider unreachable)
+ * - retireAfter / retiringSoon: announced retirement date, and whether it is within 30 days
  * Access: Site admin only
  */
 router.get("/ai-models", requireSiteAdmin, async (req, res) => {
   try {
-    // Convert AI models config to API response format
-    const models = Object.entries(AI_MODELS_CONFIG).map(([key, config]) => ({
-      key,
-      provider: config.provider,
-      model: config.model,
-      tier: config.tier,
-      description: config.description,
+    const selectable: AIModelDefinition[] = AI_MODEL_REGISTRY.filter((m) => m.selectable);
+    const live = await checkModelsLive(selectable).catch((error) => {
+      console.error("AI model live check failed:", error?.message);
+      return {} as Record<string, boolean | null>;
+    });
+    const retiringSoon = new Set(findModelsNearRetirement(new Date(), 30).map((m) => m.key));
+
+    const models = selectable.map((m) => ({
+      key: m.key,
+      provider: m.provider,
+      model: m.apiModelId,
+      label: m.label,
+      tier: m.tier,
+      description: m.description,
+      note: m.note ?? null,
       pricing: {
-        inputPer1M: config.costPer1M.input,
-        outputPer1M: config.costPer1M.output,
+        inputPer1M: m.costPer1M.input,
+        outputPer1M: m.costPer1M.output,
         currency: "USD",
       },
+      available: isModelAvailable(m.key).available,
+      live: live[m.key] ?? null,
+      retireAfter: m.retireAfter ?? null,
+      retiringSoon: retiringSoon.has(m.key),
     }));
 
     // Group by tier

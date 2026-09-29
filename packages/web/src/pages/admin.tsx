@@ -11,6 +11,19 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Sparkles, Heart, Zap, AlertTriangle, FileText, Bell, Calculator, Loader2 } from "lucide-react";
 import { AdminNotificationSettingsCard } from "@/components/notifications/admin-notification-settings-card";
+import { DEFAULT_AI_MODEL_KEY, ESTIMATED_TOKENS_PER_REPORT, estimateCostPer100Reports } from "@shared/ai-models";
+
+interface AiModelInfo {
+  key: string;
+  label: string;
+  tier: "budget" | "premium";
+  note: string | null;
+  pricing: { inputPer1M: number; outputPer1M: number };
+  available: boolean; // provider API key configured on the server
+  live: boolean | null; // provider still lists the model (null = unknown)
+  retireAfter: string | null;
+  retiringSoon: boolean;
+}
 
 export default function AdminPage() {
   const { toast } = useToast();
@@ -24,7 +37,13 @@ export default function AdminPage() {
     enabled: !!user?.isSiteAdmin, // Only fetch if user is site admin
   });
 
-  const [selectedModel, setSelectedModel] = useState<string>("gpt-6-luna");
+  // Selectable AI models come from the server (registry + live provider check)
+  const { data: aiModelsData, isLoading: aiModelsLoading, isError: aiModelsError } = useQuery<{ all: AiModelInfo[] }>({
+    queryKey: ["/api/site-settings/ai-models"],
+    enabled: !!user?.isSiteAdmin,
+  });
+
+  const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_AI_MODEL_KEY);
   const [wellnessEnabled, setWellnessEnabled] = useState<boolean>(true);
   const [sprintFvEnabled, setSprintFvEnabled] = useState<boolean>(false);
 
@@ -137,18 +156,33 @@ export default function AdminPage() {
     return null;
   }
 
-  // AI Model pricing data
-  const aiModels = [
-    { value: "gpt-5-nano", label: "GPT-5 Nano", tier: "Budget", inputPrice: 0.05, outputPrice: 0.40 },
-    { value: "gpt-6-luna", label: "GPT-6 Luna", tier: "Budget", inputPrice: 0.10, outputPrice: 0.50 },
-    { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite", tier: "Budget", inputPrice: 0.075, outputPrice: 0.30 },
-    { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite", tier: "Budget", inputPrice: 0.10, outputPrice: 0.40 },
-    { value: "claude-haiku-3", label: "Claude Haiku 3", tier: "Budget", inputPrice: 0.25, outputPrice: 1.25 },
-    { value: "claude-haiku-4.5", label: "Claude Haiku 4.5", tier: "Budget", inputPrice: 0.80, outputPrice: 4.00 },
-    { value: "gpt-6-sol", label: "GPT-6 Sol", tier: "Premium", inputPrice: 2.00, outputPrice: 10.00 },
-    { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro", tier: "Premium", inputPrice: 1.25, outputPrice: 10.00 },
-    { value: "claude-sonnet-4.5", label: "Claude Sonnet 4.5", tier: "Premium", inputPrice: 3.00, outputPrice: 15.00 },
-  ];
+  const aiModels = (aiModelsData?.all ?? []).map(m => ({
+    value: m.key,
+    label: m.label,
+    tier: m.tier === "budget" ? "Budget" : "Premium",
+    inputPrice: m.pricing.inputPer1M,
+    outputPrice: m.pricing.outputPer1M,
+    // Provider no longer serves the model, or no API key is configured for it
+    disabled: !m.available || m.live === false,
+    status: !m.available ? "No API key" : m.live === false ? "Unavailable" : null,
+    note: m.note,
+    retireAfter: m.retiringSoon ? m.retireAfter : null,
+  }));
+
+  const renderModelItem = (model: (typeof aiModels)[number]) => (
+    <SelectItem key={model.value} value={model.value} disabled={model.disabled} title={model.note ?? undefined}>
+      <div className="flex items-center justify-between w-full gap-4">
+        <span>{model.label}</span>
+        <div className="ml-auto flex items-center gap-2">
+          {model.status && <Badge variant="destructive">{model.status}</Badge>}
+          {model.retireAfter && <Badge variant="outline">Retires {model.retireAfter}</Badge>}
+          <Badge variant="secondary">
+            ${model.inputPrice.toFixed(2)}/${model.outputPrice.toFixed(2)} per 1M
+          </Badge>
+        </div>
+      </div>
+    </SelectItem>
+  );
 
   const handleModelChange = (model: string) => {
     // Client-side validation: ensure model exists in available models
@@ -177,7 +211,7 @@ export default function AdminPage() {
 
   const selectedModelData = aiModels.find(m => m.value === selectedModel);
   const estimatedCostPer100 = selectedModelData
-    ? ((selectedModelData.inputPrice * 0.5 + selectedModelData.outputPrice * 1.5) / 10000 * 100).toFixed(2)
+    ? estimateCostPer100Reports({ input: selectedModelData.inputPrice, output: selectedModelData.outputPrice }).toFixed(2)
     : "0.00";
 
   return (
@@ -203,41 +237,42 @@ export default function AdminPage() {
             <Select
               value={selectedModel}
               onValueChange={handleModelChange}
-              disabled={updateAiModelMutation.isPending}
+              disabled={updateAiModelMutation.isPending || aiModelsLoading || aiModelsError}
             >
               <SelectTrigger data-testid="ai-model-select">
-                <SelectValue placeholder="Select AI model" />
+                <SelectValue placeholder={aiModelsLoading ? "Loading models…" : "Select AI model"} />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
                   <SelectLabel>Budget Tier</SelectLabel>
-                  {aiModels.filter(m => m.tier === "Budget").map(model => (
-                    <SelectItem key={model.value} value={model.value}>
-                      <div className="flex items-center justify-between w-full gap-4">
-                        <span>{model.label}</span>
-                        <Badge variant="secondary" className="ml-auto">
-                          ${model.inputPrice}/${model.outputPrice} per 1M
-                        </Badge>
-                      </div>
-                    </SelectItem>
-                  ))}
+                  {aiModels.filter(m => m.tier === "Budget").map(renderModelItem)}
                 </SelectGroup>
                 <SelectGroup>
                   <SelectLabel>Premium Tier</SelectLabel>
-                  {aiModels.filter(m => m.tier === "Premium").map(model => (
-                    <SelectItem key={model.value} value={model.value}>
-                      <div className="flex items-center justify-between w-full gap-4">
-                        <span>{model.label}</span>
-                        <Badge variant="secondary" className="ml-auto">
-                          ${model.inputPrice}/${model.outputPrice} per 1M
-                        </Badge>
-                      </div>
-                    </SelectItem>
-                  ))}
+                  {aiModels.filter(m => m.tier === "Premium").map(renderModelItem)}
                 </SelectGroup>
               </SelectContent>
             </Select>
           </div>
+
+          {aiModelsError && (
+            <p className="text-sm text-destructive" role="alert">
+              Could not load the AI model list. Refresh the page to try again.
+            </p>
+          )}
+
+          {aiModelsData && siteSettings?.aiModel && !selectedModelData && (
+            <p className="text-sm text-destructive" role="alert">
+              The current model ({siteSettings.aiModel}) is no longer available. Select another model.
+            </p>
+          )}
+
+          {selectedModelData?.disabled && (
+            <p className="text-sm text-destructive" role="alert">
+              {selectedModelData.label} is currently unavailable ({selectedModelData.status}). Report insights will
+              fail until you select another model.
+            </p>
+          )}
 
           {selectedModelData && (
             <div className="p-4 bg-muted rounded-lg space-y-2">
@@ -251,8 +286,16 @@ export default function AdminPage() {
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="font-medium">Estimated Cost:</span>
-                <span className="text-muted-foreground">${estimatedCostPer100} per 100 reports</span>
+                <span className="text-muted-foreground">≈ ${estimatedCostPer100} per 100 reports</span>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Assumes ~{ESTIMATED_TOKENS_PER_REPORT.input.toLocaleString()} input and ~
+                {ESTIMATED_TOKENS_PER_REPORT.output.toLocaleString()} output tokens per report. Reasoning models may cost
+                more.
+              </p>
+              {selectedModelData.note && (
+                <p className="text-xs text-muted-foreground">{selectedModelData.note}</p>
+              )}
             </div>
           )}
         </CardContent>
