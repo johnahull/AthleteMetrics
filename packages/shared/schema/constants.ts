@@ -119,9 +119,16 @@ export const OrganizationType = {
 } as const;
 
 // AI Model constants
+// Keep in sync with AI_MODELS in schema-original.ts and packages/api/services/ai-insights-service.ts
+// (enforced by ai-model-keys-consistency.test.ts)
 export const AI_MODELS = [
-  'claude-3-5-sonnet-20241022',
-  'claude-3-5-haiku-20241022',
-  'gpt-4o',
-  'gpt-4o-mini'
+  'gpt-5-nano',
+  'gpt-6-luna',
+  'gpt-6-sol',
+  'gemini-2.0-flash-lite',
+  'gemini-2.5-flash-lite',
+  'claude-haiku-3',
+  'claude-haiku-4.5',
+  'gemini-2.5-pro',
+  'claude-sonnet-4.5'
 ] as const;
