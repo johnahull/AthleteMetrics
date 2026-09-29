@@ -237,7 +237,7 @@ export default function AdminPage() {
             <Select
               value={selectedModel}
               onValueChange={handleModelChange}
-              disabled={updateAiModelMutation.isPending || aiModelsError}
+              disabled={updateAiModelMutation.isPending || aiModelsLoading || aiModelsError}
             >
               <SelectTrigger data-testid="ai-model-select">
                 <SelectValue placeholder={aiModelsLoading ? "Loading models…" : "Select AI model"} />

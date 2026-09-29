@@ -3,7 +3,9 @@
 -- Rows using keys outside that list would violate the restored constraints, so
 -- site_settings falls back to the default (gpt-6-luna) and reports lose the recorded model
 -- (NULL is allowed). The 0143 remaps (claude-sonnet-4.5 -> claude-sonnet-5.5, claude-haiku-3 ->
--- claude-haiku-4.5, gemini-2.0-flash-lite -> gemini-2.5-flash-lite) are not reversed.
+-- claude-haiku-4.5, gemini-2.0-flash-lite -> gemini-2.5-flash-lite) are not reversed: this down
+-- migration is intentionally lossy, so running up then down leaves migrated rows on their replacement
+-- models (and any report that used a key outside the 0142 list loses its recorded model).
 
 UPDATE site_settings SET ai_model = 'gpt-6-luna'
   WHERE ai_model NOT IN (

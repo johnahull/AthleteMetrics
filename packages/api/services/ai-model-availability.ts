@@ -19,6 +19,8 @@ const FAILURE_TTL_MS = 60 * 1000; // retry a failed provider after 1 minute
 // One provider lookup (including Google pagination) may take at most this long. Kept short because
 // the admin page waits on it; a slower provider is reported as "unknown".
 const LOOKUP_DEADLINE_MS = 5_000;
+// The abort signal fires slightly before the deadline race, so a well-behaved SDK cancels its own request first
+const ABORT_BEFORE_DEADLINE_MS = 500;
 const GOOGLE_MODELS_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 
 interface CacheEntry {
@@ -65,6 +67,7 @@ async function listGoogle(apiKey: string, signal: AbortSignal): Promise<Set<stri
   const ids = new Set<string>();
   let pageToken: string | undefined;
   do {
+    // pageToken comes from Google's own previous response
     const url = `${GOOGLE_MODELS_URL}?pageSize=1000${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`;
     // Key goes in a header so it never ends up in URLs or logs
     const res = await fetch(url, {
@@ -94,7 +97,7 @@ async function fetchAndCache(provider: AIProviderName, apiKey: string): Promise<
   try {
     // One signal covers the whole lookup (every page), and cancels the request when it expires;
     // the race below is a backstop for a call that ignores the signal.
-    const signal = AbortSignal.timeout(LOOKUP_DEADLINE_MS);
+    const signal = AbortSignal.timeout(LOOKUP_DEADLINE_MS - ABORT_BEFORE_DEADLINE_MS);
     ids = await withDeadline(listers[provider](apiKey, signal), LOOKUP_DEADLINE_MS);
   } catch (error: any) {
     // Log only safe fields; never the key

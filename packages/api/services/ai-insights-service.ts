@@ -341,7 +341,8 @@ class AnthropicProvider implements AIProvider {
           ? // Claude Sonnet 5.5 runs adaptive thinking by default and rejects `disabled` (400);
             // `between_tools` is its documented way to turn up-front thinking off (valid at effort
             // low/medium/high; we send no effort, so the default `high` applies). This SDK version's
-            // types don't list it yet.
+            // types don't list it yet (TODO: drop the cast once @anthropic-ai/sdk includes it). It also
+            // works without tools: "Without tools, the response contains only text."
             // https://platform.claude.com/docs/en/models/sonnet-5-5/migration-guide#turn-off-up-front-thinking
             { thinking: { type: "between_tools" } as unknown as Anthropic.ThinkingConfigParam }
           : { temperature: 0.7 }),

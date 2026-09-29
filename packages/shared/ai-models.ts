@@ -165,7 +165,10 @@ export type SelectableAIModelKey = Extract<(typeof AI_MODEL_REGISTRY)[number], {
 
 export const DEFAULT_AI_MODEL_KEY: SelectableAIModelKey = 'gpt-6-luna';
 
-/** Keys a site admin can pick. Non-empty tuple so it can feed z.enum(). */
+/**
+ * Keys a site admin can pick. Non-empty tuple so it can feed z.enum(); the cast is safe because of the
+ * runtime guard below, which throws if no model is selectable.
+ */
 export const SELECTABLE_AI_MODEL_KEYS = AI_MODEL_REGISTRY.filter((m) => m.selectable).map(
   (m) => m.key,
 ) as unknown as readonly [SelectableAIModelKey, ...SelectableAIModelKey[]];
