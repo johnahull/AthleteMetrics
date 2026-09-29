@@ -7,6 +7,8 @@ name: Migrate Testing Database
 #
 # Runs only for what has been merged to develop. Migrations from unmerged PRs are
 # not applied here, so the testing DB never gets ahead of staging/production.
+# The job is skipped unless the run is on develop, so a manual "Run workflow" from a
+# feature branch cannot apply that branch's unmerged migrations.
 
 on:
   push:
@@ -30,6 +32,7 @@ permissions:
 jobs:
   migrate:
     name: Apply migrations to testing DB
+    if: github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
