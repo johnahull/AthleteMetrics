@@ -217,7 +217,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '24.21.0'
 
       - name: Check for modified migrations
         id: check-migrations
