@@ -238,7 +238,10 @@ router.patch("/", requireSiteAdmin, async (req: AuthenticatedRequest, res: Respo
 router.get("/ai-models", requireSiteAdmin, async (req, res) => {
   try {
     const selectable: AIModelDefinition[] = AI_MODEL_REGISTRY.filter((m) => m.selectable);
-    const live = await checkModelsLive(selectable).catch(() => ({}) as Record<string, boolean | null>);
+    const live = await checkModelsLive(selectable).catch((error) => {
+      console.error("AI model live check failed:", error?.message);
+      return {} as Record<string, boolean | null>;
+    });
     const retiringSoon = new Set(findModelsNearRetirement(new Date(), 30).map((m) => m.key));
 
     const models = selectable.map((m) => ({

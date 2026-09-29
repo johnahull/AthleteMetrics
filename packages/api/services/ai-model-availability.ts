@@ -131,7 +131,10 @@ export async function isModelKnownUnavailable(model: {
   provider: AIProviderName;
   apiModelId: string;
 }): Promise<boolean> {
-  const live = await checkModelsLive([model]).catch(() => ({}) as Record<string, boolean | null>);
+  const live = await checkModelsLive([model]).catch((error) => {
+    console.error("AI model live check failed:", error?.message);
+    return {} as Record<string, boolean | null>;
+  });
   return live[model.key] === false;
 }
 

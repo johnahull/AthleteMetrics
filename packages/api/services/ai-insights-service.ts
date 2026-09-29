@@ -338,8 +338,11 @@ class AnthropicProvider implements AIProvider {
         // Newer Claude models reject a non-default temperature, and run adaptive thinking (whose
         // tokens count against max_tokens) unless told otherwise
         ...(this.requestStyle === "no-sampling"
-          ? // between_tools is Anthropic's documented way to turn thinking off on Claude Sonnet 5.5
-            // (`disabled` returns a 400 there); this SDK version's types don't list it yet
+          ? // Claude Sonnet 5.5 runs adaptive thinking by default and rejects `disabled` (400);
+            // `between_tools` is its documented way to turn up-front thinking off (valid at effort
+            // low/medium/high; we send no effort, so the default `high` applies). This SDK version's
+            // types don't list it yet.
+            // https://platform.claude.com/docs/en/models/sonnet-5-5/migration-guide#turn-off-up-front-thinking
             { thinking: { type: "between_tools" } as unknown as Anthropic.ThinkingConfigParam }
           : { temperature: 0.7 }),
         system: "You are an expert athletic performance coach analyzing athlete data to provide actionable coaching insights.",
