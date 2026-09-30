@@ -14,6 +14,7 @@ import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { storage } from "../storage";
 import { db } from "../db";
 import { consumeParentEmailToken } from "../services/coppa-email-token-store";
+import { generateRegistrationToken } from "../services/registration-token-store";
 import { users } from "@shared/schema/tables/core";
 import { eq, and, inArray } from "drizzle-orm";
 import { isUnder13, wasUnder13At, COPPA_ACTIONS } from "@shared/coppa-utils";
@@ -123,6 +124,11 @@ export function registerCoppaRoutes(app: Express) {
    * Returns consent info needed to render the consent page (no PII beyond athleteName/org).
    */
   app.get("/api/coppa/consent/verify/:token", consentReadLimiter, async (req, res) => {
+    // The token lives in the URL path, so it can end up in access logs,
+    // browser history, and Referer headers on any outbound link from this
+    // page. Stop it from also being cached or forwarded onward.
+    res.set('Cache-Control', 'no-store');
+    res.set('Referrer-Policy', 'no-referrer');
     try {
       const { token } = req.params;
 
@@ -201,7 +207,18 @@ export function registerCoppaRoutes(app: Express) {
           return res.status(400).json({ message: result.error });
         }
 
-        res.json({ success: true, granted: true, message: "Consent confirmed. The athlete's account is now active." });
+        // Opaque, single-use token so the client's "Create Parent Account" link
+        // can reference this consent without putting the parent's email or the
+        // consentId in the /register URL (browser history, referrer headers,
+        // access logs).
+        const registrationToken = generateRegistrationToken(consentId);
+
+        res.json({
+          success: true,
+          granted: true,
+          message: "Consent confirmed. The athlete's account is now active.",
+          registrationToken,
+        });
       } else {
         const result = await coppaService.denyConsent(consentId, ip, userAgent);
 

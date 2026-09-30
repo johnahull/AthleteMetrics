@@ -97,7 +97,8 @@ export function registerCoppaDeletionRoutes(app: Express) {
           });
         }
 
-        const { athleteUserId, requestedByEmail, consentToken, notes } = bodyResult.data;
+        const { athleteUserId, consentToken, notes } = bodyResult.data;
+        let requestedByEmail = bodyResult.data.requestedByEmail;
 
         // Authenticate BEFORE looking up the athlete to prevent unauthenticated
         // callers from probing athlete IDs and discovering minor status.
@@ -106,6 +107,10 @@ export function registerCoppaDeletionRoutes(app: Express) {
 
         if (actor) {
           actorUserId = actor.id;
+          // Authenticated actors cannot redirect the confirmation email (which
+          // includes the minor's name) to an arbitrary address — always use the
+          // session's own email, ignoring whatever the client sent.
+          requestedByEmail = actor.email;
         } else if (consentToken) {
           // Public token-gated path: verify the consent token proves parent identity.
           // Uses verifyConfirmedToken() which returns a typed result — no error string parsing.

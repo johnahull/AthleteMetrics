@@ -149,7 +149,7 @@ export function evaluateTierBenchmark(
     // Handles non-sequential tier orders (e.g., 1, 5, 10) — allTiers is sorted ascending.
     const nextTier = allTiers
       .filter((t) => (t.tierOrder ?? Number.MAX_SAFE_INTEGER) < matchedOrder)
-      .at(-1);
+      .slice(-1)[0];
     if (nextTier) {
       nextTierName = nextTier.tierName || null;
       // Calculate distance to the boundary of the next tier

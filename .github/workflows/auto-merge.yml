@@ -55,8 +55,12 @@ jobs:
           DELETIONS=$(echo "$PR_DATA" | jq -r '.deletions')
           TOTAL_CHANGES=$((ADDITIONS + DELETIONS))
 
-          # Check status checks
-          STATUS_CHECKS=$(echo "$PR_DATA" | jq -r '.statusCheckRollup[] | select(.conclusion != "SUCCESS" and .conclusion != "NEUTRAL") | .name')
+          # Check status checks. Flattened to a comma-separated line (like
+          # SENSITIVE_FILES below) — a raw embedded newline here breaks the
+          # "reason=..." line written to $GITHUB_OUTPUT below, since GITHUB_OUTPUT
+          # requires the multiline heredoc delimiter syntax for values that span
+          # more than one line.
+          STATUS_CHECKS=$(echo "$PR_DATA" | jq -r '.statusCheckRollup[] | select(.conclusion != "SUCCESS" and .conclusion != "NEUTRAL") | .name' | tr '\n' ',' | sed 's/,$//')
 
           # Safety checks
           SAFETY_PASS=true

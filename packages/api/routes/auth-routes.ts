@@ -11,6 +11,8 @@ import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { COPPA_ACTIONS } from "@shared/coppa-utils";
 import { storage } from "../storage";
 import { generateParentEmailToken } from "../services/coppa-email-token-store";
+import { regenerateSession, saveSession } from "../lib/session-helpers";
+import { PasswordResetService } from "../auth/password-reset";
 // Session types are loaded globally
 
 const authService = new AuthService();
@@ -31,11 +33,29 @@ export function registerAuthRoutes(app: Express) {
    */
   app.post("/api/auth/login", authLimiter, async (req, res) => {
     try {
-      const { username, password } = req.body;
+      const { username, password, mfaToken } = req.body;
 
-      const result = await authService.login({ username, password });
+      const result = await authService.login({
+        username,
+        password,
+        mfaToken,
+        ipAddress: req.ip || '0.0.0.0',
+        userAgent: req.get('User-Agent'),
+      });
 
       if (!result.success) {
+        // MFA challenge: not an error — the client should prompt for a code.
+        if (result.requiresMFA) {
+          return res.status(200).json({ requiresMFA: true, message: "Enter your authentication code" });
+        }
+        // Locked account: 423 Locked so the client can show a distinct message.
+        if (result.accountLocked) {
+          return res.status(423).json({
+            message: result.error,
+            accountLocked: true,
+            lockUntil: result.lockUntil,
+          });
+        }
         return res.status(401).json({ message: result.error });
       }
 
@@ -81,6 +101,10 @@ export function registerAuthRoutes(app: Express) {
       // Determine user's actual role and organization context
       const roleContext = await authService.determineUserRoleAndContext(user);
 
+      // Regenerate the session before storing the authenticated user to prevent
+      // session fixation (mirrors the OAuth and invitation-acceptance flows).
+      await regenerateSession(req);
+
       // Set session
       req.session.user = {
         id: user.id,
@@ -108,6 +132,10 @@ export function registerAuthRoutes(app: Express) {
         redirectUrl = '/parent-dashboard';
       }
       // org_admin, coach, and others default to /dashboard
+
+      // Persist the regenerated session before responding so the Set-Cookie is
+      // written before the body (avoids a race with the client's next request).
+      await saveSession(req);
 
       res.json({
         user: req.session.user,
@@ -303,5 +331,53 @@ export function registerAuthRoutes(app: Express) {
       } : null,
       originalUser: req.session.originalUser || null
     });
+  });
+
+  // ---- Password reset (pre-authentication) ----
+  // Mounted at /api/auth/* to match the web client. CSRF is skipped for these
+  // unauthenticated requests. Responses never reveal whether an account exists.
+
+  app.post("/api/auth/forgot-password", authLimiter, async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email || typeof email !== 'string') {
+        return res.status(400).json({ success: false, message: "Email is required" });
+      }
+      const ipAddress = req.ip || '0.0.0.0';
+      const result = await PasswordResetService.requestPasswordReset(email, ipAddress, req.get('User-Agent'));
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error("Forgot-password error:", error);
+      return res.status(500).json({ success: false, message: "Failed to process request" });
+    }
+  });
+
+  app.post("/api/auth/validate-reset-token", authLimiter, async (req, res) => {
+    try {
+      const { token } = req.body;
+      if (!token || typeof token !== 'string') {
+        return res.status(400).json({ valid: false, message: "Token is required" });
+      }
+      const validation = await PasswordResetService.validateResetToken(token);
+      return res.status(200).json(validation);
+    } catch (error) {
+      console.error("Validate-reset-token error:", error);
+      return res.status(500).json({ valid: false, message: "Failed to validate token" });
+    }
+  });
+
+  app.post("/api/auth/reset-password", authLimiter, async (req, res) => {
+    try {
+      const { token, newPassword } = req.body;
+      if (!token || !newPassword) {
+        return res.status(400).json({ success: false, message: "Token and new password are required" });
+      }
+      const ipAddress = req.ip || '0.0.0.0';
+      const result = await PasswordResetService.resetPassword(token, newPassword, ipAddress, req.get('User-Agent'));
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error("Reset-password error:", error);
+      return res.status(500).json({ success: false, message: "Failed to reset password" });
+    }
   });
 }

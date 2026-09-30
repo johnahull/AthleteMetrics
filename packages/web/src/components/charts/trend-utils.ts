@@ -5,6 +5,12 @@ import type { MultiMetricData } from '@shared/analytics-types';
 import { parseColorToRgba } from '@/lib/color-utils';
 
 /**
+ * Team trend charts render one bold team-average series plus faint
+ * individual-athlete series for context, capped so the chart stays legible.
+ */
+export const MAX_FAINT_ATHLETES = 8;
+
+/**
  * Direction cue for a metric's trend chart. The y-axis is NOT inverted — values
  * render in conventional orientation — so we surface which way "better" points:
  * higher-is-better improves upward, lower-is-better improves downward.
@@ -77,14 +83,17 @@ export function overlayToAnnotations(overlay: BenchmarkOverlay): Record<string, 
   return out;
 }
 
-/** Build a single-series Chart.js dataset config from a metric trend. */
+/**
+ * Build a single-series Chart.js dataset config from a metric trend.
+ * Points carry their own ISO date (`{x, y}` for a time scale) so horizontal
+ * spacing reflects real elapsed time between tests, not measurement count.
+ */
 export function buildTrendChartData(trend: MetricTrend, label: string) {
   return {
-    labels: trend.series.map(p => new Date(p.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })),
     datasets: [
       {
         label,
-        data: trend.series.map(p => p.value),
+        data: trend.series.map(p => ({ x: p.date, y: p.value })),
         borderColor: 'rgba(37, 99, 235, 1)',
         backgroundColor: 'rgba(37, 99, 235, 0.1)',
         borderWidth: 2.5,
@@ -118,3 +127,4 @@ export function radarDataFromPercentiles(
 ): MultiMetricData {
   return { athleteId, athleteName, metrics: { ...measurements }, percentileRanks: { ...percentiles } };
 }
+

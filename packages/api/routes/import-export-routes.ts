@@ -29,6 +29,24 @@ import { DerivedMetricCalculator } from "../services/derived-metric-calculator";
 import { db } from "../db";
 
 /**
+ * Tenant-isolation guard for imports. A client-supplied organizationId must be
+ * one the caller actually belongs to (site admins may target any organization).
+ * Returns an error message when access is denied, or null when allowed. Callers
+ * must run this BEFORE any read/preview or write scoped to that organization.
+ */
+async function checkImportOrgAccess(
+  currentUser: { id: string; isSiteAdmin?: boolean } | undefined,
+  organizationId: string | undefined,
+): Promise<string | null> {
+  if (!organizationId) return null;
+  if (!currentUser?.id) return "User not authenticated";
+  if (currentUser.isSiteAdmin) return null;
+  const userOrgs = await storage.getUserOrganizations(currentUser.id);
+  const allowed = userOrgs.some((o) => o.organizationId === organizationId);
+  return allowed ? null : "You do not have access to import into this organization";
+}
+
+/**
  * After a weight or height measurement is created, sync the value to the user's profile.
  * Uses the measurement's unit to convert to the profile's storage format (lbs / inches).
  */
@@ -250,6 +268,13 @@ export function registerImportExportRoutes(app: Express) {
 
       const measurementMode = options.measurementMode || 'match_only';
       const teamHandling = options.teamHandling || 'auto_create_confirm';
+
+      // Tenant isolation: reject a client-supplied organizationId the caller
+      // does not belong to before any org-scoped read or write.
+      const photoOrgAccessError = await checkImportOrgAccess(currentUser, options.organizationId);
+      if (photoOrgAccessError) {
+        return res.status(403).json({ message: photoOrgAccessError });
+      }
 
       // Debug logging removed for production: Processing OCR for file
 
@@ -545,6 +570,13 @@ export function registerImportExportRoutes(app: Express) {
       } catch (error) {
         console.error('JSON parse error for CSV import options:', error);
         return res.status(400).json({ message: "Invalid options JSON format" });
+      }
+
+      // Tenant isolation: reject a client-supplied organizationId the caller
+      // does not belong to before any org-scoped read/preview or write.
+      const importOrgAccessError = await checkImportOrgAccess(req.session.user, options.organizationId);
+      if (importOrgAccessError) {
+        return res.status(403).json({ message: importOrgAccessError });
       }
 
       const results: any[] = [];
@@ -1025,8 +1057,23 @@ export function registerImportExportRoutes(app: Express) {
         // Load validation context for metric validation
         const validationContext = await importValidationService.loadValidationContext();
 
-        // PERFORMANCE: Load teams once before the loop to avoid N+1 queries
-        const allTeamsForMeasurements = await storage.getTeams();
+        // PERFORMANCE: Load teams once before the loop to avoid N+1 queries.
+        // Tenant isolation: a non-site-admin may only match teams within their
+        // own organizations, so a team name cannot resolve to another tenant's
+        // team (which would attribute measurements to the wrong organization).
+        const measurementImportUser = req.session.user;
+        if (!measurementImportUser?.id) {
+          return res.status(401).json({ message: "User not authenticated" });
+        }
+        let allTeamsForMeasurements = await storage.getTeams();
+        if (!measurementImportUser.isSiteAdmin) {
+          const callerOrgIds = new Set(
+            (await storage.getUserOrganizations(measurementImportUser.id)).map((o) => o.organizationId)
+          );
+          allTeamsForMeasurements = allTeamsForMeasurements.filter(
+            (t) => t.organization?.id && callerOrgIds.has(t.organization.id)
+          );
+        }
 
         // Process measurements import
         for (let i = 0; i < csvData.length; i++) {
@@ -1681,13 +1728,43 @@ export function registerImportExportRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      // Get all teams with comprehensive data
-      const teams = await storage.getTeams();
-
       // Transform to CSV format with all database fields
       const csvHeaders = [
         'id', 'name', 'organizationId', 'organizationName', 'level', 'notes', 'createdAt'
       ];
+
+      // Determine the effective organization based on permissions so a caller
+      // cannot export teams from organizations they do not belong to.
+      // Coerce to a single string: a repeated query param (?organizationId=a&organizationId=b)
+      // arrives as an array; treat anything non-string as "no org requested" rather
+      // than passing an array into the org filter and bypassing the access check.
+      const rawRequestedOrgId = req.query.organizationId;
+      const requestedOrgId = typeof rawRequestedOrgId === 'string' ? rawRequestedOrgId : undefined;
+      let teams;
+      if (currentUser.isSiteAdmin) {
+        // Site admins may export a specific org, or all when none is requested.
+        teams = await storage.getTeams(requestedOrgId);
+      } else {
+        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+        if (requestedOrgId) {
+          const hasAccess = userOrgs.some(uo => uo.organizationId === requestedOrgId);
+          if (!hasAccess) {
+            return res.status(403).json({
+              message: "You do not have access to export teams from this organization"
+            });
+          }
+          teams = await storage.getTeams(requestedOrgId);
+        } else {
+          // Include teams from ALL of the caller's organizations, not just one.
+          const orgIds = new Set(userOrgs.map(uo => uo.organizationId));
+          if (orgIds.size === 0) {
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', 'attachment; filename="teams.csv"');
+            return res.send(csvHeaders.join(','));
+          }
+          teams = (await storage.getTeams()).filter(t => t.organizationId && orgIds.has(t.organizationId));
+        }
+      }
 
       const csvRows = teams.map(team => {
         return [

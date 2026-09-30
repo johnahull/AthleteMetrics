@@ -11,11 +11,39 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { mutations } from "@/lib/api";
 import { getInvitationStatusMessage } from "@/lib/invitation-helpers";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
+import { isUnder13 } from "@shared/coppa-utils";
+
+/** Guarded age check — an incomplete date string must not throw mid-typing. */
+function dobIsUnder13(birthDate: string | undefined): boolean {
+  if (!birthDate) return false;
+  try { return isUnder13(birthDate); } catch { return false; }
+}
 
 const invitationSchema = z.object({
   email: z.string().email("Invalid email format"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
+  birthDate: z.string().optional(),
+  parentEmail: z.string().email("Invalid parent email format").optional().or(z.literal("")),
+}).superRefine((data, ctx) => {
+  // COPPA: an under-13 athlete invitation cannot be sent without a parent email
+  if (dobIsUnder13(data.birthDate)) {
+    if (!data.parentEmail) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["parentEmail"],
+        message: "A parent or guardian email is required for athletes under 13 (COPPA).",
+      });
+    } else if (data.parentEmail === data.email) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["parentEmail"],
+        message: "Parent email must be different from the athlete's email.",
+      });
+    }
+  }
 });
 
 type InvitationForm = z.infer<typeof invitationSchema>;
@@ -43,13 +71,22 @@ export function InvitationModal({
       email: "",
       firstName: "",
       lastName: "",
+      birthDate: "",
+      parentEmail: "",
     },
   });
+
+  const watchedBirthDate = form.watch("birthDate");
+  const showParentEmail = role === "athlete" && dobIsUnder13(watchedBirthDate);
 
   const invitationMutation = useMutation({
     mutationFn: async (data: InvitationForm) => {
       return mutations.createInvitation({
-        ...data,
+        email: data.email,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        birthDate: role === "athlete" && data.birthDate ? data.birthDate : undefined,
+        parentEmail: showParentEmail && data.parentEmail ? data.parentEmail.trim().toLowerCase() : undefined,
         role,
         organizationId,
         teamIds: []
@@ -158,6 +195,60 @@ export function InvitationModal({
                 </FormItem>
               )}
             />
+
+            {role === "athlete" && (
+              <FormField
+                control={form.control}
+                name="birthDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Date of Birth (optional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="date"
+                        max={new Date().toISOString().split("T")[0]}
+                        {...field}
+                        data-testid="input-invite-birth-date"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            {showParentEmail && (
+              <>
+                <Alert className="border-amber-200 bg-amber-50">
+                  <AlertCircle className="h-4 w-4 text-amber-600" />
+                  <AlertDescription className="text-amber-800 text-sm">
+                    Federal law (COPPA) requires parental consent for athletes under 13.
+                    A consent request will be sent to the parent or guardian when the
+                    athlete accepts this invitation.
+                  </AlertDescription>
+                </Alert>
+                <FormField
+                  control={form.control}
+                  name="parentEmail"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        Parent or Guardian Email <span className="text-red-500">*</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          type="email"
+                          placeholder="parent@example.com"
+                          {...field}
+                          data-testid="input-invite-parent-email"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </>
+            )}
 
             <Button
               type="submit"

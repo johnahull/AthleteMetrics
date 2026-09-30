@@ -11,6 +11,7 @@ import {
   globalAthleteClaims
 } from "@shared/schema";
 import { eq, inArray } from "drizzle-orm";
+import { hashToken } from '../lib/token-hash';
 import { GlobalAthleteService } from "../services/global-athlete-service";
 import { emailService } from "../services/email-service";
 
@@ -248,7 +249,7 @@ describe("Global Athlete Claim Features", () => {
       // Manually expire the token
       await db.update(globalAthleteClaims)
         .set({ expiresAt: new Date(Date.now() - 3600000) }) // 1 hour ago
-        .where(eq(globalAthleteClaims.token, token));
+        .where(eq(globalAthleteClaims.token, hashToken(token)));
 
       const result = await service.verifyClaim(token);
 
@@ -285,7 +286,7 @@ describe("Global Athlete Claim Features", () => {
 
       const [claim] = await db.select()
         .from(globalAthleteClaims)
-        .where(eq(globalAthleteClaims.token, token));
+        .where(eq(globalAthleteClaims.token, hashToken(token)));
 
       expect(claim.status).toBe("verified");
       expect(claim.verifiedAt).toBeDefined();
@@ -325,7 +326,7 @@ describe("Global Athlete Claim Features", () => {
       // Manually expire the claim
       await db.update(globalAthleteClaims)
         .set({ status: "expired" })
-        .where(eq(globalAthleteClaims.token, token));
+        .where(eq(globalAthleteClaims.token, hashToken(token)));
 
       const pendingClaims = await service.getPendingClaims(testUser1Id);
 
@@ -345,7 +346,7 @@ describe("Global Athlete Claim Features", () => {
 
       const [claim] = await db.select()
         .from(globalAthleteClaims)
-        .where(eq(globalAthleteClaims.token, token));
+        .where(eq(globalAthleteClaims.token, hashToken(token)));
 
       await service.cancelClaim(testUser1Id, claim.id);
 
@@ -362,7 +363,7 @@ describe("Global Athlete Claim Features", () => {
 
       const [claim] = await db.select()
         .from(globalAthleteClaims)
-        .where(eq(globalAthleteClaims.token, token));
+        .where(eq(globalAthleteClaims.token, hashToken(token)));
 
       // User2 tries to cancel user1's claim
       await expect(

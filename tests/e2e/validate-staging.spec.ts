@@ -70,6 +70,11 @@ test.describe(`${ENV_NAME} Environment Validation`, () => {
   });
 
   test('should validate login credentials work', async ({ page }) => {
+    // Clear any existing session cookie (e.g. the shared storageState session) first —
+    // express-session's regenerate() destroys whatever session the incoming request's
+    // cookie points to before creating the new one, so logging in from a context that
+    // still carries the shared storageState cookie would silently kill it.
+    await page.context().clearCookies();
     await page.goto(`${STAGING_URL}/login`);
 
     // Wait for React SPA to mount
@@ -96,6 +101,12 @@ test.describe(`${ENV_NAME} Environment Validation`, () => {
   });
 
   test('should validate basic page routes exist', async ({ page }) => {
+    // Clear any existing session cookie (e.g. the shared storageState session) first —
+    // express-session's regenerate() destroys whatever session the incoming request's
+    // cookie points to before creating the new one, so logging in from a context that
+    // still carries the shared storageState cookie would silently kill it.
+    await page.context().clearCookies();
+
     // Login first
     await page.goto(`${STAGING_URL}/login`);
 
@@ -142,6 +153,12 @@ test.describe(`${ENV_NAME} Environment Validation`, () => {
       }
     });
 
+    // Clear any existing session cookie (e.g. the shared storageState session) first —
+    // express-session's regenerate() destroys whatever session the incoming request's
+    // cookie points to before creating the new one, so logging in from a context that
+    // still carries the shared storageState cookie would silently kill it.
+    await page.context().clearCookies();
+
     // Login
     await page.goto(`${STAGING_URL}/login`);
 
@@ -175,6 +192,12 @@ test.describe(`${ENV_NAME} Environment Validation`, () => {
   });
 
   test('should validate API endpoints respond', async ({ page }) => {
+    // Clear any existing session cookie (e.g. the shared storageState session) first —
+    // express-session's regenerate() destroys whatever session the incoming request's
+    // cookie points to before creating the new one, so logging in from a context that
+    // still carries the shared storageState cookie would silently kill it.
+    await page.context().clearCookies();
+
     // Login first
     await page.goto(`${STAGING_URL}/login`);
 

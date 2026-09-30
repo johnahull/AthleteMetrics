@@ -60,22 +60,8 @@ function uid() {
   return crypto.randomBytes(4).toString('hex');
 }
 
-/** Build a YYYY-MM-DD date string for someone exactly `years` years old today */
-function exactlyAge(years: number): string {
-  const d = new Date();
-  d.setFullYear(d.getFullYear() - years);
-  return d.toISOString().split('T')[0];
-}
-
-/** Build a YYYY-MM-DD date string for a minor (14 years old by default) */
-function minorBirthDate(): string {
-  return exactlyAge(14);
-}
-
-/** Build a YYYY-MM-DD date string for an adult (25 years old) */
-function adultBirthDate(): string {
-  return exactlyAge(25);
-}
+// Date-of-birth helpers are shared to keep the timezone-safe logic in one place.
+import { exactlyAge, minorBirthDate, adultBirthDate } from '../shared/age-helpers';
 
 async function createUser(
   suffix: string,
@@ -131,6 +117,7 @@ async function loginAs(app: Express, username: string) {
 
 let app: Express;
 let coachUser: any;
+let orgAdminUser: any;
 let testOrg: any;
 const createdUserIds: string[] = [];
 const createdOrgIds: string[] = [];
@@ -151,6 +138,10 @@ beforeAll(async () => {
   coachUser = await createUser('coach', 'coach');
   createdUserIds.push(coachUser.id);
   await addUserToOrg(coachUser.id, testOrg.id, 'coach');
+
+  orgAdminUser = await createUser('orgadmin', 'org_admin');
+  createdUserIds.push(orgAdminUser.id);
+  await addUserToOrg(orgAdminUser.id, testOrg.id, 'org_admin');
 });
 
 afterAll(async () => {
@@ -187,7 +178,7 @@ describe("PUT /api/athletes/:id — parentEmail field", () => {
     createdUserIds.push(athlete.id);
     await addUserToOrg(athlete.id, testOrg.id, 'athlete');
 
-    const cookie = await loginAs(app, coachUser.username);
+    const cookie = await loginAs(app, orgAdminUser.username);
     const parentEmail = `${TEST_PREFIX}parent_set_${uid()}@example.com`;
 
     const res = await request(app)
@@ -215,7 +206,7 @@ describe("PUT /api/athletes/:id — parentEmail field", () => {
     createdUserIds.push(athlete.id);
     await addUserToOrg(athlete.id, testOrg.id, 'athlete');
 
-    const cookie = await loginAs(app, coachUser.username);
+    const cookie = await loginAs(app, orgAdminUser.username);
     const parentEmail = `${TEST_PREFIX}parent_minor_${uid()}@example.com`;
 
     const res = await request(app)
@@ -240,6 +231,51 @@ describe("PUT /api/athletes/:id — parentEmail field", () => {
     expect(links[0].isActive).toBe(true);
   });
 
+  it("scopes the parentAthleteLinks row to the authorizing org, not the alphabetically-first org", async () => {
+    // Athlete belongs to two orgs. getUserOrganizations orders by name, so the
+    // "apex" org sorts first — but the requester is org_admin only in the later
+    // "zebra" org. The link must be attributed to the authorizing (zebra) org.
+    const apexOrg = await createOrg(`aaa_${uid()}`);
+    createdOrgIds.push(apexOrg.id);
+    const zebraOrg = await createOrg(`zzz_${uid()}`);
+    createdOrgIds.push(zebraOrg.id);
+
+    const athlete = await createUser('athlete_multiorg', 'athlete', {
+      birthDate: minorBirthDate(),
+      isMinor: true,
+    });
+    createdUserIds.push(athlete.id);
+    await addUserToOrg(athlete.id, apexOrg.id, 'athlete');
+    await addUserToOrg(athlete.id, zebraOrg.id, 'athlete');
+
+    const admin = await createUser('multiorg_admin', 'org_admin');
+    createdUserIds.push(admin.id);
+    await addUserToOrg(admin.id, zebraOrg.id, 'org_admin');
+
+    const cookie = await loginAs(app, admin.username);
+    const parentEmail = `${TEST_PREFIX}parent_multiorg_${uid()}@example.com`;
+
+    const res = await request(app)
+      .put(`/api/athletes/${athlete.id}`)
+      .set('Cookie', cookie)
+      .send({ parentEmail });
+
+    expect(res.status).toBe(200);
+
+    const links = await db
+      .select({ organizationId: parentAthleteLinks.organizationId })
+      .from(parentAthleteLinks)
+      .where(
+        and(
+          eq(parentAthleteLinks.athleteUserId, athlete.id),
+          eq(parentAthleteLinks.parentEmail, parentEmail.toLowerCase()),
+        ),
+      );
+
+    expect(links.length).toBe(1);
+    expect(links[0].organizationId).toBe(zebraOrg.id);
+  });
+
   it("does NOT create a parentAthleteLinks row for an adult athlete", async () => {
     const athlete = await createUser('athlete_adult_nol', 'athlete', {
       birthDate: adultBirthDate(),
@@ -248,7 +284,7 @@ describe("PUT /api/athletes/:id — parentEmail field", () => {
     createdUserIds.push(athlete.id);
     await addUserToOrg(athlete.id, testOrg.id, 'athlete');
 
-    const cookie = await loginAs(app, coachUser.username);
+    const cookie = await loginAs(app, orgAdminUser.username);
     const parentEmail = `${TEST_PREFIX}parent_adult_${uid()}@example.com`;
 
     const res = await request(app)
@@ -280,7 +316,7 @@ describe("PUT /api/athletes/:id — parentEmail field", () => {
     createdUserIds.push(athlete.id);
     await addUserToOrg(athlete.id, testOrg.id, 'athlete');
 
-    const cookie = await loginAs(app, coachUser.username);
+    const cookie = await loginAs(app, orgAdminUser.username);
 
     const res = await request(app)
       .put(`/api/athletes/${athlete.id}`)
@@ -315,7 +351,7 @@ describe("PUT /api/athletes/:id — parentEmail field", () => {
       isActive: true,
     });
 
-    const cookie = await loginAs(app, coachUser.username);
+    const cookie = await loginAs(app, orgAdminUser.username);
 
     const res = await request(app)
       .put(`/api/athletes/${athlete.id}`)
@@ -345,7 +381,7 @@ describe("PUT /api/athletes/:id — parentEmail field", () => {
     createdUserIds.push(athlete.id);
     await addUserToOrg(athlete.id, testOrg.id, 'athlete');
 
-    const cookie = await loginAs(app, coachUser.username);
+    const cookie = await loginAs(app, orgAdminUser.username);
 
     const res = await request(app)
       .put(`/api/athletes/${athlete.id}`)
@@ -353,5 +389,91 @@ describe("PUT /api/athletes/:id — parentEmail field", () => {
       .send({ parentEmail: 'not-a-valid-email' });
 
     expect(res.status).toBe(400);
+  });
+
+  // Security fix (issue #348): a coach could otherwise set parentEmail to any
+  // address, creating a parentAthleteLinks row and sending that address a
+  // notification containing the minor's name — with no org_admin approval.
+  it("coach role → 403, parentEmail is not updated", async () => {
+    const athlete = await createUser('athlete_coachdenied', 'athlete', {
+      birthDate: adultBirthDate(),
+    });
+    createdUserIds.push(athlete.id);
+    await addUserToOrg(athlete.id, testOrg.id, 'athlete');
+
+    const cookie = await loginAs(app, coachUser.username);
+    const parentEmail = `${TEST_PREFIX}parent_coachdenied_${uid()}@example.com`;
+
+    const res = await request(app)
+      .put(`/api/athletes/${athlete.id}`)
+      .set('Cookie', cookie)
+      .send({ parentEmail });
+
+    expect(res.status).toBe(403);
+
+    const [updated] = await db
+      .select({ parentEmail: users.parentEmail })
+      .from(users)
+      .where(eq(users.id, athlete.id))
+      .limit(1);
+
+    expect(updated.parentEmail).toBeNull();
+  });
+
+  // A coach must still be able to update other athlete fields — only
+  // parentEmail is gated to org_admin/site_admin.
+  it("coach role → other fields still update successfully", async () => {
+    const athlete = await createUser('athlete_coachother', 'athlete', {
+      birthDate: adultBirthDate(),
+    });
+    createdUserIds.push(athlete.id);
+    await addUserToOrg(athlete.id, testOrg.id, 'athlete');
+
+    const cookie = await loginAs(app, coachUser.username);
+
+    const res = await request(app)
+      .put(`/api/athletes/${athlete.id}`)
+      .set('Cookie', cookie)
+      .send({ firstName: 'Updated' });
+
+    expect(res.status).toBe(200);
+  });
+
+  // Security fix: org_admin status must be scoped to an org shared with the
+  // target athlete. A user who is only a coach in the athlete's org, but
+  // org_admin in a wholly unrelated org, must not be able to combine the two
+  // memberships to bypass the parentEmail restriction.
+  it("coach in athlete's org + org_admin in an unrelated org → 403", async () => {
+    const otherOrg = await createOrg(uid());
+    createdOrgIds.push(otherOrg.id);
+
+    const confusedDeputy = await createUser('confused_deputy', 'coach');
+    createdUserIds.push(confusedDeputy.id);
+    await addUserToOrg(confusedDeputy.id, testOrg.id, 'coach');
+    await addUserToOrg(confusedDeputy.id, otherOrg.id, 'org_admin');
+
+    const athlete = await createUser('athlete_confuseddep', 'athlete', {
+      birthDate: adultBirthDate(),
+    });
+    createdUserIds.push(athlete.id);
+    await addUserToOrg(athlete.id, testOrg.id, 'athlete');
+
+    const cookie = await loginAs(app, confusedDeputy.username);
+    const parentEmail = `${TEST_PREFIX}parent_confuseddep_${uid()}@example.com`;
+
+    const res = await request(app)
+      .put(`/api/athletes/${athlete.id}`)
+      .set('Cookie', cookie)
+      .send({ parentEmail });
+
+    expect(res.status).toBe(403);
+
+    const [updated] = await db
+      .select({ parentEmail: users.parentEmail })
+      .from(users)
+      .where(eq(users.id, athlete.id))
+      .limit(1);
+
+    expect(updated.parentEmail).toBeNull();
   });
 });

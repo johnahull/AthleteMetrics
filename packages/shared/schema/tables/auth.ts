@@ -64,6 +64,21 @@ export const emailVerificationTokens = pgTable("email_verification_tokens", {
   tokenIdx: sql`CREATE INDEX IF NOT EXISTS email_verification_tokens_token_idx ON ${table} (${table.token})`,
 }));
 
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  // SHA-256 hash of the reset token — the raw token is only ever in the emailed
+  // link, never stored, so a leaked DB row cannot be used to reset a password.
+  tokenHash: text("token_hash").notNull().unique(),
+  isUsed: boolean("is_used").default(false).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  tokenHashIdx: sql`CREATE INDEX IF NOT EXISTS password_reset_tokens_token_hash_idx ON ${table} (${table.tokenHash})`,
+}));
+
 export const securityEvents = pgTable("security_events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id, { onDelete: 'set null' }),

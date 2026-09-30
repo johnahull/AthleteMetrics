@@ -9,6 +9,7 @@ import rehypeSanitize from "rehype-sanitize";
 import { useToast } from "@/hooks/use-toast";
 import { useGenerateInsights, useUpdateInsights } from "@/lib/reports-api";
 import { MAX_INSIGHTS_LENGTH } from "@shared/schema";
+import { getAIModel } from "@shared/ai-models";
 
 interface CoachingInsightsCardProps {
   reportId: string;
@@ -291,7 +292,7 @@ export function CoachingInsightsCard({
           {model && (
             <>
               <span>•</span>
-              <Badge variant="secondary">{model}</Badge>
+              <Badge variant="secondary">{getAIModel(model)?.label ?? model}</Badge>
             </>
           )}
         </div>

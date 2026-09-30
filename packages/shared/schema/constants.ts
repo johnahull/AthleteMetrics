@@ -4,6 +4,8 @@
  * Constants used across the database schema and validation.
  */
 
+import { SELECTABLE_AI_MODEL_KEYS } from '../ai-models';
+
 // AI Coaching Insights constants
 export const MAX_INSIGHTS_LENGTH = 10000;
 
@@ -118,10 +120,5 @@ export const OrganizationType = {
   ELITE_ACADEMY: 'elite_academy',
 } as const;
 
-// AI Model constants
-export const AI_MODELS = [
-  'claude-3-5-sonnet-20241022',
-  'claude-3-5-haiku-20241022',
-  'gpt-4o',
-  'gpt-4o-mini'
-] as const;
+// AI Model constants - derived from packages/shared/ai-models.ts
+export const AI_MODELS = SELECTABLE_AI_MODEL_KEYS;

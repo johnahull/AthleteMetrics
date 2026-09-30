@@ -314,11 +314,17 @@ export function BarChart({
   }
 
   return (
-    <div className="w-full h-full">
-      <Bar data={barData} options={options} />
-      
+    <div className="w-full h-full flex flex-col overflow-hidden">
+      {/* Chart canvas takes whatever space remains after the footer below —
+          not 100% of the container — so the footer can't get pushed past the
+          container's bounds and bleed into whatever renders after this
+          component (matches BoxPlotChart's containment pattern). */}
+      <div className="flex-1 min-h-0">
+        <Bar data={barData} options={options} />
+      </div>
+
       {/* Performance indicators */}
-      <div className="mt-4 grid grid-cols-3 gap-4 text-sm text-center">
+      <div className="flex-shrink-0 mt-4 grid grid-cols-3 gap-4 text-sm text-center">
         <div>
           <div className="font-medium">Best Performance</div>
           <div className="text-lg font-bold text-green-600">
@@ -328,7 +334,7 @@ export function BarChart({
             {getBestPerformingAthlete(barData.primaryMetric, barData.athletes, barData.datasets[0].data, getMetricConfig)?.athleteName}
           </div>
         </div>
-        
+
         <div>
           <div className="font-medium">Average</div>
           <div className="text-lg font-bold text-blue-600">
@@ -338,7 +344,7 @@ export function BarChart({
             Top 25 athletes
           </div>
         </div>
-        
+
         <div>
           <div className="font-medium">Range</div>
           <div className="text-lg font-bold text-gray-600">

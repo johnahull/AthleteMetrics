@@ -58,12 +58,8 @@ function uid() {
   return crypto.randomBytes(4).toString('hex');
 }
 
-/** Build a YYYY-MM-DD date string for someone exactly `years` years old today */
-function exactlyAge(years: number): string {
-  const d = new Date();
-  d.setFullYear(d.getFullYear() - years);
-  return d.toISOString().split('T')[0];
-}
+// Shared timezone-safe date-of-birth helper.
+import { exactlyAge } from '../shared/age-helpers';
 
 async function createAthlete(
   suffix: string,

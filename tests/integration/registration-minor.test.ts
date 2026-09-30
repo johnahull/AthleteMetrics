@@ -39,12 +39,8 @@ import { registerRoutes } from '../../packages/api/routes';
 // Helpers
 // ============================================================================
 
-/** Build a YYYY-MM-DD date string for someone who is exactly `years` years old today */
-function exactlyAge(years: number): string {
-  const d = new Date();
-  d.setFullYear(d.getFullYear() - years);
-  return d.toISOString().split('T')[0];
-}
+// Shared timezone-safe date-of-birth helper.
+import { exactlyAge } from '../shared/age-helpers';
 
 /** Build a YYYY-MM-DD date string for someone whose birthday is `days` days from now,
  *  but was born `years` years ago minus those days.

@@ -2,69 +2,46 @@
  * AI Coaching Insights Service
  *
  * Generates AI-powered coaching insights for performance reports using multiple AI providers.
- * Supports 7 AI models across 3 providers (OpenAI, Google, Anthropic) with budget and premium tiers.
+ * Supports OpenAI, Google and Anthropic models. The model list (IDs, prices, tiers, request style)
+ * lives in packages/shared/ai-models.ts.
  */
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
+import {
+  AI_MODEL_REGISTRY,
+  type AIProviderName,
+  type AIRequestStyle,
+  type AITier,
+  type SelectableAIModelKey,
+} from "@shared/ai-models";
 
-// AI Model Configurations
-export const AI_MODELS = {
-  // Budget Tier (5 models)
-  "gpt-5-nano": {
-    provider: "openai" as const,
-    model: "gpt-5-nano",
-    tier: "budget" as const,
-    costPer1M: { input: 0.05, output: 0.40 },
-    description: "OpenAI GPT-5 Nano - Cheapest & Fast",
-  },
-  "gemini-2.0-flash-lite": {
-    provider: "google" as const,
-    model: "gemini-2.0-flash-lite",
-    tier: "budget" as const,
-    costPer1M: { input: 0.075, output: 0.30 },
-    description: "Google Gemini 2.0 Flash-Lite - Ultra Fast",
-  },
-  "gemini-2.5-flash-lite": {
-    provider: "google" as const,
-    model: "gemini-2.5-flash-lite",
-    tier: "budget" as const,
-    costPer1M: { input: 0.10, output: 0.40 },
-    description: "Google Gemini 2.5 Flash-Lite - Fast & Efficient",
-  },
-  "claude-haiku-3": {
-    provider: "anthropic" as const,
-    model: "claude-3-haiku-20240307",
-    tier: "budget" as const,
-    costPer1M: { input: 0.25, output: 1.25 },
-    description: "Anthropic Claude Haiku 3 - Excellent Reasoning",
-  },
-  "claude-haiku-4.5": {
-    provider: "anthropic" as const,
-    model: "claude-haiku-4.5-20251015",
-    tier: "budget" as const,
-    costPer1M: { input: 0.80, output: 4.00 },
-    description: "Anthropic Claude Haiku 4.5 - Cost-Effective Claude 4",
-  },
-  // Premium Tier (2 models)
-  "gemini-2.5-pro": {
-    provider: "google" as const,
-    model: "gemini-2.5-pro",
-    tier: "premium" as const,
-    costPer1M: { input: 1.25, output: 10.00 },
-    description: "Google Gemini 2.5 Pro - High Performance",
-  },
-  "claude-sonnet-4.5": {
-    provider: "anthropic" as const,
-    model: "claude-sonnet-4.5-20250514",
-    tier: "premium" as const,
-    costPer1M: { input: 3.00, output: 15.00 },
-    description: "Anthropic Claude Sonnet 4.5 - Best Quality",
-  },
-} as const;
+// AI Model Configurations (selectable models only, derived from the shared registry)
+interface AIModelConfig {
+  provider: AIProviderName;
+  model: string;
+  tier: AITier;
+  costPer1M: { input: number; output: number };
+  description: string;
+  requestStyle: AIRequestStyle;
+}
 
-export type AIModelKey = keyof typeof AI_MODELS;
+export const AI_MODELS = Object.fromEntries(
+  AI_MODEL_REGISTRY.filter((m) => m.selectable).map((m) => [
+    m.key,
+    {
+      provider: m.provider,
+      model: m.apiModelId,
+      tier: m.tier,
+      costPer1M: m.costPer1M,
+      description: m.description,
+      requestStyle: m.requestStyle,
+    } satisfies AIModelConfig,
+  ]),
+) as Record<SelectableAIModelKey, AIModelConfig>;
+
+export type AIModelKey = SelectableAIModelKey;
 
 // Configuration constants
 /** Default timeout for AI API calls in milliseconds (30 seconds). Can be overridden via AI_REQUEST_TIMEOUT_MS env var */
@@ -145,6 +122,25 @@ export function validateAIProviderConfiguration(): {
   return { available, unavailable };
 }
 
+/** Log the safe fields of a provider error, including which model was requested. */
+function logProviderError(provider: string, model: string, error: any): void {
+  console.error(`${provider} API Error for model ${model}:`, {
+    message: error?.message,
+    status: error?.status,
+    code: error?.code,
+    type: error?.type ?? error?.error?.type,
+  });
+}
+
+/** True when the provider says the requested model does not exist (retired or misspelled ID). */
+function isModelNotFound(error: any): boolean {
+  return (
+    error?.status === 404 ||
+    error?.error?.type === "not_found_error" ||
+    error?.code === "model_not_found"
+  );
+}
+
 // Provider interfaces
 interface AIProvider {
   generateInsights(prompt: string): Promise<string>;
@@ -201,7 +197,12 @@ class GoogleProvider implements AIProvider {
         clearTimeout(timeoutId);
       }
     } catch (error: any) {
+      logProviderError("Google AI", this.modelName, error);
+
       // Handle specific Google AI errors
+      if (isModelNotFound(error)) {
+        throw new Error("AI model configuration error. Contact administrator.");
+      }
       if (error?.status === 429 || error?.message?.includes("429")) {
         throw new Error("AI service rate limited. Please try again in a few minutes.");
       }
@@ -223,8 +224,9 @@ class GoogleProvider implements AIProvider {
 class OpenAIProvider implements AIProvider {
   private client: OpenAI;
   private modelName: string;
+  private requestStyle: AIRequestStyle;
 
-  constructor(modelName: string) {
+  constructor(modelName: string, requestStyle: AIRequestStyle) {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       console.error(`AI Service Error: Missing API key for provider: openai, model: ${modelName}`);
@@ -236,12 +238,13 @@ class OpenAIProvider implements AIProvider {
       timeout: AI_REQUEST_TIMEOUT_MS,
     });
     this.modelName = modelName;
+    this.requestStyle = requestStyle;
   }
 
   async generateInsights(prompt: string): Promise<string> {
     try {
-      // GPT-5 models use different parameters than older models
-      const isGpt5Model = this.modelName.startsWith('gpt-5');
+      // GPT-5 and GPT-6 models use different parameters than older models
+      const reasoningModel = this.requestStyle === "reasoning";
 
       const requestParams: any = {
         model: this.modelName,
@@ -257,8 +260,8 @@ class OpenAIProvider implements AIProvider {
         ],
       };
 
-      if (isGpt5Model) {
-        // GPT-5 models use reasoning_effort and verbosity instead of temperature
+      if (reasoningModel) {
+        // GPT-5/6 models use reasoning_effort instead of temperature
         requestParams.reasoning_effort = "low";
         requestParams.max_completion_tokens = 2048;
       } else {
@@ -310,8 +313,9 @@ class OpenAIProvider implements AIProvider {
 class AnthropicProvider implements AIProvider {
   private client: Anthropic;
   private modelName: string;
+  private requestStyle: AIRequestStyle;
 
-  constructor(modelName: string) {
+  constructor(modelName: string, requestStyle: AIRequestStyle) {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       console.error(`AI Service Error: Missing API key for provider: anthropic, model: ${modelName}`);
@@ -323,6 +327,7 @@ class AnthropicProvider implements AIProvider {
       timeout: AI_REQUEST_TIMEOUT_MS,
     });
     this.modelName = modelName;
+    this.requestStyle = requestStyle;
   }
 
   async generateInsights(prompt: string): Promise<string> {
@@ -330,7 +335,17 @@ class AnthropicProvider implements AIProvider {
       const message = await this.client.messages.create({
         model: this.modelName,
         max_tokens: 2048,
-        temperature: 0.7,
+        // Newer Claude models reject a non-default temperature, and run adaptive thinking (whose
+        // tokens count against max_tokens) unless told otherwise
+        ...(this.requestStyle === "no-sampling"
+          ? // Claude Sonnet 5.5 runs adaptive thinking by default and rejects `disabled` (400);
+            // `between_tools` is its documented way to turn up-front thinking off (valid at effort
+            // low/medium/high; we send no effort, so the default `high` applies). This SDK version's
+            // types don't list it yet (TODO: drop the cast once @anthropic-ai/sdk includes it). It also
+            // works without tools: "Without tools, the response contains only text."
+            // https://platform.claude.com/docs/en/models/sonnet-5-5/migration-guide#turn-off-up-front-thinking
+            { thinking: { type: "between_tools" } as unknown as Anthropic.ThinkingConfigParam }
+          : { temperature: 0.7 }),
         system: "You are an expert athletic performance coach analyzing athlete data to provide actionable coaching insights.",
         messages: [
           {
@@ -340,6 +355,14 @@ class AnthropicProvider implements AIProvider {
         ],
       });
 
+      // Never return a refused response, or (for no-sampling models, new to this code path) a
+      // cut-off one, as if it were complete insights. Other models keep returning whatever text
+      // they produced, as before.
+      const cutOff = message.stop_reason === "max_tokens" && this.requestStyle === "no-sampling";
+      if (cutOff || message.stop_reason === "refusal") {
+        throw new Error(`Anthropic returned no text content (stop reason: ${message.stop_reason})`);
+      }
+
       const textContent = message.content.find((block: { type: string }) => block.type === "text");
 
       if (!textContent || textContent.type !== "text") {
@@ -348,7 +371,12 @@ class AnthropicProvider implements AIProvider {
 
       return textContent.text;
     } catch (error: any) {
+      logProviderError("Anthropic", this.modelName, error);
+
       // Handle specific Anthropic errors
+      if (isModelNotFound(error)) {
+        throw new Error("AI model configuration error. Contact administrator.");
+      }
       if (error?.status === 429 || error?.error?.type === "rate_limit_error") {
         throw new Error("AI service rate limited. Please try again in a few minutes.");
       }
@@ -374,9 +402,9 @@ function createProvider(modelKey: AIModelKey): AIProvider {
   if (providerType === "google") {
     return new GoogleProvider(config.model);
   } else if (providerType === "openai") {
-    return new OpenAIProvider(config.model);
+    return new OpenAIProvider(config.model, config.requestStyle);
   } else if (providerType === "anthropic") {
-    return new AnthropicProvider(config.model);
+    return new AnthropicProvider(config.model, config.requestStyle);
   } else {
     // This should never happen due to our type definitions
     const _exhaustiveCheck: never = providerType;
@@ -442,7 +470,7 @@ export async function generateCoachingInsights(
 ): Promise<string> {
   try {
     // Defensive validation: ensure model key exists in AI_MODELS
-    if (!(modelKey in AI_MODELS)) {
+    if (!Object.prototype.hasOwnProperty.call(AI_MODELS, modelKey)) {
       throw new Error(`Invalid AI model: ${modelKey}`);
     }
 

@@ -19,6 +19,7 @@ interface InvitationData {
   organizationId: string;
   playerId?: string; // ID of existing athlete/user if updating
   athleteId?: string;
+  parentEmailOnFile?: boolean; // COPPA: coach provided a parent email at invite-create
   athleteData?: {
     id: string;
     firstName: string;
@@ -118,6 +119,11 @@ export default function AcceptInvitation() {
           lastName: data.athleteData.lastName
         }));
       }
+
+      // COPPA: the raw coach-provided birthDate/parentEmail are intentionally
+      // NOT returned to token bearers (minor PII). The server applies the
+      // stored values at accept time; data.parentEmailOnFile only relaxes the
+      // required parent-email field below.
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load invitation');
     } finally {
@@ -428,11 +434,13 @@ export default function AcceptInvitation() {
               />
             </div>
 
-            {/* Parent/Guardian Email — shown for all minor athletes (under-18) */}
+            {/* Parent/Guardian Email — shown for all minor athletes (under-18).
+                Not required when the coach already provided one at invite
+                creation (server uses the on-file value as fallback). */}
             {minor && (
               <div>
                 <Label htmlFor="parentEmail">
-                  Parent or Guardian Email {under13 && <span className="text-red-500">*</span>}
+                  Parent or Guardian Email {under13 && !invitation?.parentEmailOnFile && <span className="text-red-500">*</span>}
                 </Label>
                 {under13 && (
                   <Alert className="mb-2 border-amber-200 bg-amber-50">
@@ -441,6 +449,11 @@ export default function AcceptInvitation() {
                       Federal law (COPPA) requires parental consent for users under 13. A parent or guardian must approve before you can log in.
                     </AlertDescription>
                   </Alert>
+                )}
+                {under13 && invitation?.parentEmailOnFile && (
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Your coach already provided a parent/guardian email. Leave this blank to use it, or enter a different one.
+                  </p>
                 )}
                 {teenMinor && (
                   <p className="text-sm text-muted-foreground mb-2">
@@ -453,7 +466,7 @@ export default function AcceptInvitation() {
                   value={formData.parentEmail}
                   onChange={handleInputChange('parentEmail')}
                   placeholder="parent@example.com"
-                  required={under13}
+                  required={under13 && !invitation?.parentEmailOnFile}
                 />
               </div>
             )}

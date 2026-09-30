@@ -270,19 +270,23 @@ export function RadarChart({
         return radarPlotValue(athlete, metric, undefined, getMetricConfig(metric)?.lowerIsBetter);
       });
 
+      const isHighlighted = highlightAthlete === athlete.athleteId;
       const color = colors[index % colors.length];
 
       datasets.push({
         label: athlete.athleteName,
+        // Carried through to the tooltip callback so it can look the athlete
+        // up by id, not by (possibly duplicate) display name.
+        athleteId: athlete.athleteId,
         data: athleteValues,
         backgroundColor: color.bg,
         borderColor: color.border,
-        borderWidth: highlightAthlete === athlete.athleteId ? 3 : 2,
+        borderWidth: isHighlighted ? 3 : 2,
         pointBackgroundColor: color.border,
         pointBorderColor: '#fff',
         pointHoverBackgroundColor: '#fff',
         pointHoverBorderColor: color.border,
-        pointRadius: highlightAthlete === athlete.athleteId ? 6 : 4
+        pointRadius: isHighlighted ? 6 : 4
       });
     });
 
@@ -325,15 +329,16 @@ export function RadarChart({
 
             if (!metric) return '';
 
-            // Find the actual value for this athlete and metric
-            const athleteName = context.dataset.label;
+            // Find the actual value for this athlete and metric. Looked up by
+            // athleteId (carried on the dataset) rather than display name,
+            // since multiple athletes can share a name.
+            const athleteId = (context.dataset as { athleteId?: string }).athleteId;
             let actualValue = 0;
 
-            if (athleteName === 'Group Average') {
+            if (context.dataset.label === 'Group Average') {
               actualValue = radarData?.groupAverages[metricIndex] || 0;
             } else {
-              // Corrected reference to radarData.data
-              const athlete = radarData?.data.find(a => a.athleteName === athleteName);
+              const athlete = radarData?.data.find(a => a.athleteId === athleteId);
               actualValue = athlete?.metrics[metric] || 0;
             }
 

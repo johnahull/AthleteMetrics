@@ -29,6 +29,7 @@ import { users } from '@shared/schema/tables/core';
 import { parentalConsents, parentAthleteLinks } from '@shared/schema/tables/coppa';
 import { eq, like } from 'drizzle-orm';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
+import { generateRegistrationToken } from '../../packages/api/services/registration-token-store';
 
 vi.mock('../../packages/api/vite.js', () => ({
   setupVite: vi.fn().mockResolvedValue(undefined),
@@ -494,6 +495,140 @@ describe('POST /api/auth/register/parent', () => {
       // Track created user for cleanup
       const [createdUser] = await db.select().from(users).where(like(users.username, username));
       if (createdUser) createdUserIds.push(createdUser.id);
+    });
+  });
+
+  // Security fix (issue #345): the web UI now sends this opaque token instead
+  // of a raw consentId, so the parent's email/consentId never appear in the
+  // /register URL. The token resolves server-side to the consentId.
+  describe('ref token (opaque post-consent registration token)', () => {
+    it('registers successfully via a valid ref token, resolving consentId server-side', async () => {
+      const id = uniqueId();
+      const { athlete, parentEmail } = await createTestAthleteUser(`${TEST_PREFIX}ref_`);
+      createdAthleteIds.push(athlete.id);
+
+      const { consent } = await createTestConsent(athlete.id, parentEmail);
+      createdConsentIds.push(consent.id);
+
+      const ref = generateRegistrationToken(consent.id);
+      const username = `${TEST_PREFIX}ref${id}`;
+
+      const res = await request(app)
+        .post('/api/auth/register/parent')
+        .send({
+          firstName: 'Jane',
+          lastName: 'Smith',
+          email: parentEmail,
+          username,
+          password: VALID_PASSWORD,
+          legalAcceptedAt: new Date().toISOString(),
+          ref,
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(res.body.linkedAthletes).toBeGreaterThanOrEqual(1);
+
+      const [createdUser] = await db.select().from(users).where(like(users.username, username));
+      if (createdUser) createdUserIds.push(createdUser.id);
+    });
+
+    it('rejects an invalid ref token → 400', async () => {
+      const id = uniqueId();
+      const res = await request(app)
+        .post('/api/auth/register/parent')
+        .send({
+          firstName: 'Jane',
+          lastName: 'Smith',
+          email: `${TEST_PREFIX}parent_${id}@example.com`,
+          username: `${TEST_PREFIX}badref${id}`,
+          password: VALID_PASSWORD,
+          legalAcceptedAt: new Date().toISOString(),
+          ref: 'not-a-real-token',
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+      expect(res.body.errors[0].field).toBe('ref');
+    });
+
+    // A ref token proves nothing about who is holding it — an intercepted link
+    // must not let an attacker register with their own email against the real
+    // parent's consent record. The token resolves to a consentId, and the
+    // existing consentId→email match rejects a mismatched email even though
+    // the token itself carries the (discarded) real parentEmail.
+    it('rejects a valid ref token when the submitted email does not match the consent record → 400', async () => {
+      const id = uniqueId();
+      const { athlete, parentEmail } = await createTestAthleteUser(`${TEST_PREFIX}refmis_`);
+      createdAthleteIds.push(athlete.id);
+
+      const { consent } = await createTestConsent(athlete.id, parentEmail);
+      createdConsentIds.push(consent.id);
+
+      const ref = generateRegistrationToken(consent.id);
+
+      const res = await request(app)
+        .post('/api/auth/register/parent')
+        .send({
+          firstName: 'Mallory',
+          lastName: 'Attacker',
+          email: `${TEST_PREFIX}attacker_${id}@example.com`, // NOT the consent's parentEmail
+          username: `${TEST_PREFIX}refmis${id}`,
+          password: VALID_PASSWORD,
+          legalAcceptedAt: new Date().toISOString(),
+          ref,
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.errors[0].field).toBe('email');
+
+      // No account was created for the attacker.
+      const created = await db.select().from(users)
+        .where(like(users.username, `${TEST_PREFIX}refmis${id}`));
+      expect(created.length).toBe(0);
+    });
+
+    it('a ref token is single-use — a second registration attempt with it fails', async () => {
+      const id = uniqueId();
+      const { athlete, parentEmail } = await createTestAthleteUser(`${TEST_PREFIX}refonce_`);
+      createdAthleteIds.push(athlete.id);
+
+      const { consent } = await createTestConsent(athlete.id, parentEmail);
+      createdConsentIds.push(consent.id);
+
+      const ref = generateRegistrationToken(consent.id);
+      const username1 = `${TEST_PREFIX}ro1${id}`;
+      const username2 = `${TEST_PREFIX}ro2${id}`;
+
+      const first = await request(app)
+        .post('/api/auth/register/parent')
+        .send({
+          firstName: 'Jane',
+          lastName: 'Smith',
+          email: parentEmail,
+          username: username1,
+          password: VALID_PASSWORD,
+          legalAcceptedAt: new Date().toISOString(),
+          ref,
+        });
+      expect(first.status).toBe(201);
+      const [createdUser] = await db.select().from(users).where(like(users.username, username1));
+      if (createdUser) createdUserIds.push(createdUser.id);
+
+      const second = await request(app)
+        .post('/api/auth/register/parent')
+        .send({
+          firstName: 'Jane',
+          lastName: 'Smith',
+          email: `${TEST_PREFIX}other_${id}@example.com`,
+          username: username2,
+          password: VALID_PASSWORD,
+          legalAcceptedAt: new Date().toISOString(),
+          ref,
+        });
+
+      expect(second.status).toBe(400);
+      expect(second.body.errors[0].field).toBe('ref');
     });
   });
 });

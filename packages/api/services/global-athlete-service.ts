@@ -10,6 +10,7 @@ import {
   type GlobalAthlete, type UserGlobalAthleteLink, type GlobalAthleteClaim
 } from "@shared/schema";
 import crypto from "crypto";
+import { hashToken } from "../lib/token-hash";
 import { eq, and, inArray, desc, ne, isNull, isNotNull, count, sql, ilike, or } from "drizzle-orm";
 import { BaseService } from "./base-service";
 import { emailService } from "./email-service";
@@ -1007,7 +1008,7 @@ export class GlobalAthleteService extends BaseService {
     await db.insert(globalAthleteClaims).values({
       globalAthleteId: link.globalAthleteId,
       claimedEmail: emailToClaim,
-      token,
+      token: hashToken(token), // Store only the hash; the raw token is emailed
       status: "pending",
       expiresAt,
     });
@@ -1044,7 +1045,7 @@ export class GlobalAthleteService extends BaseService {
     // Find the claim by token
     const [claim] = await db.select()
       .from(globalAthleteClaims)
-      .where(eq(globalAthleteClaims.token, token));
+      .where(eq(globalAthleteClaims.token, hashToken(token)));
 
     if (!claim) {
       return { success: false, message: invalidTokenMessage };

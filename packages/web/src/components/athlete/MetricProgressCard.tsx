@@ -33,6 +33,12 @@ import type { MetricExplanation } from '@shared/metric-explanations';
 interface Measurement {
   value: string | number;
   date: string;
+  // Paired-input metric fields (optional — undefined for non-paired metrics)
+  auxiliaryValue?: string | number | null;
+  isCalculated?: boolean;
+  calculationMetadata?: {
+    sourceValues?: Record<string, number>;
+  } | null;
 }
 
 interface PersonalRecord {
@@ -146,6 +152,42 @@ export function MetricProgressCard({
     return parseFloat(String(sorted[0].value));
   }, [filteredMeasurements]);
 
+  // Find the most-recent UNFILTERED measurement to access paired-input metadata
+  // (filteredMeasurements collapses by date and may pick a different one).
+  const mostRecentMeasurement = useMemo(() => {
+    if (measurements.length === 0) return null;
+    const sorted = [...measurements].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+    return sorted[0];
+  }, [measurements]);
+
+  // Best-in-last-90-days: client-side comparison from already-fetched history.
+  // Promoted from Phase 2 during design review — coaches care about recent PRs.
+  const isBestInLast90Days = useMemo(() => {
+    if (!mostRecentMeasurement) return false;
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
+    // The badge represents "best in the last 90 days" — if the most-recent
+    // measurement is itself older than 90 days, there is no recent activity
+    // to be "best of." Without this guard, the every() loop would skip every
+    // out-of-window measurement and return true vacuously, rendering the
+    // badge for stale data.
+    const mostRecentDate = new Date(mostRecentMeasurement.date);
+    if (mostRecentDate < ninetyDaysAgo) return false;
+
+    const currentNum = parseFloat(String(mostRecentMeasurement.value));
+    const lowerIsBetter = isLowerBetter(metric);
+    return measurements.every((m) => {
+      const mDate = new Date(m.date);
+      if (mDate < ninetyDaysAgo) return true;
+      if (m === mostRecentMeasurement) return true;
+      const mNum = parseFloat(String(m.value));
+      return lowerIsBetter ? currentNum <= mNum : currentNum >= mNum;
+    });
+  }, [measurements, metric, mostRecentMeasurement]);
+
   const bestValue = useMemo(
     () => getBestValue(measurements, metric),
     [measurements, metric]
@@ -251,7 +293,7 @@ export function MetricProgressCard({
       <CardContent>
         {/* Current and PR Values */}
         <div className="mb-4">
-          <div className="flex items-baseline gap-2 mb-2">
+          <div className="flex items-baseline gap-2 mb-2 flex-wrap">
             <span className="text-sm text-gray-600">Current:</span>
             <MetricContextTooltip
               metric={metric}
@@ -266,7 +308,50 @@ export function MetricProgressCard({
                 {units}
               </span>
             </MetricContextTooltip>
+            {/* Platform-wide convention: small "est." chip on every isCalculated measurement.
+                Distinguishes computed values (1RM estimate, derived metrics) from raw measured values. */}
+            {mostRecentMeasurement?.isCalculated && (
+              <span
+                data-testid="est-chip"
+                className="text-[10px] uppercase tracking-wider text-gray-500 bg-gray-200 px-1.5 py-0.5 rounded"
+                title="Estimated value (computed from inputs)"
+              >
+                est.
+              </span>
+            )}
+            {isBestInLast90Days && measurements.length > 1 && (
+              <Badge
+                data-testid="best-90d-badge"
+                className="bg-emerald-600 text-white text-xs"
+                aria-label="Best result in the last 90 days"
+              >
+                ↑ Best in last 90d
+              </Badge>
+            )}
           </div>
+
+          {/* Paired-input source context: e.g., "3 reps @ 315 lbs" — secondary muted text.
+              Renders below the headline value, never dominating it.
+              Only renders when sourceValues has BOTH load and reps — falling back
+              to measurement.value would be wrong since value is the COMPUTED 1RM,
+              not the original load. Custom formulas using different variable names
+              would silently render misleading data; better to omit the line. */}
+          {mostRecentMeasurement?.auxiliaryValue !== undefined &&
+            mostRecentMeasurement?.auxiliaryValue !== null &&
+            mostRecentMeasurement?.calculationMetadata?.sourceValues &&
+            typeof mostRecentMeasurement.calculationMetadata.sourceValues.load === 'number' &&
+            typeof mostRecentMeasurement.calculationMetadata.sourceValues.reps === 'number' && (
+              <p
+                data-testid="paired-source-context"
+                className="text-sm text-gray-500 ml-0 sm:ml-12 mb-1"
+              >
+                {mostRecentMeasurement.calculationMetadata.sourceValues.reps}
+                {' reps @ '}
+                {mostRecentMeasurement.calculationMetadata.sourceValues.load}
+                {' '}
+                {units}
+              </p>
+            )}
 
           {/* PR Display - uses personalRecord if available, otherwise bestValue */}
           <div className="flex items-center gap-2 flex-wrap">

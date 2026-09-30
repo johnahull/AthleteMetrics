@@ -16,6 +16,10 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   // Test directory
   testDir: './tests/e2e',
+  // Scaffolding templates under tests/e2e/templates/ contain literal [entity]/[ENTITY]
+  // placeholders and are meant to be copied, not executed. Exclude them so they
+  // don't register as failing specs.
+  testIgnore: '**/templates/**',
 
   // Maximum time one test can run for (120 seconds)
   // Set to 120s (2x staging's 60s) to handle testing environment's slower response times

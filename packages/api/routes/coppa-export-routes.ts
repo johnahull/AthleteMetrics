@@ -87,7 +87,11 @@ export function registerCoppaExportRoutes(app: Express) {
           });
         }
 
-        const { athleteUserId, requestedByEmail } = bodyResult.data;
+        const { athleteUserId } = bodyResult.data;
+        // Authenticated actors cannot redirect the download-ready notification
+        // (a one-time link to the athlete's full data export) to an arbitrary
+        // address — always use the session's own email, ignoring the body.
+        const requestedByEmail = actor.email;
 
         // Authorization: site_admin can request for any athlete.
         // parent must have an active link to the athlete (covers 13-17 minors with no consent record).

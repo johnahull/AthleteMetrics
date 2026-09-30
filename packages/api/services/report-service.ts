@@ -31,9 +31,14 @@ import { type MetricExplanation } from '@shared/metric-explanations';
 import { getMetricExplanationsMap } from './metric-explanation-service';
 import { assembleTrends } from './report-trends';
 import { computeDistribution } from './report-distributions';
+import { assembleTeamTrends, computeTeamDistribution } from './report-team-charts';
 import { buildCohortLabel } from './cohort-label';
-import { resolveChartSelection, type ChartSelection } from '@shared/report-charts';
-import type { ReportTrends, ReportDistributions } from '@shared/report-trends-types';
+import { pickLatestInWindow, toReportFvProfile } from './report-fv';
+import { SprintFvService } from './sprint-fv-service';
+import { checkSprintFvEnabled } from '../middleware/require-sprint-fv-enabled';
+import { resolveChartSelection, resolveTeamChartSelection, type ChartSelection } from '@shared/report-charts';
+import type { ReportTrends, ReportDistributions, TeamReportTrends, TeamReportDistributions } from '@shared/report-trends-types';
+import type { ReportFvProfile } from '@shared/report-fv-types';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
 
 interface TimeframeConfig {
@@ -134,6 +139,9 @@ interface TeamReportData {
   metricExplanations: Record<string, MetricExplanation>;
   eventContext?: EventContext; // Present when eventId filter is used
   orgBranding?: OrgBranding;
+  teamTrends?: TeamReportTrends; // present only when chartSelection.trends is true
+  teamDistributions?: TeamReportDistributions; // present only when chartSelection.boxSwarm is true
+  comparisonLabel?: string; // cohort name when filters narrow the roster (undefined = whole org/report scope)
 }
 
 interface IndividualReportData {
@@ -148,8 +156,12 @@ interface IndividualReportData {
   orgBranding?: OrgBranding;
   trends?: ReportTrends; // present only when reportConfig.showTrends is true
   distributions?: ReportDistributions;
+  fvProfile?: ReportFvProfile; // present only when charts.fvProfile is selected and the sprint-FV flag is on
   comparisonLabel?: string; // cohort name for the "Where You Stand" caption (undefined = org-wide)
 }
+
+// Read-only lookups of stored F-V profiles (same pattern as sprint-fv-routes.ts).
+const sprintFvService = new SprintFvService();
 
 export class ReportService extends BaseService {
   // Cache for metric info to prevent N+1 queries
@@ -269,6 +281,68 @@ export class ReportService extends BaseService {
       report.organizationId,
     );
 
+    const chartSelection = resolveTeamChartSelection(config);
+
+    // Per-metric direction, computed unconditionally (getMetricInfo memoizes,
+    // so this is cheap) so client components — including the public/anonymous
+    // report view, which has no authenticated org context to derive this
+    // itself — can evaluate tier standing correctly without a client hook.
+    const directionInfos = await Promise.all(config.metrics.map(m => this.getMetricInfo(m)));
+    const metricDirections: Record<string, 'higher' | 'lower'> = {};
+    config.metrics.forEach((metric, i) => {
+      metricDirections[metric] = directionInfos[i].lowerIsBetter ? 'lower' : 'higher';
+    });
+
+    // Build team-average time-series trends when the report opts in (additive; off by default)
+    let teamTrends: TeamReportTrends | undefined;
+    if (chartSelection.trends) {
+      // Reuse the per-athlete benchmark comparisons already computed by
+      // calculateAthleteRankings above — tier boundaries don't depend on which
+      // athlete's value triggered the evaluation, so any athlete with a
+      // comparison for the metric supplies the overlay for the whole team.
+      const comparisonsByMetric: Record<string, BenchmarkComparison[]> = {};
+      for (const metric of config.metrics) {
+        const withComparison = athleteRankings.find(a => a.benchmarkComparisons[metric]?.length);
+        comparisonsByMetric[metric] = withComparison?.benchmarkComparisons[metric] ?? [];
+      }
+
+      teamTrends = assembleTeamTrends(
+        // Reuse measurementData already fetched for teamStatistics — do not re-query.
+        measurementData.map(m => ({
+          athleteId: m.measurement.userId,
+          athleteName: m.user?.fullName || 'Unknown',
+          metric: m.measurement.metric,
+          date: typeof m.measurement.date === 'string'
+            ? m.measurement.date
+            : new Date(m.measurement.date).toISOString().split('T')[0],
+          value: m.measurement.value,
+        })),
+        config.metrics,
+        metricDirections,
+        comparisonsByMetric,
+      );
+    }
+
+    // Build the team-wide five-number-summary + per-athlete dots for box+swarm
+    let teamDistributions: TeamReportDistributions | undefined;
+    if (chartSelection.boxSwarm) {
+      teamDistributions = {};
+      for (const metric of config.metrics) {
+        const athletesForMetric = athleteRankings
+          .filter(a => a.measurements[metric] !== undefined)
+          .map(a => ({ athleteId: a.userId, athleteName: a.userName, value: a.measurements[metric] }));
+        const dist = computeTeamDistribution(athletesForMetric);
+        if (dist) {
+          teamDistributions[metric] = { ...dist, direction: metricDirections[metric] };
+        }
+      }
+      if (Object.keys(teamDistributions).length === 0) teamDistributions = undefined;
+    }
+
+    // Human label for the roster cohort (names the group when filters narrow it),
+    // matching the individual report's "Where You Stand" caption convention.
+    const comparisonLabel = await this.resolveComparisonLabel(report.organizationId, config.filters);
+
     // Get event context if eventId is specified
     let eventContext: EventContext | undefined;
     if (config.eventId) {
@@ -300,7 +374,11 @@ export class ReportService extends BaseService {
       metricLabels,
       metricUnits,
       metricExplanations,
+      metricDirections,
       eventContext,
+      teamTrends,
+      teamDistributions,
+      comparisonLabel,
     };
 
     return result;
@@ -480,24 +558,26 @@ export class ReportService extends BaseService {
       if (Object.keys(distributions).length === 0) distributions = undefined;
     }
 
+    // Latest in-window sprint F-V profile, when selected. Gated on the
+    // sprint-FV feature flag (site + org, fails closed) so a report can't
+    // surface F-V data for an org that has the module off.
+    let fvProfile: ReportFvProfile | undefined;
+    if (chartSelection.fvProfile) {
+      const flag = await checkSprintFvEnabled(report.organizationId);
+      if (flag.enabled) {
+        const { profiles } = await sprintFvService.listByOrganization(report.organizationId, {
+          userId: athleteId,
+          dateFrom: startDate,
+          dateTo: endDate,
+        });
+        const latest = pickLatestInWindow(profiles, startDate, endDate);
+        if (latest) fvProfile = toReportFvProfile(latest);
+      }
+    }
+
     // Human label for the peer cohort (names the group in the "Where You Stand"
     // caption). Undefined when no filter narrows the cohort → frontend says "your group".
-    let comparisonLabel: string | undefined;
-    const f = config.filters;
-    if (f && (f.teamIds?.length || f.gender || f.positions?.length)) {
-      let filterTeamNames: string[] = [];
-      if (f.teamIds?.length) {
-        const rows = await db
-          .select({ name: teams.name })
-          .from(teams)
-          // Scope to this report's org so a crafted cross-org teamId can't leak
-          // another org's team name into the caption.
-          .where(and(eq(teams.organizationId, report.organizationId), inArray(teams.id, f.teamIds)))
-          .orderBy(teams.name); // deterministic label order for multi-team cohorts
-        filterTeamNames = rows.map((r) => r.name);
-      }
-      comparisonLabel = buildCohortLabel(filterTeamNames, f.gender, f.positions);
-    }
+    const comparisonLabel = await this.resolveComparisonLabel(report.organizationId, config.filters);
 
     const athletePerformance: AthletePerformance = {
       userId: athlete.id,
@@ -561,6 +641,7 @@ export class ReportService extends BaseService {
       eventContext,
       trends,
       distributions,
+      fvProfile,
       comparisonLabel,
     };
   }
@@ -1013,9 +1094,9 @@ export class ReportService extends BaseService {
       if (report.reportType === 'individual') {
         const config = report.config as any;
         if (config?.athleteId) athleteIds.push(config.athleteId);
-      } else if (data?.athletes) {
-        for (const a of data.athletes) {
-          if (a?.userId || a?.id) athleteIds.push(a.userId || a.id);
+      } else if (data?.athleteRankings) {
+        for (const a of data.athleteRankings) {
+          if (a?.userId) athleteIds.push(a.userId);
         }
       }
 
@@ -1803,6 +1884,32 @@ export class ReportService extends BaseService {
     }
 
     return benchmarksByMetric;
+  }
+
+  /**
+   * Human label for a filter-narrowed cohort (e.g. "the Varsity Squad, Male"),
+   * shared by both the individual "Where You Stand" caption and the team
+   * report's roster caption. Undefined when no filter narrows the cohort.
+   */
+  private async resolveComparisonLabel(
+    organizationId: string,
+    filters: { teamIds?: string[]; gender?: string; positions?: string[] } | undefined,
+  ): Promise<string | undefined> {
+    if (!filters || !(filters.teamIds?.length || filters.gender || filters.positions?.length)) {
+      return undefined;
+    }
+    let filterTeamNames: string[] = [];
+    if (filters.teamIds?.length) {
+      const rows = await db
+        .select({ name: teams.name })
+        .from(teams)
+        // Scope to this report's org so a crafted cross-org teamId can't leak
+        // another org's team name into the caption.
+        .where(and(eq(teams.organizationId, organizationId), inArray(teams.id, filters.teamIds)))
+        .orderBy(teams.name); // deterministic label order for multi-team cohorts
+      filterTeamNames = rows.map((r) => r.name);
+    }
+    return buildCohortLabel(filterTeamNames, filters.gender, filters.positions);
   }
 
   private async getMetricInfo(metricCode: string) {

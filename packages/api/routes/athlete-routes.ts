@@ -19,7 +19,8 @@ import { requireAuth, requireSiteAdmin } from "../middleware";
 import { insertUserSchema, insertAthleteSchema } from "@shared/schema";
 import {
   requireAthleteManagementPermission,
-  requireAthleteAccessPermission
+  requireAthleteAccessPermission,
+  requireAthleteManagementAccess
 } from "../middleware/athlete-permissions";
 import { athleteQuerySchema } from "../validation/athlete-validation";
 import { ZodError } from "zod";
@@ -378,6 +379,42 @@ export function registerAthleteRoutes(app: Express) {
       const updateSchema = insertAthleteSchema.partial();
       const validatedData = updateSchema.parse(req.body);
 
+      // Setting parentEmail creates a parentAthleteLinks row and emails that
+      // address with the minor's name — restrict to org_admin/site_admin so a
+      // coach can't redirect that link (and notification) to an arbitrary
+      // address without admin approval. Checked BEFORE any write so a denied
+      // coach can't get parentEmail persisted via the main update below.
+      // Organization that authorizes and scopes the parent-email change. It is
+      // captured here so the parentAthleteLinks row (created below) is attributed
+      // to the org the requester actually administers, not an arbitrary
+      // (alphabetically-first) org the athlete happens to also belong to.
+      let parentLinkOrgId: string | null = null;
+      if (validatedData.parentEmail !== undefined) {
+        const currentUser = req.session.user!;
+        const athleteOrgs = await storage.getUserOrganizations(athleteId);
+        if (currentUser.isSiteAdmin) {
+          // A site admin has no requester-org context; fall back to the
+          // athlete's first organization for the link scope.
+          parentLinkOrgId = athleteOrgs[0]?.organizationId ?? null;
+        } else {
+          // Must be org_admin specifically in an org shared with the athlete —
+          // org_admin status in an unrelated org must not combine with a
+          // shared-org coach role (already required by
+          // requireAthleteAccessPermission) to authorize this.
+          const userOrgs = await storage.getUserOrganizations(currentUser.id);
+          const athleteOrgIds = new Set(athleteOrgs.map((org) => org.organizationId));
+          const authorizingOrg = userOrgs.find(
+            (org) => org.role === 'org_admin' && athleteOrgIds.has(org.organizationId)
+          );
+          if (!authorizingOrg) {
+            return res.status(403).json({
+              message: "Organization admin or site admin role required to update parent email",
+            });
+          }
+          parentLinkOrgId = authorizingOrg.organizationId;
+        }
+      }
+
       const updatedAthlete = await storage.updateAthlete(athleteId, validatedData);
 
       // Handle parentEmail: persist to user record and create parentAthleteLinks
@@ -388,15 +425,13 @@ export function registerAthleteRoutes(app: Express) {
         // updated above, or was already present from a previous request).
         const freshAthlete = await storage.getUser(athleteId);
         if (freshAthlete) {
-          // Determine the organization the athlete belongs to (for the link row).
-          const athleteOrgs = await storage.getUserOrganizations(athleteId);
-          const orgId = athleteOrgs[0]?.organizationId ?? null;
-
+          // Use the authorizing organization captured during the permission
+          // check above, not an arbitrary org the athlete belongs to.
           await handleParentEmailUpdate(
             athleteId,
             validatedData.parentEmail,
             freshAthlete,
-            orgId,
+            parentLinkOrgId,
           );
         }
       }
@@ -415,7 +450,7 @@ export function registerAthleteRoutes(app: Express) {
   /**
    * Toggle athlete active status (org admins and coaches within their organization)
    */
-  app.patch("/api/athletes/:id/status", athleteLimiter, requireAuth, requireAthleteAccessPermission, async (req, res) => {
+  app.patch("/api/athletes/:id/status", athleteLimiter, requireAuth, requireAthleteManagementAccess, async (req, res) => {
     try {
       const athleteId = req.params.id;
       const { isActive } = req.body;
@@ -443,7 +478,7 @@ export function registerAthleteRoutes(app: Express) {
   /**
    * Delete athlete (org admins and coaches within their organization)
    */
-  app.delete("/api/athletes/:id", athleteDeleteLimiter, requireAuth, requireAthleteAccessPermission, async (req, res) => {
+  app.delete("/api/athletes/:id", athleteDeleteLimiter, requireAuth, requireAthleteManagementAccess, async (req, res) => {
     try {
       const athleteId = req.params.id;
 
@@ -462,7 +497,7 @@ export function registerAthleteRoutes(app: Express) {
   /**
    * Bulk delete athletes (org admins and coaches within their organization)
    */
-  app.post("/api/athletes/bulk-delete", athleteDeleteLimiter, requireAuth, async (req, res) => {
+  app.post("/api/athletes/bulk-delete", athleteDeleteLimiter, requireAuth, requireAthleteManagementPermission, async (req, res) => {
     try {
       const { athleteIds } = req.body;
 
@@ -564,7 +599,7 @@ export function registerAthleteRoutes(app: Express) {
   /**
    * Bulk invite athletes (org admins and coaches within their organization)
    */
-  app.post("/api/athletes/bulk-invite", athleteLimiter, requireAuth, async (req, res) => {
+  app.post("/api/athletes/bulk-invite", athleteLimiter, requireAuth, requireAthleteManagementPermission, async (req, res) => {
     try {
       const { athleteIds, organizationId } = req.body;
 

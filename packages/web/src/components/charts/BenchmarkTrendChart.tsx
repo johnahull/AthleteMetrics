@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import type { ChartOptions } from 'chart.js';
 import type { AnnotationOptions } from 'chartjs-plugin-annotation';
 import { Line } from 'react-chartjs-2';
-import type { MetricTrend } from '@shared/report-trends-types';
+import type { MetricTrend, TrendPoint } from '@shared/report-trends-types';
 import {
   buildTrendChartData,
   overlayToAnnotations,
@@ -19,9 +19,16 @@ interface BenchmarkTrendChartProps {
   trend: MetricTrend;
   label: string;
   unit?: string;
+  /**
+   * Optional faint background lines drawn behind the main series (e.g. per-
+   * athlete series behind a team-average main line). The time-scale x-axis
+   * places each series' points at their own dates, so no alignment to the
+   * main series is needed.
+   */
+  backgroundSeries?: TrendPoint[][];
 }
 
-export function BenchmarkTrendChart({ metricCode, trend, label, unit }: BenchmarkTrendChartProps) {
+export function BenchmarkTrendChart({ metricCode, trend, label, unit, backgroundSeries }: BenchmarkTrendChartProps) {
   const cue = useMemo(() => directionCue(trend.direction), [trend.direction]);
 
   // Index of the personal-best point so we can enlarge + star it on the line.
@@ -43,8 +50,27 @@ export function BenchmarkTrendChart({ metricCode, trend, label, unit }: Benchmar
     ds.pointBackgroundColor = trend.series.map((_, i) => (i === pbIdx ? '#f59e0b' : '#2563eb'));
     ds.pointBorderColor = trend.series.map((_, i) => (i === pbIdx ? '#b45309' : '#2563eb'));
     ds.pointBorderWidth = trend.series.map((_, i) => (i === pbIdx ? 2 : 1));
+
+    if (backgroundSeries && backgroundSeries.length > 0) {
+      backgroundSeries.forEach((series, i) => {
+        (d.datasets as Record<string, unknown>[]).push({
+          label: `Athlete context ${i + 1}`,
+          data: series.map((p) => ({ x: p.date, y: p.value })),
+          borderColor: 'rgba(148, 163, 184, 0.5)',
+          backgroundColor: 'transparent',
+          borderWidth: 1,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          fill: false,
+          tension: 0.1,
+          spanGaps: true,
+          order: 10,
+        });
+      });
+    }
+
     return d;
-  }, [trend, label, pbIdx]);
+  }, [trend, label, pbIdx, backgroundSeries]);
 
   const annotations = useMemo<Record<string, AnnotationOptions>>(() => {
     const ann = overlayToAnnotations(trend.benchmark);
@@ -66,13 +92,9 @@ export function BenchmarkTrendChart({ metricCode, trend, label, unit }: Benchmar
         }
       }
       if (crossIdx >= 0) {
-        const xLabel = new Date(trend.series[crossIdx].date).toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric',
-        });
         ann.crossing = {
           type: 'label',
-          xValue: xLabel,
+          xValue: trend.series[crossIdx].date,
           yValue: trend.series[crossIdx].value,
           content: ['▲ reached ' + currentTierName(trend.benchmark, trend.series[crossIdx].value)],
           color: '#16a34a',
@@ -83,13 +105,9 @@ export function BenchmarkTrendChart({ metricCode, trend, label, unit }: Benchmar
     }
     // Label the personal-best point so it's unmistakable (not just a styled point).
     if (pbIdx >= 0 && trend.series.length > 1) {
-      const pbLabel = new Date(trend.series[pbIdx].date).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-      });
       ann.personalBest = {
         type: 'label',
-        xValue: pbLabel,
+        xValue: trend.series[pbIdx].date,
         yValue: trend.series[pbIdx].value,
         content: ['★ Personal best'],
         color: '#b45309',
@@ -116,7 +134,17 @@ export function BenchmarkTrendChart({ metricCode, trend, label, unit }: Benchmar
       annotation: Object.keys(annotations).length > 0 ? { annotations } : undefined,
     },
     scales: {
-      x: { title: { display: true, text: 'Date' } },
+      x: {
+        type: 'time',
+        time: {
+          tooltipFormat: 'MMM d, yyyy',
+          displayFormats: { day: 'MMM d', week: 'MMM d', month: 'MMM yyyy' },
+        },
+        // Without a cap the time scale emits a tick every few days over a
+        // season-long window, crushing the plot under rotated labels.
+        ticks: { maxTicksLimit: 8, maxRotation: 0 },
+        title: { display: true, text: 'Date' },
+      },
       y: {
         title: { display: true, text: `${yTitle}  ${cue.arrow} better` },
       },

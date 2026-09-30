@@ -146,16 +146,15 @@ describe('Server Startup Validation', () => {
       }
 
       expect(mockExit).toHaveBeenCalledWith(1);
-      // Check that the SESSION_SECRET validation error was logged
+      // The validation error output references SESSION_SECRET. The exact message
+      // is covered by config/env's unit tests.
       const errorCalls = mockConsoleError.mock.calls.flat();
-      expect(errorCalls).toContainEqual(
-        '❌ FATAL: SESSION_SECRET environment variable not set'
-      );
+      expect(errorCalls.some((c) => typeof c === 'string' && c.includes('SESSION_SECRET'))).toBe(true);
     });
 
     it('should exit with code 1 if SESSION_SECRET is less than 32 characters', async () => {
       process.env.NODE_ENV = 'production';
-      process.env.SESSION_SECRET = 'a'.repeat(31); // 31 characters
+      process.env.SESSION_SECRET = 'c7f8a9b2e4d6f1a3c5e7b9d1f3a5c7e'; // 31 chars (non-repeating)
       // Set other required env vars
       process.env.ADMIN_EMAIL = 'test@example.com';
       process.env.ADMIN_PASSWORD = 'test-password-123';
@@ -168,11 +167,8 @@ describe('Server Startup Validation', () => {
       }
 
       expect(mockExit).toHaveBeenCalledWith(1);
-      // Check that the SESSION_SECRET length validation error was logged
       const errorCalls = mockConsoleError.mock.calls.flat();
-      expect(errorCalls).toContainEqual(
-        '❌ FATAL: SESSION_SECRET must be at least 32 characters long'
-      );
+      expect(errorCalls.some((c) => typeof c === 'string' && c.includes('SESSION_SECRET'))).toBe(true);
     });
 
     it('should reject SESSION_SECRET with only 32 characters in production', async () => {
@@ -189,10 +185,8 @@ describe('Server Startup Validation', () => {
       // Should have called exit due to insufficient SESSION_SECRET length for production
       expect(mockExit).toHaveBeenCalledWith(1);
 
-      const errorCalls = mockConsoleError.mock.calls.map(call => call[0]);
-      expect(errorCalls).toContainEqual(
-        '❌ FATAL: Production SESSION_SECRET must be at least 64 characters long'
-      );
+      const errorCalls = mockConsoleError.mock.calls.flat();
+      expect(errorCalls.some((c) => typeof c === 'string' && c.includes('SESSION_SECRET'))).toBe(true);
     });
 
     it('should accept SESSION_SECRET with more than 32 characters', async () => {
@@ -214,6 +208,12 @@ describe('Server Startup Validation', () => {
       }
     });
   });
+
+  // Note: a startup-level "missing DATABASE_URL exits" test is intentionally not
+  // added here — index.ts's transitive imports read DATABASE_URL at import time
+  // and can throw before validateEnvOrExit runs, making such a test order-
+  // dependent. The DATABASE_URL requirement is covered deterministically by the
+  // parseEnv unit tests in config/__tests__/env.test.ts.
 
   describe('Combined validation', () => {
     it('should default NODE_ENV then validate SESSION_SECRET', async () => {
@@ -238,9 +238,7 @@ describe('Server Startup Validation', () => {
       );
       // Then SESSION_SECRET validation should fail
       const errorCalls = mockConsoleError.mock.calls.flat();
-      expect(errorCalls).toContainEqual(
-        '❌ FATAL: SESSION_SECRET environment variable not set'
-      );
+      expect(errorCalls.some((c) => typeof c === 'string' && c.includes('SESSION_SECRET'))).toBe(true);
     });
 
     it('should pass validation with all required environment variables set', async () => {

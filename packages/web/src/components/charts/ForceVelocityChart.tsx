@@ -5,7 +5,8 @@ import type { SprintFvProfile } from '@/lib/sprint-fv-api';
 import { useUnitSystem } from '@/contexts/UnitSystemContext';
 
 interface Props {
-  profile: SprintFvProfile;
+  /** Only the fitted params + analysis are read, so slimmer report payloads are accepted too. */
+  profile: Pick<SprintFvProfile, 'f0Rel' | 'v0' | 'pmaxRel' | 'analysisJson'>;
 }
 
 export function ForceVelocityChart({ profile }: Props) {

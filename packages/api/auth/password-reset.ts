@@ -5,6 +5,7 @@ import { passwordSchema } from '@shared/password-validation';
 import bcrypt from 'bcrypt';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 import { globalAthleteService } from '../services/global-athlete-service';
+import { emailService } from '../services/email-service';
 
 export class PasswordResetService {
   private static readonly RESET_TOKEN_EXPIRY = 60 * 60 * 1000; // 1 hour
@@ -72,16 +73,19 @@ export class PasswordResetService {
         severity: 'info',
       });
 
-      // TODO: Send email with reset link
-      // await emailService.sendPasswordReset(user.emails[0], {
-      //   resetUrl: `${process.env.BASE_URL}/reset-password?token=${token}`,
-      //   firstName: user.firstName,
-      //   expiresIn: '1 hour'
-      // });
+      // Send the reset link. The raw token is only ever transmitted here (never
+      // logged or stored) — the database holds only its hash.
+      const baseUrl = process.env.APP_URL || process.env.BASE_URL || 'https://athletemetrics.app';
+      const resetLink = `${baseUrl}/reset-password?token=${token}`;
+      const recipient = user.emails?.[0];
+      if (recipient) {
+        await emailService.sendPasswordReset(recipient, {
+          userName: user.firstName || 'there',
+          resetLink,
+        });
+      }
 
-      console.log(`Password reset requested for ${email}. Token: ${token}`);
-
-      return { 
+      return {
         success: true, 
         message: 'If an account with that email exists, a password reset link has been sent.' 
       };
@@ -107,7 +111,7 @@ export class PasswordResetService {
         return { valid: false };
       }
 
-      if (resetToken.isUsed === 'true') {
+      if (resetToken.isUsed === true) {
         return { valid: false, used: true };
       }
 
@@ -208,17 +212,19 @@ export class PasswordResetService {
         severity: 'info',
       });
 
-      // TODO: Send verification email
-      // await emailService.sendEmailVerification(email, {
-      //   verificationUrl: `${process.env.BASE_URL}/verify-email?token=${token}`,
-      //   expiresIn: '24 hours'
-      // });
+      // Send the verification link. The raw token is only ever transmitted here
+      // (never logged) — the database holds only its hash.
+      const user = await storage.getUser(userId);
+      const baseUrl = process.env.APP_URL || process.env.BASE_URL || 'https://athletemetrics.app';
+      const verificationLink = `${baseUrl}/verify-email?token=${token}`;
+      await emailService.sendEmailVerification(email, {
+        userName: user?.firstName || 'there',
+        verificationLink,
+      });
 
-      console.log(`Email verification requested for ${email}. Token: ${token}`);
-
-      return { 
-        success: true, 
-        message: 'Verification email sent. Please check your inbox.' 
+      return {
+        success: true,
+        message: 'Verification email sent. Please check your inbox.'
       };
     } catch (error) {
       console.error('Email verification request error:', error);

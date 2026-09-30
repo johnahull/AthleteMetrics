@@ -55,6 +55,7 @@ import { registerParentLinkRequestRoutes } from "./parent-link-request-routes";
 import { registerDeviceImportRoutes } from "./device-import-routes";
 import { registerSprintFvRoutes } from "./sprint-fv-routes";
 import { registerLlmExportRoutes } from "./llm-export-routes";
+import { registerWebhookRoutes } from "./webhook-routes";
 
 /**
  * Register all application routes
@@ -217,6 +218,9 @@ export function registerAllRoutes(app: Express) {
 
   // LLM export route (athlete → Markdown/JSON for paste-into-LLM program design)
   registerLlmExportRoutes(app);
+
+  // External webhook routes (Jotform waiver intake — issue #370)
+  registerWebhookRoutes(app);
 
   console.log("✅ All routes registered successfully");
 }

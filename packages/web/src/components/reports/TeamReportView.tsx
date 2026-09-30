@@ -47,8 +47,14 @@ import {
 } from "./report-utils";
 import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from "@/lib/report-utils";
 import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
-import type { Report, TeamReportData, TeamStatistic, AthleteRanking, PdfFormat } from "@/types/report-types";
+import type { Report, TeamReportData, TeamStatistic, AthleteRanking, PdfFormat, TeamReportConfig } from "@/types/report-types";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
+import { resolveTeamChartSelection } from "@shared/report-charts";
+import { TeamTrendSection } from "./TeamTrendSection";
+import { TeamBenchmarkStandingSection } from "./TeamBenchmarkStandingSection";
+import { TeamBoxSwarmSection } from "./TeamBoxSwarmSection";
+import { LeaderboardBarSection } from "./LeaderboardBarSection";
+import { TierDistributionChartSection } from "./TierDistributionChartSection";
 
 interface TeamReportViewProps {
   report: Report;
@@ -115,6 +121,15 @@ export function TeamReportView({ report }: TeamReportViewProps) {
     [reportData?.athleteRankings]
   );
 
+  // Backstop label resolution with the org's currently-active metric labels in
+  // case the report payload omits a code (e.g. custom org metric added after
+  // the report ran but before it rendered). Must be called before the early
+  // returns below (Rules of Hooks) — calling it after them meant this hook
+  // only ran once reportData was loaded, so the hook count changed between
+  // the "loading" and "loaded" renders and React threw "Rendered more hooks
+  // than during the previous render."
+  const { getLabel } = useMetricLabels();
+
   if (generateReport.isPending || !reportData) {
     return <ReportLoadingState message="Generating report..." />;
   }
@@ -129,13 +144,15 @@ export function TeamReportView({ report }: TeamReportViewProps) {
     );
   }
 
-  const { teamStatistics, athleteRankings, generatedAt, metricLabels, metricUnits, metricExplanations } = reportData;
-  // Backstop label resolution with the org's currently-active metric labels in
-  // case the report payload omits a code (e.g. custom org metric added after
-  // the report ran but before it rendered).
-  const { getLabel } = useMetricLabels();
+  const { teamStatistics, athleteRankings, generatedAt, metricLabels, metricUnits, metricExplanations, teamTrends, teamDistributions } = reportData;
   const resolveLabel = (code: string) => metricLabels?.[code] ?? getLabel(code);
   const teamMetricCodes = Array.isArray(teamStatistics) ? teamStatistics.map((s: TeamStatistic) => s.metric) : [];
+  const sel = resolveTeamChartSelection(report.config as TeamReportConfig);
+  // Resolved once and passed to the leaderboard/distribution charts below —
+  // every athlete plotted in those charts is already scoped to this report's
+  // roster, so their hover tooltips should name this team, not fall back to
+  // "Independent" (the shared chart tooltip's default when no team is given).
+  const resolvedTeamName = getTeamNames(report.config as { filters?: { teamIds?: string[] } }, teams, labels.teams);
 
   // Collect all unique benchmark names across all metrics
   const allBenchmarkNames = new Set<string>();
@@ -621,6 +638,45 @@ export function TeamReportView({ report }: TeamReportViewProps) {
             );
           })}
         </div>
+      )}
+
+      {/* Charts (additive — gated by resolveTeamChartSelection; tables above stay as-is) */}
+      {sel.benchmarkStanding && (
+        <TeamBenchmarkStandingSection
+          teamStatistics={teamStatistics}
+          metricLabels={metricLabels}
+          metricUnits={metricUnits}
+          metricDirections={reportData.metricDirections}
+          athleteRankings={athleteRankings}
+          timeframe={report.config.timeframe}
+        />
+      )}
+
+      {sel.trends && teamTrends && Object.keys(teamTrends).length > 0 && (
+        <TeamTrendSection trends={teamTrends} metricLabels={metricLabels} metricUnits={metricUnits} />
+      )}
+
+      {sel.boxSwarm && teamDistributions && Object.keys(teamDistributions).length > 0 && (
+        <TeamBoxSwarmSection
+          distributions={teamDistributions}
+          metricLabels={metricLabels}
+          generatedAt={generatedAt}
+          teamName={resolvedTeamName}
+        />
+      )}
+
+      {sel.leaderboard && (
+        <LeaderboardBarSection
+          athleteRankings={athleteRankings}
+          teamStatistics={teamStatistics}
+          metricLabels={metricLabels}
+          generatedAt={generatedAt}
+          teamName={resolvedTeamName}
+        />
+      )}
+
+      {sel.tierDistribution && tierDistributions.length > 0 && (
+        <TierDistributionChartSection tierDistributions={tierDistributions} metricLabels={metricLabels} />
       )}
 
       {metricExplanations && (

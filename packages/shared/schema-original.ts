@@ -6,6 +6,7 @@ import { z } from "zod";
 import { PASSWORD_REQUIREMENTS, PASSWORD_REGEX } from "./password-requirements";
 import { validateUsername } from "./username-validation";
 import { isSafePublicUrl } from "./url-safety";
+import { DEFAULT_AI_MODEL_KEY, SELECTABLE_AI_MODEL_KEYS } from "./ai-models";
 
 // AI Coaching Insights constants
 export const MAX_INSIGHTS_LENGTH = 10000;
@@ -592,7 +593,7 @@ export const accountLinkingTokens = pgTable("account_linking_tokens", {
 // Site Settings - Global site configuration (singleton table)
 export const siteSettings = pgTable("site_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  aiModel: text("ai_model").notNull().default("gpt-5-nano"),
+  aiModel: text("ai_model").notNull().default(DEFAULT_AI_MODEL_KEY),
   wellnessModuleEnabled: boolean("wellness_module_enabled").notNull().default(true),
   // Push notification global settings
   pushNotificationsEnabled: boolean("push_notifications_enabled").notNull().default(true),
@@ -1605,6 +1606,9 @@ export const insertInvitationSchema = createInsertSchema(invitations).omit({
   email: z.string().email("Invalid email format"),
   role: z.enum(["athlete", "coach", "org_admin", "parent"]), // Removed site_admin from invitations
   teamIds: z.array(z.string()).optional(),
+  // COPPA: coach-provided age data captured at invite-create time
+  birthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "birthDate must be in YYYY-MM-DD format").optional().nullable(),
+  parentEmail: z.string().email("Invalid parent email format").trim().toLowerCase().optional().nullable(),
 });
 
 export const insertMeasurementSchema = createInsertSchema(measurements).omit({
@@ -2206,6 +2210,10 @@ export const insertReportSchema = createInsertSchema(reports).omit({
       benchmarkStanding: z.boolean().optional(),
       trends: z.boolean().optional(),
       distribution: z.boolean().optional(),
+      fvProfile: z.boolean().optional(),
+      leaderboard: z.boolean().optional(),
+      tierDistribution: z.boolean().optional(),
+      boxSwarm: z.boolean().optional(),
     }).optional(),
     compositeIndex: z.object({
       enabled: z.boolean(),
@@ -2252,6 +2260,10 @@ export const updateReportSchema = z.object({
       benchmarkStanding: z.boolean().optional(),
       trends: z.boolean().optional(),
       distribution: z.boolean().optional(),
+      fvProfile: z.boolean().optional(),
+      leaderboard: z.boolean().optional(),
+      tierDistribution: z.boolean().optional(),
+      boxSwarm: z.boolean().optional(),
     }).optional(),
     compositeIndex: z.object({
       enabled: z.boolean(),
@@ -2639,15 +2651,8 @@ export type SportCode = (typeof sportCodeEnum)[number];
 // Legacy compatibility exports removed - use Athlete types instead
 
 // Site Settings validation schemas
-export const AI_MODELS = [
-  "gpt-5-nano",
-  "gemini-2.0-flash-lite",
-  "gemini-2.5-flash-lite",
-  "claude-haiku-3",
-  "claude-haiku-4.5",
-  "gemini-2.5-pro",
-  "claude-sonnet-4.5",
-] as const;
+// Derived from packages/shared/ai-models.ts - edit the registry, not this list
+export const AI_MODELS = SELECTABLE_AI_MODEL_KEYS;
 
 export type AIModel = typeof AI_MODELS[number];
 
