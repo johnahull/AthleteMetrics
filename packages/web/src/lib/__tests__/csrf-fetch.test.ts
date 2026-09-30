@@ -107,4 +107,16 @@ describe('installCsrfFetch', () => {
     await fetch('/api/a', { method: 'POST' });
     expect(callsTo('/api/a')).toHaveLength(1);
   });
+
+  it('retries a Request input whose body was already sent', async () => {
+    let n = 0;
+    const bodies: string[] = [];
+    baseFetch.mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('/api/csrf-token')) return tokenResponse(`tok-${++n}`);
+      if (input instanceof Request) bodies.push(await input.text());
+      return new Response(JSON.stringify({ error: 'Invalid CSRF token' }), { status: 403 });
+    });
+    await fetch(new Request(new URL('/api/a', window.location.origin).href, { method: 'POST', body: 'payload' }));
+    expect(bodies).toEqual(['payload', 'payload']);
+  });
 });

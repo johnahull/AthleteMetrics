@@ -65,7 +65,9 @@ export function installCsrfFetch(): void {
     const send = (token: string | null) => {
       const h = new Headers(headers);
       if (token) h.set(TOKEN_HEADER, token);
-      return baseFetch(input, { credentials: 'include', ...init, headers: h });
+      // Clone Request inputs so the body is still unread for the CSRF retry.
+      const target = input instanceof Request ? input.clone() : input;
+      return baseFetch(target, { credentials: 'include', ...init, headers: h });
     };
 
     const res = await send(await loadToken(false));
