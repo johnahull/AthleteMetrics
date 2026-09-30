@@ -11,10 +11,16 @@ import { loginAsDefaultUser } from './helpers/auth';
  * doesn't exist, so the response is expected to be a 4xx from the route (or AI
  * gate) — the assertion is only that it is NOT a CSRF rejection, so no AI key
  * or seeded report is needed.
+ *
+ * NOTE: loginAsDefaultUser() injects an x-csrf-token header into every request
+ * in the browser context (see helpers/auth.ts setCsrfHeader), which would mask
+ * exactly this bug. We clear it after login so only the app's own code can
+ * supply the token.
  */
 test.describe('CSRF token on raw fetch mutations', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsDefaultUser(page);
+    await page.context().setExtraHTTPHeaders({});
     await page.goto('/reports');
   });
 
