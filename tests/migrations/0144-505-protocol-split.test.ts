@@ -24,6 +24,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import postgres from 'postgres';
+import { ensurePre0144State, benchmarkMinMaxScale } from './helpers/pre0144-fixture';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -237,7 +238,7 @@ INSERT INTO site_benchmarks (id, metric_code, name, description, comparison_oper
   ('fx505-long', 'AGILITY_505', '${'FX long name '}${'x'.repeat(82)}', 'long', 'lte', 2.900, 'Female', 'SOCCER', 'D1', true, true, 904);
 INSERT INTO site_benchmarks (id, metric_code, name, description, comparison_operator, min_value, max_value,
   tier_group_id, tier_order, tier_name, tier_color, gender, is_system_default, is_active, display_order) VALUES
-  ('fx505-t1', 'AGILITY_505', 'FX 505 Tier One', 'tier one', 'range', 2.300, 2.499, '${FX_TG}'::uuid, 1, 'Elite', 'green', 'Female', true, true, 905),
+  ('fx505-t1', 'AGILITY_505', 'FX 505 Tier One', 'tier one', 'range', 2.300, 2.490, '${FX_TG}'::uuid, 1, 'Elite', 'green', 'Female', true, true, 905),
   ('fx505-t2', 'AGILITY_505', 'FX 505 Tier Two', 'tier two', 'range', 2.500, 2.800, '${FX_TG}'::uuid, 2, 'Good', 'yellow', 'Female', true, true, 906);
 INSERT INTO site_benchmarks (id, metric_code, name, description, comparison_operator, min_value, max_value,
   tier_group_id, tier_order, tier_name, tier_color, gender, is_system_default, is_active, display_order)
@@ -290,24 +291,6 @@ INSERT INTO custom_org_metrics (id, organization_id, code, label, metric_type, i
    'AGILITY_505 * 2', ARRAY['AGILITY_505'], NULL);
 `;
 
-// Only inserts what is missing; real rows (0022/0107/0128) are left alone.
-const ENSURE_OLD_SITE_METRICS_SQL = `
-INSERT INTO site_metrics (code, label, category, unit, metric_type, is_system_default, is_active, display_order,
-  description, decimal_precision, color, icon)
-VALUES
-  ('AGILITY_505', '5-0-5 Agility', 'agility', 's', 'lower_is_better', true, true, 3, 'old', 3, 'green', 'Zap'),
-  ('AGILITY_505_L', '5-0-5 Agility (Left)', 'agility', 's', 'lower_is_better', true, true, 24, 'old', 3, 'green', 'Zap'),
-  ('AGILITY_505_R', '5-0-5 Agility (Right)', 'agility', 's', 'lower_is_better', true, true, 25, 'old', 3, 'green', 'Zap')
-ON CONFLICT (code) DO NOTHING;
-INSERT INTO site_metrics (code, label, category, unit, metric_type, is_system_default, is_active, display_order,
-  description, decimal_precision, color, icon, validation_min, validation_max, is_derived, formula, dependent_metrics, calculation_config)
-VALUES ('AGILITY_505_LSI', '5-0-5 Limb Symmetry Index', 'agility', '%', 'higher_is_better', true, true, 40, 'old', 1, 'green', 'Activity', 0, 100, true,
-  '(min(AGILITY_505_L, AGILITY_505_R) / max(AGILITY_505_L, AGILITY_505_R)) * 100',
-  ARRAY['AGILITY_505_L', 'AGILITY_505_R'],
-  '{"dateMatchStrategy":"same_date","missingSourceBehavior":"skip"}'::jsonb)
-ON CONFLICT (code) DO NOTHING;
-`;
-
 const OLD_REF_RE = '\\mAGILITY_505(_L|_R|_LSI)?\\M';
 
 describe.skipIf(!DATABASE_URL)('Migration 0144: behavioral (real DB, rolled back)', () => {
@@ -346,11 +329,13 @@ describe.skipIf(!DATABASE_URL)('Migration 0144: behavioral (real DB, rolled back
     return out as T;
   }
 
-  /** Bring the transaction to the pre-0144 state (undo 0144 first if the DB already has it). */
+  /**
+   * Bring the transaction to the canonical, self-contained pre-0144 state
+   * (see helpers/pre0144-fixture.ts): old rows with their exact production text,
+   * LSI tier benchmarks, screening set and items. Independent of ambient DB state.
+   */
   async function toPreState(tx: Tx) {
-    const [{ n }] = await tx`select count(*)::int as n from site_metrics where code = 'AGILITY_505_M'`;
-    if (n > 0) await tx.unsafe(downSql);
-    await tx.unsafe(ENSURE_OLD_SITE_METRICS_SQL);
+    await ensurePre0144State(tx, downSql);
   }
 
   async function seedFixture(tx: Tx) {
@@ -663,13 +648,17 @@ describe.skipIf(!DATABASE_URL)('Migration 0144: behavioral (real DB, rolled back
       const byId = new Map((after.site_benchmarks as Record<string, any>[]).map((b) => [b.id as string, b]));
 
       // literal spot checks (numeric half-up): 2.51 -> 2.294, 2.40 -> 2.194, 2.75 -> 2.514
+      // benchmark_value is numeric(10,3) everywhere; min/max are scale 3 on migration-built DBs and
+      // scale 2 on a drizzle-push DB (schema.ts drift), where 2.102/2.276/2.285/2.559 store as 2.10/2.28/2.29/2.56.
+      const scale = await benchmarkMinMaxScale(tx);
+      const at = (three: number, two: number) => (scale === 3 ? three : two);
       expect(byId.get('fx505-flat1-yd')?.benchmark_value).toBe(2.294);
       expect(byId.get('fx505-flat3-yd')?.benchmark_value).toBe(2.194);
       expect(byId.get('fx505-flat2-yd')?.benchmark_value).toBe(2.514);
-      expect(byId.get('fx505-t1-yd')?.min_value).toBe(2.102);
-      expect(byId.get('fx505-t1-yd')?.max_value).toBe(2.284);
-      expect(byId.get('fx505-t2-yd')?.min_value).toBe(2.285);
-      expect(byId.get('fx505-t2-yd')?.max_value).toBe(2.559);
+      expect(byId.get('fx505-t1-yd')?.min_value).toBe(at(2.102, 2.1));
+      expect(byId.get('fx505-t1-yd')?.max_value).toBe(at(2.276, 2.28));
+      expect(byId.get('fx505-t2-yd')?.min_value).toBe(at(2.285, 2.29));
+      expect(byId.get('fx505-t2-yd')?.max_value).toBe(at(2.559, 2.56));
 
       // every non-LSI _M source has exactly one yard twin, everything else copied
       const ydCountAfter = (after.site_benchmarks as Record<string, any>[]).filter((b) =>
@@ -692,13 +681,13 @@ describe.skipIf(!DATABASE_URL)('Migration 0144: behavioral (real DB, rolled back
         expect(y!.min_value === null).toBe(s.min_value === null);
       }
       // exact conversion check in SQL (numeric arithmetic, no float drift)
-      const [{ bad }] = await tx`
+      const [{ bad }] = await tx.unsafe(`
         select count(*)::int as bad
           from site_benchmarks y join site_benchmarks s on y.id = s.id || '-yd'
          where s.metric_code in ('AGILITY_505_M','AGILITY_505_M_L','AGILITY_505_M_R')
            and (y.benchmark_value is distinct from round(s.benchmark_value * 0.914, 3)
-             or y.min_value is distinct from round(s.min_value * 0.914, 3)
-             or y.max_value is distinct from round(s.max_value * 0.914, 3))`;
+             or y.min_value is distinct from round(s.min_value * 0.914, 3)::numeric(10,${scale})
+             or y.max_value is distinct from round(s.max_value * 0.914, 3)::numeric(10,${scale}))`);
       expect(bad).toBe(0);
 
       // tier groups: deterministic md5 ids, per-leg tiers present, no overlap after rounding
@@ -785,6 +774,25 @@ describe.skipIf(!DATABASE_URL)('Migration 0144: behavioral (real DB, rolled back
       const mItems = (await tx`select id from benchmark_set_items where benchmark_id in (select id from site_benchmarks where metric_code = 'AGILITY_505_M_LSI') and set_id = ${LSI_SET_ID}`) as unknown[];
       expect(mItems).toHaveLength(m.length);
     });
+  }, TEST_TIMEOUT);
+
+  it('RAISES (and creates nothing) when an old row is missing and its new code is absent', async () => {
+    for (const missing of OLD_CODES) {
+      await inTx(async (tx) => {
+        await toPreState(tx);
+        // no fixture: only the old site_metrics row itself is removed
+        await tx`delete from site_metrics where code = ${missing}`;
+        const [{ pre }] = await tx`select count(*)::int as pre from site_metrics where code ~ '^AGILITY_505_(M|YD)'`;
+        expect(pre).toBe(0);
+        await expect(
+          tx.savepoint(async (sp: Tx) => {
+            await sp.unsafe(upSql);
+          }),
+        ).rejects.toThrow(new RegExp(`${M_OF[missing]}|${YD_OF[missing]}`));
+        const [{ post }] = await tx`select count(*)::int as post from site_metrics where code ~ '^AGILITY_505_(M|YD)'`;
+        expect(post).toBe(0);
+      });
+    }
   }, TEST_TIMEOUT);
 
   it('is idempotent: a second run changes nothing and never produces _M_M codes', async () => {

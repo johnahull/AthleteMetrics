@@ -20,14 +20,14 @@
 -- Deliberately NOT done: organization_metrics rows (no auto-enable, matches
 -- 0123/0128/0131) and benchmark tiers (none in v1, spec Requirement 5).
 --
--- Requires migration 0144 (the _M_L/_M_R/_YD_L/_YD_R leg metrics): this file
--- RAISES EXCEPTION on a pre-0144 database.
+-- Requires migration 0144 (the _M_L/_M_R/_YD_L/_YD_R leg metrics) and the
+-- DASH_10M / DASH_10YD site_metrics rows: this file RAISES EXCEPTION otherwise.
 --
 -- Transaction: supplied by scripts/apply-manual-migrations.js, so no
 -- BEGIN/COMMIT here. Idempotent (ON CONFLICT (code) DO UPDATE).
 
 -- ============================================================================
--- Precondition: 0144 must have run
+-- Precondition: 0144 must have run, and the 10 m / 10 yd sprint metrics must exist
 -- ============================================================================
 DO $$
 DECLARE
@@ -37,12 +37,13 @@ BEGIN
     INTO v_missing
     FROM (VALUES
       ('AGILITY_505_M_L'), ('AGILITY_505_M_R'),
-      ('AGILITY_505_YD_L'), ('AGILITY_505_YD_R')
+      ('AGILITY_505_YD_L'), ('AGILITY_505_YD_R'),
+      ('DASH_10M'), ('DASH_10YD')
     ) AS req(code)
    WHERE NOT EXISTS (SELECT 1 FROM site_metrics s WHERE s.code = req.code);
 
   IF v_missing IS NOT NULL THEN
-    RAISE EXCEPTION 'Migration 0145 requires migration 0144 (5-0-5 protocol split) to be applied first; missing site_metrics rows: %', v_missing;
+    RAISE EXCEPTION 'Migration 0145 requires migration 0144 (5-0-5 protocol split) and the DASH_10M / DASH_10YD sprint metrics; missing site_metrics rows: %', v_missing;
   END IF;
 END $$;
 
@@ -90,8 +91,9 @@ ON CONFLICT (code) DO UPDATE SET
   is_derived = EXCLUDED.is_derived,
   formula = EXCLUDED.formula,
   dependent_metrics = EXCLUDED.dependent_metrics,
-  calculation_config = EXCLUDED.calculation_config,
-  is_active = true;
+  calculation_config = EXCLUDED.calculation_config;
+  -- is_active is deliberately NOT in the update set: a re-run must not
+  -- re-activate a metric a site admin deactivated (inserts are active).
 
 -- ============================================================================
 -- Summary

@@ -27,6 +27,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import postgres from 'postgres';
+import { ensurePre0144State } from './helpers/pre0144-fixture';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { eq } from 'drizzle-orm';
 import * as schema from '@shared/schema';
@@ -232,13 +233,15 @@ describe.skipIf(!DATABASE_URL)('Migration 0145: behavioral (real DB, rolled back
     return out as T;
   }
 
-  /** Pre-0144 state (undo 0144 first if the DB already has it). */
+  /**
+   * Canonical pre-0144 state (self-contained, independent of ambient DB state;
+   * see helpers/pre0144-fixture.ts).
+   */
   async function toPre0144(tx: Tx) {
-    const [{ n }] = await tx`select count(*)::int as n from site_metrics where code = 'AGILITY_505_M_L'`;
-    if (n > 0) await tx.unsafe(down0144);
+    await ensurePre0144State(tx, down0144);
   }
 
-  /** Post-0144 state, the exact 0144 up file applied (idempotent). */
+  /** Post-0144 state, the exact 0144 up file applied on the canonical pre-state. */
   async function to0144(tx: Tx) {
     await toPre0144(tx);
     await tx.unsafe(up0144);
@@ -365,6 +368,70 @@ describe.skipIf(!DATABASE_URL)('Migration 0145: behavioral (real DB, rolled back
       ).rejects.toThrow(/0144/);
       expect(await deficitRows(tx)).toHaveLength(0);
     });
+  }, TEST_TIMEOUT);
+
+  it('RAISES (and creates nothing) when DASH_10M or DASH_10YD is missing', async () => {
+    for (const dash of ['DASH_10M', 'DASH_10YD']) {
+      await inTx(async (tx) => {
+        await to0144(tx);
+        await tx`delete from site_metrics where code = ${dash}`;
+        await expect(
+          tx.savepoint(async (sp: Tx) => {
+            await sp.unsafe(upSql);
+          }),
+        ).rejects.toThrow(new RegExp(dash));
+        expect(await deficitRows(tx)).toHaveLength(0);
+      });
+    }
+  }, TEST_TIMEOUT);
+
+  it('re-run does not re-activate a deactivated deficit metric', async () => {
+    await inTx(async (tx) => {
+      await to0144(tx);
+      await tx.unsafe(upSql);
+      await tx`update site_metrics set is_active = false where code = 'AGILITY_COD_DEFICIT_M'`;
+      await tx.unsafe(upSql);
+      const rows = await deficitRows(tx);
+      const by = Object.fromEntries(rows.map((r) => [r.code, r]));
+      expect(by.AGILITY_COD_DEFICIT_M.is_active).toBe(false);
+      expect(by.AGILITY_COD_DEFICIT_YD.is_active).toBe(true);
+      // the definition is still restored by the re-run
+      expect(by.AGILITY_COD_DEFICIT_M.formula).toBe(M_FORMULA);
+    });
+  }, TEST_TIMEOUT);
+
+  it('down refuses (and changes nothing) when other tables reference the deficit codes', async () => {
+    const cases: Record<string, string> = {
+      custom_benchmarks: `insert into custom_benchmarks (id, organization_id, metric_code, name, benchmark_value)
+                          values ('fx145-cb', '${FX_ORG}', 'AGILITY_COD_DEFICIT_M', 'FX', 0.9)`,
+      goals: `insert into goals (id, user_id, metric, goal_type, target_value, baseline_value, current_value, target_date)
+              values ('fx145-goal', '${FX_USER}', 'AGILITY_COD_DEFICIT_YD', 'target', 0.7, 0.9, 0.8, '2027-01-01')`,
+      report_benchmarks: `insert into report_benchmarks (id, report_id, metric_code, name, benchmark_value)
+                          values ('fx145-rb', 'fx145-report', 'AGILITY_COD_DEFICIT_M', 'FX', 0.9)`,
+      reports_config: `update reports set config = '{"metrics":["AGILITY_COD_DEFICIT_YD"]}'::jsonb where id = 'fx145-report'`,
+      custom_org_metrics: `insert into custom_org_metrics (id, organization_id, code, label, metric_type, is_derived, formula, dependent_metrics)
+                           values ('fx145-com', '${FX_ORG}', 'FX_USES_DEFICIT', 'FX', 'lower_is_better', true,
+                                   'AGILITY_COD_DEFICIT_M * 2', ARRAY['AGILITY_COD_DEFICIT_M'])`,
+    };
+    for (const [name, stmt] of Object.entries(cases)) {
+      await inTx(async (tx) => {
+        await to0144(tx);
+        await tx.unsafe(upSql);
+        await tx`insert into organizations (id, name) values (${FX_ORG}, 'FX 145 Org')`;
+        await tx`insert into users (id, username, first_name, last_name, full_name, password)
+                 values (${FX_USER}, 'fx145user', 'Fx', 'One', 'Fx One', 'x')`;
+        await tx`insert into reports (id, organization_id, name, report_type, config)
+                 values ('fx145-report', ${FX_ORG}, 'FX', 'custom', '{"metrics":["VERTICAL_JUMP"]}'::jsonb)`;
+        await tx.unsafe(stmt);
+        await expect(
+          tx.savepoint(async (sp: Tx) => {
+            await sp.unsafe(downSql);
+          }),
+          name,
+        ).rejects.toThrow(/refused/i);
+        expect(await deficitRows(tx)).toHaveLength(2);
+      });
+    }
   }, TEST_TIMEOUT);
 
   it('down removes calculated deficit measurements and both metrics, leaving the 0144 state intact', async () => {

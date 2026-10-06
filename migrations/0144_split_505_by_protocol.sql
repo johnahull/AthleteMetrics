@@ -30,7 +30,7 @@
 --   0 — session-local helper functions (exact-token remapping)
 --   A — insert new site_metrics rows (_M copies of the old rows, fresh _YD rows)
 --   B — repoint all children (FK-safe order)
---   C — assertion: RAISE if any old-code reference remains
+--   C — assertion: RAISE unless all 8 new codes exist, or if any old-code reference remains
 --   D — delete the 4 old site_metrics rows
 --   E — seed approximate YD benchmarks (x0.914) + set items + YD LSI tiers
 --   F — summary notice
@@ -242,8 +242,24 @@ UPDATE site_metrics
 -- ============================================================================
 DO $$
 DECLARE
-  v_left INTEGER;
+  v_left    INTEGER;
+  v_missing TEXT;
 BEGIN
+  -- All 8 new codes must exist. Block A1 joins the old rows and silently skips
+  -- any old code that is missing, so a DB lacking one old row would otherwise
+  -- commit with fewer than 8 new codes (and Block D would delete the rest).
+  SELECT string_agg(req.code, ', ' ORDER BY req.code)
+    INTO v_missing
+    FROM (VALUES
+      ('AGILITY_505_M'), ('AGILITY_505_M_L'), ('AGILITY_505_M_R'), ('AGILITY_505_M_LSI'),
+      ('AGILITY_505_YD'), ('AGILITY_505_YD_L'), ('AGILITY_505_YD_R'), ('AGILITY_505_YD_LSI')
+    ) AS req(code)
+   WHERE NOT EXISTS (SELECT 1 FROM site_metrics s WHERE s.code = req.code);
+
+  IF v_missing IS NOT NULL THEN
+    RAISE EXCEPTION 'Migration 0144 aborted: expected all 8 new 5-0-5 site_metrics rows but these are missing (was an old AGILITY_505* row absent?): %', v_missing;
+  END IF;
+
   SELECT
       (SELECT COUNT(*) FROM organization_metrics   WHERE metric_code IN ('AGILITY_505', 'AGILITY_505_L', 'AGILITY_505_R', 'AGILITY_505_LSI'))
     + (SELECT COUNT(*) FROM event_metrics          WHERE metric_code IN ('AGILITY_505', 'AGILITY_505_L', 'AGILITY_505_R', 'AGILITY_505_LSI'))
