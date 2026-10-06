@@ -14,6 +14,7 @@ import {
   type AuxiliaryInputConfig,
 } from "../services/paired-input-compute";
 import { dateStringSchema } from "@shared/date-utils";
+import { MeasurementValueValidationError } from "@shared/measurement-value-validation";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import {
   canVerifyMeasurement,
@@ -395,7 +396,7 @@ export function registerMeasurementRoutes(app: Express) {
       if (error instanceof ZodError) {
         return res.status(400).json({ message: "Invalid input data", errors: error.errors });
       }
-      if (error instanceof PairedInputValidationError) {
+      if (error instanceof PairedInputValidationError || error instanceof MeasurementValueValidationError) {
         return res.status(400).json({ message: error.message, field: error.field });
       }
       const message = error instanceof Error ? error.message : "Failed to create measurement";
@@ -555,7 +556,7 @@ export function registerMeasurementRoutes(app: Express) {
       if (error instanceof ZodError) {
         return res.status(400).json({ message: "Invalid input data", errors: error.errors });
       }
-      if (error instanceof PairedInputValidationError) {
+      if (error instanceof PairedInputValidationError || error instanceof MeasurementValueValidationError) {
         return res.status(400).json({ message: error.message, field: error.field });
       }
       const message = error instanceof Error ? error.message : "Failed to update measurement";

@@ -10,7 +10,6 @@
  * - Integration with benchmark system
  */
 
-import { isPeerComparisonExcludedMetric } from '@shared/peer-comparison-exclusions';
 import { db } from "../db";
 import {
   users, measurements, globalAthletes, userGlobalAthleteLinks,
@@ -18,6 +17,7 @@ import {
   userTeams,
   type PeerPercentileCache, type User,
 } from "@shared/schema";
+import { isPeerComparisonExcludedMetric } from "@shared/peer-comparison-exclusions";
 import { eq, and, inArray, gte, lte, isNotNull, desc, sql } from "drizzle-orm";
 import { BaseService } from "./base-service";
 import { quantileRank, mean, quantile } from "simple-statistics";

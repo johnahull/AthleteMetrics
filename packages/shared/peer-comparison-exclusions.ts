@@ -10,7 +10,20 @@
  */
 const EXCLUDED_PREFIXES = ['MQ_', 'MQI_'];
 
-export function isPeerComparisonExcludedMetric(metricCode: string): boolean {
+/** True for every Movement Quality code (MQ_* base scores and totals, MQI_TOTAL). */
+export function isMovementQualityMetric(metricCode: string): boolean {
   const code = (metricCode || '').toUpperCase();
   return EXCLUDED_PREFIXES.some((prefix) => code.startsWith(prefix));
+}
+
+export function isPeerComparisonExcludedMetric(metricCode: string): boolean {
+  return isMovementQualityMetric(metricCode);
+}
+
+/** Thrown when an excluded metric is requested from a peer-comparison feature (maps to HTTP 400). */
+export class PeerComparisonExcludedMetricError extends Error {
+  constructor(metricCode: string, feature: string) {
+    super(`Invalid metric: ${metricCode} is not available for ${feature}`);
+    this.name = 'PeerComparisonExcludedMetricError';
+  }
 }

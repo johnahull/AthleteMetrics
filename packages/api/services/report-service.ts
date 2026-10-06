@@ -3,7 +3,6 @@
  * Supports coach reports (team-level aggregations) and individual reports (athlete-level)
  */
 
-import { stripMediaUrlDeep } from "../utils/measurement-redaction";
 import { db } from '../db';
 import {
   reports,
@@ -29,6 +28,7 @@ import { quantileRank, median, mean, min, max, standardDeviation } from 'simple-
 import { BaseService } from './base-service';
 import { evaluateTierBenchmark as evaluateTierBenchmarkPure } from './benchmark-tiers';
 import { type MetricExplanation } from '@shared/metric-explanations';
+import { isPeerComparisonExcludedMetric } from '@shared/peer-comparison-exclusions';
 import { getMetricExplanationsMap } from './metric-explanation-service';
 import { assembleTrends } from './report-trends';
 import { computeDistribution } from './report-distributions';
@@ -37,6 +37,7 @@ import { buildCohortLabel } from './cohort-label';
 import { pickLatestInWindow, toReportFvProfile } from './report-fv';
 import { SprintFvService } from './sprint-fv-service';
 import { checkSprintFvEnabled } from '../middleware/require-sprint-fv-enabled';
+import { stripMediaUrlDeep } from '../utils/measurement-redaction';
 import { resolveChartSelection, resolveTeamChartSelection, type ChartSelection } from '@shared/report-charts';
 import type { ReportTrends, ReportDistributions, TeamReportTrends, TeamReportDistributions } from '@shared/report-trends-types';
 import type { ReportFvProfile } from '@shared/report-fv-types';
@@ -659,6 +660,8 @@ export class ReportService extends BaseService {
     let weightedSum = 0;
 
     for (const [metric, weight] of Object.entries(weights)) {
+      // MQ ordinal scores never feed peer-based composites (AM-FEAT-015 D7)
+      if (isPeerComparisonExcludedMetric(metric)) continue;
       if (percentiles[metric] !== undefined) {
         totalWeight += weight;
         weightedSum += percentiles[metric] * weight;
@@ -699,7 +702,8 @@ export class ReportService extends BaseService {
     );
 
     for (const metric of metrics) {
-      if (athletePerformances[metric] === undefined) {
+      // MQ ordinal scores are excluded from peer percentiles/averages (AM-FEAT-015 D7)
+      if (athletePerformances[metric] === undefined || isPeerComparisonExcludedMetric(metric)) {
         continue;
       }
 
@@ -763,7 +767,8 @@ export class ReportService extends BaseService {
     const percentiles: Record<string, number> = {};
 
     for (const metric of metrics) {
-      if (athletePerformances[metric] === undefined) {
+      // MQ ordinal scores are excluded from peer percentiles (AM-FEAT-015 D7)
+      if (athletePerformances[metric] === undefined || isPeerComparisonExcludedMetric(metric)) {
         continue;
       }
 
@@ -1515,6 +1520,9 @@ export class ReportService extends BaseService {
     const athletes = Array.from(athleteMap.values());
 
     for (const metric of metrics) {
+      // MQ ordinal scores are excluded from peer percentiles/rankings (AM-FEAT-015 D7)
+      if (isPeerComparisonExcludedMetric(metric)) continue;
+
       const values = athletes
         .filter((a) => a.measurements[metric] !== undefined)
         .map((a) => a.measurements[metric]);

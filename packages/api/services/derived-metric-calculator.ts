@@ -369,190 +369,236 @@ export class DerivedMetricCalculator {
       // If scaling issues arise (many derived metrics triggered per source measurement),
       // consider batch-fetching all source measurements upfront or implementing a calculation queue.
       // Current implementation prioritizes code clarity and transaction safety over premature optimization.
+      // Sorted so concurrent calculations take the per-metric advisory locks in the same order
+      allDependentDerivedMetrics.sort((a, b) => a.code.localeCompare(b.code));
       for (const derivedMetric of allDependentDerivedMetrics) {
         try {
-          // Check if athlete already has a direct (non-calculated) measurement for this derived metric on this date
-          const [directMeasurement] = await tx
-            .select()
-            .from(measurements)
-            .where(
-              and(
-                eq(measurements.userId, measurement.userId),
-                eq(measurements.metric, derivedMetric.code),
-                eq(measurements.date, measurement.date),
-                eq(measurements.isCalculated, false)
-              )
-            )
-            .limit(1);
-
-          if (directMeasurement) {
-            // Direct measurements take priority - skip calculation
-            continue;
-          }
-
-          // Find source measurements for the formula
-          const sourceMeasurementsMap = await this.findSourceMeasurementsInTransaction(
+          const createdMeasurement = await this.computeAndUpsertDerived(
             tx,
+            derivedMetric,
             measurement.userId,
-            derivedMetric.dependentMetrics || [],
             measurement.date,
-            derivedMetric.calculationConfig || {
-              dateMatchStrategy: 'same_date',
-              missingSourceBehavior: 'skip',
-            },
-            metricConfigsMap
+            metricConfigsMap,
+            triggerContext || { event: 'measurement_insert' },
+            measurement
           );
-
-          if (!sourceMeasurementsMap) {
-            // Missing source measurements - skip based on missingSourceBehavior.
-            // With latest_event selection the newest event is incomplete, so a total
-            // calculated from an older event is stale: remove it.
-            if (derivedMetric.calculationConfig?.sourceSelection === 'latest_event') {
-              await tx
-                .delete(measurements)
-                .where(
-                  and(
-                    eq(measurements.userId, measurement.userId),
-                    eq(measurements.metric, derivedMetric.code),
-                    eq(measurements.date, measurement.date),
-                    eq(measurements.isCalculated, true)
-                  )
-                );
-            }
-            continue;
+          if (createdMeasurement) {
+            calculatedMeasurements.push(createdMeasurement);
           }
-
-          // Build source values for formula evaluation
-          // Keys are normalized to lowercase to match formula service's variable normalization
-          const sourceValues: Record<string, number> = {};
-          const sourceMeasurementIds: string[] = [];
-
-          for (const [metricCode, sourceMeasurement] of sourceMeasurementsMap.entries()) {
-            sourceValues[metricCode.toLowerCase()] = parseFloat(sourceMeasurement.value);
-            sourceMeasurementIds.push(sourceMeasurement.id);
-          }
-
-          // Evaluate the formula
-          const calculatedValue = evaluateFormula(
-            derivedMetric.formula || '',
-            sourceValues
-          );
-
-          if (calculatedValue === null) {
-            // Formula evaluation failed
-            continue;
-          }
-
-          // Check for invalid results (Infinity, NaN)
-          if (!isFinite(calculatedValue)) {
-            continue;
-          }
-
-          // Get user info for age calculation
-          const [user] = await tx
-            .select()
-            .from(users)
-            .where(eq(users.id, measurement.userId));
-
-          if (!user) {
-            continue;
-          }
-
-          // Calculate age at measurement date
-          const measurementDate = new Date(measurement.date);
-          let age = 0;
-          if (user.birthDate) {
-            const birthDate = new Date(user.birthDate);
-            age = measurementDate.getFullYear() - birthDate.getFullYear();
-            const birthdayThisYear = new Date(
-              measurementDate.getFullYear(),
-              birthDate.getMonth(),
-              birthDate.getDate()
-            );
-            if (measurementDate < birthdayThisYear) {
-              age -= 1;
-            }
-          }
-
-          // Check if calculated measurement already exists (update scenario)
-          const existingCalculated = await tx
-            .select()
-            .from(measurements)
-            .where(
-              and(
-                eq(measurements.userId, measurement.userId),
-                eq(measurements.metric, derivedMetric.code),
-                eq(measurements.date, measurement.date),
-                eq(measurements.isCalculated, true)
-              )
-            );
-
-          let createdMeasurement: Measurement;
-
-          if (existingCalculated.length > 0) {
-            // Update existing calculated measurement
-            const [updated] = await tx
-              .update(measurements)
-              .set({
-                value: calculatedValue.toFixed(3),
-                calculatedFromMeasurementIds: sourceMeasurementIds,
-                calculationMetadata: {
-                  formula: derivedMetric.formula || '',
-                  sourceValues,
-                  calculatedAt: new Date().toISOString(),
-                  calculationVersion: CALCULATION_VERSION,
-                  triggeredBy: triggerContext || { event: 'measurement_insert' },
-                },
-              })
-              .where(eq(measurements.id, existingCalculated[0].id))
-              .returning();
-
-            createdMeasurement = updated;
-          } else {
-            // Create new calculated measurement
-            const [newMeasurement] = await tx
-              .insert(measurements)
-              .values({
-                userId: measurement.userId,
-                submittedBy: measurement.submittedBy,
-                date: measurement.date,
-                metric: derivedMetric.code,
-                value: calculatedValue.toFixed(3),
-                units: derivedMetric.unit || '',
-                age,
-                isVerified: measurement.isVerified,
-                teamId: measurement.teamId,
-                season: measurement.season,
-                teamContextAuto: measurement.teamContextAuto,
-                teamNameSnapshot: measurement.teamNameSnapshot,
-                organizationId: measurement.organizationId,
-                isCalculated: true,
-                calculatedFromMeasurementIds: sourceMeasurementIds,
-                calculationMetadata: {
-                  formula: derivedMetric.formula || '',
-                  sourceValues,
-                  calculatedAt: new Date().toISOString(),
-                  calculationVersion: CALCULATION_VERSION,
-                  triggeredBy: triggerContext || { event: 'measurement_insert' },
-                },
-              })
-              .returning();
-
-            createdMeasurement = newMeasurement;
-          }
-
-          calculatedMeasurements.push(createdMeasurement);
         } catch (error) {
           // Log error but continue processing other derived metrics
-          console.error(
-            `Error calculating derived metric ${derivedMetric.code}:`,
-            error
-          );
+          console.error(`Error calculating derived metric ${derivedMetric.code}:`, {
+            userId: measurement.userId,
+            metric: derivedMetric.code,
+            date: measurement.date,
+            error,
+          });
         }
       }
 
       return calculatedMeasurements;
     });
+  }
+
+  /**
+   * Calculate one derived metric for (userId, date) and create or update its
+   * calculated measurement. Shared by processNewMeasurement and by
+   * recalculateForAthlete when no calculated row exists yet for that date (e.g. a
+   * source moved onto the date, or the remaining same-date sources became the set).
+   *
+   * Concurrency: takes a transaction-scoped advisory lock on
+   * (athlete, derived metric, date) so concurrent calculations serialize and the
+   * second one updates the row the first one inserted instead of duplicating it.
+   *
+   * @param contextMeasurement - Source measurement whose team/org/season context a
+   *   newly created calculated row inherits; defaults to the most recently created
+   *   source measurement used by the formula.
+   * @returns the created/updated calculated measurement, or null when it cannot be
+   *   calculated (direct measurement exists, sources missing, invalid result)
+   */
+  private async computeAndUpsertDerived(
+    tx: DbTransaction,
+    derivedMetric: {
+      code: string;
+      formula: string | null;
+      dependentMetrics: string[] | null;
+      calculationConfig: { dateMatchStrategy: 'same_date' | 'latest_before' | 'closest'; maxDateDifference?: number; missingSourceBehavior: 'skip' | 'error'; sourceSelection?: 'latest_event' } | null;
+      unit: string | null;
+    },
+    userId: string,
+    date: string,
+    metricConfigsMap: Map<string, { higherIsBetter: boolean }>,
+    triggerContext: TriggerContext | undefined,
+    contextMeasurement?: Measurement
+  ): Promise<Measurement | null> {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${`derived:${userId}:${derivedMetric.code}:${date}`}, 0))`
+    );
+
+    // Check if athlete already has a direct (non-calculated) measurement for this derived metric on this date
+    const [directMeasurement] = await tx
+      .select()
+      .from(measurements)
+      .where(
+        and(
+          eq(measurements.userId, userId),
+          eq(measurements.metric, derivedMetric.code),
+          eq(measurements.date, date),
+          eq(measurements.isCalculated, false)
+        )
+      )
+      .limit(1);
+
+    if (directMeasurement) {
+      // Direct measurements take priority - skip calculation
+      return null;
+    }
+
+    // Find source measurements for the formula
+    const sourceMeasurementsMap = await this.findSourceMeasurementsInTransaction(
+      tx,
+      userId,
+      derivedMetric.dependentMetrics || [],
+      date,
+      derivedMetric.calculationConfig || {
+        dateMatchStrategy: 'same_date',
+        missingSourceBehavior: 'skip',
+      },
+      metricConfigsMap
+    );
+
+    if (!sourceMeasurementsMap) {
+      // Missing source measurements - skip based on missingSourceBehavior.
+      // With latest_event selection the newest event is incomplete, so a total
+      // calculated from an older event is stale: remove it.
+      if (derivedMetric.calculationConfig?.sourceSelection === 'latest_event') {
+        await tx
+          .delete(measurements)
+          .where(
+            and(
+              eq(measurements.userId, userId),
+              eq(measurements.metric, derivedMetric.code),
+              eq(measurements.date, date),
+              eq(measurements.isCalculated, true)
+            )
+          );
+      }
+      return null;
+    }
+
+    // Build source values for formula evaluation
+    // Keys are normalized to lowercase to match formula service's variable normalization
+    const sourceValues: Record<string, number> = {};
+    const sourceMeasurementIds: string[] = [];
+
+    for (const [metricCode, sourceMeasurement] of sourceMeasurementsMap.entries()) {
+      sourceValues[metricCode.toLowerCase()] = parseFloat(sourceMeasurement.value);
+      sourceMeasurementIds.push(sourceMeasurement.id);
+    }
+
+    // Evaluate the formula
+    const calculatedValue = evaluateFormula(
+      derivedMetric.formula || '',
+      sourceValues
+    );
+
+    // Formula evaluation failed, or invalid result (Infinity, NaN)
+    if (calculatedValue === null || !isFinite(calculatedValue)) {
+      return null;
+    }
+
+    // Get user info for age calculation
+    const [user] = await tx
+      .select()
+      .from(users)
+      .where(eq(users.id, userId));
+
+    if (!user) {
+      return null;
+    }
+
+    // Calculate age at measurement date
+    const measurementDate = new Date(date);
+    let age = 0;
+    if (user.birthDate) {
+      const birthDate = new Date(user.birthDate);
+      age = measurementDate.getFullYear() - birthDate.getFullYear();
+      const birthdayThisYear = new Date(
+        measurementDate.getFullYear(),
+        birthDate.getMonth(),
+        birthDate.getDate()
+      );
+      if (measurementDate < birthdayThisYear) {
+        age -= 1;
+      }
+    }
+
+    const calculationMetadata = {
+      formula: derivedMetric.formula || '',
+      sourceValues,
+      calculatedAt: new Date().toISOString(),
+      calculationVersion: CALCULATION_VERSION,
+      triggeredBy: triggerContext || { event: 'measurement_insert' as const },
+    };
+
+    // Check if calculated measurement already exists (update scenario)
+    const existingCalculated = await tx
+      .select()
+      .from(measurements)
+      .where(
+        and(
+          eq(measurements.userId, userId),
+          eq(measurements.metric, derivedMetric.code),
+          eq(measurements.date, date),
+          eq(measurements.isCalculated, true)
+        )
+      );
+
+    if (existingCalculated.length > 0) {
+      // Update existing calculated measurement
+      const [updated] = await tx
+        .update(measurements)
+        .set({
+          value: calculatedValue.toFixed(3),
+          calculatedFromMeasurementIds: sourceMeasurementIds,
+          calculationMetadata,
+        })
+        .where(eq(measurements.id, existingCalculated[0].id))
+        .returning();
+
+      return updated;
+    }
+
+    const context =
+      contextMeasurement ??
+      Array.from(sourceMeasurementsMap.values()).reduce((latest, m) =>
+        new Date(m.createdAt).getTime() > new Date(latest.createdAt).getTime() ? m : latest
+      );
+
+    // Create new calculated measurement
+    const [newMeasurement] = await tx
+      .insert(measurements)
+      .values({
+        userId,
+        submittedBy: context.submittedBy,
+        date,
+        metric: derivedMetric.code,
+        value: calculatedValue.toFixed(3),
+        units: derivedMetric.unit || '',
+        age,
+        isVerified: context.isVerified,
+        teamId: context.teamId,
+        season: context.season,
+        teamContextAuto: context.teamContextAuto,
+        teamNameSnapshot: context.teamNameSnapshot,
+        organizationId: context.organizationId,
+        isCalculated: true,
+        calculatedFromMeasurementIds: sourceMeasurementIds,
+        calculationMetadata,
+      })
+      .returning();
+
+    return newMeasurement;
   }
 
   /**
@@ -718,7 +764,9 @@ export class DerivedMetricCalculator {
     const metricCodes = Array.from(allDependentMetrics);
     const metricConfigsMap = await this.fetchMetricConfigs(dbOrTx, metricCodes, userOrgIds[0]);
 
-    // For each derived metric, recalculate or delete calculated measurements
+    // For each derived metric, recalculate or delete calculated measurements.
+    // Sorted so concurrent calculations take the per-metric advisory locks in the same order.
+    allDependentDerivedMetrics.sort((a, b) => a.code.localeCompare(b.code));
     for (const derivedMetric of allDependentDerivedMetrics) {
       try {
         // Find all calculated measurements for this derived metric and athlete
@@ -737,6 +785,15 @@ export class DerivedMetricCalculator {
           .select()
           .from(measurements)
           .where(and(...conditions));
+
+        if (date && calculatedMeasurements.length === 0) {
+          // No total exists on this date yet (e.g. a source was moved onto it, or the
+          // remaining same-date sources now form a complete set): try to create it.
+          await dbOrTx.transaction((tx) =>
+            this.computeAndUpsertDerived(tx, derivedMetric, userId, date, metricConfigsMap, triggerContext)
+          );
+          continue;
+        }
 
         for (const calculatedMeasurement of calculatedMeasurements) {
           // Try to find source measurements
@@ -801,10 +858,12 @@ export class DerivedMetricCalculator {
             .where(eq(measurements.id, calculatedMeasurement.id));
         }
       } catch (error) {
-        console.error(
-          `Error recalculating derived metric ${derivedMetric.code}:`,
-          error
-        );
+        console.error(`Error recalculating derived metric ${derivedMetric.code}:`, {
+          userId,
+          metric: derivedMetric.code,
+          date,
+          error,
+        });
       }
     }
   }

@@ -33,6 +33,7 @@ import {
   type SecurityEvent,
 } from "@shared/schema";
 import type { WellnessTrend } from "@shared/wellness-types";
+import { validateMeasurementValue, MeasurementValueValidationError } from "@shared/measurement-value-validation";
 import { db } from "./db";
 import { wellnessRepository, type WellnessTrend as RepoWellnessTrend } from "./repositories/wellness-repository";
 import { eq, desc, asc, and, gte, lte, gt, inArray, sql, arrayContains, or, isNull, isNotNull, exists, ne, SQL } from "drizzle-orm";
@@ -3716,6 +3717,23 @@ export class DatabaseStorage implements IStorage {
       eventDateSnapshot: string;  // String in 'YYYY-MM-DD' format for Drizzle's date() type
     }
   ): Promise<Measurement> {
+    // Metric-aware value validation, same rule as MeasurementService (CSV/OCR
+    // imports and other callers write through here without the service).
+    // Paired-input metrics validate their own inputs.
+    const [metricConfig] = await db
+      .select({
+        validationMin: siteMetrics.validationMin,
+        validationMax: siteMetrics.validationMax,
+        decimalPrecision: siteMetrics.decimalPrecision,
+        auxiliaryInputConfig: siteMetrics.auxiliaryInputConfig,
+      })
+      .from(siteMetrics)
+      .where(eq(siteMetrics.code, measurement.metric));
+    if (!metricConfig?.auxiliaryInputConfig) {
+      const valueError = validateMeasurementValue(measurement.value, metricConfig, measurement.metric);
+      if (valueError) throw new MeasurementValueValidationError(valueError);
+    }
+
     // Calculate age and units based on metric
     const user = await this.getUser(measurement.userId);
     if (!user) throw new Error("User not found");

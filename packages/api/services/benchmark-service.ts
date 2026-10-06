@@ -4,7 +4,6 @@
  * and benchmark enablement with athlete attribute filtering
  */
 
-import { isPeerComparisonExcludedMetric } from '@shared/peer-comparison-exclusions';
 import { BaseService } from "./base-service";
 import { retryAuditLog } from "../utils/audit-retry";
 import { db } from "../db";
@@ -16,6 +15,7 @@ import {
   updateCustomBenchmarkSchema,
   insertTierGroupSchema,
 } from "@shared/schema";
+import { isPeerComparisonExcludedMetric } from "@shared/peer-comparison-exclusions";
 import type {
   SiteBenchmark,
   InsertSiteBenchmark,
@@ -135,6 +135,13 @@ export class BenchmarkService extends BaseService {
       // Validate input if provided fields
       if (Object.keys(benchmarkData).length > 0) {
         updateSiteBenchmarkSchema.parse(benchmarkData);
+      }
+
+      // The raw data is spread into the update, so a metricCode the schema does not
+      // declare still reaches storage: apply the create-time MQ exclusion here too.
+      const retargetCode = (benchmarkData as { metricCode?: unknown }).metricCode;
+      if (typeof retargetCode === "string" && isPeerComparisonExcludedMetric(retargetCode)) {
+        throw new Error(`Invalid metric: ${retargetCode} is not available for benchmarks`);
       }
 
       // Update benchmark
@@ -578,6 +585,12 @@ export class BenchmarkService extends BaseService {
       // Validate input if provided fields
       if (Object.keys(benchmarkData).length > 0) {
         updateCustomBenchmarkSchema.parse(benchmarkData);
+      }
+
+      // See updateSiteBenchmark: block retargeting to an MQ metric on update too.
+      const retargetCode = (benchmarkData as { metricCode?: unknown }).metricCode;
+      if (typeof retargetCode === "string" && isPeerComparisonExcludedMetric(retargetCode)) {
+        throw new Error(`Invalid metric: ${retargetCode} is not available for benchmarks`);
       }
 
       // Update benchmark (storage layer validates ownership)

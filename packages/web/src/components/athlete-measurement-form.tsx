@@ -24,8 +24,11 @@ interface AthleteMeasurementFormProps {
 
 // Create dynamic measurement schema that accepts any metric string
 // Backend will validate against org-enabled metrics
-const dynamicMeasurementSchema = insertMeasurementSchema.omit({ metric: true }).extend({
+export const dynamicMeasurementSchema = insertMeasurementSchema.omit({ metric: true }).extend({
   metric: z.string().min(1, "Metric is required"),
+  // The shared schema allows 0 for MQ 0-3 scores (entered via the event MQ panel);
+  // this general form keeps the positive() rule so its default 0 is never submitted.
+  value: z.number().positive("Value must be positive"),
 });
 
 type DynamicInsertMeasurement = z.infer<typeof dynamicMeasurementSchema>;

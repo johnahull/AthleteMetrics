@@ -17,7 +17,8 @@ import {
   type Organization,
 } from '@shared/schema';
 import { parseDateFilter } from '@shared/date-utils';
-import { validateMeasurementValue } from '@shared/measurement-value-validation';
+import { validateMeasurementValue, MeasurementValueValidationError } from '@shared/measurement-value-validation';
+import { isMovementQualityMetric } from '@shared/peer-comparison-exclusions';
 import { db } from '../db';
 import { eq, and, gte, lte, or, isNull, sql, desc, inArray, arrayContains } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
@@ -187,16 +188,25 @@ export class MeasurementService {
           validationMin: siteMetrics.validationMin,
           validationMax: siteMetrics.validationMax,
           decimalPrecision: siteMetrics.decimalPrecision,
+          isDerived: siteMetrics.isDerived,
         })
         .from(siteMetrics)
         .where(eq(siteMetrics.code, measurement.metric));
 
+      // MQ totals (MQI_TOTAL, MQ_TRANSITION_TOTAL) are only ever calculated from
+      // the base scores; a manual entry would shadow the calculated total.
+      if (metricConfig?.isDerived && isMovementQualityMetric(measurement.metric)) {
+        throw new MeasurementValueValidationError(
+          `${measurement.metric} is calculated automatically and cannot be entered manually`
+        );
+      }
+
       // Metric-aware value validation: positive by default, 0-allowed range
-      // check for metrics with validation_min <= 0 (e.g. MQ 0-3 scores).
-      // Paired-input metrics validate their own inputs, so skip them here.
+      // check for MQ metrics (0-3 scores). Paired-input metrics validate their
+      // own inputs, so skip them here.
       if (!metricConfig?.auxiliaryInputConfig) {
-        const valueError = validateMeasurementValue(measurement.value, metricConfig);
-        if (valueError) throw new Error(valueError);
+        const valueError = validateMeasurementValue(measurement.value, metricConfig, measurement.metric);
+        if (valueError) throw new MeasurementValueValidationError(valueError);
       }
 
       // Use metric's configured unit, or default to 'in' for unknown metrics
@@ -365,7 +375,7 @@ export class MeasurementService {
       });
     } catch (error) {
       // Preserve error specificity - don't wrap validation errors
-      if (error instanceof PairedInputValidationError) {
+      if (error instanceof PairedInputValidationError || error instanceof MeasurementValueValidationError) {
         throw error;
       }
       if (error instanceof Error) {
@@ -407,7 +417,13 @@ export class MeasurementService {
         sourceMeasurementId: newMeasurement.id,
       });
     } catch (derivedError) {
-      console.error('Derived metric calculation failed after measurement create:', derivedError);
+      console.error('Derived metric calculation failed after measurement create:', {
+        measurementId: newMeasurement.id,
+        userId: newMeasurement.userId,
+        metric: newMeasurement.metric,
+        date: newMeasurement.date,
+        error: derivedError,
+      });
     }
 
     // ACHIEVEMENTS: Check for newly unlocked achievements AFTER transaction commits
@@ -669,8 +685,8 @@ export class MeasurementService {
           // metric changes, re-validate the existing stored value against the new metric.
           if (!metricConfig?.auxiliaryInputConfig) {
             const valueToCheck = measurement.value !== undefined ? measurement.value : Number(existing.value);
-            const valueError = validateMeasurementValue(valueToCheck, metricConfig);
-            if (valueError) throw new Error(valueError);
+            const valueError = validateMeasurementValue(valueToCheck, metricConfig, effectiveMetricCode);
+            if (valueError) throw new MeasurementValueValidationError(valueError);
           }
 
           if (metricIsChanging) {
@@ -766,11 +782,15 @@ export class MeasurementService {
         return { updated, previous: existing };
       });
 
-      // DERIVED METRICS: Trigger recalculation if value, date, metric or athlete changed.
+      // DERIVED METRICS: Trigger recalculation if value (incl. a paired-input
+      // auxiliaryValue that recomputes the value), date, metric or athlete changed.
       // Runs AFTER the transaction commits so the calculator (separate connection)
       // sees the updated row. Failures are logged: the update is already persisted.
+      // recalculateForAthlete also creates a total that does not exist yet, so a
+      // source moved onto a date/metric that completes a set produces its total.
       if (
         measurement.value !== undefined ||
+        measurement.auxiliaryValue !== undefined ||
         measurement.date !== undefined ||
         measurement.metric !== undefined ||
         measurement.userId !== undefined
@@ -803,14 +823,20 @@ export class MeasurementService {
             );
           }
         } catch (derivedError) {
-          console.error('Derived metric recalculation failed after measurement update:', derivedError);
+          console.error('Derived metric recalculation failed after measurement update:', {
+            measurementId: txUpdated.id,
+            userId: txUpdated.userId,
+            metric: txUpdated.metric,
+            date: txUpdated.date,
+            error: derivedError,
+          });
         }
       }
 
       return txUpdated;
     } catch (error) {
       // Preserve error specificity
-      if (error instanceof PairedInputValidationError) {
+      if (error instanceof PairedInputValidationError || error instanceof MeasurementValueValidationError) {
         throw error;
       }
       if (error instanceof Error) {
@@ -880,7 +906,13 @@ export class MeasurementService {
           },
         });
       } catch (derivedError) {
-        console.error('Derived metric recalculation failed after measurement delete:', derivedError);
+        console.error('Derived metric recalculation failed after measurement delete:', {
+          measurementId: deleted.measurementId,
+          userId: deleted.userId,
+          metric: deleted.metric,
+          date: deleted.date,
+          error: derivedError,
+        });
       }
     } catch (error) {
       // Preserve error specificity
