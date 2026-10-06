@@ -15,6 +15,15 @@ const read = (f: string) => fs.readFileSync(path.resolve(__dirname, '../../migra
 const up = read('0148_mqi_latest_event_selection.sql');
 const down = read('0148_mqi_latest_event_selection_down.sql');
 
+const stripComments = (s: string) =>
+  s
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('--'))
+    .join('\n');
+
+const UNRELATED = `TEST_0148_UNRELATED_${Date.now()}`;
+const UNRELATED_CONFIG = { dateMatchStrategy: 'latest_before', missingSourceBehavior: 'skip' };
+
 const config = async (code: string) => {
   const rows: any = await db.execute(sql`SELECT calculation_config FROM site_metrics WHERE code = ${code}`);
   return (rows.rows ?? rows)[0]?.calculation_config;
@@ -23,13 +32,27 @@ const config = async (code: string) => {
 describe('0148_mqi_latest_event_selection', () => {
   beforeAll(async () => {
     await db.execute(sql.raw(read('0146_seed_mqi_metrics.sql')));
+    await db.execute(sql`
+      INSERT INTO site_metrics (code, label, category, unit, metric_type, is_active, is_derived, formula, dependent_metrics, calculation_config)
+      VALUES (${UNRELATED}, 'Unrelated derived', 'test', 'in', 'higher_is_better', true, true, 'VERTICAL_JUMP * 2',
+              ARRAY['VERTICAL_JUMP'], ${JSON.stringify(UNRELATED_CONFIG)}::jsonb)
+    `);
   });
   afterAll(async () => {
+    await db.execute(sql`DELETE FROM site_metrics WHERE code = ${UNRELATED}`);
     await db.execute(sql.raw(up));
   });
 
-  it('does not edit 0146 (no sourceSelection there)', () => {
-    expect(read('0146_seed_mqi_metrics.sql')).not.toContain('sourceSelection');
+  it('does not edit 0146 (0146 never sets sourceSelection itself)', () => {
+    expect(stripComments(read('0146_seed_mqi_metrics.sql'))).not.toMatch(/sourceSelection/);
+  });
+
+  it('re-applying 0146 after 0148 keeps latest-event selection (0146 merges calculation_config)', async () => {
+    await db.execute(sql.raw(up));
+    await db.execute(sql.raw(read('0146_seed_mqi_metrics.sql')));
+    for (const code of ['MQI_TOTAL', 'MQ_TRANSITION_TOTAL']) {
+      expect((await config(code)).sourceSelection).toBe('latest_event');
+    }
   });
 
   it('up sets sourceSelection on both totals, keeps existing keys, and is idempotent', async () => {
@@ -47,6 +70,9 @@ describe('0148_mqi_latest_event_selection', () => {
     await db.execute(sql.raw(up));
     const base = await config('MQ_JUMP');
     expect(base?.sourceSelection).toBeUndefined();
+    expect(await config(UNRELATED)).toEqual(UNRELATED_CONFIG);
+    await db.execute(sql.raw(down));
+    expect(await config(UNRELATED)).toEqual(UNRELATED_CONFIG);
   });
 
   it('down removes the key and is idempotent', async () => {
