@@ -263,7 +263,7 @@ git diff main develop                     # Full diff
 ### Database Operations
 - `npm run db:push` - Apply schema changes from `packages/shared/schema.ts` to database (development only)
 - `npm run db:migrate` - Run drizzle migrations (0000-0013)
-- `npm run db:migrate:manual` - Run manual SQL migrations (0014+ through 0148; 0144/0145 reserved for AM-FEAT-016)
+- `npm run db:migrate:manual` - Run manual SQL migrations (0014+; AM-FEAT-015 adds 0146-0149; 0144/0145 reserved for AM-FEAT-016)
 - `npm run db:migrate:all` - Run all migrations (drizzle + manual)
 - `npm run db:validate` - Validate migration safety before applying
 
@@ -276,7 +276,7 @@ This project uses a **dual migration system**:
    - Requires both SQL files and snapshot JSON files
    - Tracked in `drizzle.__drizzle_migrations` table
 
-2. **Manual SQL migrations (0014+, currently through 0148; 0144/0145 reserved for AM-FEAT-016)**: Applied via `npm run db:migrate:manual`
+2. **Manual SQL migrations (0014+; AM-FEAT-015 adds 0146-0149; 0144/0145 reserved for AM-FEAT-016)**: Applied via `npm run db:migrate:manual`
    - Pure SQL migrations without drizzle snapshots
    - Applied using scripts/apply-manual-migrations.js
    - Tracked in `manual_migrations` table
