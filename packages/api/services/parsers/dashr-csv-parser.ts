@@ -509,6 +509,12 @@ export class DashrCsvParser implements DeviceImportParser {
       }
 
       const metric = mapDrillType(row);
+      if (metric && (row['Type'] || '').trim() === '505 Agility Test') {
+        const rawUnits = (row['Units'] || '').trim();
+        if (!['imperial', 'metric'].includes(rawUnits.toLowerCase())) {
+          warnings.push(`Units missing/unrecognized ('${rawUnits}'); 5-0-5 saved as yards (_YD)`);
+        }
+      }
       if (!metric) {
         warnings.push(`Unsupported drill type "${row['Type']}" for ${firstName} ${lastName}`);
         continue;

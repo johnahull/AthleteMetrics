@@ -242,7 +242,7 @@ describe('POST /api/import/templates/wizard', () => {
     expect(response.status).toBe(200);
 
     // Should include common metrics that are enabled
-    const commonMetrics = ['FLY10_TIME', 'VERTICAL_JUMP', 'DASH_40YD', 'AGILITY_505', 'TOP_SPEED'];
+    const commonMetrics = ['FLY10_TIME', 'VERTICAL_JUMP', 'DASH_40YD', 'AGILITY_505_YD', 'TOP_SPEED'];
     const metricCodes = response.body.enabledMetrics.map((m: any) => m.code);
 
     // At least some common metrics should be present

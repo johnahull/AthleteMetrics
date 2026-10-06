@@ -443,7 +443,7 @@ describe('BenchmarkAnalyticsService', () => {
     });
 
     it('should return empty array for metric with no benchmarks', async () => {
-      const result = await service.getBenchmarksForMetric(testOrgId, 'AGILITY_505');
+      const result = await service.getBenchmarksForMetric(testOrgId, 'AGILITY_505_M');
 
       expect(result).toBeDefined();
       expect(Array.isArray(result)).toBe(true);
@@ -882,7 +882,7 @@ describe('BenchmarkAnalyticsService', () => {
       // Create a new benchmark with no measurements
       const [newBenchmark] = await db.insert(siteBenchmarks).values({
         name: `Empty Benchmark ${uniqueSuffix}`,
-        metricCode: 'AGILITY_505',
+        metricCode: 'AGILITY_505_M',
         benchmarkValue: 2.50,
         comparisonOperator: 'lte',
         gender: null,

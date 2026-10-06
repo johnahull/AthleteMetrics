@@ -25,7 +25,7 @@ describe('getDefaultUnit', () => {
     expect(getDefaultUnit('FLY10_TIME')).toBe('s');
     expect(getDefaultUnit('VERTICAL_JUMP')).toBe('s');
     expect(getDefaultUnit('DASH_40YD')).toBe('s');
-    expect(getDefaultUnit('AGILITY_505')).toBe('s');
+    expect(getDefaultUnit('AGILITY_505_YD')).toBe('s');
     expect(getDefaultUnit('AGILITY_5105')).toBe('s');
     expect(getDefaultUnit('T_TEST')).toBe('s');
     expect(getDefaultUnit('RSI')).toBe('s');

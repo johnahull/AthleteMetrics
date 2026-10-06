@@ -568,12 +568,35 @@ describe('5-0-5 protocol from the Units column', () => {
     expect(firstMetric(units, direction)).toBe(expected);
   });
 
+  function warnings505(units: string): string[] {
+    return parser.parse(makeCsv([row505(units, '')])).warnings.filter(w => w.includes('5-0-5'));
+  }
+
   it.each([
     ['blank Units', ''],
     ['unrecognized Units', 'Furlongs'],
-  ])('%s defaults to the yard protocol (Decision #2)', (_label, units) => {
+    ['Units=Meters', 'Meters'],
+    ['Units=m', 'm'],
+  ])('%s defaults to the yard protocol (Decision #2) and warns', (_label, units) => {
     expect(firstMetric(units, '')).toBe('AGILITY_505_YD');
     expect(firstMetric(units, 'L')).toBe('AGILITY_505_YD_L');
+    expect(warnings505(units)).toEqual([
+      `Units missing/unrecognized ('${units}'); 5-0-5 saved as yards (_YD)`,
+    ]);
+  });
+
+  it.each(['Imperial', 'imperial', 'IMPERIAL', 'Metric', 'metric', 'METRIC', ' Metric '])(
+    'Units=%j produces no 5-0-5 protocol warning',
+    (units) => {
+      expect(warnings505(units)).toEqual([]);
+    },
+  );
+
+  it('does not add unit warnings for non-505 rows with blank Units', () => {
+    const csv = makeCsv([
+      '01/01/2025 10:00:00,John,,Doe,Dash,,,,,,,,,,,,,,,,,,,,,5.200000,40.000000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,',
+    ]);
+    expect(parser.parse(csv).warnings.filter(w => w.includes('Units'))).toEqual([]);
   });
 
   it('never emits the retired 5-0-5 codes', () => {

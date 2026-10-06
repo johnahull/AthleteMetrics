@@ -33,7 +33,7 @@ beforeAll(() => {
 const mockSiteMetrics = [
   { code: 'FLY10_TIME', label: '10-Yard Fly', category: 'Speed', units: 'seconds' },
   { code: 'VERTICAL_JUMP', label: 'Vertical Jump', category: 'Power', units: 'inches' },
-  { code: 'AGILITY_505', label: '5-0-5 Agility', category: 'Agility', units: 'seconds' },
+  { code: 'AGILITY_505_YD', label: '5-0-5 Agility', category: 'Agility', units: 'seconds' },
   { code: 'DASH_40YD', label: '40-Yard Dash', category: 'Speed', units: 'seconds' },
   { code: 'T_TEST', label: 'T-Test', category: 'Agility', units: 'seconds' },
 ];
@@ -228,7 +228,7 @@ describe('MetricsSelector', () => {
       const selectedMetrics: SelectedMetric[] = [
         { code: 'FLY10_TIME', label: '10-Yard Fly', isRequired: false },
         { code: 'VERTICAL_JUMP', label: 'Vertical Jump', isRequired: true },
-        { code: 'AGILITY_505', label: '5-0-5 Agility', isRequired: false },
+        { code: 'AGILITY_505_YD', label: '5-0-5 Agility', isRequired: false },
       ];
 
       render(

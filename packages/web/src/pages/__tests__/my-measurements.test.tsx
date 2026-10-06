@@ -73,7 +73,7 @@ vi.mock('@/hooks/use-available-metrics', () => ({
     metrics: [
       { code: 'FLY10_TIME', label: '10-Yard Fly', unit: 's' },
       { code: 'VERTICAL_JUMP', label: 'Vertical Jump', unit: 'in' },
-      { code: 'AGILITY_505', label: '5-0-5 Agility', unit: 's' },
+      { code: 'AGILITY_505_YD', label: '5-0-5 Agility', unit: 's' },
     ],
     isLoading: false,
   })),
