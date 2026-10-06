@@ -7,7 +7,10 @@
  *  - validation (http / private host rejected) on every write path
  *  - Decision 12: mediaUrl never appears in report snapshots, CSV export,
  *    LLM export or COPPA export payloads
+ *  - Decision 12: mediaUrl never appears in parent or unified (cross-org) views,
+ *    and createSnapshot strips it even if a generator leaks it
  *  - tenant isolation: another org's coach cannot read/write mediaUrl
+ *  - event writes keep their event_id (storage eventContext fallback)
  */
 
 process.env.NODE_ENV = 'test';
@@ -41,8 +44,11 @@ import {
   measurements,
   reports,
   events,
+  globalAthletes,
+  userGlobalAthleteLinks,
 } from '@shared/schema';
-import { dataExportRequests } from '@shared/schema/tables/coppa';
+import { dataExportRequests, parentAthleteLinks } from '@shared/schema/tables/coppa';
+import { ReportService } from '../../packages/api/services/report-service';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 
 const PASSWORD = 'TestCoach123!';
@@ -50,6 +56,10 @@ const CLIP = 'https://clips.example.com/video/abc123?t=42';
 const CLIP2 = 'https://clips.example.com/video/zzz999';
 // Distinctive sentinel so a leak is unambiguous in serialized payloads.
 const LEAK = 'https://leakcheck.example.com/secret-clip-SENTINEL';
+// Unique per-test URLs, so a DB lookup by URL can only match the row that test wrote.
+const BATCH_CLIP = `https://clips.example.com/batch-only/${Date.now()}`;
+const CROSS_ORG_CLIP = `https://clips.example.com/cross-org/${Date.now()}`;
+const CROSS_ORG_EVENT_CLIP = `https://clips.example.com/cross-org-event/${Date.now()}`;
 
 let app: Express;
 const suffix = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
@@ -63,9 +73,9 @@ let athlete: any;
 let eventA: any;
 let coachACookie: string;
 let coachBCookie: string;
-const createdMeasurementIds: string[] = [];
 const createdReportIds: string[] = [];
 const createdExportUserIds: string[] = [];
+const createdGlobalAthleteIds: string[] = [];
 
 async function login(username: string): Promise<string> {
   const res = await request(app).post('/api/auth/login').send({ username, password: PASSWORD });
@@ -134,6 +144,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   for (const id of createdReportIds) await db.delete(reports).where(eq(reports.id, id));
+  if (createdGlobalAthleteIds.length) await db.delete(globalAthletes).where(inArray(globalAthletes.id, createdGlobalAthleteIds));
+  if (athlete) await db.delete(parentAthleteLinks).where(eq(parentAthleteLinks.athleteUserId, athlete.id));
   const uids = [coachA?.id, coachB?.id, athlete?.id, ...createdExportUserIds].filter(Boolean);
   if (uids.length) {
     await db.delete(dataExportRequests).where(inArray(dataExportRequests.athleteUserId, uids));
@@ -158,7 +170,6 @@ describe('POST/PUT/GET /api/measurements - mediaUrl round-trip', () => {
     expect(res.status).toBe(201);
     expect(res.body.mediaUrl).toBe(CLIP);
     id = res.body.id;
-    createdMeasurementIds.push(id);
 
     const one = await request(app).get(`/api/measurements/${id}`).set('Cookie', coachACookie);
     expect(one.status).toBe(200);
@@ -176,8 +187,7 @@ describe('POST/PUT/GET /api/measurements - mediaUrl round-trip', () => {
   it('measurement created without mediaUrl has null mediaUrl', async () => {
     const res = await request(app).post('/api/measurements').set('Cookie', coachACookie).send(base());
     expect(res.status).toBe(201);
-    expect(res.body.mediaUrl ?? null).toBeNull();
-    createdMeasurementIds.push(res.body.id);
+    expect(res.body).toHaveProperty('mediaUrl', null);
   });
 
   it('PUT updates mediaUrl', async () => {
@@ -234,10 +244,13 @@ describe('POST/PUT/GET /api/measurements - mediaUrl round-trip', () => {
     const ok = await request(app)
       .post('/api/measurements/batch')
       .set('Cookie', coachACookie)
-      .send({ measurements: [{ ...base(), mediaUrl: CLIP }, { ...base(), metric: 'T_TEST', value: 9 }] });
-    expect(ok.status).toBeLessThan(300);
-    const rows = await db.select().from(measurements).where(eq(measurements.userId, athlete.id));
-    expect(rows.some((r) => r.metric === 'VERTICAL_JUMP' && r.mediaUrl === CLIP)).toBe(true);
+      .send({ measurements: [{ ...base(), mediaUrl: BATCH_CLIP }, { ...base(), metric: 'T_TEST', value: 9 }] });
+    expect(ok.status).toBe(201);
+    expect(ok.body.created).toBe(2);
+    const rows = await db.select().from(measurements).where(eq(measurements.mediaUrl, BATCH_CLIP));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].metric).toBe('VERTICAL_JUMP');
+    expect(rows[0].userId).toBe(athlete.id);
 
     const bad = await request(app)
       .post('/api/measurements/batch')
@@ -255,6 +268,12 @@ describe('event measurement routes - mediaUrl', () => {
       .send({ userId: athlete.id, metric: 'VERTICAL_JUMP', value: 31, date: '2026-01-15', mediaUrl: CLIP });
     expect(res.status).toBe(201);
     expect(res.body.mediaUrl).toBe(CLIP);
+
+    // The event context must be persisted on the row (storage eventContext fallback)
+    const [stored] = await db.select().from(measurements).where(eq(measurements.id, res.body.id));
+    expect(stored.eventId).toBe(eventA.id);
+    expect(stored.eventNameSnapshot).toBe(eventA.name);
+    expect(stored.eventDateSnapshot).toBe('2026-01-15');
 
     const list = await request(app).get(`/api/events/${eventA.id}/measurements`).set('Cookie', coachACookie);
     expect(list.status).toBe(200);
@@ -285,7 +304,7 @@ describe('event measurement routes - mediaUrl', () => {
     const withUrl = ok.body.created.find((m: any) => m.metric === 'T_TEST');
     const without = ok.body.created.find((m: any) => m.metric === 'DASH_40YD');
     expect(withUrl.mediaUrl).toBe(CLIP2);
-    expect(without.mediaUrl ?? null).toBeNull();
+    expect(without).toHaveProperty('mediaUrl', null);
 
     const bad = await request(app)
       .post(`/api/events/${eventA.id}/measurements/bulk`)
@@ -336,16 +355,20 @@ describe('tenant isolation - other org coach', () => {
     const res = await request(app)
       .post('/api/measurements')
       .set('Cookie', coachBCookie)
-      .send({ ...base(), mediaUrl: CLIP2 });
+      .send({ ...base(), mediaUrl: CROSS_ORG_CLIP });
     expect([403, 404]).toContain(res.status);
+    const written = await db.select().from(measurements).where(eq(measurements.mediaUrl, CROSS_ORG_CLIP));
+    expect(written).toHaveLength(0);
   });
 
   it('cannot create event measurement with mediaUrl in org A event', async () => {
     const res = await request(app)
       .post(`/api/events/${eventA.id}/measurements`)
       .set('Cookie', coachBCookie)
-      .send({ userId: athlete.id, metric: 'VERTICAL_JUMP', value: 31, date: '2026-01-15', mediaUrl: CLIP2 });
+      .send({ userId: athlete.id, metric: 'VERTICAL_JUMP', value: 31, date: '2026-01-15', mediaUrl: CROSS_ORG_EVENT_CLIP });
     expect(res.status).toBe(403);
+    const written = await db.select().from(measurements).where(eq(measurements.mediaUrl, CROSS_ORG_EVENT_CLIP));
+    expect(written).toHaveLength(0);
   });
 
   it('cannot read mediaUrl through the event measurements list', async () => {
@@ -502,5 +525,79 @@ describe('Decision 12 - mediaUrl excluded from public/export payloads', () => {
     expect(res.body.measurements[0].metric).toBe('VERTICAL_JUMP');
     expect(JSON.stringify(res.body)).not.toContain('SENTINEL');
     expect(JSON.stringify(res.body)).not.toContain('mediaUrl');
+  });
+  it('parent view of a linked child omits mediaUrl', async () => {
+    const parent = await mkUser('parent', { role: 'parent', isEmailVerified: true });
+    createdExportUserIds.push(parent.id);
+    await db.insert(parentAthleteLinks).values({
+      parentEmail: parent.emails[0],
+      parentUserId: parent.id,
+      athleteUserId: athlete.id,
+      isActive: true,
+    } as any);
+    const cookie = await login(parent.username);
+
+    const res = await request(app).get(`/api/parent/children/${athlete.id}/measurements`).set('Cookie', cookie);
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(res.body)).toContain(leakMeasurementId); // the row is present
+    expect(JSON.stringify(res.body)).not.toContain('SENTINEL');
+    expect(JSON.stringify(res.body)).not.toContain('mediaUrl');
+  });
+
+  it('unified cross-org measurements and dashboard omit mediaUrl', async () => {
+    const [ga] = await db
+      .insert(globalAthletes)
+      .values({ canonicalFirstName: 'athlete', canonicalLastName: 'Test', canonicalFullName: 'athlete Test' } as any)
+      .returning();
+    createdGlobalAthleteIds.push(ga.id);
+    await db.insert(userGlobalAthleteLinks).values({
+      userId: athlete.id,
+      globalAthleteId: ga.id,
+      linkStatus: 'confirmed',
+      linkType: 'admin_forced',
+      shareMeasurements: true,
+    } as any);
+    const cookie = await login(athlete.username);
+
+    const unified = await request(app).get('/api/my/unified-measurements').set('Cookie', cookie);
+    expect(unified.status).toBe(200);
+    expect(unified.body.measurements.some((m: any) => m.id === leakMeasurementId)).toBe(true);
+    expect(JSON.stringify(unified.body)).not.toContain('SENTINEL');
+    expect(JSON.stringify(unified.body)).not.toContain('mediaUrl');
+
+    const dashboard = await request(app).get('/api/my/unified-dashboard').set('Cookie', cookie);
+    expect(dashboard.status).toBe(200);
+    expect(dashboard.body.hasGlobalAthlete).not.toBe(false);
+    expect(JSON.stringify(dashboard.body)).not.toContain('SENTINEL');
+  });
+
+  it('createSnapshot strips a mediaUrl leaked by a report generator at any depth', async () => {
+    const [report] = await db
+      .insert(reports)
+      .values({
+        name: 'MMU stubbed report',
+        organizationId: orgA.id,
+        reportType: 'team',
+        config: { timeframe: { type: 'preset', preset: 'all_time' }, metrics: ['VERTICAL_JUMP'] },
+        createdBy: coachA.id,
+      })
+      .returning();
+    createdReportIds.push(report.id);
+
+    const service = new ReportService();
+    const generator = vi.spyOn(ReportService.prototype, 'generateTeamReport').mockResolvedValue({
+      athleteRankings: [{ userId: athlete.id, raw: [{ metric: 'VERTICAL_JUMP', mediaUrl: LEAK }] }],
+      nested: { deeper: { mediaUrl: LEAK } },
+    } as any);
+    try {
+      const snapshot = await service.createSnapshot(report.id, coachA.id);
+      const serialized = JSON.stringify(snapshot.snapshotData);
+      expect(generator).toHaveBeenCalled();
+      expect(serialized).toContain(athlete.id);
+      expect(serialized).not.toContain('SENTINEL');
+      expect(serialized).not.toContain('mediaUrl');
+    } finally {
+      generator.mockRestore();
+    }
   });
 });
