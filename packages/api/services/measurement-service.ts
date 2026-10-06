@@ -17,7 +17,8 @@ import {
   type Organization,
 } from '@shared/schema';
 import { parseDateFilter } from '@shared/date-utils';
-import { validateMeasurementValue } from '@shared/measurement-value-validation';
+import { validateMeasurementValue, MeasurementValueValidationError } from '@shared/measurement-value-validation';
+import { isMovementQualityMetric } from '@shared/peer-comparison-exclusions';
 import { db } from '../db';
 import { eq, and, gte, lte, or, isNull, sql, desc, inArray, arrayContains } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
@@ -180,16 +181,25 @@ export class MeasurementService {
           validationMin: siteMetrics.validationMin,
           validationMax: siteMetrics.validationMax,
           decimalPrecision: siteMetrics.decimalPrecision,
+          isDerived: siteMetrics.isDerived,
         })
         .from(siteMetrics)
         .where(eq(siteMetrics.code, measurement.metric));
 
+      // MQ totals (MQI_TOTAL, MQ_TRANSITION_TOTAL) are only ever calculated from
+      // the base scores; a manual entry would shadow the calculated total.
+      if (metricConfig?.isDerived && isMovementQualityMetric(measurement.metric)) {
+        throw new MeasurementValueValidationError(
+          `${measurement.metric} is calculated automatically and cannot be entered manually`
+        );
+      }
+
       // Metric-aware value validation: positive by default, 0-allowed range
-      // check for metrics with validation_min <= 0 (e.g. MQ 0-3 scores).
-      // Paired-input metrics validate their own inputs, so skip them here.
+      // check for MQ metrics (0-3 scores). Paired-input metrics validate their
+      // own inputs, so skip them here.
       if (!metricConfig?.auxiliaryInputConfig) {
-        const valueError = validateMeasurementValue(measurement.value, metricConfig);
-        if (valueError) throw new Error(valueError);
+        const valueError = validateMeasurementValue(measurement.value, metricConfig, measurement.metric);
+        if (valueError) throw new MeasurementValueValidationError(valueError);
       }
 
       // Use metric's configured unit, or default to 'in' for unknown metrics
@@ -354,7 +364,7 @@ export class MeasurementService {
       });
     } catch (error) {
       // Preserve error specificity - don't wrap validation errors
-      if (error instanceof PairedInputValidationError) {
+      if (error instanceof PairedInputValidationError || error instanceof MeasurementValueValidationError) {
         throw error;
       }
       if (error instanceof Error) {
@@ -656,8 +666,8 @@ export class MeasurementService {
           // metric changes, re-validate the existing stored value against the new metric.
           if (!metricConfig?.auxiliaryInputConfig) {
             const valueToCheck = measurement.value !== undefined ? measurement.value : Number(existing.value);
-            const valueError = validateMeasurementValue(valueToCheck, metricConfig);
-            if (valueError) throw new Error(valueError);
+            const valueError = validateMeasurementValue(valueToCheck, metricConfig, effectiveMetricCode);
+            if (valueError) throw new MeasurementValueValidationError(valueError);
           }
 
           if (metricIsChanging) {
@@ -797,7 +807,7 @@ export class MeasurementService {
       return txUpdated;
     } catch (error) {
       // Preserve error specificity
-      if (error instanceof PairedInputValidationError) {
+      if (error instanceof PairedInputValidationError || error instanceof MeasurementValueValidationError) {
         throw error;
       }
       if (error instanceof Error) {

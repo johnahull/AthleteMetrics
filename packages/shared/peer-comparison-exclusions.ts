@@ -10,7 +10,12 @@
  */
 const EXCLUDED_PREFIXES = ['MQ_', 'MQI_'];
 
-export function isPeerComparisonExcludedMetric(metricCode: string): boolean {
+/** True for every Movement Quality code (MQ_* base scores and totals, MQI_TOTAL). */
+export function isMovementQualityMetric(metricCode: string): boolean {
   const code = (metricCode || '').toUpperCase();
   return EXCLUDED_PREFIXES.some((prefix) => code.startsWith(prefix));
+}
+
+export function isPeerComparisonExcludedMetric(metricCode: string): boolean {
+  return isMovementQualityMetric(metricCode);
 }
