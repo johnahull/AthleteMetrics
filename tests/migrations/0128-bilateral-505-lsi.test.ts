@@ -22,6 +22,8 @@ const UP_SQL_PATH = path.join(projectRoot, 'migrations', '0128_add_bilateral_505
 const DOWN_SQL_PATH = path.join(projectRoot, 'migrations', '0128_add_bilateral_505_lsi_metrics_down.sql');
 
 const LSI_FORMULA = '(min(AGILITY_505_L, AGILITY_505_R) / max(AGILITY_505_L, AGILITY_505_R)) * 100';
+// After migration 0144 the LSI metric lives under the metric-protocol code (AM-FEAT-016).
+const LSI_FORMULA_M = '(min(AGILITY_505_M_L, AGILITY_505_M_R) / max(AGILITY_505_M_L, AGILITY_505_M_R)) * 100';
 const LSI_TIER_GROUP_UUID = 'a505a505-0128-4505-9151-aaaaaaaaaaaa';
 
 describe('Migration 0128: Bilateral 5-0-5 + LSI Screening', () => {
@@ -231,26 +233,26 @@ describe('Migration 0128: Bilateral 5-0-5 + LSI Screening', () => {
   // Layer 3 — Live DB inspection (skips if migration not applied)
   // ==========================================================================
   describe('Database state (when migration is applied)', () => {
-    it('AGILITY_505_LSI is registered as a derived metric', async () => {
+    it('AGILITY_505_M_LSI (renamed from AGILITY_505_LSI by 0144) is registered as a derived metric', async () => {
       let result;
       try {
         result = await db.execute(sql`
           SELECT code, is_derived, formula, dependent_metrics, calculation_config, metric_type, unit
             FROM site_metrics
-           WHERE code = 'AGILITY_505_LSI'
+           WHERE code = 'AGILITY_505_M_LSI'
         `);
       } catch (error) {
         console.warn('DB query failed (DB may not be reachable):', (error as Error).message);
         return;
       }
       if (!result.rows || result.rows.length === 0) {
-        console.warn('AGILITY_505_LSI not found - migration 0128 may not have been applied');
+        console.warn('AGILITY_505_M_LSI not found - migrations 0128 + 0144 may not have been applied');
         return;
       }
       const row = result.rows[0] as any;
       expect(row.is_derived).toBe(true);
-      expect(row.formula).toBe(LSI_FORMULA);
-      expect(row.dependent_metrics).toEqual(['AGILITY_505_L', 'AGILITY_505_R']);
+      expect(row.formula).toBe(LSI_FORMULA_M);
+      expect(row.dependent_metrics).toEqual(['AGILITY_505_M_L', 'AGILITY_505_M_R']);
       expect(row.calculation_config).toMatchObject({ dateMatchStrategy: 'same_date' });
       expect(row.metric_type).toBe('higher_is_better');
       expect(row.unit).toBe('%');
@@ -314,7 +316,7 @@ describe('Migration 0128: Bilateral 5-0-5 + LSI Screening', () => {
       expect(Number(elevated.max_value)).toBe(89.999);
     });
 
-    it('LSI tiers are wired into the screening set (3 benchmark_set_items)', async () => {
+    it('LSI tiers are wired into the screening set (3 metric + 3 yard twin benchmark_set_items after 0144)', async () => {
       let result;
       try {
         result = await db.execute(sql`
@@ -331,20 +333,24 @@ describe('Migration 0128: Bilateral 5-0-5 + LSI Screening', () => {
         console.warn('Screening set items not found - migration 0128 may not have been applied');
         return;
       }
-      expect(result.rows).toHaveLength(3);
+      // 0144 adds a yard-protocol twin (<id>-yd) of each tier to the same set
+      expect(result.rows).toHaveLength(6);
       const ids = result.rows.map((r: any) => r.benchmark_id);
       expect(ids).toContain('bench-screening-asym-lsi-normal');
       expect(ids).toContain('bench-screening-asym-lsi-monitor');
       expect(ids).toContain('bench-screening-asym-lsi-elevated');
+      expect(ids).toContain('bench-screening-asym-lsi-normal-yd');
+      expect(ids).toContain('bench-screening-asym-lsi-monitor-yd');
+      expect(ids).toContain('bench-screening-asym-lsi-elevated-yd');
     });
 
-    it('per-leg AGILITY_505_L / _R rows match AGILITY_505 row count (when AM-FEAT-007 applied)', async () => {
+    it('per-leg AGILITY_505_M_L / _M_R rows match AGILITY_505_M row count (codes renamed by 0144)', async () => {
       let result;
       try {
         result = await db.execute(sql`
           SELECT metric_code, COUNT(*)::int AS n
             FROM site_benchmarks
-           WHERE metric_code IN ('AGILITY_505', 'AGILITY_505_L', 'AGILITY_505_R')
+           WHERE metric_code IN ('AGILITY_505_M', 'AGILITY_505_M_L', 'AGILITY_505_M_R')
              AND tier_group_id IS NOT NULL
            GROUP BY metric_code
         `);
@@ -360,9 +366,9 @@ describe('Migration 0128: Bilateral 5-0-5 + LSI Screening', () => {
         (result.rows as any[]).map((r) => [r.metric_code, r.n]),
       );
       // If AM-FEAT-007 is applied, _L and _R counts must match the AGILITY_505 count
-      if (counts['AGILITY_505']) {
-        expect(counts['AGILITY_505_L']).toBe(counts['AGILITY_505']);
-        expect(counts['AGILITY_505_R']).toBe(counts['AGILITY_505']);
+      if (counts['AGILITY_505_M']) {
+        expect(counts['AGILITY_505_M_L']).toBe(counts['AGILITY_505_M']);
+        expect(counts['AGILITY_505_M_R']).toBe(counts['AGILITY_505_M']);
       }
     });
   });
