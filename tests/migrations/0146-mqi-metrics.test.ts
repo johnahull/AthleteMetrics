@@ -5,9 +5,11 @@
  *
  *   1. Static SQL file analysis  - runs unconditionally, no DB needed
  *   2. Formula evaluation        - 8/8 sums, 7/8 yields nothing, transitions excluded
- *   3. Live DB row inspection    - gracefully skips if migration not applied
+ *   3. Live DB checks            - re-apply the (idempotent) up-migration, then inspect
+ *                                  rows and the down-migration guard. Only runs against
+ *                                  a disposable test DB (localhost or CI), never a shared one.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -57,6 +59,10 @@ const seedMqiMetrics = async () => {
   await db.execute(sql.raw(upSql));
 };
 
+const dbUrl = process.env.DATABASE_URL || '';
+const isDisposableTestDb =
+  process.env.NODE_ENV === 'test' && (/@(localhost|127\.0\.0\.1)[:/]/.test(dbUrl) || process.env.CI === 'true');
+
 describe('Migration 0146: MQI metrics seed', () => {
   describe('Up-migration SQL file', () => {
     it('exists at expected path', () => {
@@ -76,15 +82,30 @@ describe('Migration 0146: MQI metrics seed', () => {
       expect(upSql).toContain(`ARRAY[${PATTERN_CODES.map((c) => `'${c}'`).join(', ')}]`);
       expect(upSql).toContain(`'${TRANSITION_FORMULA}'`);
       expect(upSql).toContain(`ARRAY[${TRANSITION_CODES.map((c) => `'${c}'`).join(', ')}]`);
-      // MQI formula line must not mention MQ_TRANS
-      expect(MQI_FORMULA).not.toContain('MQ_TRANS');
+      // The formula and dependents actually written for MQI_TOTAL must not mention MQ_TRANS
+      const mqiBlock = upSql.slice(upSql.indexOf("'MQI_TOTAL',"), upSql.indexOf("'MQ_TRANSITION_TOTAL',"));
+      const formula = mqiBlock.match(/true,\s*'([^']+)',\s*ARRAY\[([^\]]+)\]/);
+      expect(formula, 'MQI_TOTAL formula/dependents in SQL').not.toBeNull();
+      expect(formula![1]).toBe(MQI_FORMULA);
+      expect(formula![1]).not.toContain('MQ_TRANS');
+      expect(formula![2]).not.toContain('MQ_TRANS');
     });
 
-    it('uses score unit, 0-3 validation, precision 0, Movement Quality category', () => {
+    it.each([...PATTERN_CODES, ...TRANSITION_CODES])(
+      '%s is seeded as a 0-3 score with precision 0 in Movement Quality',
+      (code) => {
+        const upSql = stripComments(fs.readFileSync(UP_SQL_PATH, 'utf-8'));
+        const row = new RegExp(
+          `\\('${code}', '[^']+', 'Movement Quality', 'score', 'higher_is_better', true, true, \\d+,\\s*'[^']*',\\s*0, '\\w+', 'Activity', 0, 3\\)`,
+        );
+        expect(upSql).toMatch(row);
+      },
+    );
+
+    it('re-applying does not clobber calculation_config keys added later (e.g. 0148 sourceSelection)', () => {
       const upSql = stripComments(fs.readFileSync(UP_SQL_PATH, 'utf-8'));
-      expect(upSql).toContain("'Movement Quality'");
-      expect(upSql).toContain("'score'");
-      expect(upSql).toContain("'higher_is_better'");
+      expect(upSql).not.toMatch(/calculation_config = EXCLUDED\.calculation_config/);
+      expect((upSql.match(/calculation_config = COALESCE\(site_metrics\.calculation_config, '\{\}'::jsonb\) \|\| EXCLUDED\.calculation_config/g) || []).length).toBe(2);
     });
 
     it('uses same_date / skip calculation config for derived totals', () => {
@@ -123,6 +144,14 @@ describe('Migration 0146: MQI metrics seed', () => {
       expect(deleteIdx).toBeGreaterThan(exceptionIdx);
       expect(downSql).toMatch(/FROM measurements/);
     });
+
+    it.each(['measurements', 'goals', 'report_benchmarks', 'event_metrics'])(
+      'refuses when %s rows reference MQ metrics',
+      (table) => {
+        const downSql = fs.readFileSync(DOWN_SQL_PATH, 'utf-8');
+        expect(downSql.slice(0, downSql.indexOf('DELETE FROM site_metrics'))).toMatch(new RegExp(`FROM ${table}\\b`));
+      },
+    );
 
     it('deletes only the 14 MQ codes', () => {
       const downSql = fs.readFileSync(DOWN_SQL_PATH, 'utf-8');
@@ -176,8 +205,56 @@ describe('Migration 0146: MQI metrics seed', () => {
     });
   });
 
-  describe('Database state', () => {
+  describe.skipIf(!isDisposableTestDb)('Database state', () => {
     beforeAll(seedMqiMetrics);
+
+    it('re-applying the up-migration preserves an added calculation_config key', async () => {
+      await db.execute(sql`
+        UPDATE site_metrics
+           SET calculation_config = calculation_config || '{"sourceSelection":"latest_event"}'::jsonb
+         WHERE code = 'MQI_TOTAL'
+      `);
+      try {
+        await seedMqiMetrics();
+        const result = await db.execute(sql`SELECT calculation_config FROM site_metrics WHERE code = 'MQI_TOTAL'`);
+        expect(rowsOf(result)[0].calculation_config).toEqual({
+          dateMatchStrategy: 'same_date',
+          missingSourceBehavior: 'skip',
+          sourceSelection: 'latest_event',
+        });
+      } finally {
+        await db.execute(sql`
+          UPDATE site_metrics SET calculation_config = calculation_config - 'sourceSelection' WHERE code = 'MQI_TOTAL'
+        `);
+      }
+    });
+
+    it('down-migration refuses while a goal references an MQ metric', async () => {
+      const downSql = fs.readFileSync(DOWN_SQL_PATH, 'utf-8');
+      const suffix = `${Date.now()}`;
+      const err: any = await db
+        .transaction(async (tx) => {
+          const [u] = rowsOf(
+            await tx.execute(sql`
+              INSERT INTO users (username, emails, password, first_name, last_name, full_name)
+              VALUES (${`mq-down-${suffix}`}, ARRAY[${`mq-down-${suffix}@test.com`}], 'x', 'M', 'Down', 'M Down')
+              RETURNING id
+            `),
+          );
+          await tx.execute(sql`
+            INSERT INTO goals (user_id, metric, goal_type, target_value, baseline_value, current_value, target_date)
+            VALUES (${u.id}, 'MQI_TOTAL', 'target_value', 20, 10, 10, '2026-12-31')
+          `);
+          await tx.execute(sql.raw(downSql));
+        })
+        .catch((e) => e);
+      // Assert on the Postgres error itself: drizzle's wrapper message embeds the
+      // whole SQL text (including the RAISE string), which would match anything.
+      const pgMessage = String((err?.cause ?? err)?.message);
+      expect(pgMessage).toMatch(/^Migration 0146 \(down\) refused: .*goals/);
+      const result = await db.execute(sql`SELECT COUNT(*)::int AS n FROM site_metrics WHERE code = 'MQI_TOTAL'`);
+      expect(rowsOf(result)[0].n).toBe(1);
+    });
 
     it('seeds 14 MQ metrics with expected config', async () => {
       const result = await db.execute(sql`

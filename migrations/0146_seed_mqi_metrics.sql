@@ -105,7 +105,8 @@ ON CONFLICT (code) DO UPDATE SET
   description = EXCLUDED.description,
   formula = EXCLUDED.formula,
   dependent_metrics = EXCLUDED.dependent_metrics,
-  calculation_config = EXCLUDED.calculation_config,
+  -- Merge so keys added by later migrations (0148 sourceSelection) survive a re-apply
+  calculation_config = COALESCE(site_metrics.calculation_config, '{}'::jsonb) || EXCLUDED.calculation_config,
   is_derived = EXCLUDED.is_derived,
   metric_type = EXCLUDED.metric_type,
   unit = EXCLUDED.unit,
@@ -144,7 +145,8 @@ ON CONFLICT (code) DO UPDATE SET
   description = EXCLUDED.description,
   formula = EXCLUDED.formula,
   dependent_metrics = EXCLUDED.dependent_metrics,
-  calculation_config = EXCLUDED.calculation_config,
+  -- Merge so keys added by later migrations (0148 sourceSelection) survive a re-apply
+  calculation_config = COALESCE(site_metrics.calculation_config, '{}'::jsonb) || EXCLUDED.calculation_config,
   is_derived = EXCLUDED.is_derived,
   metric_type = EXCLUDED.metric_type,
   unit = EXCLUDED.unit,
