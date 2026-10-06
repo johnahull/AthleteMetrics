@@ -19,7 +19,8 @@ import { BASE_URL } from './config';
  * Test data is seeded straight into the database (like global-setup.ts) because event
  * registration/check-in cannot be performed by an admin through the API alone. Requires
  * DATABASE_URL (or TESTING_DATABASE_URL) to point at the DB the app under test uses,
- * and migrations 0146+0148 applied. Run against a local dev server:
+ * and migrations 0146+0148 applied. Seeding only runs against a local app (BASE_URL on
+ * localhost) unless MQI_E2E_DB_MATCHES_APP=true confirms the DB is the remote app's DB:
  *   DATABASE_URL=... npx playwright test tests/e2e/mqi-capture.spec.ts
  */
 
@@ -32,7 +33,12 @@ const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 
 
 test.use({ storageState: { cookies: [], origins: [] } });
 test.describe.configure({ mode: 'serial' });
+const APP_IS_LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(BASE_URL);
 test.skip(!DB_URL, 'DATABASE_URL (or TESTING_DATABASE_URL) is required to seed the MQI event');
+test.skip(
+  !APP_IS_LOCAL && process.env.MQI_E2E_DB_MATCHES_APP !== 'true',
+  'Seeds the database directly: only against a localhost app, or set MQI_E2E_DB_MATCHES_APP=true',
+);
 
 let sql: ReturnType<typeof postgres>;
 let db: ReturnType<typeof drizzle<typeof schema>>;
@@ -209,10 +215,43 @@ test.describe('MQI capture on event data entry', () => {
   test('rejects a non-https clip link in the panel', async ({ page }) => {
     await loginWithCredentials(page, usernames.coachA, PASSWORD);
     await openPanel(page);
+    // Self-contained: score the row here rather than relying on the previous test's data
+    await pick(page, 'Jump', 2);
     await page.getByLabel('Jump clip link').fill('http://clips.example.com/insecure');
     await page.getByRole('button', { name: /save scores/i }).click();
     await expect(page.getByText(/public HTTPS URL/i)).toBeVisible();
     await expect(page.getByRole('dialog')).toBeVisible();
+  });
+
+  test('clearing a saved score removes it and the total', async ({ page }) => {
+    await loginWithCredentials(page, usernames.coachA, PASSWORD);
+    await openPanel(page);
+    // Make sure all 8 patterns are saved so a total exists (clicking a selected score
+    // toggles it off, so only click scores that are not already selected)
+    for (const p of MQI_PATTERNS) {
+      const radio = page
+        .getByRole('group', { name: `${p.label} score (0 to 3)` })
+        .getByRole('radio', { name: /^2\b/ });
+      if ((await radio.getAttribute('aria-checked')) !== 'true') await radio.click();
+    }
+    await page.getByRole('button', { name: /save scores/i }).click();
+    await expect(page.getByRole('dialog')).toBeHidden({ timeout: 15000 });
+    await expect.poll(async () => (await mqiTotalRows()).length).toBe(1);
+
+    await openPanel(page);
+    await page.getByRole('button', { name: 'Clear Jump' }).click();
+    await expect(page.getByTestId('mqi-total')).toContainText(/incomplete/i);
+    await page.getByRole('button', { name: /save scores/i }).click();
+    await expect(page.getByRole('dialog')).toBeHidden({ timeout: 15000 });
+
+    const jumpRows = () =>
+      db
+        .select()
+        .from(schema.measurements)
+        .where(and(eq(schema.measurements.userId, ids.athlete!), eq(schema.measurements.metric, 'MQ_JUMP')));
+    await expect.poll(async () => (await jumpRows()).length).toBe(0);
+    await expect.poll(async () => (await mqiTotalRows()).length).toBe(0);
+    await expect(page.getByRole('button', { name: /Movement Quality for/ })).toContainText('7 of 8 scored');
   });
 
   test("a coach from another organization is denied", async ({ page }) => {
@@ -221,7 +260,11 @@ test.describe('MQI capture on event data entry', () => {
       data: { userId: ids.athlete, metric: 'MQ_JUMP', value: 1, date: EVENT_ISO },
     });
     expect(res.status()).toBe(403);
+    expect((await res.json()).error).toMatch(/access denied/i);
+
     await page.goto(`${BASE_URL}/events/${ids.event}/data-entry`);
+    // Wait for a positive "denied" state before asserting that nothing is offered
+    await expect(page.getByRole('heading', { name: 'Event Not Found' })).toBeVisible({ timeout: 20000 });
     await expect(page.getByRole('button', { name: /Movement Quality for/ })).toHaveCount(0);
   });
 });
