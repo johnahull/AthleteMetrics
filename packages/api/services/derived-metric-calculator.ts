@@ -17,7 +17,7 @@ import {
   type SiteMetric,
   type CustomOrgMetric,
 } from '@shared/schema';
-import { eq, and, gte, lte, sql, or, desc, asc } from 'drizzle-orm';
+import { eq, and, gte, lte, sql, or, desc, asc, inArray } from 'drizzle-orm';
 import type { PgTransaction } from 'drizzle-orm/pg-core';
 import type { PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js';
 import type { ExtractTablesWithRelations } from 'drizzle-orm';
@@ -320,7 +320,7 @@ export class DerivedMetricCalculator {
         code: string;
         formula: string | null;
         dependentMetrics: string[] | null;
-        calculationConfig: { dateMatchStrategy: 'same_date' | 'latest_before' | 'closest'; maxDateDifference?: number; missingSourceBehavior: 'skip' | 'error' } | null;
+        calculationConfig: { dateMatchStrategy: 'same_date' | 'latest_before' | 'closest'; maxDateDifference?: number; missingSourceBehavior: 'skip' | 'error'; sourceSelection?: 'latest_event' } | null;
         unit: string | null;
         isCustomOrg: boolean;
       };
@@ -404,7 +404,21 @@ export class DerivedMetricCalculator {
           );
 
           if (!sourceMeasurementsMap) {
-            // Missing source measurements - skip based on missingSourceBehavior
+            // Missing source measurements - skip based on missingSourceBehavior.
+            // With latest_event selection the newest event is incomplete, so a total
+            // calculated from an older event is stale: remove it.
+            if (derivedMetric.calculationConfig?.sourceSelection === 'latest_event') {
+              await tx
+                .delete(measurements)
+                .where(
+                  and(
+                    eq(measurements.userId, measurement.userId),
+                    eq(measurements.metric, derivedMetric.code),
+                    eq(measurements.date, measurement.date),
+                    eq(measurements.isCalculated, true)
+                  )
+                );
+            }
             continue;
           }
 
@@ -663,7 +677,7 @@ export class DerivedMetricCalculator {
       code: string;
       formula: string | null;
       dependentMetrics: string[] | null;
-      calculationConfig: { dateMatchStrategy: 'same_date' | 'latest_before' | 'closest'; maxDateDifference?: number; missingSourceBehavior: 'skip' | 'error' } | null;
+      calculationConfig: { dateMatchStrategy: 'same_date' | 'latest_before' | 'closest'; maxDateDifference?: number; missingSourceBehavior: 'skip' | 'error'; sourceSelection?: 'latest_event' } | null;
       unit: string | null;
       organizationId?: string;
     };
@@ -808,6 +822,7 @@ export class DerivedMetricCalculator {
       dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
       maxDateDifference?: number;
       missingSourceBehavior: 'skip' | 'error';
+      sourceSelection?: 'latest_event';
     },
     metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
@@ -848,6 +863,7 @@ export class DerivedMetricCalculator {
       dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
       maxDateDifference?: number;
       missingSourceBehavior: 'skip' | 'error';
+      sourceSelection?: 'latest_event';
     },
     metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
@@ -867,6 +883,7 @@ export class DerivedMetricCalculator {
       dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
       maxDateDifference?: number;
       missingSourceBehavior: 'skip' | 'error';
+      sourceSelection?: 'latest_event';
     },
     metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
@@ -885,10 +902,83 @@ export class DerivedMetricCalculator {
       dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
       maxDateDifference?: number;
       missingSourceBehavior: 'skip' | 'error';
+      sourceSelection?: 'latest_event';
     },
     metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
     return this.findSourceMeasurementsImpl(this.db, userId, dependentMetrics, targetDate, config, metricConfigs);
+  }
+
+  /**
+   * 'latest_event' source selection (AM-FEAT-015 decision 11), same_date only.
+   *
+   * Considers the athlete's verified measurements of the dependent metrics on `targetDate`,
+   * groups them by event (eventId; measurements without an event form one group), picks the
+   * single most recent group (event date snapshot, then newest created_at) and requires ALL
+   * dependent metrics from that same group. Never mixes scores from different events and never
+   * falls back to an older, complete event when the latest one is incomplete.
+   */
+  private async findLatestEventSources(
+    dbOrTx: typeof dbType | DbTransaction,
+    userId: string,
+    dependentMetrics: string[],
+    targetDate: string,
+    config: { missingSourceBehavior: 'skip' | 'error' }
+  ): Promise<Map<string, Measurement> | null> {
+    const codes = dependentMetrics.map((c) => c.toUpperCase());
+    const candidates = await dbOrTx
+      .select()
+      .from(measurements)
+      .where(
+        and(
+          eq(measurements.userId, userId),
+          inArray(measurements.metric, codes),
+          eq(measurements.date, targetDate),
+          eq(measurements.isVerified, true)
+        )
+      );
+
+    const groups = new Map<string, Measurement[]>();
+    for (const m of candidates) {
+      const key = m.eventId ?? '';
+      const list = groups.get(key);
+      if (list) list.push(m); else groups.set(key, [m]);
+    }
+
+    const newest = (list: Measurement[]) =>
+      list.reduce((a, b) => (b.createdAt > a.createdAt ? b : a));
+    const rank = (list: Measurement[]) => {
+      const eventDates = list.map((m) => m.eventDateSnapshot).filter((d): d is string => !!d).sort();
+      return {
+        eventDate: eventDates.length ? eventDates[eventDates.length - 1] : '',
+        createdAt: newest(list).createdAt.getTime(),
+      };
+    };
+
+    let latest: Measurement[] | undefined;
+    let latestRank: { eventDate: string; createdAt: number } | undefined;
+    for (const list of groups.values()) {
+      const r = rank(list);
+      if (
+        !latestRank ||
+        r.eventDate > latestRank.eventDate ||
+        (r.eventDate === latestRank.eventDate && r.createdAt > latestRank.createdAt)
+      ) {
+        latest = list;
+        latestRank = r;
+      }
+    }
+
+    const result = new Map<string, Measurement>();
+    for (let i = 0; i < dependentMetrics.length; i++) {
+      const matching = (latest ?? []).filter((m) => m.metric === codes[i]);
+      if (matching.length === 0) {
+        if (config.missingSourceBehavior === 'skip') return null;
+        throw new Error(`Missing source measurement for metric: ${dependentMetrics[i]}`);
+      }
+      result.set(dependentMetrics[i], newest(matching));
+    }
+    return result;
   }
 
   /**
@@ -912,9 +1002,14 @@ export class DerivedMetricCalculator {
       dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
       maxDateDifference?: number;
       missingSourceBehavior: 'skip' | 'error';
+      sourceSelection?: 'latest_event';
     },
     metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
+    if (config.sourceSelection === 'latest_event' && config.dateMatchStrategy === 'same_date') {
+      return this.findLatestEventSources(dbOrTx, userId, dependentMetrics, targetDate, config);
+    }
+
     const sourceMeasurementsMap = new Map<string, Measurement>();
 
     for (const metricCode of dependentMetrics) {

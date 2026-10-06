@@ -195,6 +195,8 @@ export const siteMetrics = pgTable("site_metrics", {
     dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
     maxDateDifference?: number;
     missingSourceBehavior: 'skip' | 'error';
+    /** 'latest_event': same_date sources must all come from the single most recent event (e.g. MQI totals) */
+    sourceSelection?: 'latest_event';
     constants?: Record<string, number>;
   }>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -1696,6 +1698,7 @@ export const insertSiteMetricSchema = createInsertSchema(siteMetrics).omit({
     dateMatchStrategy: z.enum(['same_date', 'latest_before', 'closest']),
     maxDateDifference: z.number().int().positive().optional(),
     missingSourceBehavior: z.enum(['skip', 'error']),
+    sourceSelection: z.enum(['latest_event']).optional(),
   }).optional(),
 }).superRefine((data, ctx) => {
   // Cross-field validation: If isDerived is true, formula is required
@@ -1752,6 +1755,7 @@ export const updateSiteMetricSchema = z.object({
     dateMatchStrategy: z.enum(['same_date', 'latest_before', 'closest']),
     maxDateDifference: z.number().int().positive().optional(),
     missingSourceBehavior: z.enum(['skip', 'error']),
+    sourceSelection: z.enum(['latest_event']).optional(),
   }).nullable().optional(),
 }).superRefine((data, ctx) => {
   // Cross-field validation: If isDerived is being set to true, formula should be provided
