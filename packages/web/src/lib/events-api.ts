@@ -1223,6 +1223,8 @@ export interface CreateEventMeasurementInput {
   value: number;
   date: string;
   notes?: string;
+  /** Optional https link (e.g. video clip). Empty string or null clears. */
+  mediaUrl?: string | null;
 }
 
 /**

@@ -3430,6 +3430,7 @@ export class DatabaseStorage implements IStorage {
       units: measurements.units,
       flyInDistance: measurements.flyInDistance,
       notes: measurements.notes,
+      mediaUrl: measurements.mediaUrl,
       createdAt: measurements.createdAt,
       // Event context fields
       eventId: measurements.eventId,
@@ -3802,6 +3803,7 @@ export class DatabaseStorage implements IStorage {
       metric: measurement.metric,
       value: measurement.value.toString(),
       notes: measurement.notes,
+      mediaUrl: measurement.mediaUrl ?? null,
       flyInDistance: measurement.flyInDistance?.toString(),
       age,
       units,
@@ -3813,9 +3815,11 @@ export class DatabaseStorage implements IStorage {
       season: season || null,
       teamContextAuto: teamContextAuto,
       // Event context (for measurements taken at events)
-      eventId: eventContext?.eventId ?? null,
-      eventNameSnapshot: eventContext?.eventNameSnapshot ?? null,
-      eventDateSnapshot: eventContext?.eventDateSnapshot ?? null,
+      // EventMeasurementsService passes event context on the measurement itself rather than
+      // via the eventContext argument, so fall back to it (otherwise eventId was silently dropped).
+      eventId: eventContext?.eventId ?? measurement.eventId ?? null,
+      eventNameSnapshot: eventContext?.eventNameSnapshot ?? measurement.eventNameSnapshot ?? null,
+      eventDateSnapshot: eventContext?.eventDateSnapshot ?? measurement.eventDateSnapshot ?? null,
     }).returning();
 
     return newMeasurement;
@@ -3829,6 +3833,7 @@ export class DatabaseStorage implements IStorage {
     if (measurement.metric) updateData.metric = measurement.metric;
     if (measurement.value !== undefined) updateData.value = measurement.value.toString();
     if (measurement.notes !== undefined) updateData.notes = measurement.notes;
+    if (measurement.mediaUrl !== undefined) updateData.mediaUrl = measurement.mediaUrl;
     if (measurement.flyInDistance !== undefined) updateData.flyInDistance = measurement.flyInDistance?.toString();
 
     const [updated] = await db.update(measurements).set(updateData).where(eq(measurements.id, id)).returning();

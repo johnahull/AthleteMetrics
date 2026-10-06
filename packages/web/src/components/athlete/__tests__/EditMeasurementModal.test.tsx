@@ -33,6 +33,7 @@ const mockMeasurement: Measurement = {
   units: 's',
   date: '2024-01-15',
   notes: 'Test notes',
+  mediaUrl: null,
   isVerified: false,
   userId: 'user-1',
   submittedBy: 'user-1',

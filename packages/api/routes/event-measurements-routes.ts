@@ -12,6 +12,19 @@ import { requireAuth } from "../middleware";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { storage } from "../storage";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
+import { mediaUrlSchema } from "@shared/schema";
+
+/**
+ * Validate an optional mediaUrl with the shared validator (https-only, public host, <= 2048).
+ * Empty string / null normalize to null (clear).
+ */
+function parseMediaUrl(raw: unknown): { ok: true; value: string | null | undefined } | { ok: false; message: string } {
+  const result = mediaUrlSchema.safeParse(raw);
+  if (!result.success) {
+    return { ok: false, message: result.error.issues[0]?.message ?? "Invalid mediaUrl" };
+  }
+  return { ok: true, value: result.data };
+}
 
 // Rate limiting for event measurements endpoints
 const eventMeasurementsLimiter = rateLimit({
@@ -179,6 +192,11 @@ export function registerEventMeasurementsRoutes(app: Express) {
           });
         }
 
+        const mediaUrl = parseMediaUrl(req.body.mediaUrl);
+        if (!mediaUrl.ok) {
+          return res.status(400).json({ error: `Invalid mediaUrl: ${mediaUrl.message}` });
+        }
+
         const measurement = await eventMeasurementsService.createEventMeasurement(
           eventId,
           {
@@ -187,6 +205,7 @@ export function registerEventMeasurementsRoutes(app: Express) {
             value: Number(value),
             date: new Date(date),
             notes,
+            mediaUrl: mediaUrl.value,
           },
           user.id
         );
@@ -235,11 +254,18 @@ export function registerEventMeasurementsRoutes(app: Express) {
 
         // Validate each measurement has required fields
         const validationErrors: string[] = [];
+        const mediaUrls: Array<string | null | undefined> = [];
         measurements.forEach((m: any, index: number) => {
           if (!m.userId) validationErrors.push(`Item ${index}: missing userId`);
           if (!m.metric) validationErrors.push(`Item ${index}: missing metric`);
           if (m.value === undefined) validationErrors.push(`Item ${index}: missing value`);
           if (!m.date) validationErrors.push(`Item ${index}: missing date`);
+          const parsedMedia = parseMediaUrl(m.mediaUrl);
+          if (parsedMedia.ok) {
+            mediaUrls[index] = parsedMedia.value;
+          } else {
+            validationErrors.push(`Item ${index}: invalid mediaUrl (${parsedMedia.message})`);
+          }
         });
 
         if (validationErrors.length > 0) {
@@ -251,12 +277,13 @@ export function registerEventMeasurementsRoutes(app: Express) {
 
         const result = await eventMeasurementsService.createEventMeasurementsBulk(
           eventId,
-          measurements.map((m: any) => ({
+          measurements.map((m: any, index: number) => ({
             userId: m.userId,
             metric: m.metric,
             value: Number(m.value),
             date: new Date(m.date),
             notes: m.notes,
+            mediaUrl: mediaUrls[index],
           })),
           user.id
         );

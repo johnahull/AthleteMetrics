@@ -18,6 +18,8 @@ export interface EventMeasurementInput {
   value: number;
   date: Date;
   notes?: string;
+  /** Validated by the route (mediaUrlSchema); null clears */
+  mediaUrl?: string | null;
 }
 
 export interface BulkCreateResult {
@@ -89,6 +91,7 @@ export class EventMeasurementsService {
         value: data.value,
         date: data.date.toISOString().split('T')[0],
         notes: data.notes,
+        mediaUrl: data.mediaUrl,
         eventId: eventId,
         eventNameSnapshot: event.name,
         eventDateSnapshot: event.startDate.toISOString().split('T')[0],
@@ -140,6 +143,7 @@ export class EventMeasurementsService {
             value: m.value,
             date: m.date.toISOString().split('T')[0],
             notes: m.notes,
+            mediaUrl: m.mediaUrl,
             eventId: eventId,
             eventNameSnapshot: event.name,
             eventDateSnapshot: event.startDate.toISOString().split('T')[0],
