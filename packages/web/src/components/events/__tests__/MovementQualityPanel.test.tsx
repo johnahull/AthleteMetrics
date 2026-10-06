@@ -2,7 +2,7 @@
  * AM-FEAT-015 Phase 3: MovementQualityPanel (per-athlete MQI entry dialog)
  */
 import { describe, it, expect, vi, beforeAll } from 'vitest';
-import { render, screen, within, waitFor } from '@testing-library/react';
+import { render, screen, within, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MovementQualityPanel } from '../MovementQualityPanel';
 import { MQI_PATTERNS, MQI_TRANSITIONS } from '@shared/mqi-entry-schema';
@@ -31,7 +31,7 @@ const saved = (metric: string, value: number, extra: Record<string, unknown> = {
 function setup(props: Partial<React.ComponentProps<typeof MovementQualityPanel>> = {}) {
   const onSave = vi.fn().mockResolvedValue(undefined);
   const onOpenChange = vi.fn();
-  render(
+  const element = (extra: Partial<React.ComponentProps<typeof MovementQualityPanel>> = {}) => (
     <MovementQualityPanel
       open
       onOpenChange={onOpenChange}
@@ -42,9 +42,16 @@ function setup(props: Partial<React.ComponentProps<typeof MovementQualityPanel>>
       measurements={[] as any}
       onSave={onSave}
       {...props}
-    />,
+      {...extra}
+    />
   );
-  return { onSave, onOpenChange, user: userEvent.setup() };
+  const { rerender } = render(element());
+  return {
+    onSave,
+    onOpenChange,
+    user: userEvent.setup(),
+    rerender: (extra: Partial<React.ComponentProps<typeof MovementQualityPanel>>) => rerender(element(extra)),
+  };
 }
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -142,11 +149,64 @@ describe('MovementQualityPanel', () => {
   it('is keyboard operable: focus a score and press Space', async () => {
     const { user, onSave } = setup();
     const radio = within(group('Hip Turn')).getByRole('radio', { name: /^3\b/ });
-    radio.focus();
+    act(() => radio.focus());
     await user.keyboard(' ');
     expect(radio).toHaveAttribute('aria-checked', 'true');
     await user.click(screen.getByRole('button', { name: /save/i }));
     await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(onSave.mock.calls[0][0].upserts).toEqual([
+      expect.objectContaining({ metric: 'MQ_HIPTURN', value: 3 }),
+    ]);
+  });
+
+  it('has an explicit per-row Clear that removes a saved score, clip and note', async () => {
+    const { user, onSave } = setup({
+      measurements: [saved('MQ_JUMP', 2, { notes: 'late left', mediaUrl: 'https://clips.example.com/j' })] as any,
+    });
+    expect(screen.getByRole('button', { name: 'Clear Deceleration' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Clear Jump' }));
+    expect(within(group('Jump')).getByRole('radio', { name: /^2\b/ })).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByLabelText('Jump notes')).toHaveValue('');
+    expect(screen.getByLabelText('Jump clip link')).toHaveValue('');
+    await user.click(screen.getByRole('button', { name: /save/i }));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(onSave.mock.calls[0][0]).toEqual({ upserts: [], deletes: ['id-MQ_JUMP'] });
+  });
+
+  it('labels clip and note inputs with <label> elements and links row errors to the inputs', async () => {
+    const { user } = setup();
+    const clip = screen.getByLabelText('Jump clip link');
+    const notes = screen.getByLabelText('Jump notes');
+    expect(document.querySelector(`label[for="${clip.id}"]`)).not.toBeNull();
+    expect(document.querySelector(`label[for="${notes.id}"]`)).not.toBeNull();
+    expect(group('Jump')).toHaveAttribute('aria-labelledby');
+
+    await pick(user, 'Jump', 2);
+    await user.type(clip, 'http://clips.example.com/j');
+    await user.click(screen.getByRole('button', { name: /save/i }));
+    const error = await screen.findByText(/public HTTPS URL/i);
+    expect(error.id).toBeTruthy();
+    expect(clip).toHaveAttribute('aria-invalid', 'true');
+    expect(clip.getAttribute('aria-describedby')).toContain(error.id);
+    expect(group('Jump').getAttribute('aria-describedby')).toContain(error.id);
+  });
+
+  it('shows per-metric errors returned by the server on the matching row', () => {
+    setup({ serverErrors: { MQ_DECEL: 'Value must be at most 3' } });
+    const error = screen.getByText('Value must be at most 3');
+    expect(group('Deceleration').getAttribute('aria-describedby')).toContain(error.id);
+  });
+
+  it('keeps in-progress edits when the saved data refreshes while open; re-prefills on reopen', async () => {
+    const { user, rerender } = setup({ measurements: [saved('MQ_JUMP', 1)] as any });
+    await pick(user, 'Jump', 3);
+    rerender({ measurements: [saved('MQ_JUMP', 1), saved('MQ_DECEL', 2)] as any });
+    expect(within(group('Jump')).getByRole('radio', { name: /^3\b/ })).toHaveAttribute('aria-checked', 'true');
+
+    rerender({ open: false, measurements: [saved('MQ_JUMP', 1), saved('MQ_DECEL', 2)] as any });
+    rerender({ open: true, measurements: [saved('MQ_JUMP', 1), saved('MQ_DECEL', 2)] as any });
+    expect(within(group('Jump')).getByRole('radio', { name: /^1\b/ })).toHaveAttribute('aria-checked', 'true');
+    expect(within(group('Deceleration')).getByRole('radio', { name: /^2\b/ })).toHaveAttribute('aria-checked', 'true');
   });
 
   it('frozen event: inputs and Save are disabled with a notice', () => {

@@ -7,7 +7,7 @@
  * measurements so scores can be edited after the fact. The parent performs the writes.
  */
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AlertCircle, Loader2, Lock } from "lucide-react";
@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
@@ -59,6 +60,8 @@ interface MovementQualityPanelProps {
   /** Frozen event: read-only */
   disabled?: boolean;
   isSaving?: boolean;
+  /** Per-metric errors returned by the server for the last save (metric code -> message) */
+  serverErrors?: Record<string, string>;
   onSave: (input: MovementQualitySaveInput) => Promise<void> | void;
 }
 
@@ -100,6 +103,7 @@ export function MovementQualityPanel({
   measurements,
   disabled = false,
   isSaving = false,
+  serverErrors,
   onSave,
 }: MovementQualityPanelProps) {
   const saved = useMemo(() => savedRowsFor(userId, measurements), [userId, measurements]);
@@ -110,10 +114,19 @@ export function MovementQualityPanel({
     defaultValues: valuesFromSaved(saved),
   });
 
-  // Re-prefill whenever the dialog (re)opens or the saved data changes
+  // Prefill only when the dialog goes from closed to open (or another athlete is opened):
+  // a refetch of the saved data while it is open must not wipe in-progress edits.
+  const prefilledFor = useRef<string | null>(null);
   useEffect(() => {
-    if (open) form.reset(valuesFromSaved(saved));
-  }, [open, saved]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!open) {
+      prefilledFor.current = null;
+      return;
+    }
+    if (prefilledFor.current !== userId) {
+      prefilledFor.current = userId;
+      form.reset(valuesFromSaved(saved));
+    }
+  }, [open, userId, saved]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const rows = useWatch({ control: form.control, name: "rows" });
   const scores = useMemo(
@@ -132,69 +145,118 @@ export function MovementQualityPanel({
     await onSave(diff);
   });
 
+  const clearRow = (code: string) => {
+    const opts = { shouldDirty: true, shouldValidate: form.formState.isSubmitted };
+    form.setValue(`rows.${code}.score`, null, opts);
+    form.setValue(`rows.${code}.mediaUrl`, "", opts);
+    form.setValue(`rows.${code}.notes`, "", opts);
+  };
+
   const renderRow = (metric: MqiMetricDef) => {
     const labelId = `mq-label-${metric.code}`;
+    const scoreHintId = `mq-score-hint-${metric.code}`;
+    const errorId = `mq-error-${metric.code}`;
+    const clipId = `mq-clip-${metric.code}`;
+    const notesId = `mq-notes-${metric.code}`;
     const error = form.formState.errors.rows?.[metric.code];
+    const errorMessage =
+      error?.score?.message || error?.mediaUrl?.message || error?.notes?.message || serverErrors?.[metric.code];
+    const row = rows?.[metric.code];
+    const rowEmpty = !row || (row.score === null && !row.mediaUrl && !row.notes);
+    const describedBy = errorMessage ? errorId : undefined;
     return (
       <div key={metric.code} className="rounded-lg border p-3 space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span id={labelId} className="font-medium text-sm">
-            {metric.label}
+          <span className="font-medium text-sm">
+            <span id={labelId}>{metric.label}</span>
+            <span id={scoreHintId} className="sr-only">
+              {" "}score (0 to 3)
+            </span>
             {rubricLabel(scores[metric.code]) && (
               <span className="ml-2 text-xs font-normal text-muted-foreground">
                 {rubricLabel(scores[metric.code])}
               </span>
             )}
           </span>
-          <Controller
-            control={form.control}
-            name={`rows.${metric.code}.score`}
-            render={({ field }) => (
-              <ToggleGroup
-                type="single"
-                variant="outline"
-                value={field.value === null || field.value === undefined ? "" : String(field.value)}
-                onValueChange={(v) => field.onChange(v === "" ? null : Number(v))}
-                disabled={disabled}
-                role="group"
-                aria-label={`${metric.label} score (0 to 3)`}
-                className="w-full justify-start sm:w-auto"
-              >
-                {[...MQI_RUBRIC].reverse().map((r) => (
-                  <ToggleGroupItem
-                    key={r.score}
-                    value={String(r.score)}
-                    aria-label={`${r.score} ${r.label}`}
-                    className="h-11 flex-1 sm:h-9 sm:w-9 sm:flex-none data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-                  >
-                    {r.score}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-            )}
-          />
+          <div className="flex w-full items-center gap-2 sm:w-auto">
+            <Controller
+              control={form.control}
+              name={`rows.${metric.code}.score`}
+              render={({ field, fieldState }) => (
+                <ToggleGroup
+                  ref={field.ref}
+                  type="single"
+                  variant="outline"
+                  value={field.value === null || field.value === undefined ? "" : String(field.value)}
+                  onValueChange={(v) => field.onChange(v === "" ? null : Number(v))}
+                  disabled={disabled}
+                  role="group"
+                  aria-labelledby={`${labelId} ${scoreHintId}`}
+                  aria-describedby={describedBy}
+                  aria-invalid={fieldState.invalid || !!serverErrors?.[metric.code] || undefined}
+                  className="w-full justify-start sm:w-auto"
+                >
+                  {[...MQI_RUBRIC].reverse().map((r) => (
+                    <ToggleGroupItem
+                      key={r.score}
+                      value={String(r.score)}
+                      aria-label={`${r.score} ${r.label}`}
+                      className="h-11 flex-1 sm:h-9 sm:w-9 sm:flex-none data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                    >
+                      {r.score}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+              )}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-11 shrink-0 sm:h-9"
+              onClick={() => clearRow(metric.code)}
+              disabled={disabled || rowEmpty}
+              aria-label={`Clear ${metric.label}`}
+            >
+              Clear
+            </Button>
+          </div>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
-          <Input
-            type="url"
-            inputMode="url"
-            placeholder="Clip link (https://...)"
-            aria-label={`${metric.label} clip link`}
-            disabled={disabled}
-            {...form.register(`rows.${metric.code}.mediaUrl`)}
-          />
-          <Input
-            type="text"
-            placeholder="Notes (hard faults, left/right)"
-            aria-label={`${metric.label} notes`}
-            maxLength={MQI_NOTES_MAX}
-            disabled={disabled}
-            {...form.register(`rows.${metric.code}.notes`)}
-          />
+          <div className="space-y-1">
+            <Label htmlFor={clipId} className="sr-only">
+              {metric.label} clip link
+            </Label>
+            <Input
+              id={clipId}
+              type="url"
+              inputMode="url"
+              placeholder="Clip link (https://...)"
+              disabled={disabled}
+              aria-invalid={!!error?.mediaUrl || undefined}
+              aria-describedby={describedBy}
+              {...form.register(`rows.${metric.code}.mediaUrl`)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor={notesId} className="sr-only">
+              {metric.label} notes
+            </Label>
+            <Input
+              id={notesId}
+              type="text"
+              placeholder="Notes (hard faults, left/right)"
+              maxLength={MQI_NOTES_MAX}
+              disabled={disabled}
+              aria-invalid={!!error?.notes || undefined}
+              aria-describedby={describedBy}
+              {...form.register(`rows.${metric.code}.notes`)}
+            />
+          </div>
         </div>
-        {error && (
-          <p role="alert" className="text-xs text-red-600">
-            {error.score?.message || error.mediaUrl?.message || error.notes?.message}
+        {errorMessage && (
+          <p id={errorId} role="alert" className="text-xs text-red-600">
+            {errorMessage}
           </p>
         )}
       </div>

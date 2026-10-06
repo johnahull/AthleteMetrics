@@ -3,7 +3,7 @@
  * Allows coaches to enter measurements for checked-in athletes at an event
  */
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import {
   useEvent,
@@ -11,7 +11,8 @@ import {
   useEventMetrics,
   useEventMeasurements,
   useCreateEventMeasurementsBulk,
-  useDeleteEventMeasurement,
+  useSaveEventMovementQuality,
+  MovementQualitySaveError,
   type EventRegistrationWithUser,
   type CreateEventMeasurementInput,
 } from "@/lib/events-api";
@@ -77,6 +78,9 @@ interface AthleteRow {
 const MQ_BASE_CODES = new Set([...MQI_PATTERNS, ...MQI_TRANSITIONS].map((m) => m.code));
 const MQ_CODES = new Set([...MQ_BASE_CODES, MQI_TOTAL_CODE, MQI_TRANSITION_TOTAL_CODE]);
 
+// Stable empty list so consumers' memoized prefill does not re-run on every render
+const EMPTY_MEASUREMENTS: Measurement[] = [];
+
 export default function EventDataEntry() {
   const { eventId } = useParams<{ eventId: string }>();
   const [, navigate] = useLocation();
@@ -86,6 +90,7 @@ export default function EventDataEntry() {
   const [gridData, setGridData] = useState<Record<string, AthleteRow>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [mqAthleteId, setMqAthleteId] = useState<string | null>(null);
+  const [mqServerErrors, setMqServerErrors] = useState<Record<string, string> | undefined>();
 
   // Fetch event details
   const { data: event, isLoading: eventLoading } = useEvent(eventId);
@@ -98,12 +103,17 @@ export default function EventDataEntry() {
   const { data: eventMetrics, isLoading: metricsLoading } = useEventMetrics(eventId);
 
   // Fetch existing measurements
-  const { data: existingMeasurements, isLoading: measurementsLoading, refetch: refetchMeasurements } =
-    useEventMeasurements(eventId);
+  const {
+    data: existingMeasurements,
+    isLoading: measurementsLoading,
+    isError: measurementsError,
+    refetch: refetchMeasurements,
+  } = useEventMeasurements(eventId);
+  const savedMeasurements = existingMeasurements ?? EMPTY_MEASUREMENTS;
 
   // Mutation for bulk save
   const bulkCreate = useCreateEventMeasurementsBulk();
-  const deleteMeasurement = useDeleteEventMeasurement();
+  const saveMovementQuality = useSaveEventMovementQuality();
 
   // Filter to only checked-in athletes
   const checkedInAthletes = useMemo(() => {
@@ -132,9 +142,14 @@ export default function EventDataEntry() {
     [sortedMetrics]
   );
   const hasMovementQuality = mqEnabledCodes.length > 0;
+  // MQI_TOTAL / MQ_TRANSITION_TOTAL enabled without any base score to enter them from
+  const hasOnlyMqTotals =
+    !hasMovementQuality &&
+    sortedMetrics.some((m) => m.metricCode === MQI_TOTAL_CODE || m.metricCode === MQI_TRANSITION_TOTAL_CODE);
 
-  // Initialize grid data when data loads
-  useMemo(() => {
+  // Initialize grid data when data loads. A refetch (e.g. after saving Movement Quality
+  // scores) must not erase unsaved grid edits: dirty cells keep their typed value.
+  useEffect(() => {
     if (!checkedInAthletes.length || !sortedMetrics.length) return;
 
     // Build lookup of existing measurements
@@ -173,7 +188,23 @@ export default function EventDataEntry() {
       };
     });
 
-    setGridData(newGridData);
+    setGridData((prev) => {
+      for (const [userId, row] of Object.entries(newGridData)) {
+        for (const [metricCode, cell] of Object.entries(row.measurements)) {
+          const previous = prev[userId]?.measurements[metricCode];
+          if (previous?.isDirty) {
+            const originalValue = cell.originalValue?.toString() || "";
+            row.measurements[metricCode] = {
+              ...cell,
+              value: previous.value,
+              error: previous.error,
+              isDirty: previous.value !== originalValue,
+            };
+          }
+        }
+      }
+      return newGridData;
+    });
   }, [checkedInAthletes, sortedMetrics, gridMetrics, existingMeasurements]);
 
   // Handle cell value change
@@ -238,6 +269,13 @@ export default function EventDataEntry() {
     const requiredMetrics = new Set(
       gridMetrics.filter((m) => m.isRequired).map((m) => m.metricCode)
     );
+    // Required Movement Quality scores are entered in the panel, not the grid
+    const requiredMqCodes = sortedMetrics
+      .filter((m) => m.isRequired && MQ_BASE_CODES.has(m.metricCode))
+      .map((m) => m.metricCode);
+    const savedMq = new Set(
+      savedMeasurements.filter((m) => MQ_BASE_CODES.has(m.metric)).map((m) => `${m.userId}-${m.metric}`)
+    );
 
     Object.values(gridData).forEach((row) => {
       Object.entries(row.measurements).forEach(([metricCode, cell]) => {
@@ -247,6 +285,10 @@ export default function EventDataEntry() {
           required++;
           if (cell.value !== "") requiredFilled++;
         }
+      });
+      requiredMqCodes.forEach((code) => {
+        required++;
+        if (savedMq.has(`${row.userId}-${code}`)) requiredFilled++;
       });
     });
 
@@ -258,7 +300,7 @@ export default function EventDataEntry() {
       percentage: total > 0 ? Math.round((filled / total) * 100) : 0,
       requiredPercentage: required > 0 ? Math.round((requiredFilled / required) * 100) : 0,
     };
-  }, [gridData, gridMetrics]);
+  }, [gridData, gridMetrics, sortedMetrics, savedMeasurements]);
 
   // Handle save
   const handleSave = async () => {
@@ -330,22 +372,30 @@ export default function EventDataEntry() {
     }
   };
 
-  // Per-athlete Movement Quality summary for the grid button
-  const mqSummary = useCallback(
-    (userId: string) => {
-      const scores: Record<string, number> = {};
-      (existingMeasurements ?? []).forEach((m: Measurement) => {
-        if (m.userId === userId && MQ_BASE_CODES.has(m.metric)) scores[m.metric] = Number(m.value);
-      });
+  // Per-athlete Movement Quality summary for the grid buttons (one pass over the measurements)
+  const mqSummaryByUser = useMemo(() => {
+    const scoresByUser = new Map<string, Record<string, number>>();
+    savedMeasurements.forEach((m: Measurement) => {
+      if (!MQ_BASE_CODES.has(m.metric)) return;
+      const scores = scoresByUser.get(m.userId) ?? {};
+      scores[m.metric] = Number(m.value);
+      scoresByUser.set(m.userId, scores);
+    });
+    const summaries = new Map<string, string>();
+    scoresByUser.forEach((scores, userId) => {
       const scored = MQI_PATTERNS.filter((p) => scores[p.code] !== undefined).length;
       const total = computeMqiTotal(scores);
-      if (total !== null) return `${total} / 24`;
-      return scored > 0 ? `${scored} of 8 scored` : "Not scored";
-    },
-    [existingMeasurements]
-  );
+      summaries.set(userId, total !== null ? `${total} / 24` : scored > 0 ? `${scored} of 8 scored` : "Not scored");
+    });
+    return summaries;
+  }, [savedMeasurements]);
 
-  // Save Movement Quality scores for one athlete (upserts via the event bulk route, then deletes)
+  const openMovementQuality = (userId: string) => {
+    setMqServerErrors(undefined);
+    setMqAthleteId(userId);
+  };
+
+  // Save one athlete's Movement Quality scores in one atomic request (upserts + deletes)
   const handleSaveMovementQuality = async ({ upserts, deletes }: MovementQualitySaveInput) => {
     if (event?.isFrozen) {
       toast({
@@ -355,6 +405,7 @@ export default function EventDataEntry() {
       });
       return;
     }
+    if (!mqAthleteId) return;
     if (upserts.length === 0 && deletes.length === 0) {
       toast({ title: "No Changes", description: "No scores to save." });
       setMqAthleteId(null);
@@ -362,27 +413,20 @@ export default function EventDataEntry() {
     }
 
     setIsSaving(true);
+    setMqServerErrors(undefined);
     try {
-      let failed = 0;
-      if (upserts.length > 0) {
-        const result = await bulkCreate.mutateAsync({ eventId: eventId!, measurements: upserts });
-        failed += result.errors?.length ?? 0;
-      }
-      for (const measurementId of deletes) {
-        await deleteMeasurement.mutateAsync({ eventId: eventId!, measurementId });
-      }
-      await refetchMeasurements();
-      if (failed > 0) {
-        toast({
-          variant: "destructive",
-          title: "Partial Save",
-          description: `${failed} score${failed !== 1 ? "s" : ""} could not be saved.`,
-        });
-      } else {
-        toast({ title: "Scores Saved", description: "Movement Quality scores saved." });
-        setMqAthleteId(null);
-      }
+      await saveMovementQuality.mutateAsync({
+        eventId: eventId!,
+        userId: mqAthleteId,
+        upserts: upserts.map(({ metric, value, notes, mediaUrl }) => ({ metric, value, notes, mediaUrl })),
+        deletes,
+      });
+      toast({ title: "Scores Saved", description: "Movement Quality scores saved." });
+      setMqAthleteId(null);
     } catch (error: any) {
+      if (error instanceof MovementQualitySaveError) {
+        setMqServerErrors(Object.fromEntries(error.errors.map((e) => [e.metric, e.error])));
+      }
       toast({
         variant: "destructive",
         title: "Save Failed",
@@ -583,6 +627,25 @@ export default function EventDataEntry() {
         </div>
       )}
 
+      {hasOnlyMqTotals && (
+        <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg text-blue-700">
+          <AlertCircle className="h-4 w-4" />
+          <span className="text-sm">
+            MQI total is calculated from the 8 Movement Quality pattern scores. Add those metrics
+            to this event to enter scores.
+          </span>
+        </div>
+      )}
+
+      {hasMovementQuality && measurementsError && (
+        <div role="alert" className="flex items-center gap-2 p-3 bg-red-50 rounded-lg text-red-700">
+          <AlertCircle className="h-4 w-4" />
+          <span className="text-sm">
+            Could not load saved scores. Movement Quality entry is disabled until you refresh.
+          </span>
+        </div>
+      )}
+
       {/* Unsaved changes warning */}
       {dirtyCount > 0 && !event.isFrozen && (
         <div className="flex items-center gap-2 p-3 bg-yellow-50 rounded-lg text-yellow-700">
@@ -689,11 +752,12 @@ export default function EventDataEntry() {
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => setMqAthleteId(row.userId)}
+                          onClick={() => openMovementQuality(row.userId)}
+                          disabled={measurementsError}
                           aria-label={`Movement Quality for ${row.fullName}`}
                         >
                           <Activity className="h-4 w-4 mr-2" />
-                          {mqSummary(row.userId)}
+                          {mqSummaryByUser.get(row.userId) ?? "Not scored"}
                         </Button>
                       </td>
                     )}
@@ -713,9 +777,10 @@ export default function EventDataEntry() {
           userId={mqAthlete.userId}
           eventDate={new Date(event.startDate).toISOString()}
           enabledMetricCodes={mqEnabledCodes}
-          measurements={existingMeasurements ?? []}
+          measurements={savedMeasurements}
           disabled={event.isFrozen}
           isSaving={isSaving}
+          serverErrors={mqServerErrors}
           onSave={handleSaveMovementQuality}
         />
       )}
