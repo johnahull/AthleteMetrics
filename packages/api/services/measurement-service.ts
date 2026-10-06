@@ -137,7 +137,14 @@ export class MeasurementService {
   async createMeasurement(
     measurement: InsertMeasurement,
     submittedBy: string,
-    submitterRole: string = 'athlete'
+    submitterRole: string = 'athlete',
+    // Trusted server-side event context (set only by the event measurement routes after the
+    // frozen/permission checks); deliberately NOT read from the request body schema.
+    eventContext?: {
+      eventId: string;
+      eventNameSnapshot: string;
+      eventDateSnapshot: string; // 'YYYY-MM-DD'
+    }
   ): Promise<Measurement> {
     // Wrap entire operation in transaction to prevent race conditions
     // Race condition scenario: User joins/leaves team between active teams query and measurement insert
@@ -339,6 +346,9 @@ export class MeasurementService {
           teamNameSnapshot,
           organizationId: organizationId || null,
           isVerified,
+          eventId: eventContext?.eventId ?? null,
+          eventNameSnapshot: eventContext?.eventNameSnapshot ?? null,
+          eventDateSnapshot: eventContext?.eventDateSnapshot ?? null,
           isCalculated: isCalculatedFromPairedInput,
           calculationMetadata: pairedInputMetadata,
           // Paired-input metrics are computed from inline inputs (not from

@@ -63,6 +63,29 @@ async function canManageEventMeasurements(user: SessionUser, eventId: string): P
   return roles.includes('org_admin') || roles.includes('coach');
 }
 
+/**
+ * Role used for auto-verification of the entered measurement. Only called after
+ * canManageEventMeasurements passed, so the user is site admin, org_admin or coach of the event org.
+ */
+async function resolveSubmitterRole(user: SessionUser, eventId: string): Promise<string> {
+  if (isSiteAdmin(user)) return "site_admin";
+  const event = await storage.getEvent(eventId);
+  const roles = event?.organizationId ? await storage.getUserRoles(user.id, event.organizationId) : [];
+  return roles.includes("org_admin") ? "org_admin" : "coach";
+}
+
+/** Map service errors to HTTP statuses (validation and frozen -> 400, missing -> 404). */
+function sendEventMeasurementError(res: Response, error: any) {
+  const message: string = error?.message ?? "Unknown error";
+  if (message.includes("frozen") || /Value must/.test(message)) {
+    return res.status(400).json({ error: message });
+  }
+  if (message.includes("not found")) {
+    return res.status(404).json({ error: message });
+  }
+  return res.status(500).json({ error: message });
+}
+
 export function registerEventMeasurementsRoutes(app: Express) {
   const eventMeasurementsService = new EventMeasurementsService(storage);
 
@@ -207,19 +230,14 @@ export function registerEventMeasurementsRoutes(app: Express) {
             notes,
             mediaUrl: mediaUrl.value,
           },
-          user.id
+          user.id,
+          await resolveSubmitterRole(user, eventId)
         );
 
         return res.status(201).json(measurement);
       } catch (error: any) {
         console.error("Error creating event measurement:", error);
-        if (error.message.includes("frozen")) {
-          return res.status(400).json({ error: error.message });
-        }
-        if (error.message.includes("not found")) {
-          return res.status(404).json({ error: error.message });
-        }
-        return res.status(500).json({ error: error.message });
+        return sendEventMeasurementError(res, error);
       }
     }
   );
@@ -285,19 +303,45 @@ export function registerEventMeasurementsRoutes(app: Express) {
             notes: m.notes,
             mediaUrl: mediaUrls[index],
           })),
-          user.id
+          user.id,
+          await resolveSubmitterRole(user, eventId)
         );
 
         return res.status(201).json(result);
       } catch (error: any) {
         console.error("Error creating bulk event measurements:", error);
-        if (error.message.includes("frozen")) {
-          return res.status(400).json({ error: error.message });
+        return sendEventMeasurementError(res, error);
+      }
+    }
+  );
+
+  /**
+   * Delete a measurement from an event (e.g. clear a Movement Quality score)
+   * DELETE /api/events/:eventId/measurements/:measurementId
+   * Same permission as create; frozen events stay frozen.
+   */
+  app.delete(
+    "/api/events/:eventId/measurements/:measurementId",
+    requireAuth,
+    eventMeasurementsMutationLimiter,
+    async (req: Request, res: Response) => {
+      try {
+        const { eventId, measurementId } = req.params;
+        const user = req.session.user;
+        if (!user?.id) {
+          return res.status(401).json({ error: "User not authenticated" });
         }
-        if (error.message.includes("not found")) {
-          return res.status(404).json({ error: error.message });
+
+        const hasAccess = await canManageEventMeasurements(user, eventId);
+        if (!hasAccess) {
+          return res.status(403).json({ error: "Access denied" });
         }
-        return res.status(500).json({ error: error.message });
+
+        await eventMeasurementsService.deleteEventMeasurement(eventId, measurementId);
+        return res.status(204).send();
+      } catch (error: any) {
+        console.error("Error deleting event measurement:", error);
+        return sendEventMeasurementError(res, error);
       }
     }
   );

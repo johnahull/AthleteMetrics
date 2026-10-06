@@ -9,8 +9,14 @@
  * - Respects event freeze status
  */
 
+import { and, eq } from "drizzle-orm";
 import type { IStorage } from "../storage";
-import type { Measurement, Event } from "@shared/schema";
+import { measurements, siteMetrics, type Measurement, type Event } from "@shared/schema";
+import { db } from "../db";
+import { MeasurementService } from "./measurement-service";
+
+/** site_metrics.category of the ordinal Movement Quality scores (AM-FEAT-015) */
+const MQ_CATEGORY = "Movement Quality";
 
 export interface EventMeasurementInput {
   userId: string;
@@ -30,8 +36,95 @@ export interface BulkCreateResult {
 export class EventMeasurementsService {
   private storage: IStorage;
 
-  constructor(storage: IStorage) {
+  private measurementService: MeasurementService;
+
+  constructor(storage: IStorage, measurementService: MeasurementService = new MeasurementService()) {
     this.storage = storage;
+    this.measurementService = measurementService;
+  }
+
+  /**
+   * Write one measurement through MeasurementService (units from site_metrics, metric-aware
+   * value validation, coach auto-verify, derived-metric calculator) with event context.
+   *
+   * Movement Quality scores are one-per-athlete-per-event: writing again edits the existing
+   * row instead of creating a duplicate. All other metrics keep append semantics.
+   */
+  private async writeEventMeasurement(
+    event: Event,
+    data: EventMeasurementInput,
+    createdBy: string,
+    submitterRole: string
+  ): Promise<Measurement> {
+    const date = data.date.toISOString().split("T")[0];
+
+    const [metricRow] = await db
+      .select({ category: siteMetrics.category })
+      .from(siteMetrics)
+      .where(eq(siteMetrics.code, data.metric));
+
+    if (metricRow?.category === MQ_CATEGORY) {
+      const [existing] = await db
+        .select({ id: measurements.id })
+        .from(measurements)
+        .where(
+          and(
+            eq(measurements.userId, data.userId),
+            eq(measurements.metric, data.metric),
+            eq(measurements.eventId, event.id)
+          )
+        )
+        .limit(1);
+
+      if (existing) {
+        return this.measurementService.updateMeasurement(existing.id, {
+          value: data.value,
+          date,
+          notes: data.notes,
+          mediaUrl: data.mediaUrl,
+        });
+      }
+    }
+
+    return this.measurementService.createMeasurement(
+      {
+        userId: data.userId,
+        metric: data.metric,
+        value: data.value,
+        date,
+        notes: data.notes,
+        mediaUrl: data.mediaUrl,
+      } as any,
+      createdBy,
+      submitterRole,
+      {
+        eventId: event.id,
+        eventNameSnapshot: event.name,
+        eventDateSnapshot: event.startDate.toISOString().split("T")[0],
+      }
+    );
+  }
+
+  /**
+   * Delete a measurement that belongs to an event (e.g. clearing a Movement Quality score).
+   * Frozen events stay frozen. Derived totals are recalculated by MeasurementService.
+   */
+  async deleteEventMeasurement(eventId: string, measurementId: string): Promise<void> {
+    const event = await this.storage.getEvent(eventId);
+    if (!event) {
+      throw new Error("Event not found");
+    }
+    if (event.isFrozen) {
+      throw new Error("Cannot delete measurements for frozen event");
+    }
+    const [existing] = await db
+      .select({ id: measurements.id, eventId: measurements.eventId })
+      .from(measurements)
+      .where(eq(measurements.id, measurementId));
+    if (!existing || existing.eventId !== eventId) {
+      throw new Error("Measurement not found for this event");
+    }
+    await this.measurementService.deleteMeasurement(measurementId);
   }
 
   /**
@@ -61,7 +154,8 @@ export class EventMeasurementsService {
   async createEventMeasurement(
     eventId: string,
     data: EventMeasurementInput,
-    createdBy: string
+    createdBy: string,
+    submitterRole: string = "coach"
   ): Promise<Measurement> {
     // Get event to check frozen status and for snapshots
     const event = await this.storage.getEvent(eventId);
@@ -83,21 +177,7 @@ export class EventMeasurementsService {
       throw new Error('Event must have a start date');
     }
 
-    // Create measurement with event context
-    const measurement = await this.storage.createMeasurement(
-      {
-        userId: data.userId,
-        metric: data.metric,
-        value: data.value,
-        date: data.date.toISOString().split('T')[0],
-        notes: data.notes,
-        mediaUrl: data.mediaUrl,
-        eventId: eventId,
-        eventNameSnapshot: event.name,
-        eventDateSnapshot: event.startDate.toISOString().split('T')[0],
-      },
-      createdBy
-    );
+    const measurement = await this.writeEventMeasurement(event, data, createdBy, submitterRole);
 
     return measurement;
   }
@@ -108,7 +188,8 @@ export class EventMeasurementsService {
   async createEventMeasurementsBulk(
     eventId: string,
     measurementsData: EventMeasurementInput[],
-    createdBy: string
+    createdBy: string,
+    submitterRole: string = "coach"
   ): Promise<BulkCreateResult> {
     const event = await this.storage.getEvent(eventId);
     if (!event) {
@@ -136,20 +217,7 @@ export class EventMeasurementsService {
           throw new Error('Invalid metric code');
         }
 
-        const measurement = await this.storage.createMeasurement(
-          {
-            userId: m.userId,
-            metric: m.metric,
-            value: m.value,
-            date: m.date.toISOString().split('T')[0],
-            notes: m.notes,
-            mediaUrl: m.mediaUrl,
-            eventId: eventId,
-            eventNameSnapshot: event.name,
-            eventDateSnapshot: event.startDate.toISOString().split('T')[0],
-          },
-          createdBy
-        );
+        const measurement = await this.writeEventMeasurement(event, m, createdBy, submitterRole);
         created.push(measurement);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
