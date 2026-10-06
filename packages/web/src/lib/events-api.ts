@@ -1316,6 +1316,26 @@ export async function createEventMeasurementsBulk(
   return response.json();
 }
 
+/**
+ * Delete a measurement from an event (e.g. clear a Movement Quality score)
+ */
+export async function deleteEventMeasurement(eventId: string, measurementId: string): Promise<void> {
+  const response = await fetch(`/api/events/${eventId}/measurements/${measurementId}`, {
+    method: 'DELETE',
+  });
+
+  if (!response.ok) {
+    let message = 'Failed to delete measurement';
+    try {
+      const body = await response.json();
+      message = body.error || body.message || message;
+    } catch {
+      // keep fallback
+    }
+    throw new Error(message);
+  }
+}
+
 // ============================================================================
 // React Query Hooks - Event Measurements
 // ============================================================================
@@ -1382,6 +1402,22 @@ export function useCreateEventMeasurementsBulk() {
       eventId: string;
       measurements: CreateEventMeasurementInput[];
     }) => createEventMeasurementsBulk(eventId, measurements),
+    onSuccess: (_, { eventId }) => {
+      queryClient.invalidateQueries({ queryKey: ['events', eventId, 'measurements'] });
+      queryClient.invalidateQueries({ queryKey: ['events', eventId, 'results'] });
+    },
+  });
+}
+
+/**
+ * Hook to delete an event measurement
+ */
+export function useDeleteEventMeasurement() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ eventId, measurementId }: { eventId: string; measurementId: string }) =>
+      deleteEventMeasurement(eventId, measurementId),
     onSuccess: (_, { eventId }) => {
       queryClient.invalidateQueries({ queryKey: ['events', eventId, 'measurements'] });
       queryClient.invalidateQueries({ queryKey: ['events', eventId, 'results'] });
