@@ -22,9 +22,12 @@ export function isSafePublicUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== 'https:') return false;
-    const hostname = parsed.hostname;
-    // Block loopback, unspecified, and common internal hostnames
-    if (hostname === 'localhost') return false;
+    // A trailing dot is the same DNS name (localhost. == localhost), so drop it
+    // before the name checks below.
+    const hostname = parsed.hostname.replace(/\.+$/, '');
+    // Block loopback, unspecified, and common internal hostnames (*.localhost
+    // resolves to loopback too, RFC 6761)
+    if (hostname === 'localhost' || hostname.endsWith('.localhost')) return false;
     if (/^0\./.test(hostname)) return false; // 0.0.0.0/8 — Linux routes to local interfaces
     if (/^127\./.test(hostname)) return false; // 127.0.0.0/8 loopback range
     // Block all IPv6 addresses (bracketed) — covers ::1, ::ffff:*, fc00::/7, fe80::, etc.

@@ -279,7 +279,7 @@ export function registerGlobalAthleteRoutes(app: Express) {
       const unifiedMeasurements = await globalAthleteService.getUnifiedMeasurements(currentUser.id);
 
       // Enrich with organization names
-      const orgIds = [...new Set(unifiedMeasurements.map(m => m.organizationId).filter(Boolean))];
+      const orgIds = [...new Set(unifiedMeasurements.map(m => m.organizationId).filter((id): id is string => !!id))];
       const orgs = orgIds.length > 0
         ? await db.select({ id: organizations.id, name: organizations.name })
             .from(organizations)
