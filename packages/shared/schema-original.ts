@@ -1614,9 +1614,21 @@ export const insertInvitationSchema = createInsertSchema(invitations).omit({
 /** Max length of measurements.media_url (AM-FEAT-015 Phase 2). */
 export const MEDIA_URL_MAX_LENGTH = 2048;
 
+const hasUrlCredentials = (u: string): boolean => {
+  try {
+    const parsed = new URL(u);
+    return parsed.username !== "" || parsed.password !== "";
+  } catch {
+    return false;
+  }
+};
+
 /**
  * Optional media link on a measurement: https only, public host, <= 2048 chars.
  * Empty / whitespace-only string is normalized to null (clears the link).
+ * Rejects embedded whitespace/control characters and credentials
+ * (e.g. https://youtube.com@evil.com), and stores the canonical WHATWG form
+ * (lowercased host, percent-encoded path) rather than the raw input.
  */
 export const mediaUrlSchema = z
   .preprocess(
@@ -1624,7 +1636,14 @@ export const mediaUrlSchema = z
     z
       .string()
       .max(MEDIA_URL_MAX_LENGTH, `Media URL cannot exceed ${MEDIA_URL_MAX_LENGTH} characters`)
+      .regex(/^[^\s\x00-\x1f\x7f]+$/, "Media URL must not contain spaces or control characters")
       .refine((u) => isSafePublicUrl(u), "Media URL must be a public HTTPS URL")
+      .refine((u) => !hasUrlCredentials(u), "Media URL must not contain a username or password")
+      .transform((u) => new URL(u).href)
+      .refine(
+        (href) => href.length <= MEDIA_URL_MAX_LENGTH,
+        `Media URL cannot exceed ${MEDIA_URL_MAX_LENGTH} characters`,
+      )
       .nullable(),
   )
   .optional();

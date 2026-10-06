@@ -4,7 +4,8 @@
  * Empty string / null clears.
  */
 import { describe, it, expect } from "vitest";
-import { measurements, insertMeasurementSchema, MEDIA_URL_MAX_LENGTH } from "../schema";
+import { measurements, insertMeasurementSchema, mediaUrlSchema, MEDIA_URL_MAX_LENGTH } from "../schema";
+import { isSafePublicUrl } from "../url-safety";
 
 const base = {
   userId: "user-1",
@@ -88,5 +89,63 @@ describe("insertMeasurementSchema - mediaUrl", () => {
     if (cleared.success) expect(cleared.data.mediaUrl).toBeNull();
     expect(upd.safeParse({ mediaUrl: null }).success).toBe(true);
     expect(upd.safeParse({ mediaUrl: "http://example.com/v" }).success).toBe(false);
+  });
+});
+
+describe("mediaUrlSchema hardening", () => {
+  it.each([
+    ["embedded newline", "https://example.com/a\nb"],
+    ["embedded tab", "https://example.com/a\tb"],
+    ["embedded space", "https://example.com/a b"],
+    ["NUL byte", "https://example.com/a\u0000b"],
+    ["DEL char", "https://example.com/a\u007fb"],
+  ])("rejects %s", (_label, url) => {
+    const r = mediaUrlSchema.safeParse(url);
+    expect(r.success).toBe(false);
+  });
+
+  it.each([
+    ["username@host (looks like youtube)", "https://youtube.com@evil.com/x"],
+    ["user:pass@host", "https://user:pass@example.com/x"],
+    ["password only", "https://:secret@example.com/x"],
+  ])("rejects credentials in the URL: %s", (_label, url) => {
+    const r = mediaUrlSchema.safeParse(url);
+    expect(r.success).toBe(false);
+  });
+
+  it.each([
+    ["uppercase host", "https://Clips.EXAMPLE.com/Video", "https://clips.example.com/Video"],
+    ["backslash path", "https://example.com\\clip", "https://example.com/clip"],
+    ["quotes and angle brackets", 'https://example.com/a"<b>', "https://example.com/a%22%3Cb%3E"],
+    ["no path", "https://example.com", "https://example.com/"],
+    ["surrounding whitespace", "  https://example.com/v  ", "https://example.com/v"],
+  ])("stores the canonical WHATWG form (%s)", (_label, input, canonical) => {
+    const r = mediaUrlSchema.safeParse(input);
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data).toBe(canonical);
+  });
+
+  it("rejects a URL whose canonical form exceeds the max length", () => {
+    // Each '"' (1 char) canonicalizes to '%22' (3 chars)
+    const prefix = "https://example.com/";
+    const raw = prefix + '"'.repeat(MEDIA_URL_MAX_LENGTH - prefix.length);
+    expect(raw.length).toBe(MEDIA_URL_MAX_LENGTH);
+    expect(mediaUrlSchema.safeParse(raw).success).toBe(false);
+  });
+});
+
+describe("isSafePublicUrl hardening", () => {
+  it.each([
+    ["trailing-dot localhost", "https://localhost./clip"],
+    ["trailing-dot .internal", "https://metadata.aws.internal./x"],
+    ["trailing-dot .local", "https://printer.local./x"],
+    ["*.localhost", "https://app.localhost/clip"],
+    ["trailing-dot *.localhost", "https://app.localhost./clip"],
+  ])("rejects %s", (_label, url) => {
+    expect(isSafePublicUrl(url)).toBe(false);
+  });
+
+  it("still accepts a normal public host", () => {
+    expect(isSafePublicUrl("https://clips.example.com/a")).toBe(true);
   });
 });
