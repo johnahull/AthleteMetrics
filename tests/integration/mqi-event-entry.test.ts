@@ -383,4 +383,22 @@ describe('MQI entry via event routes', () => {
     await single(early.id, 'MQ_JUMP', 0, coachACookie, { date: d });
     expect(Number((await totalNow())[0].value)).toBe(8);
   });
+
+  it('MQ metrics are selectable as event metrics (appear in the org metric list and can be added to an event)', async () => {
+    const list = await request(app)
+      .get('/api/metrics')
+      .set('Cookie', coachACookie)
+      .set('x-organization-id', orgA.id);
+    expect(list.status).toBe(200);
+    const codes = list.body.map((m: any) => m.code);
+    for (const code of [...PATTERNS, 'MQ_TRANS_GAS_BRAKE', 'MQI_TOTAL']) expect(codes).toContain(code);
+    expect(list.body.find((m: any) => m.code === 'MQ_JUMP').category).toBe('Movement Quality');
+
+    const ev = await mkEvent({ start: '2026-03-21T10:00:00Z' });
+    const add = await request(app)
+      .post(`/api/events/${ev.id}/metrics`)
+      .set('Cookie', coachACookie)
+      .send({ metricCode: 'MQ_JUMP' });
+    expect(add.status).toBe(201);
+  });
 });

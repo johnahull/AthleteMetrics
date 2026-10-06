@@ -62,6 +62,11 @@ interface MovementQualityPanelProps {
   onSave: (input: MovementQualitySaveInput) => Promise<void> | void;
 }
 
+function rubricLabel(score: number | null | undefined): string | null {
+  if (score === null || score === undefined) return null;
+  return MQI_RUBRIC.find((r) => r.score === score)?.label ?? null;
+}
+
 function savedRowsFor(userId: string, measurements: Measurement[]): Record<string, MqiSavedRow> {
   const codes = new Set([...MQI_PATTERNS, ...MQI_TRANSITIONS].map((m) => m.code));
   const result: Record<string, MqiSavedRow> = {};
@@ -135,6 +140,11 @@ export function MovementQualityPanel({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span id={labelId} className="font-medium text-sm">
             {metric.label}
+            {rubricLabel(scores[metric.code]) && (
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                {rubricLabel(scores[metric.code])}
+              </span>
+            )}
           </span>
           <Controller
             control={form.control}
@@ -148,14 +158,14 @@ export function MovementQualityPanel({
                 disabled={disabled}
                 role="group"
                 aria-label={`${metric.label} score (0 to 3)`}
-                className="justify-start"
+                className="w-full justify-start sm:w-auto"
               >
                 {[...MQI_RUBRIC].reverse().map((r) => (
                   <ToggleGroupItem
                     key={r.score}
                     value={String(r.score)}
                     aria-label={`${r.score} ${r.label}`}
-                    className="h-11 w-11 sm:h-9 sm:w-9 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                    className="h-11 flex-1 sm:h-9 sm:w-9 sm:flex-none data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
                   >
                     {r.score}
                   </ToggleGroupItem>
@@ -212,7 +222,7 @@ export function MovementQualityPanel({
         <form onSubmit={submit} className="space-y-4" noValidate>
           <div
             data-testid="mqi-total"
-            className="flex items-center justify-between rounded-lg bg-muted p-3"
+            className="sticky top-0 z-10 flex items-center justify-between rounded-lg bg-muted p-3 shadow-sm"
             aria-live="polite"
           >
             <span className="text-sm font-medium">MQI total</span>
@@ -259,7 +269,7 @@ export function MovementQualityPanel({
             </section>
           )}
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="sticky bottom-0 flex-row justify-end gap-2 bg-background pt-2 sm:space-x-0">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
