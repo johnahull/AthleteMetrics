@@ -9,6 +9,7 @@ import { FileUpload } from "./photo-upload/file-upload";
 import { UploadControls } from "./photo-upload/upload-controls";
 import { ProgressIndicator } from "./photo-upload/progress-indicator";
 import { OCRResults } from "./photo-upload/ocr-results";
+import { Protocol505Picker, type Protocol505 } from "./photo-upload/protocol-505-picker";
 import { useAuth } from "@/lib/auth";
 import type {
   MeasurementImportMode,
@@ -59,20 +60,23 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
   // Import mode options
   const [measurementMode, setMeasurementMode] = useState<MeasurementImportMode>('create_athletes');
   const [showAdvanced, setShowAdvanced] = useState(false);
+  // 5-0-5 protocol: deliberately no default; only sent after the user chooses.
+  const [protocol505, setProtocol505] = useState<Protocol505 | undefined>(undefined);
 
   const { toast } = useToast();
   const { userOrganizations } = useAuth();
   const queryClient = useQueryClient();
 
   const uploadMutation = useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async ({ file, protocol505: protocol }: { file: File; protocol505?: Protocol505 }) => {
       const formData = new FormData();
       formData.append('file', file);
 
       // Add import options
       const options = {
         measurementMode,
-        organizationId: userOrganizations?.[0]?.organizationId
+        organizationId: userOrganizations?.[0]?.organizationId,
+        ...(protocol ? { protocol505: protocol } : {})
       };
       formData.append('options', JSON.stringify(options));
 
@@ -175,7 +179,7 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
 
   const handleUpload = () => {
     if (!selectedFile) return;
-    uploadMutation.mutate(selectedFile);
+    uploadMutation.mutate({ file: selectedFile, protocol505 });
   };
 
   const handleClear = () => {
@@ -205,6 +209,12 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
             isUploading={uploadMutation.isPending}
             allowedTypes={ALLOWED_FILE_TYPES}
             maxSizeMB={MAX_FILE_SIZE_MB}
+          />
+
+          <Protocol505Picker
+            value={protocol505}
+            onChange={setProtocol505}
+            disabled={uploadMutation.isPending}
           />
 
           {/* Import Options */}
@@ -274,7 +284,14 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
         </CardContent>
       </Card>
 
-      {ocrResult && <OCRResults result={ocrResult} />}
+      {ocrResult && (
+        <OCRResults
+          result={ocrResult}
+          protocol505={protocol505}
+          onRetry={selectedFile ? handleUpload : undefined}
+          isRetrying={uploadMutation.isPending}
+        />
+      )}
     </div>
   );
 }

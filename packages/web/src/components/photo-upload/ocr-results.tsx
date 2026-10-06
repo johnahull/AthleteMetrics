@@ -25,6 +25,7 @@ interface OCRResult {
     errors: Array<{
       row: number;
       error: string;
+      code?: string;
       data: any;
     }>;
     warnings: string[];
@@ -33,11 +34,18 @@ interface OCRResult {
 
 interface OCRResultsProps {
   result: OCRResult;
+  /** Current 5-0-5 protocol choice from the upload form (undefined = none). */
+  protocol505?: 'M' | 'YD';
+  /** Re-run the import with the file still held by the upload form. */
+  onRetry?: () => void;
+  isRetrying?: boolean;
 }
 
-export function OCRResults({ result }: OCRResultsProps) {
+export function OCRResults({ result, protocol505, onRetry, isRetrying }: OCRResultsProps) {
   const [showExtractedText, setShowExtractedText] = useState(false);
   const { getLabel } = useMetricLabels();
+
+  const needsProtocol = result.results.errors.some((e) => e.code === 'PROTOCOL_505_REQUIRED');
 
   const getConfidenceColor = (confidence: number) => {
     if (confidence >= 80) return 'text-green-600';
@@ -178,6 +186,33 @@ export function OCRResults({ result }: OCRResultsProps) {
               ))}
             </div>
           </div>
+        )}
+
+        {/* 5-0-5 protocol retry */}
+        {needsProtocol && (
+          <Alert role="alert">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>5-0-5 protocol needed</AlertTitle>
+            <AlertDescription className="mt-2 space-y-2">
+              <div>
+                Choose meters or yards in the "5-0-5 protocol" selector above the upload button.
+              </div>
+              {result.results.successful === 0 && onRetry ? (
+                <Button
+                  type="button"
+                  onClick={onRetry}
+                  disabled={!protocol505 || isRetrying}
+                >
+                  Retry with selection
+                </Button>
+              ) : (
+                <div className="text-sm">
+                  Other readings from this photo were already imported, so do not upload it again
+                  (it would create duplicates). Enter the 5-0-5 times manually.
+                </div>
+              )}
+            </AlertDescription>
+          </Alert>
         )}
 
         {/* Warnings */}

@@ -232,6 +232,9 @@ const imageUpload = multer({
   }
 });
 
+const OCR_505_NEUTRAL_METRIC = 'AGILITY_505_UNRESOLVED';
+const PROTOCOL_505_REQUIRED_MESSAGE = 'Choose meters or yards for 5-0-5 readings';
+
 export function registerImportExportRoutes(app: Express) {
   // Photo OCR upload route (must come before generic import route)
   app.post("/api/import/photo", uploadLimiter, requireAuth, imageUpload.single('file'), async (req, res) => {
@@ -268,6 +271,13 @@ export function registerImportExportRoutes(app: Express) {
 
       const measurementMode = options.measurementMode || 'match_only';
       const teamHandling = options.teamHandling || 'auto_create_confirm';
+
+      // AM-FEAT-016: 5-0-5 protocol (meters or yards). Optional here; a 5-0-5 reading
+      // without it is rejected per reading below. A supplied but invalid value is a 400.
+      const protocol505 = options.protocol505;
+      if (protocol505 !== undefined && protocol505 !== 'M' && protocol505 !== 'YD') {
+        return res.status(400).json({ message: "Invalid protocol505: must be 'M' or 'YD'" });
+      }
 
       // Tenant isolation: reject a client-supplied organizationId the caller
       // does not belong to before any org-scoped read or write.
@@ -312,6 +322,22 @@ export function registerImportExportRoutes(app: Express) {
               data: extracted
             });
             continue;
+          }
+
+          // The OCR parser is protocol-neutral for the 5-0-5. Resolve it from the user's
+          // choice; without one, reject the reading (never save the neutral token).
+          let resolvedMetric: string = extracted.metric;
+          if (extracted.metric === OCR_505_NEUTRAL_METRIC) {
+            if (!protocol505) {
+              errors.push({
+                row: rowNum,
+                error: PROTOCOL_505_REQUIRED_MESSAGE,
+                code: 'PROTOCOL_505_REQUIRED',
+                data: extracted
+              });
+              continue;
+            }
+            resolvedMetric = protocol505 === 'M' ? 'AGILITY_505_M' : 'AGILITY_505_YD';
           }
 
           // Find or create the athlete
@@ -394,7 +420,7 @@ export function registerImportExportRoutes(app: Express) {
           const measurementData = {
             userId: userId,
             date: measurementDate,
-            metric: extracted.metric as any,
+            metric: resolvedMetric as any,
             value: numericValue,
             age: age || 18, // Default age if we can't determine it
             notes: `OCR Import - Raw: ${extracted.rawText} (Confidence: ${extracted.confidence}%)`

@@ -238,7 +238,7 @@ export class MeasurementValidator {
         }
         break;
 
-      case 'AGILITY_505':
+      case 'AGILITY_505_UNRESOLVED':
       case 'AGILITY_5105':
         if (value < 2.0) {
           warnings.push('Very fast agility time - verify measurement setup');

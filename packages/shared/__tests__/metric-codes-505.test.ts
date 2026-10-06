@@ -55,16 +55,6 @@ describe('AM-FEAT-016 metric codes', () => {
 });
 
 /**
- * Paths owned by a later step (OCR protocol choice, plan Step 4). They may keep the
- * retired/neutral token until that step lands; remove entries from here then.
- */
-export const OCR_STEP_ALLOWLIST = [
-  'packages/api/ocr/',
-  'packages/shared/ocr-types.ts',
-  'packages/api/routes/import-export-routes.ts', // photo import route
-];
-
-/**
  * Executable repo guard: the retired exact tokens must not remain in source.
  * Word-bounded: underscore is a word character, so \bAGILITY_505\b does NOT hit
  * AGILITY_505_M or AGILITY_505_YD_L.
@@ -98,14 +88,13 @@ describe('repo guard: retired 5-0-5 tokens', () => {
     expect(retiredRegex.test('AGILITY_505_LSI,')).toBe(true);
   });
 
-  it('no retired token remains outside migrations, tests, docs and the OCR allowlist', () => {
+  it('no retired token remains outside migrations, tests and docs', () => {
     const files: string[] = [];
     for (const r of SCAN_ROOTS) walk(r, files);
     const offenders: string[] = [];
     for (const f of files) {
       if (!TEXT_EXT.test(f)) continue;
       if (/\.(test|spec)\.[a-z]+$/.test(f)) continue;
-      if (OCR_STEP_ALLOWLIST.some((a) => f === a || f.startsWith(a))) continue;
       const lines = fs.readFileSync(path.join(root, f), 'utf8').split('\n');
       lines.forEach((line, i) => {
         if (retiredRegex.test(line)) offenders.push(`${f}:${i + 1}: ${line.trim()}`);

@@ -109,7 +109,7 @@ export const ocrConfigSchema = z.object({
       'DASH_40YD': { min: 3.0, max: 8.0 },
       'FLY10_TIME': { min: 0.8, max: 3.0 },
       'VERTICAL_JUMP': { min: 10, max: 50 },
-      'AGILITY_505': { min: 1.5, max: 4.0 },
+      'AGILITY_505_UNRESOLVED': { min: 1.5, max: 4.0 },
       'AGILITY_5105': { min: 2.0, max: 6.0 },
       'T_TEST': { min: 7.0, max: 15.0 },
       'RSI': { min: 0.5, max: 5.0 },
