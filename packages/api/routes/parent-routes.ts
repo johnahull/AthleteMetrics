@@ -18,7 +18,6 @@
  * calls POST /api/auth/register/parent which triggers linkParentAccount().
  */
 
-import { omitMediaUrlFromRows } from "../utils/measurement-redaction";
 import type { Express } from "express";
 import { eq, and, isNull } from "drizzle-orm";
 import rateLimit from "express-rate-limit";
@@ -27,6 +26,7 @@ import { requireAuth } from "../middleware";
 import { requireParentAccess } from "../permissions/parent-middleware";
 import { parentAthleteLinks } from "@shared/schema/tables/coppa";
 import { storage } from "../storage";
+import { omitMediaUrlFromRows } from "../utils/measurement-redaction";
 import { reports, reportShares, auditLogs } from "@shared/schema";
 import { isSiteAdmin } from "@shared/auth-utils";
 import type { AuthenticatedRequest } from "../middleware";

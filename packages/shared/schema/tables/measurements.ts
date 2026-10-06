@@ -25,7 +25,8 @@ export const measurements = pgTable("measurements", {
   flyInDistance: decimal("fly_in_distance", { precision: 10, scale: 3 }), // Optional yards for FLY10_TIME
   auxiliaryValue: decimal("auxiliary_value", { precision: 10, scale: 3 }), // Secondary input for paired-input metrics (e.g., reps for 1RM-est)
   notes: text("notes"),
-  // Optional https link to media (e.g. video clip). Validated on write (isSafePublicUrl, max 2048).
+  // Optional https link to media (e.g. video clip). Validated on write (mediaUrlSchema / isSafePublicUrl,
+  // max 2048); migration 0147 also adds CHECK (char_length(media_url) <= 2048), not declared here.
   // NEVER include in public reports/snapshots or CSV/LLM/COPPA exports (AM-FEAT-015 Decision 12).
   mediaUrl: text("media_url"),
   // Team context fields - immutable snapshot of team at time of measurement

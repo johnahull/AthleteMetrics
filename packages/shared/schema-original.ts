@@ -403,6 +403,8 @@ export const measurements = pgTable("measurements", {
   units: text("units").notNull(), // "s" or "in"
   flyInDistance: decimal("fly_in_distance", { precision: 10, scale: 3 }), // Optional yards for FLY10_TIME
   notes: text("notes"),
+  // Optional https media link (AM-FEAT-015). Mirrors schema/tables/measurements.ts; never exported publicly.
+  mediaUrl: text("media_url"),
   // Team context fields - immutable snapshot of team at time of measurement
   // IMPORTANT: teamId is historical reference WITHOUT foreign key constraint
   // This allows measurements to retain team context even after team deletion/rename

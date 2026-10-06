@@ -6,6 +6,7 @@
 import { describe, it, expect } from "vitest";
 import { measurements, insertMeasurementSchema, mediaUrlSchema, MEDIA_URL_MAX_LENGTH } from "../schema";
 import { isSafePublicUrl } from "../url-safety";
+import { measurements as schemaOriginalMeasurements } from "../schema-original";
 
 const base = {
   userId: "user-1",
@@ -15,10 +16,13 @@ const base = {
 };
 
 describe("measurements table - mediaUrl column", () => {
-  it("exposes a nullable media_url text column", () => {
-    expect(measurements.mediaUrl).toBeDefined();
-    expect(measurements.mediaUrl.name).toBe("media_url");
-    expect(measurements.mediaUrl.notNull).toBe(false);
+  it.each([
+    ["schema/tables/measurements.ts", measurements],
+    ["schema-original.ts (backs insertMeasurementSchema)", schemaOriginalMeasurements],
+  ])("%s exposes a nullable media_url text column", (_label, table) => {
+    expect(table.mediaUrl).toBeDefined();
+    expect(table.mediaUrl.name).toBe("media_url");
+    expect(table.mediaUrl.notNull).toBe(false);
   });
 });
 
