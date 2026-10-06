@@ -4,6 +4,7 @@
  * and benchmark enablement with athlete attribute filtering
  */
 
+import { isPeerComparisonExcludedMetric } from '@shared/peer-comparison-exclusions';
 import { BaseService } from "./base-service";
 import { retryAuditLog } from "../utils/audit-retry";
 import { db } from "../db";
@@ -69,6 +70,11 @@ export class BenchmarkService extends BaseService {
 
       // Validate input
       const validatedData = insertSiteBenchmarkSchema.parse(benchmarkData);
+
+      // MQ ordinal scores are excluded from benchmarks in v1 (AM-FEAT-015 D7)
+      if (isPeerComparisonExcludedMetric(validatedData.metricCode)) {
+        throw new Error(`Invalid metric: ${validatedData.metricCode} is not available for benchmarks`);
+      }
 
       // Cycle 2: Validate metric exists
       const metric = await this.storage.getSiteMetric(validatedData.metricCode);
@@ -336,6 +342,11 @@ export class BenchmarkService extends BaseService {
       // Validate input
       const validatedData = insertTierGroupSchema.parse(data);
 
+      // MQ ordinal scores are excluded from benchmarks in v1 (AM-FEAT-015 D7)
+      if (isPeerComparisonExcludedMetric(validatedData.metricCode)) {
+        throw new Error(`Invalid metric: ${validatedData.metricCode} is not available for benchmarks`);
+      }
+
       // Validate metric exists
       const metric = await this.storage.getSiteMetric(validatedData.metricCode);
       if (!metric) {
@@ -474,6 +485,11 @@ export class BenchmarkService extends BaseService {
 
       // Validate input
       const validatedData = insertCustomBenchmarkSchema.parse(benchmarkData);
+
+      // MQ ordinal scores are excluded from benchmarks in v1 (AM-FEAT-015 D7)
+      if (isPeerComparisonExcludedMetric(validatedData.metricCode)) {
+        throw new Error(`Invalid metric: ${validatedData.metricCode} is not available for benchmarks`);
+      }
 
       // Cycle 8: Check if custom benchmarks are allowed for this organization
       const organization = await this.storage.getOrganization(validatedData.organizationId);

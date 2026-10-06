@@ -3,6 +3,7 @@
  * Uses AnalyticsService for direct DB access instead of storage layer
  */
 
+import { isPeerComparisonExcludedMetric } from '@shared/peer-comparison-exclusions';
 import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { AnalyticsService } from "../services/analytics-service";
@@ -542,6 +543,10 @@ export function registerAnalyticsRoutes(app: Express) {
       const metric = req.query.metric as string | undefined;
       if (!metric) {
         return res.status(400).json({ message: "metric parameter is required" });
+      }
+
+      if (isPeerComparisonExcludedMetric(metric)) {
+        return res.status(400).json({ message: `Invalid metric: ${metric} is not available for leaderboards` });
       }
 
       // Validate optional parameters

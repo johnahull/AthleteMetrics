@@ -10,6 +10,7 @@
  * - Integration with benchmark system
  */
 
+import { isPeerComparisonExcludedMetric } from '@shared/peer-comparison-exclusions';
 import { db } from "../db";
 import {
   users, measurements, globalAthletes, userGlobalAthleteLinks,
@@ -98,10 +99,13 @@ export class PeerComparisonService extends BaseService {
    */
   async getAthletePercentiles(
     athleteId: string,
-    metrics: string[],
+    requestedMetrics: string[],
     filters?: PeerFilterCriteria
   ): Promise<PercentileResult[]> {
     try {
+      // MQ ordinal scores are excluded from peer comparison in v1 (AM-FEAT-015 D7)
+      const metrics = requestedMetrics.filter(m => !isPeerComparisonExcludedMetric(m));
+
       // Get athlete details
       const athlete = await this.storage.getUser(athleteId);
       if (!athlete) {
@@ -194,6 +198,9 @@ export class PeerComparisonService extends BaseService {
     filters?: PeerFilterCriteria
   ): Promise<DistributionData> {
     try {
+      if (isPeerComparisonExcludedMetric(metric)) {
+        throw new Error(`Invalid metric: ${metric} is not available for peer comparison`);
+      }
       return await this.getOrComputeDistribution(metric, filters || {});
     } catch (error) {
       return this.handleError(error, "PeerComparisonService.getDistribution");
