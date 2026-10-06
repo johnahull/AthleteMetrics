@@ -33,9 +33,13 @@ const OUTLIER_RANGES: Record<string, { min: number; max: number; label: string }
   DASH_40M: { min: 4.0, max: 10.0, label: '40m dash' },
   FLY10_TIME: { min: 0.8, max: 3.0, label: '10yd fly' },
   FLY10M_TIME: { min: 0.8, max: 3.0, label: '10m fly' },
-  AGILITY_505: { min: 1.5, max: 5.0, label: '505 agility' },
-  AGILITY_505_L: { min: 1.5, max: 5.0, label: '505 agility (L)' },
-  AGILITY_505_R: { min: 1.5, max: 5.0, label: '505 agility (R)' },
+  // 5-0-5 ranges differ by protocol: 5 yd is ~8.6% shorter than 5 m, so yard times run ~9% faster.
+  AGILITY_505_M: { min: 1.5, max: 5.0, label: '505 agility (m)' },
+  AGILITY_505_M_L: { min: 1.5, max: 5.0, label: '505 agility (m, L)' },
+  AGILITY_505_M_R: { min: 1.5, max: 5.0, label: '505 agility (m, R)' },
+  AGILITY_505_YD: { min: 1.3, max: 4.6, label: '505 agility (yd)' },
+  AGILITY_505_YD_L: { min: 1.3, max: 4.6, label: '505 agility (yd, L)' },
+  AGILITY_505_YD_R: { min: 1.3, max: 4.6, label: '505 agility (yd, R)' },
   AGILITY_5105: { min: 3.5, max: 8.0, label: '5-10-5 agility' },
   AGILITY_5105_L: { min: 3.5, max: 8.0, label: '5-10-5 agility (L)' },
   AGILITY_5105_R: { min: 3.5, max: 8.0, label: '5-10-5 agility (R)' },
@@ -210,9 +214,17 @@ function mapDrillType(row: DashrRow): string | null {
     }
 
     case '505 Agility Test': {
-      if (direction === 'L' || direction === 'LEFT') return MetricType.AGILITY_505_L;
-      if (direction === 'R' || direction === 'RIGHT') return MetricType.AGILITY_505_R;
-      return MetricType.AGILITY_505;
+      // Protocol (m vs yd) comes from the Units column; blank/unknown Units default to yards.
+      const isLeft = direction === 'L' || direction === 'LEFT';
+      const isRight = direction === 'R' || direction === 'RIGHT';
+      if (unit === 'M') {
+        if (isLeft) return MetricType.AGILITY_505_M_L;
+        if (isRight) return MetricType.AGILITY_505_M_R;
+        return MetricType.AGILITY_505_M;
+      }
+      if (isLeft) return MetricType.AGILITY_505_YD_L;
+      if (isRight) return MetricType.AGILITY_505_YD_R;
+      return MetricType.AGILITY_505_YD;
     }
 
     case 'Pro Agility':

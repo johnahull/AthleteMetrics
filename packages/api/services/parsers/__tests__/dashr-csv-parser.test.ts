@@ -135,12 +135,12 @@ describe('DashrCsvParser.parse (real sample)', () => {
     expect(fly!.value).toBe(1.13);
   });
 
-  it('parses 505 agility without direction as AGILITY_505', () => {
+  it('parses 505 agility without direction as AGILITY_505_YD (fixture row is Imperial)', () => {
     const buffer = loadFixture('valid-multi-session.csv');
     const result = parser.parse(buffer, '2022-06-06');
 
     const christian = result.athletes[0];
-    const agility = christian.drills.find(d => d.metric === 'AGILITY_505');
+    const agility = christian.drills.find(d => d.metric === 'AGILITY_505_YD');
     expect(agility).toBeDefined();
     expect(agility!.value).toBe(3.76);
   });
@@ -194,20 +194,20 @@ describe('drill type mapping', () => {
     expect(dash!.value).toBe(5.2);
   });
 
-  it('maps 505 with Direction=L to AGILITY_505_L', () => {
+  it('maps 505 with Direction=L (Imperial) to AGILITY_505_YD_L', () => {
     const csv = makeCsv([
       '01/01/2025 10:00:00,Jane,,Doe,505 Agility Test,,Imperial,,,,,,,,,,,,,,,,,,,,2.500000,,,,,L,,,,,,,,,,,,,,,,,,,,,,,,,,',
     ]);
     const result = parser.parse(csv);
-    expect(result.athletes[0]?.drills[0]?.metric).toBe('AGILITY_505_L');
+    expect(result.athletes[0]?.drills[0]?.metric).toBe('AGILITY_505_YD_L');
   });
 
-  it('maps 505 with Direction=R to AGILITY_505_R', () => {
+  it('maps 505 with Direction=R (Imperial) to AGILITY_505_YD_R', () => {
     const csv = makeCsv([
       '01/01/2025 10:00:00,Jane,,Doe,505 Agility Test,,Imperial,,,,,,,,,,,,,,,,,,,,2.500000,,,,,R,,,,,,,,,,,,,,,,,,,,,,,,,,',
     ]);
     const result = parser.parse(csv);
-    expect(result.athletes[0]?.drills[0]?.metric).toBe('AGILITY_505_R');
+    expect(result.athletes[0]?.drills[0]?.metric).toBe('AGILITY_505_YD_R');
   });
 
   it('maps Pro Agility to AGILITY_5105', () => {
@@ -538,5 +538,85 @@ describe('DashrCsvParser — Metric units', () => {
     const metrics = result.athletes[0].drills.map(d => d.metric);
     expect(metrics).toContain('DASH_40YD');
     expect(metrics).not.toContain('DASH_40M');
+  });
+});
+
+// ============================================================================
+// 5-0-5 protocol (AM-FEAT-016): the Units column picks the metric (_M) or yard (_YD) code
+// ============================================================================
+
+describe('5-0-5 protocol from the Units column', () => {
+  // `direction` fills the Direction column; an empty string means no direction
+  function row505(units: string, direction: string, time = '2.500000'): string {
+    return `01/01/2025 10:00:00,Jane,,Doe,505 Agility Test,,${units},,,,,,,,,,,,,,,,,,,,${time},,,,,${direction},,,,,,,,,,,,,,,,,,,,,,,,,,`;
+  }
+
+  function firstMetric(units: string, direction: string): string | undefined {
+    return parser.parse(makeCsv([row505(units, direction)])).athletes[0]?.drills[0]?.metric;
+  }
+
+  it.each([
+    ['Imperial', '', 'AGILITY_505_YD'],
+    ['Imperial', 'L', 'AGILITY_505_YD_L'],
+    ['Imperial', 'R', 'AGILITY_505_YD_R'],
+    ['Metric', '', 'AGILITY_505_M'],
+    ['Metric', 'L', 'AGILITY_505_M_L'],
+    ['Metric', 'R', 'AGILITY_505_M_R'],
+    ['Metric', 'LEFT', 'AGILITY_505_M_L'],
+    ['Metric', 'RIGHT', 'AGILITY_505_M_R'],
+  ])('Units=%s Direction=%s maps to %s', (units, direction, expected) => {
+    expect(firstMetric(units, direction)).toBe(expected);
+  });
+
+  it.each([
+    ['blank Units', ''],
+    ['unrecognized Units', 'Furlongs'],
+  ])('%s defaults to the yard protocol (Decision #2)', (_label, units) => {
+    expect(firstMetric(units, '')).toBe('AGILITY_505_YD');
+    expect(firstMetric(units, 'L')).toBe('AGILITY_505_YD_L');
+  });
+
+  it('never emits the retired 5-0-5 codes', () => {
+    const retired = ['AGILITY_505', 'AGILITY_505_L', 'AGILITY_505_R'];
+    for (const units of ['Imperial', 'Metric', '', 'Furlongs']) {
+      for (const direction of ['', 'L', 'R']) {
+        expect(retired).not.toContain(firstMetric(units, direction));
+      }
+    }
+  });
+
+  describe('outlier ranges per protocol', () => {
+    function drill(units: string, direction: string, time: string) {
+      return parser.parse(makeCsv([row505(units, direction, time)])).athletes[0]?.drills[0];
+    }
+
+    it('flags 1.4s as unusually fast for the metric protocol (min 1.5)', () => {
+      expect(drill('Metric', '', '1.400000')?.isOutlier).toBe(true);
+    });
+
+    it('does not flag 1.4s for the yard protocol (min 1.3)', () => {
+      expect(drill('Imperial', '', '1.400000')?.isOutlier).toBeFalsy();
+    });
+
+    it('flags 1.2s as unusually fast for the yard protocol', () => {
+      const d = drill('Imperial', '', '1.200000');
+      expect(d?.isOutlier).toBe(true);
+      expect(d?.outlierReason).toContain('unusually fast');
+    });
+
+    it('flags 4.8s as unusually slow for the yard protocol (max 4.6) but not the metric one (max 5.0)', () => {
+      expect(drill('Imperial', '', '4.800000')?.isOutlier).toBe(true);
+      expect(drill('Metric', '', '4.800000')?.isOutlier).toBeFalsy();
+    });
+
+    it('applies the protocol range to the left and right legs too', () => {
+      expect(drill('Metric', 'L', '1.400000')?.isOutlier).toBe(true);
+      expect(drill('Imperial', 'R', '1.400000')?.isOutlier).toBeFalsy();
+    });
+
+    it('does not flag a normal time in either protocol', () => {
+      expect(drill('Metric', '', '2.500000')?.isOutlier).toBeFalsy();
+      expect(drill('Imperial', '', '2.300000')?.isOutlier).toBeFalsy();
+    });
   });
 });
