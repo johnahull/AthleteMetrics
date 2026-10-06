@@ -185,7 +185,7 @@ export default function Publish() {
     if (!measurements) return [];
 
     const athleteBest = new Map();
-    const isTimeBased = ["FLY10_TIME", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD"].includes(filters.metric);
+    const isTimeBased = ["FLY10_TIME", "AGILITY_505_M", "AGILITY_505_YD", "AGILITY_COD_DEFICIT_M", "AGILITY_COD_DEFICIT_YD", "AGILITY_5105", "T_TEST", "DASH_40YD"].includes(filters.metric);
 
     measurements.forEach((measurement: any) => {
       const athleteId = measurement.user.id;
@@ -224,7 +224,7 @@ export default function Publish() {
   const allMeasurementsSorted = useMemo(() => {
     if (!measurements) return [];
 
-    const isTimeBased = ["FLY10_TIME", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD"].includes(filters.metric);
+    const isTimeBased = ["FLY10_TIME", "AGILITY_505_M", "AGILITY_505_YD", "AGILITY_COD_DEFICIT_M", "AGILITY_COD_DEFICIT_YD", "AGILITY_5105", "T_TEST", "DASH_40YD"].includes(filters.metric);
     return [...measurements].sort((a: any, b: any) => {
       const aValue = parseFloat(a.value);
       const bValue = parseFloat(b.value);

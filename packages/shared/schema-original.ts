@@ -398,7 +398,7 @@ export const measurements = pgTable("measurements", {
   isVerified: boolean("is_verified").default(false).notNull(),
   date: date("date").notNull(),
   age: integer("age").notNull(), // User's age at time of measurement
-  metric: text("metric").notNull(), // "FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD", "RSI", "TOP_SPEED"
+  metric: text("metric").notNull(), // "FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505_M", "AGILITY_505_YD", "AGILITY_5105", "T_TEST", "DASH_40YD", "RSI", "TOP_SPEED"
   value: decimal("value", { precision: 10, scale: 3 }).notNull(),
   units: text("units").notNull(), // "s" or "in"
   flyInDistance: decimal("fly_in_distance", { precision: 10, scale: 3 }), // Optional yards for FLY10_TIME
@@ -2537,7 +2537,8 @@ export type OrganizationBenchmarkWithDetails = OrganizationBenchmark & {
 export const MetricType = {
   FLY10_TIME: "FLY10_TIME",
   VERTICAL_JUMP: "VERTICAL_JUMP",
-  AGILITY_505: "AGILITY_505",
+  AGILITY_505_M: "AGILITY_505_M",
+  AGILITY_505_YD: "AGILITY_505_YD",
   AGILITY_5105: "AGILITY_5105",
   T_TEST: "T_TEST",
   DASH_40YD: "DASH_40YD",
@@ -2550,7 +2551,8 @@ export const MetricType = {
 export const VALID_METRICS = [
   { key: 'FLY10_TIME', metricType: 'lower_is_better' },
   { key: 'VERTICAL_JUMP', metricType: 'higher_is_better' },
-  { key: 'AGILITY_505', metricType: 'lower_is_better' },
+  { key: 'AGILITY_505_M', metricType: 'lower_is_better' },
+  { key: 'AGILITY_505_YD', metricType: 'lower_is_better' },
   { key: 'AGILITY_5105', metricType: 'lower_is_better' },
   { key: 'T_TEST', metricType: 'lower_is_better' },
   { key: 'DASH_40YD', metricType: 'lower_is_better' },

@@ -665,7 +665,7 @@ The application runs as a **single-process Node.js server** without clustering:
 ### Performance Metrics Supported
 - FLY10_TIME (10-yard fly time in seconds)
 - VERTICAL_JUMP (vertical jump in inches)
-- AGILITY_505 (5-0-5 agility test in seconds)
+- AGILITY_505_M / AGILITY_505_YD (5-0-5 agility test in seconds, meters / yards protocol)
 - AGILITY_5105 (5-10-5 agility test in seconds)
 - T_TEST (T-test agility in seconds)
 - DASH_40YD (40-yard dash in seconds)

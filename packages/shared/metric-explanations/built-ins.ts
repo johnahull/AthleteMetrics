@@ -31,13 +31,43 @@ export const BUILT_IN_METRIC_EXPLANATIONS: Record<string, MetricExplanation> = {
     unitNote: 'Measured in inches; higher is better.',
     directionOfBetter: 'higher',
   },
-  AGILITY_505: {
-    title: '5-0-5 Agility Test',
-    shortDescription: 'How quickly you can stop, turn 180 degrees, and sprint back.',
+  AGILITY_505_M: {
+    title: '5-0-5 Agility (m)',
+    shortDescription: 'How quickly you can stop, turn 180 degrees, and sprint back (meters protocol).',
     whatItMeasures:
       'The 5-0-5 test measures your ability to decelerate, change direction 180 degrees, and re-accelerate. You sprint 5 meters, plant and turn, then sprint back through the timing gates.',
     whyItMatters:
       "This test isolates single-leg change of direction ability, revealing asymmetries between legs. It's essential for sports requiring quick direction changes and reflects injury risk factors.",
+    unitNote: 'Measured in seconds; lower is better.',
+    directionOfBetter: 'lower',
+  },
+  AGILITY_505_YD: {
+    title: '5-0-5 Agility (yd)',
+    shortDescription: 'How quickly you can stop, turn 180 degrees, and sprint back (yards protocol).',
+    whatItMeasures:
+      'The 5-0-5 test measures your ability to decelerate, change direction 180 degrees, and re-accelerate. You sprint 5 yards, plant and turn, then sprint back through the timing gates.',
+    whyItMatters:
+      "This test isolates single-leg change of direction ability, revealing asymmetries between legs. It's essential for sports requiring quick direction changes and reflects injury risk factors. Yard times are not directly comparable to the meters protocol.",
+    unitNote: 'Measured in seconds; lower is better.',
+    directionOfBetter: 'lower',
+  },
+  AGILITY_COD_DEFICIT_M: {
+    title: 'COD Deficit (m)',
+    shortDescription: 'How much time the 180-degree turn costs you compared with running straight (meters protocol).',
+    whatItMeasures:
+      'The change of direction deficit is your faster-leg 5-0-5 time in meters minus your 10-meter sprint time. It isolates the time lost to braking, turning, and re-accelerating.',
+    whyItMatters:
+      'A small deficit means you lose little time when you change direction relative to your straight-line speed. A large deficit points to turning mechanics and braking strength as the area to train.',
+    unitNote: 'Measured in seconds; lower is better.',
+    directionOfBetter: 'lower',
+  },
+  AGILITY_COD_DEFICIT_YD: {
+    title: 'COD Deficit (yd)',
+    shortDescription: 'How much time the 180-degree turn costs you compared with running straight (yards protocol).',
+    whatItMeasures:
+      'The change of direction deficit is your faster-leg 5-0-5 time in yards minus your 10-yard sprint time. It isolates the time lost to braking, turning, and re-accelerating.',
+    whyItMatters:
+      'A small deficit means you lose little time when you change direction relative to your straight-line speed. A large deficit points to turning mechanics and braking strength as the area to train.',
     unitNote: 'Measured in seconds; lower is better.',
     directionOfBetter: 'lower',
   },

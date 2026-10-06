@@ -116,10 +116,34 @@ const METRIC_EDUCATION: Record<string, MetricEducation> = {
     unit: 'inches',
     lowerIsBetter: false,
   },
-  AGILITY_505: {
-    name: '5-0-5 Agility Test',
+  AGILITY_505_M: {
+    name: '5-0-5 Agility (m)',
     description:
       'The 5-0-5 test measures your ability to decelerate, change direction 180 degrees, and re-accelerate. You sprint 5 meters, plant and turn, then sprint back through the timing gates.',
+    whyItMatters:
+      'This test isolates single-leg change of direction ability, revealing asymmetries between legs. It\'s essential for sports requiring quick direction changes and reflects injury risk factors.',
+    howToImprove: [
+      'Compare left vs. right leg times — asymmetry over 10% is a movement risk flag BTA actively addresses in training',
+      'Practice deceleration drills with emphasis on body positioning',
+      'Strengthen single-leg stability with Bulgarian split squats',
+      'Work on plant foot mechanics and push-off technique',
+      'Develop hip and ankle mobility for deeper cuts',
+    ],
+    sportRelevance: [
+      'Soccer',
+      'Volleyball',
+      'Basketball',
+      'Tennis',
+      'Football',
+      'Field Hockey',
+    ],
+    unit: 'seconds',
+    lowerIsBetter: true,
+  },
+  AGILITY_505_YD: {
+    name: '5-0-5 Agility (yd)',
+    description:
+      'The 5-0-5 test measures your ability to decelerate, change direction 180 degrees, and re-accelerate. You sprint 5 yards, plant and turn, then sprint back through the timing gates.',
     whyItMatters:
       'This test isolates single-leg change of direction ability, revealing asymmetries between legs. It\'s essential for sports requiring quick direction changes and reflects injury risk factors.',
     howToImprove: [
@@ -278,7 +302,7 @@ interface BenchmarkThresholds {
 const BENCHMARKS_MALE: Record<string, BenchmarkThresholds> = {
   FLY10_TIME: { elite: 1.0, college: 1.1, aboveAverage: 1.15, average: 1.25 },
   VERTICAL_JUMP: { elite: 36, college: 30, aboveAverage: 26, average: 22 },
-  AGILITY_505: { elite: 2.1, college: 2.3, aboveAverage: 2.45, average: 2.6 },
+  AGILITY_505_M: { elite: 2.1, college: 2.3, aboveAverage: 2.45, average: 2.6 },
   AGILITY_5105: { elite: 4.2, college: 4.5, aboveAverage: 4.7, average: 5.0 },
   T_TEST: { elite: 9.0, college: 10.0, aboveAverage: 10.5, average: 11.5 },
   DASH_40YD: { elite: 4.4, college: 4.7, aboveAverage: 4.9, average: 5.2 },
@@ -290,7 +314,7 @@ const BENCHMARKS_MALE: Record<string, BenchmarkThresholds> = {
 const BENCHMARKS_FEMALE: Record<string, BenchmarkThresholds> = {
   FLY10_TIME: { elite: 1.15, college: 1.25, aboveAverage: 1.35, average: 1.45 },
   VERTICAL_JUMP: { elite: 28, college: 22, aboveAverage: 18, average: 14 },
-  AGILITY_505: { elite: 2.3, college: 2.5, aboveAverage: 2.65, average: 2.85 },
+  AGILITY_505_M: { elite: 2.3, college: 2.5, aboveAverage: 2.65, average: 2.85 },
   AGILITY_5105: { elite: 4.6, college: 4.9, aboveAverage: 5.1, average: 5.4 },
   T_TEST: { elite: 10.0, college: 11.0, aboveAverage: 11.8, average: 12.5 },
   DASH_40YD: { elite: 4.9, college: 5.2, aboveAverage: 5.5, average: 5.9 },
@@ -326,7 +350,8 @@ export function formatMetricValue(value: number, metric: string): string {
 
   switch (metric) {
     case 'FLY10_TIME':
-    case 'AGILITY_505':
+    case 'AGILITY_505_M':
+    case 'AGILITY_505_YD':
     case 'AGILITY_5105':
     case 'T_TEST':
     case 'DASH_40YD':

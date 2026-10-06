@@ -347,7 +347,9 @@ function calculateAge(birthDate: string | Date): number {
 function isLowerBetterMetric(metric: string): boolean {
   const lowerIsBetterMetrics = [
     'FLY10_TIME',
-    'AGILITY_505',
+    'AGILITY_505_M',
+    'AGILITY_505_YD',
+    'AGILITY_COD_DEFICIT',
     'AGILITY_5105',
     'T_TEST',
     'DASH_40YD',

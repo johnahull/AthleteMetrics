@@ -15,6 +15,23 @@ import { getAthleteIdsForScope } from '../utils/athlete-filters';
  */
 const DASHBOARD_STATS_WINDOW_DAYS = 30;
 
+/**
+ * Metric codes where a rising value is a decline (time-based, lower is better).
+ * Used by the SQL decline-direction logic below. Fixed code literals only.
+ */
+export const LOWER_IS_BETTER_SQL_CODES = [
+  'FLY10_TIME',
+  'AGILITY_505_M',
+  'AGILITY_505_YD',
+  'AGILITY_COD_DEFICIT_M',
+  'AGILITY_COD_DEFICIT_YD',
+  'AGILITY_5105',
+  'T_TEST',
+  'DASH_40YD',
+] as const;
+
+const LOWER_IS_BETTER_SQL_LITERALS = LOWER_IS_BETTER_SQL_CODES.map(c => `'${c}'`).join(', ');
+
 interface AthleteStats {
   bestFly10?: number;
   bestVertical?: number;
@@ -37,7 +54,7 @@ interface DashboardStats {
   totalTeams: number;
   bestFLY10_TIMELast30Days?: { value: number; userName: string };
   bestVERTICAL_JUMPLast30Days?: { value: number; userName: string };
-  bestAGILITY_505Last30Days?: { value: number; userName: string };
+  bestAGILITY_505_YDLast30Days?: { value: number; userName: string };
   bestAGILITY_5105Last30Days?: { value: number; userName: string };
   bestT_TESTLast30Days?: { value: number; userName: string };
   bestDASH_40YDLast30Days?: { value: number; userName: string };
@@ -1094,7 +1111,7 @@ export class AnalyticsService {
         athlete_id::text as "athleteId",
         metric,
         CASE
-          WHEN metric IN ('FLY10_TIME', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD')
+          WHEN metric IN (${sql.raw(LOWER_IS_BETTER_SQL_LITERALS)})
             THEN ((current_avg - previous_avg) / NULLIF(previous_avg, 0)) * 100
           ELSE ((previous_avg - current_avg) / NULLIF(previous_avg, 0)) * 100
         END as "declinePercent",
@@ -1105,7 +1122,7 @@ export class AnalyticsService {
         previous_avg > 0
         AND (
           CASE
-            WHEN metric IN ('FLY10_TIME', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD')
+            WHEN metric IN (${sql.raw(LOWER_IS_BETTER_SQL_LITERALS)})
               THEN ((current_avg - previous_avg) / previous_avg) * 100
             ELSE ((previous_avg - current_avg) / previous_avg) * 100
           END

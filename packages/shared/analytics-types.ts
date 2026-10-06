@@ -452,7 +452,10 @@ export const METRIC_CONFIG: Record<string, { label: string; unit: string; metric
  */
 export const LOWER_IS_BETTER_METRICS = [
   'FLY10_TIME',
-  'AGILITY_505',
+  'AGILITY_505_M',
+  'AGILITY_505_YD',
+  'AGILITY_COD_DEFICIT_M',
+  'AGILITY_COD_DEFICIT_YD',
   'AGILITY_5105',
   'T_TEST',
   'DASH_40YD',

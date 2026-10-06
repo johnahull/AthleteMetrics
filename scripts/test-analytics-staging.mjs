@@ -139,7 +139,7 @@ async function testAthleteIdsQuery() {
           athlete_id::text as "athleteId",
           metric,
           CASE
-            WHEN metric IN ('FLY10_TIME', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD')
+            WHEN metric IN ('FLY10_TIME', 'AGILITY_505_M', 'AGILITY_505_YD', 'AGILITY_5105', 'T_TEST', 'DASH_40YD')
               THEN ((current_avg - previous_avg) / NULLIF(previous_avg, 0)) * 100
             ELSE ((previous_avg - current_avg) / NULLIF(previous_avg, 0)) * 100
           END as "declinePercent",
@@ -150,7 +150,7 @@ async function testAthleteIdsQuery() {
           previous_avg > 0
           AND (
             CASE
-              WHEN metric IN ('FLY10_TIME', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD')
+              WHEN metric IN ('FLY10_TIME', 'AGILITY_505_M', 'AGILITY_505_YD', 'AGILITY_5105', 'T_TEST', 'DASH_40YD')
                 THEN ((current_avg - previous_avg) / previous_avg) * 100
               ELSE ((previous_avg - current_avg) / previous_avg) * 100
             END

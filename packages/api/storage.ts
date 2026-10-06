@@ -280,7 +280,7 @@ export interface IStorage {
     totalTeams: number;
     bestFLY10_TIMELast30Days?: { value: number; userName: string };
     bestVERTICAL_JUMPLast30Days?: { value: number; userName: string };
-    bestAGILITY_505Last30Days?: { value: number; userName: string };
+    bestAGILITY_505_YDLast30Days?: { value: number; userName: string };
     bestAGILITY_5105Last30Days?: { value: number; userName: string };
     bestT_TESTLast30Days?: { value: number; userName: string };
     bestDASH_40YDLast30Days?: { value: number; userName: string };
@@ -3936,7 +3936,7 @@ export class DatabaseStorage implements IStorage {
     totalTeams: number;
     bestFLY10_TIMELast30Days?: { value: number; userName: string };
     bestVERTICAL_JUMPLast30Days?: { value: number; userName: string };
-    bestAGILITY_505Last30Days?: { value: number; userName: string };
+    bestAGILITY_505_YDLast30Days?: { value: number; userName: string };
     bestAGILITY_5105Last30Days?: { value: number; userName: string };
     bestT_TESTLast30Days?: { value: number; userName: string };
     bestDASH_40YDLast30Days?: { value: number; userName: string };
@@ -3967,7 +3967,7 @@ export class DatabaseStorage implements IStorage {
     const metrics = [
       { key: 'FLY10_TIME', lowerIsBetter: true },
       { key: 'VERTICAL_JUMP', lowerIsBetter: false },
-      { key: 'AGILITY_505', lowerIsBetter: true },
+      { key: 'AGILITY_505_YD', lowerIsBetter: true },
       { key: 'AGILITY_5105', lowerIsBetter: true },
       { key: 'T_TEST', lowerIsBetter: true },
       { key: 'DASH_40YD', lowerIsBetter: true },

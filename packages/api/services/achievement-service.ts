@@ -367,7 +367,7 @@ export class AchievementService {
     const allMetrics = [
       'FLY10_TIME',
       'VERTICAL_JUMP',
-      'AGILITY_505',
+      'AGILITY_505_M', // 5-0-5 slot: either protocol satisfies it (see below)
       'AGILITY_5105',
       'T_TEST',
       'DASH_40YD',
@@ -378,7 +378,12 @@ export class AchievementService {
     const allMeasurements = await storage.getMeasurements({ userId, includeUnverified: false });
     const metricsWithData = new Set(allMeasurements.map(m => m.metric));
 
-    const hasAllMetrics = allMetrics.every(metric => metricsWithData.has(metric));
+    // The 5-0-5 slot is satisfied by either protocol (meters or yards).
+    const hasAllMetrics = allMetrics.every(metric =>
+      metric === 'AGILITY_505_M'
+        ? metricsWithData.has('AGILITY_505_M') || metricsWithData.has('AGILITY_505_YD')
+        : metricsWithData.has(metric)
+    );
 
     if (hasAllMetrics) {
       achievements.push({
