@@ -225,14 +225,100 @@ describe('MQI derived totals (calculator behavior)', () => {
     expect(await totalsFor('MQI_TOTAL', DATE)).toHaveLength(0);
   });
 
-  // KNOWN GAP (AM-FEAT-015 decision 11, not yet implemented): same_date source selection
-  // picks the BEST value per metric (higher_is_better), not the latest event, so two
-  // events on one day produce a best-of mix (24) instead of the latest event's set (8).
-  // `it.fails` passes while the gap exists and starts failing once it is fixed, at which
-  // point change it to a plain `it`.
-  it.fails('(e) same athlete, two events same day: latest event wins for totals', async () => {
-    // Event 1 scores 8x3 earlier, event 2 scores 8x1 later. Spec decision 11:
-    // the total must reflect the latest event (8), not a best-of mix (24).
+  it('(c) creates MQI_TOTAL on the NEW date when moving a score there completes the set', async () => {
+    // 7 patterns on DATE, the 8th on DATE+1; moving it to DATE completes DATE's set.
+    for (const metric of PATTERNS.slice(0, 7)) await score(metric, 2);
+    const moved = await score('MQ_JUMP', 3, '2026-03-11');
+    expect(await totalsFor('MQI_TOTAL')).toHaveLength(0);
+
+    await service.updateMeasurement(moved.id, { date: DATE } as any);
+
+    const totals = await totalsFor('MQI_TOTAL');
+    expect(totals).toHaveLength(1);
+    expect(Number(totals[0].value)).toBe(17);
+    expect(totals[0].isCalculated).toBe(true);
+  });
+
+  it('(c) creates MQI_TOTAL when a metric change completes the set', async () => {
+    for (const metric of PATTERNS.slice(0, 7)) await score(metric, 1);
+    const wrongMetric = await score('MQ_TRANS_DECEL_CUT', 3);
+    expect(await totalsFor('MQI_TOTAL')).toHaveLength(0);
+
+    await service.updateMeasurement(wrongMetric.id, { metric: 'MQ_JUMP' } as any);
+
+    const totals = await totalsFor('MQI_TOTAL');
+    expect(totals).toHaveLength(1);
+    expect(Number(totals[0].value)).toBe(10);
+  });
+
+  it('(c) restores the remaining complete set\'s total when another same-date set is cleared', async () => {
+    // Set A: all 8 patterns. Set B (same date): 3 re-scores. Clearing B must leave A's total.
+    await scoreAllPatterns(2); // A = 16
+    const b = [];
+    for (const metric of PATTERNS.slice(0, 3)) b.push(await score(metric, 3));
+    for (const row of b) await service.deleteMeasurement(row.id);
+
+    const totals = await totalsFor('MQI_TOTAL');
+    expect(totals).toHaveLength(1);
+    expect(Number(totals[0].value)).toBe(16);
+  });
+
+  it('(c) re-creates the total via recalculation when no calculated row exists yet', async () => {
+    // Sources inserted directly (no trigger), then a recalculation for that date
+    // must create the missing total rather than only updating/deleting existing ones.
+    for (const metric of PATTERNS) {
+      await db.insert(measurements).values({
+        userId: athleteId,
+        submittedBy: coachId,
+        metric,
+        value: '1',
+        units: 'score',
+        date: DATE,
+        age: 18,
+        isVerified: true,
+        organizationId: orgId,
+      } as any);
+    }
+    expect(await totalsFor('MQI_TOTAL')).toHaveLength(0);
+    await new DerivedMetricCalculator(db).recalculateForAthlete(athleteId, 'MQ_JUMP', DATE);
+    const totals = await totalsFor('MQI_TOTAL');
+    expect(totals).toHaveLength(1);
+    expect(Number(totals[0].value)).toBe(8);
+    expect(totals[0].organizationId).toBe(orgId);
+  });
+
+  it('(c) never creates duplicate totals under concurrent calculation', async () => {
+    let last: any;
+    for (const metric of PATTERNS) {
+      [last] = await db
+        .insert(measurements)
+        .values({
+          userId: athleteId,
+          submittedBy: coachId,
+          metric,
+          value: '2',
+          units: 'score',
+          date: DATE,
+          age: 18,
+          isVerified: true,
+          organizationId: orgId,
+        } as any)
+        .returning();
+    }
+    await Promise.all(
+      Array.from({ length: 8 }, () => new DerivedMetricCalculator(db).processNewMeasurement(last)),
+    );
+    const totals = await totalsFor('MQI_TOTAL');
+    expect(totals).toHaveLength(1);
+    expect(Number(totals[0].value)).toBe(16);
+  });
+
+  // CURRENT BEHAVIOR on this branch: same_date source selection picks the BEST value
+  // per metric (higher_is_better), so two same-day events produce a best-of mix (24).
+  // Spec decision 11 (latest event wins) is implemented by migration 0148
+  // (calculation_config.sourceSelection = 'latest_event') on feature/mqi-entry-ui,
+  // where this test asserts the latest event's total (8) instead.
+  it('(e) same athlete, two events same day: best-of mix until latest-event selection lands', async () => {
     const calc = new DerivedMetricCalculator(db);
     const insertSet = async (eventId: string, value: number, createdAt: Date) => {
       let last: any;
@@ -258,7 +344,8 @@ describe('MQI derived totals (calculator behavior)', () => {
     };
     await insertSet('event-one', 3, new Date('2026-03-10T09:00:00Z'));
     await insertSet('event-two', 1, new Date('2026-03-10T15:00:00Z'));
-    const [total] = await totalsFor('MQI_TOTAL');
-    expect(Number(total.value)).toBe(8);
+    const totals = await totalsFor('MQI_TOTAL');
+    expect(totals).toHaveLength(1);
+    expect(Number(totals[0].value)).toBe(24);
   });
 });

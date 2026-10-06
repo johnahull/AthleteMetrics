@@ -406,7 +406,13 @@ export class MeasurementService {
         sourceMeasurementId: newMeasurement.id,
       });
     } catch (derivedError) {
-      console.error('Derived metric calculation failed after measurement create:', derivedError);
+      console.error('Derived metric calculation failed after measurement create:', {
+        measurementId: newMeasurement.id,
+        userId: newMeasurement.userId,
+        metric: newMeasurement.metric,
+        date: newMeasurement.date,
+        error: derivedError,
+      });
     }
 
     // ACHIEVEMENTS: Check for newly unlocked achievements AFTER transaction commits
@@ -763,11 +769,15 @@ export class MeasurementService {
         return { updated, previous: existing };
       });
 
-      // DERIVED METRICS: Trigger recalculation if value, date, metric or athlete changed.
+      // DERIVED METRICS: Trigger recalculation if value (incl. a paired-input
+      // auxiliaryValue that recomputes the value), date, metric or athlete changed.
       // Runs AFTER the transaction commits so the calculator (separate connection)
       // sees the updated row. Failures are logged: the update is already persisted.
+      // recalculateForAthlete also creates a total that does not exist yet, so a
+      // source moved onto a date/metric that completes a set produces its total.
       if (
         measurement.value !== undefined ||
+        measurement.auxiliaryValue !== undefined ||
         measurement.date !== undefined ||
         measurement.metric !== undefined ||
         measurement.userId !== undefined
@@ -800,7 +810,13 @@ export class MeasurementService {
             );
           }
         } catch (derivedError) {
-          console.error('Derived metric recalculation failed after measurement update:', derivedError);
+          console.error('Derived metric recalculation failed after measurement update:', {
+            measurementId: txUpdated.id,
+            userId: txUpdated.userId,
+            metric: txUpdated.metric,
+            date: txUpdated.date,
+            error: derivedError,
+          });
         }
       }
 
@@ -877,7 +893,13 @@ export class MeasurementService {
           },
         });
       } catch (derivedError) {
-        console.error('Derived metric recalculation failed after measurement delete:', derivedError);
+        console.error('Derived metric recalculation failed after measurement delete:', {
+          measurementId: deleted.measurementId,
+          userId: deleted.userId,
+          metric: deleted.metric,
+          date: deleted.date,
+          error: derivedError,
+        });
       }
     } catch (error) {
       // Preserve error specificity
