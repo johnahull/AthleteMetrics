@@ -20,6 +20,7 @@ import { db } from '../../packages/api/db';
 import { MeasurementService } from '../../packages/api/services/measurement-service';
 import { DerivedMetricCalculator } from '../../packages/api/services/derived-metric-calculator';
 import {
+  events,
   measurements,
   organizations,
   teams,
@@ -115,6 +116,7 @@ describe('MQI derived totals (calculator behavior)', () => {
 
   afterEach(async () => {
     await db.delete(measurements).where(eq(measurements.userId, athleteId));
+    await db.delete(events).where(eq(events.organizationId, orgId));
     await db.delete(userTeams).where(eq(userTeams.userId, athleteId));
     await db.delete(userOrganizations).where(eq(userOrganizations.organizationId, orgId));
     await db.delete(teams).where(eq(teams.organizationId, orgId));
@@ -402,6 +404,49 @@ describe('MQI derived totals (calculator behavior)', () => {
     await insertEventSet('ev-two', 1, new Date('2026-03-10T15:00:00Z'), TRANSITIONS);
     const [total] = await totalsFor('MQ_TRANSITION_TOTAL');
     expect(Number(total.value)).toBe(4);
+  });
+
+  const mkRealEvent = async (start: string) => {
+    const [e] = await db
+      .insert(events)
+      .values({ name: `MQI ev ${start}`, organizationId: orgId, startDate: new Date(start), createdBy: coachId } as any)
+      .returning();
+    return e.id as string;
+  };
+
+  it('(e2) real events: the later-starting event wins even when it was entered first', async () => {
+    const morning = await mkRealEvent('2026-03-10T09:00:00Z');
+    const afternoon = await mkRealEvent('2026-03-10T15:00:00Z');
+    // Entered in reverse order: afternoon first (created earlier), morning second
+    await insertEventSet(afternoon, 1, new Date('2026-03-11T08:00:00Z'), PATTERNS, '2026-03-10');
+    await insertEventSet(morning, 3, new Date('2026-03-11T09:00:00Z'), PATTERNS, '2026-03-10');
+    const totals = await totalsFor('MQI_TOTAL');
+    expect(totals).toHaveLength(1);
+    expect(Number(totals[0].value)).toBe(8);
+  });
+
+  it('(e3) an event always outranks non-event scores on the same date', async () => {
+    const ev = await mkRealEvent('2026-03-10T09:00:00Z');
+    await insertEventSet(ev, 1, new Date('2026-03-10T09:00:00Z'), PATTERNS, '2026-03-10');
+    await scoreAllPatterns(3); // non-event scores entered later
+    const totals = await totalsFor('MQI_TOTAL');
+    expect(totals).toHaveLength(1);
+    expect(Number(totals[0].value)).toBe(8);
+  });
+
+  it('(j) clearing the latest event restores the older complete event\'s total', async () => {
+    const older = await mkRealEvent('2026-03-10T09:00:00Z');
+    const newer = await mkRealEvent('2026-03-10T15:00:00Z');
+    await insertEventSet(older, 2, new Date('2026-03-10T09:00:00Z'), PATTERNS, '2026-03-10'); // 16
+    await insertEventSet(newer, 3, new Date('2026-03-10T15:00:00Z'), PATTERNS.slice(0, 3), '2026-03-10');
+    expect(await totalsFor('MQI_TOTAL')).toHaveLength(0); // newest event incomplete
+
+    const newerRows = await db.select().from(measurements).where(eq(measurements.eventId, newer));
+    for (const row of newerRows) await service.deleteMeasurement(row.id);
+
+    const totals = await totalsFor('MQI_TOTAL');
+    expect(totals).toHaveLength(1);
+    expect(Number(totals[0].value)).toBe(16);
   });
 
   it('(i) non-event scores (no eventId) still produce a total as before', async () => {

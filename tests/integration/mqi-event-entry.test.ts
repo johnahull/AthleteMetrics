@@ -384,6 +384,25 @@ describe('MQI entry via event routes', () => {
     expect(Number((await totalNow())[0].value)).toBe(8);
   });
 
+  it('latest event is chosen by event start time, not entry order (later event entered FIRST)', async () => {
+    const d = '2026-03-22';
+    const early = await mkEvent({ start: `${d}T09:00:00Z` });
+    const late = await mkEvent({ start: `${d}T15:00:00Z` });
+    const set = (value: number) => PATTERNS.map((metric) => ({ userId: athlete.id, metric, value, date: d }));
+    const totalNow = async () => (await rowsFor('MQI_TOTAL')).filter((r) => r.date === d);
+
+    // Backfill order: the afternoon event is entered before the morning one
+    const r1 = await request(app).post(`/api/events/${late.id}/measurements/bulk`).set('Cookie', coachACookie).send({ measurements: set(1) });
+    expect(r1.status).toBe(201);
+    expect(Number((await totalNow())[0].value)).toBe(8);
+    const r2 = await request(app).post(`/api/events/${early.id}/measurements/bulk`).set('Cookie', coachACookie).send({ measurements: set(3) });
+    expect(r2.status).toBe(201);
+
+    const totals = await totalNow();
+    expect(totals).toHaveLength(1);
+    expect(Number(totals[0].value)).toBe(8);
+  });
+
   it('MQ metrics are selectable as event metrics (appear in the org metric list and can be added to an event)', async () => {
     const list = await request(app)
       .get('/api/metrics')

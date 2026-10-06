@@ -16,6 +16,7 @@ import {
   type InsertMeasurement,
   type SiteMetric,
   type CustomOrgMetric,
+  events,
 } from '@shared/schema';
 import { eq, and, gte, lte, sql, or, desc, asc, inArray } from 'drizzle-orm';
 import type { PgTransaction } from 'drizzle-orm/pg-core';
@@ -971,11 +972,16 @@ export class DerivedMetricCalculator {
   /**
    * 'latest_event' source selection (AM-FEAT-015 decision 11), same_date only.
    *
-   * Considers the athlete's verified measurements of the dependent metrics on `targetDate`,
-   * groups them by event (eventId; measurements without an event form one group), picks the
-   * single most recent group (event date snapshot, then newest created_at) and requires ALL
-   * dependent metrics from that same group. Never mixes scores from different events and never
-   * falls back to an older, complete event when the latest one is incomplete.
+   * Considers the athlete's VERIFIED measurements of the dependent metrics on `targetDate`
+   * (unverified rows are ignored before grouping, so "latest event" means the latest event
+   * that has verified scores), groups them by event (eventId; measurements without an event
+   * form one group) and picks the single most recent group by event chronology:
+   *   1. any event outranks the no-event group;
+   *   2. events.start_date (full timestamp; the event date snapshot if the event row is gone);
+   *   3. events.created_at; 4. newest measurement created_at; 5. eventId.
+   * Entry order therefore never decides between two events. ALL dependent metrics must come
+   * from that one group: scores are never mixed across events, and an older complete event
+   * is never used while the latest group is incomplete (the caller then removes the total).
    */
   private async findLatestEventSources(
     dbOrTx: typeof dbType | DbTransaction,
@@ -986,8 +992,13 @@ export class DerivedMetricCalculator {
   ): Promise<Map<string, Measurement> | null> {
     const codes = dependentMetrics.map((c) => c.toUpperCase());
     const candidates = await dbOrTx
-      .select()
+      .select({
+        measurement: measurements,
+        eventStartDate: events.startDate,
+        eventCreatedAt: events.createdAt,
+      })
       .from(measurements)
+      .leftJoin(events, eq(measurements.eventId, events.id))
       .where(
         and(
           eq(measurements.userId, userId),
@@ -997,36 +1008,48 @@ export class DerivedMetricCalculator {
         )
       );
 
-    const groups = new Map<string, Measurement[]>();
-    for (const m of candidates) {
+    type Group = { eventId: string | null; rows: Measurement[]; rank: number[] };
+    const groups = new Map<string, Group>();
+    for (const c of candidates) {
+      const m = c.measurement;
       const key = m.eventId ?? '';
-      const list = groups.get(key);
-      if (list) list.push(m); else groups.set(key, [m]);
+      let group = groups.get(key);
+      if (!group) {
+        const start = c.eventStartDate
+          ? new Date(c.eventStartDate).getTime()
+          : m.eventDateSnapshot
+            ? new Date(m.eventDateSnapshot).getTime()
+            : 0;
+        group = {
+          eventId: m.eventId,
+          rows: [],
+          rank: [
+            m.eventId ? 1 : 0,
+            start,
+            c.eventCreatedAt ? new Date(c.eventCreatedAt).getTime() : 0,
+            0,
+          ],
+        };
+        groups.set(key, group);
+      }
+      group.rows.push(m);
+      group.rank[3] = Math.max(group.rank[3], new Date(m.createdAt).getTime());
     }
 
-    const newest = (list: Measurement[]) =>
-      list.reduce((a, b) => (b.createdAt > a.createdAt ? b : a));
-    const rank = (list: Measurement[]) => {
-      const eventDates = list.map((m) => m.eventDateSnapshot).filter((d): d is string => !!d).sort();
-      return {
-        eventDate: eventDates.length ? eventDates[eventDates.length - 1] : '',
-        createdAt: newest(list).createdAt.getTime(),
-      };
+    const compare = (a: Group, b: Group): number => {
+      for (let i = 0; i < a.rank.length; i++) {
+        if (a.rank[i] !== b.rank[i]) return a.rank[i] - b.rank[i];
+      }
+      return (a.eventId ?? '').localeCompare(b.eventId ?? '');
     };
 
-    let latest: Measurement[] | undefined;
-    let latestRank: { eventDate: string; createdAt: number } | undefined;
-    for (const list of groups.values()) {
-      const r = rank(list);
-      if (
-        !latestRank ||
-        r.eventDate > latestRank.eventDate ||
-        (r.eventDate === latestRank.eventDate && r.createdAt > latestRank.createdAt)
-      ) {
-        latest = list;
-        latestRank = r;
-      }
+    let latestGroup: Group | undefined;
+    for (const group of groups.values()) {
+      if (!latestGroup || compare(group, latestGroup) > 0) latestGroup = group;
     }
+    const latest = latestGroup?.rows;
+    const newest = (list: Measurement[]) =>
+      list.reduce((a, b) => (b.createdAt > a.createdAt ? b : a));
 
     const result = new Map<string, Measurement>();
     for (let i = 0; i < dependentMetrics.length; i++) {
