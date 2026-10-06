@@ -28,6 +28,7 @@ import { quantileRank, median, mean, min, max, standardDeviation } from 'simple-
 import { BaseService } from './base-service';
 import { evaluateTierBenchmark as evaluateTierBenchmarkPure } from './benchmark-tiers';
 import { type MetricExplanation } from '@shared/metric-explanations';
+import { isPeerComparisonExcludedMetric } from '@shared/peer-comparison-exclusions';
 import { getMetricExplanationsMap } from './metric-explanation-service';
 import { assembleTrends } from './report-trends';
 import { computeDistribution } from './report-distributions';
@@ -658,6 +659,8 @@ export class ReportService extends BaseService {
     let weightedSum = 0;
 
     for (const [metric, weight] of Object.entries(weights)) {
+      // MQ ordinal scores never feed peer-based composites (AM-FEAT-015 D7)
+      if (isPeerComparisonExcludedMetric(metric)) continue;
       if (percentiles[metric] !== undefined) {
         totalWeight += weight;
         weightedSum += percentiles[metric] * weight;
@@ -698,7 +701,8 @@ export class ReportService extends BaseService {
     );
 
     for (const metric of metrics) {
-      if (athletePerformances[metric] === undefined) {
+      // MQ ordinal scores are excluded from peer percentiles/averages (AM-FEAT-015 D7)
+      if (athletePerformances[metric] === undefined || isPeerComparisonExcludedMetric(metric)) {
         continue;
       }
 
@@ -762,7 +766,8 @@ export class ReportService extends BaseService {
     const percentiles: Record<string, number> = {};
 
     for (const metric of metrics) {
-      if (athletePerformances[metric] === undefined) {
+      // MQ ordinal scores are excluded from peer percentiles (AM-FEAT-015 D7)
+      if (athletePerformances[metric] === undefined || isPeerComparisonExcludedMetric(metric)) {
         continue;
       }
 
@@ -1511,6 +1516,9 @@ export class ReportService extends BaseService {
     const athletes = Array.from(athleteMap.values());
 
     for (const metric of metrics) {
+      // MQ ordinal scores are excluded from peer percentiles/rankings (AM-FEAT-015 D7)
+      if (isPeerComparisonExcludedMetric(metric)) continue;
+
       const values = athletes
         .filter((a) => a.measurements[metric] !== undefined)
         .map((a) => a.measurements[metric]);

@@ -3,9 +3,9 @@
  * Refactored to use direct database access instead of storage layer
  */
 
-import { isPeerComparisonExcludedMetric } from '@shared/peer-comparison-exclusions';
 import { db } from '../db';
 import { measurements, teams, organizations, users, userTeams, siteMetrics, organizationMetrics, VALID_METRICS, INVITATION_PENDING_PASSWORD } from '@shared/schema';
+import { isPeerComparisonExcludedMetric, PeerComparisonExcludedMetricError } from '@shared/peer-comparison-exclusions';
 import { eq, and, gte, lte, lt, ne, desc, inArray, sql } from 'drizzle-orm';
 import { getAthleteIdsForScope } from '../utils/athlete-filters';
 
@@ -624,7 +624,7 @@ export class AnalyticsService {
 
     // MQ ordinal scores are excluded from leaderboards in v1 (AM-FEAT-015 D7)
     if (isPeerComparisonExcludedMetric(metric)) {
-      throw new Error(`Invalid metric: ${metric} is not available for leaderboards`);
+      throw new PeerComparisonExcludedMetricError(metric, 'leaderboards');
     }
 
     // Get metric info for display and sorting direction
@@ -795,6 +795,11 @@ export class AnalyticsService {
     }
   ): Promise<MostImprovedResponse> {
     const { teamId, startDate, endDate, limit = 5 } = options || {};
+
+    // MQ ordinal scores are excluded from improvement rankings in v1 (AM-FEAT-015 D7)
+    if (isPeerComparisonExcludedMetric(metric)) {
+      throw new PeerComparisonExcludedMetricError(metric, 'improvement rankings');
+    }
 
     // Get metric info for display and sorting direction
     const metricInfo = await db
