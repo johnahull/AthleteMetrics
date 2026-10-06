@@ -3,7 +3,6 @@
  * Supports coach reports (team-level aggregations) and individual reports (athlete-level)
  */
 
-import { stripMediaUrlDeep } from "../utils/measurement-redaction";
 import { db } from '../db';
 import {
   reports,
@@ -37,6 +36,7 @@ import { buildCohortLabel } from './cohort-label';
 import { pickLatestInWindow, toReportFvProfile } from './report-fv';
 import { SprintFvService } from './sprint-fv-service';
 import { checkSprintFvEnabled } from '../middleware/require-sprint-fv-enabled';
+import { stripMediaUrlDeep } from '../utils/measurement-redaction';
 import { resolveChartSelection, resolveTeamChartSelection, type ChartSelection } from '@shared/report-charts';
 import type { ReportTrends, ReportDistributions, TeamReportTrends, TeamReportDistributions } from '@shared/report-trends-types';
 import type { ReportFvProfile } from '@shared/report-fv-types';
