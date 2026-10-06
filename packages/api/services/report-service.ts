@@ -3,6 +3,7 @@
  * Supports coach reports (team-level aggregations) and individual reports (athlete-level)
  */
 
+import { stripMediaUrlDeep } from "../utils/measurement-redaction";
 import { db } from '../db';
 import {
   reports,
@@ -1073,6 +1074,9 @@ export class ReportService extends BaseService {
         tagline: org?.brandTagline ?? null,
       },
     };
+
+    // Decision 12: defense in depth - media links never appear in a public snapshot
+    snapshotData = stripMediaUrlDeep(snapshotData);
 
     // Generate secure token
     const publicToken = nanoid(21);

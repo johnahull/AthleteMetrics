@@ -2,6 +2,7 @@
  * Service for managing cross-organization athlete identity linking
  */
 
+import { omitMediaUrlFromRows } from "../utils/measurement-redaction";
 import { db } from "../db";
 import {
   globalAthletes, userGlobalAthleteLinks, globalAthleteAuditLog,
@@ -345,10 +346,13 @@ export class GlobalAthleteService extends BaseService {
     const linkedUserIds = linkedUsers.map((l) => l.userId);
 
     // Query measurements for all linked users
-    return db.select()
+    const rows = await db.select()
       .from(measurements)
       .where(inArray(measurements.userId, linkedUserIds))
       .orderBy(desc(measurements.date));
+
+    // Decision 12: cross-organization view must not expose another org's media links
+    return omitMediaUrlFromRows(rows);
   }
 
   /**

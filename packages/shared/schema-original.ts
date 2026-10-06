@@ -1611,6 +1611,24 @@ export const insertInvitationSchema = createInsertSchema(invitations).omit({
   parentEmail: z.string().email("Invalid parent email format").trim().toLowerCase().optional().nullable(),
 });
 
+/** Max length of measurements.media_url (AM-FEAT-015 Phase 2). */
+export const MEDIA_URL_MAX_LENGTH = 2048;
+
+/**
+ * Optional media link on a measurement: https only, public host, <= 2048 chars.
+ * Empty / whitespace-only string is normalized to null (clears the link).
+ */
+export const mediaUrlSchema = z
+  .preprocess(
+    (val) => (typeof val === "string" ? (val.trim() === "" ? null : val.trim()) : val),
+    z
+      .string()
+      .max(MEDIA_URL_MAX_LENGTH, `Media URL cannot exceed ${MEDIA_URL_MAX_LENGTH} characters`)
+      .refine((u) => isSafePublicUrl(u), "Media URL must be a public HTTPS URL")
+      .nullable(),
+  )
+  .optional();
+
 export const insertMeasurementSchema = createInsertSchema(measurements).omit({
   id: true,
   age: true, // Age is calculated automatically
@@ -1635,6 +1653,7 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
   // Server validates against the metric's auxiliaryInputConfig at insert time.
   auxiliaryValue: z.number().nullable().optional(),
   notes: z.string().max(1000, "Notes cannot exceed 1000 characters").optional(),
+  mediaUrl: mediaUrlSchema,
   // Optional team context - will be auto-populated if not provided
   teamId: z.string().optional(),
   season: z.string().optional(),

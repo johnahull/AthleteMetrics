@@ -330,6 +330,7 @@ export class MeasurementService {
           units,
           age,
           notes: measurement.notes || null,
+          mediaUrl: measurement.mediaUrl ?? null,
           flyInDistance: measurement.flyInDistance ? String(measurement.flyInDistance) : null,
           auxiliaryValue: auxiliaryNumericValue !== null ? String(auxiliaryNumericValue) : null,
           teamId: teamId || null,
@@ -620,6 +621,8 @@ export class MeasurementService {
         if (measurement.value !== undefined)
           updateData.value = String(measurement.value);
         if (measurement.notes !== undefined) updateData.notes = measurement.notes;
+        // null (or empty string, normalized to null by the Zod schema) clears the link
+        if (measurement.mediaUrl !== undefined) updateData.mediaUrl = measurement.mediaUrl;
         if (measurement.flyInDistance !== undefined)
           updateData.flyInDistance = measurement.flyInDistance ? String(measurement.flyInDistance) : null;
         // auxiliaryValue is intentionally NOT written here unconditionally.
@@ -1481,6 +1484,7 @@ export class MeasurementService {
         flyInDistance: measurements.flyInDistance,
         auxiliaryValue: measurements.auxiliaryValue,
         notes: measurements.notes,
+        mediaUrl: measurements.mediaUrl,
         teamId: measurements.teamId,
         teamNameSnapshot: measurements.teamNameSnapshot,
         organizationId: measurements.organizationId,

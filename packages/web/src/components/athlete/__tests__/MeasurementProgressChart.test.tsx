@@ -46,6 +46,7 @@ function createMockMeasurement(overrides: Partial<Measurement> = {}): Measuremen
     units: 's',
     date: '2024-01-15',
     notes: 'Test notes',
+    mediaUrl: null,
     isVerified: true,
     userId: 'user-1',
     submittedBy: 'user-1',
