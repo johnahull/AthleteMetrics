@@ -338,15 +338,6 @@ export class MeasurementService {
         })
         .returning();
 
-      // DERIVED METRICS: Trigger automatic calculation of derived metrics
-      // This runs after the measurement is created and committed
-      const calculator = new DerivedMetricCalculator(db);
-      await calculator.processNewMeasurement(txMeasurement, {
-        event: 'measurement_insert',
-        userId: submittedBy,
-        sourceMeasurementId: txMeasurement.id,
-      });
-
       return txMeasurement;
       });
     } catch (error) {
@@ -378,6 +369,22 @@ export class MeasurementService {
       }
       // Unknown error type - wrap with context
       throw new Error(`Failed to create measurement due to unexpected error: ${String(error)}`);
+    }
+
+    // DERIVED METRICS: Trigger automatic calculation of derived metrics.
+    // Must run AFTER the transaction commits: the calculator reads through its own
+    // connection, so inside the transaction it cannot see the row just inserted
+    // (the last source measurement would never produce its derived total).
+    // Failures are logged, not thrown: the source measurement is already persisted.
+    try {
+      const calculator = new DerivedMetricCalculator(db);
+      await calculator.processNewMeasurement(newMeasurement, {
+        event: 'measurement_insert',
+        userId: submittedBy,
+        sourceMeasurementId: newMeasurement.id,
+      });
+    } catch (derivedError) {
+      console.error('Derived metric calculation failed after measurement create:', derivedError);
     }
 
     // ACHIEVEMENTS: Check for newly unlocked achievements AFTER transaction commits
@@ -574,7 +581,7 @@ export class MeasurementService {
     // Wrap in transaction to prevent race conditions during concurrent updates
     // Race condition scenario: Two users update same measurement simultaneously
     try {
-      return await db.transaction(async (tx) => {
+      const { updated: txUpdated, previous } = await db.transaction(async (tx) => {
         // Lock the row with FOR UPDATE to prevent concurrent modifications
         const [existing] = await tx
           .select()
@@ -720,25 +727,51 @@ export class MeasurementService {
           .where(eq(measurements.id, id))
           .returning();
 
-        // DERIVED METRICS: Trigger recalculation if value or date changed
-        // This ensures derived metrics stay synchronized with source changes
-        if (updateData.value !== undefined || updateData.date !== undefined) {
-          const calculator = new DerivedMetricCalculator(db);
-          await calculator.recalculateForAthlete(
-            updated.userId,
-            updated.metric,
-            updated.date,
-            {
-              triggerContext: {
-                event: 'measurement_update',
-                sourceMeasurementId: updated.id,
-              },
-            }
-          );
-        }
-
-        return updated;
+        return { updated, previous: existing };
       });
+
+      // DERIVED METRICS: Trigger recalculation if value, date, metric or athlete changed.
+      // Runs AFTER the transaction commits so the calculator (separate connection)
+      // sees the updated row. Failures are logged: the update is already persisted.
+      if (
+        measurement.value !== undefined ||
+        measurement.date !== undefined ||
+        measurement.metric !== undefined ||
+        measurement.userId !== undefined
+      ) {
+        try {
+          const calculator = new DerivedMetricCalculator(db);
+          const triggerContext = {
+            event: 'measurement_update' as const,
+            sourceMeasurementId: txUpdated.id,
+          };
+          await calculator.recalculateForAthlete(
+            txUpdated.userId,
+            txUpdated.metric,
+            txUpdated.date,
+            { triggerContext }
+          );
+          // If the source moved (date, metric or athlete), the derived value it
+          // used to feed must be recalculated/invalidated too, otherwise a stale
+          // total remains on the old date/metric/athlete.
+          if (
+            previous.date !== txUpdated.date ||
+            previous.metric !== txUpdated.metric ||
+            previous.userId !== txUpdated.userId
+          ) {
+            await calculator.recalculateForAthlete(
+              previous.userId,
+              previous.metric,
+              previous.date,
+              { triggerContext }
+            );
+          }
+        } catch (derivedError) {
+          console.error('Derived metric recalculation failed after measurement update:', derivedError);
+        }
+      }
+
+      return txUpdated;
     } catch (error) {
       // Preserve error specificity
       if (error instanceof PairedInputValidationError) {
@@ -771,7 +804,7 @@ export class MeasurementService {
     // Wrap in transaction to prevent race conditions during concurrent operations
     // Race condition scenario: User deletes measurement while another user verifies/updates it
     try {
-      await db.transaction(async (tx) => {
+      const deleted = await db.transaction(async (tx) => {
         // Lock the row with FOR UPDATE to prevent concurrent modifications
         const [existing] = await tx
           .select()
@@ -795,16 +828,24 @@ export class MeasurementService {
         // Delete the measurement
         await tx.delete(measurements).where(eq(measurements.id, id));
 
-        // DERIVED METRICS: Trigger recalculation after deletion
-        // This ensures derived metrics are updated when source measurements are removed
+        return { userId, metric, date, measurementId };
+      });
+
+      // DERIVED METRICS: Trigger recalculation after the deletion has committed.
+      // Inside the transaction the calculator (separate connection) would still
+      // see the deleted row, leaving a stale derived total. Failures are logged:
+      // the deletion is already persisted.
+      try {
         const calculator = new DerivedMetricCalculator(db);
-        await calculator.recalculateForAthlete(userId, metric, date, {
+        await calculator.recalculateForAthlete(deleted.userId, deleted.metric, deleted.date, {
           triggerContext: {
             event: 'measurement_delete',
-            sourceMeasurementId: measurementId,
+            sourceMeasurementId: deleted.measurementId,
           },
         });
-      });
+      } catch (derivedError) {
+        console.error('Derived metric recalculation failed after measurement delete:', derivedError);
+      }
     } catch (error) {
       // Preserve error specificity
       if (error instanceof Error) {
