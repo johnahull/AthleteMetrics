@@ -612,3 +612,27 @@ If you encounter issues or need clarification:
 2. Review this guide for missed steps
 3. Test in development environment first
 4. Verify database migration succeeds before deploying
+
+---
+
+## Movement Quality Index (MQI) Metrics (AM-FEAT-015)
+
+Ordinal rubric metrics that deviate from the standard checklist above. Decision record: `docs/adr/ADR-001-measurement-media-url-and-mqi-capture.md`.
+
+| Metric | Range | Notes |
+|---|---|---|
+| 12 x `MQ_*` (8 patterns + 4 `MQ_TRANS_*`) | 0-3 ordinal | Entered per athlete per event; unit `score` |
+| `MQI_TOTAL` | 0-24 | Derived from the 8 pattern metrics |
+| `MQ_TRANSITION_TOTAL` | 0-12 | Derived from the 4 `MQ_TRANS_*` metrics |
+
+Maintenance rules:
+- **Seeding**: metrics are seeded by manual migration `0146_seed_mqi_metrics.sql` (down script included), not by the enum steps above.
+- **Zero values**: 0 is valid only when `site_metrics.validation_min <= 0`. Any new ordinal metric must set `validation_min` to 0; other metrics still reject 0.
+- **Derived totals**: `calculationConfig.sourceSelection = 'latest_event'` (migration 0148). Latest event on the date wins; a total needs all source metrics from that same event, otherwise it is not computed.
+- **Comparisons**: MQ metrics are excluded from peer percentiles, benchmarks and leaderboards via `packages/shared/peer-comparison-exclusions.ts`. Add new ordinal metrics there.
+- **Notes**: per-pattern notes live in `measurements.notes`.
+- **`measurements.media_url`** (migration 0147): nullable, https-only (`isSafePublicUrl`), max 2048. Never exposed in public report/snapshot, CSV export, LLM payloads, COPPA export, or parent/unified views; see `packages/api/utils/measurement-redaction.ts`. New read paths must apply it.
+- **Writes**: event results go through `MeasurementService`; MQ rows are upserted per (athlete, metric, event). Remove one with `DELETE /api/events/:eventId/measurements/:measurementId`. Frozen events reject changes.
+- **Entry UI**: `packages/web/src/components/events/MovementQualityPanel.tsx`, opened from event data entry.
+- **Caveats**: athlete self-entered MQ scores are unverified and do not feed totals; event mutation rate limit (20/15 min/user) may return 429 when saving many athletes.
+- **Out of scope (v1)**: bands, report surfacing, BTB / AM-FEAT-014 quadrant, video upload, structured hard-fault.
