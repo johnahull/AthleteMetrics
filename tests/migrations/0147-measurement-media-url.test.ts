@@ -1,9 +1,11 @@
 /**
  * Migration 0147: add nullable measurements.media_url (AM-FEAT-015 Phase 2)
  * Hand-written SQL, idempotent up, down drops the column. No index.
- * Requires a live DATABASE_URL (migrations are applied inside a transaction that is rolled back).
+ * Live checks apply the migrations inside a transaction that is rolled back, and
+ * only run against a disposable test DB (NODE_ENV=test on localhost, or CI): the
+ * down migration DROPs a column, so it must never touch a shared database.
  */
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -13,6 +15,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../..');
 const UP = path.join(root, 'migrations', '0147_add_measurement_media_url.sql');
 const DOWN = path.join(root, 'migrations', '0147_add_measurement_media_url_down.sql');
+
+const dbUrl = process.env.DATABASE_URL || '';
+const isDisposableTestDb =
+  process.env.NODE_ENV === 'test' && (/@(localhost|127\.0\.0\.1)[:/]/.test(dbUrl) || process.env.CI === 'true');
+
+const constraintInfo = `SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+  WHERE conrelid = 'measurements'::regclass AND conname = 'measurements_media_url_length_check'`;
 
 const colInfo = `SELECT data_type, is_nullable FROM information_schema.columns
   WHERE table_name = 'measurements' AND column_name = 'media_url'`;
@@ -25,7 +34,11 @@ describe('Migration 0147: measurements.media_url', () => {
   beforeAll(() => {
     upSql = fs.existsSync(UP) ? fs.readFileSync(UP, 'utf-8') : '';
     downSql = fs.existsSync(DOWN) ? fs.readFileSync(DOWN, 'utf-8') : '';
-    sql = postgres(process.env.DATABASE_URL!, { max: 1 });
+    if (isDisposableTestDb) sql = postgres(dbUrl, { max: 1 });
+  });
+
+  afterAll(async () => {
+    if (sql) await sql.end();
   });
 
   it('up and down files exist', () => {
@@ -43,7 +56,30 @@ describe('Migration 0147: measurements.media_url', () => {
     expect(downSql).toMatch(/DROP COLUMN IF EXISTS media_url/i);
   });
 
-  it('up is idempotent and down drops the column (rolled-back transaction)', async () => {
+  it('up SQL adds a 2048-char CHECK constraint (idempotently) and down drops it', () => {
+    expect(upSql).toMatch(/ADD CONSTRAINT measurements_media_url_length_check\s+CHECK \(char_length\(media_url\) <= 2048\)/i);
+    expect(upSql).toMatch(/IF NOT EXISTS \(\s*SELECT 1 FROM pg_constraint/i);
+    expect(downSql).toMatch(/DROP CONSTRAINT IF EXISTS measurements_media_url_length_check/i);
+  });
+
+  it.skipIf(!isDisposableTestDb)('up creates the length CHECK constraint, re-apply keeps exactly one (rolled back)', async () => {
+    const ROLLBACK = new Error('rollback');
+    try {
+      await sql.begin(async (tx) => {
+        await tx.unsafe(downSql);
+        await tx.unsafe(upSql);
+        await tx.unsafe(upSql);
+        const rows = await tx.unsafe(constraintInfo);
+        expect(rows).toHaveLength(1);
+        expect(rows[0].def).toMatch(/char_length\(media_url\) <= 2048/);
+        throw ROLLBACK;
+      });
+    } catch (e) {
+      if (e !== ROLLBACK) throw e;
+    }
+  });
+
+  it.skipIf(!isDisposableTestDb)('up is idempotent and down drops the column (rolled-back transaction)', async () => {
     const ROLLBACK = new Error('rollback');
     try {
       await sql.begin(async (tx) => {
@@ -68,7 +104,7 @@ describe('Migration 0147: measurements.media_url', () => {
     }
   });
 
-  it('preserves existing data on re-apply (does not clobber values)', async () => {
+  it.skipIf(!isDisposableTestDb)('preserves existing data on re-apply (does not clobber values)', async () => {
     const ROLLBACK = new Error('rollback');
     try {
       await sql.begin(async (tx) => {
