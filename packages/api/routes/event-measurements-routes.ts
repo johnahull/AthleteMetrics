@@ -7,12 +7,23 @@
 
 import type { Express, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
-import { EventMeasurementsService } from "../services/event-measurements-service";
+import { z } from "zod";
+import {
+  EventMeasurementsService,
+  EventNotFoundError,
+  EventFrozenError,
+  EventMeasurementNotFoundError,
+  EventMeasurementInputError,
+  MovementQualitySaveError,
+} from "../services/event-measurements-service";
+import { MeasurementAccessDeniedError } from "../services/measurement-service";
+import { PairedInputValidationError } from "../services/paired-input-compute";
 import { requireAuth } from "../middleware";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { storage } from "../storage";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { mediaUrlSchema } from "@shared/schema";
+import { MeasurementValueValidationError } from "@shared/measurement-value-validation";
 
 /**
  * Validate an optional mediaUrl with the shared validator (https-only, public host, <= 2048).
@@ -35,55 +46,76 @@ const eventMeasurementsLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Stricter rate limiting for mutation operations
+// Rate limiting for mutation operations, per signed-in user (not per IP: a whole staff on
+// one gym network shares an IP). Live event data entry is a high-frequency workflow - a
+// 25-athlete session is ~25 Movement Quality saves plus grid saves - so it uses the
+// STANDARD tier (100 per 15 minutes per user) instead of the generic MUTATION tier.
 const eventMeasurementsMutationLimiter = rateLimit({
   windowMs: RATE_LIMIT_WINDOW_MS,
-  limit: RATE_LIMITS.MUTATION,
+  limit: RATE_LIMITS.STANDARD,
+  keyGenerator: (req) => req.session?.user?.id ?? req.ip ?? "unknown",
+  validate: { keyGeneratorIpFallback: false },
   message: { message: "Too many event measurements modification attempts, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
 });
 
+/** Body of PUT /api/events/:eventId/athletes/:userId/movement-quality */
+const movementQualitySaveSchema = z.object({
+  upserts: z
+    .array(
+      z.object({
+        metric: z.string().min(1),
+        value: z.number(),
+        notes: z.string().max(1000).optional(),
+        mediaUrl: mediaUrlSchema,
+      })
+    )
+    .max(12),
+  deletes: z.array(z.string().min(1)).max(12),
+});
+
 /**
- * Check if user has permission to manage measurements for an event
+ * Role with which the user manages measurements for an event (used for auto-verification),
+ * or null when the user may not manage them: site admin, or org_admin / coach of the
+ * event's organization.
  */
-async function canManageEventMeasurements(user: SessionUser, eventId: string): Promise<boolean> {
+async function getEventManagerRole(user: SessionUser, eventId: string): Promise<string | null> {
   if (isSiteAdmin(user)) {
-    return true;
+    return "site_admin";
   }
 
   // Get the event to check organization
   const event = await storage.getEvent(eventId);
   if (!event || !event.organizationId) {
-    return false;
+    return null;
   }
 
   // Check if user has org_admin or coach role in this organization
   const roles = await storage.getUserRoles(user.id, event.organizationId);
-  return roles.includes('org_admin') || roles.includes('coach');
+  if (roles.includes("org_admin")) return "org_admin";
+  if (roles.includes("coach")) return "coach";
+  return null;
 }
 
-/**
- * Role used for auto-verification of the entered measurement. Only called after
- * canManageEventMeasurements passed, so the user is site admin, org_admin or coach of the event org.
- */
-async function resolveSubmitterRole(user: SessionUser, eventId: string): Promise<string> {
-  if (isSiteAdmin(user)) return "site_admin";
-  const event = await storage.getEvent(eventId);
-  const roles = event?.organizationId ? await storage.getUserRoles(user.id, event.organizationId) : [];
-  return roles.includes("org_admin") ? "org_admin" : "coach";
-}
-
-/** Map service errors to HTTP statuses (validation and frozen -> 400, missing -> 404). */
-function sendEventMeasurementError(res: Response, error: any) {
-  const message: string = error?.message ?? "Unknown error";
-  if (message.includes("frozen") || /Value must/.test(message)) {
-    return res.status(400).json({ error: message });
+/** Map service errors to HTTP statuses by type; unexpected errors never leak their message. */
+function sendEventMeasurementError(res: Response, error: unknown) {
+  if (error instanceof MovementQualitySaveError) {
+    return res.status(400).json({ error: error.message, errors: error.errors });
   }
-  if (message.includes("not found")) {
-    return res.status(404).json({ error: message });
+  if (error instanceof MeasurementValueValidationError || error instanceof PairedInputValidationError) {
+    return res.status(400).json({ error: error.message, field: error.field });
   }
-  return res.status(500).json({ error: message });
+  if (error instanceof EventFrozenError || error instanceof EventMeasurementInputError) {
+    return res.status(400).json({ error: error.message });
+  }
+  if (error instanceof MeasurementAccessDeniedError) {
+    return res.status(403).json({ error: "Access denied" });
+  }
+  if (error instanceof EventNotFoundError || error instanceof EventMeasurementNotFoundError) {
+    return res.status(404).json({ error: error.message });
+  }
+  return res.status(500).json({ error: "Failed to save event measurement" });
 }
 
 export function registerEventMeasurementsRoutes(app: Express) {
@@ -117,7 +149,7 @@ export function registerEventMeasurementsRoutes(app: Express) {
         }
 
         // Check if user has management access (coach/org_admin/site_admin)
-        const hasManagementAccess = await canManageEventMeasurements(user, eventId);
+        const hasManagementAccess = (await getEventManagerRole(user, eventId)) !== null;
 
         // Athletes can only view their own measurements if results are published
         const isViewingOwnData = requestedUserId === user.id;
@@ -171,8 +203,7 @@ export function registerEventMeasurementsRoutes(app: Express) {
         }
 
         // Check if user has access
-        const hasAccess = await canManageEventMeasurements(user, eventId);
-        if (!hasAccess) {
+        if (!(await getEventManagerRole(user, eventId))) {
           return res.status(403).json({ error: "Access denied" });
         }
 
@@ -202,12 +233,12 @@ export function registerEventMeasurementsRoutes(app: Express) {
         }
 
         // Check permissions
-        const hasAccess = await canManageEventMeasurements(user, eventId);
-        if (!hasAccess) {
+        const role = await getEventManagerRole(user, eventId);
+        if (!role) {
           return res.status(403).json({ error: "Access denied" });
         }
 
-        const { userId, metric, value, date, notes } = req.body;
+        const { userId, metric, value, date, notes, auxiliaryValue, flyInDistance } = req.body;
 
         if (!userId || !metric || value === undefined || !date) {
           return res.status(400).json({
@@ -229,9 +260,11 @@ export function registerEventMeasurementsRoutes(app: Express) {
             date: new Date(date),
             notes,
             mediaUrl: mediaUrl.value,
+            auxiliaryValue: auxiliaryValue === undefined || auxiliaryValue === null ? undefined : Number(auxiliaryValue),
+            flyInDistance: flyInDistance === undefined || flyInDistance === null ? undefined : Number(flyInDistance),
           },
           user.id,
-          await resolveSubmitterRole(user, eventId)
+          role
         );
 
         return res.status(201).json(measurement);
@@ -259,8 +292,8 @@ export function registerEventMeasurementsRoutes(app: Express) {
         }
 
         // Check permissions
-        const hasAccess = await canManageEventMeasurements(user, eventId);
-        if (!hasAccess) {
+        const role = await getEventManagerRole(user, eventId);
+        if (!role) {
           return res.status(403).json({ error: "Access denied" });
         }
 
@@ -302,9 +335,11 @@ export function registerEventMeasurementsRoutes(app: Express) {
             date: new Date(m.date),
             notes: m.notes,
             mediaUrl: mediaUrls[index],
+            auxiliaryValue: m.auxiliaryValue === undefined || m.auxiliaryValue === null ? undefined : Number(m.auxiliaryValue),
+            flyInDistance: m.flyInDistance === undefined || m.flyInDistance === null ? undefined : Number(m.flyInDistance),
           })),
           user.id,
-          await resolveSubmitterRole(user, eventId)
+          role
         );
 
         return res.status(201).json(result);
@@ -332,8 +367,7 @@ export function registerEventMeasurementsRoutes(app: Express) {
           return res.status(401).json({ error: "User not authenticated" });
         }
 
-        const hasAccess = await canManageEventMeasurements(user, eventId);
-        if (!hasAccess) {
+        if (!(await getEventManagerRole(user, eventId))) {
           return res.status(403).json({ error: "Access denied" });
         }
 
@@ -341,6 +375,50 @@ export function registerEventMeasurementsRoutes(app: Express) {
         return res.status(204).send();
       } catch (error: any) {
         console.error("Error deleting event measurement:", error);
+        return sendEventMeasurementError(res, error);
+      }
+    }
+  );
+
+  /**
+   * Save one athlete's Movement Quality scores for an event atomically
+   * PUT /api/events/:eventId/athletes/:userId/movement-quality
+   * Body: { upserts: [{ metric, value, notes?, mediaUrl? }], deletes: [measurementId] }
+   * All changes apply in one transaction or none do (per-metric errors are returned).
+   * Same permission as create; frozen events stay frozen; deletes are event/athlete scoped.
+   */
+  app.put(
+    "/api/events/:eventId/athletes/:userId/movement-quality",
+    requireAuth,
+    eventMeasurementsMutationLimiter,
+    async (req: Request, res: Response) => {
+      try {
+        const { eventId, userId } = req.params;
+        const user = req.session.user;
+        if (!user?.id) {
+          return res.status(401).json({ error: "User not authenticated" });
+        }
+
+        const role = await getEventManagerRole(user, eventId);
+        if (!role) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+
+        const parsed = movementQualitySaveSchema.safeParse(req.body);
+        if (!parsed.success) {
+          return res.status(400).json({ error: "Validation failed", details: parsed.error.issues });
+        }
+
+        const result = await eventMeasurementsService.saveMovementQuality(
+          eventId,
+          userId,
+          parsed.data,
+          user.id,
+          role
+        );
+        return res.json(result);
+      } catch (error) {
+        console.error("Error saving Movement Quality scores:", error);
         return sendEventMeasurementError(res, error);
       }
     }
