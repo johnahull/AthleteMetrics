@@ -1626,7 +1626,10 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
   // Accept any metric code - validation against active metrics happens at API level
   // This allows derived metrics and custom metrics to be recorded
   metric: z.string().min(1, "Metric is required").regex(/^[A-Z0-9_]+$/, "Invalid metric code format"),
-  value: z.number().positive("Value must be positive"),
+  // Non-negative here; the metric-aware rule (0 only for metrics whose
+  // validation_min <= 0, positive otherwise) is enforced in MeasurementService
+  // via validateMeasurementValue().
+  value: z.number().nonnegative("Value must not be negative"),
   flyInDistance: z.number().positive().optional(),
   // Auxiliary input for paired-input metrics (e.g., reps for 1RM-est metrics).
   // Server validates against the metric's auxiliaryInputConfig at insert time.

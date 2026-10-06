@@ -50,6 +50,13 @@ const stripComments = (s: string) =>
     .filter((line) => !line.trim().startsWith('--'))
     .join('\n');
 
+// The up-migration is idempotent (ON CONFLICT upserts). Re-apply it so these tests do not
+// depend on suite ordering: other suites delete derived site_metrics rows from the shared DB.
+const seedMqiMetrics = async () => {
+  const upSql = fs.readFileSync(path.resolve(__dirname, '../../migrations/0146_seed_mqi_metrics.sql'), 'utf-8');
+  await db.execute(sql.raw(upSql));
+};
+
 describe('Migration 0146: MQI metrics seed', () => {
   describe('Up-migration SQL file', () => {
     it('exists at expected path', () => {
@@ -170,6 +177,8 @@ describe('Migration 0146: MQI metrics seed', () => {
   });
 
   describe('Database state', () => {
+    beforeAll(seedMqiMetrics);
+
     it('seeds 14 MQ metrics with expected config', async () => {
       const result = await db.execute(sql`
         SELECT code, unit, metric_type, category, validation_min, validation_max,

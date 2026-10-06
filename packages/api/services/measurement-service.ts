@@ -17,6 +17,7 @@ import {
   type Organization,
 } from '@shared/schema';
 import { parseDateFilter } from '@shared/date-utils';
+import { validateMeasurementValue } from '@shared/measurement-value-validation';
 import { db } from '../db';
 import { eq, and, gte, lte, or, isNull, sql, desc, inArray, arrayContains } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
@@ -176,9 +177,20 @@ export class MeasurementService {
         .select({
           unit: siteMetrics.unit,
           auxiliaryInputConfig: siteMetrics.auxiliaryInputConfig,
+          validationMin: siteMetrics.validationMin,
+          validationMax: siteMetrics.validationMax,
+          decimalPrecision: siteMetrics.decimalPrecision,
         })
         .from(siteMetrics)
         .where(eq(siteMetrics.code, measurement.metric));
+
+      // Metric-aware value validation: positive by default, 0-allowed range
+      // check for metrics with validation_min <= 0 (e.g. MQ 0-3 scores).
+      // Paired-input metrics validate their own inputs, so skip them here.
+      if (!metricConfig?.auxiliaryInputConfig) {
+        const valueError = validateMeasurementValue(measurement.value, metricConfig);
+        if (valueError) throw new Error(valueError);
+      }
 
       // Use metric's configured unit, or default to 'in' for unknown metrics
       // Use nullish coalescing to allow empty string units (e.g., RSI is a ratio)
@@ -633,9 +645,20 @@ export class MeasurementService {
             .select({
               unit: siteMetrics.unit,
               auxiliaryInputConfig: siteMetrics.auxiliaryInputConfig,
+              validationMin: siteMetrics.validationMin,
+              validationMax: siteMetrics.validationMax,
+              decimalPrecision: siteMetrics.decimalPrecision,
             })
             .from(siteMetrics)
             .where(eq(siteMetrics.code, effectiveMetricCode));
+
+          // Metric-aware value validation (see createMeasurement). When only the
+          // metric changes, re-validate the existing stored value against the new metric.
+          if (!metricConfig?.auxiliaryInputConfig) {
+            const valueToCheck = measurement.value !== undefined ? measurement.value : Number(existing.value);
+            const valueError = validateMeasurementValue(valueToCheck, metricConfig);
+            if (valueError) throw new Error(valueError);
+          }
 
           if (metricIsChanging) {
             updateData.units = metricConfig?.unit ?? 'in';

@@ -10,7 +10,11 @@
 process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret-key-for-integration-tests-only';
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { sql } from 'drizzle-orm';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
 import { MeasurementService } from '../../packages/api/services/measurement-service';
@@ -42,8 +46,19 @@ const TRANSITIONS = [
 ];
 const DATE = '2026-03-10';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// The up-migration is idempotent (ON CONFLICT upserts). Re-apply it so these tests do not
+// depend on suite ordering: other suites delete derived site_metrics rows from the shared DB.
+const seedMqiMetrics = async () => {
+  const upSql = fs.readFileSync(path.resolve(__dirname, '../../migrations/0146_seed_mqi_metrics.sql'), 'utf-8');
+  await db.execute(sql.raw(upSql));
+};
+
 describe('MQI derived totals (calculator behavior)', () => {
   const service = new MeasurementService();
+
+  beforeAll(seedMqiMetrics);
   let orgId: string;
   let teamId: string;
   let athleteId: string;
