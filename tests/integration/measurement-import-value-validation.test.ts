@@ -1,0 +1,86 @@
+/**
+ * AM-FEAT-015: the CSV / OCR / review-decision import paths write through
+ * storage.createMeasurement, which must apply the same metric-aware value
+ * validation as MeasurementService (0-3 for MQ scores, positive elsewhere).
+ * Re-applies migration 0146 in beforeAll.
+ */
+process.env.NODE_ENV = process.env.NODE_ENV || 'test';
+process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret-key-for-integration-tests-only';
+
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
+import { eq, inArray, sql } from 'drizzle-orm';
+import { db } from '../../packages/api/db';
+import { storage } from '../../packages/api/storage';
+import { measurements, users } from '@shared/schema';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+describe('storage.createMeasurement value validation (import paths)', () => {
+  let athleteId: string;
+  let coachId: string;
+
+  beforeAll(async () => {
+    const upSql = fs.readFileSync(path.resolve(__dirname, '../../migrations/0146_seed_mqi_metrics.sql'), 'utf-8');
+    await db.execute(sql.raw(upSql));
+  });
+
+  beforeEach(async () => {
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const mk = async (tag: string) =>
+      (
+        await db
+          .insert(users)
+          .values({
+            username: `imp-${tag}-${suffix}`,
+            emails: [`imp-${tag}-${suffix}@test.com`],
+            password: 'x',
+            firstName: 'Imp',
+            lastName: tag,
+            fullName: `Imp ${tag}`,
+            birthDate: '2008-01-01',
+          } as any)
+          .returning()
+      )[0].id;
+    athleteId = await mk('ath');
+    coachId = await mk('coach');
+  });
+
+  afterEach(async () => {
+    await db.delete(measurements).where(eq(measurements.userId, athleteId));
+    await db.delete(users).where(inArray(users.id, [athleteId, coachId]));
+  });
+
+  const create = (metric: string, value: number) =>
+    storage.createMeasurement({ userId: athleteId, metric, value, date: '2026-03-10' } as any, coachId);
+
+  it('accepts a 0 MQ score', async () => {
+    const m = await create('MQ_JUMP', 0);
+    expect(Number(m.value)).toBe(0);
+  });
+
+  it.each([
+    [4, /at most 3/],
+    [-1, /at least 0/],
+    [2.5, /whole number/],
+  ])('rejects MQ score %s', async (value, message) => {
+    await expect(create('MQ_JUMP', value)).rejects.toThrow(message);
+    const rows = await db.select().from(measurements).where(eq(measurements.userId, athleteId));
+    expect(rows).toHaveLength(0);
+  });
+
+  it('rejects NaN (unparseable CSV value)', async () => {
+    await expect(create('FLY10_TIME', NaN)).rejects.toThrow(/finite number/);
+  });
+
+  it('keeps rejecting 0 for a standard metric', async () => {
+    await expect(create('FLY10_TIME', 0)).rejects.toThrow(/positive/i);
+  });
+
+  it('accepts a positive standard value', async () => {
+    const m = await create('FLY10_TIME', 1.52);
+    expect(Number(m.value)).toBe(1.52);
+  });
+});
