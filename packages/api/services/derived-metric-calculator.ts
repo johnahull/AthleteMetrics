@@ -467,8 +467,9 @@ export class DerivedMetricCalculator {
       metricConfigsMap
     );
 
-    if (!sourceMeasurementsMap) {
-      // Missing source measurements - skip based on missingSourceBehavior
+    if (!sourceMeasurementsMap || sourceMeasurementsMap.size === 0) {
+      // Missing source measurements - skip based on missingSourceBehavior.
+      // An empty map (no dependent metrics) has no source to inherit context from.
       return null;
     }
 
