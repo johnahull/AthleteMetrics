@@ -33,11 +33,25 @@ import {
 // Singleton achievement service instance for performance
 const achievementService = new AchievementService();
 
-/** Thrown when an athlete tries to attach a clip (mediaUrl) to a measurement (maps to HTTP 403). */
+/** Thrown when a non-coach/admin tries to attach a clip (mediaUrl) to a measurement (maps to HTTP 403). */
 export class MediaUrlPermissionError extends Error {
   constructor() {
-    super('Athletes cannot attach clips to measurements; a coach must add them');
+    super('Only coaches and admins can attach clips to measurements; a coach must add them');
     this.name = 'MediaUrlPermissionError';
+  }
+}
+
+/** Roles allowed to attach clips. Everything else (athlete, parent, guest, no role) is denied. */
+const CLIP_ROLES: ReadonlySet<string> = new Set(['coach', 'org_admin', 'site_admin']);
+
+/**
+ * Clips are coach-attached (AM-FEAT-015): a non-empty mediaUrl needs a coach or
+ * admin role; omitting or clearing it (null / '') is allowed for everyone.
+ * Fails closed on a missing role.
+ */
+function assertCanAttachClip(role: string | undefined, mediaUrl: string | null | undefined): void {
+  if (mediaUrl && !(role && CLIP_ROLES.has(role))) {
+    throw new MediaUrlPermissionError();
   }
 }
 
@@ -146,10 +160,7 @@ export class MeasurementService {
     submittedBy: string,
     submitterRole: string = 'athlete'
   ): Promise<Measurement> {
-    // Clips are coach-attached (AM-FEAT-015); athletes may only omit or clear mediaUrl
-    if (submitterRole === 'athlete' && measurement.mediaUrl) {
-      throw new MediaUrlPermissionError();
-    }
+    assertCanAttachClip(submitterRole, measurement.mediaUrl);
 
     // Wrap entire operation in transaction to prevent race conditions
     // Race condition scenario: User joins/leaves team between active teams query and measurement insert
@@ -577,7 +588,7 @@ export class MeasurementService {
    * @param id Measurement ID
    * @param measurement Partial measurement data
    * @param expectedOrganizationId Optional organization ID for defense-in-depth validation (IDOR prevention)
-   * @param updaterRole Role of the user making the change (athletes cannot attach clips)
+   * @param updaterRole Role of the user making the change (only coaches/admins may attach clips; undefined is denied)
    * @returns Updated measurement
    * @throws Error if measurement not found, org mismatch, or transaction fails
    */
@@ -587,10 +598,7 @@ export class MeasurementService {
     expectedOrganizationId?: string,
     updaterRole?: string
   ): Promise<Measurement> {
-    // Clips are coach-attached (AM-FEAT-015); athletes may only clear mediaUrl
-    if (updaterRole === 'athlete' && measurement.mediaUrl) {
-      throw new MediaUrlPermissionError();
-    }
+    assertCanAttachClip(updaterRole, measurement.mediaUrl);
 
     // Wrap in transaction to prevent race conditions during concurrent updates
     // Race condition scenario: Two users update same measurement simultaneously
