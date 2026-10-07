@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useRef } from "react";
+import { forwardRef, useId, useImperativeHandle, useRef } from "react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 
@@ -24,6 +24,11 @@ export interface Protocol505PickerHandle {
  */
 export const Protocol505Picker = forwardRef<Protocol505PickerHandle, Protocol505PickerProps>(
 function Protocol505Picker({ value, onChange, disabled, error }, ref) {
+  const baseId = useId();
+  const legendId = `${baseId}-legend`;
+  const errorId = `${baseId}-error`;
+  const meterId = `${baseId}-m`;
+  const yardId = `${baseId}-yd`;
   const fieldsetRef = useRef<HTMLFieldSetElement>(null);
   useImperativeHandle(ref, () => ({
     focus: () => {
@@ -34,32 +39,32 @@ function Protocol505Picker({ value, onChange, disabled, error }, ref) {
   }));
   return (
     <fieldset ref={fieldsetRef} className="space-y-2" disabled={disabled}>
-      <legend id="protocol-505-legend" className="text-sm font-medium">
+      <legend id={legendId} className="text-sm font-medium">
         5-0-5 protocol <span className="text-destructive" aria-hidden="true">*</span>
       </legend>
       <RadioGroup
         value={value ?? ""}
         onValueChange={(v) => onChange(v as Protocol505)}
         required
-        aria-labelledby="protocol-505-legend"
-        aria-describedby={error ? "protocol-505-error" : undefined}
+        aria-labelledby={legendId}
+        aria-describedby={error ? errorId : undefined}
         aria-invalid={error ? true : undefined}
         className="flex gap-6"
       >
         <div className="flex items-center gap-2">
-          <RadioGroupItem value="M" id="protocol-505-m" />
-          <Label htmlFor="protocol-505-m" className="cursor-pointer">Meters</Label>
+          <RadioGroupItem value="M" id={meterId} />
+          <Label htmlFor={meterId} className="cursor-pointer">Meters</Label>
         </div>
         <div className="flex items-center gap-2">
-          <RadioGroupItem value="YD" id="protocol-505-yd" />
-          <Label htmlFor="protocol-505-yd" className="cursor-pointer">Yards</Label>
+          <RadioGroupItem value="YD" id={yardId} />
+          <Label htmlFor={yardId} className="cursor-pointer">Yards</Label>
         </div>
       </RadioGroup>
       <p className="text-xs text-muted-foreground">
         Needed only if the photo has 5-0-5 readings: pick the distance used for the test. The photo is not imported without it.
       </p>
       {error && (
-        <p id="protocol-505-error" role="alert" aria-live="assertive" className="text-sm font-medium text-destructive">
+        <p id={errorId} role="alert" aria-live="assertive" className="text-sm font-medium text-destructive">
           {error}
         </p>
       )}
