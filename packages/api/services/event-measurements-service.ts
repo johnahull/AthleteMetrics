@@ -68,6 +68,16 @@ export class EventMeasurementsService {
     }
   }
 
+  /** Event context for storage: the measurement belongs to the event's organization */
+  private eventContext(event: Event) {
+    return {
+      eventId: event.id,
+      eventNameSnapshot: event.name,
+      eventDateSnapshot: event.startDate!.toISOString().split('T')[0],
+      organizationId: event.organizationId,
+    };
+  }
+
   /**
    * Create a single measurement for an event
    */
@@ -115,7 +125,8 @@ export class EventMeasurementsService {
         eventNameSnapshot: event.name,
         eventDateSnapshot: event.startDate.toISOString().split('T')[0],
       },
-      createdBy
+      createdBy,
+      this.eventContext(event)
     );
 
     return measurement;
@@ -171,7 +182,8 @@ export class EventMeasurementsService {
             eventNameSnapshot: event.name,
             eventDateSnapshot: event.startDate.toISOString().split('T')[0],
           },
-          createdBy
+          createdBy,
+          this.eventContext(event)
         );
         created.push(measurement);
       } catch (err) {

@@ -8,7 +8,7 @@ process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret-key-for-integration-tests-only';
 process.env.BYPASS_GENERAL_RATE_LIMIT = 'true'; // a 429 must not mask the 403s asserted here
 
-import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import { eq, inArray } from 'drizzle-orm';
 import request from 'supertest';
 import express, { type Express } from 'express';
@@ -439,6 +439,85 @@ describe('Athletes cannot attach clips (R1)', () => {
       expect(result.errors).toEqual([{ index: 0, error: expect.stringMatching(NOT_MEMBER) }]);
       expect(result.created.map((m) => m.userId)).toEqual([athlete.id]);
       expect(await outsiderRows()).toHaveLength(0);
+    });
+
+    describe("stored organization and team context come from the event's organization", () => {
+      let member: any;
+      const extraTeamIds: string[] = [];
+      const memberRows = () => db.select().from(measurements).where(eq(measurements.userId, member.id));
+      const addTeam = async (organizationId: string) => {
+        const [team] = await db
+          .insert(teams)
+          .values({ name: `Ctx Team ${extraTeamIds.length}-${Date.now()}`, organizationId, level: 'College' })
+          .returning();
+        extraTeamIds.push(team.id);
+        await db.insert(userTeams).values({ userId: member.id, teamId: team.id, joinedAt: new Date('2020-01-01'), isActive: true });
+        return team.id;
+      };
+
+      beforeEach(async () => {
+        const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        [member] = await db
+          .insert(users)
+          .values({
+            username: `clip-member-${suffix}`,
+            emails: [`clip-member-${suffix}@test.com`],
+            password: 'x',
+            firstName: 'Ctx',
+            lastName: 'Member',
+            fullName: 'Ctx Member',
+          } as any)
+          .returning();
+        await db.insert(userOrganizations).values({ userId: member.id, organizationId: orgId, role: 'athlete' } as any);
+      });
+
+      afterEach(async () => {
+        await db.delete(measurements).where(eq(measurements.userId, member.id));
+        await db.delete(userTeams).where(eq(userTeams.userId, member.id));
+        await db.delete(userOrganizations).where(eq(userOrganizations.userId, member.id));
+        await db.delete(users).where(eq(users.id, member.id));
+        if (extraTeamIds.length) await db.delete(teams).where(inArray(teams.id, extraTeamIds.splice(0)));
+      });
+
+      const write = () =>
+        eventService.createEventMeasurement(
+          eventId,
+          { userId: member.id, metric: 'VERTICAL_JUMP', value: 30, date: new Date('2026-01-15') },
+          coach.id,
+          'coach',
+        );
+
+      it("an athlete whose only team is in another org is stored under the event's org, without that team", async () => {
+        await db.insert(userOrganizations).values({ userId: member.id, organizationId: otherOrgId, role: 'athlete' } as any);
+        await addTeam(otherOrgId);
+        const m = await write();
+        expect(m.organizationId).toBe(orgId);
+        expect(m.teamId).toBeNull();
+        expect(m.teamNameSnapshot).toBeNull();
+      });
+
+      it("an athlete on two teams of the event's org is stored under the event's org (no team)", async () => {
+        await addTeam(orgId);
+        await addTeam(orgId);
+        const m = await write();
+        expect(m.organizationId).toBe(orgId);
+        expect(m.teamId).toBeNull();
+      });
+
+      it("an athlete with no team is stored under the event's org", async () => {
+        const m = await write();
+        expect(m.organizationId).toBe(orgId);
+        expect((await memberRows())[0].organizationId).toBe(orgId);
+      });
+
+      it("the single team in the event's org is used even when the athlete also has a team elsewhere", async () => {
+        const eventTeam = await addTeam(orgId);
+        await db.insert(userOrganizations).values({ userId: member.id, organizationId: otherOrgId, role: 'athlete' } as any);
+        await addTeam(otherOrgId);
+        const m = await write();
+        expect(m.organizationId).toBe(orgId);
+        expect(m.teamId).toBe(eventTeam);
+      });
     });
 
     it('POST /api/events/:eventId/measurements answers 400 for an outside athlete', async () => {

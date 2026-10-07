@@ -254,7 +254,7 @@ export interface IStorage {
     verifiedBy?: User;
   })[]>;
   getMeasurement(id: string): Promise<Measurement | undefined>;
-  createMeasurement(measurement: InsertMeasurement, submittedBy: string, eventContext?: { eventId: string; eventNameSnapshot: string; eventDateSnapshot: string; }): Promise<Measurement>;
+  createMeasurement(measurement: InsertMeasurement, submittedBy: string, eventContext?: { eventId: string; eventNameSnapshot: string; eventDateSnapshot: string; organizationId?: string | null; }): Promise<Measurement>;
   updateMeasurement(id: string, measurement: Partial<InsertMeasurement>): Promise<Measurement>;
   deleteMeasurement(id: string): Promise<void>;
   verifyMeasurement(id: string, verifiedBy: string): Promise<Measurement>;
@@ -3714,6 +3714,9 @@ export class DatabaseStorage implements IStorage {
       eventId: string;
       eventNameSnapshot: string;
       eventDateSnapshot: string;  // String in 'YYYY-MM-DD' format for Drizzle's date() type
+      // The event's organization: an event measurement always belongs to it, and
+      // team context is only taken from the athlete's teams in that organization.
+      organizationId?: string | null;
     }
   ): Promise<Measurement> {
     // Calculate age and units based on metric
@@ -3743,10 +3746,12 @@ export class DatabaseStorage implements IStorage {
     let teamContextAuto = true;
     let teamNameSnapshot: string | null = null;
     let organizationId: string | null = null;
+    const eventOrganizationId = eventContext?.organizationId ?? null;
 
     if (!teamId || teamId.trim() === "") {
-      // Get athlete's active teams at measurement date
-      const activeTeams = await this.getAthleteActiveTeamsAtDate(measurement.userId, measurementDate);
+      // Get athlete's active teams at measurement date (only the event's org for event writes)
+      const activeTeams = (await this.getAthleteActiveTeamsAtDate(measurement.userId, measurementDate))
+        .filter(t => !eventOrganizationId || t.organizationId === eventOrganizationId);
 
       if (activeTeams.length === 1) {
         // Single team - auto-assign
@@ -3811,7 +3816,7 @@ export class DatabaseStorage implements IStorage {
       verifiedBy: isCoach ? submittedBy : undefined,
       teamId: teamId || null,
       teamNameSnapshot: teamNameSnapshot || null,
-      organizationId: organizationId || null,
+      organizationId: eventOrganizationId || organizationId || null,
       season: season || null,
       teamContextAuto: teamContextAuto,
       // Event context (for measurements taken at events)
