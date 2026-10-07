@@ -41,7 +41,8 @@ import { registerRoutes } from '../../packages/api/routes';
 const GENERATORS_DIR = process.env.GENERATORS_DIR;
 const PASSWORD = 'GenImport123!';
 const DATES = ['2025-03-15', '2025-06-20'];
-const DASHR_DATE = '2025-03-15';
+// A date the measurements CSV does not use, so the Dashr commit is not skipped as duplicates.
+const DASHR_DATE = '2025-04-10';
 
 const MQ_PATTERNS = [
   'MQ_LIN_ACCEL', 'MQ_MAX_VELO', 'MQ_DECEL', 'MQ_SHUFFLE',
@@ -168,6 +169,7 @@ describe.skipIf(!GENERATORS_DIR)('am-data-generators output imports into Athlete
 
     it('derives the yard COD deficit for every athlete and date', async () => {
       const rows = await athleteRows();
+      expect(athleteIds).toHaveLength(4);
       for (const userId of athleteIds) {
         for (const date of DATES) {
           const deficit = rows.filter((r) => r.userId === userId && r.date === date && r.metric === 'AGILITY_COD_DEFICIT_YD');
@@ -183,8 +185,13 @@ describe.skipIf(!GENERATORS_DIR)('am-data-generators output imports into Athlete
 
     it('stores MQ scores and derives MQI_TOTAL / MQ_TRANSITION_TOTAL as the sums', async () => {
       const rows = await athleteRows();
-      const value = (userId: string, date: string, metric: string) =>
-        Number(rows.find((r) => r.userId === userId && r.date === date && r.metric === metric)?.value);
+      expect(athleteIds).toHaveLength(4);
+      // A missing metric must fail, not become NaN (expect(NaN).toBe(NaN) passes).
+      const value = (userId: string, date: string, metric: string) => {
+        const row = rows.find((r) => r.userId === userId && r.date === date && r.metric === metric);
+        expect(row, `${metric} ${userId} ${date}`).toBeDefined();
+        return Number(row!.value);
+      };
       for (const userId of athleteIds) {
         for (const date of DATES) {
           const patternSum = MQ_PATTERNS.reduce((s, m) => s + value(userId, date, m), 0);
@@ -198,12 +205,13 @@ describe.skipIf(!GENERATORS_DIR)('am-data-generators output imports into Athlete
 
   describe('Dashr device import', () => {
     it('parses, matches every athlete, and commits yard 5-0-5 legs', async () => {
-      const before = await athleteRows();
       const parse = await request(app)
         .post('/api/import/device/parse')
         .set('Cookie', coachCookie)
         .field('source', 'dashr')
         .field('organizationId', orgId)
+        // The import dialog sends the session the user picked; without it the commit dates rows "today".
+        .field('sessionDate', DASHR_DATE)
         .attach('file', path.join(tmp, 'dashr.csv'), { filename: 'dashr.csv', contentType: 'text/csv' });
       expect(parse.status).toBe(200);
       expect(parse.body.preview.summary.unmatched).toBe(0);
@@ -228,7 +236,15 @@ describe.skipIf(!GENERATORS_DIR)('am-data-generators output imports into Athlete
           })),
         });
       expect(commit.status).toBe(200);
-      expect((await athleteRows()).length).toBeGreaterThan(before.length);
+      expect(commit.body.athletesImported).toBe(4);
+      expect(commit.body.measurementsCreated).toBeGreaterThan(0);
+
+      const onDashrDate = (await athleteRows()).filter((r) => r.date === DASHR_DATE);
+      for (const userId of athleteIds) {
+        const metrics = new Set(onDashrDate.filter((r) => r.userId === userId).map((r) => r.metric));
+        expect(metrics.has('AGILITY_505_YD_L'), `YD_L ${userId}`).toBe(true);
+        expect(metrics.has('AGILITY_505_YD_R'), `YD_R ${userId}`).toBe(true);
+      }
     }, 120_000);
   });
 });
