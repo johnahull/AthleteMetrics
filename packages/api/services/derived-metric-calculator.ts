@@ -646,7 +646,11 @@ export class DerivedMetricCalculator {
    * @param metricCode - The source metric code that changed
    * @param date - Optional date filter (if omitted, recalculates all dates)
    * @param options - Optional configuration for transaction and audit trail
-   * @param options.useTransaction - If true, wraps operation in a transaction (default: false)
+   * @param options.useTransaction - If true, wraps operation in a transaction (default: false).
+   *   Each derived (metric, date) is still written in its own nested transaction, which
+   *   inside the outer one is a savepoint; the per-(athlete, metric, date) advisory locks
+   *   it takes are transaction-scoped, so they are then held until the OUTER transaction
+   *   commits rather than released per metric. No caller uses this mode today.
    * @param options.triggerContext - Context for audit trail
    */
   async recalculateForAthlete(
