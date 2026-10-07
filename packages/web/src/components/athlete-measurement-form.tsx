@@ -11,6 +11,8 @@ import { apiRequest } from "@/lib/queryClient";
 import { insertMeasurementSchema, type InsertMeasurement } from "@shared/schema";
 import { Save } from "lucide-react";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
+import { useAuth } from "@/lib/auth";
+import { isMovementQualityMetric } from "@shared/peer-comparison-exclusions";
 import { PairedInputFields } from "@/components/measurement/PairedInputFields";
 import { LastSetContextLine } from "@/components/measurement/LastSetContextLine";
 import { parseFieldError } from "@/lib/parse-field-error";
@@ -37,8 +39,14 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Get available metrics using centralized hook (filters by active+enabled)
-  const { metrics: availableMetrics } = useAvailableMetrics();
+  const { user } = useAuth();
+
+  // Get available metrics using centralized hook (filters by active+enabled).
+  // Movement Quality scores are coach-entered: athletes are not offered them.
+  const { metrics: enabledMetrics } = useAvailableMetrics();
+  const availableMetrics = user?.role === "athlete"
+    ? enabledMetrics.filter((m) => !isMovementQualityMetric(m.code))
+    : enabledMetrics;
 
   const firstMetricCode = "FLY10_TIME";
 

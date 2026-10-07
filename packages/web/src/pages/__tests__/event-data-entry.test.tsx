@@ -22,8 +22,18 @@ vi.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: vi.fn() }),
 }));
 
+const COACH_AUTH = {
+  user: { id: 'coach-1', role: 'coach', isSiteAdmin: false },
+  userOrganizations: [{ organizationId: 'org-1', role: 'coach' }],
+};
+let authState: any;
+
+vi.mock('@/lib/auth', () => ({
+  useAuth: () => authState,
+}));
+
 // Stable references, like React Query returns between renders
-const EVENT = { id: 'ev-1', name: 'Spring Screen', startDate: '2026-03-10T00:00:00.000Z', isFrozen: false };
+const EVENT = { id: 'ev-1', organizationId: 'org-1', name: 'Spring Screen', startDate: '2026-03-10T00:00:00.000Z', isFrozen: false };
 const REGISTRATIONS = [
   { id: 'r1', userId: 'ath-1', status: 'checked_in', userFullName: 'Jordan Lee' },
   { id: 'r2', userId: 'ath-2', status: 'checked_in', userFullName: 'Sam Park' },
@@ -87,10 +97,24 @@ beforeEach(() => {
   mutateBulk.mockReset();
   refetchMeasurements.mockReset();
   measurementsState = { data: [], isError: false };
+  authState = COACH_AUTH;
   eventMetricsState = [metric('VERTICAL_JUMP'), ...PATTERNS.map((c) => metric(c))];
 });
 
 describe('EventDataEntry', () => {
+  // AM-FEAT-015 R1/R2: athletes cannot enter MQ scores or attach clips, so the
+  // entry grid and Movement Quality panel are for event managers only.
+  it('shows athletes no data entry or Movement Quality panel', () => {
+    authState = {
+      user: { id: 'ath-1', role: 'athlete', isSiteAdmin: false },
+      userOrganizations: [{ organizationId: 'org-1', role: 'athlete' }],
+    };
+    render(<EventDataEntry />);
+    expect(screen.getByText(/only coaches and organization admins can enter/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Movement Quality for/ })).toBeNull();
+    expect(screen.queryAllByRole('textbox')).toHaveLength(0);
+  });
+
   it('keeps unsaved grid edits when Movement Quality scores are saved (measurements refetch)', async () => {
     const user = userEvent.setup();
     mutateSaveMq.mockImplementation(async () => {

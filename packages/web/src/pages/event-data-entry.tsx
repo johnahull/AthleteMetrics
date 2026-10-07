@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
 import {
   MovementQualityPanel,
   type MovementQualitySaveInput,
@@ -85,6 +86,7 @@ export default function EventDataEntry() {
   const { eventId } = useParams<{ eventId: string }>();
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { user, userOrganizations } = useAuth();
 
   // State for the measurement grid
   const [gridData, setGridData] = useState<Record<string, AthleteRow>>({});
@@ -469,6 +471,35 @@ export default function EventDataEntry() {
             <Button variant="outline" onClick={() => navigate("/events")}>
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Events
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Event managers only (coach, org_admin, site_admin), same rule as the event page:
+  // athletes cannot enter Movement Quality scores or attach clips (AM-FEAT-015)
+  const canManageEvent =
+    !!user &&
+    (user.isSiteAdmin ||
+      (!!event.organizationId &&
+        (userOrganizations?.some(
+          (org) => org.organizationId === event.organizationId && (org.role === "org_admin" || org.role === "coach")
+        ) ?? false)));
+  if (!canManageEvent) {
+    return (
+      <div className="container mx-auto py-6">
+        <Card>
+          <CardContent className="py-12 text-center">
+            <AlertCircle className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+            <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
+            <p className="text-muted-foreground mb-4">
+              Only coaches and organization admins can enter data for this event.
+            </p>
+            <Button variant="outline" onClick={() => navigate(`/events/${eventId}`)}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Event
             </Button>
           </CardContent>
         </Card>
