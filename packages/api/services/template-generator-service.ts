@@ -107,8 +107,9 @@ export class TemplateGeneratorService {
     const value = this.getSampleValue(metric.code);
     const units = metric.unit || '';
 
-    // flyInDistance is typically 10 or 20 yards for fly times
-    const flyInDistance = metric.code.includes('FLY') ? '10' : '';
+    // flyInDistance stays blank: for fly metrics the code carries the run-in
+    // (FLY10_TIME_RI10, FLY10_TIME = 20 yd, ...) and a mismatch is rejected.
+    const flyInDistance = '';
 
     return {
       firstName,
