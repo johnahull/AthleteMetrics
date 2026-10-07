@@ -52,6 +52,8 @@ describe('MQ role allowlist on the import paths (CSV, OCR, review queue)', () =>
   let coach: any;
   let parent: any;
   let guest: any;
+  // A site admin with no organization membership: the role must still resolve to site_admin.
+  let siteAdmin: any;
   const cookies: Record<string, string> = {};
 
   beforeAll(async () => {
@@ -89,6 +91,8 @@ describe('MQ role allowlist on the import paths (CSV, OCR, review queue)', () =>
     coach = await mk('coach');
     parent = await mk('parent');
     guest = await mk('guest');
+    siteAdmin = await mk('siteadmin');
+    await db.update(users).set({ isSiteAdmin: true }).where(eq(users.id, siteAdmin.id));
     await db.insert(userOrganizations).values([
       { userId: athlete.id, organizationId: orgId, role: 'athlete' },
       { userId: coach.id, organizationId: orgId, role: 'coach' },
@@ -102,7 +106,7 @@ describe('MQ role allowlist on the import paths (CSV, OCR, review queue)', () =>
       isActive: true,
     });
 
-    for (const [role, u] of Object.entries({ athlete, coach, parent, guest })) {
+    for (const [role, u] of Object.entries({ athlete, coach, parent, guest, siteAdmin })) {
       const login = await request(app).post('/api/auth/login').send({ username: u.username, password: PASSWORD });
       cookies[role] = login.headers['set-cookie'][0];
     }
@@ -118,7 +122,7 @@ describe('MQ role allowlist on the import paths (CSV, OCR, review queue)', () =>
     await db.delete(userTeams).where(eq(userTeams.teamId, teamId));
     await db.delete(userOrganizations).where(eq(userOrganizations.organizationId, orgId));
     await db.delete(teams).where(eq(teams.id, teamId));
-    await db.delete(users).where(inArray(users.id, [athlete.id, coach.id, parent.id, guest.id]));
+    await db.delete(users).where(inArray(users.id, [athlete.id, coach.id, parent.id, guest.id, siteAdmin.id]));
     await db.delete(organizations).where(eq(organizations.id, orgId));
   });
 
@@ -187,6 +191,17 @@ describe('MQ role allowlist on the import paths (CSV, OCR, review queue)', () =>
       const rows = await athleteRows();
       expect(rows).toHaveLength(1);
       expect(Number(rows[0].value)).toBe(2);
+    });
+
+    it('a site admin with no organization membership approving an MQ review item creates the score', async () => {
+      const item = queueMqItem();
+      const res = await request(app)
+        .post('/api/import/review-decision')
+        .set('Cookie', cookies.siteAdmin)
+        .send({ itemId: item.id, action: 'approve' });
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body.measurement.metric).toBe('MQ_JUMP');
+      expect(await athleteRows()).toHaveLength(1);
     });
   });
 
@@ -307,6 +322,19 @@ describe('MQ role allowlist on the import paths (CSV, OCR, review queue)', () =>
       expect(res.body.results.successful).toBe(1);
       expect(await athleteRows()).toHaveLength(1);
     });
+
+    it('a site admin with no organization membership can import an MQ row', async () => {
+      ocrReturns('MQ_JUMP');
+      const res = await request(app)
+        .post('/api/import/photo')
+        .set('Cookie', cookies.siteAdmin)
+        .field('options', JSON.stringify({ organizationId: orgId, measurementMode: 'match_only' }))
+        .attach('file', PNG, 'scores.png');
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body.results.errors).toEqual([]);
+      expect(res.body.results.successful).toBe(1);
+      expect(await athleteRows()).toHaveLength(1);
+    });
   });
 
   describe('POST /api/import/measurements (CSV)', () => {
@@ -349,6 +377,19 @@ describe('MQ role allowlist on the import paths (CSV, OCR, review queue)', () =>
       expect(rows).toHaveLength(1);
       expect(rows[0].metric).toBe('MQ_JUMP');
       expect(Number(rows[0].value)).toBe(2);
+    });
+
+    it('a site admin with no organization membership can import an MQ CSV row', async () => {
+      const res = await request(app)
+        .post('/api/import/measurements')
+        .set('Cookie', cookies.siteAdmin)
+        .field('options', JSON.stringify({ organizationId: orgId, measurementMode: 'match_only' }))
+        .attach('file', Buffer.from(csvFor()), 'measurements.csv');
+      expect(res.body.errors).toEqual([]);
+      expect(res.body.summary.created).toBe(1);
+      const rows = await athleteRows();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].metric).toBe('MQ_JUMP');
     });
   });
 });
