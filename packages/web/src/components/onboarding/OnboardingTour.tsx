@@ -61,7 +61,7 @@ export function OnboardingTour() {
         primaryColor: '#3b82f6', // blue-500
         zIndex: 10000,
         showProgress: true,
-        buttons: ['back', 'close', 'primary', 'skip'],
+        width: 448, // match OnboardingTooltip's max-w-md; v3 defaults to 380
       }}
       locale={{
         back: 'Back',
