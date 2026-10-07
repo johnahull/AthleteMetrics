@@ -383,4 +383,72 @@ describe('Athletes cannot attach clips (R1)', () => {
       expect(result.created[0].mediaUrl).toBe(CLIP);
     });
   });
+
+  describe('event writes are limited to athletes of the event organization', () => {
+    const eventService = new EventMeasurementsService(storage);
+    let eventId: string;
+    let otherOrgId: string;
+    let outsider: any;
+    const NOT_MEMBER = /not a member of this event's organization/i;
+    const outsiderRows = () => db.select().from(measurements).where(eq(measurements.userId, outsider.id));
+
+    beforeAll(async () => {
+      const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const [event] = await db
+        .insert(events)
+        .values({ organizationId: orgId, name: 'Membership Event', startDate: new Date('2026-01-15') } as any)
+        .returning({ id: events.id });
+      eventId = event.id;
+      const [otherOrg] = await db.insert(organizations).values({ name: `Other Org ${suffix}` }).returning();
+      otherOrgId = otherOrg.id;
+      [outsider] = await db
+        .insert(users)
+        .values({
+          username: `clip-outsider-${suffix}`,
+          emails: [`clip-outsider-${suffix}@test.com`],
+          password: 'x',
+          firstName: 'Out',
+          lastName: 'Sider',
+          fullName: 'Out Sider',
+        } as any)
+        .returning();
+      await db.insert(userOrganizations).values({ userId: outsider.id, organizationId: otherOrgId, role: 'athlete' } as any);
+    });
+
+    afterAll(async () => {
+      await db.delete(measurements).where(eq(measurements.userId, outsider.id));
+      await db.delete(userOrganizations).where(eq(userOrganizations.userId, outsider.id));
+      await db.delete(users).where(eq(users.id, outsider.id));
+      await db.delete(organizations).where(eq(organizations.id, otherOrgId));
+    });
+
+    const outsiderInput = () => ({ userId: outsider.id, metric: 'VERTICAL_JUMP', value: 30, date: new Date('2026-01-15') });
+
+    it('createEventMeasurement rejects an athlete from another organization', async () => {
+      await expect(eventService.createEventMeasurement(eventId, outsiderInput(), coach.id, 'coach')).rejects.toThrow(NOT_MEMBER);
+      expect(await outsiderRows()).toHaveLength(0);
+    });
+
+    it('createEventMeasurementsBulk reports an outside athlete as a per-item error', async () => {
+      const result = await eventService.createEventMeasurementsBulk(
+        eventId,
+        [outsiderInput(), { ...outsiderInput(), userId: athlete.id }],
+        coach.id,
+        'coach',
+      );
+      expect(result.errors).toEqual([{ index: 0, error: expect.stringMatching(NOT_MEMBER) }]);
+      expect(result.created.map((m) => m.userId)).toEqual([athlete.id]);
+      expect(await outsiderRows()).toHaveLength(0);
+    });
+
+    it('POST /api/events/:eventId/measurements answers 400 for an outside athlete', async () => {
+      const res = await request(app)
+        .post(`/api/events/${eventId}/measurements`)
+        .set('Cookie', coachCookie)
+        .send({ userId: outsider.id, metric: 'VERTICAL_JUMP', value: 30, date: '2026-01-15' });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(NOT_MEMBER);
+      expect(await outsiderRows()).toHaveLength(0);
+    });
+  });
 });

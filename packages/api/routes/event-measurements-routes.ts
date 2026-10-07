@@ -221,6 +221,9 @@ export function registerEventMeasurementsRoutes(app: Express) {
         if (error instanceof MediaUrlPermissionError) {
           return res.status(403).json({ error: error.message });
         }
+        if (error.message.includes("not a member")) {
+          return res.status(400).json({ error: error.message });
+        }
         if (error.message.includes("frozen")) {
           return res.status(400).json({ error: error.message });
         }

@@ -57,6 +57,18 @@ export class EventMeasurementsService {
   }
 
   /**
+   * Event measurements may only be written for members of the event's organization
+   * (a coach must not write into another organization's athlete record).
+   */
+  private async assertAthleteInEventOrg(event: Event, userId: string): Promise<void> {
+    if (!event.organizationId) return;
+    const roles = await this.storage.getUserRoles(userId, event.organizationId);
+    if (roles.length === 0) {
+      throw new Error("Athlete is not a member of this event's organization");
+    }
+  }
+
+  /**
    * Create a single measurement for an event
    */
   async createEventMeasurement(
@@ -87,6 +99,8 @@ export class EventMeasurementsService {
     if (!event.startDate) {
       throw new Error('Event must have a start date');
     }
+
+    await this.assertAthleteInEventOrg(event, data.userId);
 
     // Create measurement with event context
     const measurement = await this.storage.createMeasurement(
@@ -143,6 +157,7 @@ export class EventMeasurementsService {
         }
 
         assertCanAttachClip(submitterRole, m.mediaUrl);
+        await this.assertAthleteInEventOrg(event, m.userId);
 
         const measurement = await this.storage.createMeasurement(
           {
