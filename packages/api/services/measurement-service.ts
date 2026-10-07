@@ -372,7 +372,9 @@ export class MeasurementService {
                 lte(userTeams.joinedAt, measurementDate),
                 or(isNull(userTeams.leftAt), gte(userTeams.leftAt, measurementDate)),
                 eq(userTeams.isActive, true),
-                eq(teams.isArchived, false)
+                eq(teams.isArchived, false),
+                // Event writes take team context only from the event's organization
+                eventContext?.organizationId ? eq(teams.organizationId, eventContext.organizationId) : undefined
               )
             )
             .for('update'); // Prevent race condition with row-level lock
