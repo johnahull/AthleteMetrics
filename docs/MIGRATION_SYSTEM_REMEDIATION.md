@@ -1,5 +1,14 @@
 # Migration System Remediation Plan
 
+> **Historical document (written 2025-10-30).** The 0014-0021 manual range below describes the
+> state at the time. Option 2 was implemented: `scripts/apply-manual-migrations.js` now applies
+> every migration file numbered 0014 or above that is not a `*_down.sql` file, in numeric order,
+> each in its own transaction (tracked in `manual_migrations`). Down migrations are never applied
+> by the script; run them by hand.
+>
+> **Reserved numbers:** 0144 and 0145 are reserved for AM-FEAT-016, so the manual sequence has a
+> gap there until that feature lands (AM-FEAT-015 uses 0146-0149).
+
 ## Current State (2025-10-30)
 
 ### Overview
