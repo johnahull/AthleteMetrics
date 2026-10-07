@@ -43,6 +43,7 @@ import { registerRoutes } from '../../packages/api/routes';
 import { storage } from '../../packages/api/storage';
 import { EventMeasurementsService } from '../../packages/api/services/event-measurements-service';
 import { MeasurementService } from '../../packages/api/services/measurement-service';
+import { DerivedMetricCalculator } from '../../packages/api/services/derived-metric-calculator';
 import { db } from '../../packages/api/db';
 import { notifyNewMeasurement } from '../../packages/api/services/measurement-notification-service';
 import { AchievementService } from '../../packages/api/services/achievement-service';
@@ -531,6 +532,18 @@ describe('PUT /api/events/:eventId/athletes/:userId/movement-quality', () => {
       expect(await rowsFor(athlete.id, 'VERTICAL_JUMP', ev.id)).toHaveLength(0);
     }
   );
+
+  it('a save recalculates each affected total once, not once per touched score', async () => {
+    const ev = await mkEvent();
+    const spy = vi.spyOn(DerivedMetricCalculator.prototype as any, 'computeAndUpsertDerived');
+    onTestFinished(() => spy.mockRestore());
+    const res = await saveMq(ev.id, athlete.id, { upserts: PATTERNS.map((metric) => ({ metric, value: 2 })), deletes: [] });
+    expect(res.status).toBe(200);
+    // Only MQI_TOTAL depends on the 8 pattern scores
+    expect(spy.mock.calls.map((c: any[]) => c[1].code)).toEqual(['MQI_TOTAL']);
+    const totals = (await rowsFor(athlete.id, 'MQI_TOTAL')).filter((t) => t.date === eventDay(ev));
+    expect(totals.map((t) => Number(t.value))).toEqual([16]);
+  });
 
   it('duplicate ids in deletes are a 400, not a 500, and nothing changes', async () => {
     const ev = await mkEvent();

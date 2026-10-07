@@ -666,7 +666,8 @@ export class DerivedMetricCalculator {
    * Called after measurement update or delete.
    *
    * @param userId - The athlete's user ID
-   * @param metricCode - The source metric code that changed
+   * @param metricCode - The source metric code that changed, or several codes: each
+   *   derived metric depending on any of them is then recalculated once
    * @param date - Optional date filter (if omitted, recalculates all dates)
    * @param options - Optional configuration for transaction and audit trail
    * @param options.useTransaction - If true, wraps operation in a transaction (default: false)
@@ -674,7 +675,7 @@ export class DerivedMetricCalculator {
    */
   async recalculateForAthlete(
     userId: string,
-    metricCode: string,
+    metricCode: string | string[],
     date?: string,
     options?: RecalculateOptions
   ): Promise<void> {
@@ -696,7 +697,7 @@ export class DerivedMetricCalculator {
   private async recalculateForAthleteInternal(
     dbOrTx: typeof dbType | DbTransaction,
     userId: string,
-    metricCode: string,
+    metricCode: string | string[],
     date?: string,
     triggerContext?: TriggerContext,
     triggeringOrganizationId?: string | null
@@ -739,20 +740,20 @@ export class DerivedMetricCalculator {
     }
 
     // Case-insensitive comparison to handle mixed-case dependent_metrics config
-    const metricCodeUpper = metricCode.toUpperCase();
+    const metricCodesUpper = new Set((Array.isArray(metricCode) ? metricCode : [metricCode]).map(c => c.toUpperCase()));
 
     // Filter site derived metrics
     const dependentSiteDerivedMetrics = siteDerivedMetrics.filter(
       (metric: SiteMetric) =>
         metric.dependentMetrics &&
-        metric.dependentMetrics.some(dep => dep.toUpperCase() === metricCodeUpper)
+        metric.dependentMetrics.some(dep => metricCodesUpper.has(dep.toUpperCase()))
     );
 
     // Filter custom org derived metrics
     const dependentCustomDerivedMetrics = customDerivedMetrics.filter(
       (metric: CustomOrgMetric) =>
         metric.dependentMetrics &&
-        metric.dependentMetrics.some(dep => dep.toUpperCase() === metricCodeUpper)
+        metric.dependentMetrics.some(dep => metricCodesUpper.has(dep.toUpperCase()))
     );
 
     // Combine both lists - use a unified type with common fields

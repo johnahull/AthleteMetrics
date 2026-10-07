@@ -300,18 +300,19 @@ export class EventMeasurementsService {
       }
     });
 
-    // Recalculate (create, update or remove) the totals fed by the touched scores
-    const calculator = new DerivedMetricCalculator(this.db);
-    for (const metric of touched) {
+    // Recalculate (create, update or remove) the totals fed by the touched scores,
+    // each affected total once
+    if (touched.size > 0) {
       try {
-        await calculator.recalculateForAthlete(userId, metric, eventDate, {
+        await new DerivedMetricCalculator(this.db).recalculateForAthlete(userId, [...touched], eventDate, {
           triggerContext: { event: "measurement_update", userId: submittedBy },
+          organizationId: event.organizationId,
         });
       } catch (derivedError) {
         console.error("Derived metric recalculation failed after Movement Quality save:", {
           eventId,
           userId,
-          metric,
+          metrics: [...touched],
           date: eventDate,
           error: derivedError,
         });
