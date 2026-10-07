@@ -322,6 +322,38 @@ describe('Athletes cannot enter Movement Quality scores (R2)', () => {
       expect(row.metric).toBe('FLY10_TIME');
     });
 
+    it('PUT /api/measurements/:id: 400 when a coach moves a measurement onto MQI_TOTAL', async () => {
+      const own = await service.createMeasurement(
+        { userId: athlete.id, metric: 'FLY10_TIME', value: 1.52, date: '2026-03-10', teamId } as any,
+        coach.id,
+        'coach'
+      );
+      const res = await request(app)
+        .put(`/api/measurements/${own.id}`)
+        .set('Cookie', coachCookie)
+        .send({ metric: 'MQI_TOTAL', value: 12 });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/calculated automatically/);
+      const [row] = await athleteRows();
+      expect(row.metric).toBe('FLY10_TIME');
+    });
+
+    it('PUT /api/measurements/:id: 400 when a coach edits the value of a calculated MQI_TOTAL', async () => {
+      for (const metric of MQ_PATTERNS) {
+        await service.createMeasurement({ userId: athlete.id, metric, value: 2, date: '2026-03-10' } as any, coach.id, 'coach');
+      }
+      const [total] = await athleteRows('MQI_TOTAL');
+      expect(Number(total.value)).toBe(16);
+      const res = await request(app)
+        .put(`/api/measurements/${total.id}`)
+        .set('Cookie', coachCookie)
+        .send({ value: 20 });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/calculated automatically/);
+      const [after] = await athleteRows('MQI_TOTAL');
+      expect(Number(after.value)).toBe(16);
+    });
+
     it('POST /api/measurements/batch: athletes are denied by the batch endpoint gate', async () => {
       const res = await request(app)
         .post('/api/measurements/batch')
@@ -385,6 +417,16 @@ describe('Athletes cannot enter Movement Quality scores (R2)', () => {
           .send({ userId: athlete.id, metric: 'MQ_JUMP', value: 4, date: '2026-03-10' });
         expect(res.status).toBe(400);
         expect(res.body.error).toMatch(/at most 3/);
+        expect(await athleteRows()).toHaveLength(0);
+      });
+
+      it('POST /api/events/:eventId/measurements: 400 for a manual MQI_TOTAL from a coach', async () => {
+        const res = await request(app)
+          .post(`/api/events/${eventId}/measurements`)
+          .set('Cookie', coachCookie)
+          .send({ userId: athlete.id, metric: 'MQI_TOTAL', value: 12, date: '2026-03-10' });
+        expect(res.status).toBe(400);
+        expect(res.body.error).toMatch(/calculated automatically/);
         expect(await athleteRows()).toHaveLength(0);
       });
 

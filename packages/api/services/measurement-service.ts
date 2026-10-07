@@ -657,6 +657,14 @@ export class MeasurementService {
         assertCanEnterMetric(updaterRole, existing.metric);
         if (measurement.metric) assertCanEnterMetric(updaterRole, measurement.metric);
 
+        // A calculated MQ total is owned by the calculator: editing it by hand
+        // would be overwritten by the next recalculation (or shadow it).
+        if (existing.isCalculated && isMovementQualityMetric(existing.metric)) {
+          throw new MeasurementValueValidationError(
+            `${existing.metric} is calculated automatically and cannot be edited manually`
+          );
+        }
+
         const updateData: Partial<typeof measurements.$inferInsert> = {};
 
         if (measurement.userId) updateData.userId = measurement.userId;
@@ -694,9 +702,17 @@ export class MeasurementService {
               validationMin: siteMetrics.validationMin,
               validationMax: siteMetrics.validationMax,
               decimalPrecision: siteMetrics.decimalPrecision,
+              isDerived: siteMetrics.isDerived,
             })
             .from(siteMetrics)
             .where(eq(siteMetrics.code, effectiveMetricCode));
+
+          // Same rule as createMeasurement: an MQ total cannot be entered manually.
+          if (metricIsChanging && metricConfig?.isDerived && isMovementQualityMetric(effectiveMetricCode)) {
+            throw new MeasurementValueValidationError(
+              `${effectiveMetricCode} is calculated automatically and cannot be entered manually`
+            );
+          }
 
           // Metric-aware value validation (see createMeasurement). When only the
           // metric changes, re-validate the existing stored value against the new metric.

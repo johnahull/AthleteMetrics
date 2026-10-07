@@ -82,6 +82,13 @@ describe('storage.createMeasurement value validation (import paths)', () => {
     expect(Number((await create('RSI_ASYM', -5)).value)).toBe(-5);
   });
 
+  it('rejects a manual MQ total (MQI_TOTAL / MQ_TRANSITION_TOTAL) and writes nothing', async () => {
+    await expect(create('MQI_TOTAL', 12)).rejects.toThrow(/calculated automatically/);
+    await expect(create('MQ_TRANSITION_TOTAL', 6)).rejects.toThrow(/calculated automatically/);
+    const rows = await db.select().from(measurements).where(eq(measurements.userId, athleteId));
+    expect(rows).toHaveLength(0);
+  });
+
   it('accepts a positive standard value', async () => {
     const m = await create('FLY10_TIME', 1.52);
     expect(Number(m.value)).toBe(1.52);

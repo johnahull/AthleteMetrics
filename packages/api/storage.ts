@@ -3734,9 +3734,17 @@ export class DatabaseStorage implements IStorage {
         validationMax: siteMetrics.validationMax,
         decimalPrecision: siteMetrics.decimalPrecision,
         auxiliaryInputConfig: siteMetrics.auxiliaryInputConfig,
+        isDerived: siteMetrics.isDerived,
       })
       .from(siteMetrics)
       .where(eq(siteMetrics.code, measurement.metric));
+    // MQ totals (MQI_TOTAL, MQ_TRANSITION_TOTAL) are only ever calculated from
+    // the base scores; a manual entry would shadow the calculated total.
+    if (metricConfig?.isDerived && isMovementQualityMetric(measurement.metric)) {
+      throw new MeasurementValueValidationError(
+        `${measurement.metric} is calculated automatically and cannot be entered manually`
+      );
+    }
     if (!Number.isFinite(Number(measurement.value))) {
       throw new MeasurementValueValidationError('Value must be a finite number');
     }
