@@ -450,8 +450,10 @@ export default function EventDataEntry() {
     });
   };
 
-  // Loading state
-  if (eventLoading || registrationsLoading || metricsLoading || measurementsLoading) {
+  // Loading state (auth and organization memberships included, so managers never
+  // see a flash of Access Denied while they load)
+  const authLoading = !user || (!user.isSiteAdmin && userOrganizations === null);
+  if (authLoading || eventLoading || registrationsLoading || metricsLoading || measurementsLoading) {
     return (
       <div className="container mx-auto py-6 space-y-6">
         <Skeleton className="h-8 w-64" />

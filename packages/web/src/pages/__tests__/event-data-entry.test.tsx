@@ -115,6 +115,26 @@ describe('EventDataEntry', () => {
     expect(screen.queryAllByRole('textbox')).toHaveLength(0);
   });
 
+  // Auth and organization memberships load after the page: show the loading
+  // skeleton until they are known instead of flashing Access Denied.
+  it.each([
+    ['no user yet', { user: null, userOrganizations: null }],
+    ['organizations not loaded', { user: COACH_AUTH.user, userOrganizations: null }],
+  ])('shows the loading skeleton while auth is not ready (%s)', (_case, auth) => {
+    authState = auth;
+    const { container } = render(<EventDataEntry />);
+    expect(screen.queryByText(/access denied/i)).toBeNull();
+    expect(screen.queryByText(/only coaches and organization admins can enter/i)).toBeNull();
+    expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
+  });
+
+  it('does not wait for organizations for a site admin', () => {
+    authState = { user: { id: 'admin-1', role: 'site_admin', isSiteAdmin: true }, userOrganizations: null };
+    const { container } = render(<EventDataEntry />);
+    expect(container.querySelectorAll('.animate-pulse')).toHaveLength(0);
+    expect(screen.getByRole('button', { name: 'Movement Quality for Sam Park' })).toBeInTheDocument();
+  });
+
   it('keeps unsaved grid edits when Movement Quality scores are saved (measurements refetch)', async () => {
     const user = userEvent.setup();
     mutateSaveMq.mockImplementation(async () => {
