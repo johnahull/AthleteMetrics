@@ -7,8 +7,6 @@
  *
  * Requires DATABASE_URL (PostgreSQL).
  */
-process.env.NODE_ENV = process.env.NODE_ENV || 'test';
-
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
@@ -16,7 +14,7 @@ import { siteMetrics, siteBenchmarks, customBenchmarks, organizations } from '@s
 
 const suffix = Date.now();
 const metricCode = `SCALE_TEST_${suffix}`;
-let orgId: string;
+let orgId = '';
 
 describe('benchmark min_value/max_value numeric scale', () => {
   beforeAll(async () => {
@@ -26,8 +24,10 @@ describe('benchmark min_value/max_value numeric scale', () => {
   });
 
   afterAll(async () => {
-    await db.delete(customBenchmarks).where(eq(customBenchmarks.organizationId, orgId));
-    await db.delete(organizations).where(eq(organizations.id, orgId));
+    if (orgId) {
+      await db.delete(customBenchmarks).where(eq(customBenchmarks.organizationId, orgId));
+      await db.delete(organizations).where(eq(organizations.id, orgId));
+    }
     await db.delete(siteBenchmarks).where(eq(siteBenchmarks.metricCode, metricCode));
     await db.delete(siteMetrics).where(eq(siteMetrics.code, metricCode));
   });
@@ -53,11 +53,11 @@ describe('benchmark min_value/max_value numeric scale', () => {
       metricCode,
       name: 'Scale tier',
       comparisonOperator: 'range',
-      minValue: '94.999',
-      maxValue: '2.102',
+      minValue: '2.102',
+      maxValue: '94.999',
     }).returning();
-    expect(row.minValue).toBe('94.999');
-    expect(row.maxValue).toBe('2.102');
+    expect(row.minValue).toBe('2.102');
+    expect(row.maxValue).toBe('94.999');
   });
 
   it('round-trips three-decimal custom benchmark edges without rounding', async () => {
@@ -66,10 +66,10 @@ describe('benchmark min_value/max_value numeric scale', () => {
       metricCode,
       name: 'Scale tier',
       comparisonOperator: 'range',
-      minValue: '94.999',
-      maxValue: '2.102',
+      minValue: '2.102',
+      maxValue: '94.999',
     }).returning();
-    expect(row.minValue).toBe('94.999');
-    expect(row.maxValue).toBe('2.102');
+    expect(row.minValue).toBe('2.102');
+    expect(row.maxValue).toBe('94.999');
   });
 });
