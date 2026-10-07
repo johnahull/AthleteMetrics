@@ -342,6 +342,28 @@ describe('PUT /api/events/:eventId/athletes/:userId/movement-quality', () => {
     expect(Number(total.value)).toBe(12);
   });
 
+  it('editing a saved score keeps its date and recalculates the total', async () => {
+    const ev = await mkEvent();
+    const first = await saveMq(ev.id, athlete.id, {
+      upserts: PATTERNS.map((metric) => ({ metric, value: 1 })),
+      deletes: [],
+    });
+    expect(first.status).toBe(200);
+
+    // Edit one score in place (upsertPerEvent UPDATE branch), twice
+    for (const value of [3, 2]) {
+      const res = await saveMq(ev.id, athlete.id, { upserts: [{ metric: PATTERNS[0], value }], deletes: [] });
+      expect(res.status).toBe(200);
+    }
+
+    const [edited] = await rowsFor(athlete.id, PATTERNS[0], ev.id);
+    expect(edited.date).toBe(eventDay(ev));
+    expect(Number(edited.value)).toBe(2);
+    const totals = (await rowsFor(athlete.id, 'MQI_TOTAL')).filter((t) => t.date === eventDay(ev));
+    expect(totals).toHaveLength(1);
+    expect(Number(totals[0].value)).toBe(9);
+  });
+
   it('rolls back every change when one score is invalid, and reports it per metric', async () => {
     const ev = await mkEvent();
     const first = await saveMq(ev.id, athlete.id, { upserts: [{ metric: 'MQ_LATRUN', value: 1 }], deletes: [] });
