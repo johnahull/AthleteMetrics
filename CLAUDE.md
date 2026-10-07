@@ -263,7 +263,7 @@ git diff main develop                     # Full diff
 ### Database Operations
 - `npm run db:push` - Apply schema changes from `packages/shared/schema.ts` to database (development only)
 - `npm run db:migrate` - Run drizzle migrations (0000-0013)
-- `npm run db:migrate:manual` - Run manual SQL migrations (0014+; AM-FEAT-015 adds 0146-0149; 0144/0145 reserved for AM-FEAT-016)
+- `npm run db:migrate:manual` - Run manual SQL migrations (see `docs/MIGRATION_SYSTEM_REMEDIATION.md`)
 - `npm run db:migrate:all` - Run all migrations (drizzle + manual)
 - `npm run db:validate` - Validate migration safety before applying
 
@@ -276,12 +276,12 @@ This project uses a **dual migration system**:
    - Requires both SQL files and snapshot JSON files
    - Tracked in `drizzle.__drizzle_migrations` table
 
-2. **Manual SQL migrations (0014+; AM-FEAT-015 adds 0146-0149; 0144/0145 reserved for AM-FEAT-016)**: Applied via `npm run db:migrate:manual`
+2. **Manual SQL migrations** (see `docs/MIGRATION_SYSTEM_REMEDIATION.md`): Applied via `npm run db:migrate:manual`
    - Pure SQL migrations without drizzle snapshots
    - Applied using scripts/apply-manual-migrations.js
    - Tracked in `manual_migrations` table
 
-**Why two systems?** Migrations 0014 onward were created without drizzle snapshot files and cannot be applied by drizzle's migrate() function. See `docs/MIGRATION_SYSTEM_REMEDIATION.md` for full details (that document predates the later migrations and still describes the manual range as 0014-0021; the same manual system now applies to every migration from 0014 on).
+**Why two systems?** The manual migrations were created without drizzle snapshot files and cannot be applied by drizzle's migrate() function. See `docs/MIGRATION_SYSTEM_REMEDIATION.md` for the current range, reserved numbers and history.
 
 **For new migrations**: Always use drizzle-kit to generate migrations with proper snapshots:
 ```bash
