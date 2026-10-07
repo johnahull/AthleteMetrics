@@ -32,6 +32,10 @@ const OUTLIER_RANGES: Record<string, { min: number; max: number; label: string }
   DASH_30M: { min: 3.0, max: 8.0, label: '30m dash' },
   DASH_40M: { min: 4.0, max: 10.0, label: '40m dash' },
   FLY10_TIME: { min: 0.8, max: 3.0, label: '10yd fly' },
+  FLY10_TIME_RI5: { min: 0.8, max: 3.0, label: '10yd fly (5yd run-in)' },
+  FLY10_TIME_RI10: { min: 0.8, max: 3.0, label: '10yd fly (10yd run-in)' },
+  FLY10_TIME_RI15: { min: 0.8, max: 3.0, label: '10yd fly (15yd run-in)' },
+  FLY10_TIME_RI30: { min: 0.8, max: 3.0, label: '10yd fly (30yd run-in)' },
   FLY10M_TIME: { min: 0.8, max: 3.0, label: '10m fly' },
   // 5-0-5 ranges differ by protocol: 5 yd is ~8.6% shorter than 5 m, so yard times run ~9% faster.
   AGILITY_505_M: { min: 1.5, max: 5.0, label: '505 agility (m)' },
@@ -184,6 +188,22 @@ function parseFloat_(str: string): number | null {
   return isNaN(val) ? null : val;
 }
 
+// Start Distance (yd) of a 10-yard fly -> metric code. The code carries the run-in.
+const FLY10_YD_BY_START: Record<number, string> = {
+  5: MetricType.FLY10_TIME_RI5,
+  10: MetricType.FLY10_TIME_RI10,
+  15: MetricType.FLY10_TIME_RI15,
+  20: MetricType.FLY10_TIME,
+  30: MetricType.FLY10_TIME_RI30,
+};
+
+/** True for a yard Flying row over 10 yd, whose code depends on Start Distance. */
+function isYardFly10(row: DashrRow): boolean {
+  return (row['Type'] || '').trim() === 'Flying'
+    && parseFloat_(row['Final Distance']) === 10
+    && getDistanceUnit(row) === 'YD';
+}
+
 /**
  * Determine the metric code from a Dashr row based on Type + distances
  */
@@ -207,8 +227,13 @@ function mapDrillType(row: DashrRow): string | null {
     }
 
     case 'Flying': {
-      // Flying sprints: map to FLY10_TIME / FLY10M_TIME when Final Distance = 10
-      if (finalDist === 10) return unit === 'M' ? MetricType.FLY10M_TIME : MetricType.FLY10_TIME;
+      // Flying sprints over 10: meters -> FLY10M_TIME (run-in not modelled); yards ->
+      // the code for the row's Start Distance (run-in), or null when missing/unsupported.
+      if (finalDist === 10) {
+        if (unit === 'M') return MetricType.FLY10M_TIME;
+        const start = parseFloat_(row['Start Distance']);
+        return start === null ? null : (FLY10_YD_BY_START[start] ?? null);
+      }
       // Other flying distances aren't standard metrics
       return null;
     }
@@ -381,6 +406,33 @@ function deriveFly10ForAthlete(
 }
 
 /**
+ * Derive FLY10_TIME_RI10 from a 20yd dash with a 10yd split (20 - 10).
+ * Yards only. Skipped when the athlete already has a direct FLY10_TIME_RI10.
+ */
+function deriveFly10Ri10ForAthlete(drills: ParsedDrillResult[]): ParsedDrillResult | null {
+  if (drills.some(d => d.metric === MetricType.FLY10_TIME_RI10)) return null;
+
+  let best: number | null = null;
+  for (const drill of drills) {
+    if (drill.metric !== MetricType.DASH_20YD) continue;
+    const split10 = drill.splits?.find(s => s.metric === MetricType.DASH_10YD);
+    if (!split10) continue;
+    const value = parseFloat((drill.value - split10.value).toFixed(3));
+    if (value > 0 && (best === null || value < best)) best = value;
+  }
+  if (best === null) return null;
+
+  const outlierReason = checkOutlier(MetricType.FLY10_TIME_RI10, best);
+  return {
+    metric: MetricType.FLY10_TIME_RI10,
+    value: best,
+    units: 's',
+    derivedFrom: `${MetricType.DASH_20YD} splits`,
+    ...(outlierReason ? { isOutlier: true, outlierReason } : {}),
+  };
+}
+
+/**
  * Group rows by athlete name + drill type + date + direction + distance unit,
  * then select the best (fastest) attempt per group.
  */
@@ -398,6 +450,8 @@ function selectBestAttempts(rows: DashrRow[]): DashrRow[] {
       row['Final Distance'] || '',
       // A metric and a yard 5-0-5 are different protocols (_M vs _YD), never alternate attempts.
       getDistanceUnit(row),
+      // Different run-ins on the same day are different metrics, not attempts at one
+      (row['Start Distance'] || '').trim() === '' ? '' : String(parseFloat_(row['Start Distance'])),
     ].join('|');
 
     if (!groups.has(key)) groups.set(key, []);
@@ -478,6 +532,14 @@ export class DashrCsvParser implements DeviceImportParser {
       });
     }
 
+    // Yard flies take their run-in from Start Distance; without the column none can be imported
+    const hasStartDistanceColumn = allRows.length === 0 || 'Start Distance' in allRows[0];
+    if (!hasStartDistanceColumn && rows.some(isYardFly10)) {
+      warnings.push(
+        'Start Distance column is missing from this file: 10-yard Flying rows cannot be assigned a run-in and were skipped',
+      );
+    }
+
     // Validate rows and collect warnings
     const validRows: DashrRow[] = [];
     for (const row of rows) {
@@ -512,6 +574,15 @@ export class DashrCsvParser implements DeviceImportParser {
       }
 
       const metric = mapDrillType(row);
+      if (!metric && isYardFly10(row)) {
+        // File-level warning already covers a missing Start Distance column
+        if (hasStartDistanceColumn) {
+          warnings.push(
+            `Flying 10: missing/unsupported Start Distance "${(row['Start Distance'] || '').trim()}" for ${firstName} ${lastName}; expected 5, 10, 15, 20 or 30`,
+          );
+        }
+        continue;
+      }
       if (metric && (row['Type'] || '').trim() === '505 Agility Test') {
         const rawUnits = (row['Units'] || '').trim();
         if (!['imperial', 'metric'].includes(rawUnits.toLowerCase())) {
@@ -558,6 +629,8 @@ export class DashrCsvParser implements DeviceImportParser {
       if (fly10Yd) athlete.drills.push(fly10Yd);
       const fly10M = deriveFly10ForAthlete(athlete.drills, 'M');
       if (fly10M) athlete.drills.push(fly10M);
+      const fly10Ri10 = deriveFly10Ri10ForAthlete(athlete.drills);
+      if (fly10Ri10) athlete.drills.push(fly10Ri10);
     }
 
     const athletes = Array.from(athleteMap.values());
