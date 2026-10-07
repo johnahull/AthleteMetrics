@@ -94,6 +94,21 @@ describe('storage.createMeasurement value validation (import paths)', () => {
     expect(m.units).toBe('score');
   });
 
+  // Review-queue approval fills a missing unit with getDefaultUnit(metric) = 's';
+  // an MQ score keeps 'score', while a standard metric honors the caller's unit.
+  it("keeps 'score' for an MQ score even when the caller supplies another unit", async () => {
+    const mq = await storage.createMeasurement(
+      { userId: athleteId, metric: 'MQ_JUMP', value: 2, units: 's', date: '2026-03-10' },
+      coachId,
+    );
+    expect(mq.units).toBe('score');
+    const std = await storage.createMeasurement(
+      { userId: athleteId, metric: 'FLY10_TIME', value: 1.5, units: 'ms', date: '2026-03-10' },
+      coachId,
+    );
+    expect(std.units).toBe('ms');
+  });
+
   it('accepts a positive standard value', async () => {
     const m = await create('FLY10_TIME', 1.52);
     expect(Number(m.value)).toBe(1.52);
