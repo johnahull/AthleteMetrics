@@ -330,4 +330,26 @@ describe('analytics routes answer 400 for MQ metrics', () => {
     expect(res.status).toBe(400);
     expect(res.body.message).toBe('metric parameter is required');
   });
+
+  // Benchmark and peer-distribution routes map the service's MQ exclusion to 400, not 500
+  it.each([
+    ['POST /api/benchmarks', () => request(app).post('/api/benchmarks').send({
+      metricCode: 'MQI_TOTAL', name: 'MQI bench', comparisonOperator: 'gte', benchmarkValue: 12, tierName: 'Competent',
+    })],
+    ['POST /api/site-benchmarks/tier-group', () => request(app).post('/api/site-benchmarks/tier-group').send({
+      metricCode: 'MQ_JUMP', name: 'MQ tiers', comparisonOperator: 'range',
+      tiers: [
+        { tierName: 'Low', tierOrder: 1, minValue: 0, maxValue: 1.5 },
+        { tierName: 'High', tierOrder: 2, minValue: 1.5, maxValue: 3 },
+      ],
+    })],
+    ['POST /api/organizations/:id/benchmarks/custom', () => request(app).post(`/api/organizations/${orgId}/benchmarks/custom`).send({
+      metricCode: 'MQ_JUMP', name: 'MQ custom', comparisonOperator: 'gte', benchmarkValue: 2, tierName: 'Functional',
+    })],
+    ['GET /api/peer-distributions/MQ_JUMP', () => request(app).get('/api/peer-distributions/MQ_JUMP')],
+  ])('%s with an MQ metric -> 400', async (_label, send) => {
+    const res = await send().set('Cookie', cookie);
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/MQ(I_TOTAL|_JUMP) is not available/);
+  });
 });

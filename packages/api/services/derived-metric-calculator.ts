@@ -487,6 +487,11 @@ export class DerivedMetricCalculator {
       return null;
     }
 
+    if (sourceMeasurementsMap.size === 0) {
+      // An empty map (no dependent metrics) has no source to inherit context from
+      return null;
+    }
+
     // Build source values for formula evaluation
     // Keys are normalized to lowercase to match formula service's variable normalization
     const sourceValues: Record<string, number> = {};
