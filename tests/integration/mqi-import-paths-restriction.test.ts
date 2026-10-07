@@ -348,7 +348,7 @@ describe('MQ role allowlist on the import paths (CSV, OCR, review queue)', () =>
         .field('options', JSON.stringify({ measurementMode: 'match_only' }))
         .attach('file', Buffer.from(csvFor()), 'measurements.csv');
       expect(res.status).toBe(403);
-      expect(res.body.message).toMatch(/cannot import measurement data/i);
+      expect(res.body.message).toMatch(/your role cannot import measurement data/i);
       expect(await athleteRows()).toHaveLength(0);
     });
 

@@ -349,15 +349,15 @@ export function registerMeasurementRoutes(app: Express) {
       // Validate request body using Zod schema
       const validatedData = insertMeasurementSchema.parse(req.body);
 
+      // SECURITY: Writer-role allowlist. parent, guest and any other role cannot create measurements
+      if (!isSiteAdmin(user) && !['athlete', 'coach', 'org_admin'].includes(user.role)) {
+        return res.status(403).json({ message: "Your role cannot create measurements" });
+      }
+
       // Permission check: athletes can only create measurements for themselves
       // Use user.id as the athlete's userId (not user.athleteId which could be undefined)
       if (user.role === 'athlete' && validatedData.userId !== user.id) {
         return res.status(403).json({ message: "Athletes can only create measurements for themselves" });
-      }
-
-      // SECURITY: Writer-role allowlist. parent, guest and any other role cannot create measurements
-      if (!isSiteAdmin(user) && !['athlete', 'coach', 'org_admin'].includes(user.role)) {
-        return res.status(403).json({ message: "Your role cannot create measurements" });
       }
 
       // SECURITY: Validate teamId exists (applies to all users)

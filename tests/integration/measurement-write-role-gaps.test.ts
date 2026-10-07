@@ -37,6 +37,7 @@ describe('measurement write role gaps (#515, #516)', () => {
   let athlete: any;
   let victim: any;
   let coach: any;
+  let orgAdmin: any;
   let parent: any;
   let guest: any;
   const cookies: Record<string, string> = {};
@@ -73,12 +74,14 @@ describe('measurement write role gaps (#515, #516)', () => {
     athlete = await mk('athlete');
     victim = await mk('victim');
     coach = await mk('coach');
+    orgAdmin = await mk('orgadmin');
     parent = await mk('parent');
     guest = await mk('guest');
     await db.insert(userOrganizations).values([
       { userId: athlete.id, organizationId: orgId, role: 'athlete' },
       { userId: victim.id, organizationId: orgId, role: 'athlete' },
       { userId: coach.id, organizationId: orgId, role: 'coach' },
+      { userId: orgAdmin.id, organizationId: orgId, role: 'org_admin' },
       { userId: guest.id, organizationId: orgId, role: 'guest' },
     ] as any);
     await db.insert(userTeams).values([
@@ -92,7 +95,7 @@ describe('measurement write role gaps (#515, #516)', () => {
       isActive: true,
     });
 
-    for (const [role, u] of Object.entries({ athlete, coach, parent, guest })) {
+    for (const [role, u] of Object.entries({ athlete, coach, orgAdmin, parent, guest })) {
       const login = await request(app).post('/api/auth/login').send({ username: u.username, password: PASSWORD });
       cookies[role] = login.headers['set-cookie'][0];
     }
@@ -110,7 +113,7 @@ describe('measurement write role gaps (#515, #516)', () => {
     await db.delete(userTeams).where(eq(userTeams.teamId, teamId));
     await db.delete(userOrganizations).where(eq(userOrganizations.organizationId, orgId));
     await db.delete(teams).where(eq(teams.id, teamId));
-    await db.delete(users).where(inArray(users.id, [athlete.id, victim.id, coach.id, parent.id, guest.id]));
+    await db.delete(users).where(inArray(users.id, [athlete.id, victim.id, coach.id, orgAdmin.id, parent.id, guest.id]));
     await db.delete(organizations).where(eq(organizations.id, orgId));
   });
 
@@ -143,6 +146,12 @@ describe('measurement write role gaps (#515, #516)', () => {
 
     it('a coach in the same organization can still create the measurement', async () => {
       const res = await request(app).post('/api/measurements').set('Cookie', cookies.coach).send(body());
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      expect(await victimRows()).toHaveLength(1);
+    });
+
+    it('an org_admin in the same organization can create the measurement', async () => {
+      const res = await request(app).post('/api/measurements').set('Cookie', cookies.orgAdmin).send(body());
       expect(res.status, JSON.stringify(res.body)).toBe(201);
       expect(await victimRows()).toHaveLength(1);
     });
@@ -195,12 +204,12 @@ describe('measurement write role gaps (#515, #516)', () => {
     it.each(['athlete', 'parent', 'guest'])('403 when a %s session imports measurements; nothing is written', async (role) => {
       const res = await importCsv(role);
       expect(res.status, JSON.stringify(res.body)).toBe(403);
-      expect(res.body.message).toMatch(/cannot import measurement data/i);
+      expect(res.body.message).toMatch(/your role cannot import measurement data/i);
       expect(await victimRows()).toHaveLength(0);
     });
 
-    it('a coach in the organization can still import measurements', async () => {
-      const res = await importCsv('coach');
+    it.each(['coach', 'orgAdmin'])('a %s in the organization can still import measurements', async (role) => {
+      const res = await importCsv(role);
       expect(res.status, JSON.stringify(res.body)).toBe(200);
       expect(await victimRows()).toHaveLength(1);
     });

@@ -386,7 +386,7 @@ describe('Athletes cannot enter Movement Quality scores (R2)', () => {
         .attach('file', Buffer.from(csv), 'measurements.csv');
       // Athletes are now rejected from measurement import outright (#516)
       expect(res.status).toBe(403);
-      expect(res.body.message).toMatch(/cannot import measurement data/i);
+      expect(res.body.message).toMatch(/your role cannot import measurement data/i);
       expect(await athleteRows()).toHaveLength(0);
     });
 

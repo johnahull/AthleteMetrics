@@ -604,7 +604,7 @@ export function registerImportExportRoutes(app: Express) {
       if (type === 'measurements') {
         const importUser = req.session.user;
         if (!isSiteAdmin(importUser) && !['coach', 'org_admin'].includes(importUser?.role ?? '')) {
-          return res.status(403).json({ message: "Athletes cannot import measurement data" });
+          return res.status(403).json({ message: "Your role cannot import measurement data" });
         }
       }
 
