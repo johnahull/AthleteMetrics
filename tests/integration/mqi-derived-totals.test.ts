@@ -196,7 +196,7 @@ describe('MQI derived totals (calculator behavior)', () => {
 
   it('(b) recalculates MQI_TOTAL when a source score is updated', async () => {
     const rows = await scoreAllPatterns(2); // 16
-    await service.updateMeasurement(rows[0].id, { value: 3 });
+    await service.updateMeasurement(rows[0].id, { value: 3 }, undefined, 'coach');
     const [total] = await totalsFor('MQI_TOTAL');
     expect(Number(total.value)).toBe(17);
   });
@@ -220,7 +220,7 @@ describe('MQI derived totals (calculator behavior)', () => {
   it('(c) leaves no stale total on the OLD date when a source score is moved to another date', async () => {
     const rows = await scoreAllPatterns(2);
     expect(await totalsFor('MQI_TOTAL')).toHaveLength(1);
-    await service.updateMeasurement(rows[0].id, { date: '2026-03-11' } as any);
+    await service.updateMeasurement(rows[0].id, { date: '2026-03-11' } as any, undefined, 'coach');
     // Old date now has only 7 pattern scores: total must be gone.
     expect(await totalsFor('MQI_TOTAL', DATE)).toHaveLength(0);
   });
@@ -231,7 +231,7 @@ describe('MQI derived totals (calculator behavior)', () => {
     const moved = await score('MQ_JUMP', 3, '2026-03-11');
     expect(await totalsFor('MQI_TOTAL')).toHaveLength(0);
 
-    await service.updateMeasurement(moved.id, { date: DATE } as any);
+    await service.updateMeasurement(moved.id, { date: DATE } as any, undefined, 'coach');
 
     const totals = await totalsFor('MQI_TOTAL');
     expect(totals).toHaveLength(1);
@@ -244,7 +244,7 @@ describe('MQI derived totals (calculator behavior)', () => {
     const wrongMetric = await score('MQ_TRANS_DECEL_CUT', 3);
     expect(await totalsFor('MQI_TOTAL')).toHaveLength(0);
 
-    await service.updateMeasurement(wrongMetric.id, { metric: 'MQ_JUMP' } as any);
+    await service.updateMeasurement(wrongMetric.id, { metric: 'MQ_JUMP' } as any, undefined, 'coach');
 
     const totals = await totalsFor('MQI_TOTAL');
     expect(totals).toHaveLength(1);

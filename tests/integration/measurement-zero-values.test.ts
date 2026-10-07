@@ -171,12 +171,12 @@ describe('MeasurementService zero / range validation', () => {
 
   it('update: allows 0 on an MQ score, rejects 0 on a standard metric', async () => {
     const mq = await create('MQ_JUMP', 2);
-    const updated = await service.updateMeasurement(mq.id, { value: 0 });
+    const updated = await service.updateMeasurement(mq.id, { value: 0 }, undefined, 'coach');
     expect(Number(updated.value)).toBe(0);
-    await expect(service.updateMeasurement(mq.id, { value: 4 })).rejects.toThrow();
+    await expect(service.updateMeasurement(mq.id, { value: 4 }, undefined, 'coach')).rejects.toThrow(/at most 3/);
 
     const fly = await create('FLY10_TIME', 1.5);
-    await expect(service.updateMeasurement(fly.id, { value: 0 })).rejects.toThrow(/positive/i);
+    await expect(service.updateMeasurement(fly.id, { value: 0 }, undefined, 'coach')).rejects.toThrow(/positive/i);
   });
 });
 
