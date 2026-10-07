@@ -35,10 +35,10 @@ import {
 // Singleton achievement service instance for performance
 const achievementService = new AchievementService();
 
-/** Thrown when an athlete tries to attach a clip (mediaUrl) to a measurement (maps to HTTP 403). */
+/** Thrown when a non-coach/admin tries to attach a clip (mediaUrl) to a measurement (maps to HTTP 403). */
 export class MediaUrlPermissionError extends Error {
   constructor() {
-    super('Athletes cannot attach clips to measurements; a coach must add them');
+    super('Only coaches and admins can attach clips to measurements; a coach must add them');
     this.name = 'MediaUrlPermissionError';
   }
 }
@@ -61,6 +61,20 @@ const MQ_ENTRY_ROLES: ReadonlySet<string> = new Set(['coach', 'org_admin', 'site
 export function assertCanEnterMetric(role: string | undefined, metricCode: string): void {
   if (isMovementQualityMetric(metricCode) && !(role && MQ_ENTRY_ROLES.has(role))) {
     throw new MovementQualityPermissionError(metricCode);
+  }
+}
+
+/** Roles allowed to attach clips. Everything else (athlete, parent, guest, no role) is denied. */
+const CLIP_ROLES: ReadonlySet<string> = new Set(['coach', 'org_admin', 'site_admin']);
+
+/**
+ * Clips are coach-attached (AM-FEAT-015): a non-empty mediaUrl needs a coach or
+ * admin role; omitting or clearing it (null / '') is allowed for everyone.
+ * Fails closed on a missing role.
+ */
+function assertCanAttachClip(role: string | undefined, mediaUrl: string | null | undefined): void {
+  if (mediaUrl && !(role && CLIP_ROLES.has(role))) {
+    throw new MediaUrlPermissionError();
   }
 }
 
@@ -209,11 +223,7 @@ export class MeasurementService {
     options: MeasurementWriteOptions = {}
   ): Promise<Measurement> {
     assertCanEnterMetric(submitterRole, measurement.metric);
-
-    // Clips are coach-attached (AM-FEAT-015); athletes may only omit or clear mediaUrl
-    if (submitterRole === 'athlete' && measurement.mediaUrl) {
-      throw new MediaUrlPermissionError();
-    }
+    assertCanAttachClip(submitterRole, measurement.mediaUrl);
 
     // Wrap entire operation in transaction to prevent race conditions
     // Race condition scenario: User joins/leaves team between active teams query and measurement insert
@@ -756,10 +766,7 @@ export class MeasurementService {
     updaterRole?: string,
     options: Pick<MeasurementWriteOptions, 'tx'> = {}
   ): Promise<Measurement> {
-    // Clips are coach-attached (AM-FEAT-015); athletes may only clear mediaUrl
-    if (updaterRole === 'athlete' && measurement.mediaUrl) {
-      throw new MediaUrlPermissionError();
-    }
+    assertCanAttachClip(updaterRole, measurement.mediaUrl);
 
     // Wrap in transaction to prevent race conditions during concurrent updates
     // Race condition scenario: Two users update same measurement simultaneously
