@@ -183,9 +183,12 @@ describe('MeasurementService zero / range validation', () => {
 describe('POST /api/measurements value validation response shape', () => {
   let app: Express;
   let orgId: string;
+  let teamId: string;
   let athlete: any;
+  let coach: any;
   let cookie: string;
 
+  // Posted by a coach: athletes cannot enter MQ scores at all (403, see mqi-athlete-restriction).
   beforeAll(async () => {
     await seedMqiMetrics();
     app = express();
@@ -195,27 +198,44 @@ describe('POST /api/measurements value validation response shape', () => {
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const [org] = await db.insert(organizations).values({ name: `Zero Route Org ${suffix}` }).returning();
     orgId = org.id;
-    [athlete] = await db
-      .insert(users)
-      .values({
-        username: `zero-route-${suffix}`,
-        emails: [`zero-route-${suffix}@test.com`],
-        password: await bcrypt.hash('ZeroRoute123!', BCRYPT_SALT_ROUNDS),
-        firstName: 'Zero',
-        lastName: 'Route',
-        fullName: 'Zero Route',
-        birthDate: '2008-01-01',
-      } as any)
+    const [team] = await db
+      .insert(teams)
+      .values({ name: 'Zero Route Team', organizationId: orgId, level: 'College' })
       .returning();
-    await db.insert(userOrganizations).values({ userId: athlete.id, organizationId: orgId, role: 'athlete' } as any);
-    const login = await request(app).post('/api/auth/login').send({ username: athlete.username, password: 'ZeroRoute123!' });
+    teamId = team.id;
+    const password = await bcrypt.hash('ZeroRoute123!', BCRYPT_SALT_ROUNDS);
+    const mk = async (tag: string) =>
+      (
+        await db
+          .insert(users)
+          .values({
+            username: `zero-route-${tag}-${suffix}`,
+            emails: [`zero-route-${tag}-${suffix}@test.com`],
+            password,
+            firstName: 'Zero',
+            lastName: `Route${tag}`,
+            fullName: `Zero Route${tag}`,
+            birthDate: '2008-01-01',
+          } as any)
+          .returning()
+      )[0];
+    athlete = await mk('ath');
+    coach = await mk('coach');
+    await db.insert(userOrganizations).values([
+      { userId: athlete.id, organizationId: orgId, role: 'athlete' },
+      { userId: coach.id, organizationId: orgId, role: 'coach' },
+    ] as any);
+    await db.insert(userTeams).values({ userId: athlete.id, teamId, joinedAt: new Date('2020-01-01'), isActive: true });
+    const login = await request(app).post('/api/auth/login').send({ username: coach.username, password: 'ZeroRoute123!' });
     cookie = login.headers['set-cookie'][0];
   });
 
   afterAll(async () => {
     await db.delete(measurements).where(eq(measurements.userId, athlete.id));
+    await db.delete(userTeams).where(eq(userTeams.teamId, teamId));
     await db.delete(userOrganizations).where(eq(userOrganizations.organizationId, orgId));
-    await db.delete(users).where(eq(users.id, athlete.id));
+    await db.delete(teams).where(eq(teams.id, teamId));
+    await db.delete(users).where(inArray(users.id, [athlete.id, coach.id]));
     await db.delete(organizations).where(eq(organizations.id, orgId));
   });
 
