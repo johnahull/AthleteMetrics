@@ -80,7 +80,10 @@ const movementQualitySaveSchema = z.object({
       })
     )
     .max(12),
-  deletes: z.array(z.string().min(1)).max(12),
+  deletes: z
+    .array(z.string().min(1))
+    .max(12)
+    .refine((ids) => new Set(ids).size === ids.length, { message: "deletes must not contain duplicate ids" }),
 });
 
 /**

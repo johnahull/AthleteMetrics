@@ -532,6 +532,15 @@ describe('PUT /api/events/:eventId/athletes/:userId/movement-quality', () => {
     }
   );
 
+  it('duplicate ids in deletes are a 400, not a 500, and nothing changes', async () => {
+    const ev = await mkEvent();
+    const first = await saveMq(ev.id, athlete.id, { upserts: [{ metric: 'MQ_JUMP', value: 2 }], deletes: [] });
+    const jump = first.body.saved[0];
+    const res = await saveMq(ev.id, athlete.id, { upserts: [], deletes: [jump.id, jump.id] });
+    expect(res.status).toBe(400);
+    expect(await rowsFor(athlete.id, 'MQ_JUMP', ev.id)).toHaveLength(1);
+  });
+
   it('clearing a saved score deletes it and removes the total', async () => {
     const ev = await mkEvent();
     const full = await saveMq(ev.id, athlete.id, { upserts: PATTERNS.map((metric) => ({ metric, value: 2 })), deletes: [] });
