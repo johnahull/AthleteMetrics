@@ -231,6 +231,8 @@ export class GlobalSearchService extends BaseService {
         .where(
           and(
             eq(userOrganizations.organizationId, organizationId),
+            // Only this org's rows: not the athlete's personal or other-org measurements
+            eq(measurements.organizationId, organizationId),
             isNull(users.deletedAt), // Exclude soft-deleted users
             or(
               ilike(users.fullName, searchPattern),

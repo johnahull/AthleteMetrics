@@ -41,6 +41,14 @@ export function isSafePublicUrl(url: string): boolean {
     if (/^169\.254\./.test(hostname)) return false;
     // Block CGNAT shared address space (100.64.0.0/10)
     if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(hostname)) return false;
+    // Block multicast 224.0.0.0/4, reserved 240.0.0.0/4 (incl. broadcast
+    // 255.255.255.255) and benchmarking 198.18.0.0/15 IPv4 literals
+    const ipv4 = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(hostname);
+    if (ipv4) {
+      const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
+      if (a >= 224) return false;
+      if (a === 198 && (b === 18 || b === 19)) return false;
+    }
     // Block internal TLDs
     if (hostname.endsWith('.internal') || hostname.endsWith('.local')) return false;
     return true;

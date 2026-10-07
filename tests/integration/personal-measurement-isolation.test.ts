@@ -12,9 +12,9 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import express, { type Express } from 'express';
 import bcrypt from 'bcrypt';
-import { inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
-import { measurements, users } from '@shared/schema';
+import { measurements, organizations, userOrganizations, users } from '@shared/schema';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 
 vi.mock('../../packages/api/vite.js', () => ({
@@ -32,6 +32,8 @@ describe('personal measurements are visible only to their athlete', () => {
   let owner: any;
   let other: any;
   let admin: any;
+  let coach: any;
+  let orgId: string;
   let ownerRowId: string;
   const cookies: Record<string, string> = {};
 
@@ -60,6 +62,14 @@ describe('personal measurements are visible only to their athlete', () => {
     owner = await mk('owner');
     other = await mk('other');
     admin = await mk('admin', { isSiteAdmin: true });
+    coach = await mk('coach');
+    // A coach of an organization the owner also belongs to
+    const [org] = await db.insert(organizations).values({ name: `PIso Org ${suffix}` }).returning();
+    orgId = org.id;
+    await db.insert(userOrganizations).values([
+      { userId: owner.id, organizationId: orgId, role: 'athlete' },
+      { userId: coach.id, organizationId: orgId, role: 'coach' },
+    ] as any);
 
     const [row] = await db
       .insert(measurements)
@@ -78,25 +88,28 @@ describe('personal measurements are visible only to their athlete', () => {
       .returning();
     ownerRowId = row.id;
 
-    for (const [name, u] of Object.entries({ owner, other, admin })) {
+    for (const [name, u] of Object.entries({ owner, other, admin, coach })) {
       const login = await request(app).post('/api/auth/login').send({ username: u.username, password: PASSWORD });
       cookies[name] = login.headers['set-cookie'][0];
     }
   });
 
   afterAll(async () => {
-    const ids = [owner.id, other.id, admin.id];
+    const ids = [owner.id, other.id, admin.id, coach.id];
     await db.delete(measurements).where(inArray(measurements.userId, ids));
+    await db.delete(userOrganizations).where(eq(userOrganizations.organizationId, orgId));
     await db.delete(users).where(inArray(users.id, ids));
+    await db.delete(organizations).where(eq(organizations.id, orgId));
   });
 
   const list = (who: string, query: Record<string, string>) =>
     request(app).get('/api/measurements').query({ includeUnverified: 'true', ...query }).set('Cookie', cookies[who]);
 
+  // athleteId keeps the owner's row on the first page, so a pass cannot come from paging
   it.each([{ filterMode: 'personal' }, { filterMode: 'all' }])(
     'another user does not get the personal rows (%o)',
     async (query) => {
-      const res = await list('other', query);
+      const res = await list('other', { ...query, athleteId: owner.id });
       expect(res.status).toBe(200);
       expect(res.body.map((m: any) => m.id)).not.toContain(ownerRowId);
       expect(JSON.stringify(res.body)).not.toContain(CLIP);
@@ -112,6 +125,19 @@ describe('personal measurements are visible only to their athlete', () => {
       expect(row?.mediaUrl).toBe(CLIP);
     },
   );
+
+  // CURRENT BEHAVIOR (privacy decision pending): a coach of an organization the athlete
+  // belongs to does not see that athlete's personal (no-org) rows either, because
+  // personal rows are bound to the requester. Changing this needs a product decision.
+  it.each([
+    { filterMode: 'personal' },
+    { filterMode: 'all' },
+  ])('a coach in a shared organization does not get the athlete\'s personal rows (%o)', async (query) => {
+    const res = await list('coach', { ...query, athleteId: owner.id, orgIds: orgId });
+    expect(res.status).toBe(200);
+    expect(res.body.map((m: any) => m.id)).not.toContain(ownerRowId);
+    expect(JSON.stringify(res.body)).not.toContain(CLIP);
+  });
 
   it('a site admin still gets personal rows', async () => {
     const res = await list('admin', { filterMode: 'personal', userId: owner.id });

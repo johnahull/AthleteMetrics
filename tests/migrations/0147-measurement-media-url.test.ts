@@ -52,14 +52,21 @@ describe('Migration 0147: measurements.media_url', () => {
     expect(upSql).not.toMatch(/CREATE\s+(UNIQUE\s+)?INDEX/i);
   });
 
+  it('up SQL bounds its lock wait with a transaction-local lock_timeout', () => {
+    expect(upSql).toMatch(/^\s*SET LOCAL lock_timeout = '5s';/m);
+    expect(upSql.indexOf('SET LOCAL lock_timeout')).toBeLessThan(upSql.indexOf('ALTER TABLE'));
+  });
+
   it('down SQL drops the column if exists', () => {
     expect(downSql).toMatch(/DROP COLUMN IF EXISTS media_url/i);
   });
 
   it('up SQL adds a 2048-char CHECK constraint (idempotently) and down drops it', () => {
     expect(upSql).toMatch(/ADD CONSTRAINT measurements_media_url_length_check\s+CHECK \(char_length\(media_url\) <= 2048\)\s+NOT VALID/i);
-    // Added NOT VALID (no full-table scan under the ADD lock), then validated separately
-    expect(upSql).toMatch(/VALIDATE CONSTRAINT measurements_media_url_length_check/i);
+    // apply-manual-migrations.js runs the whole file in one transaction, so a VALIDATE
+    // here would scan the table while ADD COLUMN's ACCESS EXCLUSIVE lock is still held.
+    // The column is new (all NULL), so NOT VALID is sufficient; new writes are checked.
+    expect(upSql).not.toMatch(/VALIDATE CONSTRAINT/i);
     expect(upSql).toMatch(/IF NOT EXISTS \(\s*SELECT 1 FROM pg_constraint/i);
     expect(downSql).toMatch(/DROP CONSTRAINT IF EXISTS measurements_media_url_length_check/i);
   });
@@ -74,7 +81,13 @@ describe('Migration 0147: measurements.media_url', () => {
         const rows = await tx.unsafe(constraintInfo);
         expect(rows).toHaveLength(1);
         expect(rows[0].def).toMatch(/char_length\(media_url\) <= 2048/);
-        expect(rows[0].convalidated).toBe(true);
+        // NOT VALID constraints are still enforced for new writes
+        const [m] = await tx.unsafe(`SELECT id FROM measurements LIMIT 1`);
+        if (m) {
+          await expect(
+            tx.unsafe(`UPDATE measurements SET media_url = repeat('a', 2049) WHERE id = $1`, [m.id]),
+          ).rejects.toThrow(/measurements_media_url_length_check/);
+        }
         throw ROLLBACK;
       });
     } catch (e) {

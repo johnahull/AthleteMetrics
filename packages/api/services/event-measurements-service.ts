@@ -326,13 +326,10 @@ export class EventMeasurementsService {
       offset?: number;
     }
   ): Promise<Measurement[]> {
-    // Get measurements filtered by eventId
-    const allMeasurements = await this.storage.getMeasurements({
+    return this.storage.getMeasurements({
       userId: options?.userId,
+      eventId,
     });
-
-    // Filter by eventId - measurements have optional eventId field
-    return allMeasurements.filter((m) => m.eventId === eventId);
   }
 
   /**
