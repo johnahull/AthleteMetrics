@@ -56,8 +56,16 @@
 -- disabled twin; an organization with no old rows gets nothing. The down file
 -- deletes all _YD organization rows.
 --
+-- Pending imports: a Dashr preview stored in import_batches.parsed_preview before
+-- the deploy would, if committed afterwards, write retired codes into
+-- measurements (no FK, orphaned). Such pending batches are EXPIRED (the same
+-- terminal status the 30-minute TTL cleanup uses), never remapped: the old
+-- parser ignored the CSV Units column, so metric vs yard cannot be inferred.
+-- The user re-uploads the file. NOTE: the runner tracks migrations by name, so
+-- this only takes effect in environments that have not yet applied 0144.
+--
 -- Deliberately NOT done: report_snapshots, user_achievements.metadata,
--- import_batches, audit_logs (historical).
+-- completed import_batches, audit_logs (historical).
 
 -- ============================================================================
 -- Block 0 — helpers (pg_temp: vanish with the session, nothing persists)
@@ -264,6 +272,13 @@ UPDATE site_metrics
  WHERE code NOT IN ('AGILITY_505', 'AGILITY_505_L', 'AGILITY_505_R', 'AGILITY_505_LSI')
    AND (formula ~* '\mAGILITY_505(_L|_R|_LSI)?\M'
         OR array_to_string(dependent_metrics, ',') ~* '\mAGILITY_505(_L|_R|_LSI)?\M');
+
+-- Expire pending imports whose preview still carries a retired code
+-- (idempotent: a second run matches nothing; no-op when import_batches is empty).
+UPDATE import_batches
+   SET status = 'expired'
+ WHERE status = 'pending'
+   AND parsed_preview::text ~ '\mAGILITY_505(_L|_R|_LSI)?\M';
 
 -- ============================================================================
 -- Block C — safety assertion: nothing may still reference an old code.

@@ -80,6 +80,14 @@ describe('Migration 0144: static SQL analysis', () => {
       up = stripComments(fs.readFileSync(UP_SQL_PATH, 'utf-8'));
     });
 
+    it('expires pending import batches that carry a retired code, before the old rows are deleted', () => {
+      const m = up.match(/UPDATE\s+import_batches\s+SET\s+status\s*=\s*'expired'[\s\S]*?;/i);
+      expect(m).not.toBeNull();
+      expect(m![0]).toMatch(/status\s*=\s*'pending'/i);
+      expect(m![0]).toMatch(/parsed_preview::text/i);
+      expect(up.indexOf(m![0])).toBeLessThan(up.search(/DELETE\s+FROM\s+site_metrics/i));
+    });
+
     it('does not manage its own transaction (the runner supplies it)', () => {
       expect(up).not.toMatch(/^\s*(BEGIN|COMMIT|ROLLBACK)\s*;/im);
     });
@@ -683,6 +691,34 @@ describe.skipIf(!DATABASE_URL)('Migration 0144: behavioral (real DB, rolled back
       ]);
       // an org with no old rows gets nothing
       expect(await om(tx, 'fx505-orgC')).toEqual([]);
+    });
+  }, TEST_TIMEOUT);
+
+  it('expires pending import batches carrying a retired code; leaves others untouched; re-run is a no-op', async () => {
+    await inTx(async (tx) => {
+      await toPreState(tx);
+      await tx.unsafe(`INSERT INTO organizations (id, name) VALUES ('fx505-l5-org', 'FX L5 Org')`);
+      const ins = (id: string, status: string, preview: unknown) =>
+        tx`INSERT INTO import_batches (id, organization_id, source, file_name, parsed_preview, status, created_by, expires_at)
+           VALUES (${id}, 'fx505-l5-org', 'dashr', 'f.csv', ${tx.json(preview as never)}, ${status}, 'u1', now() + interval '30 minutes')`;
+      await ins('fx505-b-old', 'pending', { drills: [{ metric: 'AGILITY_505_LSI' }] });
+      await ins('fx505-b-old2', 'pending', { drills: [{ metric: 'AGILITY_505' }] });
+      await ins('fx505-b-new', 'pending', { drills: [{ metric: 'AGILITY_505_M_L' }, { metric: 'AGILITY_5105' }] });
+      await ins('fx505-b-done', 'completed', { drills: [{ metric: 'AGILITY_505_L' }] });
+      const status = async () =>
+        Object.fromEntries(
+          (await tx`SELECT id, status FROM import_batches WHERE id LIKE 'fx505-b-%'`).map((r) => [r.id, r.status]),
+        );
+      await tx.unsafe(upSql);
+      const after = await status();
+      expect(after).toEqual({
+        'fx505-b-old': 'expired',
+        'fx505-b-old2': 'expired',
+        'fx505-b-new': 'pending',
+        'fx505-b-done': 'completed',
+      });
+      await tx.unsafe(upSql);
+      expect(await status()).toEqual(after);
     });
   }, TEST_TIMEOUT);
 
