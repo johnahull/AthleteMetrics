@@ -5,7 +5,7 @@
  */
 
 import React, { useMemo } from 'react';
-import { Joyride, STATUS, type EventData } from 'react-joyride';
+import { Joyride, EVENTS, type EventData } from 'react-joyride';
 import { useAuth } from '@/lib/auth';
 import { useOnboarding } from './OnboardingProvider';
 import { athleteSteps } from './tour-steps/athlete-steps';
@@ -38,10 +38,8 @@ export function OnboardingTour() {
   }, [user]);
 
   const handleJoyrideCallback = (data: EventData) => {
-    const { status } = data;
-
-    // Tour finished or skipped
-    if (status === STATUS.FINISHED || status === STATUS.SKIPPED) {
+    // Fired once when the tour finishes or is skipped
+    if (data.type === EVENTS.TOUR_END) {
       stopOnboarding();
     }
   };
@@ -60,7 +58,6 @@ export function OnboardingTour() {
       options={{
         primaryColor: '#3b82f6', // blue-500
         zIndex: 10000,
-        showProgress: true,
         width: 448, // match OnboardingTooltip's max-w-md; v3 defaults to 380
       }}
       locale={{
