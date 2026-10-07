@@ -6,7 +6,7 @@
 import { describe, it, expect } from "vitest";
 import { measurements, insertMeasurementSchema, mediaUrlSchema, MEDIA_URL_MAX_LENGTH } from "../schema";
 import { isSafePublicUrl } from "../url-safety";
-import { measurements as schemaOriginalMeasurements } from "../schema-original";
+import { measurements as schemaOriginalMeasurements, hasUrlCredentials } from "../schema-original";
 
 const base = {
   userId: "user-1",
@@ -151,5 +151,16 @@ describe("isSafePublicUrl hardening", () => {
 
   it("still accepts a normal public host", () => {
     expect(isSafePublicUrl("https://clips.example.com/a")).toBe(true);
+  });
+});
+
+describe("hasUrlCredentials", () => {
+  it("detects a username or password", () => {
+    expect(hasUrlCredentials("https://user:pw@clips.example.com/a")).toBe(true);
+    expect(hasUrlCredentials("https://clips.example.com/a")).toBe(false);
+  });
+
+  it("fails closed on an unparseable URL", () => {
+    expect(hasUrlCredentials("not a url")).toBe(true);
   });
 });
