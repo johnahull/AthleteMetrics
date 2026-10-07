@@ -102,20 +102,27 @@ describe.skipIf(!GENERATORS_DIR)('am-data-generators output imports into Athlete
         fullName: 'Gen Coach',
         birthDate: '1985-01-01',
         birthYear: 1985,
-      } as any)
+      })
       .returning();
     coachId = coach.id;
-    await db.insert(userOrganizations).values({ userId: coachId, organizationId: orgId, role: 'coach' } as any);
+    await db.insert(userOrganizations).values({ userId: coachId, organizationId: orgId, role: 'coach' });
     const login = await request(app).post('/api/auth/login').send({ username: coach.username, password: PASSWORD });
-    coachCookie = login.headers['set-cookie'][0];
+    expect(login.status, 'coach login').toBe(200);
+    const cookies = login.headers['set-cookie'];
+    expect(cookies, 'login must set a session cookie').toBeDefined();
+    coachCookie = cookies[0];
   });
 
   afterAll(async () => {
-    if (athleteIds.length) {
-      await db.delete(measurements).where(inArray(measurements.userId, athleteIds));
-      await db.delete(userTeams).where(inArray(userTeams.userId, athleteIds));
-      await db.delete(userOrganizations).where(inArray(userOrganizations.userId, athleteIds));
-      await db.delete(users).where(inArray(users.id, athleteIds));
+    // Re-query the team's members instead of trusting athleteIds alone: a roster import that fails partway
+    // creates users before the test captures their ids, and those would otherwise leak into the database.
+    const members = await db.select({ id: userTeams.userId }).from(userTeams).where(eq(userTeams.teamId, teamId));
+    const ids = [...new Set([...athleteIds, ...members.map((m) => m.id)])];
+    if (ids.length) {
+      await db.delete(measurements).where(inArray(measurements.userId, ids));
+      await db.delete(userTeams).where(inArray(userTeams.userId, ids));
+      await db.delete(userOrganizations).where(inArray(userOrganizations.userId, ids));
+      await db.delete(users).where(inArray(users.id, ids));
     }
     await db.delete(userTeams).where(eq(userTeams.teamId, teamId));
     await db.delete(userOrganizations).where(eq(userOrganizations.userId, coachId));
@@ -160,6 +167,7 @@ describe.skipIf(!GENERATORS_DIR)('am-data-generators output imports into Athlete
     }, 180_000);
 
     it('stores yard 5-0-5 and no retired 5-0-5 codes', async () => {
+      expect(athleteIds).toHaveLength(4);
       const metrics = new Set((await athleteRows()).map((r) => r.metric));
       for (const code of ['AGILITY_505_YD', 'AGILITY_505_YD_L', 'AGILITY_505_YD_R', 'DASH_10YD']) {
         expect(metrics.has(code), code).toBe(true);
