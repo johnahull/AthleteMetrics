@@ -96,7 +96,8 @@ BEGIN
       (SELECT COUNT(*) FROM reports WHERE config::text ~* '\mAGILITY_505_YD(_L|_R|_LSI)?\M')
     + (SELECT COUNT(*) FROM custom_org_metrics
         WHERE coalesce(formula, '') ~* '\mAGILITY_505_YD(_L|_R|_LSI)?\M'
-           OR coalesce(array_to_string(dependent_metrics, ','), '') ~* '\mAGILITY_505_YD(_L|_R|_LSI)?\M')
+           OR coalesce(array_to_string(dependent_metrics, ','), '') ~* '\mAGILITY_505_YD(_L|_R|_LSI)?\M'
+           OR coalesce(calculation_config::text, '') ~* '\mAGILITY_505_YD(_L|_R|_LSI)?\M')
   INTO v_cfg;
 
   IF v_meas + v_goals + v_rb + v_cb + v_cfg > 0 THEN
@@ -261,8 +262,9 @@ BEGIN
                                                       OR calculation_metadata::text ~* '\mAGILITY_505_(M|YD)(_L|_R|_LSI)?\M')
     + (SELECT COUNT(*) FROM reports                WHERE config::text ~* '\mAGILITY_505_(M|YD)(_L|_R|_LSI)?\M')
     + (SELECT COUNT(*) FROM custom_org_metrics     WHERE coalesce(formula, '') ~* '\mAGILITY_505_(M|YD)(_L|_R|_LSI)?\M'
-                                                      OR coalesce(array_to_string(dependent_metrics, ','), '') ~* '\mAGILITY_505_(M|YD)(_L|_R|_LSI)?\M')
-    + (SELECT COUNT(*) FROM site_metrics           WHERE code !~ '^AGILITY_505_(M|YD)'
+                                                      OR coalesce(array_to_string(dependent_metrics, ','), '') ~* '\mAGILITY_505_(M|YD)(_L|_R|_LSI)?\M'
+                                                      OR coalesce(calculation_config::text, '') ~* '\mAGILITY_505_(M|YD)(_L|_R|_LSI)?\M')
+    + (SELECT COUNT(*) FROM site_metrics          WHERE code !~ '^AGILITY_505_(M|YD)'
                                                       AND (coalesce(formula, '') ~* '\mAGILITY_505_(M|YD)(_L|_R|_LSI)?\M'
                                                            OR coalesce(array_to_string(dependent_metrics, ','), '') ~* '\mAGILITY_505_(M|YD)(_L|_R|_LSI)?\M'))
   INTO v_left;

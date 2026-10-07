@@ -950,6 +950,26 @@ describe.skipIf(!DATABASE_URL)('Migration 0144: behavioral (real DB, rolled back
     });
   }, TEST_TIMEOUT);
 
+  it('down RAISES when a yard code appears only in a custom org metric calculation_config', async () => {
+    await inTx(async (tx) => {
+      await toPreState(tx);
+      await seedFixture(tx);
+      await tx.unsafe(upSql);
+      await tx.unsafe(
+        `INSERT INTO custom_org_metrics (id, organization_id, code, label, unit, metric_type, is_derived, calculation_config)
+         VALUES ('fx505-com-cfg', '${FX_ORG}', 'FX_COD_CFG', 'FX CFG', 's', 'lower_is_better', false,
+                 '{"source":"AGILITY_505_YD"}'::jsonb)`,
+      );
+      await expect(
+        tx.savepoint(async (sp: Tx) => {
+          await sp.unsafe(downSql);
+        }),
+      ).rejects.toThrow(/YD|yard/i);
+      const rows = await tx`select code from site_metrics where code ~ '^AGILITY_505' order by code`;
+      expect(rows.map((r: { code: string }) => r.code).sort()).toEqual([...NEW_CODES].sort());
+    });
+  }, TEST_TIMEOUT);
+
   // --------------------------------------------------------------------------
   // Layer 3 — fresh DB (no 5-0-5 child data)
   // --------------------------------------------------------------------------
