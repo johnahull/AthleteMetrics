@@ -231,6 +231,49 @@ describe('POST /api/reports/:id/generate — trends payload', () => {
     expect(response.body.trends.VERTICAL_JUMP.series.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('never mixes FLY10 run-in variants in one metric trend (AM-FEAT-017)', async () => {
+    const fly = (metric: string, date: string, value: string) => ({
+      userId: testAthlete.id,
+      submittedBy: testCoach.id,
+      date,
+      age: 17,
+      metric,
+      value,
+      units: 's',
+      organizationId: testOrg.id,
+      isVerified: true,
+    });
+    await db.insert(measurements).values([
+      fly('FLY10_TIME', '2024-01-15', '1.200'),
+      fly('FLY10_TIME', '2024-03-15', '1.100'),
+      fly('FLY10_TIME_RI10', '2024-01-15', '1.700'),
+      fly('FLY10_TIME_RI10', '2024-03-15', '1.600'),
+    ]);
+    const [report] = await db.insert(reports).values({
+      name: 'Run-in trends report',
+      organizationId: testOrg.id,
+      reportType: 'individual',
+      config: {
+        timeframe: { type: 'preset', preset: 'all_time' },
+        metrics: ['FLY10_TIME', 'FLY10_TIME_RI10'],
+        showTrends: true,
+      },
+      createdBy: testCoach.id,
+    }).returning();
+    createdReportIds.push(report.id);
+
+    const response = await request(app)
+      .post(`/api/reports/${report.id}/generate`)
+      .set('Cookie', coachAuthCookie)
+      .send({ athleteId: testAthlete.id });
+
+    expect(response.status).toBe(200);
+    const values = (code: string) =>
+      response.body.trends[code].series.map((p: any) => Number(p.value ?? p.y)).sort();
+    expect(values('FLY10_TIME')).toEqual([1.1, 1.2]);
+    expect(values('FLY10_TIME_RI10')).toEqual([1.6, 1.7]);
+  });
+
   it('omits trends when config.showTrends is absent, keeping single-value fields', async () => {
     const report = await createIndividualReport(false);
 
