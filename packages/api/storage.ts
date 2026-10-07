@@ -235,6 +235,7 @@ export interface IStorage {
   // Measurements
   getMeasurements(filters?: {
     userId?: string;
+    eventId?: string;
     teamIds?: string[];
     organizationId?: string;
     metric?: string;
@@ -3399,6 +3400,7 @@ export class DatabaseStorage implements IStorage {
   async getMeasurements(filters?: {
     userId?: string;
     athleteId?: string;
+    eventId?: string;
     teamIds?: string[];
     organizationId?: string;
     metric?: string;
@@ -3462,6 +3464,9 @@ export class DatabaseStorage implements IStorage {
       if (targetUserId) {
         conditions.push(eq(measurements.userId, targetUserId));
       }
+    }
+    if (filters?.eventId) {
+      conditions.push(eq(measurements.eventId, filters.eventId));
     }
     if (filters?.metric) {
       conditions.push(eq(measurements.metric, filters.metric));

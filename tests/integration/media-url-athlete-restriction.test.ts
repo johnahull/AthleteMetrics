@@ -377,6 +377,18 @@ describe('Athletes cannot attach clips (R1)', () => {
       expect(await athleteRows()).toHaveLength(0);
     });
 
+    it('getEventMeasurements filters by eventId in the storage query', async () => {
+      const created = await eventService.createEventMeasurement(eventId, input(null), coach.id, 'coach');
+      const spy = vi.spyOn(storage, 'getMeasurements');
+      try {
+        const rows = await eventService.getEventMeasurements(eventId);
+        expect(spy).toHaveBeenCalledWith(expect.objectContaining({ eventId }));
+        expect(rows.map((m) => m.id)).toEqual([created.id]);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
     it('createEventMeasurementsBulk: a coach clip is stored', async () => {
       const result = await eventService.createEventMeasurementsBulk(eventId, [input(CLIP)], coach.id, 'coach');
       expect(result.errors).toEqual([]);
