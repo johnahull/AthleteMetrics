@@ -25,9 +25,18 @@ const METRICS = [
   m('FLY10_TIME', '10-Yard Fly, 20 yd run-in'),
   m('FLY10_TIME_RI30', '10-Yard Fly, 30 yd run-in'),
 ];
-vi.mock('@/hooks/use-available-metrics', () => ({
-  useAvailableMetrics: () => ({ metrics: METRICS, isLoading: false, error: null }),
-}));
+// Deliberately shuffled; the mock applies the hook's real comparator, as the hook does.
+const SHUFFLED = [METRICS[3], METRICS[0], METRICS[4], METRICS[2], METRICS[1]];
+vi.mock('@/hooks/use-available-metrics', async () => {
+  const actual = await vi.importActual<typeof import('@/hooks/use-available-metrics')>('@/hooks/use-available-metrics');
+  return {
+    useAvailableMetrics: () => ({
+      metrics: [...SHUFFLED].sort(actual.compareMetricLabels),
+      isLoading: false,
+      error: null,
+    }),
+  };
+});
 
 import AthleteMeasurementForm from '../athlete-measurement-form';
 import MeasurementForm from '../measurement-form';
@@ -67,7 +76,7 @@ describe('AthleteMeasurementForm FLY10 run-in variants', () => {
     renderForm();
     await user.click(screen.getByTestId('select-measurement-metric'));
     const options = (await screen.findAllByRole('option')).map((o) => o.textContent);
-    expect(options).toEqual(METRICS.map((x) => x.label));
+    expect(options).toEqual([5, 10, 15, 20, 30].map((yd) => `10-Yard Fly, ${yd} yd run-in`));
   });
 
   it('submits without a flyInDistance key', async () => {
