@@ -222,6 +222,19 @@ describe('MQ role allowlist on the import paths (CSV, OCR, review queue)', () =>
       expect(await athleteRows()).toHaveLength(0);
     });
 
+    it('a denied MQ row carries the permission message, not a generic processing failure', async () => {
+      ocrReturns('MQ_JUMP');
+      const res = await request(app)
+        .post('/api/import/photo')
+        .set('Cookie', cookies.parent)
+        .field('options', JSON.stringify({ measurementMode: 'match_only' }))
+        .attach('file', PNG, 'scores.png');
+      expect(res.status).toBe(200);
+      expect(res.body.results.errors).toEqual([
+        expect.objectContaining({ row: 1, error: expect.stringMatching(/^Only coaches and admins can enter Movement Quality scores \(MQ_JUMP\)/) }),
+      ]);
+    });
+
     it('a coach MQ row is still imported', async () => {
       ocrReturns('MQ_JUMP');
       const res = await request(app)

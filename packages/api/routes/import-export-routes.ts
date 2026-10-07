@@ -439,6 +439,10 @@ export function registerImportExportRoutes(app: Express) {
           });
 
         } catch (error) {
+          if (error instanceof MovementQualityPermissionError) {
+            errors.push({ row: rowNum, error: error.message, data: extracted });
+            continue;
+          }
           console.error(`Error processing measurement ${rowNum}:`, error);
           errors.push({
             row: rowNum,
