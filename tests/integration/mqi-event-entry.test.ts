@@ -283,7 +283,7 @@ describe('MQI entry via event routes', () => {
     expect((await rowsFor('MQ_TRANSITION_TOTAL')).filter((r) => r.date === d)).toHaveLength(0);
   });
 
-  it('DELETE of one score removes the total; delete is event-scoped', async () => {
+  it('clearing one score removes the total; clearing is event-scoped', async () => {
     const ev = await mkEvent({ start: '2026-03-15T10:00:00Z' });
     const d = '2026-03-15';
     await request(app)
@@ -295,14 +295,16 @@ describe('MQI entry via event routes', () => {
     const [row] = await rowsFor('MQ_SHUFFLE', ev.id);
     const otherEvent = await mkEvent({ start: '2026-03-16T10:00:00Z' });
     const wrong = await request(app)
-      .delete(`/api/events/${otherEvent.id}/measurements/${row.id}`)
-      .set('Cookie', coachACookie);
+      .put(`/api/events/${otherEvent.id}/athletes/${athlete.id}/movement-quality`)
+      .set('Cookie', coachACookie)
+      .send({ upserts: [], deletes: [row.id] });
     expect(wrong.status).toBe(404);
 
     const del = await request(app)
-      .delete(`/api/events/${ev.id}/measurements/${row.id}`)
-      .set('Cookie', coachACookie);
-    expect(del.status).toBe(204);
+      .put(`/api/events/${ev.id}/athletes/${athlete.id}/movement-quality`)
+      .set('Cookie', coachACookie)
+      .send({ upserts: [], deletes: [row.id] });
+    expect(del.status).toBe(200);
     expect(await rowsFor('MQ_SHUFFLE', ev.id)).toHaveLength(0);
     expect((await rowsFor('MQI_TOTAL')).filter((r) => r.date === d)).toHaveLength(0);
   });
@@ -335,8 +337,9 @@ describe('MQI entry via event routes', () => {
       } as any)
       .returning();
     const del = await request(app)
-      .delete(`/api/events/${ev.id}/measurements/${m.id}`)
-      .set('Cookie', coachACookie);
+      .put(`/api/events/${ev.id}/athletes/${athlete.id}/movement-quality`)
+      .set('Cookie', coachACookie)
+      .send({ upserts: [], deletes: [m.id] });
     expect(del.status).toBe(400);
     expect(await rowsFor('MQ_DECEL', ev.id)).toHaveLength(1);
   });
@@ -347,9 +350,20 @@ describe('MQI entry via event routes', () => {
     expect(denied.status).toBe(403);
     const ok = await single(ev.id, 'MQ_DECEL', 2, coachACookie, { date: '2026-03-18' });
     const del = await request(app)
-      .delete(`/api/events/${ev.id}/measurements/${ok.body.id}`)
-      .set('Cookie', coachBCookie);
+      .put(`/api/events/${ev.id}/athletes/${athlete.id}/movement-quality`)
+      .set('Cookie', coachBCookie)
+      .send({ upserts: [], deletes: [ok.body.id] });
     expect(del.status).toBe(403);
+    expect(await rowsFor('MQ_DECEL', ev.id)).toHaveLength(1);
+  });
+
+  it('there is no generic DELETE route for one event measurement (the atomic PUT clears scores)', async () => {
+    const ev = await mkEvent({ start: '2026-03-28T10:00:00Z' });
+    const ok = await single(ev.id, 'MQ_DECEL', 2, coachACookie, { date: '2026-03-28' });
+    const del = await request(app)
+      .delete(`/api/events/${ev.id}/measurements/${ok.body.id}`)
+      .set('Cookie', coachACookie);
+    expect(del.status).toBe(404);
     expect(await rowsFor('MQ_DECEL', ev.id)).toHaveLength(1);
   });
 

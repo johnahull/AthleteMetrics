@@ -366,36 +366,6 @@ export function registerEventMeasurementsRoutes(app: Express) {
   );
 
   /**
-   * Delete a measurement from an event (e.g. clear a Movement Quality score)
-   * DELETE /api/events/:eventId/measurements/:measurementId
-   * Same permission as create; frozen events stay frozen.
-   */
-  app.delete(
-    "/api/events/:eventId/measurements/:measurementId",
-    requireAuth,
-    eventMeasurementsMutationLimiter,
-    async (req: Request, res: Response) => {
-      try {
-        const { eventId, measurementId } = req.params;
-        const user = req.session.user;
-        if (!user?.id) {
-          return res.status(401).json({ error: "User not authenticated" });
-        }
-
-        if (!(await getEventManagerRole(user, eventId))) {
-          return res.status(403).json({ error: "Access denied" });
-        }
-
-        await eventMeasurementsService.deleteEventMeasurement(eventId, measurementId);
-        return res.status(204).send();
-      } catch (error: any) {
-        console.error("Error deleting event measurement:", error);
-        return sendEventMeasurementError(res, error);
-      }
-    }
-  );
-
-  /**
    * Save one athlete's Movement Quality scores for an event atomically
    * PUT /api/events/:eventId/athletes/:userId/movement-quality
    * Body: { upserts: [{ metric, value, notes?, mediaUrl? }], deletes: [measurementId] }

@@ -206,22 +206,6 @@ export class EventMeasurementsService {
   }
 
   /**
-   * Delete a measurement that belongs to an event (e.g. clearing a Movement Quality score).
-   * Frozen events stay frozen. Derived totals are recalculated by MeasurementService.
-   */
-  async deleteEventMeasurement(eventId: string, measurementId: string): Promise<void> {
-    const event = await this.getWritableEvent(eventId, "Cannot delete measurements for frozen event");
-    const [existing] = await this.db
-      .select({ id: measurements.id, eventId: measurements.eventId })
-      .from(measurements)
-      .where(eq(measurements.id, measurementId));
-    if (!existing || existing.eventId !== eventId) {
-      throw new EventMeasurementNotFoundError();
-    }
-    await this.measurementService.deleteMeasurement(measurementId, event.organizationId ?? undefined);
-  }
-
-  /**
    * Save one athlete's Movement Quality scores for an event in ONE transaction:
    * upserts (one row per metric) and deletes (cleared scores) either all apply or none do.
    * Deletes are scoped to this event and athlete. Derived totals are recalculated once
