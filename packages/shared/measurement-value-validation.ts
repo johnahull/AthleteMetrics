@@ -18,12 +18,13 @@ export interface MetricValueBounds {
   decimalPrecision?: number | null;
 }
 
-/** Field-shaped validation error so routes can answer 400 { message, field: 'value' } */
+/** Field-shaped validation error so routes can answer 400 { message, field } (default field: 'value') */
 export class MeasurementValueValidationError extends Error {
-  readonly field = 'value';
+  readonly field: string;
 
-  constructor(message: string) {
+  constructor(message: string, field: string = 'value') {
     super(message);
+    this.field = field;
     this.name = 'MeasurementValueValidationError';
   }
 }
