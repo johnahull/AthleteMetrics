@@ -52,6 +52,9 @@ function whereUserNotDeleted(): SQL {
   return sql`${users.deletedAt} IS NULL`;
 }
 
+/** InsertMeasurement omits `units`; import callers may supply it to override the metric's configured unit. */
+export type CreateMeasurementInput = InsertMeasurement & { units?: string | null };
+
 export interface IStorage {
   // Authentication & Users
   authenticateUser(username: string, password: string): Promise<User | null>;
@@ -254,7 +257,7 @@ export interface IStorage {
     verifiedBy?: User;
   })[]>;
   getMeasurement(id: string): Promise<Measurement | undefined>;
-  createMeasurement(measurement: InsertMeasurement, submittedBy: string, eventContext?: { eventId: string; eventNameSnapshot: string; eventDateSnapshot: string; }): Promise<Measurement>;
+  createMeasurement(measurement: CreateMeasurementInput, submittedBy: string, eventContext?: { eventId: string; eventNameSnapshot: string; eventDateSnapshot: string; }): Promise<Measurement>;
   updateMeasurement(id: string, measurement: Partial<InsertMeasurement>): Promise<Measurement>;
   deleteMeasurement(id: string): Promise<void>;
   verifyMeasurement(id: string, verifiedBy: string): Promise<Measurement>;
@@ -3707,7 +3710,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createMeasurement(
-    measurement: InsertMeasurement,
+    measurement: CreateMeasurementInput,
     submittedBy: string,
     eventContext?: {
       eventId: string;
@@ -3733,8 +3736,17 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    const units = measurement.metric === "FLY10_TIME" || measurement.metric === "T_TEST" || measurement.metric === "DASH_40YD" ? "s" :
-                  measurement.metric === "RSI" ? "ratio" : "in";
+    // Units: caller-supplied (non-empty) > site_metrics.unit (non-empty) > legacy hard-coded mapping.
+    const callerUnits = measurement.units;
+    let units = callerUnits && callerUnits.trim() !== "" ? callerUnits : "";
+    if (!units) {
+      const siteMetric = await this.getSiteMetric(measurement.metric);
+      units = siteMetric?.unit ?? "";
+    }
+    if (!units) {
+      units = measurement.metric === "FLY10_TIME" || measurement.metric === "T_TEST" || measurement.metric === "DASH_40YD" ? "s" :
+              measurement.metric === "RSI" ? "ratio" : "in";
+    }
 
     // Auto-populate team context if not explicitly provided
     let teamId = measurement.teamId;

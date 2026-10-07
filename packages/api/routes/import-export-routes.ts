@@ -276,6 +276,17 @@ export function registerImportExportRoutes(app: Express) {
         return res.status(403).json({ message: photoOrgAccessError });
       }
 
+      // Athlete lookup and creation are scoped to one organization: the validated
+      // client-supplied one, else the caller's first membership (same default as CSV import).
+      let photoOrganizationId: string | undefined = options.organizationId;
+      if (!photoOrganizationId) {
+        const photoUserOrgs = await storage.getUserOrganizations(currentUser.id);
+        photoOrganizationId = photoUserOrgs[0]?.organizationId;
+      }
+      if (!photoOrganizationId) {
+        return res.status(400).json({ message: "An organization is required to import measurements from a photo" });
+      }
+
       // Debug logging removed for production: Processing OCR for file
 
       // Extract text and data using OCR
@@ -316,6 +327,7 @@ export function registerImportExportRoutes(app: Express) {
 
           // Find or create the athlete
           const athletes = await storage.getAthletes({
+            organizationId: photoOrganizationId,
             search: `${extracted.firstName} ${extracted.lastName}`
           });
 
@@ -354,13 +366,11 @@ export function registerImportExportRoutes(app: Express) {
               athleteCreated = true;
               createdAthletes.push({ id: newAthlete.id, name: `${newAthlete.firstName} ${newAthlete.lastName}` });
 
-              // Add to organization if specified
-              if (options.organizationId) {
-                try {
-                  await storage.addUserToOrganization(userId, options.organizationId, 'athlete');
-                } catch (error) {
-                  console.warn(`Could not add athlete ${userId} to organization ${options.organizationId}:`, error);
-                }
+              // Add to the selected organization so a repeat import finds this athlete
+              try {
+                await storage.addUserToOrganization(userId, photoOrganizationId, 'athlete');
+              } catch (error) {
+                console.warn(`Could not add athlete ${userId} to organization ${photoOrganizationId}:`, error);
               }
             } else {
               // Match-only mode - error if not found
