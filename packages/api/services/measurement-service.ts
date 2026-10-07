@@ -49,7 +49,7 @@ const CLIP_ROLES: ReadonlySet<string> = new Set(['coach', 'org_admin', 'site_adm
  * admin role; omitting or clearing it (null / '') is allowed for everyone.
  * Fails closed on a missing role.
  */
-function assertCanAttachClip(role: string | undefined, mediaUrl: string | null | undefined): void {
+export function assertCanAttachClip(role: string | undefined, mediaUrl: string | null | undefined): void {
   if (mediaUrl && !(role && CLIP_ROLES.has(role))) {
     throw new MediaUrlPermissionError();
   }

@@ -10,6 +10,7 @@
  */
 
 import type { IStorage } from "../storage";
+import { assertCanAttachClip } from "./measurement-service";
 import type { Measurement, Event } from "@shared/schema";
 
 export interface EventMeasurementInput {
@@ -61,8 +62,12 @@ export class EventMeasurementsService {
   async createEventMeasurement(
     eventId: string,
     data: EventMeasurementInput,
-    createdBy: string
+    createdBy: string,
+    submitterRole?: string
   ): Promise<Measurement> {
+    // Clips are coach/admin-only; enforced here too, not only by the route (fails closed without a role)
+    assertCanAttachClip(submitterRole, data.mediaUrl);
+
     // Get event to check frozen status and for snapshots
     const event = await this.storage.getEvent(eventId);
     if (!event) {
@@ -108,7 +113,8 @@ export class EventMeasurementsService {
   async createEventMeasurementsBulk(
     eventId: string,
     measurementsData: EventMeasurementInput[],
-    createdBy: string
+    createdBy: string,
+    submitterRole?: string
   ): Promise<BulkCreateResult> {
     const event = await this.storage.getEvent(eventId);
     if (!event) {
@@ -135,6 +141,8 @@ export class EventMeasurementsService {
         if (!m.metric || typeof m.metric !== 'string') {
           throw new Error('Invalid metric code');
         }
+
+        assertCanAttachClip(submitterRole, m.mediaUrl);
 
         const measurement = await this.storage.createMeasurement(
           {

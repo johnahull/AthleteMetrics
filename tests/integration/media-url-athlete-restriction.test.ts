@@ -15,6 +15,8 @@ import express, { type Express } from 'express';
 import bcrypt from 'bcrypt';
 import { db } from '../../packages/api/db';
 import { MeasurementService } from '../../packages/api/services/measurement-service';
+import { EventMeasurementsService } from '../../packages/api/services/event-measurements-service';
+import { storage } from '../../packages/api/storage';
 import { events, measurements, organizations, teams, userOrganizations, userTeams, users } from '@shared/schema';
 import { parentAthleteLinks } from '@shared/schema/tables/coppa';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
@@ -340,6 +342,45 @@ describe('Athletes cannot attach clips (R1)', () => {
         expect(res.body).toEqual({ error: 'Access denied' });
         expect(await athleteRows()).toHaveLength(0);
       });
+    });
+  });
+
+  describe('EventMeasurementsService enforces the clip allowlist itself', () => {
+    const eventService = new EventMeasurementsService(storage);
+    let eventId: string;
+    const input = (mediaUrl?: string | null) => ({
+      userId: athlete.id, metric: 'VERTICAL_JUMP', value: 30, date: new Date('2026-01-15'), mediaUrl,
+    });
+
+    beforeAll(async () => {
+      const [event] = await db
+        .insert(events)
+        .values({ organizationId: orgId, name: 'Clip Service Event', startDate: new Date('2026-01-15') } as any)
+        .returning({ id: events.id });
+      eventId = event.id;
+    });
+
+    it.each(['athlete', 'parent', 'guest', undefined])('createEventMeasurement: rejects a clip for role %s', async (role) => {
+      await expect(eventService.createEventMeasurement(eventId, input(CLIP), coach.id, role)).rejects.toThrow(ATHLETE_CLIP_DENIED);
+      expect(await athleteRows()).toHaveLength(0);
+    });
+
+    it('createEventMeasurement: a coach clip is stored; no clip needs no role', async () => {
+      expect((await eventService.createEventMeasurement(eventId, input(CLIP), coach.id, 'coach')).mediaUrl).toBe(CLIP);
+      expect((await eventService.createEventMeasurement(eventId, input(null), coach.id, 'athlete')).mediaUrl).toBeNull();
+    });
+
+    it.each(['athlete', 'parent', 'guest'])('createEventMeasurementsBulk: a %s clip is a per-item error and nothing is written', async (role) => {
+      const result = await eventService.createEventMeasurementsBulk(eventId, [input(CLIP)], coach.id, role);
+      expect(result.created).toHaveLength(0);
+      expect(result.errors).toEqual([{ index: 0, error: expect.stringMatching(ATHLETE_CLIP_DENIED) }]);
+      expect(await athleteRows()).toHaveLength(0);
+    });
+
+    it('createEventMeasurementsBulk: a coach clip is stored', async () => {
+      const result = await eventService.createEventMeasurementsBulk(eventId, [input(CLIP)], coach.id, 'coach');
+      expect(result.errors).toEqual([]);
+      expect(result.created[0].mediaUrl).toBe(CLIP);
     });
   });
 });

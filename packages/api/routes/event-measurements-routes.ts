@@ -13,6 +13,7 @@ import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { storage } from "../storage";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { mediaUrlSchema } from "@shared/schema";
+import { MediaUrlPermissionError } from "../services/measurement-service";
 
 /**
  * Validate an optional mediaUrl with the shared validator (https-only, public host, <= 2048).
@@ -45,22 +46,25 @@ const eventMeasurementsMutationLimiter = rateLimit({
 });
 
 /**
- * Check if user has permission to manage measurements for an event
+ * Role with which the user manages measurements for an event, or null when the user
+ * may not manage them: site admin, or org_admin / coach of the event's organization.
  */
-async function canManageEventMeasurements(user: SessionUser, eventId: string): Promise<boolean> {
+async function getEventManagerRole(user: SessionUser, eventId: string): Promise<string | null> {
   if (isSiteAdmin(user)) {
-    return true;
+    return "site_admin";
   }
 
   // Get the event to check organization
   const event = await storage.getEvent(eventId);
   if (!event || !event.organizationId) {
-    return false;
+    return null;
   }
 
   // Check if user has org_admin or coach role in this organization
   const roles = await storage.getUserRoles(user.id, event.organizationId);
-  return roles.includes('org_admin') || roles.includes('coach');
+  if (roles.includes("org_admin")) return "org_admin";
+  if (roles.includes("coach")) return "coach";
+  return null;
 }
 
 export function registerEventMeasurementsRoutes(app: Express) {
@@ -94,7 +98,7 @@ export function registerEventMeasurementsRoutes(app: Express) {
         }
 
         // Check if user has management access (coach/org_admin/site_admin)
-        const hasManagementAccess = await canManageEventMeasurements(user, eventId);
+        const hasManagementAccess = (await getEventManagerRole(user, eventId)) !== null;
 
         // Athletes can only view their own measurements if results are published
         const isViewingOwnData = requestedUserId === user.id;
@@ -148,8 +152,8 @@ export function registerEventMeasurementsRoutes(app: Express) {
         }
 
         // Check if user has access
-        const hasAccess = await canManageEventMeasurements(user, eventId);
-        if (!hasAccess) {
+        const role = await getEventManagerRole(user, eventId);
+        if (!role) {
           return res.status(403).json({ error: "Access denied" });
         }
 
@@ -179,8 +183,8 @@ export function registerEventMeasurementsRoutes(app: Express) {
         }
 
         // Check permissions
-        const hasAccess = await canManageEventMeasurements(user, eventId);
-        if (!hasAccess) {
+        const role = await getEventManagerRole(user, eventId);
+        if (!role) {
           return res.status(403).json({ error: "Access denied" });
         }
 
@@ -207,12 +211,16 @@ export function registerEventMeasurementsRoutes(app: Express) {
             notes,
             mediaUrl: mediaUrl.value,
           },
-          user.id
+          user.id,
+          role
         );
 
         return res.status(201).json(measurement);
       } catch (error: any) {
         console.error("Error creating event measurement:", error);
+        if (error instanceof MediaUrlPermissionError) {
+          return res.status(403).json({ error: error.message });
+        }
         if (error.message.includes("frozen")) {
           return res.status(400).json({ error: error.message });
         }
@@ -241,8 +249,8 @@ export function registerEventMeasurementsRoutes(app: Express) {
         }
 
         // Check permissions
-        const hasAccess = await canManageEventMeasurements(user, eventId);
-        if (!hasAccess) {
+        const role = await getEventManagerRole(user, eventId);
+        if (!role) {
           return res.status(403).json({ error: "Access denied" });
         }
 
@@ -285,7 +293,8 @@ export function registerEventMeasurementsRoutes(app: Express) {
             notes: m.notes,
             mediaUrl: mediaUrls[index],
           })),
-          user.id
+          user.id,
+          role
         );
 
         return res.status(201).json(result);
