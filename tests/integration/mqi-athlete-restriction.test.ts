@@ -378,6 +378,16 @@ describe('Athletes cannot enter Movement Quality scores (R2)', () => {
         expect(await athleteRows()).toHaveLength(0);
       });
 
+      it('POST /api/events/:eventId/measurements: 400 (not 500) for an out-of-range MQ score from a coach', async () => {
+        const res = await request(app)
+          .post(`/api/events/${eventId}/measurements`)
+          .set('Cookie', coachCookie)
+          .send({ userId: athlete.id, metric: 'MQ_JUMP', value: 4, date: '2026-03-10' });
+        expect(res.status).toBe(400);
+        expect(res.body.error).toMatch(/at most 3/);
+        expect(await athleteRows()).toHaveLength(0);
+      });
+
       it('POST /api/events/:eventId/measurements/bulk: 403 for athlete MQ scores', async () => {
         const res = await request(app)
           .post(`/api/events/${eventId}/measurements/bulk`)

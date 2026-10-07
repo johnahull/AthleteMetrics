@@ -12,6 +12,7 @@ import { requireAuth } from "../middleware";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { storage } from "../storage";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
+import { MeasurementValueValidationError } from "@shared/measurement-value-validation";
 
 // Rate limiting for event measurements endpoints
 const eventMeasurementsLimiter = rateLimit({
@@ -194,6 +195,9 @@ export function registerEventMeasurementsRoutes(app: Express) {
         return res.status(201).json(measurement);
       } catch (error: any) {
         console.error("Error creating event measurement:", error);
+        if (error instanceof MeasurementValueValidationError) {
+          return res.status(400).json({ error: error.message });
+        }
         if (error.message.includes("frozen")) {
           return res.status(400).json({ error: error.message });
         }

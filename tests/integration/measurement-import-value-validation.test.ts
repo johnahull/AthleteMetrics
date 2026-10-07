@@ -75,8 +75,11 @@ describe('storage.createMeasurement value validation (import paths)', () => {
     await expect(create('FLY10_TIME', NaN)).rejects.toThrow(/finite number/);
   });
 
-  it('keeps rejecting 0 for a standard metric', async () => {
-    await expect(create('FLY10_TIME', 0)).rejects.toThrow(/positive/i);
+  // The storage path validated nothing before AM-FEAT-015: the range/zero rule is
+  // scoped to MQ metrics so standard metrics behave exactly as on develop.
+  it('stores 0 and negative values for a standard metric as before (no range rule outside MQ)', async () => {
+    expect(Number((await create('FLY10_TIME', 0)).value)).toBe(0);
+    expect(Number((await create('RSI_ASYM', -5)).value)).toBe(-5);
   });
 
   it('accepts a positive standard value', async () => {

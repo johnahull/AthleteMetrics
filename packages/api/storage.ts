@@ -34,6 +34,7 @@ import {
 } from "@shared/schema";
 import type { WellnessTrend } from "@shared/wellness-types";
 import { validateMeasurementValue, MeasurementValueValidationError } from "@shared/measurement-value-validation";
+import { isMovementQualityMetric } from "@shared/peer-comparison-exclusions";
 import { db } from "./db";
 import { wellnessRepository, type WellnessTrend as RepoWellnessTrend } from "./repositories/wellness-repository";
 import { eq, desc, asc, and, gte, lte, gt, inArray, sql, arrayContains, or, isNull, isNotNull, exists, ne, SQL } from "drizzle-orm";
@@ -3722,9 +3723,11 @@ export class DatabaseStorage implements IStorage {
     // the CSV/OCR/review-queue import routes (assertCanEnterMetric per row), and
     // the event measurement routes (coach/org_admin/site_admin only).
     //
-    // Metric-aware value validation, same rule as MeasurementService (CSV/OCR
-    // imports and other callers write through here without the service).
-    // Paired-input metrics validate their own inputs.
+    // Value validation (CSV/OCR imports and other callers write through here
+    // without the service). Every metric must be a finite number. The
+    // metric-aware range rule (0-3 scores) applies to MQ metrics only: this path
+    // did no range/zero validation before AM-FEAT-015, so other metrics keep
+    // accepting 0 and negative values. Paired-input metrics validate their own inputs.
     const [metricConfig] = await db
       .select({
         validationMin: siteMetrics.validationMin,
@@ -3734,7 +3737,10 @@ export class DatabaseStorage implements IStorage {
       })
       .from(siteMetrics)
       .where(eq(siteMetrics.code, measurement.metric));
-    if (!metricConfig?.auxiliaryInputConfig) {
+    if (!Number.isFinite(Number(measurement.value))) {
+      throw new MeasurementValueValidationError('Value must be a finite number');
+    }
+    if (isMovementQualityMetric(measurement.metric) && !metricConfig?.auxiliaryInputConfig) {
       const valueError = validateMeasurementValue(measurement.value, metricConfig, measurement.metric);
       if (valueError) throw new MeasurementValueValidationError(valueError);
     }
