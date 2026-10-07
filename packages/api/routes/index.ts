@@ -33,6 +33,7 @@ import { registerMembershipRequestRoutes } from "./membership-request-routes";
 import { registerImportExportRoutes } from "./import-export-routes";
 import { registerProfileRoutes } from "./profile-routes";
 import { registerAdminUtilityRoutes } from "./admin-utility-routes";
+import { registerDerivedTotalRoutes } from "./derived-total-routes";
 import { registerAdminSecurityRoutes } from "./admin-security-routes";
 import { registerRegistrationRoutes } from "./registration-routes";
 import { registerEventRoutes } from "./event-routes";
@@ -159,6 +160,9 @@ export function registerAllRoutes(app: Express) {
 
   // Admin utility routes (data cleanup, testing)
   registerAdminUtilityRoutes(app);
+
+  // Derived total repair (site admin)
+  registerDerivedTotalRoutes(app);
 
   // Admin security routes (security metrics, monitoring)
   registerAdminSecurityRoutes(app);

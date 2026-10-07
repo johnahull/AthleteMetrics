@@ -30,6 +30,7 @@ type DbTransaction = PgTransaction<
   ExtractTablesWithRelations<typeof import('@shared/schema')>
 >;
 import { evaluateFormula } from './formula-service';
+import type { DerivedCalcFailure } from './derived-total-warnings';
 
 // ============================================================================
 // Metric Config Cache - Performance Optimization
@@ -236,6 +237,14 @@ const CALCULATION_VERSION = '1.0.0';
 
 export class DerivedMetricCalculator {
   private metricConfigCache: MetricConfigCache;
+  // Per-derived-metric failures that were logged and swallowed (so one failing total does
+  // not block the others). Callers read them via getFailures() to warn the client (#526).
+  private failures: DerivedCalcFailure[] = [];
+
+  /** Failures swallowed by processNewMeasurement / recalculateForAthlete on this instance. */
+  getFailures(): DerivedCalcFailure[] {
+    return [...this.failures];
+  }
 
   constructor(private db: typeof dbType) {
     this.metricConfigCache = new MetricConfigCache();
@@ -398,6 +407,7 @@ export class DerivedMetricCalculator {
             date: measurement.date,
             error,
           });
+          this.failures.push({ metric: derivedMetric.code, date: measurement.date, userId: measurement.userId });
         }
       }
 
@@ -863,6 +873,7 @@ export class DerivedMetricCalculator {
           date,
           error,
         });
+        this.failures.push({ metric: derivedMetric.code, date: date ?? null, userId });
       }
     }
   }

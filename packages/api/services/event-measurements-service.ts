@@ -16,6 +16,7 @@ import { MeasurementValueValidationError } from "@shared/measurement-value-valid
 import { db as defaultDb } from "../db";
 import { MeasurementService } from "./measurement-service";
 import { DerivedMetricCalculator } from "./derived-metric-calculator";
+import { staleWarning, warningsFromCalculator, withWarnings, type DerivedTotalWarning } from "./derived-total-warnings";
 import { PairedInputValidationError } from "./paired-input-compute";
 
 /** site_metrics.category of the ordinal Movement Quality scores (AM-FEAT-015) */
@@ -222,7 +223,7 @@ export class EventMeasurementsService {
     input: { upserts: MovementQualityScoreInput[]; deletes: string[] },
     submittedBy: string,
     submitterRole: string
-  ): Promise<{ saved: Measurement[]; deleted: string[] }> {
+  ): Promise<{ saved: Measurement[]; deleted: string[]; warnings?: DerivedTotalWarning[] }> {
     const event = await this.getWritableEvent(eventId, "Cannot modify measurements for frozen event");
     const eventDate = eventCalendarDate(event);
 
@@ -291,9 +292,11 @@ export class EventMeasurementsService {
 
     // Recalculate (create, update or remove) the totals fed by the touched scores,
     // each affected total once
+    const warnings: DerivedTotalWarning[] = [];
     if (touched.size > 0) {
+      const calculator = new DerivedMetricCalculator(this.db);
       try {
-        await new DerivedMetricCalculator(this.db).recalculateForAthlete(userId, [...touched], eventDate, {
+        await calculator.recalculateForAthlete(userId, [...touched], eventDate, {
           triggerContext: { event: "measurement_update", userId: submittedBy },
           organizationId: event.organizationId,
         });
@@ -305,10 +308,14 @@ export class EventMeasurementsService {
           date: eventDate,
           error: derivedError,
         });
+        // The derived total that failed is unknown here: report every touched score
+        for (const metric of touched) warnings.push(staleWarning(metric, eventDate));
       }
+      warnings.push(...warningsFromCalculator(calculator));
     }
 
-    return { saved, deleted: input.deletes };
+    // Additive (#526): `warnings` is only present when a derived total may be stale
+    return withWarnings({ saved, deleted: input.deletes }, warnings);
   }
 
   /**

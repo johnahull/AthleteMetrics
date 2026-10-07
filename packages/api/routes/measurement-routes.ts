@@ -637,8 +637,12 @@ export function registerMeasurementRoutes(app: Express) {
           expectedOrganizationId = Array.from(userOrgIds)[0];
         }
       }
-      await measurementService.deleteMeasurement(measurementId, expectedOrganizationId);
-      res.json({ message: "Measurement deleted successfully" });
+      const { warnings } = await measurementService.deleteMeasurement(measurementId, expectedOrganizationId);
+      res.json({
+        message: "Measurement deleted successfully",
+        // Additive (#526): present only when a derived total may be stale
+        ...(warnings.length > 0 ? { warnings } : {}),
+      });
     } catch (error) {
       console.error("Delete measurement error:", error);
       const message = error instanceof Error ? error.message : "Failed to delete measurement";
@@ -926,7 +930,9 @@ export function registerMeasurementRoutes(app: Express) {
           ? `All ${result.deleted} measurement(s) deleted successfully`
           : result.deleted === 0
           ? `All measurements failed deletion`
-          : `${result.deleted} measurement(s) deleted, ${result.failed} failed`
+          : `${result.deleted} measurement(s) deleted, ${result.failed} failed`,
+        // Additive (#526): present only when a derived total may be stale
+        ...(result.warnings.length > 0 ? { warnings: result.warnings } : {}),
       });
     } catch (error) {
       // Log the full error server-side, but never echo it back to the client:

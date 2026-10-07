@@ -24,6 +24,13 @@ import { eq, and, gte, lte, or, isNull, sql, desc, inArray, arrayContains } from
 import { alias } from 'drizzle-orm/pg-core';
 import { PAGINATION } from '../constants/pagination';
 import { DerivedMetricCalculator, type TriggerContext } from './derived-metric-calculator';
+import {
+  staleWarning,
+  warningsFromCalculator,
+  dedupeWarnings,
+  withWarnings,
+  type DerivedTotalWarning,
+} from './derived-total-warnings';
 import { AchievementService } from './achievement-service';
 import { notifyNewMeasurement } from './measurement-notification-service';
 import {
@@ -226,7 +233,7 @@ export class MeasurementService {
     submitterRole: string = 'athlete',
     eventContext?: MeasurementEventContext,
     options: MeasurementWriteOptions = {}
-  ): Promise<Measurement> {
+  ): Promise<Measurement & { warnings?: DerivedTotalWarning[] }> {
     assertCanEnterMetric(submitterRole, measurement.metric);
     assertCanAttachClip(submitterRole, measurement.mediaUrl);
 
@@ -554,8 +561,9 @@ export class MeasurementService {
     // connection, so inside the transaction it cannot see the row just inserted
     // (the last source measurement would never produce its derived total).
     // Failures are logged, not thrown: the source measurement is already persisted.
+    const derivedWarnings: DerivedTotalWarning[] = [];
+    const calculator = new DerivedMetricCalculator(db);
     try {
-      const calculator = new DerivedMetricCalculator(db);
       await calculator.processNewMeasurement(newMeasurement, {
         event: 'measurement_insert',
         userId: submittedBy,
@@ -576,12 +584,16 @@ export class MeasurementService {
         date: newMeasurement.date,
         error: derivedError,
       });
+      derivedWarnings.push(staleWarning(newMeasurement.metric, newMeasurement.date));
     }
+    derivedWarnings.push(...warningsFromCalculator(calculator));
+    // Additive response field (#526): the measurement is saved, its derived total may be stale
+    const result = withWarnings(newMeasurement, derivedWarnings);
 
     // Event entries before results are published (and in-place score edits) do not
     // notify the athlete or award achievements.
     if (options.suppressSideEffects || replaced) {
-      return newMeasurement;
+      return result;
     }
 
     // ACHIEVEMENTS: Check for newly unlocked achievements AFTER transaction commits
@@ -616,7 +628,7 @@ export class MeasurementService {
       }).catch(err => console.error('Measurement notification failed:', err));
     }
 
-    return newMeasurement;
+    return result;
   }
 
   /**
@@ -777,7 +789,7 @@ export class MeasurementService {
     expectedOrganizationId?: string,
     updaterRole?: string,
     options: Pick<MeasurementWriteOptions, 'tx'> = {}
-  ): Promise<Measurement> {
+  ): Promise<Measurement & { warnings?: DerivedTotalWarning[] }> {
     // Wrap in transaction to prevent race conditions during concurrent updates
     // Race condition scenario: Two users update same measurement simultaneously
     try {
@@ -971,6 +983,7 @@ export class MeasurementService {
       // sees the updated row. Failures are logged: the update is already persisted.
       // recalculateForAthlete also creates a total that does not exist yet, so a
       // source moved onto a date/metric that completes a set produces its total.
+      const derivedWarnings: DerivedTotalWarning[] = [];
       if (
         !options.tx &&
         (measurement.value !== undefined ||
@@ -979,8 +992,8 @@ export class MeasurementService {
           measurement.metric !== undefined ||
           measurement.userId !== undefined)
       ) {
+        const calculator = new DerivedMetricCalculator(db);
         try {
-          const calculator = new DerivedMetricCalculator(db);
           const triggerContext = {
             event: 'measurement_update' as const,
             sourceMeasurementId: txUpdated.id,
@@ -1014,10 +1027,12 @@ export class MeasurementService {
             date: txUpdated.date,
             error: derivedError,
           });
+          derivedWarnings.push(staleWarning(txUpdated.metric, txUpdated.date));
         }
+        derivedWarnings.push(...warningsFromCalculator(calculator));
       }
 
-      return txUpdated;
+      return withWarnings(txUpdated, derivedWarnings);
     } catch (error) {
       // Preserve error specificity
       if (
@@ -1056,7 +1071,7 @@ export class MeasurementService {
     id: string,
     expectedOrganizationId?: string,
     options: Pick<MeasurementWriteOptions, 'tx'> = {}
-  ): Promise<void> {
+  ): Promise<{ warnings: DerivedTotalWarning[] }> {
     // Wrap in transaction to prevent race conditions during concurrent operations
     // Race condition scenario: User deletes measurement while another user verifies/updates it
     try {
@@ -1090,15 +1105,16 @@ export class MeasurementService {
       // Inside a caller's transaction the deletion is not committed yet: the caller
       // recalculates derived metrics after its commit.
       if (options.tx) {
-        return;
+        return { warnings: [] };
       }
 
       // DERIVED METRICS: Trigger recalculation after the deletion has committed.
       // Inside the transaction the calculator (separate connection) would still
       // see the deleted row, leaving a stale derived total. Failures are logged:
       // the deletion is already persisted.
+      const warnings: DerivedTotalWarning[] = [];
+      const calculator = new DerivedMetricCalculator(db);
       try {
-        const calculator = new DerivedMetricCalculator(db);
         await calculator.recalculateForAthlete(deleted.userId, deleted.metric, deleted.date, {
           triggerContext: {
             event: 'measurement_delete',
@@ -1114,7 +1130,10 @@ export class MeasurementService {
           date: deleted.date,
           error: derivedError,
         });
+        warnings.push(staleWarning(deleted.metric, deleted.date));
       }
+      warnings.push(...warningsFromCalculator(calculator));
+      return { warnings: dedupeWarnings(warnings) };
     } catch (error) {
       // Preserve error specificity
       if (error instanceof MeasurementAccessDeniedError) {
@@ -1401,7 +1420,12 @@ export class MeasurementService {
   async bulkDelete(
     measurementIds: string[],
     expectedOrganizationId?: string
-  ): Promise<{ deleted: number; failed: number; errors: Array<{ id: string; message: string }> }> {
+  ): Promise<{
+    deleted: number;
+    failed: number;
+    errors: Array<{ id: string; message: string }>;
+    warnings: DerivedTotalWarning[];
+  }> {
     type RecalcKey = { userId: string; metric: string; date: string; organizationId: string | null };
     type TxResult = {
       deleted: number;
@@ -1477,9 +1501,11 @@ export class MeasurementService {
         deleted: 0,
         failed: measurementIds.length,
         errors: measurementIds.map(id => ({ id, message })),
+        warnings: [],
       };
     }
 
+    const warnings: DerivedTotalWarning[] = [];
     if (txResult.recalcKeys.length > 0) {
       const calculator = new DerivedMetricCalculator(db);
       const seen = new Set<string>();
@@ -1500,14 +1526,17 @@ export class MeasurementService {
             date: key.date,
             error: e instanceof Error ? e.message : String(e),
           });
+          warnings.push(staleWarning(key.metric, key.date));
         }
       }
+      warnings.push(...warningsFromCalculator(calculator));
     }
 
     return {
       deleted: txResult.deleted,
       failed: txResult.errors.length,
       errors: txResult.errors,
+      warnings: dedupeWarnings(warnings),
     };
   }
 
