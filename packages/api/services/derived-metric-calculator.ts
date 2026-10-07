@@ -221,6 +221,10 @@ export type TriggerContext = {
 export interface RecalculateOptions {
   useTransaction?: boolean;     // Default: false (avoids long-running transactions)
   triggerContext?: TriggerContext;
+  // Organization of the measurement that triggered the recalculation. A missing total
+  // is only created for site derived metrics and this org's custom derived metrics
+  // (as in processNewMeasurement); other orgs' existing totals are still recalculated.
+  organizationId?: string | null;
 }
 
 /**
@@ -416,6 +420,7 @@ export class DerivedMetricCalculator {
    * @param deleteWhenUncomputable - Recalculation mode (recalculateForAthlete): an
    *   existing calculated row is recalculated even when a direct measurement exists,
    *   and is deleted when its sources are missing or the formula result is invalid.
+   * @param allowCreate - When false, only an existing calculated row is updated.
    * @returns the created/updated calculated measurement, or null when it cannot be
    *   calculated (direct measurement exists, sources missing, invalid result)
    */
@@ -433,7 +438,8 @@ export class DerivedMetricCalculator {
     metricConfigsMap: Map<string, { higherIsBetter: boolean }>,
     triggerContext: TriggerContext | undefined,
     contextMeasurement?: Measurement,
-    deleteWhenUncomputable = false
+    deleteWhenUncomputable = false,
+    allowCreate = true
   ): Promise<Measurement | null> {
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtextextended(${`derived:${userId}:${derivedMetric.code}:${date}`}, 0))`
@@ -451,6 +457,10 @@ export class DerivedMetricCalculator {
           eq(measurements.isCalculated, true)
         )
       );
+
+    if (!allowCreate && existingCalculated.length === 0) {
+      return null;
+    }
 
     const deleteExisting = async () => {
       if (deleteWhenUncomputable && existingCalculated.length > 0) {
@@ -645,14 +655,14 @@ export class DerivedMetricCalculator {
     date?: string,
     options?: RecalculateOptions
   ): Promise<void> {
-    const { useTransaction = false, triggerContext } = options || {};
+    const { useTransaction = false, triggerContext, organizationId } = options || {};
 
     if (useTransaction) {
       await this.db.transaction(async (tx) => {
-        await this.recalculateForAthleteInternal(tx, userId, metricCode, date, triggerContext);
+        await this.recalculateForAthleteInternal(tx, userId, metricCode, date, triggerContext, organizationId);
       });
     } else {
-      await this.recalculateForAthleteInternal(this.db, userId, metricCode, date, triggerContext);
+      await this.recalculateForAthleteInternal(this.db, userId, metricCode, date, triggerContext, organizationId);
     }
   }
 
@@ -665,7 +675,8 @@ export class DerivedMetricCalculator {
     userId: string,
     metricCode: string,
     date?: string,
-    triggerContext?: TriggerContext
+    triggerContext?: TriggerContext,
+    triggeringOrganizationId?: string | null
   ): Promise<void> {
     // Find all derived site metrics that depend on this source metric
     const siteDerivedMetrics = await dbOrTx
@@ -795,10 +806,12 @@ export class DerivedMetricCalculator {
         // computeAndUpsertDerived is the single write path: it reads the sources and
         // writes (or deletes) the total under the per-(athlete, metric, date) advisory
         // lock, so concurrent source edits cannot leave a stale total.
+        const allowCreate =
+          !derivedMetric.organizationId || derivedMetric.organizationId === triggeringOrganizationId;
         for (const targetDate of dates) {
           await dbOrTx.transaction((tx) =>
             this.computeAndUpsertDerived(
-              tx, derivedMetric, userId, targetDate, metricConfigsMap, triggerContext, undefined, true
+              tx, derivedMetric, userId, targetDate, metricConfigsMap, triggerContext, undefined, true, allowCreate
             )
           );
         }

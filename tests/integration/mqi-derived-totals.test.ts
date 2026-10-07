@@ -26,6 +26,7 @@ import {
   userTeams,
   users,
   userOrganizations,
+  customOrgMetrics,
 } from '@shared/schema';
 
 const PATTERNS = [
@@ -114,6 +115,7 @@ describe('MQI derived totals (calculator behavior)', () => {
     await db.delete(measurements).where(eq(measurements.userId, athleteId));
     await db.delete(userTeams).where(eq(userTeams.userId, athleteId));
     await db.delete(userOrganizations).where(eq(userOrganizations.organizationId, orgId));
+    await db.delete(userOrganizations).where(eq(userOrganizations.userId, athleteId));
     await db.delete(teams).where(eq(teams.organizationId, orgId));
     await db.delete(users).where(inArray(users.id, [athleteId, coachId]));
     await db.delete(organizations).where(eq(organizations.id, orgId));
@@ -285,6 +287,36 @@ describe('MQI derived totals (calculator behavior)', () => {
     expect(totals).toHaveLength(1);
     expect(Number(totals[0].value)).toBe(8);
     expect(totals[0].organizationId).toBe(orgId);
+  });
+
+  it('(c) recalculation only creates custom totals of the triggering measurement\'s org', async () => {
+    // The athlete also belongs to org B, which has a custom derived metric on MQ_JUMP.
+    const [orgB] = await db.insert(organizations).values({ name: `MQI Org B ${Date.now()}` }).returning();
+    const customCode = `MQ2_B_${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    await db.insert(userOrganizations).values({ userId: athleteId, organizationId: orgB.id, role: 'athlete' } as any);
+    await db.insert(customOrgMetrics).values({
+      organizationId: orgB.id,
+      code: customCode,
+      label: 'Org B jump x2',
+      unit: 'score',
+      metricType: 'higher_is_better',
+      isDerived: true,
+      formula: 'MQ_JUMP * 2',
+      dependentMetrics: ['MQ_JUMP'],
+      calculationConfig: { dateMatchStrategy: 'same_date', missingSourceBehavior: 'skip' },
+    } as any);
+    onTestFinished(async () => {
+      await db.delete(measurements).where(eq(measurements.metric, customCode));
+      await db.delete(customOrgMetrics).where(eq(customOrgMetrics.organizationId, orgB.id));
+      await db.delete(organizations).where(eq(organizations.id, orgB.id));
+    });
+
+    // An org-A score moved onto DATE: its recalculation must not create org B's total.
+    const moved = await score('MQ_JUMP', 3, '2026-03-11');
+    expect(moved.organizationId).toBe(orgId);
+    await service.updateMeasurement(moved.id, { date: DATE } as any, undefined, 'coach');
+
+    expect(await totalsFor(customCode)).toHaveLength(0);
   });
 
   it('(c) never creates duplicate totals under concurrent calculation', async () => {
