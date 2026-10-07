@@ -114,7 +114,7 @@ describe('isFly10Metric', () => {
 
   it('should return false for other metrics', () => {
     expect(isFly10Metric('VERTICAL_JUMP')).toBe(false);
-    expect(isFly10Metric('AGILITY_505')).toBe(false);
+    expect(isFly10Metric('AGILITY_505_YD')).toBe(false);
     expect(isFly10Metric('DASH_40YD')).toBe(false);
     expect(isFly10Metric('RSI')).toBe(false);
   });

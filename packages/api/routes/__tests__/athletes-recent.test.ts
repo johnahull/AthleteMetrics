@@ -251,7 +251,7 @@ describe("GET /api/athletes/recent", () => {
     await storage.createMeasurement({
       userId: testAthlete5Id,
       date: fourDaysAgo.toISOString().split('T')[0],
-      metric: "AGILITY_505",
+      metric: "AGILITY_505_YD",
       value: 2.5,
       teamId: testTeamId1,
       organizationId: testOrgId1,

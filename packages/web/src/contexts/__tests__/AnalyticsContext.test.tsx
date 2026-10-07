@@ -191,7 +191,7 @@ describe('AnalyticsContext State Transitions', () => {
       const initialState = createMockState({
         metrics: {
           primary: 'VERTICAL_JUMP',
-          additional: ['FLY10_TIME', 'AGILITY_505'],
+          additional: ['FLY10_TIME', 'AGILITY_505_YD'],
         }
       });
 
@@ -204,7 +204,7 @@ describe('AnalyticsContext State Transitions', () => {
       const initialState = createMockState({
         metrics: {
           primary: 'FLY10_TIME',
-          additional: ['VERTICAL_JUMP', 'AGILITY_505'],
+          additional: ['VERTICAL_JUMP', 'AGILITY_505_YD'],
         }
       });
 
@@ -451,7 +451,7 @@ describe('AnalyticsContext State Transitions', () => {
         analysisType: 'individual',
         metrics: {
           primary: 'FLY10_TIME',
-          additional: ['VERTICAL_JUMP', 'AGILITY_505'],
+          additional: ['VERTICAL_JUMP', 'AGILITY_505_YD'],
         }
       });
 
@@ -459,7 +459,7 @@ describe('AnalyticsContext State Transitions', () => {
 
       expect(result.metrics).toEqual({
         primary: 'FLY10_TIME',
-        additional: ['VERTICAL_JUMP', 'AGILITY_505'],
+        additional: ['VERTICAL_JUMP', 'AGILITY_505_YD'],
       });
     });
 

@@ -89,7 +89,8 @@ export function MeasurementsTimeline({ measurements }: MeasurementsTimelineProps
     const colors: Record<string, string> = {
       'FLY10_TIME': 'bg-blue-100 text-blue-800',
       'VERTICAL_JUMP': 'bg-green-100 text-green-800',
-      'AGILITY_505': 'bg-purple-100 text-purple-800',
+      'AGILITY_505_M': 'bg-purple-100 text-purple-800',
+      'AGILITY_505_YD': 'bg-purple-100 text-purple-800',
       'AGILITY_5105': 'bg-purple-100 text-purple-800',
       'T_TEST': 'bg-orange-100 text-orange-800',
       'DASH_40YD': 'bg-red-100 text-red-800',

@@ -29,7 +29,7 @@ describe("Event Metrics Service", () => {
   let frozenEventId: string;
 
   // Test metric codes (must exist in site_metrics)
-  const testMetricCodes = ['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505'];
+  const testMetricCodes = ['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505_M'];
 
   beforeAll(async () => {
     // Create test organization
@@ -149,7 +149,7 @@ describe("Event Metrics Service", () => {
     it("should auto-assign display order if not provided", async () => {
       await metricsService.addMetricToEvent(testEventId, 'FLY10_TIME', testOrgAdminId);
       const second = await metricsService.addMetricToEvent(testEventId, 'VERTICAL_JUMP', testOrgAdminId);
-      const third = await metricsService.addMetricToEvent(testEventId, 'AGILITY_505', testOrgAdminId);
+      const third = await metricsService.addMetricToEvent(testEventId, 'AGILITY_505_M', testOrgAdminId);
 
       expect(second.displayOrder).toBeGreaterThan(0);
       expect(third.displayOrder).toBeGreaterThan(second.displayOrder);
@@ -212,7 +212,7 @@ describe("Event Metrics Service", () => {
 
   describe("listEventMetrics", () => {
     it("should list all metrics for an event in display order", async () => {
-      await metricsService.addMetricToEvent(testEventId, 'AGILITY_505', testOrgAdminId, { displayOrder: 3 });
+      await metricsService.addMetricToEvent(testEventId, 'AGILITY_505_M', testOrgAdminId, { displayOrder: 3 });
       await metricsService.addMetricToEvent(testEventId, 'FLY10_TIME', testOrgAdminId, { displayOrder: 1 });
       await metricsService.addMetricToEvent(testEventId, 'VERTICAL_JUMP', testOrgAdminId, { displayOrder: 2 });
 
@@ -221,7 +221,7 @@ describe("Event Metrics Service", () => {
       expect(metrics).toHaveLength(3);
       expect(metrics[0].metricCode).toBe('FLY10_TIME');
       expect(metrics[1].metricCode).toBe('VERTICAL_JUMP');
-      expect(metrics[2].metricCode).toBe('AGILITY_505');
+      expect(metrics[2].metricCode).toBe('AGILITY_505_M');
     });
 
     it("should return empty array for event with no metrics", async () => {
@@ -291,16 +291,16 @@ describe("Event Metrics Service", () => {
     it("should reorder all metrics at once", async () => {
       await metricsService.addMetricToEvent(testEventId, 'FLY10_TIME', testOrgAdminId);
       await metricsService.addMetricToEvent(testEventId, 'VERTICAL_JUMP', testOrgAdminId);
-      await metricsService.addMetricToEvent(testEventId, 'AGILITY_505', testOrgAdminId);
+      await metricsService.addMetricToEvent(testEventId, 'AGILITY_505_M', testOrgAdminId);
 
       await metricsService.reorderEventMetrics(
         testEventId,
         testOrgAdminId,
-        ['AGILITY_505', 'FLY10_TIME', 'VERTICAL_JUMP'] // New order
+        ['AGILITY_505_M', 'FLY10_TIME', 'VERTICAL_JUMP'] // New order
       );
 
       const metrics = await metricsService.listEventMetrics(testEventId);
-      expect(metrics[0].metricCode).toBe('AGILITY_505');
+      expect(metrics[0].metricCode).toBe('AGILITY_505_M');
       expect(metrics[1].metricCode).toBe('FLY10_TIME');
       expect(metrics[2].metricCode).toBe('VERTICAL_JUMP');
     });
@@ -314,7 +314,7 @@ describe("Event Metrics Service", () => {
         [
           { metricCode: 'FLY10_TIME', displayOrder: 1 },
           { metricCode: 'VERTICAL_JUMP', displayOrder: 2, isRequired: true },
-          { metricCode: 'AGILITY_505', displayOrder: 3 },
+          { metricCode: 'AGILITY_505_M', displayOrder: 3 },
         ]
       );
 

@@ -52,7 +52,8 @@ describe('storage.createMeasurement units resolution', () => {
   });
 
   it('seeded site_metrics are present', () => {
-    expect(configured.AGILITY_505).toBe('s');
+    expect(configured.AGILITY_505_M).toBe('s');
+    expect(configured.AGILITY_505_YD).toBe('s');
     expect(configured.TOP_SPEED).toBeTruthy();
   });
 
@@ -66,7 +67,7 @@ describe('storage.createMeasurement units resolution', () => {
     expect((await create(metric)).units).toBe(expected);
   });
 
-  it.each(['AGILITY_505', 'AGILITY_5105', 'ZZ_UNITS_TIME'])(
+  it.each(['AGILITY_505_M', 'AGILITY_505_YD', 'AGILITY_5105', 'ZZ_UNITS_TIME'])(
     'regression: time metric %s without units is not stored as "in"',
     async (metric) => {
       const m = await create(metric);

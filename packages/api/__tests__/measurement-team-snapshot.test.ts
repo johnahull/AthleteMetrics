@@ -216,7 +216,7 @@ describe('Measurement Team Snapshot Feature', () => {
         {
           userId: testAthleteId,
           date: '2024-10-15',
-          metric: 'AGILITY_505',
+          metric: 'AGILITY_505_YD',
           value: 2.85,
         },
         testCoachId

@@ -46,7 +46,8 @@ export const MEASUREMENT_PATTERNS: Record<string, PatternConfig> = {
     }
   },
   
-  AGILITY_505: {
+  // Protocol-neutral: the photo route resolves this to AGILITY_505_M or _YD from the user's choice.
+  AGILITY_505_UNRESOLVED: {
     patterns: [
       /(?:5-0-5|505).*?(\d\.\d{2})/gi,
       /agility.*?505.*?(\d\.\d{2})/gi,
@@ -55,7 +56,7 @@ export const MEASUREMENT_PATTERNS: Record<string, PatternConfig> = {
     confidence: 75,
     validator: (value: string) => {
       const num = parseFloat(value);
-      return num >= 1.5 && num <= 4.0;
+      return num >= 1.3 && num <= 4.0;
     }
   },
   

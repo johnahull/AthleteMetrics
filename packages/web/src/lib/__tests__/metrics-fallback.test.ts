@@ -50,7 +50,7 @@ describe('Metric Utility Functions - Fallback Behavior', () => {
     });
 
     it('should return "secondary" for all metrics', () => {
-      const metrics = ['AGILITY_505', 'T_TEST', 'DASH_40YD', 'RSI'];
+      const metrics = ['AGILITY_505_YD', 'T_TEST', 'DASH_40YD', 'RSI'];
       metrics.forEach(metric => {
         expect(getMetricBadgeVariant(metric)).toBe('secondary');
       });
@@ -71,7 +71,7 @@ describe('Metric Utility Functions - Fallback Behavior', () => {
     });
 
     it('should return gray color for all metrics', () => {
-      const metrics = ['AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI'];
+      const metrics = ['AGILITY_505_YD', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI'];
       metrics.forEach(metric => {
         expect(getMetricColor(metric)).toBe('bg-gray-100 text-gray-800');
       });
@@ -92,7 +92,7 @@ describe('Metric Utility Functions - Fallback Behavior', () => {
     });
 
     it('should return empty string for all metrics', () => {
-      const metrics = ['AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI'];
+      const metrics = ['AGILITY_505_YD', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI'];
       metrics.forEach(metric => {
         expect(getMetricUnits(metric)).toBe('');
       });
@@ -113,7 +113,7 @@ describe('Metric Utility Functions - Fallback Behavior', () => {
     });
 
     it('should return Clock icon for all metrics', () => {
-      const metrics = ['AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI'];
+      const metrics = ['AGILITY_505_YD', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI'];
       metrics.forEach(metric => {
         expect(getMetricIcon(metric)).toBe(Clock);
       });
@@ -135,7 +135,7 @@ describe('Metric Utility Functions - Fallback Behavior', () => {
     });
 
     it('should return plain number string for all metrics', () => {
-      expect(formatMetricValue('AGILITY_505', 2.5)).toBe('2.5');
+      expect(formatMetricValue('AGILITY_505_YD', 2.5)).toBe('2.5');
       expect(formatMetricValue('RSI', 1.8)).toBe('1.8');
     });
 
