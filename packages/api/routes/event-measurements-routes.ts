@@ -7,7 +7,7 @@
 
 import type { Express, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
-import { EventMeasurementsService } from "../services/event-measurements-service";
+import { EventMeasurementsService, EventMeasurementInputError } from "../services/event-measurements-service";
 import { requireAuth } from "../middleware";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { storage } from "../storage";
@@ -221,7 +221,7 @@ export function registerEventMeasurementsRoutes(app: Express) {
         if (error instanceof MediaUrlPermissionError) {
           return res.status(403).json({ error: error.message });
         }
-        if (error.message.includes("not a member")) {
+        if (error instanceof EventMeasurementInputError) {
           return res.status(400).json({ error: error.message });
         }
         if (error.message.includes("frozen")) {

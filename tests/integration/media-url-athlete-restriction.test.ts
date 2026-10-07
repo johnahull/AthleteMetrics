@@ -15,7 +15,7 @@ import express, { type Express } from 'express';
 import bcrypt from 'bcrypt';
 import { db } from '../../packages/api/db';
 import { MeasurementService } from '../../packages/api/services/measurement-service';
-import { EventMeasurementsService } from '../../packages/api/services/event-measurements-service';
+import { EventMeasurementsService, EventMeasurementInputError } from '../../packages/api/services/event-measurements-service';
 import { storage } from '../../packages/api/storage';
 import { events, measurements, organizations, teams, userOrganizations, userTeams, users } from '@shared/schema';
 import { parentAthleteLinks } from '@shared/schema/tables/coppa';
@@ -426,6 +426,9 @@ describe('Athletes cannot attach clips (R1)', () => {
 
     it('createEventMeasurement rejects an athlete from another organization', async () => {
       await expect(eventService.createEventMeasurement(eventId, outsiderInput(), coach.id, 'coach')).rejects.toThrow(NOT_MEMBER);
+      await expect(eventService.createEventMeasurement(eventId, outsiderInput(), coach.id, 'coach')).rejects.toBeInstanceOf(
+        EventMeasurementInputError,
+      );
       expect(await outsiderRows()).toHaveLength(0);
     });
 

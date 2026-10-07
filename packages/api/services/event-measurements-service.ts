@@ -23,6 +23,14 @@ export interface EventMeasurementInput {
   mediaUrl?: string | null;
 }
 
+/** Invalid input for an event write (maps to HTTP 400) */
+export class EventMeasurementInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "EventMeasurementInputError";
+  }
+}
+
 export interface BulkCreateResult {
   created: Measurement[];
   errors: Array<{ index: number; error: string }>;
@@ -64,7 +72,7 @@ export class EventMeasurementsService {
     if (!event.organizationId) return;
     const roles = await this.storage.getUserRoles(userId, event.organizationId);
     if (roles.length === 0) {
-      throw new Error("Athlete is not a member of this event's organization");
+      throw new EventMeasurementInputError("Athlete is not a member of this event's organization");
     }
   }
 
