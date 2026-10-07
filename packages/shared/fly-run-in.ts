@@ -66,3 +66,10 @@ export function assertFlyInDistanceOnUpdate(
   const flyIn = patch.flyInDistance !== undefined ? patch.flyInDistance : existing.flyInDistance;
   assertFlyInDistanceMatches(metric, flyIn);
 }
+
+/** Display text for a measurement's fly-in distance: the code's run-in for fly codes, else the stored value. */
+export function formatFlyInDistance(metric: string, stored: FlyInValue): string {
+  const runIn = FLY10_RUN_IN_YD[metric];
+  if (runIn !== undefined) return `${runIn}yd`;
+  return isBlank(stored) || stored === 0 ? '-' : `${stored}yd`;
+}

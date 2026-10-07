@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { formatFlyInDistance } from "@shared/fly-run-in";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -587,7 +588,7 @@ export default function AthleteProfile() {
                         }
                       </td>
                       <td className="py-3 px-4 text-sm text-gray-600">
-                        {measurement.flyInDistance ? `${measurement.flyInDistance}yd` : '-'}
+                        {formatFlyInDistance(measurement.metric, measurement.flyInDistance)}
                       </td>
                       <td className="py-3 px-4 text-sm text-gray-600">
                         {measurement.notes || '-'}

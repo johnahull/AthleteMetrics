@@ -4,6 +4,7 @@ import {
   assertFlyInDistanceMatches,
   assertFlyInDistanceOnUpdate,
   parseFlyInInput,
+  formatFlyInDistance,
 } from '../fly-run-in';
 import { MeasurementValueValidationError } from '../measurement-value-validation';
 
@@ -118,5 +119,18 @@ describe('parseFlyInInput (route input -> value for the checker)', () => {
   it('drops garbage on non-fly codes (never stores NaN)', () => {
     expect(parseFlyInInput('VERTICAL_JUMP', '20abc')).toBeUndefined();
     expect(parseFlyInInput('FLY10M_TIME', 'x')).toBeUndefined();
+  });
+});
+
+describe('formatFlyInDistance (display)', () => {
+  it('shows the code run-in for fly codes, ignoring a stale stored value', () => {
+    expect(formatFlyInDistance('FLY10_TIME', '10.000')).toBe('20yd');
+    expect(formatFlyInDistance('FLY10_TIME_RI15', null)).toBe('15yd');
+  });
+
+  it('shows the stored value for other codes, or a dash when absent', () => {
+    expect(formatFlyInDistance('FLY10M_TIME', '10')).toBe('10yd');
+    expect(formatFlyInDistance('VERTICAL_JUMP', null)).toBe('-');
+    expect(formatFlyInDistance('VERTICAL_JUMP', '')).toBe('-');
   });
 });
