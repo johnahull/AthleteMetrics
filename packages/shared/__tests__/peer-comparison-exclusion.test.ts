@@ -15,7 +15,7 @@ describe('isPeerComparisonExcludedMetric (AM-FEAT-015 D7)', () => {
     expect(isPeerComparisonExcludedMetric('mqi_total')).toBe(true);
   });
 
-  it.each(['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'RSI', 'MQX_OTHER', 'JUMP_SJ_HEIGHT', ''])(
+  it.each(['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505_M', 'RSI', 'MQX_OTHER', 'JUMP_SJ_HEIGHT', ''])(
     'does not exclude %s',
     (code) => {
       expect(isPeerComparisonExcludedMetric(code)).toBe(false);

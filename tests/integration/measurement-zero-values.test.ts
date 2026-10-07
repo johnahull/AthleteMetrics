@@ -123,7 +123,7 @@ describe('MeasurementService zero / range validation', () => {
     const LEGACY = [
       { code: 'RSI_L', unit: 'ratio', validationMin: '0', validationMax: '5', decimalPrecision: 2, aboveMax: 6.25 },
       { code: 'RSI_R', unit: 'ratio', validationMin: '0', validationMax: '5', decimalPrecision: 2, aboveMax: 5.5 },
-      { code: 'AGILITY_505_LSI', unit: '%', validationMin: '0', validationMax: '100', decimalPrecision: 1, aboveMax: 101.5 },
+      { code: 'AGILITY_505_M_LSI', unit: '%', validationMin: '0', validationMax: '100', decimalPrecision: 1, aboveMax: 101.5 },
       { code: 'RSI_ASYM', unit: '%', validationMin: '0', validationMax: '100', decimalPrecision: 1, aboveMax: 120 },
       { code: 'COND_YYIR1_DISTANCE', unit: 'm', validationMin: '0', validationMax: '4000', decimalPrecision: 0, aboveMax: 4100.5 },
     ];

@@ -31,7 +31,7 @@ describe('validateMeasurementValue', () => {
     it.each([
       ['RSI_L', { validationMin: '0.000', validationMax: '5.000', decimalPrecision: 2 }, 7.5],
       ['RSI_R', { validationMin: '0.000', validationMax: '5.000', decimalPrecision: 2 }, 6],
-      ['AGILITY_505_LSI', { validationMin: '0.000', validationMax: '100.000', decimalPrecision: 1 }, 101],
+      ['AGILITY_505_M_LSI', { validationMin: '0.000', validationMax: '100.000', decimalPrecision: 1 }, 101],
       ['RSI_ASYM', { validationMin: '0.000', validationMax: '100.000', decimalPrecision: 1 }, 120],
       ['COND_YYIR1_DISTANCE', { validationMin: '0.000', validationMax: '4000.000', decimalPrecision: 0 }, 4100.5],
     ])('%s (validation_min 0) still rejects 0 and accepts values above max', (code, bounds, aboveMax) => {
