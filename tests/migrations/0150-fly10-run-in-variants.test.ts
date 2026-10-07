@@ -82,6 +82,12 @@ describe('Migration 0150: FLY10 run-in variants', () => {
       await rollbackable(async (tx) => {
         await resetToPre(tx);
         const [before] = await tx`SELECT * FROM site_metrics WHERE code = 'FLY10_TIME'`;
+        // Other integration files may have wiped the seeded benchmarks; make sure there is
+        // one to prove untouched (inside this rolled-back transaction).
+        const [{ n }] = await tx`SELECT count(*)::int AS n FROM site_benchmarks WHERE metric_code = 'FLY10_TIME'`;
+        if (n === 0) {
+          await tx`INSERT INTO site_benchmarks (metric_code, name, benchmark_value) VALUES ('FLY10_TIME', 'sb-0150', 1.2)`;
+        }
         const snapBefore = await snapshotBenchmarks(tx);
         expect(snapBefore.benchmarks.length).toBeGreaterThan(0);
 

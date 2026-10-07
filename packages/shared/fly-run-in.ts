@@ -15,7 +15,7 @@ export const FLY10_RUN_IN_YD: Readonly<Record<string, number>> = {
 
 type FlyInValue = number | string | null | undefined;
 
-const isBlank = (v: FlyInValue): v is null | undefined => v === null || v === undefined || v === '';
+const isBlank = (v: FlyInValue): v is null | undefined | '' => v === null || v === undefined || v === '';
 
 /** Numeric comparison: exports write '20.000000', and 7.5 must not equal 7. */
 const sameDistance = (a: FlyInValue, b: FlyInValue): boolean => {
@@ -29,7 +29,8 @@ const toNumber = (v: FlyInValue): number => (typeof v === 'number' ? v : Number(
 /**
  * Route input (CSV cell or JSON body value) -> value for the checker and storage.
  * Blank is "not supplied"; numeric text keeps its fraction (20.4 is not 20).
- * Garbage becomes NaN on a fly code (so the checker rejects it) and is dropped otherwise.
+ * Garbage becomes NaN on a fly code (so the checker rejects it) and is dropped otherwise:
+ * callers must pass the result through assertFlyInDistanceMatches before storing it.
  */
 export function parseFlyInInput(metric: string, raw: FlyInValue): number | undefined {
   if (isBlank(raw) || String(raw).trim() === '') return undefined;

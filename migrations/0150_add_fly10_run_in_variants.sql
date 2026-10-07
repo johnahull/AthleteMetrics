@@ -48,6 +48,7 @@ SELECT v.code, v.label, base.category, base.unit, base.metric_type, true, true,
    ('FLY10_TIME_RI30', '10-Yard Fly, 30 yd run-in', 30)
  ) AS v(code, label, run_in)
  WHERE base.code = 'FLY10_TIME'
+-- color and icon are deliberately not updated, so admin customisations survive a re-run.
 ON CONFLICT (code) DO UPDATE SET
   label = EXCLUDED.label,
   category = EXCLUDED.category,
