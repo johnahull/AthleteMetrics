@@ -14,6 +14,7 @@ function fakeTx(selectResults: unknown[][]) {
     p.from = () => p;
     p.where = () => p;
     p.limit = () => p;
+    p.orderBy = () => p;
     return p;
   };
   return {
