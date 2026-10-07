@@ -18,6 +18,7 @@ Coaches score Movement Quality Index (MQI) screens per athlete: 8 movement patte
 5. **Exclusion from comparisons**: MQ metrics are excluded from peer percentiles, report percentiles / team averages / rankings / composite index, most-improved, benchmarks (create and update) and leaderboards (`packages/shared/peer-comparison-exclusions.ts`).
 6. **Event writes via `MeasurementService`**: event data entry goes through the service (unit handling, validation, derived calculator) instead of direct inserts. MQ scores are one row per (athlete, metric, event), edited in place under an advisory lock, with a partial unique index as backstop (0149), and always use the event's calendar date. No athlete notifications or achievements before results are published. The panel saves one athlete atomically with `PUT /api/events/:eventId/athletes/:userId/movement-quality`; `DELETE /api/events/:eventId/measurements/:measurementId` also exists. Frozen events remain frozen.
 7. **Notes and UI**: per-pattern notes go in `measurements.notes`. UI is the `MovementQualityPanel` dialog on event data entry.
+8. **Coach-only MQ scores and clips**: athletes may not enter MQ scores (R2) or attach clips (R1). `MeasurementService` enforces both on create, batch and update, so every route that writes through it is covered. For an athlete-role user it rejects any MQ code (the same `isMovementQualityMetric` predicate, including moving an entry onto an MQ metric) and any non-empty `mediaUrl`; omitting or clearing `mediaUrl` (null or empty string) is still allowed. `POST` / `PUT /api/measurements` answer **403** `{ message }`, the status the measurement routes already use for role restrictions. The CSV measurement import rejects an athlete's MQ row before athlete matching. Event measurement routes, including the panel save, were already limited to event managers (site admin, or coach / org admin of the event's organization). In the UI, event data entry renders only for event managers, and the athlete self-entry form does not list MQ metrics for athletes. Coaches, org admins and site admins are unaffected.
 
 Rejected: a dedicated MQI table (duplicates measurement history, permissions and exports); raw-value percentiles for ordinal scores (not meaningful).
 
@@ -30,10 +31,10 @@ Rejected: a dedicated MQI table (duplicates measurement history, permissions and
 
 ### Negative
 - Redaction is allowlist-by-call-site: a new read path that exposes measurements must use an explicit field list without `mediaUrl` or one of the redaction helpers.
-- Athlete self-entered MQ scores are unverified and never feed the totals, even after a coach verifies them (open decision).
 - Event measurement mutations are rate limited per user at 100 per 15 minutes; very large sessions can still reach it.
 - Down migrations are manual (`apply-manual-migrations.js` skips `*_down.sql`): 0146 down refuses while MQ data or configuration references the metrics, 0147 down destroys stored links, 0148 down removes latest-event selection, 0149 down drops the unique index.
 
 ### Neutral
+- Open item M4 (unverified athlete MQ scores never produce a total) is resolved by decision 8: athletes cannot create MQ scores, so no unverified athlete score can sit in a pattern set and the totals' verified-only rule needs no change.
 - v1 out of scope: score bands, report surfacing, BTB / AM-FEAT-014 quadrant, video upload (URL only), structured hard-fault.
 - Manual migration numbers 0144/0145 are reserved for AM-FEAT-016.
