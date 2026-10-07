@@ -25,6 +25,7 @@ import {
   PeerComparisonFilters,
   type ComparisonScope,
 } from '@/components/athlete/PeerComparisonFilters';
+import { isLowerIsBetterMetric } from '@shared/analytics-types';
 import { PeerMetricCard, type BenchmarkStatus } from '@/components/athlete/PeerMetricCard';
 import { useAthleteMetricExplanations } from '@/hooks/useAthleteMetricExplanations';
 import { Card, CardContent } from '@/components/ui/card';
@@ -302,7 +303,7 @@ export default function MyPeerComparisonPage() {
                   result={result}
                   benchmark={benchmarksByMetric.get(result.metric)}
                   filters={effectiveFilters}
-                  lowerIsBetter={isLowerBetterMetric(result.metric)}
+                  lowerIsBetter={isLowerIsBetterMetric(result.metric)}
                   explanation={metricExplanations[result.metric]}
                 />
               ))}
@@ -339,24 +340,4 @@ function calculateAge(birthDate: string | Date): number {
     age--;
   }
   return age;
-}
-
-/**
- * Check if a metric is "lower is better" (time-based metrics)
- */
-function isLowerBetterMetric(metric: string): boolean {
-  const lowerIsBetterMetrics = [
-    'FLY10_TIME',
-    'AGILITY_505_M',
-    'AGILITY_505_YD',
-    'AGILITY_COD_DEFICIT_M',
-    'AGILITY_COD_DEFICIT_YD',
-    'AGILITY_5105',
-    'T_TEST',
-    'DASH_40YD',
-    'DASH_100M',
-    'DASH_200M',
-    'SHUTTLE_RUN',
-  ];
-  return lowerIsBetterMetrics.some(m => metric.toUpperCase().includes(m) || m.includes(metric.toUpperCase()));
 }
