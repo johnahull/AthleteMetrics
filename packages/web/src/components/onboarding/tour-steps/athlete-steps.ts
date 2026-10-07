@@ -10,7 +10,7 @@ export const athleteSteps: Step[] = [
   {
     target: '[data-tour="my-profile"]',
     content: 'Welcome! This is your personal profile where you can view your information and settings.',
-    disableBeacon: true,
+    skipBeacon: true,
     placement: 'right',
   },
   {
