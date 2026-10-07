@@ -422,6 +422,14 @@ describe('MQI derived totals (calculator behavior)', () => {
           isVerified: true,
           organizationId: orgId,
           isCalculated: true,
+          // chk_calculated_measurements_valid requires both source-tracking columns
+          // on every is_calculated row
+          calculatedFromMeasurementIds: [],
+          calculationMetadata: {
+            formula: 'legacy-duplicate',
+            sourceValues: {},
+            calculatedAt: createdAt.toISOString(),
+          },
           createdAt,
         } as any)
         .returning();
