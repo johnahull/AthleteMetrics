@@ -41,10 +41,14 @@ function parseMediaUrl(raw: unknown): { ok: true; value: string | null | undefin
   return { ok: true, value: result.data };
 }
 
-// Rate limiting for event measurements endpoints
+// Rate limiting for event measurements reads, per signed-in user like the mutation
+// limiter below: the entry panel refetches after every save, and a staff sharing one
+// gym network shares an IP.
 const eventMeasurementsLimiter = rateLimit({
   windowMs: RATE_LIMIT_WINDOW_MS,
   limit: RATE_LIMITS.STANDARD,
+  keyGenerator: (req) => req.session?.user?.id ?? req.ip ?? "unknown",
+  validate: { keyGeneratorIpFallback: false },
   message: { message: "Too many event measurements requests, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
