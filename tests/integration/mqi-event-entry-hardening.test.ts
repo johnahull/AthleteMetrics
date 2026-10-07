@@ -391,6 +391,20 @@ describe('PUT /api/events/:eventId/athletes/:userId/movement-quality', () => {
     expect(await rowsFor(athlete.id, 'MQ_JUMP', ev.id)).toHaveLength(0);
   });
 
+  // AM-FEAT-015 R1/R2: athletes cannot enter MQ scores or attach clips, even their own
+  it("denies an athlete of the event's organization (own scores, with a clip)", async () => {
+    const ev = await mkEvent();
+    const athleteCookie = await login(athlete.username);
+    const denied = await saveMq(
+      ev.id,
+      athlete.id,
+      { upserts: [{ metric: 'MQ_JUMP', value: 2, mediaUrl: 'https://clips.example.com/self' }], deletes: [] },
+      athleteCookie
+    );
+    expect(denied.status).toBe(403);
+    expect(await rowsFor(athlete.id, 'MQ_JUMP', ev.id)).toHaveLength(0);
+  });
+
   it('clearing a saved score deletes it and removes the total', async () => {
     const ev = await mkEvent();
     const full = await saveMq(ev.id, athlete.id, { upserts: PATTERNS.map((metric) => ({ metric, value: 2 })), deletes: [] });
