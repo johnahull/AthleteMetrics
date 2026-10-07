@@ -7,6 +7,10 @@
  * Runs only when GENERATORS_DIR points at a checkout of that repo; the generators repo's CI sets it.
  * Without it the suite is skipped, so the app's own CI is independent of the generators.
  *
+ * Needs a production-like database: `npm run db:push` then `npm run db:migrate:manual`. The app's PR CI
+ * database (db:push + seed-default-metrics) lacks the metrics added by migrations 0144-0149 (the 5-0-5
+ * leg metrics, COD deficits, MQ_*), so do not set GENERATORS_DIR there.
+ *
  * Flow: generate roster + measurements + Dashr CSVs -> import as a coach (roster, measurement CSV,
  * Dashr device import) -> assert nothing is rejected and the derived metrics (COD deficit, MQI totals)
  * are computed.
