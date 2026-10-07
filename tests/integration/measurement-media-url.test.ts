@@ -261,6 +261,18 @@ describe('POST/PUT/GET /api/measurements - mediaUrl round-trip', () => {
 });
 
 describe('event measurement routes - mediaUrl', () => {
+  it('a standard POST /api/measurements cannot inject event context through the body', async () => {
+    const res = await request(app)
+      .post('/api/measurements')
+      .set('Cookie', coachACookie)
+      .send({ ...base(), eventId: eventA.id, eventNameSnapshot: 'Forged', eventDateSnapshot: '2020-01-01' });
+    expect(res.status).toBe(201);
+    const [stored] = await db.select().from(measurements).where(eq(measurements.id, res.body.id));
+    expect(stored.eventId).toBeNull();
+    expect(stored.eventNameSnapshot).toBeNull();
+    expect(stored.eventDateSnapshot).toBeNull();
+  });
+
   it('POST /api/events/:id/measurements stores mediaUrl; GET returns it', async () => {
     const res = await request(app)
       .post(`/api/events/${eventA.id}/measurements`)
