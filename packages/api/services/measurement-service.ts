@@ -452,6 +452,10 @@ export class MeasurementService {
               value: String(computedNumericValue),
               units,
               date: measurementDate.toISOString(),
+              // The edit is this submitter's entry now (and auto-verified for coaches/admins)
+              submittedBy,
+              isVerified,
+              verifiedBy: isVerified ? submittedBy : existing.verifiedBy,
               ...(measurement.notes !== undefined ? { notes: measurement.notes || null } : {}),
               ...(measurement.mediaUrl !== undefined ? { mediaUrl: measurement.mediaUrl ?? null } : {}),
             })

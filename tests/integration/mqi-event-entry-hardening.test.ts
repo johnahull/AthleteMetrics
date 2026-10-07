@@ -545,6 +545,34 @@ describe('PUT /api/events/:eventId/athletes/:userId/movement-quality', () => {
     expect(totals.map((t) => Number(t.value))).toEqual([16]);
   });
 
+  it('editing an unverified legacy score in place verifies it under the editing coach, so the total appears', async () => {
+    const ev = await mkEvent();
+    const [legacy] = await db
+      .insert(measurements)
+      .values({
+        userId: athlete.id,
+        submittedBy: athlete.id,
+        metric: 'MQ_JUMP',
+        value: '1',
+        units: 'score',
+        date: eventDay(ev),
+        age: 18,
+        isVerified: false,
+        organizationId: orgA.id,
+        eventId: ev.id,
+      } as any)
+      .returning();
+    const res = await saveMq(ev.id, athlete.id, { upserts: PATTERNS.map((metric) => ({ metric, value: 2 })), deletes: [] });
+    expect(res.status).toBe(200);
+    const [edited] = await rowsFor(athlete.id, 'MQ_JUMP', ev.id);
+    expect(edited.id).toBe(legacy.id);
+    expect(edited.isVerified).toBe(true);
+    expect(edited.verifiedBy).toBe(coachA.id);
+    expect(edited.submittedBy).toBe(coachA.id);
+    const totals = (await rowsFor(athlete.id, 'MQI_TOTAL')).filter((t) => t.date === eventDay(ev));
+    expect(totals.map((t) => Number(t.value))).toEqual([16]);
+  });
+
   it('duplicate ids in deletes are a 400, not a 500, and nothing changes', async () => {
     const ev = await mkEvent();
     const first = await saveMq(ev.id, athlete.id, { upserts: [{ metric: 'MQ_JUMP', value: 2 }], deletes: [] });
