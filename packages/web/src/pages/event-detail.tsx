@@ -6,6 +6,7 @@
 import { useState, useMemo } from "react";
 import { useParams, Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
+import { canManageEvent as canUserManageEvent } from "@/lib/event-permissions";
 import { Eye } from "lucide-react";
 import {
   useEvent,
@@ -209,16 +210,10 @@ export default function EventDetail() {
   const pendingCount = typedRegistrations.filter((r) => r.status === "pending").length;
 
   // Determine if user can manage this event (coach, org_admin, or site_admin)
-  const canManageEvent = useMemo(() => {
-    if (!event || !user) return false;
-    if (user.isSiteAdmin) return true;
-    if (!event.organizationId) return false;
-
-    return userOrganizations?.some(
-      (org) => org.organizationId === event.organizationId &&
-               (org.role === "org_admin" || org.role === "coach")
-    ) ?? false;
-  }, [event, user, userOrganizations]);
+  const canManageEvent = useMemo(
+    () => canUserManageEvent(user, userOrganizations, event),
+    [event, user, userOrganizations]
+  );
 
   // Copy event code to clipboard
   const copyEventCode = () => {

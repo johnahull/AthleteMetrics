@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
+import { canManageEvent } from "@/lib/event-permissions";
 import {
   MovementQualityPanel,
   type MovementQualitySaveInput,
@@ -482,14 +483,7 @@ export default function EventDataEntry() {
 
   // Event managers only (coach, org_admin, site_admin), same rule as the event page:
   // athletes cannot enter Movement Quality scores or attach clips (AM-FEAT-015)
-  const canManageEvent =
-    !!user &&
-    (user.isSiteAdmin ||
-      (!!event.organizationId &&
-        (userOrganizations?.some(
-          (org) => org.organizationId === event.organizationId && (org.role === "org_admin" || org.role === "coach")
-        ) ?? false)));
-  if (!canManageEvent) {
+  if (!canManageEvent(user, userOrganizations, event)) {
     return (
       <div className="container mx-auto py-6">
         <Card>
