@@ -129,9 +129,6 @@ export class EventMeasurementsService {
         date: data.date.toISOString().split('T')[0],
         notes: data.notes,
         mediaUrl: data.mediaUrl,
-        eventId: eventId,
-        eventNameSnapshot: event.name,
-        eventDateSnapshot: event.startDate.toISOString().split('T')[0],
       },
       createdBy,
       this.eventContext(event)
@@ -186,9 +183,6 @@ export class EventMeasurementsService {
             date: m.date.toISOString().split('T')[0],
             notes: m.notes,
             mediaUrl: m.mediaUrl,
-            eventId: eventId,
-            eventNameSnapshot: event.name,
-            eventDateSnapshot: event.startDate.toISOString().split('T')[0],
           },
           createdBy,
           this.eventContext(event)

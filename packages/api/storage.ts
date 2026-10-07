@@ -3819,12 +3819,10 @@ export class DatabaseStorage implements IStorage {
       organizationId: eventOrganizationId || organizationId || null,
       season: season || null,
       teamContextAuto: teamContextAuto,
-      // Event context (for measurements taken at events)
-      // EventMeasurementsService passes event context on the measurement itself rather than
-      // via the eventContext argument, so fall back to it (otherwise eventId was silently dropped).
-      eventId: eventContext?.eventId ?? measurement.eventId ?? null,
-      eventNameSnapshot: eventContext?.eventNameSnapshot ?? measurement.eventNameSnapshot ?? null,
-      eventDateSnapshot: eventContext?.eventDateSnapshot ?? measurement.eventDateSnapshot ?? null,
+      // Event context (for measurements taken at events), passed by EventMeasurementsService
+      eventId: eventContext?.eventId ?? null,
+      eventNameSnapshot: eventContext?.eventNameSnapshot ?? null,
+      eventDateSnapshot: eventContext?.eventDateSnapshot ?? null,
     }).returning();
 
     return newMeasurement;

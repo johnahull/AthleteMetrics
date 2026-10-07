@@ -1660,6 +1660,12 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
   isVerified: true,
   submittedBy: true, // Backend handles this automatically based on session
   teamContextAuto: true, // Managed by system
+  // Set by the server only: event context by the event routes (storage eventContext),
+  // organization from the team / event. Never accepted from a request body.
+  eventId: true,
+  eventNameSnapshot: true,
+  eventDateSnapshot: true,
+  organizationId: true,
 }).extend({
   userId: z.string().min(1, "User is required"), // Changed from playerId to userId
   date: z.string().date("Date must be in YYYY-MM-DD format"), // Strict date validation
