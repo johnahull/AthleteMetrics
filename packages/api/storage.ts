@@ -3735,6 +3735,7 @@ export class DatabaseStorage implements IStorage {
         decimalPrecision: siteMetrics.decimalPrecision,
         auxiliaryInputConfig: siteMetrics.auxiliaryInputConfig,
         isDerived: siteMetrics.isDerived,
+        unit: siteMetrics.unit,
       })
       .from(siteMetrics)
       .where(eq(siteMetrics.code, measurement.metric));
@@ -3771,8 +3772,10 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    const units = measurement.metric === "FLY10_TIME" || measurement.metric === "T_TEST" || measurement.metric === "DASH_40YD" ? "s" :
-                  measurement.metric === "RSI" ? "ratio" : "in";
+    // site_metrics.unit (non-empty, e.g. 'score' for MQ metrics), else the legacy mapping
+    const units = metricConfig?.unit ||
+                  (measurement.metric === "FLY10_TIME" || measurement.metric === "T_TEST" || measurement.metric === "DASH_40YD" ? "s" :
+                  measurement.metric === "RSI" ? "ratio" : "in");
 
     // Auto-populate team context if not explicitly provided
     let teamId = measurement.teamId;

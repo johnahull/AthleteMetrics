@@ -89,6 +89,11 @@ describe('storage.createMeasurement value validation (import paths)', () => {
     expect(rows).toHaveLength(0);
   });
 
+  it("stores an MQ score with the metric's configured unit", async () => {
+    const m = await create('MQ_JUMP', 2);
+    expect(m.units).toBe('score');
+  });
+
   it('accepts a positive standard value', async () => {
     const m = await create('FLY10_TIME', 1.52);
     expect(Number(m.value)).toBe(1.52);
