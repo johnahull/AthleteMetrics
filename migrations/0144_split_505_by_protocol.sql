@@ -40,11 +40,24 @@
 -- character) so already-migrated codes (AGILITY_505_M_L ...) are never matched
 -- and a second run is a no-op.
 --
--- Idempotent: safe to re-run (deploy-window sweep, see plan R2).
+-- Idempotent FOR THE RUNNER (every statement is a no-op once the old codes are
+-- gone, and the runner records the migration so it is never applied twice).
+-- DO NOT re-run this file by hand. A manual re-run would blindly relabel any
+-- retired-code rows written during a failed-deploy window (which may be yard
+-- data) as _M, and would overwrite admin edits to the _YD site_metrics rows.
+-- Triage retired-code measurements by hand instead, using the import batch and
+-- the CSV Units column to decide metric vs yard for each row.
 --
--- Deliberately NOT done: organization_metrics rows for the new codes
--- (no auto-enable, matches 0123/0128/0131), report_snapshots,
--- user_achievements.metadata, import_batches, audit_logs (historical).
+-- Organization enablement (product decision, 2026-10-06): every
+-- organization_metrics row on an old code is repointed to its _M code AND gets a
+-- _YD twin for the same organization with the SAME is_enabled and display_order
+-- (custom_label is not copied: it named the metric protocol). ON CONFLICT DO
+-- NOTHING, so an existing row is never overridden. A disabled old row yields a
+-- disabled twin; an organization with no old rows gets nothing. The down file
+-- deletes all _YD organization rows.
+--
+-- Deliberately NOT done: report_snapshots, user_achievements.metadata,
+-- import_batches, audit_logs (historical).
 
 -- ============================================================================
 -- Block 0 — helpers (pg_temp: vanish with the session, nothing persists)
@@ -168,6 +181,23 @@ ON CONFLICT (code) DO UPDATE SET
 -- Every UPDATE is bounded to the four old codes or to a token match, so a
 -- second run touches nothing. FK-bound tables first, soft references after.
 -- ============================================================================
+-- _YD twin FIRST (reads the old-code rows before they are repointed). Same
+-- is_enabled / display_order; created_at defaults to now. ON CONFLICT DO NOTHING
+-- never overrides an existing row.
+INSERT INTO organization_metrics (organization_id, metric_code, is_enabled, display_order)
+SELECT om.organization_id,
+       CASE om.metric_code
+         WHEN 'AGILITY_505'     THEN 'AGILITY_505_YD'
+         WHEN 'AGILITY_505_L'   THEN 'AGILITY_505_YD_L'
+         WHEN 'AGILITY_505_R'   THEN 'AGILITY_505_YD_R'
+         WHEN 'AGILITY_505_LSI' THEN 'AGILITY_505_YD_LSI'
+       END,
+       om.is_enabled,
+       om.display_order
+  FROM organization_metrics om
+ WHERE om.metric_code IN ('AGILITY_505', 'AGILITY_505_L', 'AGILITY_505_R', 'AGILITY_505_LSI')
+ON CONFLICT (organization_id, metric_code) DO NOTHING;
+
 UPDATE organization_metrics
    SET metric_code = pg_temp.m505_remap(metric_code)
  WHERE metric_code IN ('AGILITY_505', 'AGILITY_505_L', 'AGILITY_505_R', 'AGILITY_505_LSI');

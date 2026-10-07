@@ -32,6 +32,7 @@ const projectRoot = path.resolve(__dirname, '../..');
 
 const UP_SQL_PATH = path.join(projectRoot, 'migrations', '0144_split_505_by_protocol.sql');
 const DOWN_SQL_PATH = path.join(projectRoot, 'migrations', '0144_split_505_by_protocol_down.sql');
+const UP_0145_PATH = path.join(projectRoot, 'migrations', '0145_add_cod_deficit_metrics.sql');
 
 const DATABASE_URL = process.env.DATABASE_URL;
 
@@ -150,8 +151,24 @@ describe('Migration 0144: static SQL analysis', () => {
       expect(up).toContain('"missingSourceBehavior":"skip"');
     });
 
-    it('does not auto-enable new codes for organizations', () => {
-      expect(up).not.toMatch(/INSERT\s+INTO\s+organization_metrics/i);
+    it('auto-enables the _YD twin of every repointed organization_metrics row, never overriding an existing row', () => {
+      const m = up.match(/INSERT\s+INTO\s+organization_metrics[^;]*;/i);
+      expect(m).not.toBeNull();
+      expect(m![0]).toMatch(/ON\s+CONFLICT\s*\(\s*organization_id\s*,\s*metric_code\s*\)\s*DO\s+NOTHING/i);
+      // the twin insert reads the OLD-code rows, so it must run before they are repointed
+      const ins = up.search(/INSERT\s+INTO\s+organization_metrics/i);
+      const upd = up.search(/UPDATE\s+organization_metrics/i);
+      expect(ins).toBeGreaterThan(-1);
+      expect(ins).toBeLessThan(upd);
+    });
+
+    it('header says do not re-run by hand and no longer claims a safe re-run sweep', () => {
+      const raw = fs.readFileSync(UP_SQL_PATH, 'utf-8');
+      expect(raw).not.toMatch(/safe to re-run/i);
+      expect(raw).toMatch(/DO NOT re-run/i);
+      expect(raw).toMatch(/import batch/i);
+      expect(raw).toMatch(/Units/);
+      expect(raw).not.toMatch(/no auto-enable/i);
     });
   });
 
@@ -171,6 +188,20 @@ describe('Migration 0144: static SQL analysis', () => {
       expect(down).toMatch(/RAISE\s+EXCEPTION/i);
       expect(down).toMatch(/FROM\s+measurements/i);
       expect(down).toMatch(/AGILITY_505_YD/);
+    });
+
+    it('ends by removing its own manual_migrations tracking row', () => {
+      expect(down.trimEnd()).toMatch(
+        /DELETE\s+FROM\s+manual_migrations\s+WHERE\s+migration_name\s*=\s*'0144_split_505_by_protocol'[\s\S]*$/i,
+      );
+      expect(down.search(/DELETE\s+FROM\s+manual_migrations/i)).toBeGreaterThan(
+        down.search(/DELETE\s+FROM\s+site_metrics/i),
+      );
+    });
+
+    it('header states 0145_down must run BEFORE 0144_down', () => {
+      const raw = fs.readFileSync(DOWN_SQL_PATH, 'utf-8');
+      expect(raw).toMatch(/0145_down[^\n]*BEFORE[^\n]*0144_down/i);
     });
 
     it('deletes the new site_metrics rows only after repointing children back', () => {
@@ -622,16 +653,87 @@ describe.skipIf(!DATABASE_URL)('Migration 0144: behavioral (real DB, rolled back
     });
   }, TEST_TIMEOUT);
 
-  it('does not auto-enable any new code for organizations', async () => {
+  async function om(tx: Tx, org: string) {
+    return (await tx`select metric_code, is_enabled, display_order, custom_label from organization_metrics
+                      where organization_id = ${org} and metric_code ~ '^AGILITY_505' order by metric_code`) as Record<string, any>[];
+  }
+
+  it('auto-enables the _YD twin of each repointed row, mirroring is_enabled and display_order', async () => {
+    await inTx(async (tx) => {
+      await toPreState(tx);
+      await tx`insert into organizations (id, name) values ('fx505-orgB', 'B'), ('fx505-orgC', 'C')`;
+      await tx.unsafe(`insert into organization_metrics (id, organization_id, metric_code, is_enabled, display_order, custom_label) values
+        ('fx505-b1', 'fx505-orgB', 'AGILITY_505', true, 7, 'My 505'),
+        ('fx505-b2', 'fx505-orgB', 'AGILITY_505_L', false, 8, null)`);
+      await tx.unsafe(upSql);
+      expect(await om(tx, 'fx505-orgB')).toEqual([
+        { metric_code: 'AGILITY_505_M', is_enabled: true, display_order: 7, custom_label: 'My 505' },
+        { metric_code: 'AGILITY_505_M_L', is_enabled: false, display_order: 8, custom_label: null },
+        // twin: same is_enabled / display_order; a custom label named the metric protocol, so it is not copied
+        { metric_code: 'AGILITY_505_YD', is_enabled: true, display_order: 7, custom_label: null },
+        { metric_code: 'AGILITY_505_YD_L', is_enabled: false, display_order: 8, custom_label: null },
+      ]);
+      // an org with no old rows gets nothing
+      expect(await om(tx, 'fx505-orgC')).toEqual([]);
+    });
+  }, TEST_TIMEOUT);
+
+  it('re-run is a no-op and does not change an admin-modified twin row', async () => {
     await inTx(async (tx) => {
       await toPreState(tx);
       await seedFixture(tx);
-      const [{ before }] = await tx`select count(*)::int as before from organization_metrics`;
       await tx.unsafe(upSql);
-      const [{ after }] = await tx`select count(*)::int as after from organization_metrics`;
-      expect(after).toBe(before);
-      const [{ yd }] = await tx`select count(*)::int as yd from organization_metrics where metric_code ~ '^AGILITY_505_YD'`;
-      expect(yd).toBe(0);
+      await tx`update organization_metrics set is_enabled = false, display_order = 99
+                where organization_id = ${FX_ORG} and metric_code = 'AGILITY_505_YD'`;
+      const before = await om(tx, FX_ORG);
+      await tx.unsafe(upSql);
+      expect(await om(tx, FX_ORG)).toEqual(before);
+      expect(before.find((r) => r.metric_code === 'AGILITY_505_YD')).toMatchObject({ is_enabled: false, display_order: 99 });
+    });
+  }, TEST_TIMEOUT);
+
+  it('down removes the _YD org rows it created and restores the old org rows', async () => {
+    await inTx(async (tx) => {
+      await toPreState(tx);
+      await seedFixture(tx);
+      const pre = await om(tx, FX_ORG);
+      await tx.unsafe(upSql);
+      expect(await om(tx, FX_ORG)).toHaveLength(8);
+      await tx.unsafe(downSql);
+      expect(await om(tx, FX_ORG)).toEqual(pre);
+      const [{ n }] = await tx`select count(*)::int as n from organization_metrics where metric_code ~ '^AGILITY_505_(M|YD)'`;
+      expect(n).toBe(0);
+    });
+  }, TEST_TIMEOUT);
+
+  it('down removes the manual_migrations tracking row (valid also when absent)', async () => {
+    await inTx(async (tx) => {
+      await toPreState(tx);
+      await tx.unsafe(upSql);
+      await tx.unsafe(`CREATE TABLE IF NOT EXISTS manual_migrations (
+        id SERIAL PRIMARY KEY, migration_name TEXT NOT NULL UNIQUE, applied_at TIMESTAMP DEFAULT NOW() NOT NULL)`);
+      await tx`insert into manual_migrations (migration_name) values ('0144_split_505_by_protocol') on conflict do nothing`;
+      await tx`insert into manual_migrations (migration_name) values ('0143_drop_ai_model_checks') on conflict do nothing`;
+      await tx.unsafe(downSql);
+      const rows = await tx`select migration_name from manual_migrations where migration_name in ('0144_split_505_by_protocol', '0143_drop_ai_model_checks')`;
+      expect(rows.map((r: { migration_name: string }) => r.migration_name)).toEqual(['0143_drop_ai_model_checks']);
+      // absent row: still fine
+      await tx.unsafe(downSql);
+    });
+  }, TEST_TIMEOUT);
+
+  it('down refuses with a clear message while 0145 is still applied', async () => {
+    await inTx(async (tx) => {
+      await toPreState(tx);
+      await tx.unsafe(upSql);
+      await tx.unsafe(fs.readFileSync(UP_0145_PATH, 'utf-8'));
+      await expect(
+        tx.savepoint(async (sp: Tx) => {
+          await sp.unsafe(downSql);
+        }),
+      ).rejects.toThrow(/0145_down/);
+      const rows = await tx`select code from site_metrics where code ~ '^AGILITY_505' order by code`;
+      expect(rows.map((r: { code: string }) => r.code).sort()).toEqual([...NEW_CODES].sort());
     });
   }, TEST_TIMEOUT);
 

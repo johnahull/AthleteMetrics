@@ -17,14 +17,21 @@
 -- validation_min / validation_max (0 / 2.0 s) are set on the columns for manual
 -- entry; the calculator does not enforce them on computed values (Decision 9).
 --
--- Deliberately NOT done: organization_metrics rows (no auto-enable, matches
--- 0123/0128/0131) and benchmark tiers (none in v1, spec Requirement 5).
+-- Organization enablement (product decision, 2026-10-06): each deficit is
+-- enabled (is_enabled = true) for every organization that has BOTH legs enabled
+-- for that protocol (organization_metrics.is_enabled true for AGILITY_505_<p>_L
+-- and _R). ON CONFLICT DO NOTHING: an existing row, e.g. an admin's choice, is
+-- never overridden. Organizations without both legs enabled get nothing.
+-- Do not re-run by hand: it would re-create rows an admin deliberately deleted.
+--
+-- Deliberately NOT done: benchmark tiers (none in v1, spec Requirement 5).
 --
 -- Requires migration 0144 (the _M_L/_M_R/_YD_L/_YD_R leg metrics) and the
 -- DASH_10M / DASH_10YD site_metrics rows: this file RAISES EXCEPTION otherwise.
 --
 -- Transaction: supplied by scripts/apply-manual-migrations.js, so no
--- BEGIN/COMMIT here. Idempotent (ON CONFLICT (code) DO UPDATE).
+-- BEGIN/COMMIT here. Idempotent for the runner (ON CONFLICT (code) DO UPDATE,
+-- ON CONFLICT DO NOTHING for organization rows).
 
 -- ============================================================================
 -- Precondition: 0144 must have run, and the 10 m / 10 yd sprint metrics must exist
@@ -96,14 +103,32 @@ ON CONFLICT (code) DO UPDATE SET
   -- re-activate a metric a site admin deactivated (inserts are active).
 
 -- ============================================================================
+-- Organization enablement: both legs enabled for the protocol -> deficit enabled
+-- ============================================================================
+INSERT INTO organization_metrics (organization_id, metric_code, is_enabled)
+SELECT om.organization_id, p.deficit_code, true
+  FROM organization_metrics om
+  JOIN (VALUES
+    ('AGILITY_COD_DEFICIT_M',  'AGILITY_505_M_L',  'AGILITY_505_M_R'),
+    ('AGILITY_COD_DEFICIT_YD', 'AGILITY_505_YD_L', 'AGILITY_505_YD_R')
+  ) AS p(deficit_code, left_code, right_code)
+    ON om.metric_code IN (p.left_code, p.right_code)
+ WHERE om.is_enabled = true
+ GROUP BY om.organization_id, p.deficit_code
+HAVING COUNT(DISTINCT om.metric_code) = 2
+ON CONFLICT (organization_id, metric_code) DO NOTHING;
+
+-- ============================================================================
 -- Summary
 -- ============================================================================
 DO $$
 DECLARE
   v_metrics INTEGER;
+  v_orgs    INTEGER;
 BEGIN
   SELECT COUNT(*) INTO v_metrics FROM site_metrics WHERE code IN ('AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD');
+  SELECT COUNT(*) INTO v_orgs FROM organization_metrics WHERE metric_code IN ('AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD');
 
-  RAISE NOTICE 'Migration 0145 complete: % COD deficit derived site_metrics rows (AGILITY_COD_DEFICIT_M, AGILITY_COD_DEFICIT_YD); not enabled for any organization, no benchmarks seeded.',
-    v_metrics;
+  RAISE NOTICE 'Migration 0145 complete: % COD deficit derived site_metrics rows (AGILITY_COD_DEFICIT_M, AGILITY_COD_DEFICIT_YD); % organization_metrics rows for them (orgs with both legs enabled); no benchmarks seeded.',
+    v_metrics, v_orgs;
 END $$;

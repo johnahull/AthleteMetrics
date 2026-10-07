@@ -359,6 +359,8 @@ async function putRow(tx: Tx, table: string, row: Record<string, unknown>, key: 
  */
 export async function ensurePre0144State(tx: Tx, downSql: string): Promise<void> {
   const [{ n }] = await tx`select count(*)::int as n from site_metrics where code ~ '^AGILITY_505_(M|YD)'`;
+  // 0144_down refuses while 0145 is applied (its formulas reference the legs): remove the deficits first.
+  await tx`delete from site_metrics where code in ('AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD')`;
   if (n > 0) await tx.unsafe(downSql);
 
   // Old rows: upsert to the canonical text so the pre-state is deterministic.

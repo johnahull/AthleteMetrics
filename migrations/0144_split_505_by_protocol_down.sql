@@ -19,17 +19,27 @@
 -- peer_percentile_cache, site_metric_explanations, yard site_benchmarks and
 -- their benchmark_set_items / organization_benchmarks) is deleted explicitly.
 --
+-- ORDER: if 0145 (COD deficit) is applied, run 0145_down BEFORE 0144_down: the
+-- deficit formulas reference the _M / _YD legs. This file refuses (clear
+-- message) while the deficit metrics exist.
+--
+-- Tracking: the runner skips a migration by name once recorded, and a rollback
+-- must not leave the row behind or the next forward deploy would silently skip
+-- 0144. The last statement deletes the '0144_split_505_by_protocol' row from
+-- manual_migrations (a no-op if the row or the table is absent).
+--
 -- Transaction supplied by the runner; no BEGIN/COMMIT. Idempotent: once the
 -- _M/_YD rows are gone every statement matches nothing.
 --
 -- Order:
 --   0 — helper functions
---   1 — guard (yard user data)
+--   1 — guard (0145 still applied; yard user data)
 --   2 — recreate the four old site_metrics rows from the _M rows
 --   3 — delete yard configuration + benchmarks
 --   4 — repoint children _M -> old codes
 --   5 — assertion: nothing references _M / _YD any more
 --   6 — delete the _M and _YD site_metrics rows
+--   7 — delete the manual_migrations tracking row
 
 -- ============================================================================
 -- Block 0 — helpers (pg_temp)
@@ -60,12 +70,19 @@ $fn$;
 -- ============================================================================
 DO $$
 DECLARE
+  v_cod    INTEGER;
   v_meas   INTEGER;
   v_goals  INTEGER;
   v_rb     INTEGER;
   v_cb     INTEGER;
   v_cfg    INTEGER;
 BEGIN
+  SELECT COUNT(*) INTO v_cod FROM site_metrics
+   WHERE code IN ('AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD');
+  IF v_cod > 0 THEN
+    RAISE EXCEPTION 'Migration 0144 down aborted: migration 0145 (COD deficit) is still applied; run 0145_down (0145_add_cod_deficit_metrics_down.sql) first (its formulas reference the _M / _YD legs)';
+  END IF;
+
   SELECT COUNT(*) INTO v_meas FROM measurements
    WHERE metric IN ('AGILITY_505_YD', 'AGILITY_505_YD_L', 'AGILITY_505_YD_R', 'AGILITY_505_YD_LSI')
       OR calculation_metadata::text ~* '\mAGILITY_505_YD(_L|_R|_LSI)?\M';
@@ -264,7 +281,13 @@ DELETE FROM site_metrics
    'AGILITY_505_YD', 'AGILITY_505_YD_L', 'AGILITY_505_YD_R', 'AGILITY_505_YD_LSI'
  );
 
+-- ============================================================================
+-- Block 7 — forget that 0144 was applied (see header, "Tracking")
+-- ============================================================================
 DO $$
 BEGIN
+  IF to_regclass('manual_migrations') IS NOT NULL THEN
+    DELETE FROM manual_migrations WHERE migration_name = '0144_split_505_by_protocol';
+  END IF;
   RAISE NOTICE 'Migration 0144 (down): restored AGILITY_505, _L, _R, _LSI; removed the _M / _YD codes and all yard benchmarks.';
 END $$;

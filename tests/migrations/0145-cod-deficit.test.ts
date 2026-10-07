@@ -104,8 +104,12 @@ describe('Migration 0145: static SQL analysis', () => {
       expect(up).toMatch(/0144/);
     });
 
-    it('does not auto-enable for organizations and seeds no benchmarks', () => {
-      expect(up).not.toMatch(/INSERT\s+INTO\s+organization_metrics/i);
+    it('auto-enables for orgs with both legs enabled (ON CONFLICT DO NOTHING) and seeds no benchmarks', () => {
+      const m = up.match(/INSERT\s+INTO\s+organization_metrics[^;]*;/i);
+      expect(m).not.toBeNull();
+      expect(m![0]).toMatch(/ON\s+CONFLICT\s*\(\s*organization_id\s*,\s*metric_code\s*\)\s*DO\s+NOTHING/i);
+      expect(up.search(/INSERT\s+INTO\s+organization_metrics/i)).toBeGreaterThan(up.search(/INSERT\s+INTO\s+site_metrics/i));
+      expect(fs.readFileSync(UP_SQL_PATH, 'utf-8')).not.toMatch(/no auto-enable|not enabled for any organization/i);
       expect(up).not.toMatch(/site_benchmarks/i);
       expect(up).not.toMatch(/benchmark_set_items/i);
     });
@@ -125,6 +129,26 @@ describe('Migration 0145: static SQL analysis', () => {
       expect(down).not.toMatch(/^\s*(BEGIN|COMMIT|ROLLBACK)\s*;/im);
       expect(down).not.toMatch(/DROP\s+TABLE/i);
       expect(down).not.toMatch(/TRUNCATE/i);
+    });
+
+    it('deletes the deficit organization_metrics rows BEFORE the site_metrics rows', () => {
+      const o = down.search(/DELETE\s+FROM\s+organization_metrics/i);
+      const s = down.search(/DELETE\s+FROM\s+site_metrics/i);
+      expect(o).toBeGreaterThan(-1);
+      expect(s).toBeGreaterThan(o);
+    });
+
+    it('ends by removing its own manual_migrations tracking row', () => {
+      expect(down.trimEnd()).toMatch(
+        /DELETE\s+FROM\s+manual_migrations\s+WHERE\s+migration_name\s*=\s*'0145_add_cod_deficit_metrics'[\s\S]*$/i,
+      );
+      expect(down.search(/DELETE\s+FROM\s+manual_migrations/i)).toBeGreaterThan(
+        down.search(/DELETE\s+FROM\s+site_metrics/i),
+      );
+    });
+
+    it('header states 0145_down must run BEFORE 0144_down', () => {
+      expect(fs.readFileSync(DOWN_SQL_PATH, 'utf-8')).toMatch(/0145_down[^\n]*BEFORE[^\n]*0144_down/i);
     });
 
     it('deletes calculated deficit measurements BEFORE the site_metrics rows', () => {
@@ -319,18 +343,149 @@ describe.skipIf(!DATABASE_URL)('Migration 0145: behavioral (real DB, rolled back
     });
   }, TEST_TIMEOUT);
 
-  it('does not auto-enable orgs and seeds no benchmarks', async () => {
+  it('seeds no benchmarks and, with no organizations, enables nothing', async () => {
     await inTx(async (tx) => {
       await to0144(tx);
-      const [{ om }] = await tx`select count(*)::int as om from organization_metrics`;
       const [{ sb }] = await tx`select count(*)::int as sb from site_benchmarks`;
       await tx.unsafe(upSql);
-      const [{ om2 }] = await tx`select count(*)::int as om2 from organization_metrics`;
       const [{ sb2 }] = await tx`select count(*)::int as sb2 from site_benchmarks`;
-      expect(om2).toBe(om);
       expect(sb2).toBe(sb);
       const [{ n }] = await tx`select count(*)::int as n from site_benchmarks where metric_code like 'AGILITY_COD_DEFICIT%'`;
       expect(n).toBe(0);
+      const [{ o }] = await tx`select count(*)::int as o from organization_metrics where metric_code like 'AGILITY_COD_DEFICIT%'`;
+      expect(o).toBe(0);
+    });
+  }, TEST_TIMEOUT);
+
+  /** Seed orgs + old-code organization_metrics rows, then apply the exact 0144 up file. */
+  async function to0144WithOrgs(tx: Tx, orgs: string[], rows: Array<[string, string, boolean]>) {
+    await toPre0144(tx);
+    for (const o of orgs) await tx`insert into organizations (id, name) values (${o}, ${o})`;
+    for (const [org, code, enabled] of rows) {
+      await tx`insert into organization_metrics (organization_id, metric_code, is_enabled) values (${org}, ${code}, ${enabled})`;
+    }
+    await tx.unsafe(up0144);
+  }
+
+  async function deficitOrgRows(tx: Tx, orgs: string[]) {
+    return (await tx`select organization_id, metric_code, is_enabled from organization_metrics
+                      where metric_code like 'AGILITY_COD_DEFICIT%' and organization_id = any(${orgs})
+                      order by organization_id, metric_code`) as Record<string, any>[];
+  }
+
+  it('production-shaped: 6 old rows (505 x1, L x2, R x2, LSI x1) across 2 of 3 orgs -> 6 twins + 4 deficit rows', async () => {
+    await inTx(async (tx) => {
+      const orgs = ['fx145-pA', 'fx145-pB', 'fx145-pC'];
+      await to0144WithOrgs(tx, orgs, [
+        ['fx145-pA', 'AGILITY_505', true],
+        ['fx145-pA', 'AGILITY_505_L', true],
+        ['fx145-pA', 'AGILITY_505_R', true],
+        ['fx145-pA', 'AGILITY_505_LSI', true],
+        ['fx145-pB', 'AGILITY_505_L', true],
+        ['fx145-pB', 'AGILITY_505_R', true],
+      ]);
+      const [{ n }] = await tx`select count(*)::int as n from organization_metrics where organization_id = any(${orgs}) and metric_code ~ '^AGILITY_505_YD'`;
+      expect(n).toBe(6);
+      const [{ nm }] = await tx`select count(*)::int as nm from organization_metrics where organization_id = any(${orgs}) and metric_code ~ '^AGILITY_505_M'`;
+      expect(nm).toBe(6);
+      await tx.unsafe(upSql);
+      expect(await deficitOrgRows(tx, orgs)).toEqual([
+        { organization_id: 'fx145-pA', metric_code: 'AGILITY_COD_DEFICIT_M', is_enabled: true },
+        { organization_id: 'fx145-pA', metric_code: 'AGILITY_COD_DEFICIT_YD', is_enabled: true },
+        { organization_id: 'fx145-pB', metric_code: 'AGILITY_COD_DEFICIT_M', is_enabled: true },
+        { organization_id: 'fx145-pB', metric_code: 'AGILITY_COD_DEFICIT_YD', is_enabled: true },
+      ]);
+    });
+  }, TEST_TIMEOUT);
+
+  it('enables a deficit only for orgs with BOTH legs enabled for that protocol', async () => {
+    await inTx(async (tx) => {
+      const orgs = ['fx145-eBoth', 'fx145-eOneOff', 'fx145-eOneOnly', 'fx145-eYdOff', 'fx145-eNone'];
+      await to0144WithOrgs(tx, orgs, [
+        ['fx145-eBoth', 'AGILITY_505_L', true],
+        ['fx145-eBoth', 'AGILITY_505_R', true],
+        ['fx145-eOneOff', 'AGILITY_505_L', true],
+        ['fx145-eOneOff', 'AGILITY_505_R', false],
+        ['fx145-eOneOnly', 'AGILITY_505_L', true],
+        ['fx145-eYdOff', 'AGILITY_505_L', true],
+        ['fx145-eYdOff', 'AGILITY_505_R', true],
+      ]);
+      // admin disables one yard leg after 0144 and before 0145
+      await tx`update organization_metrics set is_enabled = false
+                where organization_id = 'fx145-eYdOff' and metric_code = 'AGILITY_505_YD_R'`;
+      await tx.unsafe(upSql);
+      expect(await deficitOrgRows(tx, orgs)).toEqual([
+        { organization_id: 'fx145-eBoth', metric_code: 'AGILITY_COD_DEFICIT_M', is_enabled: true },
+        { organization_id: 'fx145-eBoth', metric_code: 'AGILITY_COD_DEFICIT_YD', is_enabled: true },
+        { organization_id: 'fx145-eYdOff', metric_code: 'AGILITY_COD_DEFICIT_M', is_enabled: true },
+      ]);
+    });
+  }, TEST_TIMEOUT);
+
+  it('re-run does not change an admin-modified deficit org row', async () => {
+    await inTx(async (tx) => {
+      const orgs = ['fx145-rA'];
+      await to0144WithOrgs(tx, orgs, [
+        ['fx145-rA', 'AGILITY_505_L', true],
+        ['fx145-rA', 'AGILITY_505_R', true],
+      ]);
+      await tx.unsafe(upSql);
+      await tx`update organization_metrics set is_enabled = false
+                where organization_id = 'fx145-rA' and metric_code = 'AGILITY_COD_DEFICIT_M'`;
+      const before = await deficitOrgRows(tx, orgs);
+      await tx.unsafe(upSql);
+      expect(await deficitOrgRows(tx, orgs)).toEqual(before);
+      expect(before).toHaveLength(2);
+      expect(before[0]).toMatchObject({ metric_code: 'AGILITY_COD_DEFICIT_M', is_enabled: false });
+    });
+  }, TEST_TIMEOUT);
+
+  it('down deletes the deficit org rows (and only those) and removes the manual_migrations tracking row', async () => {
+    await inTx(async (tx) => {
+      const orgs = ['fx145-dA'];
+      await to0144WithOrgs(tx, orgs, [
+        ['fx145-dA', 'AGILITY_505_L', true],
+        ['fx145-dA', 'AGILITY_505_R', true],
+      ]);
+      const orgRowsBefore = await tx`select metric_code from organization_metrics where organization_id = 'fx145-dA' order by metric_code`;
+      await tx.unsafe(upSql);
+      await tx.unsafe(`CREATE TABLE IF NOT EXISTS manual_migrations (
+        id SERIAL PRIMARY KEY, migration_name TEXT NOT NULL UNIQUE, applied_at TIMESTAMP DEFAULT NOW() NOT NULL)`);
+      await tx`insert into manual_migrations (migration_name) values ('0145_add_cod_deficit_metrics') on conflict do nothing`;
+      await tx`insert into manual_migrations (migration_name) values ('0144_split_505_by_protocol') on conflict do nothing`;
+      expect(await deficitOrgRows(tx, orgs)).toHaveLength(2);
+
+      await tx.unsafe(downSql);
+
+      expect(await deficitOrgRows(tx, orgs)).toHaveLength(0);
+      expect(await deficitRows(tx)).toHaveLength(0);
+      expect(await tx`select metric_code from organization_metrics where organization_id = 'fx145-dA' order by metric_code`).toEqual(orgRowsBefore);
+      const t = await tx`select migration_name from manual_migrations where migration_name in ('0145_add_cod_deficit_metrics', '0144_split_505_by_protocol')`;
+      expect(t.map((r: { migration_name: string }) => r.migration_name)).toEqual(['0144_split_505_by_protocol']);
+      // absent row: still fine
+      await tx.unsafe(downSql);
+    });
+  }, TEST_TIMEOUT);
+
+  it('full rollback 0145_down then 0144_down returns the pre-0144 org state and clears both tracking rows', async () => {
+    await inTx(async (tx) => {
+      const orgs = ['fx145-fA', 'fx145-fB'];
+      await toPre0144(tx);
+      for (const o of orgs) await tx`insert into organizations (id, name) values (${o}, ${o})`;
+      await tx`insert into organization_metrics (organization_id, metric_code, is_enabled) values
+        ('fx145-fA', 'AGILITY_505_L', true), ('fx145-fA', 'AGILITY_505_R', true), ('fx145-fB', 'AGILITY_505', false)`;
+      const pre = await tx`select organization_id, metric_code, is_enabled from organization_metrics where organization_id = any(${orgs}) order by organization_id, metric_code`;
+      await tx.unsafe(up0144);
+      await tx.unsafe(upSql);
+      await tx.unsafe(`CREATE TABLE IF NOT EXISTS manual_migrations (
+        id SERIAL PRIMARY KEY, migration_name TEXT NOT NULL UNIQUE, applied_at TIMESTAMP DEFAULT NOW() NOT NULL)`);
+      await tx`insert into manual_migrations (migration_name) values ('0144_split_505_by_protocol'), ('0145_add_cod_deficit_metrics') on conflict do nothing`;
+      await tx.unsafe(downSql);
+      await tx.unsafe(down0144);
+      const post = await tx`select organization_id, metric_code, is_enabled from organization_metrics where organization_id = any(${orgs}) order by organization_id, metric_code`;
+      expect(post).toEqual(pre);
+      const t = await tx`select migration_name from manual_migrations where migration_name in ('0144_split_505_by_protocol', '0145_add_cod_deficit_metrics')`;
+      expect(t).toHaveLength(0);
     });
   }, TEST_TIMEOUT);
 

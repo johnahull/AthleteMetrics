@@ -1,8 +1,16 @@
 -- Down Migration 0145: remove the COD deficit derived metrics
 --
--- Order: (1) guard, (2) delete CALCULATED deficit measurements (derived rows
--- can be regenerated, so removing them loses nothing), (3) delete the two
--- site_metrics rows (child rows such as organization_metrics cascade by FK).
+-- ORDER: run this file (0145_down) BEFORE 0144_down: the deficit formulas
+-- reference the _M / _YD leg metrics that 0144_down removes.
+--
+-- Steps: (1) guard, (2) delete CALCULATED deficit measurements (derived rows
+-- can be regenerated, so removing them loses nothing), (3) delete the deficit
+-- organization_metrics rows that 0145 created, (4) delete the two site_metrics
+-- rows, (5) delete this migration's manual_migrations tracking row.
+--
+-- Tracking: the runner skips a migration by name once recorded, and a rollback
+-- must not leave the row behind or the next forward deploy would silently skip
+-- 0145. Step 5 is a no-op if the row or the table is absent.
 --
 -- Guard: measurements.metric has no FK, so a MANUALLY entered (non-calculated)
 -- deficit measurement would be silently orphaned by deleting its metric. This
@@ -52,10 +60,16 @@ DELETE FROM measurements
  WHERE metric IN ('AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD')
    AND is_calculated = true;
 
+DELETE FROM organization_metrics
+ WHERE metric_code IN ('AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD');
+
 DELETE FROM site_metrics
  WHERE code IN ('AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD');
 
 DO $$
 BEGIN
+  IF to_regclass('manual_migrations') IS NOT NULL THEN
+    DELETE FROM manual_migrations WHERE migration_name = '0145_add_cod_deficit_metrics';
+  END IF;
   RAISE NOTICE 'Migration 0145 down complete: AGILITY_COD_DEFICIT_M and AGILITY_COD_DEFICIT_YD removed (calculated measurements deleted).';
 END $$;
