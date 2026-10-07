@@ -20,14 +20,29 @@ const isBlank = (v: FlyInValue): v is null | undefined => v === null || v === un
 /** Numeric comparison: exports write '20.000000', and 7.5 must not equal 7. */
 const sameDistance = (a: FlyInValue, b: FlyInValue): boolean => {
   if (isBlank(a) || isBlank(b)) return isBlank(a) && isBlank(b);
-  return parseFloat(String(a)) === parseFloat(String(b));
+  return toNumber(a) === toNumber(b);
 };
+
+/** Strict numeric parse: '20abc' and '' are NaN, not 20 and 0. */
+const toNumber = (v: FlyInValue): number => (typeof v === 'number' ? v : Number(String(v).trim()));
+
+/**
+ * Route input (CSV cell or JSON body value) -> value for the checker and storage.
+ * Blank is "not supplied"; numeric text keeps its fraction (20.4 is not 20).
+ * Garbage becomes NaN on a fly code (so the checker rejects it) and is dropped otherwise.
+ */
+export function parseFlyInInput(metric: string, raw: FlyInValue): number | undefined {
+  if (isBlank(raw) || String(raw).trim() === '') return undefined;
+  const n = toNumber(raw);
+  if (Number.isFinite(n)) return n;
+  return FLY10_RUN_IN_YD[metric] !== undefined ? NaN : undefined;
+}
 
 /** Null/undefined/blank is accepted; anything else must equal the code's run-in. */
 export function assertFlyInDistanceMatches(metric: string, flyInDistance: FlyInValue): void {
   const expected = FLY10_RUN_IN_YD[metric];
   if (expected === undefined || isBlank(flyInDistance)) return;
-  if (parseFloat(String(flyInDistance)) !== expected) {
+  if (toNumber(flyInDistance) !== expected) {
     throw new MeasurementValueValidationError(
       `Fly-in distance must be ${expected} yd for ${metric} (or left blank); the metric sets the run-in`,
       'flyInDistance',

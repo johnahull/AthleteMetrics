@@ -3,6 +3,7 @@ import {
   FLY10_RUN_IN_YD,
   assertFlyInDistanceMatches,
   assertFlyInDistanceOnUpdate,
+  parseFlyInInput,
 } from '../fly-run-in';
 import { MeasurementValueValidationError } from '../measurement-value-validation';
 
@@ -52,6 +53,10 @@ describe('assertFlyInDistanceMatches', () => {
     expect(() => assertFlyInDistanceMatches('FLY10_TIME', 'abc')).toThrow(MeasurementValueValidationError);
   });
 
+  it.each(['20abc', '20.4', NaN, Infinity, '1e1x', ' x '])('rejects garbage/non-finite %s on a fly code', (v) => {
+    expect(() => assertFlyInDistanceMatches('FLY10_TIME', v as any)).toThrow(MeasurementValueValidationError);
+  });
+
   it('never checks non-fly codes, including FLY10M_TIME', () => {
     expect(() => assertFlyInDistanceMatches('FLY10M_TIME', 10)).not.toThrow();
     expect(() => assertFlyInDistanceMatches('VERTICAL_JUMP', 99)).not.toThrow();
@@ -89,5 +94,29 @@ describe('assertFlyInDistanceOnUpdate', () => {
 
   it('does not reject an unchanged metric sent alongside an unchanged legacy value', () => {
     expect(() => assertFlyInDistanceOnUpdate(legacy, { metric: 'FLY10_TIME', flyInDistance: '10' })).not.toThrow();
+  });
+});
+
+describe('parseFlyInInput (route input -> value for the checker)', () => {
+  it.each(['', '   ', null, undefined])('treats blank %j as not supplied', (v) => {
+    expect(parseFlyInInput('FLY10_TIME', v as any)).toBeUndefined();
+  });
+
+  it('parses numbers and numeric strings without truncating', () => {
+    expect(parseFlyInInput('FLY10_TIME', '20')).toBe(20);
+    expect(parseFlyInInput('FLY10_TIME', 20)).toBe(20);
+    expect(parseFlyInInput('FLY10_TIME', '20.4')).toBe(20.4);
+  });
+
+  it('yields NaN for garbage on a fly code so the checker rejects it', () => {
+    const v = parseFlyInInput('FLY10_TIME', '20abc');
+    expect(Number.isNaN(v)).toBe(true);
+    expect(() => assertFlyInDistanceMatches('FLY10_TIME', v)).toThrow(MeasurementValueValidationError);
+    expect(() => assertFlyInDistanceMatches('FLY10_TIME', parseFlyInInput('FLY10_TIME', '20.4'))).toThrow();
+  });
+
+  it('drops garbage on non-fly codes (never stores NaN)', () => {
+    expect(parseFlyInInput('VERTICAL_JUMP', '20abc')).toBeUndefined();
+    expect(parseFlyInInput('FLY10M_TIME', 'x')).toBeUndefined();
   });
 });

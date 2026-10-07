@@ -5,6 +5,7 @@
  * TDD Phase 6.2: Routes to expose EventMeasurementsService
  */
 
+import { parseFlyInInput } from "@shared/fly-run-in";
 import type { Express, Request, Response } from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { z } from "zod";
@@ -279,7 +280,7 @@ export function registerEventMeasurementsRoutes(app: Express) {
             notes,
             mediaUrl: mediaUrl.value,
             auxiliaryValue: auxiliaryValue === undefined || auxiliaryValue === null ? undefined : Number(auxiliaryValue),
-            flyInDistance: flyInDistance === undefined || flyInDistance === null ? undefined : Number(flyInDistance),
+            flyInDistance: parseFlyInInput(metric, flyInDistance),
           },
           user.id,
           role
@@ -354,7 +355,7 @@ export function registerEventMeasurementsRoutes(app: Express) {
             notes: m.notes,
             mediaUrl: mediaUrls[index],
             auxiliaryValue: m.auxiliaryValue === undefined || m.auxiliaryValue === null ? undefined : Number(m.auxiliaryValue),
-            flyInDistance: m.flyInDistance === undefined || m.flyInDistance === null ? undefined : Number(m.flyInDistance),
+            flyInDistance: parseFlyInInput(m.metric, m.flyInDistance),
           })),
           user.id,
           role
