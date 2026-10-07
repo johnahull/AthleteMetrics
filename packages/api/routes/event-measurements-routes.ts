@@ -16,7 +16,11 @@ import {
   EventMeasurementInputError,
   MovementQualitySaveError,
 } from "../services/event-measurements-service";
-import { MeasurementAccessDeniedError } from "../services/measurement-service";
+import {
+  MeasurementAccessDeniedError,
+  MediaUrlPermissionError,
+  MovementQualityPermissionError,
+} from "../services/measurement-service";
 import { PairedInputValidationError } from "../services/paired-input-compute";
 import { requireAuth } from "../middleware";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
@@ -99,7 +103,7 @@ async function getEventManagerRole(user: SessionUser, eventId: string): Promise<
 }
 
 /** Map service errors to HTTP statuses by type; unexpected errors never leak their message. */
-function sendEventMeasurementError(res: Response, error: unknown) {
+export function sendEventMeasurementError(res: Response, error: unknown) {
   if (error instanceof MovementQualitySaveError) {
     return res.status(400).json({ error: error.message, errors: error.errors });
   }
@@ -111,6 +115,10 @@ function sendEventMeasurementError(res: Response, error: unknown) {
   }
   if (error instanceof MeasurementAccessDeniedError) {
     return res.status(403).json({ error: "Access denied" });
+  }
+  // Safeguard: managers pass the route gate, but a coach-only check failing must stay a 403
+  if (error instanceof MovementQualityPermissionError || error instanceof MediaUrlPermissionError) {
+    return res.status(403).json({ error: error.message });
   }
   if (error instanceof EventNotFoundError || error instanceof EventMeasurementNotFoundError) {
     return res.status(404).json({ error: error.message });
