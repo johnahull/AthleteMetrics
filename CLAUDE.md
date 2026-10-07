@@ -281,7 +281,7 @@ This project uses a **dual migration system**:
    - Applied using scripts/apply-manual-migrations.js
    - Tracked in `manual_migrations` table
 
-**Why two systems?** Migrations 0014 onward were created without drizzle snapshot files and cannot be applied by drizzle's migrate() function. See `docs/MIGRATION_SYSTEM_REMEDIATION.md` for full details.
+**Why two systems?** Migrations 0014 onward were created without drizzle snapshot files and cannot be applied by drizzle's migrate() function. See `docs/MIGRATION_SYSTEM_REMEDIATION.md` for full details (that document predates the later migrations and still describes the manual range as 0014-0021; the same manual system now applies to every migration from 0014 on).
 
 **For new migrations**: Always use drizzle-kit to generate migrations with proper snapshots:
 ```bash
