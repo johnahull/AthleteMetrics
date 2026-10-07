@@ -37,14 +37,22 @@ set -e
 #   Revisit when jsdom widens its undici range or isomorphic-dompurify ships a fixed jsdom.
 # - GHSA-vfj7-8cjw-p6xm (braces stack exhaustion DoS on deeply nested brace patterns)
 #   Affects every published braces release (<=3.0.3, and 3.0.3 is the latest), so no
-#   patched version exists. braces reaches this project ONLY at build time through
-#   tailwindcss@3 -> (chokidar, fast-glob, micromatch) -> braces, where the glob patterns
-#   are the static `content` globs in packages/web/tailwind.config.ts, never user or
-#   network input; braces is not in the runtime/production dependency tree.
+#   patched version exists. braces is never loaded at runtime: it is used only at build
+#   time, through tailwindcss@3 -> (chokidar, fast-glob, micromatch) -> braces, where the
+#   glob patterns are the static `content` globs in packages/web/tailwind.config.ts, never
+#   user or network input. tailwindcss and its tailwindcss-animate plugin are
+#   devDependencies, so package-lock.json marks this chain dev-only (`npm ls braces`).
 #   The only clean way off it is migrating tailwindcss 3 -> 4 (drops these deps), a
 #   separate UI-affecting migration (config/@tailwind directives rewrite) deferred.
 #   Affected (transitively): braces, micromatch, chokidar, fast-glob, tailwindcss.
 #   Revisit when braces publishes a fix or the project migrates to tailwindcss 4.
+#
+# package.json overrides added for audit fixes (remove when no longer needed):
+# - tinypool: drop once vitest >= 4 (vitest 4 no longer depends on tinypool; 3.x pins ^1).
+# - postcss-selector-parser: remove at the Tailwind 4 migration (issue #523).
+#
+# Each run warns about an EXCLUDED_ADVISORIES ID that matches no current advisory,
+# so stale exclusions are noticed and pruned.
 
 echo "🔍 Running npm security audit..."
 
@@ -104,6 +112,18 @@ if command -v jq &> /dev/null; then
     }
     console.log(n);
   ' 2>/dev/null || echo "0")
+
+  # Warn about excluded advisory IDs that no longer match any reported advisory
+  STALE_EXCLUSIONS=$(EXCLUDED_ADVISORIES="$EXCLUDED_ADVISORIES" node -e '
+    const audit = require("./audit-results.json");
+    const urls = Object.values(audit.vulnerabilities || {})
+      .flatMap(v => (v.via || []).filter(via => typeof via === "object").map(via => via.url || ""));
+    const excluded = (process.env.EXCLUDED_ADVISORIES || "").split(/\s+/).filter(Boolean);
+    console.log(excluded.filter(id => !urls.some(url => url.includes(id))).join(" "));
+  ' 2>/dev/null || echo "")
+  for advisory in $STALE_EXCLUSIONS; do
+    echo "⚠️  Excluded advisory $advisory matched nothing in this audit; remove it from EXCLUDED_ADVISORIES if it is fixed."
+  done
 
   # Adjust high count by excluding false positives (see header for rationale).
   HIGH_COUNT=$((RAW_HIGH - EXCLUDED_VULN_COUNT))

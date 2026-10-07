@@ -279,8 +279,8 @@ export const siteBenchmarks = pgTable("site_benchmarks", {
   benchmarkValue: decimal("benchmark_value", { precision: 10, scale: 3 }),
   comparisonOperator: varchar("comparison_operator", { length: 10 }).default('lte').notNull(), // 'lte', 'gte', 'eq', 'range'
   // Range-based benchmark fields (migration 0076)
-  minValue: decimal("min_value", { precision: 10, scale: 2 }),
-  maxValue: decimal("max_value", { precision: 10, scale: 2 }),
+  minValue: decimal("min_value", { precision: 10, scale: 3 }),
+  maxValue: decimal("max_value", { precision: 10, scale: 3 }),
   // Tier grouping fields (migration 0077)
   tierGroupId: uuid("tier_group_id"),
   tierOrder: integer("tier_order"),
@@ -337,8 +337,8 @@ export const customBenchmarks = pgTable("custom_benchmarks", {
   benchmarkValue: decimal("benchmark_value", { precision: 10, scale: 3 }),
   comparisonOperator: varchar("comparison_operator", { length: 10 }).default('lte').notNull(), // 'lte', 'gte', 'eq', 'range'
   // Range-based benchmark fields (migration 0076)
-  minValue: decimal("min_value", { precision: 10, scale: 2 }),
-  maxValue: decimal("max_value", { precision: 10, scale: 2 }),
+  minValue: decimal("min_value", { precision: 10, scale: 3 }),
+  maxValue: decimal("max_value", { precision: 10, scale: 3 }),
   // Tier grouping fields (migration 0077)
   tierGroupId: uuid("tier_group_id"),
   tierOrder: integer("tier_order"),
