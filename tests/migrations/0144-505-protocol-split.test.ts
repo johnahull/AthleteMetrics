@@ -85,6 +85,8 @@ describe('Migration 0144: static SQL analysis', () => {
       expect(m).not.toBeNull();
       expect(m![0]).toMatch(/status\s*=\s*'pending'/i);
       expect(m![0]).toMatch(/parsed_preview::text/i);
+      // case-insensitive, like Block C's assertions
+      expect(m![0]).toMatch(/parsed_preview::text\s*~\*/i);
       expect(up.indexOf(m![0])).toBeLessThan(up.search(/DELETE\s+FROM\s+site_metrics/i));
     });
 

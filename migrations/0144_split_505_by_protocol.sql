@@ -278,7 +278,7 @@ UPDATE site_metrics
 UPDATE import_batches
    SET status = 'expired'
  WHERE status = 'pending'
-   AND parsed_preview::text ~ '\mAGILITY_505(_L|_R|_LSI)?\M';
+   AND parsed_preview::text ~* '\mAGILITY_505(_L|_R|_LSI)?\M';
 
 -- ============================================================================
 -- Block C — safety assertion: nothing may still reference an old code.
