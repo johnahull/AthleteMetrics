@@ -600,6 +600,14 @@ export function registerImportExportRoutes(app: Express) {
         return res.status(400).json({ message: "Invalid import type. Use 'athletes' or 'measurements'" });
       }
 
+      // SECURITY: Measurement import is limited to coach, org_admin and site_admin (matches /api/import/photo)
+      if (type === 'measurements') {
+        const importUser = req.session.user;
+        if (!isSiteAdmin(importUser) && !['coach', 'org_admin'].includes(importUser?.role ?? '')) {
+          return res.status(403).json({ message: "Athletes cannot import measurement data" });
+        }
+      }
+
       // Parse import options
       let options;
       try {

@@ -355,6 +355,11 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(403).json({ message: "Athletes can only create measurements for themselves" });
       }
 
+      // SECURITY: Writer-role allowlist. parent, guest and any other role cannot create measurements
+      if (!isSiteAdmin(user) && !['athlete', 'coach', 'org_admin'].includes(user.role)) {
+        return res.status(403).json({ message: "Your role cannot create measurements" });
+      }
+
       // SECURITY: Validate teamId exists (applies to all users)
       if (validatedData.teamId) {
         const [team] = await db
