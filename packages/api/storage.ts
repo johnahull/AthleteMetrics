@@ -3887,6 +3887,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateMeasurement(id: string, measurement: Partial<InsertMeasurement>): Promise<Measurement> {
+    // Trust boundary: this method performs NO role check (no Movement Quality
+    // or clip guard) and has no callers today. Measurement edits go through
+    // MeasurementService.updateMeasurement, which enforces assertCanEnterMetric
+    // and assertCanAttachClip itself; any new caller must enforce them first.
     const updateData: any = {};
     if (measurement.userId) updateData.userId = measurement.userId;
     // submittedBy cannot be updated after creation
