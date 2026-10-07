@@ -414,12 +414,15 @@ export class DerivedMetricCalculator {
    * Concurrency: takes a transaction-scoped advisory lock on
    * (athlete, derived metric, date) so concurrent calculations serialize and the
    * second one updates the row the first one inserted instead of duplicating it.
+   * Duplicate calculated rows left over from before the lock existed are collapsed
+   * here: the most recently created row (ties broken by id) is updated and the
+   * others are deleted, so one calculated row remains per (athlete, metric, date).
    *
    * @param contextMeasurement - Source measurement whose team/org/season context a
    *   newly created calculated row inherits; defaults to the most recently created
    *   source measurement used by the formula.
-   * @param deleteWhenUncomputable - Recalculation mode (recalculateForAthlete): an
-   *   existing calculated row is deleted when a direct measurement exists for the
+   * @param deleteWhenUncomputable - Recalculation mode (recalculateForAthlete): all
+   *   existing calculated rows are deleted when a direct measurement exists for the
    *   date, its sources are missing, or the formula result is invalid.
    * @param allowCreate - When false, only an existing calculated row is updated.
    * @returns the created/updated calculated measurement, or null when it cannot be
@@ -446,7 +449,9 @@ export class DerivedMetricCalculator {
       sql`SELECT pg_advisory_xact_lock(hashtextextended(${`derived:${userId}:${derivedMetric.code}:${date}`}, 0))`
     );
 
-    // Check if calculated measurement already exists (update scenario)
+    // Check if calculated measurement already exists (update scenario). Newest first:
+    // duplicates can predate the advisory lock, and the update below keeps the most
+    // recently created row (ties broken by id) and deletes the rest.
     const existingCalculated = await tx
       .select()
       .from(measurements)
@@ -457,7 +462,8 @@ export class DerivedMetricCalculator {
           eq(measurements.date, date),
           eq(measurements.isCalculated, true)
         )
-      );
+      )
+      .orderBy(desc(measurements.createdAt), desc(measurements.id));
 
     if (!allowCreate && existingCalculated.length === 0) {
       return null;
@@ -586,7 +592,13 @@ export class DerivedMetricCalculator {
     const context = isLatestEvent ? newestSource : contextMeasurement ?? newestSource;
 
     if (existingCalculated.length > 0) {
-      // Update existing calculated measurement
+      // Update the survivor (newest calculated row) and delete any duplicates
+      const [survivor, ...duplicates] = existingCalculated;
+      if (duplicates.length > 0) {
+        await tx.delete(measurements).where(
+          inArray(measurements.id, duplicates.map(m => m.id))
+        );
+      }
       const [updated] = await tx
         .update(measurements)
         .set({
@@ -606,7 +618,7 @@ export class DerivedMetricCalculator {
               }
             : {}),
         })
-        .where(eq(measurements.id, existingCalculated[0].id))
+        .where(eq(measurements.id, survivor.id))
         .returning();
 
       return updated;
@@ -990,6 +1002,12 @@ export class DerivedMetricCalculator {
           eq(measurements.userId, userId),
           inArray(measurements.metric, codes),
           eq(measurements.date, targetDate),
+          // Intentional: only verified scores count toward a total. Failure mode: a fully
+          // entered set that contains an unverified score yields NO total, silently (the
+          // incomplete-group rule above applies, and an existing total is removed). In
+          // practice MQ scores are always verified: coach/org_admin/site_admin writes are
+          // auto-verified and athletes cannot enter MQ scores. A direct DB write, backfill
+          // or new write path that stores unverified MQ scores would hit this.
           eq(measurements.isVerified, true)
         )
       );

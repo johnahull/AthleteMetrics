@@ -404,6 +404,91 @@ describe('MQI derived totals (calculator behavior)', () => {
     }
   });
 
+  // Duplicate calculated rows for one (athlete, metric, date) can exist from before the
+  // advisory lock was added. Recalculation must collapse them to one row.
+  const insertDuplicateTotals = async (entries: Array<{ value: string; createdAt: Date }>) => {
+    const rows = [];
+    for (const { value, createdAt } of entries) {
+      const [row] = await db
+        .insert(measurements)
+        .values({
+          userId: athleteId,
+          submittedBy: coachId,
+          metric: 'MQI_TOTAL',
+          value,
+          units: 'score',
+          date: DATE,
+          age: 18,
+          isVerified: true,
+          organizationId: orgId,
+          isCalculated: true,
+          createdAt,
+        } as any)
+        .returning();
+      rows.push(row);
+    }
+    return rows;
+  };
+
+  it('(d) recalculation collapses duplicate calculated totals to one updated row (newest survives)', async () => {
+    const rows = await scoreAllPatterns(2); // calculated total 16
+    const [, newest] = await insertDuplicateTotals([
+      { value: '99', createdAt: new Date('2020-01-01T00:00:00Z') },
+      { value: '50', createdAt: new Date(Date.now() + 60 * 60 * 1000) },
+    ]);
+    expect(await totalsFor('MQI_TOTAL')).toHaveLength(3);
+
+    await service.updateMeasurement(rows[0].id, { value: 3 }, undefined, 'coach');
+
+    const totals = await totalsFor('MQI_TOTAL');
+    expect(totals).toHaveLength(1);
+    expect(totals[0].isCalculated).toBe(true);
+    expect(Number(totals[0].value)).toBe(17);
+    expect(totals[0].id).toBe(newest.id);
+  });
+
+  it('(d) recalculation deletes ALL duplicate calculated totals when the set becomes incomplete', async () => {
+    const rows = await scoreAllPatterns(2);
+    await insertDuplicateTotals([
+      { value: '99', createdAt: new Date('2020-01-01T00:00:00Z') },
+      { value: '50', createdAt: new Date('2021-01-01T00:00:00Z') },
+    ]);
+    expect(await totalsFor('MQI_TOTAL')).toHaveLength(3);
+
+    await service.deleteMeasurement(rows[3].id);
+
+    expect(await totalsFor('MQI_TOTAL')).toHaveLength(0);
+  });
+
+  it('(d) a direct total removes ALL duplicate calculated totals on recalculation', async () => {
+    const rows = await scoreAllPatterns(2);
+    await insertDuplicateTotals([
+      { value: '99', createdAt: new Date('2020-01-01T00:00:00Z') },
+      { value: '50', createdAt: new Date('2021-01-01T00:00:00Z') },
+    ]);
+    const [direct] = await db
+      .insert(measurements)
+      .values({
+        userId: athleteId,
+        submittedBy: coachId,
+        metric: 'MQI_TOTAL',
+        value: '20',
+        units: 'score',
+        date: DATE,
+        age: 18,
+        isVerified: true,
+        organizationId: orgId,
+      } as any)
+      .returning();
+
+    await service.updateMeasurement(rows[0].id, { value: 3 }, undefined, 'coach');
+
+    const totals = await totalsFor('MQI_TOTAL');
+    expect(totals).toHaveLength(1);
+    expect(totals[0].id).toBe(direct.id);
+    expect(totals[0].isCalculated).toBe(false);
+  });
+
   // AM-FEAT-015 decision 11: with calculationConfig.sourceSelection = 'latest_event' (migration
   // 0148) the totals use the single most recent event that has scores for the athlete that day.
   it('(e) same athlete, two events same day: latest event wins for totals', async () => {
