@@ -3734,8 +3734,18 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    const units = measurement.metric === "FLY10_TIME" || measurement.metric === "T_TEST" || measurement.metric === "DASH_40YD" ? "s" :
-                  measurement.metric === "RSI" ? "ratio" : "in";
+    // Units: caller-supplied (non-empty) > site_metrics.unit (non-empty) > legacy hard-coded mapping.
+    // InsertMeasurement omits `units`, but import callers pass it through.
+    const callerUnits = (measurement as { units?: string | null }).units;
+    let units = callerUnits && callerUnits.trim() !== "" ? callerUnits : "";
+    if (!units) {
+      const siteMetric = await this.getSiteMetric(measurement.metric);
+      units = siteMetric?.unit ?? "";
+    }
+    if (!units) {
+      units = measurement.metric === "FLY10_TIME" || measurement.metric === "T_TEST" || measurement.metric === "DASH_40YD" ? "s" :
+              measurement.metric === "RSI" ? "ratio" : "in";
+    }
 
     // Auto-populate team context if not explicitly provided
     let teamId = measurement.teamId;
