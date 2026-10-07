@@ -154,7 +154,8 @@ describe("Event Measurements Service", () => {
           value: 1.15,
           date: new Date("2025-06-01"),
         },
-        testOrgAdminId
+        testOrgAdminId,
+        "org_admin"
       );
 
       expect(measurement).toBeDefined();
@@ -174,7 +175,8 @@ describe("Event Measurements Service", () => {
           value: 32.5,
           date: new Date("2025-06-01"),
         },
-        testOrgAdminId
+        testOrgAdminId,
+        "org_admin"
       );
 
       expect(measurement.eventDateSnapshot).toBeDefined();
@@ -200,7 +202,8 @@ describe("Event Measurements Service", () => {
             value: 1.15,
             date: new Date("2025-05-01"),
           },
-          testOrgAdminId
+          testOrgAdminId,
+          "org_admin"
         )
       ).rejects.toThrow("frozen");
     });
@@ -215,7 +218,8 @@ describe("Event Measurements Service", () => {
             value: 1.15,
             date: new Date("2025-06-01"),
           },
-          testOrgAdminId
+          testOrgAdminId,
+          "org_admin"
         )
       ).rejects.toThrow("Event not found");
     });
@@ -230,7 +234,8 @@ describe("Event Measurements Service", () => {
           date: new Date("2025-06-01"),
           notes: "Slight hesitation at start",
         },
-        testOrgAdminId
+        testOrgAdminId,
+        "org_admin"
       );
 
       expect(measurement.notes).toBe("Slight hesitation at start");
@@ -245,7 +250,8 @@ describe("Event Measurements Service", () => {
           { userId: testAthleteId, metric: "FLY10_TIME", value: 1.15, date: new Date("2025-06-01") },
           { userId: testAthleteId, metric: "VERTICAL_JUMP", value: 32.5, date: new Date("2025-06-01") },
         ],
-        testOrgAdminId
+        testOrgAdminId,
+        "org_admin"
       );
 
       expect(result.created).toHaveLength(2);
@@ -263,7 +269,8 @@ describe("Event Measurements Service", () => {
           { userId: testAthleteId, metric: "FLY10_TIME", value: 1.15, date: new Date("2025-06-01") },
           { userId: testAthleteId, metric: "VERTICAL_JUMP", value: 30.0, date: new Date("2025-06-01") },
         ],
-        testOrgAdminId
+        testOrgAdminId,
+        "org_admin"
       );
 
       // Both should succeed if metric codes exist
@@ -277,7 +284,8 @@ describe("Event Measurements Service", () => {
           [
             { userId: testAthleteId, metric: "FLY10_TIME", value: 1.15, date: new Date("2025-05-01") },
           ],
-          testOrgAdminId
+          testOrgAdminId,
+          "org_admin"
         )
       ).rejects.toThrow("frozen");
     });
@@ -289,7 +297,8 @@ describe("Event Measurements Service", () => {
           { userId: testAthleteId, metric: "FLY10_TIME", value: 1.10, date: new Date("2025-06-01") },
           { userId: testAthleteId, metric: "VERTICAL_JUMP", value: 33.0, date: new Date("2025-06-01") },
         ],
-        testOrgAdminId
+        testOrgAdminId,
+        "org_admin"
       );
 
       for (const measurement of result.created) {
@@ -306,12 +315,14 @@ describe("Event Measurements Service", () => {
       await eventMeasurementsService.createEventMeasurement(
         testEventId,
         { userId: testAthleteId, metric: "FLY10_TIME", value: 1.15, date: new Date("2025-06-01") },
-        testOrgAdminId
+        testOrgAdminId,
+        "org_admin"
       );
       await eventMeasurementsService.createEventMeasurement(
         testEventId,
         { userId: testAthleteId, metric: "VERTICAL_JUMP", value: 32.0, date: new Date("2025-06-01") },
-        testOrgAdminId
+        testOrgAdminId,
+        "org_admin"
       );
 
       const measurements = await eventMeasurementsService.getEventMeasurements(testEventId);
@@ -325,7 +336,8 @@ describe("Event Measurements Service", () => {
       await eventMeasurementsService.createEventMeasurement(
         testEventId,
         { userId: testAthleteId, metric: "FLY10_TIME", value: 1.15, date: new Date("2025-06-01") },
-        testOrgAdminId
+        testOrgAdminId,
+        "org_admin"
       );
 
       const measurements = await eventMeasurementsService.getEventMeasurements(testEventId, {
@@ -346,7 +358,8 @@ describe("Event Measurements Service", () => {
       await eventMeasurementsService.createEventMeasurement(
         testEventId,
         { userId: testAthleteId, metric: "FLY10_TIME", value: 1.15, date: new Date("2025-06-01") },
-        testOrgAdminId
+        testOrgAdminId,
+        "org_admin"
       );
 
       // Create a different event and measurement
