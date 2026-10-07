@@ -175,13 +175,19 @@ describe('Athletes cannot enter Movement Quality scores (R2)', () => {
       expect(Number(m.value)).toBe(1.52);
     });
 
-    it('batch: rejects every MQ item submitted by an athlete', async () => {
+    // The batch route admits only coaches and admins (canUseBatchEndpoint), so the
+    // service is called directly to prove R2 holds for every other role too.
+    it.each([
+      ['athlete', () => athlete],
+      ['parent', () => parent],
+      ['guest', () => guest],
+    ])('batch: rejects every MQ item submitted by a %s', async (role, who) => {
       const result = await service.createMeasurementsBatch(
         [
           { userId: athlete.id, metric: 'MQ_JUMP', value: 2, date: '2026-03-10' } as any,
           { userId: athlete.id, metric: 'MQ_DECEL', value: 1, date: '2026-03-10' } as any,
         ],
-        { id: athlete.id, role: 'athlete' },
+        { id: who().id, role },
         false
       );
       expect(result.created).toBe(0);
@@ -316,13 +322,23 @@ describe('Athletes cannot enter Movement Quality scores (R2)', () => {
       expect(row.metric).toBe('FLY10_TIME');
     });
 
-    it('POST /api/measurements/batch: athletes are denied', async () => {
+    it('POST /api/measurements/batch: athletes are denied by the batch endpoint gate', async () => {
       const res = await request(app)
         .post('/api/measurements/batch')
         .set('Cookie', athleteCookie)
         .send({ measurements: [{ userId: athlete.id, metric: 'MQ_JUMP', value: 2, date: '2026-03-10' }] });
       expect(res.status).toBe(403);
+      expect(res.body.message).toBe('Athletes cannot use batch measurement entry');
       expect(await athleteRows()).toHaveLength(0);
+    });
+
+    it('POST /api/measurements/batch: a coach batch with MQ scores still succeeds', async () => {
+      const res = await request(app)
+        .post('/api/measurements/batch')
+        .set('Cookie', coachCookie)
+        .send({ measurements: [{ userId: athlete.id, metric: 'MQ_JUMP', value: 2, date: '2026-03-10' }] });
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      expect(await athleteRows('MQ_JUMP')).toHaveLength(1);
     });
 
     it('POST /api/import/measurements: an athlete MQ row is rejected and nothing is written', async () => {
@@ -356,7 +372,9 @@ describe('Athletes cannot enter Movement Quality scores (R2)', () => {
           .post(`/api/events/${eventId}/measurements`)
           .set('Cookie', athleteCookie)
           .send({ userId: athlete.id, metric: 'MQ_JUMP', value: 2, date: '2026-03-10' });
+        // Denied by the event-manager gate (coach/org_admin of the event's org), not a later check
         expect(res.status).toBe(403);
+        expect(res.body).toEqual({ error: 'Access denied' });
         expect(await athleteRows()).toHaveLength(0);
       });
 
@@ -366,6 +384,7 @@ describe('Athletes cannot enter Movement Quality scores (R2)', () => {
           .set('Cookie', athleteCookie)
           .send({ measurements: [{ userId: athlete.id, metric: 'MQ_JUMP', value: 2, date: '2026-03-10' }] });
         expect(res.status).toBe(403);
+        expect(res.body).toEqual({ error: 'Access denied' });
         expect(await athleteRows()).toHaveLength(0);
       });
     });
