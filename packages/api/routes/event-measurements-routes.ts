@@ -14,6 +14,7 @@ import { storage } from "../storage";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { mediaUrlSchema } from "@shared/schema";
 import { MediaUrlPermissionError } from "../services/measurement-service";
+import { clipViewer, omitClipsHiddenFromViewer } from "../utils/measurement-redaction";
 
 /**
  * Validate an optional mediaUrl with the shared validator (https-only, public host, <= 2048).
@@ -121,7 +122,9 @@ export function registerEventMeasurementsRoutes(app: Express) {
           metricCode: req.query.metricCode as string | undefined,
         });
 
-        return res.json(measurements);
+        // Same clip rule as the measurement list (managers and the owner pass the gate above)
+        const viewer = clipViewer(user, isSiteAdmin(user) ? [] : await storage.getUserOrganizations(user.id));
+        return res.json(omitClipsHiddenFromViewer(measurements, viewer));
       } catch (error: any) {
         console.error("Error fetching event measurements:", error);
         return res.status(500).json({ error: error.message });

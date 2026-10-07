@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { omitMediaUrl, omitMediaUrlFromRows, stripMediaUrlDeep } from '../measurement-redaction';
+import { omitMediaUrl, omitMediaUrlFromRows, omitClipsHiddenFromViewer, stripMediaUrlDeep } from '../measurement-redaction';
 
 const LEAK = 'https://leakcheck.example.com/secret-clip-SENTINEL';
 
@@ -29,5 +29,44 @@ describe('measurement-redaction (AM-FEAT-015 Decision 12)', () => {
   it('stripMediaUrlDeep also strips null-prototype objects', () => {
     const bare = Object.assign(Object.create(null), { mediaUrl: LEAK, v: 1 });
     expect(stripMediaUrlDeep({ row: bare })).toEqual({ row: { v: 1 } });
+  });
+
+  describe('omitClipsHiddenFromViewer (clip read visibility)', () => {
+    const row = (userId: string, organizationId: string | null) => ({ id: `${userId}-${organizationId}`, userId, organizationId, mediaUrl: LEAK });
+    const viewer = (roles: Record<string, string>, isSiteAdmin = false) => ({
+      userId: 'me',
+      isSiteAdmin,
+      orgRoles: new Map(Object.entries(roles)),
+    });
+
+    it.each(['coach', 'org_admin'])('keeps clips of the organizations where the viewer is %s', (role) => {
+      const [out] = omitClipsHiddenFromViewer([row('a1', 'orgA')], viewer({ orgA: role }));
+      expect(out.mediaUrl).toBe(LEAK);
+    });
+
+    it.each(['athlete', 'parent', 'guest'])('omits clips of other athletes for a %s', (role) => {
+      const [out] = omitClipsHiddenFromViewer([row('a1', 'orgA')], viewer({ orgA: role }));
+      expect(out).toEqual({ id: 'a1-orgA', userId: 'a1', organizationId: 'orgA' });
+    });
+
+    it("keeps the viewer's own clips in any organization and personal rows", () => {
+      const out = omitClipsHiddenFromViewer([row('me', 'orgA'), row('me', null)], viewer({ orgA: 'athlete' }));
+      expect(out.map((r) => r.mediaUrl)).toEqual([LEAK, LEAK]);
+    });
+
+    it('a coach role in another organization does not reveal clips', () => {
+      const [out] = omitClipsHiddenFromViewer([row('a1', 'orgA')], viewer({ orgA: 'athlete', orgB: 'coach' }));
+      expect(out).not.toHaveProperty('mediaUrl');
+    });
+
+    it("omits another athlete's personal-row clip for a non-admin", () => {
+      const [out] = omitClipsHiddenFromViewer([row('a1', null)], viewer({ orgA: 'coach' }));
+      expect(out).not.toHaveProperty('mediaUrl');
+    });
+
+    it('keeps every clip for a site admin', () => {
+      const out = omitClipsHiddenFromViewer([row('a1', 'orgA'), row('a2', null)], viewer({}, true));
+      expect(out.map((r) => r.mediaUrl)).toEqual([LEAK, LEAK]);
+    });
   });
 });

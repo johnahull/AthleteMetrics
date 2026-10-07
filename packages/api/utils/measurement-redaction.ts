@@ -16,6 +16,46 @@ export function omitMediaUrlFromRows<T extends object>(rows: T[]): Array<Omit<T,
   return rows.map(omitMediaUrl);
 }
 
+/** Organization roles that may read clips on other athletes' measurements of that organization */
+const CLIP_READER_ROLES = new Set(["coach", "org_admin"]);
+
+export interface ClipViewer {
+  userId: string;
+  isSiteAdmin: boolean;
+  /** organizationId -> the viewer's membership role in that organization */
+  orgRoles: ReadonlyMap<string, string>;
+}
+
+/** Build a ClipViewer from the session user and their organization memberships (from the database) */
+export function clipViewer(
+  user: { id: string; isSiteAdmin?: boolean },
+  memberships: Array<{ organizationId: string; role: string }>
+): ClipViewer {
+  return {
+    userId: user.id,
+    isSiteAdmin: user.isSiteAdmin === true,
+    orgRoles: new Map(memberships.map((m) => [m.organizationId, m.role])),
+  };
+}
+
+/**
+ * Clip read rule for authenticated organization-scoped views: a row keeps its
+ * mediaUrl only for a site admin, the athlete who owns the row, or a coach /
+ * org admin of the row's organization. Everyone else (a teammate athlete, a
+ * parent, a guest) gets the row without mediaUrl.
+ */
+export function omitClipsHiddenFromViewer<T extends { userId: string; organizationId: string | null }>(
+  rows: T[],
+  viewer: ClipViewer
+): Array<T | Omit<T, "mediaUrl">> {
+  if (viewer.isSiteAdmin) return rows;
+  return rows.map((row) => {
+    const role = row.organizationId ? viewer.orgRoles.get(row.organizationId) : undefined;
+    const visible = row.userId === viewer.userId || (role !== undefined && CLIP_READER_ROLES.has(role));
+    return visible ? row : omitMediaUrl(row);
+  });
+}
+
 /**
  * Recursively remove every `mediaUrl` key from plain objects/arrays, including
  * null-prototype objects. Class instances (Dates etc.) are preserved as-is.
