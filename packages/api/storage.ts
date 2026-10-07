@@ -3734,8 +3734,8 @@ export class DatabaseStorage implements IStorage {
   ): Promise<Measurement> {
     // Trust boundary: this method validates values only and performs NO role
     // check. Callers must enforce who may enter a metric (Movement Quality is
-    // coach/admin-only) before calling: today the only callers are the CSV/OCR/
-    // review-queue import routes, which call assertCanEnterMetric per row (other
+    // coach/admin-only) before calling: today the only callers are the CSV/OCR
+    // import routes, which call assertCanEnterMetric per row (other
     // writes go through MeasurementService, which enforces it itself).
     //
     // Value validation (CSV/OCR imports and other callers write through here

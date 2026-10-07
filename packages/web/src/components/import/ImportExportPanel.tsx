@@ -1084,7 +1084,7 @@ Jordan,Williams,2009-01-10,2009,2027,Male,"jordan.williams@email.com,j.williams@
                         setUpdateExisting(true);
                         setSkipDuplicates(false);
                       } else {
-                        setMeasurementMode('review_low_confidence');
+                        setMeasurementMode('match_only');
                         setTeamHandling('auto_create_confirm');
                       }
                     }}
