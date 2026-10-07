@@ -766,8 +766,6 @@ export class MeasurementService {
     updaterRole?: string,
     options: Pick<MeasurementWriteOptions, 'tx'> = {}
   ): Promise<Measurement> {
-    assertCanAttachClip(updaterRole, measurement.mediaUrl);
-
     // Wrap in transaction to prevent race conditions during concurrent updates
     // Race condition scenario: Two users update same measurement simultaneously
     try {
@@ -790,9 +788,10 @@ export class MeasurementService {
         }
 
         // Both the stored metric and a new one: a non-coach/admin may neither edit
-        // an MQ score nor move a measurement onto an MQ metric.
+        // an MQ score nor move a measurement onto an MQ metric, nor attach a clip.
         assertCanEnterMetric(updaterRole, existing.metric);
         if (measurement.metric) assertCanEnterMetric(updaterRole, measurement.metric);
+        assertCanAttachClip(updaterRole, measurement.mediaUrl);
 
         const updateData: Partial<typeof measurements.$inferInsert> = {};
 
@@ -997,7 +996,8 @@ export class MeasurementService {
         error instanceof PairedInputValidationError ||
         error instanceof MeasurementValueValidationError ||
         error instanceof MeasurementAccessDeniedError ||
-        error instanceof MovementQualityPermissionError
+        error instanceof MovementQualityPermissionError ||
+        error instanceof MediaUrlPermissionError
       ) {
         throw error;
       }
