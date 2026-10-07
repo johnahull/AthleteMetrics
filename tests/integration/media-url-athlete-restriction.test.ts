@@ -6,6 +6,7 @@
  */
 process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret-key-for-integration-tests-only';
+process.env.BYPASS_GENERAL_RATE_LIMIT = 'true'; // a 429 must not mask the 403s asserted here
 
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import { eq, inArray } from 'drizzle-orm';
