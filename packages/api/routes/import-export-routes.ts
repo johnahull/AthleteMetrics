@@ -272,8 +272,8 @@ export function registerImportExportRoutes(app: Express) {
       const measurementMode = options.measurementMode || 'match_only';
       const teamHandling = options.teamHandling || 'auto_create_confirm';
 
-      // AM-FEAT-016: 5-0-5 protocol (meters or yards). Optional here; a 5-0-5 reading
-      // without it is rejected per reading below. A supplied but invalid value is a 400.
+      // AM-FEAT-016: 5-0-5 protocol (meters or yards). Optional unless the photo contains a
+      // 5-0-5 reading (then 422 below, before anything is saved). A supplied but invalid value is a 400.
       const protocol505 = options.protocol505;
       if (protocol505 !== undefined && protocol505 !== 'M' && protocol505 !== 'YD') {
         return res.status(400).json({ message: "Invalid protocol505: must be 'M' or 'YD'" });
@@ -293,6 +293,15 @@ export function registerImportExportRoutes(app: Express) {
 
       // Debug logging removed for production: OCR completed with confidence and extracted measurements
 
+      // All-or-nothing: a 5-0-5 reading needs the protocol. Reject the whole photo BEFORE any
+      // athlete lookup/creation or measurement write, so a retry can never duplicate data.
+      if (!protocol505 && ocrResult.extractedData.some(d => d.metric === OCR_505_NEUTRAL_METRIC)) {
+        return res.status(422).json({
+          message: PROTOCOL_505_REQUIRED_MESSAGE,
+          code: 'PROTOCOL_505_REQUIRED'
+        });
+      }
+
       // Convert extracted data to the same format as CSV import
       const processedData: any[] = [];
       const errors: any[] = [];
@@ -300,8 +309,14 @@ export function registerImportExportRoutes(app: Express) {
       const createdAthletes: any[] = [];
 
       for (let i = 0; i < ocrResult.extractedData.length; i++) {
-        const extracted = ocrResult.extractedData[i];
+        const raw = ocrResult.extractedData[i];
         const rowNum = i + 1;
+        // The protocol is known here (guard above), so the neutral token resolves to a concrete
+        // code and can never reach storage or a response.
+        const resolvedMetric: string | undefined = raw.metric === OCR_505_NEUTRAL_METRIC
+          ? (protocol505 === 'M' ? 'AGILITY_505_M' : 'AGILITY_505_YD')
+          : raw.metric;
+        const extracted = { ...raw, metric: resolvedMetric };
 
         try {
           if (!extracted.firstName || !extracted.lastName || !extracted.metric || !extracted.value) {
@@ -322,22 +337,6 @@ export function registerImportExportRoutes(app: Express) {
               data: extracted
             });
             continue;
-          }
-
-          // The OCR parser is protocol-neutral for the 5-0-5. Resolve it from the user's
-          // choice; without one, reject the reading (never save the neutral token).
-          let resolvedMetric: string = extracted.metric;
-          if (extracted.metric === OCR_505_NEUTRAL_METRIC) {
-            if (!protocol505) {
-              errors.push({
-                row: rowNum,
-                error: PROTOCOL_505_REQUIRED_MESSAGE,
-                code: 'PROTOCOL_505_REQUIRED',
-                data: extracted
-              });
-              continue;
-            }
-            resolvedMetric = protocol505 === 'M' ? 'AGILITY_505_M' : 'AGILITY_505_YD';
           }
 
           // Find or create the athlete

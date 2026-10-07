@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -9,7 +9,7 @@ import { FileUpload } from "./photo-upload/file-upload";
 import { UploadControls } from "./photo-upload/upload-controls";
 import { ProgressIndicator } from "./photo-upload/progress-indicator";
 import { OCRResults } from "./photo-upload/ocr-results";
-import { Protocol505Picker, type Protocol505 } from "./photo-upload/protocol-505-picker";
+import { Protocol505Picker, type Protocol505, type Protocol505PickerHandle } from "./photo-upload/protocol-505-picker";
 import { useAuth } from "@/lib/auth";
 import type {
   MeasurementImportMode,
@@ -47,6 +47,16 @@ interface OCRResult {
   };
 }
 
+const PROTOCOL_505_REQUIRED_CODE = 'PROTOCOL_505_REQUIRED';
+
+/** Server answered 422: the photo has a 5-0-5 reading and no protocol was sent. Nothing was saved. */
+class Protocol505RequiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'Protocol505RequiredError';
+  }
+}
+
 const ALLOWED_FILE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf'];
 const MAX_FILE_SIZE_MB = 10;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
@@ -62,6 +72,9 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
   // 5-0-5 protocol: deliberately no default; only sent after the user chooses.
   const [protocol505, setProtocol505] = useState<Protocol505 | undefined>(undefined);
+
+  const [protocolError, setProtocolError] = useState<string | undefined>(undefined);
+  const pickerRef = useRef<Protocol505PickerHandle>(null);
 
   const { toast } = useToast();
   const { userOrganizations } = useAuth();
@@ -91,6 +104,13 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
         credentials: 'include',
       });
 
+      if (response.status === 422) {
+        const body = await response.json().catch(() => null);
+        if (body?.code === PROTOCOL_505_REQUIRED_CODE) {
+          throw new Protocol505RequiredError(body.message);
+        }
+      }
+
       if (!response.ok) {
         throw new Error(`Upload failed: ${response.statusText}`);
       }
@@ -113,6 +133,10 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
       setOcrResult(data);
       
       if (data.results.successful > 0) {
+        // Measurements were saved: drop the file so the same photo cannot be re-imported by accident.
+        setSelectedFile(null);
+        setPreview(null);
+
         toast({
           title: "Photo Import Successful!",
           description: `Successfully imported ${data.results.successful} measurements with ${Math.round(data.results.ocrConfidence)}% OCR confidence`,
@@ -132,6 +156,13 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
       }
     },
     onError: (error: any) => {
+      if (error instanceof Protocol505RequiredError) {
+        // Nothing was saved, so retrying the same file is safe. No toast: the inline alert is the message.
+        setOcrResult(null);
+        setProtocolError(`${error.message}. Nothing was saved; choose below and upload again.`);
+        setTimeout(() => pickerRef.current?.focus(), 0);
+        return;
+      }
       console.error('Photo upload failed:', error);
       toast({
         title: "Upload Failed",
@@ -164,6 +195,8 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
 
     setSelectedFile(file);
     setOcrResult(null); // Clear previous results
+    setProtocol505(undefined); // The choice belongs to the photo it was made for
+    setProtocolError(undefined);
     
     // Create preview for images
     if (file.type.startsWith('image/')) {
@@ -179,6 +212,7 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
 
   const handleUpload = () => {
     if (!selectedFile) return;
+    setProtocolError(undefined);
     uploadMutation.mutate({ file: selectedFile, protocol505 });
   };
 
@@ -186,6 +220,8 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
     setSelectedFile(null);
     setPreview(null);
     setOcrResult(null);
+    setProtocol505(undefined);
+    setProtocolError(undefined);
   };
 
 
@@ -212,9 +248,14 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
           />
 
           <Protocol505Picker
+            ref={pickerRef}
             value={protocol505}
-            onChange={setProtocol505}
+            onChange={(v) => {
+              setProtocol505(v);
+              setProtocolError(undefined);
+            }}
             disabled={uploadMutation.isPending}
+            error={protocolError}
           />
 
           {/* Import Options */}
@@ -285,12 +326,7 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
       </Card>
 
       {ocrResult && (
-        <OCRResults
-          result={ocrResult}
-          protocol505={protocol505}
-          onRetry={selectedFile ? handleUpload : undefined}
-          isRetrying={uploadMutation.isPending}
-        />
+        <OCRResults result={ocrResult} />
       )}
     </div>
   );

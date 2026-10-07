@@ -1,3 +1,4 @@
+import { forwardRef, useImperativeHandle, useRef } from "react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 
@@ -8,15 +9,31 @@ interface Protocol505PickerProps {
   value: Protocol505 | undefined;
   onChange: (value: Protocol505) => void;
   disabled?: boolean;
+  /** Inline error (server said a 5-0-5 reading needs a choice). Announced and tied to the group. */
+  error?: string;
+}
+
+export interface Protocol505PickerHandle {
+  /** Move focus into the radio group (checked radio, else the first). */
+  focus: () => void;
 }
 
 /**
  * Required, no-default choice of the 5-0-5 protocol (5 m or 5 yd legs).
  * OCR readings of the 5-0-5 are only saved once this is chosen.
  */
-export function Protocol505Picker({ value, onChange, disabled }: Protocol505PickerProps) {
+export const Protocol505Picker = forwardRef<Protocol505PickerHandle, Protocol505PickerProps>(
+function Protocol505Picker({ value, onChange, disabled, error }, ref) {
+  const fieldsetRef = useRef<HTMLFieldSetElement>(null);
+  useImperativeHandle(ref, () => ({
+    focus: () => {
+      const radios = fieldsetRef.current?.querySelectorAll<HTMLElement>('[role="radio"]');
+      const target = fieldsetRef.current?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]') ?? radios?.[0];
+      target?.focus();
+    },
+  }));
   return (
-    <fieldset className="space-y-2" disabled={disabled}>
+    <fieldset ref={fieldsetRef} className="space-y-2" disabled={disabled}>
       <legend id="protocol-505-legend" className="text-sm font-medium">
         5-0-5 protocol <span className="text-destructive" aria-hidden="true">*</span>
       </legend>
@@ -25,6 +42,8 @@ export function Protocol505Picker({ value, onChange, disabled }: Protocol505Pick
         onValueChange={(v) => onChange(v as Protocol505)}
         required
         aria-labelledby="protocol-505-legend"
+        aria-describedby={error ? "protocol-505-error" : undefined}
+        aria-invalid={error ? true : undefined}
         className="flex gap-6"
       >
         <div className="flex items-center gap-2">
@@ -37,8 +56,13 @@ export function Protocol505Picker({ value, onChange, disabled }: Protocol505Pick
         </div>
       </RadioGroup>
       <p className="text-xs text-muted-foreground">
-        Required for 5-0-5 readings: pick the distance used for the test. 5-0-5 times are not saved without it.
+        Needed only if the photo has 5-0-5 readings: pick the distance used for the test. The photo is not imported without it.
       </p>
+      {error && (
+        <p id="protocol-505-error" role="alert" aria-live="assertive" className="text-sm font-medium text-destructive">
+          {error}
+        </p>
+      )}
     </fieldset>
   );
-}
+});

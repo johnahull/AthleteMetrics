@@ -107,16 +107,13 @@ describe('POST /api/import/photo 5-0-5 protocol', () => {
     try { await storage.deleteOrganization(org.id); } catch { /* ignore */ }
   });
 
-  it('without protocol505: 200, 5-0-5 is in errors[], not saved, nothing written', async () => {
+  it('without protocol505: 422 PROTOCOL_505_REQUIRED and nothing is written', async () => {
     mockOcr([{ metric: NEUTRAL, value: '2.45', rawText: 'Ocrfive 5-0-5 2.45' }]);
     const spy = vi.spyOn(storage, 'createMeasurement');
 
-    const res = await upload().expect(200);
+    const res = await upload().expect(422);
 
-    expect(res.body.results.successful).toBe(0);
-    expect(res.body.results.processedData).toEqual([]);
-    expect(res.body.results.errors).toHaveLength(1);
-    expect(res.body.results.errors[0].error).toBe(PROTOCOL_MSG);
+    expect(res.body).toEqual({ message: PROTOCOL_MSG, code: 'PROTOCOL_505_REQUIRED' });
     expect(spy).not.toHaveBeenCalled();
     expect(await savedMetrics()).toEqual([]);
   });
@@ -151,30 +148,82 @@ describe('POST /api/import/photo 5-0-5 protocol', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('a mixed upload without protocol saves the other reading and rejects only the 5-0-5', async () => {
+  it('a mixed upload (5-0-5 + vertical jump) without protocol is all-or-nothing: 422, zero writes', async () => {
     mockOcr([
       { metric: 'VERTICAL_JUMP', value: '30.5', rawText: 'Ocrfive vertical 30.5 in' },
       { metric: NEUTRAL, value: '2.45', rawText: 'Ocrfive 5-0-5 2.45' },
     ]);
     const spy = vi.spyOn(storage, 'createMeasurement');
+    const lookup = vi.spyOn(storage, 'getAthletes');
+    const before = await savedMetrics();
+
+    const res = await upload().expect(422);
+
+    expect(res.body.code).toBe('PROTOCOL_505_REQUIRED');
+    expect(spy).not.toHaveBeenCalled();
+    expect(lookup).not.toHaveBeenCalled();
+    expect(await savedMetrics()).toEqual(before);
+  });
+
+  it('create_athletes with an unknown athlete and no protocol creates no user', async () => {
+    const ghostFirst = 'Ghostfive';
+    const ghostLast = `Nobody${ts}`;
+    vi.spyOn(ocrService, 'extractTextFromImage').mockResolvedValue({
+      text: 'mock',
+      confidence: 90,
+      extractedData: [
+        { firstName: ghostFirst, lastName: ghostLast, confidence: 75, metric: 'VERTICAL_JUMP', value: '30.5', rawText: 'g vj' },
+        { firstName: ghostFirst, lastName: ghostLast, confidence: 75, metric: NEUTRAL, value: '2.45', rawText: 'g 5-0-5' },
+      ],
+      warnings: [],
+    } as any);
+    const createUser = vi.spyOn(storage, 'createUser');
+    const create = vi.spyOn(storage, 'createMeasurement');
+
+    await upload({ measurementMode: 'create_athletes' }).expect(422);
+
+    expect(createUser).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+    const found = await storage.getAthletes({ search: `${ghostFirst} ${ghostLast}` } as any);
+    expect(found).toHaveLength(0);
+  });
+
+  it('a photo with no 5-0-5 reading needs no protocol and saves normally', async () => {
+    mockOcr([{ metric: 'VERTICAL_JUMP', value: '30.5', rawText: 'Ocrfive vertical 30.5 in' }]);
 
     const res = await upload().expect(200);
 
     expect(res.body.results.successful).toBe(1);
+    expect(res.body.results.errors).toEqual([]);
     expect(res.body.results.processedData[0].measurement.metric).toBe('VERTICAL_JUMP');
+  });
+
+  it('error rows for a resolved 5-0-5 carry the concrete metric, never the neutral token', async () => {
+    vi.spyOn(ocrService, 'extractTextFromImage').mockResolvedValue({
+      text: 'mock',
+      confidence: 90,
+      extractedData: [
+        { firstName: 'Nomatch', lastName: `Person${ts}`, confidence: 75, metric: NEUTRAL, value: '2.45', rawText: 'n 5-0-5' },
+      ],
+      warnings: [],
+    } as any);
+
+    const res = await upload({ protocol505: 'M' }).expect(200);
+
     expect(res.body.results.errors).toHaveLength(1);
-    expect(res.body.results.errors[0].error).toBe(PROTOCOL_MSG);
-    expect(spy).toHaveBeenCalledTimes(1);
+    expect(res.body.results.errors[0].data.metric).toBe('AGILITY_505_M');
+    expect(JSON.stringify(res.body)).not.toContain(NEUTRAL);
   });
 
   it('the neutral token never reaches createMeasurement, whatever the options', async () => {
     mockOcr([{ metric: NEUTRAL, value: '2.45', rawText: 'Ocrfive 5-0-5 2.45' }]);
     const spy = vi.spyOn(storage, 'createMeasurement');
 
-    await upload().expect(200);
+    await upload().expect(422);
     await upload({ protocol505: 'M' }).expect(200);
     await upload({ protocol505: 'YD' }).expect(200);
 
+    expect(spy).toHaveBeenCalledTimes(2);
     for (const call of spy.mock.calls) {
       expect(call[0].metric).not.toBe(NEUTRAL);
       expect(['AGILITY_505_M', 'AGILITY_505_YD']).toContain(call[0].metric);

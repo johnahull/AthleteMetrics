@@ -381,7 +381,7 @@ function deriveFly10ForAthlete(
 }
 
 /**
- * Group rows by athlete name + drill type + date + direction,
+ * Group rows by athlete name + drill type + date + direction + distance unit,
  * then select the best (fastest) attempt per group.
  */
 function selectBestAttempts(rows: DashrRow[]): DashrRow[] {
@@ -396,6 +396,8 @@ function selectBestAttempts(rows: DashrRow[]): DashrRow[] {
       date || '',
       (row['Direction'] || '').toLowerCase().trim(),
       row['Final Distance'] || '',
+      // A metric and a yard 5-0-5 are different protocols (_M vs _YD), never alternate attempts.
+      getDistanceUnit(row),
     ].join('|');
 
     if (!groups.has(key)) groups.set(key, []);
@@ -493,6 +495,7 @@ export class DashrCsvParser implements DeviceImportParser {
 
     // Group by athlete
     const athleteMap = new Map<string, ParsedAthleteResult>();
+    let badUnits505Rows = 0;
 
     for (const row of bestRows) {
       const firstName = (row['First Name'] || '').trim();
@@ -512,7 +515,7 @@ export class DashrCsvParser implements DeviceImportParser {
       if (metric && (row['Type'] || '').trim() === '505 Agility Test') {
         const rawUnits = (row['Units'] || '').trim();
         if (!['imperial', 'metric'].includes(rawUnits.toLowerCase())) {
-          warnings.push(`Units missing/unrecognized ('${rawUnits}'); 5-0-5 saved as yards (_YD)`);
+          badUnits505Rows++;
         }
       }
       if (!metric) {
@@ -603,6 +606,10 @@ export class DashrCsvParser implements DeviceImportParser {
           }
         }
       }
+    }
+
+    if (badUnits505Rows > 0) {
+      warnings.push(`${badUnits505Rows} 5-0-5 row(s) had missing/unrecognized Units; saved as yards (_YD)`);
     }
 
     return {

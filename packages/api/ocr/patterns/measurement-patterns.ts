@@ -56,7 +56,7 @@ export const MEASUREMENT_PATTERNS: Record<string, PatternConfig> = {
     confidence: 75,
     validator: (value: string) => {
       const num = parseFloat(value);
-      return num >= 1.5 && num <= 4.0;
+      return num >= 1.3 && num <= 4.0;
     }
   },
   

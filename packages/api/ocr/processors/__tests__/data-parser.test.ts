@@ -33,12 +33,17 @@ describe('DataParser 5-0-5 neutrality', () => {
     expect(m?.confidence).toBe(45);
   });
 
-  it('keys the default measurement range on the neutral token (1.5-4.0)', () => {
+  it('keys the default measurement range on the neutral token (1.3-4.0)', () => {
     const ranges = config.validation.measurementRanges;
-    expect(ranges[NEUTRAL]).toEqual({ min: 1.5, max: 4.0 });
+    expect(ranges[NEUTRAL]).toEqual({ min: 1.3, max: 4.0 });
     expect(Object.keys(ranges)).not.toContain('AGILITY_505');
     // out-of-range value is dropped
     expect(parse('John Smith 5-0-5 4.90').map((d) => d.metric)).not.toContain(NEUTRAL);
+  });
+
+  it('keeps a real 5 yd time between 1.3 and 1.5 s (not dropped before the protocol is known)', () => {
+    expect(parse('John Smith 5-0-5 1.40').map((d) => d.metric)).toContain(NEUTRAL);
+    expect(parse('John Smith 5-0-5 1.20').map((d) => d.metric)).not.toContain(NEUTRAL);
   });
 });
 
@@ -57,5 +62,26 @@ describe('MeasurementValidator thresholds apply to the neutral token', () => {
     expect(check('1.9').some((w) => w.includes('Very fast agility'))).toBe(true);
     expect(check('3.6').some((w) => w.includes('Slow agility'))).toBe(true);
     expect(check('2.5').filter((w) => w.toLowerCase().includes('agility'))).toEqual([]);
+  });
+});
+
+describe('neutral token never appears in user-visible validator text', () => {
+  const validator = new MeasurementValidator(config);
+  const run = (value: string) =>
+    validator.validateMeasurement({
+      firstName: 'John',
+      lastName: 'Smith',
+      metric: NEUTRAL,
+      value,
+      confidence: 85,
+    });
+
+  it('labels it 5-0-5 in range errors and warnings', () => {
+    const high = run('4.5');
+    expect(high.errors).toContain('Value too high for 5-0-5: 4.5 (maximum: 4)');
+    const low = run('1.31');
+    const text = [...high.errors, ...high.warnings, ...low.errors, ...low.warnings].join(' | ');
+    expect(text).not.toContain('UNRESOLVED');
+    expect(low.warnings.join(' ')).toContain('Unusually low value for 5-0-5');
   });
 });

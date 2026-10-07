@@ -581,8 +581,35 @@ describe('5-0-5 protocol from the Units column', () => {
     expect(firstMetric(units, '')).toBe('AGILITY_505_YD');
     expect(firstMetric(units, 'L')).toBe('AGILITY_505_YD_L');
     expect(warnings505(units)).toEqual([
-      `Units missing/unrecognized ('${units}'); 5-0-5 saved as yards (_YD)`,
+      '1 5-0-5 row(s) had missing/unrecognized Units; saved as yards (_YD)',
     ]);
+  });
+
+  it('emits ONE warning per file with a count, however many rows have bad Units', () => {
+    const rows = [
+      row505('', 'L'),
+      row505('Furlongs', 'R'),
+      row505('Meters', ''),
+      row505('Metric', 'L'),
+    ];
+    const w = parser.parse(makeCsv(rows)).warnings.filter(x => x.includes('Units'));
+    expect(w).toEqual(['3 5-0-5 row(s) had missing/unrecognized Units; saved as yards (_YD)']);
+  });
+
+  it('keeps a Metric and an Imperial 5-0-5 from the same athlete/date/leg as separate attempts', () => {
+    const drills = parser
+      .parse(makeCsv([row505('Metric', 'L', '2.600000'), row505('Imperial', 'L', '2.500000')]))
+      .athletes[0].drills.map(d => d.metric)
+      .sort();
+    expect(drills).toEqual(['AGILITY_505_M_L', 'AGILITY_505_YD_L']);
+  });
+
+  it('still picks the fastest of two attempts with the same Units', () => {
+    const drills = parser
+      .parse(makeCsv([row505('Metric', 'L', '2.700000'), row505('Metric', 'L', '2.500000')]))
+      .athletes[0].drills;
+    expect(drills).toHaveLength(1);
+    expect(drills[0].value).toBe(2.5);
   });
 
   it.each(['Imperial', 'imperial', 'IMPERIAL', 'Metric', 'metric', 'METRIC', ' Metric '])(

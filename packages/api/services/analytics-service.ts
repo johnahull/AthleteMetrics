@@ -7,6 +7,7 @@ import { db } from '../db';
 import { measurements, teams, organizations, users, userTeams, siteMetrics, organizationMetrics, VALID_METRICS, INVITATION_PENDING_PASSWORD } from '@shared/schema';
 import { eq, and, gte, lte, lt, ne, desc, inArray, sql } from 'drizzle-orm';
 import { getAthleteIdsForScope } from '../utils/athlete-filters';
+import { LOWER_IS_BETTER_METRICS } from '@shared/analytics-types';
 
 /**
  * Dashboard statistics time window
@@ -17,18 +18,11 @@ const DASHBOARD_STATS_WINDOW_DAYS = 30;
 
 /**
  * Metric codes where a rising value is a decline (time-based, lower is better).
- * Used by the SQL decline-direction logic below. Fixed code literals only.
+ * Used by the SQL decline-direction logic below. Derived from the shared single source of
+ * truth. NOTE: this intentionally now includes DASH_10YD, which the old local copy lacked
+ * (a bug fix: decline detection used the wrong sign for DASH_10YD). Fixed code literals only.
  */
-export const LOWER_IS_BETTER_SQL_CODES = [
-  'FLY10_TIME',
-  'AGILITY_505_M',
-  'AGILITY_505_YD',
-  'AGILITY_COD_DEFICIT_M',
-  'AGILITY_COD_DEFICIT_YD',
-  'AGILITY_5105',
-  'T_TEST',
-  'DASH_40YD',
-] as const;
+export const LOWER_IS_BETTER_SQL_CODES = LOWER_IS_BETTER_METRICS;
 
 const LOWER_IS_BETTER_SQL_LITERALS = LOWER_IS_BETTER_SQL_CODES.map(c => `'${c}'`).join(', ');
 
