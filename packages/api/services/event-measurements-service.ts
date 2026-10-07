@@ -9,7 +9,7 @@
  * - Respects event freeze status
  */
 
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import type { IStorage } from "../storage";
 import { measurements, siteMetrics, type Measurement, type Event } from "@shared/schema";
 import { MeasurementValueValidationError } from "@shared/measurement-value-validation";
@@ -248,6 +248,11 @@ export class EventMeasurementsService {
     const touched = new Set<string>();
 
     await this.db.transaction(async (tx) => {
+      // One save per (event, athlete) at a time: deletes take row locks without the
+      // per-score advisory lock, so two interleaved saves could otherwise deadlock.
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtextextended(${`event-mq:${eventId}:${userId}`}, 0))`
+      );
       const deleteRows = input.deletes.length
         ? await tx
             .select({ id: measurements.id, eventId: measurements.eventId, userId: measurements.userId, metric: measurements.metric })
@@ -266,7 +271,9 @@ export class EventMeasurementsService {
       }
 
       const errors: Array<{ metric: string; error: string }> = [];
-      for (const u of input.upserts) {
+      // Sorted so the per-score advisory locks (backstop) are always taken in the same order
+      const upserts = [...input.upserts].sort((a, b) => a.metric.localeCompare(b.metric));
+      for (const u of upserts) {
         try {
           saved.push(
             await this.writeEventMeasurement(

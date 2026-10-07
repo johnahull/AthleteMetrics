@@ -24,7 +24,7 @@ process.env.BYPASS_GENERAL_RATE_LIMIT = 'true';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi, onTestFinished } from 'vitest';
 import request from 'supertest';
 import express, { type Express } from 'express';
 import bcrypt from 'bcrypt';
@@ -42,6 +42,7 @@ vi.mock('../../packages/api/services/measurement-notification-service', () => ({
 import { registerRoutes } from '../../packages/api/routes';
 import { storage } from '../../packages/api/storage';
 import { EventMeasurementsService } from '../../packages/api/services/event-measurements-service';
+import { MeasurementService } from '../../packages/api/services/measurement-service';
 import { db } from '../../packages/api/db';
 import { notifyNewMeasurement } from '../../packages/api/services/measurement-notification-service';
 import { AchievementService } from '../../packages/api/services/achievement-service';
@@ -327,6 +328,60 @@ describe('one MQ row per (athlete, metric, event)', () => {
     for (const r of results) expect(r.status).toBe(201);
     expect(await rowsFor(teamlessAthlete.id, 'MQ_SHUFFLE', ev.id)).toHaveLength(1);
   });
+});
+
+describe('concurrent Movement Quality saves for one athlete', () => {
+  it('a clear + change and a change of both scores never deadlock', async () => {
+    const service = new EventMeasurementsService(storage);
+    // Hold each write's locks a little longer so the two transactions interleave
+    const proto = MeasurementService.prototype as any;
+    const spies = ['createMeasurement', 'deleteMeasurement'].map((name) => {
+      const original = proto[name];
+      return vi.spyOn(proto, name).mockImplementation(async function (this: any, ...args: any[]) {
+        const result = await original.apply(this, args);
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        return result;
+      });
+    });
+    onTestFinished(() => spies.forEach((spy) => spy.mockRestore()));
+    for (let round = 0; round < 8; round++) {
+      // June days, outside mkEvent's May day counter used by the other tests
+      const [ev] = await db
+        .insert(events)
+        .values({
+          name: `MQH Deadlock ${suffix} ${round}`,
+          organizationId: orgA.id,
+          startDate: new Date(`2026-06-${String(round + 1).padStart(2, '0')}T10:00:00Z`),
+          createdBy: coachA.id,
+        } as any)
+        .returning();
+      eventIds.push(ev.id);
+      const initial = await service.saveMovementQuality(
+        ev.id,
+        teamlessAthlete.id,
+        { upserts: [{ metric: 'MQ_JUMP', value: 1 }, { metric: 'MQ_LIN_ACCEL', value: 1 }], deletes: [] },
+        coachA.id,
+        'coach',
+      );
+      const jump = initial.saved.find((m) => m.metric === 'MQ_JUMP')!;
+      const results = await Promise.allSettled([
+        // Staff A clears JUMP and changes LIN_ACCEL
+        service.saveMovementQuality(ev.id, teamlessAthlete.id, { upserts: [{ metric: 'MQ_LIN_ACCEL', value: 2 }], deletes: [jump.id] }, coachA.id, 'coach'),
+        // Staff B changes both (LIN_ACCEL first, then JUMP)
+        service.saveMovementQuality(
+          ev.id,
+          teamlessAthlete.id,
+          { upserts: [{ metric: 'MQ_LIN_ACCEL', value: 3 }, { metric: 'MQ_JUMP', value: 3 }], deletes: [] },
+          coachA.id,
+          'coach',
+        ),
+      ]);
+      // Both saves succeed (serialized); before the fix one died with a deadlock
+      const failures = results.filter((r) => r.status === 'rejected').map((r: any) => String(r.reason?.cause?.message ?? r.reason?.message));
+      expect(failures).toEqual([]);
+      expect(await rowsFor(teamlessAthlete.id, 'MQ_LIN_ACCEL', ev.id)).toHaveLength(1);
+    }
+  }, 60000);
 });
 
 describe('PUT /api/events/:eventId/athletes/:userId/movement-quality', () => {
