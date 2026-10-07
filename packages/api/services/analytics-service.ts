@@ -48,6 +48,7 @@ interface DashboardStats {
   totalTeams: number;
   bestFLY10_TIMELast30Days?: { value: number; userName: string };
   bestVERTICAL_JUMPLast30Days?: { value: number; userName: string };
+  bestAGILITY_505_MLast30Days?: { value: number; userName: string };
   bestAGILITY_505_YDLast30Days?: { value: number; userName: string };
   bestAGILITY_5105Last30Days?: { value: number; userName: string };
   bestT_TESTLast30Days?: { value: number; userName: string };
