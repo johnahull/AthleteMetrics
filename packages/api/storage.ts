@@ -3435,6 +3435,7 @@ export class DatabaseStorage implements IStorage {
       flyInDistance: measurements.flyInDistance,
       notes: measurements.notes,
       mediaUrl: measurements.mediaUrl,
+      organizationId: measurements.organizationId,
       createdAt: measurements.createdAt,
       // Event context fields
       eventId: measurements.eventId,

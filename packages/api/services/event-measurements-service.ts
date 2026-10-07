@@ -79,6 +79,9 @@ export interface MovementQualityScoreInput {
   mediaUrl?: string | null;
 }
 
+/** Organization membership roles that can be the subject of an event measurement */
+const EVENT_SUBJECT_ROLES = new Set(["athlete", "coach", "org_admin"]);
+
 export interface BulkCreateResult {
   created: Measurement[];
   errors: Array<{ index: number; error: string }>;
@@ -132,12 +135,14 @@ export class EventMeasurementsService {
 
   /**
    * Event measurements may only be written for members of the event's organization
-   * (a coach must not write into another organization's athlete record).
+   * (a coach must not write into another organization's athlete record) whose
+   * membership role can be measured: athlete, coach or org_admin. Parent and guest
+   * members are not subjects, and site admin status is not membership.
    */
   private async assertAthleteInEventOrg(event: Event, userId: string): Promise<void> {
     if (!event.organizationId) return;
-    const roles = await this.storage.getUserRoles(userId, event.organizationId);
-    if (roles.length === 0) {
+    const role = await this.storage.getUserRole(userId, event.organizationId);
+    if (!role || !EVENT_SUBJECT_ROLES.has(role)) {
       throw new EventMeasurementInputError("Athlete is not a member of this event's organization");
     }
   }

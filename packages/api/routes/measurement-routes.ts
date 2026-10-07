@@ -30,6 +30,7 @@ import { eq, and } from "drizzle-orm";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { PAGINATION } from "../constants/pagination";
 import { storage } from "../storage";
+import { clipViewer, omitClipsHiddenFromViewer } from "../utils/measurement-redaction";
 
 // Rate limiting for measurement endpoints
 const measurementLimiter = rateLimit({
@@ -278,8 +279,10 @@ export function registerMeasurementRoutes(app: Express) {
         filters.personalOwnerId = user.id;
       }
       const result = await measurementService.getMeasurements(filters, allowCrossOrganization);
+      // Clips only for coaches / org admins of the row's org, the owning athlete and site admins
+      const viewer = clipViewer(user, allowCrossOrganization ? [] : await storage.getUserOrganizations(user.id));
       // Return just the measurements array for backwards compatibility
-      res.json(result.measurements);
+      res.json(omitClipsHiddenFromViewer(result.measurements, viewer));
     } catch (error) {
       console.error("Get measurements error:", error);
       if (error instanceof ZodError) {
@@ -322,7 +325,9 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.MEASUREMENT_ACCESS_DENIED) });
       }
 
-      res.json(measurement);
+      // Clips only for coaches / org admins of the row's org, the owning athlete and site admins
+      const viewer = clipViewer(user, isSiteAdmin(user) ? [] : await storage.getUserOrganizations(user.id));
+      res.json(omitClipsHiddenFromViewer([measurement], viewer)[0]);
     } catch (error) {
       console.error("Get measurement error:", error);
       const message = error instanceof Error ? error.message : "Failed to fetch measurement";
