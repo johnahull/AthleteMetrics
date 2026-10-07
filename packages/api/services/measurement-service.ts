@@ -452,6 +452,7 @@ export class MeasurementService {
               value: String(computedNumericValue),
               units,
               date: measurementDate.toISOString(),
+              age,
               // The edit is this submitter's entry now (and auto-verified for coaches/admins)
               submittedBy,
               isVerified,

@@ -442,6 +442,24 @@ describe('PUT /api/events/:eventId/athletes/:userId/movement-quality', () => {
     expect(Number(totals[0].value)).toBe(9);
   });
 
+  it('editing a score after the event date changed recomputes the stored age', async () => {
+    const ev = await mkEvent();
+    const first = await saveMq(ev.id, athlete.id, { upserts: [{ metric: PATTERNS[0], value: 1 }], deletes: [] });
+    expect(first.status).toBe(200);
+    const [before] = await rowsFor(athlete.id, PATTERNS[0], ev.id);
+    expect(before.age).toBe(18); // born 2008-01-01, event in May 2026
+
+    // Correct the event's start date a year later, then edit the score in place
+    await db.update(events).set({ startDate: new Date('2027-06-15T10:00:00Z') }).where(eq(events.id, ev.id));
+    const res = await saveMq(ev.id, athlete.id, { upserts: [{ metric: PATTERNS[0], value: 2 }], deletes: [] });
+    expect(res.status).toBe(200);
+
+    const rows = await rowsFor(athlete.id, PATTERNS[0], ev.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].date).toBe('2027-06-15');
+    expect(rows[0].age).toBe(19);
+  });
+
   it('rolls back every change when one score is invalid, and reports it per metric', async () => {
     const ev = await mkEvent();
     const first = await saveMq(ev.id, athlete.id, { upserts: [{ metric: 'MQ_LATRUN', value: 1 }], deletes: [] });
