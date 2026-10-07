@@ -77,6 +77,11 @@ export interface MeasurementFilters {
   offset?: number;
   filterMode?: 'all' | 'personal' | 'org';
   orgIds?: string;
+  /**
+   * Owner of the personal (organizationId IS NULL) rows a filterMode query may return.
+   * Required for filterMode queries unless allowCrossOrganization (site admin).
+   */
+  personalOwnerId?: string;
 }
 
 export interface PaginatedMeasurements {
@@ -1261,9 +1266,18 @@ export class MeasurementService {
 
     // CROSS-ORG MEASUREMENT QUERIES (filterMode parameter)
     // Handle new filter modes: 'personal', 'all', 'org'
+    // SECURITY: personal rows (organizationId IS NULL) belong to their athlete only;
+    // outside site-admin context they are bound to personalOwnerId.
+    if ((filters?.filterMode === 'personal' || filters?.filterMode === 'all') && !allowCrossOrganization && !filters.personalOwnerId) {
+      throw new Error('personalOwnerId is required for personal measurement queries');
+    }
+    const personalRows = allowCrossOrganization || !filters?.personalOwnerId
+      ? isNull(measurements.organizationId)
+      : and(isNull(measurements.organizationId), eq(measurements.userId, filters.personalOwnerId))!;
+
     if (filters?.filterMode === 'personal') {
       // Only self-entered measurements (organizationId IS NULL)
-      conditions.push(isNull(measurements.organizationId));
+      conditions.push(personalRows);
     } else if (filters?.filterMode === 'all') {
       // Measurements from any of specified org IDs OR personal (NULL)
       const orgIdArray = filters.orgIds
@@ -1287,12 +1301,12 @@ export class MeasurementService {
         conditions.push(
           or(
             inArray(measurements.organizationId, orgIdArray),
-            isNull(measurements.organizationId)
+            personalRows
           )!
         );
       } else {
         // Empty orgIds = only personal measurements
-        conditions.push(isNull(measurements.organizationId));
+        conditions.push(personalRows);
       }
     } else if (filters?.organizationId) {
       // Default 'org' mode: existing organizationId filter
