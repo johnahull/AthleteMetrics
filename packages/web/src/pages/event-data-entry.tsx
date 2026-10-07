@@ -87,7 +87,7 @@ export default function EventDataEntry() {
   const { eventId } = useParams<{ eventId: string }>();
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const { user, userOrganizations } = useAuth();
+  const { user, userOrganizations, organizationsError, refetchOrganizations } = useAuth();
 
   // State for the measurement grid
   const [gridData, setGridData] = useState<Record<string, AthleteRow>>({});
@@ -451,9 +451,30 @@ export default function EventDataEntry() {
     });
   };
 
+  // Organization memberships could not be loaded: offer a retry instead of an endless skeleton
+  const organizationsMissing = !!user && !user.isSiteAdmin && userOrganizations === null;
+  if (organizationsMissing && organizationsError) {
+    return (
+      <div className="container mx-auto py-6">
+        <Card>
+          <CardContent className="py-12 text-center">
+            <AlertCircle className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+            <h2 className="text-xl font-semibold mb-2">Could not load your organizations</h2>
+            <p className="text-muted-foreground mb-4">
+              Your organization memberships are needed to check access to this event.
+            </p>
+            <Button variant="outline" onClick={() => refetchOrganizations()}>
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   // Loading state (auth and organization memberships included, so managers never
   // see a flash of Access Denied while they load)
-  const authLoading = !user || (!user.isSiteAdmin && userOrganizations === null);
+  const authLoading = !user || organizationsMissing;
   if (authLoading || eventLoading || registrationsLoading || metricsLoading || measurementsLoading) {
     return (
       <div className="container mx-auto py-6 space-y-6">

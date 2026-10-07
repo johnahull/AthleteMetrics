@@ -128,6 +128,17 @@ describe('EventDataEntry', () => {
     expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
   });
 
+  it('shows an error with a retry instead of loading forever when organizations failed to load', async () => {
+    const refetchOrganizations = vi.fn();
+    authState = { user: COACH_AUTH.user, userOrganizations: null, organizationsError: true, refetchOrganizations };
+    const { container } = render(<EventDataEntry />);
+    expect(container.querySelectorAll('.animate-pulse')).toHaveLength(0);
+    expect(screen.getByText(/could not load your organizations/i)).toBeInTheDocument();
+    expect(screen.queryByText(/access denied/i)).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: /retry/i }));
+    expect(refetchOrganizations).toHaveBeenCalledTimes(1);
+  });
+
   it('does not wait for organizations for a site admin', () => {
     authState = { user: { id: 'admin-1', role: 'site_admin', isSiteAdmin: true }, userOrganizations: null };
     const { container } = render(<EventDataEntry />);

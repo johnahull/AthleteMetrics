@@ -89,6 +89,9 @@ describe('PendingTasksBanner', () => {
       startImpersonation: vi.fn(),
       stopImpersonation: vi.fn(),
       checkImpersonationStatus: vi.fn(),
+      organizationsLoading: false,
+      organizationsError: false,
+      refetchOrganizations: vi.fn(),
     });
 
     // Clear localStorage before each test
