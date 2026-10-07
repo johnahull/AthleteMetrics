@@ -49,6 +49,25 @@ describe('GET /api/analytics/benchmarks/for-metric/:metricCode (5-0-5 protocol c
     expect(getBenchmarksForMetric).toHaveBeenCalledWith('org-1', code);
   });
 
+  it.each([
+    'AGILITY_505_M_L', 'AGILITY_505_M_R', 'AGILITY_505_M_LSI',
+    'AGILITY_505_YD_L', 'AGILITY_505_YD_R', 'AGILITY_505_YD_LSI',
+  ])('accepts per-leg/LSI code %s', async (code) => {
+    const res = await request(createApp())
+      .get(`/api/analytics/benchmarks/for-metric/${code}`)
+      .query({ organizationId: 'org-1' });
+    expect(res.status).toBe(200);
+    expect(getBenchmarksForMetric).toHaveBeenCalledWith('org-1', code);
+  });
+
+  it('still rejects an unknown 5-0-5-like code', async () => {
+    const res = await request(createApp())
+      .get('/api/analytics/benchmarks/for-metric/AGILITY_505_XX')
+      .query({ organizationId: 'org-1' });
+    expect(res.status).toBe(400);
+    expect(getBenchmarksForMetric).not.toHaveBeenCalled();
+  });
+
   it('rejects the retired AGILITY_505 code with 400', async () => {
     const res = await request(createApp())
       .get('/api/analytics/benchmarks/for-metric/AGILITY_505')
