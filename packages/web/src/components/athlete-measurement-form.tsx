@@ -57,7 +57,6 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
       date: new Date().toISOString().split('T')[0],
       metric: firstMetricCode,
       value: 0,
-      flyInDistance: undefined,
       notes: "",
     },
   });
@@ -82,7 +81,6 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
       // values, then return focus to the primary input field.
       form.resetField("value", { defaultValue: 0 });
       form.resetField("auxiliaryValue", { defaultValue: undefined });
-      form.resetField("flyInDistance", { defaultValue: undefined });
       form.resetField("notes", { defaultValue: "" });
       form.clearErrors();
       setTimeout(() => form.setFocus("value"), 0);
@@ -234,39 +232,6 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
                       )}
                     </div>
                     <p className="text-xs text-gray-500">Units auto-selected based on metric</p>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-
-            {/* Fly-In Distance (only for FLY10_TIME) */}
-            {metric === "FLY10_TIME" && (
-              <FormField
-                control={form.control}
-                name="flyInDistance"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Fly-In Distance (Optional)</FormLabel>
-                    <div className="flex">
-                      <FormControl>
-                        <Input 
-                          {...field}
-                          type="number"
-                          step="0.1"
-                          placeholder="Enter distance"
-                          disabled={createMeasurementMutation.isPending}
-                          className="rounded-r-none"
-                          data-testid="input-fly-in-distance"
-                          onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
-                          value={field.value || ''}
-                        />
-                      </FormControl>
-                      <div className="px-4 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600 text-sm">
-                        yd
-                      </div>
-                    </div>
-                    <p className="text-xs text-gray-500">Distance from start of acceleration to timing gate</p>
                     <FormMessage />
                   </FormItem>
                 )}

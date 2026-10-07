@@ -36,7 +36,6 @@ const editMeasurementSchema = z.object({
     (val) => !isNaN(Number(val)) && Number(val) >= 10 && Number(val) <= 25,
     "Age must be between 10 and 25"
   ),
-  flyInDistance: z.string().optional(),
   notes: z.string().optional(),
 });
 
@@ -106,7 +105,6 @@ export default function Analytics() {
       value: "",
       date: "",
       age: "",
-      flyInDistance: "",
       notes: "",
     },
   });
@@ -259,7 +257,6 @@ export default function Analytics() {
       value: measurement.value.toString(),
       date: measurement.date,
       age: measurement.age.toString(),
-      flyInDistance: measurement.flyInDistance?.toString() || "",
       notes: measurement.notes || "",
     });
     setShowEditDialog(true);
@@ -282,7 +279,6 @@ export default function Analytics() {
       value: parseFloat(values.value),
       date: values.date,
       age: parseInt(values.age),
-      flyInDistance: values.flyInDistance ? parseFloat(values.flyInDistance) : null,
       notes: values.notes || null,
     };
     
@@ -883,26 +879,6 @@ export default function Analytics() {
                   </FormItem>
                 )}
               />
-              {editingMeasurement?.metric === 'FLY10_TIME' && (
-                <FormField
-                  control={editForm.control}
-                  name="flyInDistance"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Fly In Distance (yards)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          placeholder="Optional"
-                          {...field}
-                          data-testid="input-edit-fly-distance"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
               <FormField
                 control={editForm.control}
                 name="notes"

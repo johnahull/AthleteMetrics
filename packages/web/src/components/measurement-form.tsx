@@ -73,7 +73,6 @@ export default function MeasurementForm() {
       date: new Date().toISOString().split('T')[0],
       metric: firstMetricCode,
       value: 0,
-      flyInDistance: undefined,
       auxiliaryValue: undefined,
       notes: "",
       teamId: "",
@@ -129,12 +128,11 @@ export default function MeasurementForm() {
       // Batch-entry preservation per plan §6: keep athlete + metric + date +
       // team + season after a successful submit so a coach can log the next
       // working set without re-picking everything. Clear only the inputs that
-      // belong to "this set" (value / auxiliary / fly-in / notes), and return
+      // belong to "this set" (value / auxiliary / notes), and return
       // focus to the primary value input. To start a totally fresh entry,
       // coach changes the athlete/metric explicitly.
       form.resetField("value", { defaultValue: 0 });
       form.resetField("auxiliaryValue", { defaultValue: undefined });
-      form.resetField("flyInDistance", { defaultValue: undefined });
       form.resetField("notes", { defaultValue: "" });
       form.clearErrors();
       setOverrideCalculated(false);
@@ -289,7 +287,6 @@ export default function MeasurementForm() {
       date: new Date().toISOString().split('T')[0],
       metric: firstMetricCode,
       value: 0,
-      flyInDistance: undefined,
       notes: "",
       teamId: "",
       season: "",
@@ -528,39 +525,6 @@ export default function MeasurementForm() {
               )}
             />
           ))}
-
-          {/* Fly-In Distance (only for FLY10_TIME) */}
-          {metric === "FLY10_TIME" && (
-            <FormField
-              control={form.control}
-              name="flyInDistance"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Fly-In Distance (Optional)</FormLabel>
-                  <div className="flex">
-                    <FormControl>
-                      <Input 
-                        {...field}
-                        type="number"
-                        step="0.1"
-                        placeholder="Enter distance"
-                        disabled={createMeasurementMutation.isPending}
-                        className="rounded-r-none"
-                        data-testid="input-fly-in-distance"
-                        onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
-                        value={field.value || ''}
-                      />
-                    </FormControl>
-                    <div className="px-4 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600 text-sm">
-                      yd
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-500">Distance from start of acceleration to timing gate</p>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
         </div>
 
         {/* Notes */}
