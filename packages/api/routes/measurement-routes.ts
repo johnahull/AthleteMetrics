@@ -5,7 +5,7 @@
 
 import type { Express } from "express";
 import rateLimit, { type Options } from "express-rate-limit";
-import { MeasurementService, MovementQualityPermissionError } from "../services/measurement-service";
+import { MeasurementService, MediaUrlPermissionError, MovementQualityPermissionError } from "../services/measurement-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { insertMeasurementSchema, teams, userTeams, siteMetrics } from "@shared/schema";
 import {
@@ -396,7 +396,7 @@ export function registerMeasurementRoutes(app: Express) {
       if (error instanceof ZodError) {
         return res.status(400).json({ message: "Invalid input data", errors: error.errors });
       }
-      if (error instanceof MovementQualityPermissionError) {
+      if (error instanceof MovementQualityPermissionError || error instanceof MediaUrlPermissionError) {
         return res.status(403).json({ message: error.message });
       }
       if (error instanceof PairedInputValidationError || error instanceof MeasurementValueValidationError) {
@@ -560,7 +560,7 @@ export function registerMeasurementRoutes(app: Express) {
       if (error instanceof ZodError) {
         return res.status(400).json({ message: "Invalid input data", errors: error.errors });
       }
-      if (error instanceof MovementQualityPermissionError) {
+      if (error instanceof MovementQualityPermissionError || error instanceof MediaUrlPermissionError) {
         return res.status(403).json({ message: error.message });
       }
       if (error instanceof PairedInputValidationError || error instanceof MeasurementValueValidationError) {

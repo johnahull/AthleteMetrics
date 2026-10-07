@@ -35,6 +35,14 @@ import {
 // Singleton achievement service instance for performance
 const achievementService = new AchievementService();
 
+/** Thrown when an athlete tries to attach a clip (mediaUrl) to a measurement (maps to HTTP 403). */
+export class MediaUrlPermissionError extends Error {
+  constructor() {
+    super('Athletes cannot attach clips to measurements; a coach must add them');
+    this.name = 'MediaUrlPermissionError';
+  }
+}
+
 /** Thrown when an athlete tries to enter a Movement Quality score (maps to HTTP 403). */
 export class MovementQualityPermissionError extends Error {
   constructor(metricCode: string) {
@@ -198,6 +206,11 @@ export class MeasurementService {
     options: MeasurementWriteOptions = {}
   ): Promise<Measurement> {
     assertCanEnterMetric(submitterRole, measurement.metric);
+
+    // Clips are coach-attached (AM-FEAT-015); athletes may only omit or clear mediaUrl
+    if (submitterRole === 'athlete' && measurement.mediaUrl) {
+      throw new MediaUrlPermissionError();
+    }
 
     // Wrap entire operation in transaction to prevent race conditions
     // Race condition scenario: User joins/leaves team between active teams query and measurement insert
@@ -729,7 +742,7 @@ export class MeasurementService {
    * @param id Measurement ID
    * @param measurement Partial measurement data
    * @param expectedOrganizationId Optional organization ID for defense-in-depth validation (IDOR prevention)
-   * @param updaterRole Role of the user making the change (athletes cannot edit MQ scores)
+   * @param updaterRole Role of the user making the change (athletes cannot edit MQ scores or attach clips)
    * @returns Updated measurement
    * @throws Error if measurement not found, org mismatch, or transaction fails
    */
@@ -740,6 +753,11 @@ export class MeasurementService {
     updaterRole?: string,
     options: Pick<MeasurementWriteOptions, 'tx'> = {}
   ): Promise<Measurement> {
+    // Clips are coach-attached (AM-FEAT-015); athletes may only clear mediaUrl
+    if (updaterRole === 'athlete' && measurement.mediaUrl) {
+      throw new MediaUrlPermissionError();
+    }
+
     // Wrap in transaction to prevent race conditions during concurrent updates
     // Race condition scenario: Two users update same measurement simultaneously
     try {
