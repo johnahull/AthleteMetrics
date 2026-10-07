@@ -26,6 +26,7 @@ import { logAuthorizationFailure } from "../helpers/audit-logging";
 import { getCachedUserOrganizations } from "../helpers/cached-org-access";
 import type { SiteMetric } from "@shared/schema";
 import { DerivedMetricCalculator } from "../services/derived-metric-calculator";
+import { assertCanEnterMetric } from "../services/measurement-service";
 import { db } from "../db";
 
 /**
@@ -1093,6 +1094,9 @@ export function registerImportExportRoutes(app: Express) {
             if (!metricValidation.valid && metricValidation.warning) {
               warnings.push(`Row ${rowNum}: ${metricValidation.warning}`);
             }
+
+            // Athletes cannot import MQ scores; checked before any athlete matching/creation
+            assertCanEnterMetric(req.session.user!.role, metric);
 
             // Get organization context and teamId for measurement
             let organizationId: string | undefined;

@@ -35,6 +35,24 @@ import {
 // Singleton achievement service instance for performance
 const achievementService = new AchievementService();
 
+/** Thrown when an athlete tries to enter a Movement Quality score (maps to HTTP 403). */
+export class MovementQualityPermissionError extends Error {
+  constructor(metricCode: string) {
+    super(`Athletes cannot enter Movement Quality scores (${metricCode}); a coach must record them`);
+    this.name = 'MovementQualityPermissionError';
+  }
+}
+
+/**
+ * MQ scores are coach-entered rubric values (AM-FEAT-015): athletes may not
+ * create or edit them on any write path.
+ */
+export function assertCanEnterMetric(role: string | undefined, metricCode: string): void {
+  if (role === 'athlete' && isMovementQualityMetric(metricCode)) {
+    throw new MovementQualityPermissionError(metricCode);
+  }
+}
+
 export interface MeasurementFilters {
   userId?: string;
   athleteId?: string;
@@ -140,6 +158,8 @@ export class MeasurementService {
     submittedBy: string,
     submitterRole: string = 'athlete'
   ): Promise<Measurement> {
+    assertCanEnterMetric(submitterRole, measurement.metric);
+
     // Wrap entire operation in transaction to prevent race conditions
     // Race condition scenario: User joins/leaves team between active teams query and measurement insert
     let newMeasurement: Measurement;
@@ -598,13 +618,15 @@ export class MeasurementService {
    * @param id Measurement ID
    * @param measurement Partial measurement data
    * @param expectedOrganizationId Optional organization ID for defense-in-depth validation (IDOR prevention)
+   * @param updaterRole Role of the user making the change (athletes cannot edit MQ scores)
    * @returns Updated measurement
    * @throws Error if measurement not found, org mismatch, or transaction fails
    */
   async updateMeasurement(
     id: string,
     measurement: Partial<InsertMeasurement>,
-    expectedOrganizationId?: string
+    expectedOrganizationId?: string,
+    updaterRole?: string
   ): Promise<Measurement> {
     // Wrap in transaction to prevent race conditions during concurrent updates
     // Race condition scenario: Two users update same measurement simultaneously
@@ -626,6 +648,11 @@ export class MeasurementService {
         if (expectedOrganizationId && existing.organizationId !== expectedOrganizationId) {
           throw new Error('Access denied - measurement belongs to different organization');
         }
+
+        // Both the stored metric and a new one: an athlete may neither edit an
+        // MQ score nor move a measurement onto an MQ metric.
+        assertCanEnterMetric(updaterRole, existing.metric);
+        if (measurement.metric) assertCanEnterMetric(updaterRole, measurement.metric);
 
         const updateData: Partial<typeof measurements.$inferInsert> = {};
 
@@ -823,7 +850,11 @@ export class MeasurementService {
       return txUpdated;
     } catch (error) {
       // Preserve error specificity
-      if (error instanceof PairedInputValidationError || error instanceof MeasurementValueValidationError) {
+      if (
+        error instanceof PairedInputValidationError ||
+        error instanceof MeasurementValueValidationError ||
+        error instanceof MovementQualityPermissionError
+      ) {
         throw error;
       }
       if (error instanceof Error) {

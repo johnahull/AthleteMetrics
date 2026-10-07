@@ -5,7 +5,7 @@
 
 import type { Express } from "express";
 import rateLimit, { type Options } from "express-rate-limit";
-import { MeasurementService } from "../services/measurement-service";
+import { MeasurementService, MovementQualityPermissionError } from "../services/measurement-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { insertMeasurementSchema, teams, userTeams, siteMetrics } from "@shared/schema";
 import {
@@ -396,6 +396,9 @@ export function registerMeasurementRoutes(app: Express) {
       if (error instanceof ZodError) {
         return res.status(400).json({ message: "Invalid input data", errors: error.errors });
       }
+      if (error instanceof MovementQualityPermissionError) {
+        return res.status(403).json({ message: error.message });
+      }
       if (error instanceof PairedInputValidationError || error instanceof MeasurementValueValidationError) {
         return res.status(400).json({ message: error.message, field: error.field });
       }
@@ -548,13 +551,17 @@ export function registerMeasurementRoutes(app: Express) {
       const updatedMeasurement = await measurementService.updateMeasurement(
         measurementId,
         validatedData,
-        expectedOrganizationId
+        expectedOrganizationId,
+        user.role
       );
       res.json(updatedMeasurement);
     } catch (error) {
       console.error("Update measurement error:", error);
       if (error instanceof ZodError) {
         return res.status(400).json({ message: "Invalid input data", errors: error.errors });
+      }
+      if (error instanceof MovementQualityPermissionError) {
+        return res.status(403).json({ message: error.message });
       }
       if (error instanceof PairedInputValidationError || error instanceof MeasurementValueValidationError) {
         return res.status(400).json({ message: error.message, field: error.field });
