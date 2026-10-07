@@ -12,6 +12,8 @@ export interface DerivedTotalWarning {
   metric: string;
   /** Calendar date (YYYY-MM-DD) of the affected total. */
   date: string;
+  /** The athlete whose total is affected. */
+  userId: string;
 }
 
 /** A per-derived-metric failure recorded by DerivedMetricCalculator. */
@@ -21,8 +23,8 @@ export interface DerivedCalcFailure {
   userId: string;
 }
 
-export function staleWarning(metric: string, date: string): DerivedTotalWarning {
-  return { code: 'DERIVED_TOTAL_STALE', metric, date };
+export function staleWarning(metric: string, date: string, userId: string): DerivedTotalWarning {
+  return { code: 'DERIVED_TOTAL_STALE', metric, date, userId };
 }
 
 /**
@@ -33,13 +35,13 @@ export function warningsFromCalculator(calculator: {
   getFailures?: () => DerivedCalcFailure[];
 }): DerivedTotalWarning[] {
   const failures = calculator.getFailures?.() ?? [];
-  return failures.filter((f) => f.date).map((f) => staleWarning(f.metric, f.date as string));
+  return failures.filter((f) => f.date).map((f) => staleWarning(f.metric, f.date as string, f.userId));
 }
 
 export function dedupeWarnings(warnings: DerivedTotalWarning[]): DerivedTotalWarning[] {
   const seen = new Set<string>();
   return warnings.filter((w) => {
-    const key = `${w.metric}|${w.date}`;
+    const key = `${w.userId}|${w.metric}|${w.date}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

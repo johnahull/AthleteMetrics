@@ -29,7 +29,7 @@ import { events, measurements, organizations, userOrganizations, users } from '@
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATE = '2026-04-14';
-const STALE = { code: 'DERIVED_TOTAL_STALE', metric: 'MQI_TOTAL', date: DATE };
+const warn = (metric: string, date: string, userId: string) => ({ code: 'DERIVED_TOTAL_STALE', metric, date, userId });
 
 describe('DERIVED_TOTAL_STALE warnings', () => {
   const service = new MeasurementService();
@@ -109,7 +109,7 @@ describe('DERIVED_TOTAL_STALE warnings', () => {
     failComputation();
     const m = (await create()) as any;
     expect(m.id).toBeTruthy();
-    expect(m.warnings).toEqual([STALE]);
+    expect(m.warnings).toEqual([warn('MQI_TOTAL', DATE, athleteId)]);
     const rows = await db.select().from(measurements).where(eq(measurements.id, m.id));
     expect(rows).toHaveLength(1);
   });
@@ -117,7 +117,7 @@ describe('DERIVED_TOTAL_STALE warnings', () => {
   it('create: warns when processNewMeasurement itself rejects', async () => {
     track(vi.spyOn(DerivedMetricCalculator.prototype, 'processNewMeasurement').mockRejectedValue(new Error('timeout')));
     const m = (await create()) as any;
-    expect(m.warnings).toEqual([{ code: 'DERIVED_TOTAL_STALE', metric: 'MQ_JUMP', date: DATE }]);
+    expect(m.warnings).toEqual([warn('MQ_JUMP', DATE, athleteId)]);
   });
 
   it('update: warns when recalculation fails and the update still applies', async () => {
@@ -125,21 +125,21 @@ describe('DERIVED_TOTAL_STALE warnings', () => {
     failComputation();
     const updated = (await service.updateMeasurement(m.id, { value: 3 } as any, undefined, 'coach')) as any;
     expect(Number(updated.value)).toBe(3);
-    expect(updated.warnings).toEqual([STALE]);
+    expect(updated.warnings).toEqual([warn('MQI_TOTAL', DATE, athleteId)]);
   });
 
   it('update: warns when recalculateForAthlete rejects', async () => {
     const m = await create();
     track(vi.spyOn(DerivedMetricCalculator.prototype, 'recalculateForAthlete').mockRejectedValue(new Error('boom')));
     const updated = (await service.updateMeasurement(m.id, { value: 1 } as any, undefined, 'coach')) as any;
-    expect(updated.warnings).toEqual([{ code: 'DERIVED_TOTAL_STALE', metric: 'MQ_JUMP', date: DATE }]);
+    expect(updated.warnings).toEqual([warn('MQ_JUMP', DATE, athleteId)]);
   });
 
   it('delete: still deletes and returns warnings when recalculation fails', async () => {
     const m = await create();
     failComputation();
     const result = await service.deleteMeasurement(m.id);
-    expect(result.warnings).toEqual([STALE]);
+    expect(result.warnings).toEqual([warn('MQI_TOTAL', DATE, athleteId)]);
     expect(await db.select().from(measurements).where(eq(measurements.id, m.id))).toHaveLength(0);
   });
 
@@ -155,7 +155,7 @@ describe('DERIVED_TOTAL_STALE warnings', () => {
     failComputation();
     const result = await service.bulkDelete([a.id, b.id]);
     expect(result.deleted).toBe(2);
-    expect(result.warnings).toEqual([STALE]);
+    expect(result.warnings).toEqual([warn('MQI_TOTAL', DATE, athleteId)]);
   });
 
   it('bulkDelete: warnings is empty on success', async () => {
@@ -175,7 +175,64 @@ describe('DERIVED_TOTAL_STALE warnings', () => {
       'coach'
     )) as any;
     expect(result.saved).toHaveLength(1);
-    expect(result.warnings).toEqual([STALE]);
+    expect(result.warnings).toEqual([warn('MQI_TOTAL', DATE, athleteId)]);
+  });
+
+  it('update that moves the date: each recalculation is attempted and warned on its own', async () => {
+    const m = await create();
+    const NEW_DATE = '2026-04-15';
+    const spy = track(
+      vi.spyOn(DerivedMetricCalculator.prototype, 'recalculateForAthlete').mockRejectedValue(new Error('boom'))
+    );
+    const updated = (await service.updateMeasurement(m.id, { date: NEW_DATE } as any, undefined, 'coach')) as any;
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(updated.warnings).toEqual([warn('MQ_JUMP', NEW_DATE, athleteId), warn('MQ_JUMP', DATE, athleteId)]);
+  });
+
+  it('update that moves the date: previous-date recalculation still runs when the first fails', async () => {
+    const m = await create();
+    const NEW_DATE = '2026-04-15';
+    const spy = track(
+      vi
+        .spyOn(DerivedMetricCalculator.prototype, 'recalculateForAthlete')
+        .mockRejectedValueOnce(new Error('boom'))
+        .mockResolvedValue(undefined)
+    );
+    const updated = (await service.updateMeasurement(m.id, { date: NEW_DATE } as any, undefined, 'coach')) as any;
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(updated.warnings).toEqual([warn('MQ_JUMP', NEW_DATE, athleteId)]);
+  });
+
+  it('bulkDelete over two athletes on the same date yields one warning per athlete', async () => {
+    const suffix = `${Date.now()}-b`;
+    const [other] = await db
+      .insert(users)
+      .values({
+        username: `warn-other-${suffix}`,
+        emails: [`warn-other-${suffix}@test.com`],
+        password: 'x',
+        firstName: 'Other',
+        lastName: 'Warn',
+        fullName: 'Other Warn',
+        birthDate: '2008-01-01',
+        birthYear: 2008,
+      } as any)
+      .returning();
+    try {
+      const a = await create();
+      const b = await service.createMeasurement(
+        { userId: other.id, metric: 'MQ_JUMP', value: 2, date: DATE } as any,
+        coachId,
+        'coach'
+      );
+      failComputation();
+      const result = await service.bulkDelete([a.id, b.id]);
+      expect(result.warnings).toHaveLength(2);
+      expect(result.warnings.map((w) => w.userId).sort()).toEqual([athleteId, other.id].sort());
+    } finally {
+      await db.delete(measurements).where(eq(measurements.userId, other.id));
+      await db.delete(users).where(eq(users.id, other.id));
+    }
   });
 
   it('Movement Quality save: response is unchanged (no warnings key) on success', async () => {

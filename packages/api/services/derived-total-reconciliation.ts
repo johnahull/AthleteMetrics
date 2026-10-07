@@ -16,7 +16,7 @@
  */
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { db as dbType } from '../db';
-import { measurements, siteMetrics } from '@shared/schema';
+import { events, measurements, siteMetrics } from '@shared/schema';
 import { DerivedMetricCalculator } from './derived-metric-calculator';
 
 export type DriftReason = 'missing_total' | 'orphaned_total' | 'stale_total' | 'duplicate_totals';
@@ -25,6 +25,12 @@ export interface DriftSource {
   id: string;
   metric: string;
   value: string;
+  /** ms epoch; tie-breaker for equal values (newest wins), as in the calculator */
+  createdAt?: number;
+  /** latest_event selection only */
+  eventId?: string | null;
+  eventStart?: number;
+  eventCreatedAt?: number;
 }
 
 export interface DriftTotal {
@@ -34,44 +40,107 @@ export interface DriftTotal {
   calculationMetadata?: { sourceValues?: Record<string, number> } | null;
 }
 
+/**
+ * Mirrors the calculator's source selection (verified sources only are passed in):
+ * per dependent metric the best value (direction per metric, default higher is better),
+ * ties broken by newest createdAt. With latest_event, the sources come from the latest
+ * event group only and every dependent metric must be present in it.
+ * Returns null when the set is incomplete.
+ */
+function expectedSources(
+  deps: string[],
+  sources: DriftSource[],
+  higherIsBetter: Record<string, boolean>,
+  latestEvent: boolean
+): DriftSource[] | null {
+  let pool = sources;
+  if (latestEvent) {
+    const groups = new Map<string, DriftSource[]>();
+    for (const s of sources) {
+      const key = s.eventId ?? '';
+      groups.set(key, [...(groups.get(key) ?? []), s]);
+    }
+    const rank = (rows: DriftSource[]) => [
+      rows[0].eventId ? 1 : 0,
+      rows[0].eventStart ?? 0,
+      rows[0].eventCreatedAt ?? 0,
+      Math.max(...rows.map((r) => r.createdAt ?? 0)),
+    ];
+    let latest: DriftSource[] | undefined;
+    for (const rows of groups.values()) {
+      if (!latest) {
+        latest = rows;
+        continue;
+      }
+      const ra = rank(rows);
+      const rb = rank(latest);
+      for (let i = 0; i < ra.length; i++) {
+        if (ra[i] !== rb[i]) {
+          if (ra[i] > rb[i]) latest = rows;
+          break;
+        }
+      }
+    }
+    pool = latest ?? [];
+  }
+
+  const chosen: DriftSource[] = [];
+  for (const dep of deps) {
+    const candidates = pool.filter((s) => s.metric.toUpperCase() === dep);
+    if (candidates.length === 0) return null;
+    const higher = higherIsBetter[dep] ?? true;
+    chosen.push(
+      candidates.reduce((best, c) => {
+        const diff = Number(c.value) - Number(best.value);
+        if (diff !== 0) return (higher ? diff > 0 : diff < 0) ? c : best;
+        return (c.createdAt ?? 0) > (best.createdAt ?? 0) ? c : best;
+      })
+    );
+  }
+  return chosen;
+}
+
+/**
+ * Pre-filter: compares the existing calculated total with what the calculator would
+ * select from the verified source rows. The calculator remains the authority; the
+ * before/after comparison in reconcileDerivedTotals confirms real repairs.
+ */
 export function detectDrift(input: {
   dependentMetrics: string[];
+  /** Verified, non-calculated source rows for this athlete and date */
   sources: DriftSource[];
   totals: DriftTotal[];
   hasDirectTotal: boolean;
+  /** Per dependent metric (uppercase code); missing = higher is better */
+  higherIsBetter?: Record<string, boolean>;
+  latestEvent?: boolean;
 }): DriftReason | null {
   const deps = input.dependentMetrics.map((d) => d.toUpperCase());
   if (deps.length === 0) return null;
 
-  const present = new Set(input.sources.map((s) => s.metric.toUpperCase()));
-  const complete = deps.every((d) => present.has(d));
-
   if (input.totals.length > 1) return 'duplicate_totals';
 
+  const expected = expectedSources(deps, input.sources, input.higherIsBetter ?? {}, !!input.latestEvent);
+
   if (input.totals.length === 0) {
-    return complete && !input.hasDirectTotal ? 'missing_total' : null;
+    return expected && !input.hasDirectTotal ? 'missing_total' : null;
   }
 
   // One calculated total exists
-  if (!complete || input.hasDirectTotal) return 'orphaned_total';
+  if (!expected || input.hasDirectTotal) return 'orphaned_total';
 
   const total = input.totals[0];
   const refs = total.calculatedFromMeasurementIds ?? [];
   if (refs.length === 0) return 'stale_total';
 
-  const sourcesById = new Map(input.sources.map((s) => [s.id, s]));
+  const expectedIds = new Set(expected.map((e) => e.id));
+  if (refs.length !== expectedIds.size || !refs.every((id) => expectedIds.has(id))) return 'stale_total';
+
   const recorded = total.calculationMetadata?.sourceValues ?? {};
-  for (const id of refs) {
-    const source = sourcesById.get(id);
-    if (!source) return 'stale_total';
+  for (const source of expected) {
     const was = recorded[source.metric.toLowerCase()];
     if (was !== undefined && Number(was) !== Number(source.value)) return 'stale_total';
   }
-  // A source the total does not reference may be a better retest (or a legitimate
-  // non-selected row); the calculator decides, so this is only a candidate.
-  const refSet = new Set(refs);
-  if (input.sources.some((s) => !refSet.has(s.id))) return 'stale_total';
-
   return null;
 }
 
@@ -138,6 +207,13 @@ export async function reconcileDerivedTotals(
 
   const calculator = new DerivedMetricCalculator(database);
   let attempted = 0;
+  // The findings list is capped at `limit` (also in dryRun); counts stay exact
+  // 'unchanged' outcomes are only counted, not listed (they can be numerous false positives)
+  const addFinding = (finding: ReconcileFinding) => {
+    if (finding.outcome === 'unchanged') return;
+    if (result.findings.length < limit) result.findings.push(finding);
+    else result.truncated = true;
+  };
 
   for (const metric of derivedMetrics) {
     if (options.metricCode && metric.code.toUpperCase() !== options.metricCode.toUpperCase()) continue;
@@ -153,6 +229,17 @@ export async function reconcileDerivedTotals(
       ? eq(measurements.organizationId, options.organizationId)
       : undefined;
 
+    const latestEvent = metric.calculationConfig?.sourceSelection === 'latest_event';
+
+    // Per-metric direction used by the calculator's best-value selection
+    const depConfigs = await database
+      .select({ code: siteMetrics.code, metricType: siteMetrics.metricType })
+      .from(siteMetrics)
+      .where(inArray(sql`UPPER(${siteMetrics.code})`, deps));
+    const higherIsBetter: Record<string, boolean> = {};
+    for (const c of depConfigs) higherIsBetter[c.code.toUpperCase()] = c.metricType === 'higher_is_better';
+
+    // Verified sources only, for every strategy: the calculator ignores unverified rows
     const sourceRows = await database
       .select({
         id: measurements.id,
@@ -161,16 +248,18 @@ export async function reconcileDerivedTotals(
         metric: measurements.metric,
         value: measurements.value,
         organizationId: measurements.organizationId,
+        createdAt: measurements.createdAt,
+        eventId: measurements.eventId,
+        eventStart: events.startDate,
+        eventCreatedAt: events.createdAt,
       })
       .from(measurements)
+      .leftJoin(events, eq(measurements.eventId, events.id))
       .where(
         and(
           inArray(sql`UPPER(${measurements.metric})`, deps),
           eq(measurements.isCalculated, false),
-          // latest_event selection only counts verified scores (see findLatestEventSources)
-          metric.calculationConfig?.sourceSelection === 'latest_event'
-            ? eq(measurements.isVerified, true)
-            : undefined,
+          eq(measurements.isVerified, true),
           orgFilter
         )
       );
@@ -178,7 +267,7 @@ export async function reconcileDerivedTotals(
     const totalRows = await database
       .select()
       .from(measurements)
-      .where(eq(measurements.metric, metric.code));
+      .where(and(eq(measurements.metric, metric.code), orgFilter));
 
     // Group by athlete|date
     const groups = new Map<
@@ -202,15 +291,21 @@ export async function reconcileDerivedTotals(
       return g;
     };
     for (const s of sourceRows) {
-      group(s.userId, s.date, s.organizationId).sources.push({ id: s.id, metric: s.metric, value: s.value });
+      group(s.userId, s.date, s.organizationId).sources.push({
+        id: s.id,
+        metric: s.metric,
+        value: s.value,
+        createdAt: new Date(s.createdAt).getTime(),
+        eventId: s.eventId,
+        eventStart: s.eventStart ? new Date(s.eventStart).getTime() : undefined,
+        eventCreatedAt: s.eventCreatedAt ? new Date(s.eventCreatedAt).getTime() : undefined,
+      });
     }
     for (const t of totalRows) {
       const g = groups.get(`${t.userId}|${t.date}`);
       // A total whose sources are all gone (orphan) has no source group yet: create one,
       // but an org-scoped run only considers totals of that org.
-      const inScope = !options.organizationId || t.organizationId === options.organizationId;
-      const target = g ?? (inScope ? group(t.userId, t.date, t.organizationId) : undefined);
-      if (!target) continue;
+      const target = g ?? group(t.userId, t.date, t.organizationId);
       if (t.isCalculated) {
         target.totals.push({
           id: t.id,
@@ -229,6 +324,8 @@ export async function reconcileDerivedTotals(
         sources: g.sources,
         totals: g.totals,
         hasDirectTotal: g.hasDirectTotal,
+        higherIsBetter,
+        latestEvent,
       });
       if (!reason) continue;
       result.drifted++;
@@ -244,7 +341,7 @@ export async function reconcileDerivedTotals(
       if (!options.dryRun) {
         if (attempted >= limit) {
           result.truncated = true;
-          result.findings.push(finding);
+          addFinding(finding);
           continue;
         }
         attempted++;
@@ -255,7 +352,8 @@ export async function reconcileDerivedTotals(
             triggerContext: { event: 'manual_recalculation', userId: options.triggeredBy },
             organizationId: g.organizationId,
           });
-          if (calculator.getFailures().length > failuresBefore) {
+          // Only failures of this derived metric count (e.g. not an unrelated custom-org total)
+          if (calculator.getFailures().slice(failuresBefore).some((f) => f.metric === metric.code)) {
             finding.outcome = 'failed';
             result.failed++;
           } else {
@@ -279,6 +377,8 @@ export async function reconcileDerivedTotals(
             } else {
               finding.outcome = 'unchanged';
               result.unchanged++;
+              // A false positive must not starve real drift of the repair budget
+              attempted--;
             }
           }
         } catch (error) {
@@ -292,7 +392,7 @@ export async function reconcileDerivedTotals(
           });
         }
       }
-      result.findings.push(finding);
+      addFinding(finding);
     }
   }
 

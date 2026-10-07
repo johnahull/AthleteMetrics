@@ -569,13 +569,6 @@ export class MeasurementService {
         userId: submittedBy,
         sourceMeasurementId: newMeasurement.id,
       });
-      const previous = replaced as Measurement | null;
-      if (previous && previous.date !== newMeasurement.date) {
-        // An upsert moved the score to another date: refresh the old date's totals too
-        await calculator.recalculateForAthlete(previous.userId, previous.metric, previous.date, {
-          triggerContext: { event: 'measurement_update', sourceMeasurementId: newMeasurement.id },
-        });
-      }
     } catch (derivedError) {
       console.error('Derived metric calculation failed after measurement create:', {
         measurementId: newMeasurement.id,
@@ -584,7 +577,26 @@ export class MeasurementService {
         date: newMeasurement.date,
         error: derivedError,
       });
-      derivedWarnings.push(staleWarning(newMeasurement.metric, newMeasurement.date));
+      derivedWarnings.push(staleWarning(newMeasurement.metric, newMeasurement.date, newMeasurement.userId));
+    }
+    const previous = replaced as Measurement | null;
+    if (previous && previous.date !== newMeasurement.date) {
+      // An upsert moved the score to another date: refresh the old date's totals too.
+      // Attempted (and warned) independently of the recalculation above.
+      try {
+        await calculator.recalculateForAthlete(previous.userId, previous.metric, previous.date, {
+          triggerContext: { event: 'measurement_update', sourceMeasurementId: newMeasurement.id },
+        });
+      } catch (derivedError) {
+        console.error('Derived metric recalculation failed for the previous date after measurement create:', {
+          measurementId: newMeasurement.id,
+          userId: previous.userId,
+          metric: previous.metric,
+          date: previous.date,
+          error: derivedError,
+        });
+        derivedWarnings.push(staleWarning(previous.metric, previous.date, previous.userId));
+      }
     }
     derivedWarnings.push(...warningsFromCalculator(calculator));
     // Additive response field (#526): the measurement is saved, its derived total may be stale
@@ -993,41 +1005,39 @@ export class MeasurementService {
           measurement.userId !== undefined)
       ) {
         const calculator = new DerivedMetricCalculator(db);
-        try {
-          const triggerContext = {
-            event: 'measurement_update' as const,
-            sourceMeasurementId: txUpdated.id,
-          };
-          await calculator.recalculateForAthlete(
-            txUpdated.userId,
-            txUpdated.metric,
-            txUpdated.date,
-            { triggerContext, organizationId: txUpdated.organizationId }
-          );
-          // If the source moved (date, metric or athlete), the derived value it
-          // used to feed must be recalculated/invalidated too, otherwise a stale
-          // total remains on the old date/metric/athlete.
-          if (
-            previous.date !== txUpdated.date ||
-            previous.metric !== txUpdated.metric ||
-            previous.userId !== txUpdated.userId
-          ) {
-            await calculator.recalculateForAthlete(
-              previous.userId,
-              previous.metric,
-              previous.date,
-              { triggerContext, organizationId: previous.organizationId }
-            );
+        const triggerContext = {
+          event: 'measurement_update' as const,
+          sourceMeasurementId: txUpdated.id,
+        };
+        const recalc = async (
+          target: { userId: string; metric: string; date: string; organizationId: string | null }
+        ) => {
+          try {
+            await calculator.recalculateForAthlete(target.userId, target.metric, target.date, {
+              triggerContext,
+              organizationId: target.organizationId,
+            });
+          } catch (derivedError) {
+            console.error('Derived metric recalculation failed after measurement update:', {
+              measurementId: txUpdated.id,
+              userId: target.userId,
+              metric: target.metric,
+              date: target.date,
+              error: derivedError,
+            });
+            derivedWarnings.push(staleWarning(target.metric, target.date, target.userId));
           }
-        } catch (derivedError) {
-          console.error('Derived metric recalculation failed after measurement update:', {
-            measurementId: txUpdated.id,
-            userId: txUpdated.userId,
-            metric: txUpdated.metric,
-            date: txUpdated.date,
-            error: derivedError,
-          });
-          derivedWarnings.push(staleWarning(txUpdated.metric, txUpdated.date));
+        };
+        await recalc(txUpdated);
+        // If the source moved (date, metric or athlete), the derived value it
+        // used to feed must be recalculated/invalidated too, otherwise a stale
+        // total remains on the old date/metric/athlete. Attempted independently.
+        if (
+          previous.date !== txUpdated.date ||
+          previous.metric !== txUpdated.metric ||
+          previous.userId !== txUpdated.userId
+        ) {
+          await recalc(previous);
         }
         derivedWarnings.push(...warningsFromCalculator(calculator));
       }
@@ -1130,7 +1140,7 @@ export class MeasurementService {
           date: deleted.date,
           error: derivedError,
         });
-        warnings.push(staleWarning(deleted.metric, deleted.date));
+        warnings.push(staleWarning(deleted.metric, deleted.date, deleted.userId));
       }
       warnings.push(...warningsFromCalculator(calculator));
       return { warnings: dedupeWarnings(warnings) };
@@ -1526,7 +1536,7 @@ export class MeasurementService {
             date: key.date,
             error: e instanceof Error ? e.message : String(e),
           });
-          warnings.push(staleWarning(key.metric, key.date));
+          warnings.push(staleWarning(key.metric, key.date, key.userId));
         }
       }
       warnings.push(...warningsFromCalculator(calculator));

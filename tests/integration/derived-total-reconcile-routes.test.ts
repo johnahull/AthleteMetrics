@@ -30,7 +30,7 @@ vi.mock('../../packages/api/services/measurement-notification-service', () => ({
 import { registerRoutes } from '../../packages/api/routes';
 import { db } from '../../packages/api/db';
 import { DerivedMetricCalculator } from '../../packages/api/services/derived-metric-calculator';
-import { measurements, organizations, userOrganizations, users } from '@shared/schema';
+import { events, measurements, organizations, userOrganizations, users } from '@shared/schema';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -283,6 +283,164 @@ describe('POST /api/derived-totals/reconcile', () => {
     expect(res.body.repaired).toBe(0);
     expect(await totalRows()).toHaveLength(0);
   });
+  it('ignores an unverified complete source set (the calculator ignores it too)', async () => {
+    await seedScores('2');
+    await db.update(measurements).set({ isVerified: false }).where(eq(measurements.userId, athleteId));
+    const res = await reconcile(siteAdminCookie, { organizationId: orgId, dryRun: true });
+    expect(res.body.drifted).toBe(0);
+  });
+
+  it('does not re-flag a worse same-date retest forever', async () => {
+    await seedScores('2');
+    await reconcile(siteAdminCookie, { organizationId: orgId });
+    await db.insert(measurements).values({
+      userId: athleteId, organizationId: orgId, submittedBy: coachId, isVerified: true,
+      metric: 'MQ_JUMP', value: '1', units: 'score', age: 17, date: DATE,
+    } as any);
+    const res = await reconcile(siteAdminCookie, { organizationId: orgId });
+    expect(res.body.drifted).toBe(0);
+  });
+
+  it('does not flag an older Movement Quality event on the same date', async () => {
+    const mkEvent = async (name: string, start: string) =>
+      (
+        await db
+          .insert(events)
+          .values({ name, organizationId: orgId, startDate: new Date(start), createdBy: coachId } as any)
+          .returning()
+      )[0];
+    const older = await mkEvent('rc older', `${DATE}T08:00:00Z`);
+    const newer = await mkEvent('rc newer', `${DATE}T16:00:00Z`);
+    try {
+      for (const [ev, value] of [[older, '1'], [newer, '3']] as const) {
+        await db.insert(measurements).values(
+          PATTERNS.map((metric) => ({
+            userId: athleteId, organizationId: orgId, submittedBy: coachId, isVerified: true,
+            eventId: ev.id, metric, value, units: 'score', age: 17, date: DATE,
+          })) as any
+        );
+      }
+      const first = await reconcile(siteAdminCookie, { organizationId: orgId });
+      expect(first.body.repaired).toBe(1);
+      expect(Number((await totalRows())[0].value)).toBe(24);
+      const again = await reconcile(siteAdminCookie, { organizationId: orgId });
+      expect(again.body.drifted).toBe(0);
+    } finally {
+      await db.delete(measurements).where(eq(measurements.userId, athleteId));
+      await db.delete(events).where(inArray(events.id, [older.id, newer.id]));
+    }
+  });
+
+  it("an 'unchanged' outcome does not consume the repair budget", async () => {
+    await seedScores('2');
+    const [second] = await db
+      .insert(users)
+      .values({
+        username: `rc_s2_${Date.now()}`, emails: [`rc_s2_${Date.now()}@test.com`], password: 'x',
+        firstName: 'S2', lastName: 'Rc', fullName: 'S2 Rc', birthDate: '2008-01-01', birthYear: 2008,
+      } as any)
+      .returning();
+    try {
+      await db.insert(measurements).values(
+        PATTERNS.map((metric) => ({
+          userId: second.id, organizationId: orgId, submittedBy: coachId, isVerified: true,
+          metric, value: '1', units: 'score', age: 17, date: DATE,
+        })) as any
+      );
+      const original = DerivedMetricCalculator.prototype.recalculateForAthlete;
+      // First repair attempt is a no-op (a false positive); the next calls go through
+      vi.spyOn(DerivedMetricCalculator.prototype, 'recalculateForAthlete')
+        .mockImplementationOnce(async () => undefined)
+        .mockImplementation(function (this: any, ...args: any[]) {
+          return (original as any).apply(this, args);
+        });
+      const res = await reconcile(siteAdminCookie, { organizationId: orgId, limit: 1 });
+      expect(res.body.unchanged).toBe(1);
+      expect(res.body.repaired).toBe(1);
+      expect(res.body.truncated).toBe(false);
+      expect(res.body.drifted).toBe(2);
+      expect(res.body.findings.map((f: any) => f.outcome)).toEqual(['repaired']);
+    } finally {
+      await db.delete(measurements).where(eq(measurements.userId, second.id));
+      await db.delete(users).where(eq(users.id, second.id));
+    }
+  });
+
+  it('attributes failures only to the metric being reconciled', async () => {
+    await seedScores('2');
+    const original = DerivedMetricCalculator.prototype.recalculateForAthlete;
+    vi.spyOn(DerivedMetricCalculator.prototype, 'recalculateForAthlete').mockImplementation(async function (this: any, ...args: any[]) {
+      this.failures.push({ metric: 'SOME_CUSTOM_TOTAL', date: DATE, userId: athleteId });
+      return (original as any).apply(this, args);
+    });
+    const res = await reconcile(siteAdminCookie, { organizationId: orgId });
+    expect(res.body.failed).toBe(0);
+    expect(res.body.repaired).toBe(1);
+  });
+
+  it("an org-scoped run leaves another organization's totals alone", async () => {
+    const [orgB] = await db.insert(organizations).values({ name: `Reconcile Org B ${Date.now()}`, isActive: true } as any).returning();
+    const [other] = await db
+      .insert(users)
+      .values({
+        username: `rc_b_${Date.now()}`, emails: [`rc_b_${Date.now()}@test.com`], password: 'x',
+        firstName: 'B', lastName: 'Rc', fullName: 'B Rc', birthDate: '2008-01-01', birthYear: 2008,
+      } as any)
+      .returning();
+    try {
+      await db.insert(measurements).values({
+        userId: other.id, organizationId: orgB.id, submittedBy: coachId, metric: 'MQI_TOTAL',
+        value: '9', units: 'score', age: 17, date: DATE, isCalculated: true,
+        calculatedFromMeasurementIds: [athleteId], calculationMetadata: { formula: 'x', sourceValues: {} },
+      } as any);
+      const res = await reconcile(siteAdminCookie, { organizationId: orgId });
+      expect(res.body.drifted).toBe(0);
+      expect(await db.select().from(measurements).where(eq(measurements.userId, other.id))).toHaveLength(1);
+    } finally {
+      await db.delete(measurements).where(eq(measurements.userId, other.id));
+      await db.delete(users).where(eq(users.id, other.id));
+      await db.delete(organizations).where(eq(organizations.id, orgB.id));
+    }
+  });
+
+  it('dryRun applies the limit to findings, with truncated and full counts', async () => {
+    await seedScores('2');
+    const [second] = await db
+      .insert(users)
+      .values({
+        username: `rc_d2_${Date.now()}`, emails: [`rc_d2_${Date.now()}@test.com`], password: 'x',
+        firstName: 'D2', lastName: 'Rc', fullName: 'D2 Rc', birthDate: '2008-01-01', birthYear: 2008,
+      } as any)
+      .returning();
+    try {
+      await db.insert(measurements).values(
+        PATTERNS.map((metric) => ({
+          userId: second.id, organizationId: orgId, submittedBy: coachId, isVerified: true,
+          metric, value: '1', units: 'score', age: 17, date: DATE,
+        })) as any
+      );
+      const res = await reconcile(siteAdminCookie, { organizationId: orgId, dryRun: true, limit: 1 });
+      expect(res.body.drifted).toBe(2);
+      expect(res.body.findings).toHaveLength(1);
+      expect(res.body.truncated).toBe(true);
+    } finally {
+      await db.delete(measurements).where(eq(measurements.userId, second.id));
+      await db.delete(users).where(eq(users.id, second.id));
+    }
+  });
+
+  it('does not spend rate limit on unauthenticated requests', async () => {
+    const ipAddr = ip();
+    for (let i = 0; i < 12; i++) {
+      await request(app).post('/api/derived-totals/reconcile').set('X-Forwarded-For', ipAddr).send({});
+    }
+    const res = await request(app)
+      .post('/api/derived-totals/reconcile')
+      .set('X-Forwarded-For', ipAddr)
+      .set('Cookie', siteAdminCookie)
+      .send({ dryRun: true, organizationId: orgId });
+    expect(res.status).toBe(200);
+  });
 });
 
 describe('delete responses carry DERIVED_TOTAL_STALE warnings', () => {
@@ -309,7 +467,7 @@ describe('delete responses carry DERIVED_TOTAL_STALE warnings', () => {
     const res2 = await request(app).delete(`/api/measurements/${bad.id}`).set('X-Forwarded-For', ip()).set('Cookie', siteAdminCookie);
     expect(res2.status).toBe(200);
     expect(res2.body.message).toBe('Measurement deleted successfully');
-    expect(res2.body.warnings).toEqual([{ code: 'DERIVED_TOTAL_STALE', metric: 'MQI_TOTAL', date: DATE }]);
+    expect(res2.body.warnings).toEqual([{ code: 'DERIVED_TOTAL_STALE', metric: 'MQI_TOTAL', date: DATE, userId: athleteId }]);
   });
 
   it('POST /api/measurements/bulk-delete: warnings when recalculation fails', async () => {
@@ -322,6 +480,6 @@ describe('delete responses carry DERIVED_TOTAL_STALE warnings', () => {
       .send({ measurementIds: [m.id] });
     expect(res.status).toBe(200);
     expect(res.body.deleted).toBe(1);
-    expect(res.body.warnings).toEqual([{ code: 'DERIVED_TOTAL_STALE', metric: 'MQI_TOTAL', date: DATE }]);
+    expect(res.body.warnings).toEqual([{ code: 'DERIVED_TOTAL_STALE', metric: 'MQI_TOTAL', date: DATE, userId: athleteId }]);
   });
 });

@@ -309,7 +309,7 @@ export class EventMeasurementsService {
           error: derivedError,
         });
         // The derived total that failed is unknown here: report every touched score
-        for (const metric of touched) warnings.push(staleWarning(metric, eventDate));
+        for (const metric of touched) warnings.push(staleWarning(metric, eventDate, userId));
       }
       warnings.push(...warningsFromCalculator(calculator));
     }

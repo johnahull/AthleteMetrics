@@ -123,6 +123,68 @@ describe('detectDrift', () => {
     ).toBe('duplicate_totals');
   });
 
+  it('does not flag a worse same-date retest the calculator would not select', () => {
+    expect(
+      detectDrift({
+        ...base,
+        sources: [src('a', 'MQ_A'), src('b', 'MQ_B'), src('c', 'MQ_B', '2.000')],
+        totals: [total()],
+      })
+    ).toBeNull();
+  });
+
+  it('flags a better retest, honouring lower-is-better metrics', () => {
+    const sources = [src('a', 'MQ_A'), src('b', 'MQ_B'), src('c', 'MQ_B', '2.000')];
+    expect(
+      detectDrift({ ...base, higherIsBetter: { MQ_B: false }, sources, totals: [total()] })
+    ).toBe('stale_total');
+  });
+
+  it('breaks value ties by newest createdAt like the calculator', () => {
+    const sources = [
+      { ...src('a', 'MQ_A'), createdAt: 1 },
+      { ...src('b', 'MQ_B'), createdAt: 1 },
+      { ...src('c', 'MQ_B'), createdAt: 2 },
+    ];
+    expect(detectDrift({ ...base, sources, totals: [total()] })).toBe('stale_total');
+  });
+
+  describe('latest_event selection', () => {
+    const ev = (id: string, metric: string, eventId: string, start: number, value = '3.000') => ({
+      id, metric, value, eventId, eventStart: start, eventCreatedAt: start, createdAt: start,
+    });
+    const refsOld = total({ calculatedFromMeasurementIds: ['a', 'b'] });
+    const refsNew = total({ calculatedFromMeasurementIds: ['a2', 'b2'] });
+
+    it('does not flag an older complete event on the same date', () => {
+      expect(
+        detectDrift({
+          ...base,
+          latestEvent: true,
+          sources: [ev('a', 'MQ_A', 'e1', 1), ev('b', 'MQ_B', 'e1', 1), ev('a2', 'MQ_A', 'e2', 2), ev('b2', 'MQ_B', 'e2', 2)],
+          totals: [refsNew],
+        })
+      ).toBeNull();
+    });
+
+    it('flags a total still built from the older event', () => {
+      expect(
+        detectDrift({
+          ...base,
+          latestEvent: true,
+          sources: [ev('a', 'MQ_A', 'e1', 1), ev('b', 'MQ_B', 'e1', 1), ev('a2', 'MQ_A', 'e2', 2), ev('b2', 'MQ_B', 'e2', 2)],
+          totals: [refsOld],
+        })
+      ).toBe('stale_total');
+    });
+
+    it('treats an incomplete latest event as no total, even if an older event is complete', () => {
+      const sources = [ev('a', 'MQ_A', 'e1', 1), ev('b', 'MQ_B', 'e1', 1), ev('a2', 'MQ_A', 'e2', 2)];
+      expect(detectDrift({ ...base, latestEvent: true, sources, totals: [] })).toBeNull();
+      expect(detectDrift({ ...base, latestEvent: true, sources, totals: [refsOld] })).toBe('orphaned_total');
+    });
+  });
+
   it('returns null for a derived metric with no dependencies', () => {
     expect(detectDrift({ dependentMetrics: [], hasDirectTotal: false, sources: [], totals: [] })).toBeNull();
   });

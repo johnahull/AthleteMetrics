@@ -36,9 +36,10 @@ const reconcileBodySchema = z
 export function registerDerivedTotalRoutes(app: Express) {
   app.post(
     "/api/derived-totals/reconcile",
-    reconcileLimiter,
     requireAuth,
     requireSiteAdmin,
+    // After auth so unauthenticated requests do not consume the bucket
+    reconcileLimiter,
     async (req, res) => {
       const parsed = reconcileBodySchema.safeParse(req.body ?? {});
       if (!parsed.success) {
