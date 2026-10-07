@@ -35,6 +35,16 @@ set -e
 #   ^7 peer range. All seven undici advisory IDs are listed so the audit gate treats the
 #   undici/jsdom/isomorphic-dompurify chain as fully attributable to excluded advisories.
 #   Revisit when jsdom widens its undici range or isomorphic-dompurify ships a fixed jsdom.
+# - GHSA-vfj7-8cjw-p6xm (braces stack exhaustion DoS on deeply nested brace patterns)
+#   Affects every published braces release (<=3.0.3, and 3.0.3 is the latest), so no
+#   patched version exists. braces reaches this project ONLY at build time through
+#   tailwindcss@3 -> (chokidar, fast-glob, micromatch) -> braces, where the glob patterns
+#   are the static `content` globs in packages/web/tailwind.config.ts, never user or
+#   network input; braces is not in the runtime/production dependency tree.
+#   The only clean way off it is migrating tailwindcss 3 -> 4 (drops these deps), a
+#   separate UI-affecting migration (config/@tailwind directives rewrite) deferred.
+#   Affected (transitively): braces, micromatch, chokidar, fast-glob, tailwindcss.
+#   Revisit when braces publishes a fix or the project migrates to tailwindcss 4.
 
 echo "🔍 Running npm security audit..."
 
@@ -46,7 +56,7 @@ npm audit --audit-level=moderate --json > audit-results.json || true
 
 # List of excluded vulnerability advisory IDs (false positives)
 # These are vulnerabilities that don't affect our usage patterns
-EXCLUDED_ADVISORIES="GHSA-5j98-mcp5-4vw2 GHSA-mmgp-wc2j-qcv7 GHSA-gv7w-rqvm-qjhr GHSA-vmh5-mc38-953g GHSA-vxpw-j846-p89q GHSA-hm92-r4w5-c3mj GHSA-p88m-4jfj-68fv GHSA-pr7r-676h-xcf6 GHSA-35p6-xmwp-9g52 GHSA-g8m3-5g58-fq7m"
+EXCLUDED_ADVISORIES="GHSA-5j98-mcp5-4vw2 GHSA-mmgp-wc2j-qcv7 GHSA-gv7w-rqvm-qjhr GHSA-vmh5-mc38-953g GHSA-vxpw-j846-p89q GHSA-hm92-r4w5-c3mj GHSA-p88m-4jfj-68fv GHSA-pr7r-676h-xcf6 GHSA-35p6-xmwp-9g52 GHSA-g8m3-5g58-fq7m GHSA-vfj7-8cjw-p6xm"
 
 # Validate that audit results were generated
 if [ ! -f "audit-results.json" ] || [ ! -s "audit-results.json" ]; then

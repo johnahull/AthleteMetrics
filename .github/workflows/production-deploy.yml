@@ -48,6 +48,8 @@ jobs:
       - name: Generate test credentials
         run: |
           TEST_PASS="$(openssl rand -base64 12)Aa1!"
+          # Register as a secret so later steps' env: headers print ***, not the value
+          echo "::add-mask::${TEST_PASS}"
           echo "ADMIN_PASSWORD=${TEST_PASS}" >> "$GITHUB_ENV"
           echo "✅ Generated secure test credentials"
 
