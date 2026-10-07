@@ -40,6 +40,8 @@ vi.mock('../../packages/api/services/measurement-notification-service', () => ({
 }));
 
 import { registerRoutes } from '../../packages/api/routes';
+import { storage } from '../../packages/api/storage';
+import { EventMeasurementsService } from '../../packages/api/services/event-measurements-service';
 import { db } from '../../packages/api/db';
 import { notifyNewMeasurement } from '../../packages/api/services/measurement-notification-service';
 import { AchievementService } from '../../packages/api/services/achievement-service';
@@ -388,6 +390,7 @@ describe('PUT /api/events/:eventId/athletes/:userId/movement-quality', () => {
     const ev = await mkEvent();
     const denied = await saveMq(ev.id, athlete.id, { upserts: [{ metric: 'MQ_JUMP', value: 2 }], deletes: [] }, coachBCookie);
     expect(denied.status).toBe(403);
+    expect(denied.body).toEqual({ error: 'Access denied' });
     expect(await rowsFor(athlete.id, 'MQ_JUMP', ev.id)).toHaveLength(0);
   });
 
@@ -401,9 +404,34 @@ describe('PUT /api/events/:eventId/athletes/:userId/movement-quality', () => {
       { upserts: [{ metric: 'MQ_JUMP', value: 2, mediaUrl: 'https://clips.example.com/self' }], deletes: [] },
       athleteCookie
     );
+    // Denied by the event-manager gate (getEventManagerRole), before any write
     expect(denied.status).toBe(403);
+    expect(denied.body).toEqual({ error: 'Access denied' });
     expect(await rowsFor(athlete.id, 'MQ_JUMP', ev.id)).toHaveLength(0);
   });
+
+  // The route gate admits only managers, so call the event service directly to prove
+  // the MeasurementService allowlist (R1/R2) also holds behind it.
+  it.each(['athlete', 'parent', 'guest'])(
+    'the event service itself rejects MQ scores and clips from a %s',
+    async (role) => {
+      const service = new EventMeasurementsService(storage);
+      const ev = await mkEvent();
+      await expect(
+        service.saveMovementQuality(ev.id, athlete.id, { upserts: [{ metric: 'MQ_JUMP', value: 2 }], deletes: [] }, athlete.id, role)
+      ).rejects.toThrow(/only coaches and admins can enter movement quality/i);
+      await expect(
+        service.createEventMeasurement(
+          ev.id,
+          { userId: athlete.id, metric: 'VERTICAL_JUMP', value: 30, date: new Date(eventDay(ev)), mediaUrl: 'https://clips.example.com/self' },
+          athlete.id,
+          role
+        )
+      ).rejects.toThrow(/only coaches and admins can attach clips/i);
+      expect(await rowsFor(athlete.id, 'MQ_JUMP', ev.id)).toHaveLength(0);
+      expect(await rowsFor(athlete.id, 'VERTICAL_JUMP', ev.id)).toHaveLength(0);
+    }
+  );
 
   it('clearing a saved score deletes it and removes the total', async () => {
     const ev = await mkEvent();
