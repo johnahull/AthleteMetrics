@@ -126,9 +126,9 @@ describe('personal measurements are visible only to their athlete', () => {
     },
   );
 
-  // CURRENT BEHAVIOR (privacy decision pending): a coach of an organization the athlete
-  // belongs to does not see that athlete's personal (no-org) rows either, because
-  // personal rows are bound to the requester. Changing this needs a product decision.
+  // DECIDED (AM-FEAT-015): a coach of an organization the athlete belongs to does not
+  // see that athlete's personal (no-org) rows; personal rows are visible only to their
+  // athlete and to site admins.
   it.each([
     { filterMode: 'personal' },
     { filterMode: 'all' },
