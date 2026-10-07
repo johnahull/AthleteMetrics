@@ -456,6 +456,58 @@ describe('Athletes cannot attach clips (R1)', () => {
       expect(await outsiderRows()).toHaveLength(0);
     });
 
+    describe('only athlete, coach and org_admin members can be the subject', () => {
+      let subject: any;
+      const subjectRows = () => db.select().from(measurements).where(eq(measurements.userId, subject.id));
+      const mkSubject = async (extra: Record<string, unknown> = {}) => {
+        const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        [subject] = await db
+          .insert(users)
+          .values({
+            username: `clip-subject-${suffix}`,
+            emails: [`clip-subject-${suffix}@test.com`],
+            password: 'x',
+            firstName: 'Sub',
+            lastName: 'Ject',
+            fullName: 'Sub Ject',
+            ...extra,
+          } as any)
+          .returning();
+      };
+      const write = () =>
+        eventService.createEventMeasurement(
+          eventId,
+          { userId: subject.id, metric: 'VERTICAL_JUMP', value: 30, date: new Date('2026-01-15') },
+          coach.id,
+          'coach',
+        );
+
+      afterEach(async () => {
+        await db.delete(measurements).where(eq(measurements.userId, subject.id));
+        await db.delete(userOrganizations).where(eq(userOrganizations.userId, subject.id));
+        await db.delete(users).where(eq(users.id, subject.id));
+      });
+
+      it.each(['parent', 'guest'])('rejects a %s member of the event organization', async (role) => {
+        await mkSubject();
+        await db.insert(userOrganizations).values({ userId: subject.id, organizationId: orgId, role } as any);
+        await expect(write()).rejects.toThrow(NOT_MEMBER);
+        expect(await subjectRows()).toHaveLength(0);
+      });
+
+      it('rejects a site admin who is not a member of the event organization', async () => {
+        await mkSubject({ isSiteAdmin: true });
+        await expect(write()).rejects.toThrow(NOT_MEMBER);
+        expect(await subjectRows()).toHaveLength(0);
+      });
+
+      it.each(['athlete', 'coach', 'org_admin'])('accepts a %s member of the event organization', async (role) => {
+        await mkSubject();
+        await db.insert(userOrganizations).values({ userId: subject.id, organizationId: orgId, role } as any);
+        expect((await write()).organizationId).toBe(orgId);
+      });
+    });
+
     describe("stored organization and team context come from the event's organization", () => {
       let member: any;
       const extraTeamIds: string[] = [];
