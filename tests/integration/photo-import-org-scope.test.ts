@@ -186,7 +186,7 @@ describe('Photo import organization scoping', () => {
 
     const res2 = await postPhoto(agentCoachA, { organizationId: orgA.id, measurementMode: 'create_athletes' });
     expect(res2.status).toBe(200);
-    expect(res2.body.results.createdAthletes).toBeUndefined();
+    expect(res2.body.results.createdAthletes ?? []).toHaveLength(0);
     expect(res2.body.results.successful).toBe(1);
 
     const matches = await db.select().from(users).where(eq(users.firstName, first));
