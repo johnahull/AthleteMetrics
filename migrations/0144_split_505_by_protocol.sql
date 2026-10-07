@@ -303,7 +303,8 @@ BEGIN
                                                       OR calculation_metadata::text ~* '\mAGILITY_505(_L|_R|_LSI)?\M')
     + (SELECT COUNT(*) FROM reports                WHERE config::text ~* '\mAGILITY_505(_L|_R|_LSI)?\M')
     + (SELECT COUNT(*) FROM custom_org_metrics     WHERE formula ~* '\mAGILITY_505(_L|_R|_LSI)?\M'
-                                                      OR array_to_string(dependent_metrics, ',') ~* '\mAGILITY_505(_L|_R|_LSI)?\M')
+                                                      OR array_to_string(dependent_metrics, ',') ~* '\mAGILITY_505(_L|_R|_LSI)?\M'
+                                                      OR calculation_config::text ~* '\mAGILITY_505(_L|_R|_LSI)?\M')
     + (SELECT COUNT(*) FROM site_metrics           WHERE code NOT IN ('AGILITY_505', 'AGILITY_505_L', 'AGILITY_505_R', 'AGILITY_505_LSI')
                                                       AND (formula ~* '\mAGILITY_505(_L|_R|_LSI)?\M'
                                                            OR array_to_string(dependent_metrics, ',') ~* '\mAGILITY_505(_L|_R|_LSI)?\M'))

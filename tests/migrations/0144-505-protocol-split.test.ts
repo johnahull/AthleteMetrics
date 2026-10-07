@@ -121,6 +121,14 @@ describe('Migration 0144: static SQL analysis', () => {
       expect(assertIdx).toBeLessThan(deleteIdx);
     });
 
+    it('the pre-delete assertion covers custom_org_metrics.calculation_config, as the repoint does', () => {
+      const end = up.search(/INTO\s+v_left/i);
+      expect(end).toBeGreaterThan(-1);
+      const counts = up.slice(up.lastIndexOf('SELECT', up.search(/FROM\s+organization_metrics\s+WHERE/i)), end);
+      const cust = counts.slice(counts.search(/FROM\s+custom_org_metrics/i));
+      expect(cust).toMatch(/calculation_config::text/);
+    });
+
     it('inserts the new site_metrics rows BEFORE repointing children', () => {
       const firstInsert = up.search(/INSERT\s+INTO\s+site_metrics/i);
       const firstUpdate = up.search(/^\s*UPDATE\s+\w+/im);
