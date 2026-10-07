@@ -14,7 +14,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { sql } from 'drizzle-orm';
-import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi, onTestFinished } from 'vitest';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
 import { MeasurementService } from '../../packages/api/services/measurement-service';
@@ -27,6 +27,7 @@ import {
   userTeams,
   users,
   userOrganizations,
+  customOrgMetrics,
 } from '@shared/schema';
 
 const PATTERNS = [
@@ -119,6 +120,7 @@ describe('MQI derived totals (calculator behavior)', () => {
     await db.delete(events).where(eq(events.organizationId, orgId));
     await db.delete(userTeams).where(eq(userTeams.userId, athleteId));
     await db.delete(userOrganizations).where(eq(userOrganizations.organizationId, orgId));
+    await db.delete(userOrganizations).where(eq(userOrganizations.userId, athleteId));
     await db.delete(teams).where(eq(teams.organizationId, orgId));
     await db.delete(users).where(inArray(users.id, [athleteId, coachId]));
     await db.delete(organizations).where(eq(organizations.id, orgId));
@@ -292,6 +294,36 @@ describe('MQI derived totals (calculator behavior)', () => {
     expect(totals[0].organizationId).toBe(orgId);
   });
 
+  it('(c) recalculation only creates custom totals of the triggering measurement\'s org', async () => {
+    // The athlete also belongs to org B, which has a custom derived metric on MQ_JUMP.
+    const [orgB] = await db.insert(organizations).values({ name: `MQI Org B ${Date.now()}` }).returning();
+    const customCode = `MQ2_B_${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    await db.insert(userOrganizations).values({ userId: athleteId, organizationId: orgB.id, role: 'athlete' } as any);
+    await db.insert(customOrgMetrics).values({
+      organizationId: orgB.id,
+      code: customCode,
+      label: 'Org B jump x2',
+      unit: 'score',
+      metricType: 'higher_is_better',
+      isDerived: true,
+      formula: 'MQ_JUMP * 2',
+      dependentMetrics: ['MQ_JUMP'],
+      calculationConfig: { dateMatchStrategy: 'same_date', missingSourceBehavior: 'skip' },
+    } as any);
+    onTestFinished(async () => {
+      await db.delete(measurements).where(eq(measurements.metric, customCode));
+      await db.delete(customOrgMetrics).where(eq(customOrgMetrics.organizationId, orgB.id));
+      await db.delete(organizations).where(eq(organizations.id, orgB.id));
+    });
+
+    // An org-A score moved onto DATE: its recalculation must not create org B's total.
+    const moved = await score('MQ_JUMP', 3, '2026-03-11');
+    expect(moved.organizationId).toBe(orgId);
+    await service.updateMeasurement(moved.id, { date: DATE } as any, undefined, 'coach');
+
+    expect(await totalsFor(customCode)).toHaveLength(0);
+  });
+
   it('(c) never creates duplicate totals under concurrent calculation', async () => {
     let last: any;
     for (const metric of PATTERNS) {
@@ -316,6 +348,32 @@ describe('MQI derived totals (calculator behavior)', () => {
     const totals = await totalsFor('MQI_TOTAL');
     expect(totals).toHaveLength(1);
     expect(Number(totals[0].value)).toBe(16);
+  });
+
+  it('(c) concurrent updates of different scores leave the correct total', async () => {
+    const rows = await scoreAllPatterns(1); // 8
+    // Widen the read-then-write window so an unserialized recalculation that read the
+    // sources before another update committed would write a stale total.
+    const proto = DerivedMetricCalculator.prototype as any;
+    const findSources = proto.findSourceMeasurementsImpl;
+    const spy = vi.spyOn(proto, 'findSourceMeasurementsImpl').mockImplementation(async function (this: any, ...args: any[]) {
+      const result = await findSources.apply(this, args);
+      await new Promise((resolve) => setTimeout(resolve, Math.random() * 30));
+      return result;
+    });
+    onTestFinished(() => spy.mockRestore());
+    for (let round = 0; round < 12; round++) {
+      const values = rows.map((_, i) => (i + round) % 4);
+      await Promise.all(
+        rows.map(async (row, i) => {
+          await new Promise((resolve) => setTimeout(resolve, Math.random() * 20));
+          return service.updateMeasurement(row.id, { value: values[i] }, undefined, 'coach');
+        }),
+      );
+      const totals = await totalsFor('MQI_TOTAL');
+      expect(totals).toHaveLength(1);
+      expect(Number(totals[0].value)).toBe(values.reduce((a, b) => a + b, 0));
+    }
   });
 
   // AM-FEAT-015 decision 11: with calculationConfig.sourceSelection = 'latest_event' (migration

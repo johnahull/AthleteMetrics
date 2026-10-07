@@ -75,8 +75,23 @@ describe('storage.createMeasurement value validation (import paths)', () => {
     await expect(create('FLY10_TIME', NaN)).rejects.toThrow(/finite number/);
   });
 
-  it('keeps rejecting 0 for a standard metric', async () => {
-    await expect(create('FLY10_TIME', 0)).rejects.toThrow(/positive/i);
+  // The storage path validated nothing before AM-FEAT-015: the range/zero rule is
+  // scoped to MQ metrics so standard metrics behave exactly as on develop.
+  it('stores 0 and negative values for a standard metric as before (no range rule outside MQ)', async () => {
+    expect(Number((await create('FLY10_TIME', 0)).value)).toBe(0);
+    expect(Number((await create('RSI_ASYM', -5)).value)).toBe(-5);
+  });
+
+  it('rejects a manual MQ total (MQI_TOTAL / MQ_TRANSITION_TOTAL) and writes nothing', async () => {
+    await expect(create('MQI_TOTAL', 12)).rejects.toThrow(/calculated automatically/);
+    await expect(create('MQ_TRANSITION_TOTAL', 6)).rejects.toThrow(/calculated automatically/);
+    const rows = await db.select().from(measurements).where(eq(measurements.userId, athleteId));
+    expect(rows).toHaveLength(0);
+  });
+
+  it("stores an MQ score with the metric's configured unit", async () => {
+    const m = await create('MQ_JUMP', 2);
+    expect(m.units).toBe('score');
   });
 
   it('accepts a positive standard value', async () => {

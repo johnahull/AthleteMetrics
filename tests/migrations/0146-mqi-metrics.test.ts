@@ -145,7 +145,7 @@ describe('Migration 0146: MQI metrics seed', () => {
       expect(downSql).toMatch(/FROM measurements/);
     });
 
-    it.each(['measurements', 'goals', 'report_benchmarks', 'event_metrics'])(
+    it.each(['measurements', 'goals', 'report_benchmarks', 'event_metrics', 'organization_metrics'])(
       'refuses when %s rows reference MQ metrics',
       (table) => {
         const downSql = fs.readFileSync(DOWN_SQL_PATH, 'utf-8');
@@ -253,6 +253,25 @@ describe('Migration 0146: MQI metrics seed', () => {
       const pgMessage = String((err?.cause ?? err)?.message);
       expect(pgMessage).toMatch(/^Migration 0146 \(down\) refused: .*goals/);
       const result = await db.execute(sql`SELECT COUNT(*)::int AS n FROM site_metrics WHERE code = 'MQI_TOTAL'`);
+      expect(rowsOf(result)[0].n).toBe(1);
+    });
+
+    it("down-migration refuses while an organization's metric configuration enables an MQ metric", async () => {
+      const downSql = fs.readFileSync(DOWN_SQL_PATH, 'utf-8');
+      const err: any = await db
+        .transaction(async (tx) => {
+          const [org] = rowsOf(
+            await tx.execute(sql`INSERT INTO organizations (name) VALUES (${`MQ Down Org ${Date.now()}`}) RETURNING id`),
+          );
+          await tx.execute(sql`
+            INSERT INTO organization_metrics (organization_id, metric_code) VALUES (${org.id}, 'MQ_JUMP')
+          `);
+          await tx.execute(sql.raw(downSql));
+        })
+        .catch((e) => e);
+      const pgMessage = String((err?.cause ?? err)?.message);
+      expect(pgMessage).toMatch(/^Migration 0146 \(down\) refused: .*organization_metrics/);
+      const result = await db.execute(sql`SELECT COUNT(*)::int AS n FROM site_metrics WHERE code = 'MQ_JUMP'`);
       expect(rowsOf(result)[0].n).toBe(1);
     });
 

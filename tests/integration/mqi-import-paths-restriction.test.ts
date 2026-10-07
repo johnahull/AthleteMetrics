@@ -235,6 +235,21 @@ describe('MQ role allowlist on the import paths (CSV, OCR, review queue)', () =>
       ]);
     });
 
+    it('a coach OCR row for a manual MQI_TOTAL is rejected and nothing is written', async () => {
+      ocrReturns('MQI_TOTAL');
+      const res = await request(app)
+        .post('/api/import/photo')
+        .set('Cookie', cookies.coach)
+        .field('options', JSON.stringify({ organizationId: orgId, measurementMode: 'match_only' }))
+        .attach('file', PNG, 'scores.png');
+      expect(res.status).toBe(200);
+      expect(res.body.results.successful).toBe(0);
+      expect(res.body.results.errors).toEqual([
+        expect.objectContaining({ row: 1, error: expect.stringMatching(/calculated automatically/) }),
+      ]);
+      expect(await athleteRows()).toHaveLength(0);
+    });
+
     it('a coach MQ row is still imported', async () => {
       ocrReturns('MQ_JUMP');
       const res = await request(app)
@@ -262,6 +277,18 @@ describe('MQ role allowlist on the import paths (CSV, OCR, review queue)', () =>
       expect(res.status).toBe(200);
       expect(res.body.summary.created).toBe(0);
       expect(res.body.errors).toEqual([{ row: 2, error: expect.stringMatching(MQ_DENIED) }]);
+      expect(await athleteRows()).toHaveLength(0);
+    });
+
+    it('a coach CSV row for a manual MQI_TOTAL is a per-row error and nothing is written', async () => {
+      const csv = ['firstName,lastName,teamName,date,metric,value', `${athlete.firstName},${athlete.lastName},${teamName},2026-03-10,MQI_TOTAL,12`].join('\n');
+      const res = await request(app)
+        .post('/api/import/measurements')
+        .set('Cookie', cookies.coach)
+        .field('options', JSON.stringify({ organizationId: orgId, measurementMode: 'match_only' }))
+        .attach('file', Buffer.from(csv), 'measurements.csv');
+      expect(res.body.summary.created).toBe(0);
+      expect(res.body.errors).toEqual([{ row: 2, error: expect.stringMatching(/calculated automatically/) }]);
       expect(await athleteRows()).toHaveLength(0);
     });
 

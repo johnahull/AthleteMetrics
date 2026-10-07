@@ -798,6 +798,14 @@ export class MeasurementService {
         if (measurement.metric) assertCanEnterMetric(updaterRole, measurement.metric);
         assertCanAttachClip(updaterRole, measurement.mediaUrl);
 
+        // A calculated MQ total is owned by the calculator: editing it by hand
+        // would be overwritten by the next recalculation (or shadow it).
+        if (existing.isCalculated && isMovementQualityMetric(existing.metric)) {
+          throw new MeasurementValueValidationError(
+            `${existing.metric} is calculated automatically and cannot be edited manually`
+          );
+        }
+
         const updateData: Partial<typeof measurements.$inferInsert> = {};
 
         if (measurement.userId) updateData.userId = measurement.userId;
@@ -837,9 +845,17 @@ export class MeasurementService {
               validationMin: siteMetrics.validationMin,
               validationMax: siteMetrics.validationMax,
               decimalPrecision: siteMetrics.decimalPrecision,
+              isDerived: siteMetrics.isDerived,
             })
             .from(siteMetrics)
             .where(eq(siteMetrics.code, effectiveMetricCode));
+
+          // Same rule as createMeasurement: an MQ total cannot be entered manually.
+          if (metricIsChanging && metricConfig?.isDerived && isMovementQualityMetric(effectiveMetricCode)) {
+            throw new MeasurementValueValidationError(
+              `${effectiveMetricCode} is calculated automatically and cannot be entered manually`
+            );
+          }
 
           // Metric-aware value validation (see createMeasurement). When only the
           // metric changes, re-validate the existing stored value against the new metric.
@@ -966,7 +982,7 @@ export class MeasurementService {
             txUpdated.userId,
             txUpdated.metric,
             txUpdated.date,
-            { triggerContext }
+            { triggerContext, organizationId: txUpdated.organizationId }
           );
           // If the source moved (date, metric or athlete), the derived value it
           // used to feed must be recalculated/invalidated too, otherwise a stale
@@ -980,7 +996,7 @@ export class MeasurementService {
               previous.userId,
               previous.metric,
               previous.date,
-              { triggerContext }
+              { triggerContext, organizationId: previous.organizationId }
             );
           }
         } catch (derivedError) {
@@ -1056,12 +1072,12 @@ export class MeasurementService {
         }
 
         // Store info for derived metric recalculation before deleting
-        const { userId, metric, date, id: measurementId } = existing;
+        const { userId, metric, date, id: measurementId, organizationId } = existing;
 
         // Delete the measurement
         await tx.delete(measurements).where(eq(measurements.id, id));
 
-        return { userId, metric, date, measurementId };
+        return { userId, metric, date, measurementId, organizationId };
       });
 
       // Inside a caller's transaction the deletion is not committed yet: the caller
@@ -1081,6 +1097,7 @@ export class MeasurementService {
             event: 'measurement_delete',
             sourceMeasurementId: deleted.measurementId,
           },
+          organizationId: deleted.organizationId,
         });
       } catch (derivedError) {
         console.error('Derived metric recalculation failed after measurement delete:', {
@@ -1378,7 +1395,7 @@ export class MeasurementService {
     measurementIds: string[],
     expectedOrganizationId?: string
   ): Promise<{ deleted: number; failed: number; errors: Array<{ id: string; message: string }> }> {
-    type RecalcKey = { userId: string; metric: string; date: string };
+    type RecalcKey = { userId: string; metric: string; date: string; organizationId: string | null };
     type TxResult = {
       deleted: number;
       errors: Array<{ id: string; message: string }>;
@@ -1429,6 +1446,7 @@ export class MeasurementService {
             userId: measurements.userId,
             metric: measurements.metric,
             date: measurements.date,
+            organizationId: measurements.organizationId,
           });
 
         const deletedIdSet = new Set(deletedRows.map(r => r.id));
@@ -1441,6 +1459,7 @@ export class MeasurementService {
           userId: r.userId,
           metric: r.metric,
           date: r.date,
+          organizationId: r.organizationId,
         }));
 
         return { deleted: deletedRows.length, errors, recalcKeys };
@@ -1458,12 +1477,13 @@ export class MeasurementService {
       const calculator = new DerivedMetricCalculator(db);
       const seen = new Set<string>();
       for (const key of txResult.recalcKeys) {
-        const dedupeKey = `${key.userId}|${key.metric}|${key.date}`;
+        const dedupeKey = `${key.userId}|${key.metric}|${key.date}|${key.organizationId}`;
         if (seen.has(dedupeKey)) continue;
         seen.add(dedupeKey);
         try {
           await calculator.recalculateForAthlete(key.userId, key.metric, key.date, {
             triggerContext: { event: 'measurement_delete' },
+            organizationId: key.organizationId,
           });
         } catch (e) {
           // Recalc failures must not roll back successful deletions; log and continue

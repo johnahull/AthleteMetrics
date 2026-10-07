@@ -34,6 +34,7 @@ import {
 } from "@shared/schema";
 import type { WellnessTrend } from "@shared/wellness-types";
 import { validateMeasurementValue, MeasurementValueValidationError } from "@shared/measurement-value-validation";
+import { isMovementQualityMetric } from "@shared/peer-comparison-exclusions";
 import { db } from "./db";
 import { wellnessRepository, type WellnessTrend as RepoWellnessTrend } from "./repositories/wellness-repository";
 import { eq, desc, asc, and, gte, lte, gt, inArray, sql, arrayContains, or, isNull, isNotNull, exists, ne, SQL } from "drizzle-orm";
@@ -3723,19 +3724,33 @@ export class DatabaseStorage implements IStorage {
     // review-queue import routes, which call assertCanEnterMetric per row (other
     // writes go through MeasurementService, which enforces it itself).
     //
-    // Metric-aware value validation, same rule as MeasurementService (CSV/OCR
-    // imports and other callers write through here without the service).
-    // Paired-input metrics validate their own inputs.
+    // Value validation (CSV/OCR imports and other callers write through here
+    // without the service). Every metric must be a finite number. The
+    // metric-aware range rule (0-3 scores) applies to MQ metrics only: this path
+    // did no range/zero validation before AM-FEAT-015, so other metrics keep
+    // accepting 0 and negative values. Paired-input metrics validate their own inputs.
     const [metricConfig] = await db
       .select({
         validationMin: siteMetrics.validationMin,
         validationMax: siteMetrics.validationMax,
         decimalPrecision: siteMetrics.decimalPrecision,
         auxiliaryInputConfig: siteMetrics.auxiliaryInputConfig,
+        isDerived: siteMetrics.isDerived,
+        unit: siteMetrics.unit,
       })
       .from(siteMetrics)
       .where(eq(siteMetrics.code, measurement.metric));
-    if (!metricConfig?.auxiliaryInputConfig) {
+    // MQ totals (MQI_TOTAL, MQ_TRANSITION_TOTAL) are only ever calculated from
+    // the base scores; a manual entry would shadow the calculated total.
+    if (metricConfig?.isDerived && isMovementQualityMetric(measurement.metric)) {
+      throw new MeasurementValueValidationError(
+        `${measurement.metric} is calculated automatically and cannot be entered manually`
+      );
+    }
+    if (!Number.isFinite(Number(measurement.value))) {
+      throw new MeasurementValueValidationError('Value must be a finite number');
+    }
+    if (isMovementQualityMetric(measurement.metric) && !metricConfig?.auxiliaryInputConfig) {
       const valueError = validateMeasurementValue(measurement.value, metricConfig, measurement.metric);
       if (valueError) throw new MeasurementValueValidationError(valueError);
     }
@@ -3758,8 +3773,10 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    const units = measurement.metric === "FLY10_TIME" || measurement.metric === "T_TEST" || measurement.metric === "DASH_40YD" ? "s" :
-                  measurement.metric === "RSI" ? "ratio" : "in";
+    // site_metrics.unit (non-empty, e.g. 'score' for MQ metrics), else the legacy mapping
+    const units = metricConfig?.unit ||
+                  (measurement.metric === "FLY10_TIME" || measurement.metric === "T_TEST" || measurement.metric === "DASH_40YD" ? "s" :
+                  measurement.metric === "RSI" ? "ratio" : "in");
 
     // Auto-populate team context if not explicitly provided
     let teamId = measurement.teamId;
