@@ -71,18 +71,18 @@ const rowSchema = z
       .min(0, "Score must be 0-3")
       .max(3, "Score must be 0-3")
       .nullable(),
-    mediaUrl: z
-      .string()
-      .transform((s) => s.trim())
-      .superRefine((s, ctx) => {
-        const parsed = mediaUrlSchema.safeParse(s);
-        if (!parsed.success) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: parsed.error.issues[0]?.message ?? "Clip link must be a public HTTPS URL",
-          });
-        }
-      }),
+    // Output the canonical URL the server stores ('' = none), so the diff compares like with like
+    mediaUrl: z.string().transform((s, ctx) => {
+      const parsed = mediaUrlSchema.safeParse(s);
+      if (!parsed.success) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: parsed.error.issues[0]?.message ?? "Clip link must be a public HTTPS URL",
+        });
+        return z.NEVER;
+      }
+      return parsed.data ?? "";
+    }),
     notes: z.string().max(MQI_NOTES_MAX, `Notes cannot exceed ${MQI_NOTES_MAX} characters`),
   })
   .superRefine((row, ctx) => {

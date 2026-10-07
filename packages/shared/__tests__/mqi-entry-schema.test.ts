@@ -102,6 +102,25 @@ describe('mqiEntrySchema', () => {
     expect(mqiEntrySchema.safeParse(v).success).toBe(false);
   });
 
+  it('outputs the canonical clip url the server stores, and an empty string for none', () => {
+    const v = valid();
+    v.rows.MQ_JUMP.mediaUrl = ' https://Clips.Example.COM ';
+    v.rows.MQ_DECEL = { score: 1, mediaUrl: '', notes: '' };
+    const r = mqiEntrySchema.safeParse(v);
+    expect(r.success && r.data.rows.MQ_JUMP.mediaUrl).toBe('https://clips.example.com/');
+    expect(r.success && r.data.rows.MQ_DECEL.mediaUrl).toBe('');
+  });
+
+  it('a re-typed clip url equal to the saved canonical url produces no write', () => {
+    const v = valid();
+    v.rows.MQ_JUMP = { score: 3, mediaUrl: 'https://CLIPS.example.com/a', notes: '' };
+    const r = mqiEntrySchema.safeParse(v);
+    expect(r.success).toBe(true);
+    if (!r.success) return;
+    const saved = { MQ_JUMP: { id: 'm1', score: 3, mediaUrl: 'https://clips.example.com/a', notes: '' } };
+    expect(diffMqiEntry('u1', r.data, saved, '2026-03-10').upserts).toEqual([]);
+  });
+
   it('requires a score when a clip url or note is present', () => {
     const v = emptyMqiEntry();
     v.rows.MQ_JUMP.notes = 'note only';
