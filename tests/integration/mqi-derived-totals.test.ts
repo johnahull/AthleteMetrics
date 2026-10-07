@@ -411,6 +411,52 @@ describe('MQI derived totals (calculator behavior)', () => {
     expect(Number(totals[0].value)).toBe(8);
   });
 
+  it('(e) two orgs score the athlete on one day: the total carries the latest event\'s org context', async () => {
+    // Org A scores first; org B's later event completes and becomes the latest.
+    const [orgB] = await db.insert(organizations).values({ name: `MQI Org B ${Date.now()}` }).returning();
+    const [coachB] = await db
+      .insert(users)
+      .values({
+        username: `mqi-coachb-${Date.now()}`,
+        emails: [`mqi-coachb-${Date.now()}@test.com`],
+        password: 'x',
+        firstName: 'Mqi',
+        lastName: 'CoachB',
+        fullName: 'Mqi CoachB',
+      } as any)
+      .returning();
+    onTestFinished(async () => {
+      await db.delete(measurements).where(eq(measurements.userId, athleteId));
+      await db.delete(users).where(eq(users.id, coachB.id));
+      await db.delete(organizations).where(eq(organizations.id, orgB.id));
+    });
+    const calc = new DerivedMetricCalculator(db);
+    const insertSet = async (organizationId: string, submittedBy: string, eventId: string, value: number, createdAt: Date) => {
+      let last: any;
+      for (const metric of PATTERNS) {
+        [last] = await db
+          .insert(measurements)
+          .values({
+            userId: athleteId, submittedBy, metric, value: String(value), units: 'score', date: DATE, age: 18,
+            isVerified: true, organizationId, eventId, createdAt,
+          } as any)
+          .returning();
+      }
+      await calc.processNewMeasurement(last);
+    };
+    await insertSet(orgId, coachId, 'org-a-event', 3, new Date('2026-03-10T09:00:00Z'));
+    const [first] = await totalsFor('MQI_TOTAL');
+    expect(first.organizationId).toBe(orgId);
+
+    await insertSet(orgB.id, coachB.id, 'org-b-event', 1, new Date('2026-03-10T15:00:00Z'));
+    const totals = await totalsFor('MQI_TOTAL');
+    expect(totals).toHaveLength(1);
+    expect(Number(totals[0].value)).toBe(8);
+    expect(totals[0].organizationId).toBe(orgB.id);
+    expect(totals[0].submittedBy).toBe(coachB.id);
+    expect(totals[0].teamId).toBeNull();
+  });
+
   const insertEventSet = async (
     eventId: string,
     value: number,

@@ -576,6 +576,14 @@ export class DerivedMetricCalculator {
       triggeredBy: triggerContext || { event: 'measurement_insert' as const },
     };
 
+    const newestSource = Array.from(sourceMeasurementsMap.values()).reduce((latest, m) =>
+      new Date(m.createdAt).getTime() > new Date(latest.createdAt).getTime() ? m : latest
+    );
+    // latest_event: the total belongs to the chosen event's sources (possibly another
+    // org than the measurement that triggered the calculation), so it takes their context.
+    const isLatestEvent = derivedMetric.calculationConfig?.sourceSelection === 'latest_event';
+    const context = isLatestEvent ? newestSource : contextMeasurement ?? newestSource;
+
     if (existingCalculated.length > 0) {
       // Update existing calculated measurement
       const [updated] = await tx
@@ -584,18 +592,24 @@ export class DerivedMetricCalculator {
           value: calculatedValue.toFixed(3),
           calculatedFromMeasurementIds: sourceMeasurementIds,
           calculationMetadata,
+          // The chosen event may have changed: refresh the context columns too
+          ...(isLatestEvent
+            ? {
+                submittedBy: context.submittedBy,
+                isVerified: context.isVerified,
+                teamId: context.teamId,
+                season: context.season,
+                teamContextAuto: context.teamContextAuto,
+                teamNameSnapshot: context.teamNameSnapshot,
+                organizationId: context.organizationId,
+              }
+            : {}),
         })
         .where(eq(measurements.id, existingCalculated[0].id))
         .returning();
 
       return updated;
     }
-
-    const context =
-      contextMeasurement ??
-      Array.from(sourceMeasurementsMap.values()).reduce((latest, m) =>
-        new Date(m.createdAt).getTime() > new Date(latest.createdAt).getTime() ? m : latest
-      );
 
     // Create new calculated measurement
     const [newMeasurement] = await tx
