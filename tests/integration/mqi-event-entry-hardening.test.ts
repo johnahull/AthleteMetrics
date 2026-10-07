@@ -342,6 +342,28 @@ describe('PUT /api/events/:eventId/athletes/:userId/movement-quality', () => {
     expect(Number(total.value)).toBe(12);
   });
 
+  it('checks metric categories once per save, not once per score', async () => {
+    const ev = await mkEvent();
+    const first = await saveMq(ev.id, athlete.id, { upserts: PATTERNS.map((metric) => ({ metric, value: 1 })), deletes: [] });
+    expect(first.status).toBe(200);
+    const [toClear] = await rowsFor(athlete.id, PATTERNS[7], ev.id);
+
+    const perRowLookup = vi.spyOn(EventMeasurementsService.prototype as any, 'isMovementQualityScore');
+    try {
+      const res = await saveMq(ev.id, athlete.id, {
+        upserts: PATTERNS.slice(0, 7).map((metric) => ({ metric, value: 2 })),
+        deletes: [toClear.id],
+      });
+      expect(res.status).toBe(200);
+      // compare the count only: the call args hold a DB transaction, too large to print
+      expect(perRowLookup.mock.calls.length).toBe(0);
+    } finally {
+      perRowLookup.mockRestore();
+    }
+    expect(await rowsFor(athlete.id, PATTERNS[7], ev.id)).toHaveLength(0);
+    expect(Number((await rowsFor(athlete.id, PATTERNS[0], ev.id))[0].value)).toBe(2);
+  });
+
   it('editing a saved score keeps its date and recalculates the total', async () => {
     const ev = await mkEvent();
     const first = await saveMq(ev.id, athlete.id, {

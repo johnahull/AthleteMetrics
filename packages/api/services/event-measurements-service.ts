@@ -9,7 +9,7 @@
  * - Respects event freeze status
  */
 
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import type { IStorage } from "../storage";
 import { measurements, siteMetrics, type Measurement, type Event } from "@shared/schema";
 import { MeasurementValueValidationError } from "@shared/measurement-value-validation";
@@ -143,11 +143,18 @@ export class EventMeasurementsService {
   }
 
   private async isMovementQualityScore(metric: string, dbOrTx: Db | DbTransaction = this.db): Promise<boolean> {
-    const [metricRow] = await dbOrTx
-      .select({ category: siteMetrics.category, isDerived: siteMetrics.isDerived })
+    return (await this.movementQualityCodes([metric], dbOrTx)).has(metric);
+  }
+
+  /** The subset of `metrics` that are Movement Quality base scores, in one query */
+  private async movementQualityCodes(metrics: string[], dbOrTx: Db | DbTransaction = this.db): Promise<Set<string>> {
+    const codes = [...new Set(metrics)];
+    if (codes.length === 0) return new Set();
+    const rows = await dbOrTx
+      .select({ code: siteMetrics.code, category: siteMetrics.category, isDerived: siteMetrics.isDerived })
       .from(siteMetrics)
-      .where(eq(siteMetrics.code, metric));
-    return metricRow?.category === MQ_CATEGORY && !metricRow.isDerived;
+      .where(inArray(siteMetrics.code, codes));
+    return new Set(rows.filter((r) => r.category === MQ_CATEGORY && !r.isDerived).map((r) => r.code));
   }
 
   /**
@@ -166,11 +173,13 @@ export class EventMeasurementsService {
     createdBy: string,
     /** No role fails closed: MeasurementService then treats the writer as an athlete */
     submitterRole: string | undefined,
-    tx?: DbTransaction
+    tx?: DbTransaction,
+    /** Already known by a caller that batch-checked the metrics */
+    knownIsMq?: boolean
   ): Promise<Measurement> {
     await this.assertAthleteInEventOrg(event, data.userId);
     const eventDate = eventCalendarDate(event);
-    const isMq = await this.isMovementQualityScore(data.metric, tx);
+    const isMq = knownIsMq ?? (await this.isMovementQualityScore(data.metric, tx));
 
     return this.measurementService.createMeasurement(
       {
@@ -228,8 +237,9 @@ export class EventMeasurementsService {
     const event = await this.getWritableEvent(eventId, "Cannot modify measurements for frozen event");
     const eventDate = eventCalendarDate(event);
 
+    const upsertMqCodes = await this.movementQualityCodes(input.upserts.map((u) => u.metric));
     for (const u of input.upserts) {
-      if (!(await this.isMovementQualityScore(u.metric))) {
+      if (!upsertMqCodes.has(u.metric)) {
         throw new EventMeasurementInputError(`${u.metric} is not a Movement Quality score`);
       }
     }
@@ -238,12 +248,17 @@ export class EventMeasurementsService {
     const touched = new Set<string>();
 
     await this.db.transaction(async (tx) => {
+      const deleteRows = input.deletes.length
+        ? await tx
+            .select({ id: measurements.id, eventId: measurements.eventId, userId: measurements.userId, metric: measurements.metric })
+            .from(measurements)
+            .where(inArray(measurements.id, input.deletes))
+        : [];
+      const deleteRowsById = new Map(deleteRows.map((r) => [r.id, r]));
+      const deleteMqCodes = await this.movementQualityCodes(deleteRows.map((r) => r.metric), tx);
       for (const measurementId of input.deletes) {
-        const [row] = await tx
-          .select({ id: measurements.id, eventId: measurements.eventId, userId: measurements.userId, metric: measurements.metric })
-          .from(measurements)
-          .where(eq(measurements.id, measurementId));
-        if (!row || row.eventId !== eventId || row.userId !== userId || !(await this.isMovementQualityScore(row.metric, tx))) {
+        const row = deleteRowsById.get(measurementId);
+        if (!row || row.eventId !== eventId || row.userId !== userId || !deleteMqCodes.has(row.metric)) {
           throw new EventMeasurementNotFoundError();
         }
         await this.measurementService.deleteMeasurement(measurementId, event.organizationId ?? undefined, { tx });
@@ -259,7 +274,8 @@ export class EventMeasurementsService {
               { userId, metric: u.metric, value: u.value, date: new Date(eventDate), notes: u.notes, mediaUrl: u.mediaUrl },
               submittedBy,
               submitterRole,
-              tx
+              tx,
+              true // checked above: every upsert is a Movement Quality score
             )
           );
           touched.add(u.metric);
