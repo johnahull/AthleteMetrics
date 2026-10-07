@@ -25,14 +25,14 @@ async function seedMetrics() {
     const metrics = [
       {
         code: 'FLY10_TIME',
-        label: '10-Yard Fly Time',
+        label: '10-Yard Fly, 20 yd run-in',
         category: 'speed',
         unit: 's',
         metricType: 'lower_is_better' as const,
         isSystemDefault: true,
         isActive: true,
         displayOrder: 1,
-        description: 'Time to cover 10 yards after a flying start, measuring maximum velocity.',
+        description: 'Time to cover 10 yards after a 20-yard run-in, measuring maximum velocity. Fly times from other run-in distances are separate metrics and are not comparable.',
         sportAssociations: null, // Available to all sports
         decimalPrecision: 3,
         color: 'blue',
