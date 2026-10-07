@@ -18,7 +18,7 @@
  */
 
 import type { Express } from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { eq, and, inArray, gt } from "drizzle-orm";
 import { db } from "../db";
 import { requireAuth } from "../middleware";
@@ -73,7 +73,7 @@ export function registerParentLinkRequestRoutes(app: Express) {
   const linkRequestLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     limit: 10,
-    keyGenerator: (req) => req.session?.user?.id ?? req.ip ?? 'unknown',
+    keyGenerator: (req) => req.session?.user?.id ?? ipKeyGenerator(req.ip ?? 'unknown'),
     skip: (req) => shouldSkipRateLimiting(req, 'general'),
     message: { success: false, message: "Too many link requests. Please try again later." },
   });

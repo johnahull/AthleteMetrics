@@ -6,48 +6,132 @@
  */
 
 import type { Express, Request, Response } from "express";
-import rateLimit from "express-rate-limit";
-import { EventMeasurementsService } from "../services/event-measurements-service";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import { z } from "zod";
+import {
+  EventMeasurementsService,
+  EventNotFoundError,
+  EventFrozenError,
+  EventMeasurementNotFoundError,
+  EventMeasurementInputError,
+  MovementQualitySaveError,
+} from "../services/event-measurements-service";
+import {
+  MeasurementAccessDeniedError,
+  MediaUrlPermissionError,
+  MovementQualityPermissionError,
+} from "../services/measurement-service";
+import { PairedInputValidationError } from "../services/paired-input-compute";
 import { requireAuth } from "../middleware";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { storage } from "../storage";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
+import { mediaUrlSchema } from "@shared/schema";
+import { MeasurementValueValidationError } from "@shared/measurement-value-validation";
+import { clipViewer, omitClipsHiddenFromViewer } from "../utils/measurement-redaction";
 
-// Rate limiting for event measurements endpoints
+/**
+ * Validate an optional mediaUrl with the shared validator (https-only, public host, <= 2048).
+ * Empty string / null normalize to null (clear).
+ */
+function parseMediaUrl(raw: unknown): { ok: true; value: string | null | undefined } | { ok: false; message: string } {
+  const result = mediaUrlSchema.safeParse(raw);
+  if (!result.success) {
+    return { ok: false, message: result.error.issues[0]?.message ?? "Invalid mediaUrl" };
+  }
+  return { ok: true, value: result.data };
+}
+
+// Rate limiting for event measurements reads, per signed-in user like the mutation
+// limiter below: the entry panel refetches after every save, and a staff sharing one
+// gym network shares an IP.
 const eventMeasurementsLimiter = rateLimit({
   windowMs: RATE_LIMIT_WINDOW_MS,
   limit: RATE_LIMITS.STANDARD,
+  keyGenerator: (req) => req.session?.user?.id ?? ipKeyGenerator(req.ip ?? "unknown"),
+  validate: { keyGeneratorIpFallback: false },
   message: { message: "Too many event measurements requests, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
 });
 
-// Stricter rate limiting for mutation operations
+// Rate limiting for mutation operations, per signed-in user (not per IP: a whole staff on
+// one gym network shares an IP). Live event data entry is a high-frequency workflow - a
+// 25-athlete session is ~25 Movement Quality saves plus grid saves - so it uses the
+// STANDARD tier (100 per 15 minutes per user) instead of the generic MUTATION tier.
 const eventMeasurementsMutationLimiter = rateLimit({
   windowMs: RATE_LIMIT_WINDOW_MS,
-  limit: RATE_LIMITS.MUTATION,
+  limit: RATE_LIMITS.STANDARD,
+  keyGenerator: (req) => req.session?.user?.id ?? ipKeyGenerator(req.ip ?? "unknown"),
+  validate: { keyGeneratorIpFallback: false },
   message: { message: "Too many event measurements modification attempts, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
 });
 
+/** Body of PUT /api/events/:eventId/athletes/:userId/movement-quality */
+const movementQualitySaveSchema = z.object({
+  upserts: z
+    .array(
+      z.object({
+        metric: z.string().min(1),
+        value: z.number(),
+        notes: z.string().max(1000).optional(),
+        mediaUrl: mediaUrlSchema,
+      })
+    )
+    .max(12),
+  deletes: z
+    .array(z.string().min(1))
+    .max(12)
+    .refine((ids) => new Set(ids).size === ids.length, { message: "deletes must not contain duplicate ids" }),
+});
+
 /**
- * Check if user has permission to manage measurements for an event
+ * Role with which the user manages measurements for an event (used for auto-verification),
+ * or null when the user may not manage them: site admin, or org_admin / coach of the
+ * event's organization.
  */
-async function canManageEventMeasurements(user: SessionUser, eventId: string): Promise<boolean> {
+async function getEventManagerRole(user: SessionUser, eventId: string): Promise<string | null> {
   if (isSiteAdmin(user)) {
-    return true;
+    return "site_admin";
   }
 
   // Get the event to check organization
   const event = await storage.getEvent(eventId);
   if (!event || !event.organizationId) {
-    return false;
+    return null;
   }
 
   // Check if user has org_admin or coach role in this organization
   const roles = await storage.getUserRoles(user.id, event.organizationId);
-  return roles.includes('org_admin') || roles.includes('coach');
+  if (roles.includes("org_admin")) return "org_admin";
+  if (roles.includes("coach")) return "coach";
+  return null;
+}
+
+/** Map service errors to HTTP statuses by type; unexpected errors never leak their message. */
+export function sendEventMeasurementError(res: Response, error: unknown) {
+  if (error instanceof MovementQualitySaveError) {
+    return res.status(400).json({ error: error.message, errors: error.errors });
+  }
+  if (error instanceof MeasurementValueValidationError || error instanceof PairedInputValidationError) {
+    return res.status(400).json({ error: error.message, field: error.field });
+  }
+  if (error instanceof EventFrozenError || error instanceof EventMeasurementInputError) {
+    return res.status(400).json({ error: error.message });
+  }
+  if (error instanceof MeasurementAccessDeniedError) {
+    return res.status(403).json({ error: "Access denied" });
+  }
+  // Safeguard: managers pass the route gate, but a coach-only check failing must stay a 403
+  if (error instanceof MovementQualityPermissionError || error instanceof MediaUrlPermissionError) {
+    return res.status(403).json({ error: error.message });
+  }
+  if (error instanceof EventNotFoundError || error instanceof EventMeasurementNotFoundError) {
+    return res.status(404).json({ error: error.message });
+  }
+  return res.status(500).json({ error: "Failed to save event measurement" });
 }
 
 export function registerEventMeasurementsRoutes(app: Express) {
@@ -81,7 +165,7 @@ export function registerEventMeasurementsRoutes(app: Express) {
         }
 
         // Check if user has management access (coach/org_admin/site_admin)
-        const hasManagementAccess = await canManageEventMeasurements(user, eventId);
+        const hasManagementAccess = (await getEventManagerRole(user, eventId)) !== null;
 
         // Athletes can only view their own measurements if results are published
         const isViewingOwnData = requestedUserId === user.id;
@@ -104,7 +188,9 @@ export function registerEventMeasurementsRoutes(app: Express) {
           metricCode: req.query.metricCode as string | undefined,
         });
 
-        return res.json(measurements);
+        // Same clip rule as the measurement list (managers and the owner pass the gate above)
+        const viewer = clipViewer(user, isSiteAdmin(user) ? [] : await storage.getUserOrganizations(user.id));
+        return res.json(omitClipsHiddenFromViewer(measurements, viewer));
       } catch (error: any) {
         console.error("Error fetching event measurements:", error);
         return res.status(500).json({ error: error.message });
@@ -135,8 +221,7 @@ export function registerEventMeasurementsRoutes(app: Express) {
         }
 
         // Check if user has access
-        const hasAccess = await canManageEventMeasurements(user, eventId);
-        if (!hasAccess) {
+        if (!(await getEventManagerRole(user, eventId))) {
           return res.status(403).json({ error: "Access denied" });
         }
 
@@ -166,17 +251,22 @@ export function registerEventMeasurementsRoutes(app: Express) {
         }
 
         // Check permissions
-        const hasAccess = await canManageEventMeasurements(user, eventId);
-        if (!hasAccess) {
+        const role = await getEventManagerRole(user, eventId);
+        if (!role) {
           return res.status(403).json({ error: "Access denied" });
         }
 
-        const { userId, metric, value, date, notes } = req.body;
+        const { userId, metric, value, date, notes, auxiliaryValue, flyInDistance } = req.body;
 
         if (!userId || !metric || value === undefined || !date) {
           return res.status(400).json({
             error: "Missing required fields: userId, metric, value, date"
           });
+        }
+
+        const mediaUrl = parseMediaUrl(req.body.mediaUrl);
+        if (!mediaUrl.ok) {
+          return res.status(400).json({ error: `Invalid mediaUrl: ${mediaUrl.message}` });
         }
 
         const measurement = await eventMeasurementsService.createEventMeasurement(
@@ -187,20 +277,18 @@ export function registerEventMeasurementsRoutes(app: Express) {
             value: Number(value),
             date: new Date(date),
             notes,
+            mediaUrl: mediaUrl.value,
+            auxiliaryValue: auxiliaryValue === undefined || auxiliaryValue === null ? undefined : Number(auxiliaryValue),
+            flyInDistance: flyInDistance === undefined || flyInDistance === null ? undefined : Number(flyInDistance),
           },
-          user.id
+          user.id,
+          role
         );
 
         return res.status(201).json(measurement);
       } catch (error: any) {
         console.error("Error creating event measurement:", error);
-        if (error.message.includes("frozen")) {
-          return res.status(400).json({ error: error.message });
-        }
-        if (error.message.includes("not found")) {
-          return res.status(404).json({ error: error.message });
-        }
-        return res.status(500).json({ error: error.message });
+        return sendEventMeasurementError(res, error);
       }
     }
   );
@@ -222,8 +310,8 @@ export function registerEventMeasurementsRoutes(app: Express) {
         }
 
         // Check permissions
-        const hasAccess = await canManageEventMeasurements(user, eventId);
-        if (!hasAccess) {
+        const role = await getEventManagerRole(user, eventId);
+        if (!role) {
           return res.status(403).json({ error: "Access denied" });
         }
 
@@ -235,11 +323,18 @@ export function registerEventMeasurementsRoutes(app: Express) {
 
         // Validate each measurement has required fields
         const validationErrors: string[] = [];
+        const mediaUrls: Array<string | null | undefined> = [];
         measurements.forEach((m: any, index: number) => {
           if (!m.userId) validationErrors.push(`Item ${index}: missing userId`);
           if (!m.metric) validationErrors.push(`Item ${index}: missing metric`);
           if (m.value === undefined) validationErrors.push(`Item ${index}: missing value`);
           if (!m.date) validationErrors.push(`Item ${index}: missing date`);
+          const parsedMedia = parseMediaUrl(m.mediaUrl);
+          if (parsedMedia.ok) {
+            mediaUrls[index] = parsedMedia.value;
+          } else {
+            validationErrors.push(`Item ${index}: invalid mediaUrl (${parsedMedia.message})`);
+          }
         });
 
         if (validationErrors.length > 0) {
@@ -251,26 +346,68 @@ export function registerEventMeasurementsRoutes(app: Express) {
 
         const result = await eventMeasurementsService.createEventMeasurementsBulk(
           eventId,
-          measurements.map((m: any) => ({
+          measurements.map((m: any, index: number) => ({
             userId: m.userId,
             metric: m.metric,
             value: Number(m.value),
             date: new Date(m.date),
             notes: m.notes,
+            mediaUrl: mediaUrls[index],
+            auxiliaryValue: m.auxiliaryValue === undefined || m.auxiliaryValue === null ? undefined : Number(m.auxiliaryValue),
+            flyInDistance: m.flyInDistance === undefined || m.flyInDistance === null ? undefined : Number(m.flyInDistance),
           })),
-          user.id
+          user.id,
+          role
         );
 
         return res.status(201).json(result);
       } catch (error: any) {
         console.error("Error creating bulk event measurements:", error);
-        if (error.message.includes("frozen")) {
-          return res.status(400).json({ error: error.message });
+        return sendEventMeasurementError(res, error);
+      }
+    }
+  );
+
+  /**
+   * Save one athlete's Movement Quality scores for an event atomically
+   * PUT /api/events/:eventId/athletes/:userId/movement-quality
+   * Body: { upserts: [{ metric, value, notes?, mediaUrl? }], deletes: [measurementId] }
+   * All changes apply in one transaction or none do (per-metric errors are returned).
+   * Same permission as create; frozen events stay frozen; deletes are event/athlete scoped.
+   */
+  app.put(
+    "/api/events/:eventId/athletes/:userId/movement-quality",
+    requireAuth,
+    eventMeasurementsMutationLimiter,
+    async (req: Request, res: Response) => {
+      try {
+        const { eventId, userId } = req.params;
+        const user = req.session.user;
+        if (!user?.id) {
+          return res.status(401).json({ error: "User not authenticated" });
         }
-        if (error.message.includes("not found")) {
-          return res.status(404).json({ error: error.message });
+
+        const role = await getEventManagerRole(user, eventId);
+        if (!role) {
+          return res.status(403).json({ error: "Access denied" });
         }
-        return res.status(500).json({ error: error.message });
+
+        const parsed = movementQualitySaveSchema.safeParse(req.body);
+        if (!parsed.success) {
+          return res.status(400).json({ error: "Validation failed", details: parsed.error.issues });
+        }
+
+        const result = await eventMeasurementsService.saveMovementQuality(
+          eventId,
+          userId,
+          parsed.data,
+          user.id,
+          role
+        );
+        return res.json(result);
+      } catch (error) {
+        console.error("Error saving Movement Quality scores:", error);
+        return sendEventMeasurementError(res, error);
       }
     }
   );

@@ -1,6 +1,7 @@
 /**
  * Integration tests for Event Measurements Service
- * Tests creating and retrieving measurements linked to events
+ * Tests creating and retrieving measurements linked to events, against the real
+ * EventMeasurementsService (previously a local copy of an older implementation)
  *
  * TDD Phase 6.2: RED - These tests define expected event measurements behavior
  */
@@ -18,157 +19,7 @@ import {
   siteMetrics
 } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
-import type { IStorage } from "../storage";
-
-/**
- * EventMeasurementsService - Handles creating/retrieving measurements for events
- * This service wraps the measurement service with event-specific logic:
- * - Validates that users are registered for the event
- * - Validates that metrics are configured for the event
- * - Adds eventId and snapshots to measurements
- * - Respects event freeze status
- */
-class EventMeasurementsService {
-  private storage: IStorage;
-
-  constructor(storage: IStorage) {
-    this.storage = storage;
-  }
-
-  /**
-   * Get all measurements for an event
-   */
-  async getEventMeasurements(eventId: string, options?: {
-    userId?: string;
-    metricCode?: string;
-    limit?: number;
-    offset?: number;
-  }): Promise<any[]> {
-    // Get measurements filtered by eventId
-    const allMeasurements = await this.storage.getMeasurements({
-      userId: options?.userId,
-    });
-
-    // Filter by eventId (since getMeasurements doesn't support eventId filter yet)
-    return allMeasurements.filter(m => m.eventId === eventId);
-  }
-
-  /**
-   * Create a single measurement for an event
-   */
-  async createEventMeasurement(
-    eventId: string,
-    data: {
-      userId: string;
-      metric: string;
-      value: number;
-      date: Date;
-      notes?: string;
-    },
-    createdBy: string
-  ): Promise<any> {
-    // Get event to check frozen status and for snapshots
-    const event = await this.storage.getEvent(eventId);
-    if (!event) {
-      throw new Error("Event not found");
-    }
-
-    if (event.isFrozen) {
-      throw new Error("Cannot create measurements for frozen event");
-    }
-
-    // Create measurement with event context
-    // Debug: check what event.startDate is
-    console.log("event.startDate value:", event.startDate);
-    console.log("event.startDate type:", typeof event.startDate);
-    console.log("event.startDate instanceof Date:", event.startDate instanceof Date);
-
-    // Convert event date to string format 'YYYY-MM-DD' for Drizzle's date() type
-    const eventDate = event.startDate instanceof Date
-      ? event.startDate
-      : new Date(event.startDate!);
-    const eventDateString = eventDate.toISOString().split('T')[0];
-    console.log("eventDate after conversion:", eventDate);
-    console.log("eventDateString for DB:", eventDateString);
-
-    const measurement = await this.storage.createMeasurement(
-      {
-        userId: data.userId,
-        metric: data.metric as any,
-        value: data.value,
-        date: data.date.toISOString().split('T')[0],
-        notes: data.notes,
-      },
-      createdBy,
-      {
-        eventId: eventId,
-        eventNameSnapshot: event.name,
-        eventDateSnapshot: eventDateString,
-      }
-    );
-
-    return measurement;
-  }
-
-  /**
-   * Create multiple measurements for an event (bulk entry)
-   */
-  async createEventMeasurementsBulk(
-    eventId: string,
-    measurementsData: Array<{
-      userId: string;
-      metric: string;
-      value: number;
-      date: Date;
-      notes?: string;
-    }>,
-    createdBy: string
-  ): Promise<{ created: any[]; errors: Array<{ index: number; error: string }> }> {
-    const event = await this.storage.getEvent(eventId);
-    if (!event) {
-      throw new Error("Event not found");
-    }
-
-    if (event.isFrozen) {
-      throw new Error("Cannot create measurements for frozen event");
-    }
-
-    const created: any[] = [];
-    const errors: Array<{ index: number; error: string }> = [];
-
-    // Convert event date to string format 'YYYY-MM-DD' for Drizzle's date() type
-    const eventDate = event.startDate instanceof Date
-      ? event.startDate
-      : new Date(event.startDate!);
-    const eventDateString = eventDate.toISOString().split('T')[0];
-
-    for (let i = 0; i < measurementsData.length; i++) {
-      try {
-        const m = measurementsData[i];
-        const measurement = await this.storage.createMeasurement(
-          {
-            userId: m.userId,
-            metric: m.metric as any,
-            value: m.value,
-            date: m.date.toISOString().split('T')[0],
-            notes: m.notes,
-          },
-          createdBy,
-          {
-            eventId: eventId,
-            eventNameSnapshot: event.name,
-            eventDateSnapshot: eventDateString,
-          }
-        );
-        created.push(measurement);
-      } catch (err: any) {
-        errors.push({ index: i, error: err.message });
-      }
-    }
-
-    return { created, errors };
-  }
-}
+import { EventMeasurementsService } from "../services/event-measurements-service";
 
 describe("Event Measurements Service", () => {
   const timestamp = Date.now().toString();
@@ -303,7 +154,8 @@ describe("Event Measurements Service", () => {
           value: 1.15,
           date: new Date("2025-06-01"),
         },
-        testOrgAdminId
+        testOrgAdminId,
+        "org_admin"
       );
 
       expect(measurement).toBeDefined();
@@ -323,7 +175,8 @@ describe("Event Measurements Service", () => {
           value: 32.5,
           date: new Date("2025-06-01"),
         },
-        testOrgAdminId
+        testOrgAdminId,
+        "org_admin"
       );
 
       expect(measurement.eventDateSnapshot).toBeDefined();
@@ -349,7 +202,8 @@ describe("Event Measurements Service", () => {
             value: 1.15,
             date: new Date("2025-05-01"),
           },
-          testOrgAdminId
+          testOrgAdminId,
+          "org_admin"
         )
       ).rejects.toThrow("frozen");
     });
@@ -364,7 +218,8 @@ describe("Event Measurements Service", () => {
             value: 1.15,
             date: new Date("2025-06-01"),
           },
-          testOrgAdminId
+          testOrgAdminId,
+          "org_admin"
         )
       ).rejects.toThrow("Event not found");
     });
@@ -379,7 +234,8 @@ describe("Event Measurements Service", () => {
           date: new Date("2025-06-01"),
           notes: "Slight hesitation at start",
         },
-        testOrgAdminId
+        testOrgAdminId,
+        "org_admin"
       );
 
       expect(measurement.notes).toBe("Slight hesitation at start");
@@ -394,7 +250,8 @@ describe("Event Measurements Service", () => {
           { userId: testAthleteId, metric: "FLY10_TIME", value: 1.15, date: new Date("2025-06-01") },
           { userId: testAthleteId, metric: "VERTICAL_JUMP", value: 32.5, date: new Date("2025-06-01") },
         ],
-        testOrgAdminId
+        testOrgAdminId,
+        "org_admin"
       );
 
       expect(result.created).toHaveLength(2);
@@ -412,7 +269,8 @@ describe("Event Measurements Service", () => {
           { userId: testAthleteId, metric: "FLY10_TIME", value: 1.15, date: new Date("2025-06-01") },
           { userId: testAthleteId, metric: "VERTICAL_JUMP", value: 30.0, date: new Date("2025-06-01") },
         ],
-        testOrgAdminId
+        testOrgAdminId,
+        "org_admin"
       );
 
       // Both should succeed if metric codes exist
@@ -426,7 +284,8 @@ describe("Event Measurements Service", () => {
           [
             { userId: testAthleteId, metric: "FLY10_TIME", value: 1.15, date: new Date("2025-05-01") },
           ],
-          testOrgAdminId
+          testOrgAdminId,
+          "org_admin"
         )
       ).rejects.toThrow("frozen");
     });
@@ -438,7 +297,8 @@ describe("Event Measurements Service", () => {
           { userId: testAthleteId, metric: "FLY10_TIME", value: 1.10, date: new Date("2025-06-01") },
           { userId: testAthleteId, metric: "VERTICAL_JUMP", value: 33.0, date: new Date("2025-06-01") },
         ],
-        testOrgAdminId
+        testOrgAdminId,
+        "org_admin"
       );
 
       for (const measurement of result.created) {
@@ -455,12 +315,14 @@ describe("Event Measurements Service", () => {
       await eventMeasurementsService.createEventMeasurement(
         testEventId,
         { userId: testAthleteId, metric: "FLY10_TIME", value: 1.15, date: new Date("2025-06-01") },
-        testOrgAdminId
+        testOrgAdminId,
+        "org_admin"
       );
       await eventMeasurementsService.createEventMeasurement(
         testEventId,
         { userId: testAthleteId, metric: "VERTICAL_JUMP", value: 32.0, date: new Date("2025-06-01") },
-        testOrgAdminId
+        testOrgAdminId,
+        "org_admin"
       );
 
       const measurements = await eventMeasurementsService.getEventMeasurements(testEventId);
@@ -474,7 +336,8 @@ describe("Event Measurements Service", () => {
       await eventMeasurementsService.createEventMeasurement(
         testEventId,
         { userId: testAthleteId, metric: "FLY10_TIME", value: 1.15, date: new Date("2025-06-01") },
-        testOrgAdminId
+        testOrgAdminId,
+        "org_admin"
       );
 
       const measurements = await eventMeasurementsService.getEventMeasurements(testEventId, {
@@ -495,7 +358,8 @@ describe("Event Measurements Service", () => {
       await eventMeasurementsService.createEventMeasurement(
         testEventId,
         { userId: testAthleteId, metric: "FLY10_TIME", value: 1.15, date: new Date("2025-06-01") },
-        testOrgAdminId
+        testOrgAdminId,
+        "org_admin"
       );
 
       // Create a different event and measurement

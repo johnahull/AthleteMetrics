@@ -146,6 +146,9 @@ describe.skip('Organization Profile - User Invitation Functionality (TDD)', () =
         startImpersonation: vi.fn(),
         stopImpersonation: vi.fn(),
         checkImpersonationStatus: vi.fn(),
+        organizationsLoading: false,
+        organizationsError: false,
+        refetchOrganizations: vi.fn(),
       });
 
       renderWithProviders(<OrganizationProfile />);
@@ -188,6 +191,9 @@ describe.skip('Organization Profile - User Invitation Functionality (TDD)', () =
         startImpersonation: vi.fn(),
         stopImpersonation: vi.fn(),
         checkImpersonationStatus: vi.fn(),
+        organizationsLoading: false,
+        organizationsError: false,
+        refetchOrganizations: vi.fn(),
       });
 
       renderWithProviders(<OrganizationProfile />);
@@ -222,6 +228,9 @@ describe.skip('Organization Profile - User Invitation Functionality (TDD)', () =
         startImpersonation: vi.fn(),
         stopImpersonation: vi.fn(),
         checkImpersonationStatus: vi.fn(),
+        organizationsLoading: false,
+        organizationsError: false,
+        refetchOrganizations: vi.fn(),
       });
 
       renderWithProviders(<OrganizationProfile />);
@@ -263,6 +272,9 @@ describe.skip('Organization Profile - User Invitation Functionality (TDD)', () =
         startImpersonation: vi.fn(),
         stopImpersonation: vi.fn(),
         checkImpersonationStatus: vi.fn(),
+        organizationsLoading: false,
+        organizationsError: false,
+        refetchOrganizations: vi.fn(),
       });
 
       renderWithProviders(<OrganizationProfile />);
@@ -307,6 +319,9 @@ describe.skip('Organization Profile - User Invitation Functionality (TDD)', () =
         startImpersonation: vi.fn(),
         stopImpersonation: vi.fn(),
         checkImpersonationStatus: vi.fn(),
+        organizationsLoading: false,
+        organizationsError: false,
+        refetchOrganizations: vi.fn(),
       });
 
       renderWithProviders(<OrganizationProfile />);
@@ -354,6 +369,9 @@ describe.skip('Organization Profile - User Invitation Functionality (TDD)', () =
         startImpersonation: vi.fn(),
         stopImpersonation: vi.fn(),
         checkImpersonationStatus: vi.fn(),
+        organizationsLoading: false,
+        organizationsError: false,
+        refetchOrganizations: vi.fn(),
       });
 
       renderWithProviders(<OrganizationProfile />);
@@ -402,6 +420,9 @@ describe.skip('Organization Profile - User Invitation Functionality (TDD)', () =
         startImpersonation: vi.fn(),
         stopImpersonation: vi.fn(),
         checkImpersonationStatus: vi.fn(),
+        organizationsLoading: false,
+        organizationsError: false,
+        refetchOrganizations: vi.fn(),
       });
 
       renderWithProviders(<OrganizationProfile />);
@@ -454,6 +475,9 @@ describe.skip('Organization Profile - User Invitation Functionality (TDD)', () =
         startImpersonation: vi.fn(),
         stopImpersonation: vi.fn(),
         checkImpersonationStatus: vi.fn(),
+        organizationsLoading: false,
+        organizationsError: false,
+        refetchOrganizations: vi.fn(),
       });
 
       renderWithProviders(<OrganizationProfile />);

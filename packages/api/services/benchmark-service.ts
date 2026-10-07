@@ -15,6 +15,7 @@ import {
   updateCustomBenchmarkSchema,
   insertTierGroupSchema,
 } from "@shared/schema";
+import { isPeerComparisonExcludedMetric } from "@shared/peer-comparison-exclusions";
 import type {
   SiteBenchmark,
   InsertSiteBenchmark,
@@ -69,6 +70,11 @@ export class BenchmarkService extends BaseService {
 
       // Validate input
       const validatedData = insertSiteBenchmarkSchema.parse(benchmarkData);
+
+      // MQ ordinal scores are excluded from benchmarks in v1 (AM-FEAT-015 D7)
+      if (isPeerComparisonExcludedMetric(validatedData.metricCode)) {
+        throw new Error(`Invalid metric: ${validatedData.metricCode} is not available for benchmarks`);
+      }
 
       // Cycle 2: Validate metric exists
       const metric = await this.storage.getSiteMetric(validatedData.metricCode);
@@ -129,6 +135,13 @@ export class BenchmarkService extends BaseService {
       // Validate input if provided fields
       if (Object.keys(benchmarkData).length > 0) {
         updateSiteBenchmarkSchema.parse(benchmarkData);
+      }
+
+      // The raw data is spread into the update, so a metricCode the schema does not
+      // declare still reaches storage: apply the create-time MQ exclusion here too.
+      const retargetCode = (benchmarkData as { metricCode?: unknown }).metricCode;
+      if (typeof retargetCode === "string" && isPeerComparisonExcludedMetric(retargetCode)) {
+        throw new Error(`Invalid metric: ${retargetCode} is not available for benchmarks`);
       }
 
       // Update benchmark
@@ -336,6 +349,11 @@ export class BenchmarkService extends BaseService {
       // Validate input
       const validatedData = insertTierGroupSchema.parse(data);
 
+      // MQ ordinal scores are excluded from benchmarks in v1 (AM-FEAT-015 D7)
+      if (isPeerComparisonExcludedMetric(validatedData.metricCode)) {
+        throw new Error(`Invalid metric: ${validatedData.metricCode} is not available for benchmarks`);
+      }
+
       // Validate metric exists
       const metric = await this.storage.getSiteMetric(validatedData.metricCode);
       if (!metric) {
@@ -475,6 +493,11 @@ export class BenchmarkService extends BaseService {
       // Validate input
       const validatedData = insertCustomBenchmarkSchema.parse(benchmarkData);
 
+      // MQ ordinal scores are excluded from benchmarks in v1 (AM-FEAT-015 D7)
+      if (isPeerComparisonExcludedMetric(validatedData.metricCode)) {
+        throw new Error(`Invalid metric: ${validatedData.metricCode} is not available for benchmarks`);
+      }
+
       // Cycle 8: Check if custom benchmarks are allowed for this organization
       const organization = await this.storage.getOrganization(validatedData.organizationId);
       if (!organization) {
@@ -562,6 +585,12 @@ export class BenchmarkService extends BaseService {
       // Validate input if provided fields
       if (Object.keys(benchmarkData).length > 0) {
         updateCustomBenchmarkSchema.parse(benchmarkData);
+      }
+
+      // See updateSiteBenchmark: block retargeting to an MQ metric on update too.
+      const retargetCode = (benchmarkData as { metricCode?: unknown }).metricCode;
+      if (typeof retargetCode === "string" && isPeerComparisonExcludedMetric(retargetCode)) {
+        throw new Error(`Invalid metric: ${retargetCode} is not available for benchmarks`);
       }
 
       // Update benchmark (storage layer validates ownership)

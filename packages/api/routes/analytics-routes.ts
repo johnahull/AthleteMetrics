@@ -38,6 +38,7 @@ import {
   getPresetDateRange,
   type TimeframePreset
 } from "@shared/dashboard-timeframe";
+import { PeerComparisonExcludedMetricError } from "@shared/peer-comparison-exclusions";
 
 // Rate limiting for analytics endpoints
 // Analytics queries can be expensive, so we use stricter limits
@@ -538,8 +539,8 @@ export function registerAnalyticsRoutes(app: Express) {
         return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.ORG_ACCESS_DENIED) });
       }
 
-      // Validate required metric parameter
-      const metric = req.query.metric as string | undefined;
+      // Validate required metric parameter (a repeated ?metric= arrives as an array)
+      const metric = typeof req.query.metric === "string" ? req.query.metric : undefined;
       if (!metric) {
         return res.status(400).json({ message: "metric parameter is required" });
       }
@@ -597,6 +598,9 @@ export function registerAnalyticsRoutes(app: Express) {
 
       res.json(leaderboardData);
     } catch (error) {
+      if (error instanceof PeerComparisonExcludedMetricError) {
+        return res.status(400).json({ message: error.message });
+      }
       console.error("Get leaderboard error:", error);
       const message = error instanceof Error ? error.message : "Failed to fetch leaderboard";
       res.status(500).json({ message });
@@ -642,8 +646,8 @@ export function registerAnalyticsRoutes(app: Express) {
         return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.ORG_ACCESS_DENIED) });
       }
 
-      // Validate required metric parameter
-      const metric = req.query.metric as string | undefined;
+      // Validate required metric parameter (a repeated ?metric= arrives as an array)
+      const metric = typeof req.query.metric === "string" ? req.query.metric : undefined;
       if (!metric) {
         return res.status(400).json({ message: "metric parameter is required" });
       }
@@ -701,6 +705,9 @@ export function registerAnalyticsRoutes(app: Express) {
 
       res.json(mostImprovedData);
     } catch (error) {
+      if (error instanceof PeerComparisonExcludedMetricError) {
+        return res.status(400).json({ message: error.message });
+      }
       console.error("Get most-improved error:", error);
       const message = error instanceof Error ? error.message : "Failed to fetch improvement rankings";
       res.status(500).json({ message });

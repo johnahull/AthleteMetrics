@@ -17,6 +17,8 @@ import {
   type Organization,
 } from '@shared/schema';
 import { parseDateFilter } from '@shared/date-utils';
+import { validateMeasurementValue, MeasurementValueValidationError } from '@shared/measurement-value-validation';
+import { isMovementQualityMetric } from '@shared/peer-comparison-exclusions';
 import { db } from '../db';
 import { eq, and, gte, lte, or, isNull, sql, desc, inArray, arrayContains } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
@@ -32,6 +34,86 @@ import {
 
 // Singleton achievement service instance for performance
 const achievementService = new AchievementService();
+
+/** Thrown when a non-coach/admin tries to attach a clip (mediaUrl) to a measurement (maps to HTTP 403). */
+export class MediaUrlPermissionError extends Error {
+  constructor() {
+    super('Only coaches and admins can attach clips to measurements; a coach must add them');
+    this.name = 'MediaUrlPermissionError';
+  }
+}
+
+/** Thrown when a non-coach/admin tries to enter a Movement Quality score (maps to HTTP 403). */
+export class MovementQualityPermissionError extends Error {
+  constructor(metricCode: string) {
+    super(`Only coaches and admins can enter Movement Quality scores (${metricCode}); a coach must record them`);
+    this.name = 'MovementQualityPermissionError';
+  }
+}
+
+/** Roles allowed to enter MQ scores. Everything else (athlete, parent, guest, no role) is denied. */
+const MQ_ENTRY_ROLES: ReadonlySet<string> = new Set(['coach', 'org_admin', 'site_admin']);
+
+/**
+ * MQ scores are coach-entered rubric values (AM-FEAT-015): only coaches and
+ * admins may create or edit them on any write path. Fails closed on a missing role.
+ */
+export function assertCanEnterMetric(role: string | undefined, metricCode: string): void {
+  if (isMovementQualityMetric(metricCode) && !(role && MQ_ENTRY_ROLES.has(role))) {
+    throw new MovementQualityPermissionError(metricCode);
+  }
+}
+
+/** Roles allowed to attach clips. Everything else (athlete, parent, guest, no role) is denied. */
+const CLIP_ROLES: ReadonlySet<string> = new Set(['coach', 'org_admin', 'site_admin']);
+
+/**
+ * Clips are coach-attached (AM-FEAT-015): a non-empty mediaUrl needs a coach or
+ * admin role; omitting or clearing it (null / '') is allowed for everyone.
+ * Fails closed on a missing role.
+ */
+export function assertCanAttachClip(role: string | undefined, mediaUrl: string | null | undefined): void {
+  if (mediaUrl && !(role && CLIP_ROLES.has(role))) {
+    throw new MediaUrlPermissionError();
+  }
+}
+
+/** The measurement belongs to another organization than the caller expected (maps to HTTP 403). */
+export class MeasurementAccessDeniedError extends Error {
+  constructor(message = 'Access denied - measurement belongs to different organization') {
+    super(message);
+    this.name = 'MeasurementAccessDeniedError';
+  }
+}
+
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Trusted server-side event context (set only by the event measurement service after its
+ * frozen/permission checks); deliberately NOT read from the request body schema.
+ */
+export interface MeasurementEventContext {
+  eventId: string;
+  eventNameSnapshot: string;
+  eventDateSnapshot: string; // 'YYYY-MM-DD'
+  /** The event's organization; used for the measurement instead of the team-derived one */
+  organizationId?: string | null;
+  /**
+   * One row per (athlete, metric, event): update the existing row instead of inserting
+   * (Movement Quality scores). Serialized per key with a transaction-scoped advisory lock.
+   */
+  upsertPerEvent?: boolean;
+}
+
+export interface MeasurementWriteOptions {
+  /**
+   * Run inside this outer transaction. Derived-metric recalculation, achievements and
+   * notifications are then skipped: they must run after the OUTER commit (caller's job).
+   */
+  tx?: DbTransaction;
+  /** Skip athlete notifications and achievement checks (e.g. event results not yet published) */
+  suppressSideEffects?: boolean;
+}
 
 export interface MeasurementFilters {
   userId?: string;
@@ -55,6 +137,11 @@ export interface MeasurementFilters {
   offset?: number;
   filterMode?: 'all' | 'personal' | 'org';
   orgIds?: string;
+  /**
+   * Owner of the personal (organizationId IS NULL) rows a filterMode query may return.
+   * Required for filterMode queries unless allowCrossOrganization (site admin).
+   */
+  personalOwnerId?: string;
 }
 
 export interface PaginatedMeasurements {
@@ -136,14 +223,21 @@ export class MeasurementService {
   async createMeasurement(
     measurement: InsertMeasurement,
     submittedBy: string,
-    submitterRole: string = 'athlete'
+    submitterRole: string = 'athlete',
+    eventContext?: MeasurementEventContext,
+    options: MeasurementWriteOptions = {}
   ): Promise<Measurement> {
+    assertCanEnterMetric(submitterRole, measurement.metric);
+    assertCanAttachClip(submitterRole, measurement.mediaUrl);
+
     // Wrap entire operation in transaction to prevent race conditions
     // Race condition scenario: User joins/leaves team between active teams query and measurement insert
     let newMeasurement: Measurement;
+    // Set when upsertPerEvent updated an existing row instead of inserting
+    let replaced: Measurement | null = null;
 
     try {
-      newMeasurement = await db.transaction(async (tx) => {
+      newMeasurement = await (options.tx ?? db).transaction(async (tx) => {
       // Get user info for age calculation
       const [user] = await tx
         .select()
@@ -176,9 +270,29 @@ export class MeasurementService {
         .select({
           unit: siteMetrics.unit,
           auxiliaryInputConfig: siteMetrics.auxiliaryInputConfig,
+          validationMin: siteMetrics.validationMin,
+          validationMax: siteMetrics.validationMax,
+          decimalPrecision: siteMetrics.decimalPrecision,
+          isDerived: siteMetrics.isDerived,
         })
         .from(siteMetrics)
         .where(eq(siteMetrics.code, measurement.metric));
+
+      // MQ totals (MQI_TOTAL, MQ_TRANSITION_TOTAL) are only ever calculated from
+      // the base scores; a manual entry would shadow the calculated total.
+      if (metricConfig?.isDerived && isMovementQualityMetric(measurement.metric)) {
+        throw new MeasurementValueValidationError(
+          `${measurement.metric} is calculated automatically and cannot be entered manually`
+        );
+      }
+
+      // Metric-aware value validation: positive by default, 0-allowed range
+      // check for MQ metrics (0-3 scores). Paired-input metrics validate their
+      // own inputs, so skip them here.
+      if (!metricConfig?.auxiliaryInputConfig) {
+        const valueError = validateMeasurementValue(measurement.value, metricConfig, measurement.metric);
+        if (valueError) throw new MeasurementValueValidationError(valueError);
+      }
 
       // Use metric's configured unit, or default to 'in' for unknown metrics
       // Use nullish coalescing to allow empty string units (e.g., RSI is a ratio)
@@ -258,7 +372,9 @@ export class MeasurementService {
                 lte(userTeams.joinedAt, measurementDate),
                 or(isNull(userTeams.leftAt), gte(userTeams.leftAt, measurementDate)),
                 eq(userTeams.isActive, true),
-                eq(teams.isArchived, false)
+                eq(teams.isArchived, false),
+                // Event writes take team context only from the event's organization
+                eventContext?.organizationId ? eq(teams.organizationId, eventContext.organizationId) : undefined
               )
             )
             .for('update'); // Prevent race condition with row-level lock
@@ -306,6 +422,51 @@ export class MeasurementService {
                         submitterRole === 'org_admin' ||
                         submitterRole === 'site_admin';
 
+      // One score per (athlete, metric, event): edit the existing row in place
+      if (eventContext?.upsertPerEvent) {
+        await tx.execute(
+          sql`SELECT pg_advisory_xact_lock(hashtextextended(${`event-score:${measurement.userId}:${measurement.metric}:${eventContext.eventId}`}, 0))`
+        );
+        const [existing] = await tx
+          .select()
+          .from(measurements)
+          .where(
+            and(
+              eq(measurements.userId, measurement.userId),
+              eq(measurements.metric, measurement.metric),
+              eq(measurements.eventId, eventContext.eventId),
+              eq(measurements.isCalculated, false)
+            )
+          )
+          .orderBy(desc(measurements.createdAt))
+          .limit(1)
+          .for('update');
+
+        if (existing) {
+          if (eventContext.organizationId && existing.organizationId && existing.organizationId !== eventContext.organizationId) {
+            throw new MeasurementAccessDeniedError();
+          }
+          const [txUpdated] = await tx
+            .update(measurements)
+            .set({
+              value: String(computedNumericValue),
+              units,
+              date: measurementDate.toISOString(),
+              age,
+              // The edit is this submitter's entry now (and auto-verified for coaches/admins)
+              submittedBy,
+              isVerified,
+              verifiedBy: isVerified ? submittedBy : existing.verifiedBy,
+              ...(measurement.notes !== undefined ? { notes: measurement.notes || null } : {}),
+              ...(measurement.mediaUrl !== undefined ? { mediaUrl: measurement.mediaUrl ?? null } : {}),
+            })
+            .where(eq(measurements.id, existing.id))
+            .returning();
+          replaced = existing;
+          return txUpdated;
+        }
+      }
+
       // Create measurement
       const [txMeasurement] = await tx
         .insert(measurements)
@@ -318,14 +479,21 @@ export class MeasurementService {
           units,
           age,
           notes: measurement.notes || null,
+          mediaUrl: measurement.mediaUrl ?? null,
           flyInDistance: measurement.flyInDistance ? String(measurement.flyInDistance) : null,
           auxiliaryValue: auxiliaryNumericValue !== null ? String(auxiliaryNumericValue) : null,
           teamId: teamId || null,
           season: season || null,
           teamContextAuto,
           teamNameSnapshot,
-          organizationId: organizationId || null,
+          // Event writes belong to the event's organization (the athlete's team may be in another)
+          organizationId: eventContext?.organizationId || organizationId || null,
           isVerified,
+          // Audit trail: an auto-verified entry is verified by its submitter
+          verifiedBy: isVerified ? submittedBy : null,
+          eventId: eventContext?.eventId ?? null,
+          eventNameSnapshot: eventContext?.eventNameSnapshot ?? null,
+          eventDateSnapshot: eventContext?.eventDateSnapshot ?? null,
           isCalculated: isCalculatedFromPairedInput,
           calculationMetadata: pairedInputMetadata,
           // Paired-input metrics are computed from inline inputs (not from
@@ -338,20 +506,15 @@ export class MeasurementService {
         })
         .returning();
 
-      // DERIVED METRICS: Trigger automatic calculation of derived metrics
-      // This runs after the measurement is created and committed
-      const calculator = new DerivedMetricCalculator(db);
-      await calculator.processNewMeasurement(txMeasurement, {
-        event: 'measurement_insert',
-        userId: submittedBy,
-        sourceMeasurementId: txMeasurement.id,
-      });
-
       return txMeasurement;
       });
     } catch (error) {
       // Preserve error specificity - don't wrap validation errors
-      if (error instanceof PairedInputValidationError) {
+      if (
+        error instanceof PairedInputValidationError ||
+        error instanceof MeasurementValueValidationError ||
+        error instanceof MeasurementAccessDeniedError
+      ) {
         throw error;
       }
       if (error instanceof Error) {
@@ -378,6 +541,47 @@ export class MeasurementService {
       }
       // Unknown error type - wrap with context
       throw new Error(`Failed to create measurement due to unexpected error: ${String(error)}`);
+    }
+
+    // Inside a caller's transaction nothing is committed yet: derived metrics,
+    // achievements and notifications are the caller's job after its commit.
+    if (options.tx) {
+      return newMeasurement;
+    }
+
+    // DERIVED METRICS: Trigger automatic calculation of derived metrics.
+    // Must run AFTER the transaction commits: the calculator reads through its own
+    // connection, so inside the transaction it cannot see the row just inserted
+    // (the last source measurement would never produce its derived total).
+    // Failures are logged, not thrown: the source measurement is already persisted.
+    try {
+      const calculator = new DerivedMetricCalculator(db);
+      await calculator.processNewMeasurement(newMeasurement, {
+        event: 'measurement_insert',
+        userId: submittedBy,
+        sourceMeasurementId: newMeasurement.id,
+      });
+      const previous = replaced as Measurement | null;
+      if (previous && previous.date !== newMeasurement.date) {
+        // An upsert moved the score to another date: refresh the old date's totals too
+        await calculator.recalculateForAthlete(previous.userId, previous.metric, previous.date, {
+          triggerContext: { event: 'measurement_update', sourceMeasurementId: newMeasurement.id },
+        });
+      }
+    } catch (derivedError) {
+      console.error('Derived metric calculation failed after measurement create:', {
+        measurementId: newMeasurement.id,
+        userId: newMeasurement.userId,
+        metric: newMeasurement.metric,
+        date: newMeasurement.date,
+        error: derivedError,
+      });
+    }
+
+    // Event entries before results are published (and in-place score edits) do not
+    // notify the athlete or award achievements.
+    if (options.suppressSideEffects || replaced) {
+      return newMeasurement;
     }
 
     // ACHIEVEMENTS: Check for newly unlocked achievements AFTER transaction commits
@@ -563,18 +767,21 @@ export class MeasurementService {
    * @param id Measurement ID
    * @param measurement Partial measurement data
    * @param expectedOrganizationId Optional organization ID for defense-in-depth validation (IDOR prevention)
+   * @param updaterRole Role of the user making the change (only coaches/admins may edit MQ scores or attach clips; undefined is denied)
    * @returns Updated measurement
    * @throws Error if measurement not found, org mismatch, or transaction fails
    */
   async updateMeasurement(
     id: string,
     measurement: Partial<InsertMeasurement>,
-    expectedOrganizationId?: string
+    expectedOrganizationId?: string,
+    updaterRole?: string,
+    options: Pick<MeasurementWriteOptions, 'tx'> = {}
   ): Promise<Measurement> {
     // Wrap in transaction to prevent race conditions during concurrent updates
     // Race condition scenario: Two users update same measurement simultaneously
     try {
-      return await db.transaction(async (tx) => {
+      const { updated: txUpdated, previous } = await (options.tx ?? db).transaction(async (tx) => {
         // Lock the row with FOR UPDATE to prevent concurrent modifications
         const [existing] = await tx
           .select()
@@ -589,7 +796,21 @@ export class MeasurementService {
         // Defense-in-depth: Verify organizationId if provided (IDOR prevention)
         // This provides service-layer validation even if route-layer checks are bypassed
         if (expectedOrganizationId && existing.organizationId !== expectedOrganizationId) {
-          throw new Error('Access denied - measurement belongs to different organization');
+          throw new MeasurementAccessDeniedError();
+        }
+
+        // Both the stored metric and a new one: a non-coach/admin may neither edit
+        // an MQ score nor move a measurement onto an MQ metric, nor attach a clip.
+        assertCanEnterMetric(updaterRole, existing.metric);
+        if (measurement.metric) assertCanEnterMetric(updaterRole, measurement.metric);
+        assertCanAttachClip(updaterRole, measurement.mediaUrl);
+
+        // A calculated MQ total is owned by the calculator: editing it by hand
+        // would be overwritten by the next recalculation (or shadow it).
+        if (existing.isCalculated && isMovementQualityMetric(existing.metric)) {
+          throw new MeasurementValueValidationError(
+            `${existing.metric} is calculated automatically and cannot be edited manually`
+          );
         }
 
         const updateData: Partial<typeof measurements.$inferInsert> = {};
@@ -601,6 +822,8 @@ export class MeasurementService {
         if (measurement.value !== undefined)
           updateData.value = String(measurement.value);
         if (measurement.notes !== undefined) updateData.notes = measurement.notes;
+        // null (or empty string, normalized to null by the Zod schema) clears the link
+        if (measurement.mediaUrl !== undefined) updateData.mediaUrl = measurement.mediaUrl;
         if (measurement.flyInDistance !== undefined)
           updateData.flyInDistance = measurement.flyInDistance ? String(measurement.flyInDistance) : null;
         // auxiliaryValue is intentionally NOT written here unconditionally.
@@ -626,9 +849,28 @@ export class MeasurementService {
             .select({
               unit: siteMetrics.unit,
               auxiliaryInputConfig: siteMetrics.auxiliaryInputConfig,
+              validationMin: siteMetrics.validationMin,
+              validationMax: siteMetrics.validationMax,
+              decimalPrecision: siteMetrics.decimalPrecision,
+              isDerived: siteMetrics.isDerived,
             })
             .from(siteMetrics)
             .where(eq(siteMetrics.code, effectiveMetricCode));
+
+          // Same rule as createMeasurement: an MQ total cannot be entered manually.
+          if (metricIsChanging && metricConfig?.isDerived && isMovementQualityMetric(effectiveMetricCode)) {
+            throw new MeasurementValueValidationError(
+              `${effectiveMetricCode} is calculated automatically and cannot be entered manually`
+            );
+          }
+
+          // Metric-aware value validation (see createMeasurement). When only the
+          // metric changes, re-validate the existing stored value against the new metric.
+          if (!metricConfig?.auxiliaryInputConfig) {
+            const valueToCheck = measurement.value !== undefined ? measurement.value : Number(existing.value);
+            const valueError = validateMeasurementValue(valueToCheck, metricConfig, effectiveMetricCode);
+            if (valueError) throw new MeasurementValueValidationError(valueError);
+          }
 
           if (metricIsChanging) {
             updateData.units = metricConfig?.unit ?? 'in';
@@ -720,28 +962,71 @@ export class MeasurementService {
           .where(eq(measurements.id, id))
           .returning();
 
-        // DERIVED METRICS: Trigger recalculation if value or date changed
-        // This ensures derived metrics stay synchronized with source changes
-        if (updateData.value !== undefined || updateData.date !== undefined) {
-          const calculator = new DerivedMetricCalculator(db);
-          await calculator.recalculateForAthlete(
-            updated.userId,
-            updated.metric,
-            updated.date,
-            {
-              triggerContext: {
-                event: 'measurement_update',
-                sourceMeasurementId: updated.id,
-              },
-            }
-          );
-        }
-
-        return updated;
+        return { updated, previous: existing };
       });
+
+      // DERIVED METRICS: Trigger recalculation if value (incl. a paired-input
+      // auxiliaryValue that recomputes the value), date, metric or athlete changed.
+      // Runs AFTER the transaction commits so the calculator (separate connection)
+      // sees the updated row. Failures are logged: the update is already persisted.
+      // recalculateForAthlete also creates a total that does not exist yet, so a
+      // source moved onto a date/metric that completes a set produces its total.
+      if (
+        !options.tx &&
+        (measurement.value !== undefined ||
+          measurement.auxiliaryValue !== undefined ||
+          measurement.date !== undefined ||
+          measurement.metric !== undefined ||
+          measurement.userId !== undefined)
+      ) {
+        try {
+          const calculator = new DerivedMetricCalculator(db);
+          const triggerContext = {
+            event: 'measurement_update' as const,
+            sourceMeasurementId: txUpdated.id,
+          };
+          await calculator.recalculateForAthlete(
+            txUpdated.userId,
+            txUpdated.metric,
+            txUpdated.date,
+            { triggerContext, organizationId: txUpdated.organizationId }
+          );
+          // If the source moved (date, metric or athlete), the derived value it
+          // used to feed must be recalculated/invalidated too, otherwise a stale
+          // total remains on the old date/metric/athlete.
+          if (
+            previous.date !== txUpdated.date ||
+            previous.metric !== txUpdated.metric ||
+            previous.userId !== txUpdated.userId
+          ) {
+            await calculator.recalculateForAthlete(
+              previous.userId,
+              previous.metric,
+              previous.date,
+              { triggerContext, organizationId: previous.organizationId }
+            );
+          }
+        } catch (derivedError) {
+          console.error('Derived metric recalculation failed after measurement update:', {
+            measurementId: txUpdated.id,
+            userId: txUpdated.userId,
+            metric: txUpdated.metric,
+            date: txUpdated.date,
+            error: derivedError,
+          });
+        }
+      }
+
+      return txUpdated;
     } catch (error) {
       // Preserve error specificity
-      if (error instanceof PairedInputValidationError) {
+      if (
+        error instanceof PairedInputValidationError ||
+        error instanceof MeasurementValueValidationError ||
+        error instanceof MeasurementAccessDeniedError ||
+        error instanceof MovementQualityPermissionError ||
+        error instanceof MediaUrlPermissionError
+      ) {
         throw error;
       }
       if (error instanceof Error) {
@@ -767,11 +1052,15 @@ export class MeasurementService {
    * @param expectedOrganizationId Optional organization ID for defense-in-depth validation (IDOR prevention)
    * @throws Error if measurement not found, org mismatch, or transaction fails
    */
-  async deleteMeasurement(id: string, expectedOrganizationId?: string): Promise<void> {
+  async deleteMeasurement(
+    id: string,
+    expectedOrganizationId?: string,
+    options: Pick<MeasurementWriteOptions, 'tx'> = {}
+  ): Promise<void> {
     // Wrap in transaction to prevent race conditions during concurrent operations
     // Race condition scenario: User deletes measurement while another user verifies/updates it
     try {
-      await db.transaction(async (tx) => {
+      const deleted = await (options.tx ?? db).transaction(async (tx) => {
         // Lock the row with FOR UPDATE to prevent concurrent modifications
         const [existing] = await tx
           .select()
@@ -786,27 +1075,51 @@ export class MeasurementService {
         // Defense-in-depth: Verify organizationId if provided (IDOR prevention)
         // This provides service-layer validation even if route-layer checks are bypassed
         if (expectedOrganizationId && existing.organizationId !== expectedOrganizationId) {
-          throw new Error('Access denied - measurement belongs to different organization');
+          throw new MeasurementAccessDeniedError();
         }
 
         // Store info for derived metric recalculation before deleting
-        const { userId, metric, date, id: measurementId } = existing;
+        const { userId, metric, date, id: measurementId, organizationId } = existing;
 
         // Delete the measurement
         await tx.delete(measurements).where(eq(measurements.id, id));
 
-        // DERIVED METRICS: Trigger recalculation after deletion
-        // This ensures derived metrics are updated when source measurements are removed
+        return { userId, metric, date, measurementId, organizationId };
+      });
+
+      // Inside a caller's transaction the deletion is not committed yet: the caller
+      // recalculates derived metrics after its commit.
+      if (options.tx) {
+        return;
+      }
+
+      // DERIVED METRICS: Trigger recalculation after the deletion has committed.
+      // Inside the transaction the calculator (separate connection) would still
+      // see the deleted row, leaving a stale derived total. Failures are logged:
+      // the deletion is already persisted.
+      try {
         const calculator = new DerivedMetricCalculator(db);
-        await calculator.recalculateForAthlete(userId, metric, date, {
+        await calculator.recalculateForAthlete(deleted.userId, deleted.metric, deleted.date, {
           triggerContext: {
             event: 'measurement_delete',
-            sourceMeasurementId: measurementId,
+            sourceMeasurementId: deleted.measurementId,
           },
+          organizationId: deleted.organizationId,
         });
-      });
+      } catch (derivedError) {
+        console.error('Derived metric recalculation failed after measurement delete:', {
+          measurementId: deleted.measurementId,
+          userId: deleted.userId,
+          metric: deleted.metric,
+          date: deleted.date,
+          error: derivedError,
+        });
+      }
     } catch (error) {
       // Preserve error specificity
+      if (error instanceof MeasurementAccessDeniedError) {
+        throw error;
+      }
       if (error instanceof Error) {
         if (error.message.includes('not found')) {
           throw error;
@@ -1089,7 +1402,7 @@ export class MeasurementService {
     measurementIds: string[],
     expectedOrganizationId?: string
   ): Promise<{ deleted: number; failed: number; errors: Array<{ id: string; message: string }> }> {
-    type RecalcKey = { userId: string; metric: string; date: string };
+    type RecalcKey = { userId: string; metric: string; date: string; organizationId: string | null };
     type TxResult = {
       deleted: number;
       errors: Array<{ id: string; message: string }>;
@@ -1140,6 +1453,7 @@ export class MeasurementService {
             userId: measurements.userId,
             metric: measurements.metric,
             date: measurements.date,
+            organizationId: measurements.organizationId,
           });
 
         const deletedIdSet = new Set(deletedRows.map(r => r.id));
@@ -1152,6 +1466,7 @@ export class MeasurementService {
           userId: r.userId,
           metric: r.metric,
           date: r.date,
+          organizationId: r.organizationId,
         }));
 
         return { deleted: deletedRows.length, errors, recalcKeys };
@@ -1169,12 +1484,13 @@ export class MeasurementService {
       const calculator = new DerivedMetricCalculator(db);
       const seen = new Set<string>();
       for (const key of txResult.recalcKeys) {
-        const dedupeKey = `${key.userId}|${key.metric}|${key.date}`;
+        const dedupeKey = `${key.userId}|${key.metric}|${key.date}|${key.organizationId}`;
         if (seen.has(dedupeKey)) continue;
         seen.add(dedupeKey);
         try {
           await calculator.recalculateForAthlete(key.userId, key.metric, key.date, {
             triggerContext: { event: 'measurement_delete' },
+            organizationId: key.organizationId,
           });
         } catch (e) {
           // Recalc failures must not roll back successful deletions; log and continue
@@ -1230,9 +1546,18 @@ export class MeasurementService {
 
     // CROSS-ORG MEASUREMENT QUERIES (filterMode parameter)
     // Handle new filter modes: 'personal', 'all', 'org'
+    // SECURITY: personal rows (organizationId IS NULL) belong to their athlete only;
+    // outside site-admin context they are bound to personalOwnerId.
+    if ((filters?.filterMode === 'personal' || filters?.filterMode === 'all') && !allowCrossOrganization && !filters.personalOwnerId) {
+      throw new Error('personalOwnerId is required for personal measurement queries');
+    }
+    const personalRows = allowCrossOrganization || !filters?.personalOwnerId
+      ? isNull(measurements.organizationId)
+      : and(isNull(measurements.organizationId), eq(measurements.userId, filters.personalOwnerId))!;
+
     if (filters?.filterMode === 'personal') {
       // Only self-entered measurements (organizationId IS NULL)
-      conditions.push(isNull(measurements.organizationId));
+      conditions.push(personalRows);
     } else if (filters?.filterMode === 'all') {
       // Measurements from any of specified org IDs OR personal (NULL)
       const orgIdArray = filters.orgIds
@@ -1256,12 +1581,12 @@ export class MeasurementService {
         conditions.push(
           or(
             inArray(measurements.organizationId, orgIdArray),
-            isNull(measurements.organizationId)
+            personalRows
           )!
         );
       } else {
         // Empty orgIds = only personal measurements
-        conditions.push(isNull(measurements.organizationId));
+        conditions.push(personalRows);
       }
     } else if (filters?.organizationId) {
       // Default 'org' mode: existing organizationId filter
@@ -1417,6 +1742,7 @@ export class MeasurementService {
         flyInDistance: measurements.flyInDistance,
         auxiliaryValue: measurements.auxiliaryValue,
         notes: measurements.notes,
+        mediaUrl: measurements.mediaUrl,
         teamId: measurements.teamId,
         teamNameSnapshot: measurements.teamNameSnapshot,
         organizationId: measurements.organizationId,

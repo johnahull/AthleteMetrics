@@ -33,6 +33,8 @@ import {
   type SecurityEvent,
 } from "@shared/schema";
 import type { WellnessTrend } from "@shared/wellness-types";
+import { validateMeasurementValue, MeasurementValueValidationError } from "@shared/measurement-value-validation";
+import { isMovementQualityMetric } from "@shared/peer-comparison-exclusions";
 import { db } from "./db";
 import { wellnessRepository, type WellnessTrend as RepoWellnessTrend } from "./repositories/wellness-repository";
 import { eq, desc, asc, and, gte, lte, gt, inArray, sql, arrayContains, or, isNull, isNotNull, exists, ne, SQL } from "drizzle-orm";
@@ -238,6 +240,7 @@ export interface IStorage {
   // Measurements
   getMeasurements(filters?: {
     userId?: string;
+    eventId?: string;
     teamIds?: string[];
     organizationId?: string;
     metric?: string;
@@ -257,7 +260,7 @@ export interface IStorage {
     verifiedBy?: User;
   })[]>;
   getMeasurement(id: string): Promise<Measurement | undefined>;
-  createMeasurement(measurement: CreateMeasurementInput, submittedBy: string, eventContext?: { eventId: string; eventNameSnapshot: string; eventDateSnapshot: string; }): Promise<Measurement>;
+  createMeasurement(measurement: CreateMeasurementInput, submittedBy: string, eventContext?: { eventId: string; eventNameSnapshot: string; eventDateSnapshot: string; organizationId?: string | null; }): Promise<Measurement>;
   updateMeasurement(id: string, measurement: Partial<InsertMeasurement>): Promise<Measurement>;
   deleteMeasurement(id: string): Promise<void>;
   verifyMeasurement(id: string, verifiedBy: string): Promise<Measurement>;
@@ -3403,6 +3406,7 @@ export class DatabaseStorage implements IStorage {
   async getMeasurements(filters?: {
     userId?: string;
     athleteId?: string;
+    eventId?: string;
     teamIds?: string[];
     organizationId?: string;
     metric?: string;
@@ -3434,6 +3438,8 @@ export class DatabaseStorage implements IStorage {
       units: measurements.units,
       flyInDistance: measurements.flyInDistance,
       notes: measurements.notes,
+      mediaUrl: measurements.mediaUrl,
+      organizationId: measurements.organizationId,
       createdAt: measurements.createdAt,
       // Event context fields
       eventId: measurements.eventId,
@@ -3465,6 +3471,9 @@ export class DatabaseStorage implements IStorage {
       if (targetUserId) {
         conditions.push(eq(measurements.userId, targetUserId));
       }
+    }
+    if (filters?.eventId) {
+      conditions.push(eq(measurements.eventId, filters.eventId));
     }
     if (filters?.metric) {
       conditions.push(eq(measurements.metric, filters.metric));
@@ -3717,8 +3726,48 @@ export class DatabaseStorage implements IStorage {
       eventId: string;
       eventNameSnapshot: string;
       eventDateSnapshot: string;  // String in 'YYYY-MM-DD' format for Drizzle's date() type
+      // The event's organization: an event measurement always belongs to it, and
+      // team context is only taken from the athlete's teams in that organization.
+      organizationId?: string | null;
     }
   ): Promise<Measurement> {
+    // Trust boundary: this method validates values only and performs NO role
+    // check. Callers must enforce who may enter a metric (Movement Quality is
+    // coach/admin-only) before calling: today the only callers are the CSV/OCR/
+    // review-queue import routes, which call assertCanEnterMetric per row (other
+    // writes go through MeasurementService, which enforces it itself).
+    //
+    // Value validation (CSV/OCR imports and other callers write through here
+    // without the service). Every metric must be a finite number. The
+    // metric-aware range rule (0-3 scores) applies to MQ metrics only: this path
+    // did no range/zero validation before AM-FEAT-015, so other metrics keep
+    // accepting 0 and negative values. Paired-input metrics validate their own inputs.
+    const [metricConfig] = await db
+      .select({
+        validationMin: siteMetrics.validationMin,
+        validationMax: siteMetrics.validationMax,
+        decimalPrecision: siteMetrics.decimalPrecision,
+        auxiliaryInputConfig: siteMetrics.auxiliaryInputConfig,
+        isDerived: siteMetrics.isDerived,
+        unit: siteMetrics.unit,
+      })
+      .from(siteMetrics)
+      .where(eq(siteMetrics.code, measurement.metric));
+    // MQ totals (MQI_TOTAL, MQ_TRANSITION_TOTAL) are only ever calculated from
+    // the base scores; a manual entry would shadow the calculated total.
+    if (metricConfig?.isDerived && isMovementQualityMetric(measurement.metric)) {
+      throw new MeasurementValueValidationError(
+        `${measurement.metric} is calculated automatically and cannot be entered manually`
+      );
+    }
+    if (!Number.isFinite(Number(measurement.value))) {
+      throw new MeasurementValueValidationError('Value must be a finite number');
+    }
+    if (isMovementQualityMetric(measurement.metric) && !metricConfig?.auxiliaryInputConfig) {
+      const valueError = validateMeasurementValue(measurement.value, metricConfig, measurement.metric);
+      if (valueError) throw new MeasurementValueValidationError(valueError);
+    }
+
     // Calculate age and units based on metric
     const user = await this.getUser(measurement.userId);
     if (!user) throw new Error("User not found");
@@ -3738,16 +3787,16 @@ export class DatabaseStorage implements IStorage {
     }
 
     // Units: caller-supplied (non-empty) > site_metrics.unit (non-empty) > legacy hard-coded mapping.
-    const callerUnits = measurement.units;
-    let units = callerUnits && callerUnits.trim() !== "" ? callerUnits : "";
-    if (!units) {
-      const siteMetric = await this.getSiteMetric(measurement.metric);
-      units = siteMetric?.unit ?? "";
-    }
-    if (!units) {
-      units = measurement.metric === "FLY10_TIME" || measurement.metric === "T_TEST" || measurement.metric === "DASH_40YD" ? "s" :
-              measurement.metric === "RSI" ? "ratio" : "in";
-    }
+    // Exception: an MQ score always takes its configured unit ('score'); import
+    // callers fill a missing unit with a non-MQ default (e.g. 's' on review approval).
+    const callerUnits = measurement.units?.trim() ? measurement.units : "";
+    const configuredUnit = metricConfig?.unit || "";
+    const units =
+      (isMovementQualityMetric(measurement.metric) && configuredUnit) ||
+      callerUnits ||
+      configuredUnit ||
+      (measurement.metric === "FLY10_TIME" || measurement.metric === "T_TEST" || measurement.metric === "DASH_40YD" ? "s" :
+       measurement.metric === "RSI" ? "ratio" : "in");
 
     // Auto-populate team context if not explicitly provided
     let teamId = measurement.teamId;
@@ -3755,10 +3804,12 @@ export class DatabaseStorage implements IStorage {
     let teamContextAuto = true;
     let teamNameSnapshot: string | null = null;
     let organizationId: string | null = null;
+    const eventOrganizationId = eventContext?.organizationId ?? null;
 
     if (!teamId || teamId.trim() === "") {
-      // Get athlete's active teams at measurement date
-      const activeTeams = await this.getAthleteActiveTeamsAtDate(measurement.userId, measurementDate);
+      // Get athlete's active teams at measurement date (only the event's org for event writes)
+      const activeTeams = (await this.getAthleteActiveTeamsAtDate(measurement.userId, measurementDate))
+        .filter(t => !eventOrganizationId || t.organizationId === eventOrganizationId);
 
       if (activeTeams.length === 1) {
         // Single team - auto-assign
@@ -3815,6 +3866,7 @@ export class DatabaseStorage implements IStorage {
       metric: measurement.metric,
       value: measurement.value.toString(),
       notes: measurement.notes,
+      mediaUrl: measurement.mediaUrl ?? null,
       flyInDistance: measurement.flyInDistance?.toString(),
       age,
       units,
@@ -3822,10 +3874,10 @@ export class DatabaseStorage implements IStorage {
       verifiedBy: isCoach ? submittedBy : undefined,
       teamId: teamId || null,
       teamNameSnapshot: teamNameSnapshot || null,
-      organizationId: organizationId || null,
+      organizationId: eventOrganizationId || organizationId || null,
       season: season || null,
       teamContextAuto: teamContextAuto,
-      // Event context (for measurements taken at events)
+      // Event context (for measurements taken at events), passed by EventMeasurementsService
       eventId: eventContext?.eventId ?? null,
       eventNameSnapshot: eventContext?.eventNameSnapshot ?? null,
       eventDateSnapshot: eventContext?.eventDateSnapshot ?? null,
@@ -3835,6 +3887,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateMeasurement(id: string, measurement: Partial<InsertMeasurement>): Promise<Measurement> {
+    // Trust boundary: this method performs NO role check (no Movement Quality
+    // or clip guard) and has no callers today. Measurement edits go through
+    // MeasurementService.updateMeasurement, which enforces assertCanEnterMetric
+    // and assertCanAttachClip itself; any new caller must enforce them first.
     const updateData: any = {};
     if (measurement.userId) updateData.userId = measurement.userId;
     // submittedBy cannot be updated after creation
@@ -3842,6 +3898,7 @@ export class DatabaseStorage implements IStorage {
     if (measurement.metric) updateData.metric = measurement.metric;
     if (measurement.value !== undefined) updateData.value = measurement.value.toString();
     if (measurement.notes !== undefined) updateData.notes = measurement.notes;
+    if (measurement.mediaUrl !== undefined) updateData.mediaUrl = measurement.mediaUrl;
     if (measurement.flyInDistance !== undefined) updateData.flyInDistance = measurement.flyInDistance?.toString();
 
     const [updated] = await db.update(measurements).set(updateData).where(eq(measurements.id, id)).returning();

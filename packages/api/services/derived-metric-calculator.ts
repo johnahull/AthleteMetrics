@@ -16,8 +16,9 @@ import {
   type InsertMeasurement,
   type SiteMetric,
   type CustomOrgMetric,
+  events,
 } from '@shared/schema';
-import { eq, and, gte, lte, sql, or, desc, asc } from 'drizzle-orm';
+import { eq, and, gte, lte, sql, or, desc, asc, inArray } from 'drizzle-orm';
 import type { PgTransaction } from 'drizzle-orm/pg-core';
 import type { PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js';
 import type { ExtractTablesWithRelations } from 'drizzle-orm';
@@ -221,6 +222,10 @@ export type TriggerContext = {
 export interface RecalculateOptions {
   useTransaction?: boolean;     // Default: false (avoids long-running transactions)
   triggerContext?: TriggerContext;
+  // Organization of the measurement that triggered the recalculation. A missing total
+  // is only created for site derived metrics and this org's custom derived metrics
+  // (as in processNewMeasurement); other orgs' existing totals are still recalculated.
+  organizationId?: string | null;
 }
 
 /**
@@ -320,7 +325,7 @@ export class DerivedMetricCalculator {
         code: string;
         formula: string | null;
         dependentMetrics: string[] | null;
-        calculationConfig: { dateMatchStrategy: 'same_date' | 'latest_before' | 'closest'; maxDateDifference?: number; missingSourceBehavior: 'skip' | 'error' } | null;
+        calculationConfig: { dateMatchStrategy: 'same_date' | 'latest_before' | 'closest'; maxDateDifference?: number; missingSourceBehavior: 'skip' | 'error'; sourceSelection?: 'latest_event' } | null;
         unit: string | null;
         isCustomOrg: boolean;
       };
@@ -369,176 +374,280 @@ export class DerivedMetricCalculator {
       // If scaling issues arise (many derived metrics triggered per source measurement),
       // consider batch-fetching all source measurements upfront or implementing a calculation queue.
       // Current implementation prioritizes code clarity and transaction safety over premature optimization.
+      // Sorted so concurrent calculations take the per-metric advisory locks in the same order
+      allDependentDerivedMetrics.sort((a, b) => a.code.localeCompare(b.code));
       for (const derivedMetric of allDependentDerivedMetrics) {
         try {
-          // Check if athlete already has a direct (non-calculated) measurement for this derived metric on this date
-          const [directMeasurement] = await tx
-            .select()
-            .from(measurements)
-            .where(
-              and(
-                eq(measurements.userId, measurement.userId),
-                eq(measurements.metric, derivedMetric.code),
-                eq(measurements.date, measurement.date),
-                eq(measurements.isCalculated, false)
-              )
-            )
-            .limit(1);
-
-          if (directMeasurement) {
-            // Direct measurements take priority - skip calculation
-            continue;
-          }
-
-          // Find source measurements for the formula
-          const sourceMeasurementsMap = await this.findSourceMeasurementsInTransaction(
+          const createdMeasurement = await this.computeAndUpsertDerived(
             tx,
+            derivedMetric,
             measurement.userId,
-            derivedMetric.dependentMetrics || [],
             measurement.date,
-            derivedMetric.calculationConfig || {
-              dateMatchStrategy: 'same_date',
-              missingSourceBehavior: 'skip',
-            },
-            metricConfigsMap
+            metricConfigsMap,
+            triggerContext || { event: 'measurement_insert' },
+            measurement
           );
-
-          if (!sourceMeasurementsMap) {
-            // Missing source measurements - skip based on missingSourceBehavior
-            continue;
+          if (createdMeasurement) {
+            calculatedMeasurements.push(createdMeasurement);
           }
-
-          // Build source values for formula evaluation
-          // Keys are normalized to lowercase to match formula service's variable normalization
-          const sourceValues: Record<string, number> = {};
-          const sourceMeasurementIds: string[] = [];
-
-          for (const [metricCode, sourceMeasurement] of sourceMeasurementsMap.entries()) {
-            sourceValues[metricCode.toLowerCase()] = parseFloat(sourceMeasurement.value);
-            sourceMeasurementIds.push(sourceMeasurement.id);
-          }
-
-          // Evaluate the formula
-          const calculatedValue = evaluateFormula(
-            derivedMetric.formula || '',
-            sourceValues
-          );
-
-          if (calculatedValue === null) {
-            // Formula evaluation failed
-            continue;
-          }
-
-          // Check for invalid results (Infinity, NaN)
-          if (!isFinite(calculatedValue)) {
-            continue;
-          }
-
-          // Get user info for age calculation
-          const [user] = await tx
-            .select()
-            .from(users)
-            .where(eq(users.id, measurement.userId));
-
-          if (!user) {
-            continue;
-          }
-
-          // Calculate age at measurement date
-          const measurementDate = new Date(measurement.date);
-          let age = 0;
-          if (user.birthDate) {
-            const birthDate = new Date(user.birthDate);
-            age = measurementDate.getFullYear() - birthDate.getFullYear();
-            const birthdayThisYear = new Date(
-              measurementDate.getFullYear(),
-              birthDate.getMonth(),
-              birthDate.getDate()
-            );
-            if (measurementDate < birthdayThisYear) {
-              age -= 1;
-            }
-          }
-
-          // Check if calculated measurement already exists (update scenario)
-          const existingCalculated = await tx
-            .select()
-            .from(measurements)
-            .where(
-              and(
-                eq(measurements.userId, measurement.userId),
-                eq(measurements.metric, derivedMetric.code),
-                eq(measurements.date, measurement.date),
-                eq(measurements.isCalculated, true)
-              )
-            );
-
-          let createdMeasurement: Measurement;
-
-          if (existingCalculated.length > 0) {
-            // Update existing calculated measurement
-            const [updated] = await tx
-              .update(measurements)
-              .set({
-                value: calculatedValue.toFixed(3),
-                calculatedFromMeasurementIds: sourceMeasurementIds,
-                calculationMetadata: {
-                  formula: derivedMetric.formula || '',
-                  sourceValues,
-                  calculatedAt: new Date().toISOString(),
-                  calculationVersion: CALCULATION_VERSION,
-                  triggeredBy: triggerContext || { event: 'measurement_insert' },
-                },
-              })
-              .where(eq(measurements.id, existingCalculated[0].id))
-              .returning();
-
-            createdMeasurement = updated;
-          } else {
-            // Create new calculated measurement
-            const [newMeasurement] = await tx
-              .insert(measurements)
-              .values({
-                userId: measurement.userId,
-                submittedBy: measurement.submittedBy,
-                date: measurement.date,
-                metric: derivedMetric.code,
-                value: calculatedValue.toFixed(3),
-                units: derivedMetric.unit || '',
-                age,
-                isVerified: measurement.isVerified,
-                teamId: measurement.teamId,
-                season: measurement.season,
-                teamContextAuto: measurement.teamContextAuto,
-                teamNameSnapshot: measurement.teamNameSnapshot,
-                organizationId: measurement.organizationId,
-                isCalculated: true,
-                calculatedFromMeasurementIds: sourceMeasurementIds,
-                calculationMetadata: {
-                  formula: derivedMetric.formula || '',
-                  sourceValues,
-                  calculatedAt: new Date().toISOString(),
-                  calculationVersion: CALCULATION_VERSION,
-                  triggeredBy: triggerContext || { event: 'measurement_insert' },
-                },
-              })
-              .returning();
-
-            createdMeasurement = newMeasurement;
-          }
-
-          calculatedMeasurements.push(createdMeasurement);
         } catch (error) {
           // Log error but continue processing other derived metrics
-          console.error(
-            `Error calculating derived metric ${derivedMetric.code}:`,
-            error
-          );
+          console.error(`Error calculating derived metric ${derivedMetric.code}:`, {
+            userId: measurement.userId,
+            metric: derivedMetric.code,
+            date: measurement.date,
+            error,
+          });
         }
       }
 
       return calculatedMeasurements;
     });
+  }
+
+  /**
+   * Calculate one derived metric for (userId, date) and create or update its
+   * calculated measurement. Shared by processNewMeasurement and by
+   * recalculateForAthlete when no calculated row exists yet for that date (e.g. a
+   * source moved onto the date, or the remaining same-date sources became the set).
+   *
+   * Concurrency: takes a transaction-scoped advisory lock on
+   * (athlete, derived metric, date) so concurrent calculations serialize and the
+   * second one updates the row the first one inserted instead of duplicating it.
+   * Duplicate calculated rows left over from before the lock existed are collapsed
+   * here: the most recently created row (ties broken by id) is updated and the
+   * others are deleted, so one calculated row remains per (athlete, metric, date).
+   *
+   * @param contextMeasurement - Source measurement whose team/org/season context a
+   *   newly created calculated row inherits; defaults to the most recently created
+   *   source measurement used by the formula.
+   * @param deleteWhenUncomputable - Recalculation mode (recalculateForAthlete): all
+   *   existing calculated rows are deleted when a direct measurement exists for the
+   *   date, its sources are missing, or the formula result is invalid.
+   * @param allowCreate - When false, only an existing calculated row is updated.
+   * @returns the created/updated calculated measurement, or null when it cannot be
+   *   calculated (direct measurement exists, sources missing, invalid result)
+   */
+  private async computeAndUpsertDerived(
+    tx: DbTransaction,
+    derivedMetric: {
+      code: string;
+      formula: string | null;
+      dependentMetrics: string[] | null;
+      calculationConfig: { dateMatchStrategy: 'same_date' | 'latest_before' | 'closest'; maxDateDifference?: number; missingSourceBehavior: 'skip' | 'error'; sourceSelection?: 'latest_event' } | null;
+      unit: string | null;
+    },
+    userId: string,
+    date: string,
+    metricConfigsMap: Map<string, { higherIsBetter: boolean }>,
+    triggerContext: TriggerContext | undefined,
+    contextMeasurement?: Measurement,
+    deleteWhenUncomputable = false,
+    allowCreate = true
+  ): Promise<Measurement | null> {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${`derived:${userId}:${derivedMetric.code}:${date}`}, 0))`
+    );
+
+    // Check if calculated measurement already exists (update scenario). Newest first:
+    // duplicates can predate the advisory lock, and the update below keeps the most
+    // recently created row (ties broken by id) and deletes the rest.
+    const existingCalculated = await tx
+      .select()
+      .from(measurements)
+      .where(
+        and(
+          eq(measurements.userId, userId),
+          eq(measurements.metric, derivedMetric.code),
+          eq(measurements.date, date),
+          eq(measurements.isCalculated, true)
+        )
+      )
+      .orderBy(desc(measurements.createdAt), desc(measurements.id));
+
+    if (!allowCreate && existingCalculated.length === 0) {
+      return null;
+    }
+
+    const deleteExisting = async () => {
+      if (deleteWhenUncomputable && existingCalculated.length > 0) {
+        await tx.delete(measurements).where(
+          inArray(measurements.id, existingCalculated.map(m => m.id))
+        );
+      }
+      return null;
+    };
+
+    // Check if athlete already has a direct (non-calculated) measurement for this derived metric on this date
+    const [directMeasurement] = await tx
+      .select()
+      .from(measurements)
+      .where(
+        and(
+          eq(measurements.userId, userId),
+          eq(measurements.metric, derivedMetric.code),
+          eq(measurements.date, date),
+          eq(measurements.isCalculated, false)
+        )
+      )
+      .limit(1);
+
+    if (directMeasurement) {
+      // Direct measurements take priority - skip calculation; when recalculating,
+      // also remove a calculated row that coexists with the direct one.
+      return deleteExisting();
+    }
+
+    // Find source measurements for the formula
+    const sourceMeasurementsMap = await this.findSourceMeasurementsInTransaction(
+      tx,
+      userId,
+      derivedMetric.dependentMetrics || [],
+      date,
+      derivedMetric.calculationConfig || {
+        dateMatchStrategy: 'same_date',
+        missingSourceBehavior: 'skip',
+      },
+      metricConfigsMap
+    );
+
+    if (!sourceMeasurementsMap) {
+      // Missing source measurements - skip based on missingSourceBehavior.
+      // With latest_event selection the newest event is incomplete, so a total
+      // calculated from an older event is stale: remove it in either mode.
+      if (derivedMetric.calculationConfig?.sourceSelection === 'latest_event' && existingCalculated.length > 0) {
+        await tx.delete(measurements).where(
+          inArray(measurements.id, existingCalculated.map(m => m.id))
+        );
+        return null;
+      }
+      return deleteExisting();
+    }
+    if (sourceMeasurementsMap.size === 0) {
+      // An empty map (no dependent metrics) has no source to inherit context from.
+      return null;
+    }
+
+    // Build source values for formula evaluation
+    // Keys are normalized to lowercase to match formula service's variable normalization
+    const sourceValues: Record<string, number> = {};
+    const sourceMeasurementIds: string[] = [];
+
+    for (const [metricCode, sourceMeasurement] of sourceMeasurementsMap.entries()) {
+      sourceValues[metricCode.toLowerCase()] = parseFloat(sourceMeasurement.value);
+      sourceMeasurementIds.push(sourceMeasurement.id);
+    }
+
+    // Evaluate the formula
+    const calculatedValue = evaluateFormula(
+      derivedMetric.formula || '',
+      sourceValues
+    );
+
+    // Formula evaluation failed, or invalid result (Infinity, NaN)
+    if (calculatedValue === null || !isFinite(calculatedValue)) {
+      return deleteExisting();
+    }
+
+    // Get user info for age calculation
+    const [user] = await tx
+      .select()
+      .from(users)
+      .where(eq(users.id, userId));
+
+    if (!user) {
+      return null;
+    }
+
+    // Calculate age at measurement date
+    const measurementDate = new Date(date);
+    let age = 0;
+    if (user.birthDate) {
+      const birthDate = new Date(user.birthDate);
+      age = measurementDate.getFullYear() - birthDate.getFullYear();
+      const birthdayThisYear = new Date(
+        measurementDate.getFullYear(),
+        birthDate.getMonth(),
+        birthDate.getDate()
+      );
+      if (measurementDate < birthdayThisYear) {
+        age -= 1;
+      }
+    }
+
+    const calculationMetadata = {
+      formula: derivedMetric.formula || '',
+      sourceValues,
+      calculatedAt: new Date().toISOString(),
+      calculationVersion: CALCULATION_VERSION,
+      triggeredBy: triggerContext || { event: 'measurement_insert' as const },
+    };
+
+    const newestSource = Array.from(sourceMeasurementsMap.values()).reduce((latest, m) =>
+      new Date(m.createdAt).getTime() > new Date(latest.createdAt).getTime() ? m : latest
+    );
+    // latest_event: the total belongs to the chosen event's sources (possibly another
+    // org than the measurement that triggered the calculation), so it takes their context.
+    const isLatestEvent = derivedMetric.calculationConfig?.sourceSelection === 'latest_event';
+    const context = isLatestEvent ? newestSource : contextMeasurement ?? newestSource;
+
+    if (existingCalculated.length > 0) {
+      // Update the survivor (newest calculated row) and delete any duplicates
+      const [survivor, ...duplicates] = existingCalculated;
+      if (duplicates.length > 0) {
+        await tx.delete(measurements).where(
+          inArray(measurements.id, duplicates.map(m => m.id))
+        );
+      }
+      const [updated] = await tx
+        .update(measurements)
+        .set({
+          value: calculatedValue.toFixed(3),
+          calculatedFromMeasurementIds: sourceMeasurementIds,
+          calculationMetadata,
+          // The chosen event may have changed: refresh the context columns too
+          ...(isLatestEvent
+            ? {
+                submittedBy: context.submittedBy,
+                isVerified: context.isVerified,
+                teamId: context.teamId,
+                season: context.season,
+                teamContextAuto: context.teamContextAuto,
+                teamNameSnapshot: context.teamNameSnapshot,
+                organizationId: context.organizationId,
+              }
+            : {}),
+        })
+        .where(eq(measurements.id, survivor.id))
+        .returning();
+
+      return updated;
+    }
+
+    // Create new calculated measurement
+    const [newMeasurement] = await tx
+      .insert(measurements)
+      .values({
+        userId,
+        submittedBy: context.submittedBy,
+        date,
+        metric: derivedMetric.code,
+        value: calculatedValue.toFixed(3),
+        units: derivedMetric.unit || '',
+        age,
+        isVerified: context.isVerified,
+        teamId: context.teamId,
+        season: context.season,
+        teamContextAuto: context.teamContextAuto,
+        teamNameSnapshot: context.teamNameSnapshot,
+        organizationId: context.organizationId,
+        isCalculated: true,
+        calculatedFromMeasurementIds: sourceMeasurementIds,
+        calculationMetadata,
+      })
+      .returning();
+
+    return newMeasurement;
   }
 
   /**
@@ -570,26 +679,31 @@ export class DerivedMetricCalculator {
    * Called after measurement update or delete.
    *
    * @param userId - The athlete's user ID
-   * @param metricCode - The source metric code that changed
+   * @param metricCode - The source metric code that changed, or several codes: each
+   *   derived metric depending on any of them is then recalculated once
    * @param date - Optional date filter (if omitted, recalculates all dates)
    * @param options - Optional configuration for transaction and audit trail
-   * @param options.useTransaction - If true, wraps operation in a transaction (default: false)
+   * @param options.useTransaction - If true, wraps operation in a transaction (default: false).
+   *   Each derived (metric, date) is still written in its own nested transaction, which
+   *   inside the outer one is a savepoint; the per-(athlete, metric, date) advisory locks
+   *   it takes are transaction-scoped, so they are then held until the OUTER transaction
+   *   commits rather than released per metric. No caller uses this mode today.
    * @param options.triggerContext - Context for audit trail
    */
   async recalculateForAthlete(
     userId: string,
-    metricCode: string,
+    metricCode: string | string[],
     date?: string,
     options?: RecalculateOptions
   ): Promise<void> {
-    const { useTransaction = false, triggerContext } = options || {};
+    const { useTransaction = false, triggerContext, organizationId } = options || {};
 
     if (useTransaction) {
       await this.db.transaction(async (tx) => {
-        await this.recalculateForAthleteInternal(tx, userId, metricCode, date, triggerContext);
+        await this.recalculateForAthleteInternal(tx, userId, metricCode, date, triggerContext, organizationId);
       });
     } else {
-      await this.recalculateForAthleteInternal(this.db, userId, metricCode, date, triggerContext);
+      await this.recalculateForAthleteInternal(this.db, userId, metricCode, date, triggerContext, organizationId);
     }
   }
 
@@ -600,9 +714,10 @@ export class DerivedMetricCalculator {
   private async recalculateForAthleteInternal(
     dbOrTx: typeof dbType | DbTransaction,
     userId: string,
-    metricCode: string,
+    metricCode: string | string[],
     date?: string,
-    triggerContext?: TriggerContext
+    triggerContext?: TriggerContext,
+    triggeringOrganizationId?: string | null
   ): Promise<void> {
     // Find all derived site metrics that depend on this source metric
     const siteDerivedMetrics = await dbOrTx
@@ -642,20 +757,20 @@ export class DerivedMetricCalculator {
     }
 
     // Case-insensitive comparison to handle mixed-case dependent_metrics config
-    const metricCodeUpper = metricCode.toUpperCase();
+    const metricCodesUpper = new Set((Array.isArray(metricCode) ? metricCode : [metricCode]).map(c => c.toUpperCase()));
 
     // Filter site derived metrics
     const dependentSiteDerivedMetrics = siteDerivedMetrics.filter(
       (metric: SiteMetric) =>
         metric.dependentMetrics &&
-        metric.dependentMetrics.some(dep => dep.toUpperCase() === metricCodeUpper)
+        metric.dependentMetrics.some(dep => metricCodesUpper.has(dep.toUpperCase()))
     );
 
     // Filter custom org derived metrics
     const dependentCustomDerivedMetrics = customDerivedMetrics.filter(
       (metric: CustomOrgMetric) =>
         metric.dependentMetrics &&
-        metric.dependentMetrics.some(dep => dep.toUpperCase() === metricCodeUpper)
+        metric.dependentMetrics.some(dep => metricCodesUpper.has(dep.toUpperCase()))
     );
 
     // Combine both lists - use a unified type with common fields
@@ -663,7 +778,7 @@ export class DerivedMetricCalculator {
       code: string;
       formula: string | null;
       dependentMetrics: string[] | null;
-      calculationConfig: { dateMatchStrategy: 'same_date' | 'latest_before' | 'closest'; maxDateDifference?: number; missingSourceBehavior: 'skip' | 'error' } | null;
+      calculationConfig: { dateMatchStrategy: 'same_date' | 'latest_before' | 'closest'; maxDateDifference?: number; missingSourceBehavior: 'skip' | 'error'; sourceSelection?: 'latest_event' } | null;
       unit: string | null;
       organizationId?: string;
     };
@@ -704,93 +819,50 @@ export class DerivedMetricCalculator {
     const metricCodes = Array.from(allDependentMetrics);
     const metricConfigsMap = await this.fetchMetricConfigs(dbOrTx, metricCodes, userOrgIds[0]);
 
-    // For each derived metric, recalculate or delete calculated measurements
+    // For each derived metric, recalculate or delete calculated measurements.
+    // Sorted so concurrent calculations take the per-metric advisory locks in the same order.
+    allDependentDerivedMetrics.sort((a, b) => a.code.localeCompare(b.code));
     for (const derivedMetric of allDependentDerivedMetrics) {
       try {
-        // Find all calculated measurements for this derived metric and athlete
-        // Build conditions array based on whether date is specified
-        const conditions = [
-          eq(measurements.userId, userId),
-          eq(measurements.metric, derivedMetric.code),
-          eq(measurements.isCalculated, true)
-        ];
-
+        // Dates to recalculate: the given date (which also creates a total that does
+        // not exist yet, e.g. a source was moved onto it, or the remaining same-date
+        // sources now form a complete set), else every date with a calculated row.
+        let dates: string[];
         if (date) {
-          conditions.push(eq(measurements.date, date));
+          dates = [date];
+        } else {
+          const calculatedMeasurements = await dbOrTx
+            .select({ date: measurements.date })
+            .from(measurements)
+            .where(
+              and(
+                eq(measurements.userId, userId),
+                eq(measurements.metric, derivedMetric.code),
+                eq(measurements.isCalculated, true)
+              )
+            );
+          dates = Array.from(new Set(calculatedMeasurements.map(m => m.date)));
         }
 
-        const calculatedMeasurements = await dbOrTx
-          .select()
-          .from(measurements)
-          .where(and(...conditions));
-
-        for (const calculatedMeasurement of calculatedMeasurements) {
-          // Try to find source measurements
-          const sourceMeasurementsMap = await this.findSourceMeasurementsWithDb(
-            dbOrTx,
-            userId,
-            derivedMetric.dependentMetrics || [],
-            calculatedMeasurement.date,
-            derivedMetric.calculationConfig || {
-              dateMatchStrategy: 'same_date',
-              missingSourceBehavior: 'skip',
-            },
-            metricConfigsMap
+        // computeAndUpsertDerived is the single write path: it reads the sources and
+        // writes (or deletes) the total under the per-(athlete, metric, date) advisory
+        // lock, so concurrent source edits cannot leave a stale total.
+        const allowCreate =
+          !derivedMetric.organizationId || derivedMetric.organizationId === triggeringOrganizationId;
+        for (const targetDate of dates) {
+          await dbOrTx.transaction((tx) =>
+            this.computeAndUpsertDerived(
+              tx, derivedMetric, userId, targetDate, metricConfigsMap, triggerContext, undefined, true, allowCreate
+            )
           );
-
-          if (!sourceMeasurementsMap) {
-            // Source measurements no longer available - delete calculated measurement
-            await dbOrTx
-              .delete(measurements)
-              .where(eq(measurements.id, calculatedMeasurement.id));
-            continue;
-          }
-
-          // Build source values for formula evaluation
-          // Keys are normalized to lowercase to match formula service's variable normalization
-          const sourceValues: Record<string, number> = {};
-          const sourceMeasurementIds: string[] = [];
-
-          for (const [metricCode, sourceMeasurement] of sourceMeasurementsMap.entries()) {
-            sourceValues[metricCode.toLowerCase()] = parseFloat(sourceMeasurement.value);
-            sourceMeasurementIds.push(sourceMeasurement.id);
-          }
-
-          // Evaluate the formula
-          const calculatedValue = evaluateFormula(
-            derivedMetric.formula || '',
-            sourceValues
-          );
-
-          if (calculatedValue === null || !isFinite(calculatedValue)) {
-            // Formula evaluation failed - delete calculated measurement
-            await dbOrTx
-              .delete(measurements)
-              .where(eq(measurements.id, calculatedMeasurement.id));
-            continue;
-          }
-
-          // Update calculated measurement
-          await dbOrTx
-            .update(measurements)
-            .set({
-              value: calculatedValue.toFixed(3),
-              calculatedFromMeasurementIds: sourceMeasurementIds,
-              calculationMetadata: {
-                formula: derivedMetric.formula || '',
-                sourceValues,
-                calculatedAt: new Date().toISOString(),
-                calculationVersion: CALCULATION_VERSION,
-                triggeredBy: triggerContext,
-              },
-            })
-            .where(eq(measurements.id, calculatedMeasurement.id));
         }
       } catch (error) {
-        console.error(
-          `Error recalculating derived metric ${derivedMetric.code}:`,
-          error
-        );
+        console.error(`Error recalculating derived metric ${derivedMetric.code}:`, {
+          userId,
+          metric: derivedMetric.code,
+          date,
+          error,
+        });
       }
     }
   }
@@ -808,6 +880,7 @@ export class DerivedMetricCalculator {
       dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
       maxDateDifference?: number;
       missingSourceBehavior: 'skip' | 'error';
+      sourceSelection?: 'latest_event';
     },
     metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
@@ -848,6 +921,7 @@ export class DerivedMetricCalculator {
       dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
       maxDateDifference?: number;
       missingSourceBehavior: 'skip' | 'error';
+      sourceSelection?: 'latest_event';
     },
     metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
@@ -867,6 +941,7 @@ export class DerivedMetricCalculator {
       dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
       maxDateDifference?: number;
       missingSourceBehavior: 'skip' | 'error';
+      sourceSelection?: 'latest_event';
     },
     metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
@@ -885,10 +960,111 @@ export class DerivedMetricCalculator {
       dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
       maxDateDifference?: number;
       missingSourceBehavior: 'skip' | 'error';
+      sourceSelection?: 'latest_event';
     },
     metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
     return this.findSourceMeasurementsImpl(this.db, userId, dependentMetrics, targetDate, config, metricConfigs);
+  }
+
+  /**
+   * 'latest_event' source selection (AM-FEAT-015 decision 11), same_date only.
+   *
+   * Considers the athlete's VERIFIED measurements of the dependent metrics on `targetDate`
+   * (unverified rows are ignored before grouping, so "latest event" means the latest event
+   * that has verified scores), groups them by event (eventId; measurements without an event
+   * form one group) and picks the single most recent group by event chronology:
+   *   1. any event outranks the no-event group;
+   *   2. events.start_date (full timestamp; the event date snapshot if the event row is gone);
+   *   3. events.created_at; 4. newest measurement created_at; 5. eventId.
+   * Entry order therefore never decides between two events. ALL dependent metrics must come
+   * from that one group: scores are never mixed across events, and an older complete event
+   * is never used while the latest group is incomplete (the caller then removes the total).
+   */
+  private async findLatestEventSources(
+    dbOrTx: typeof dbType | DbTransaction,
+    userId: string,
+    dependentMetrics: string[],
+    targetDate: string,
+    config: { missingSourceBehavior: 'skip' | 'error' }
+  ): Promise<Map<string, Measurement> | null> {
+    const codes = dependentMetrics.map((c) => c.toUpperCase());
+    const candidates = await dbOrTx
+      .select({
+        measurement: measurements,
+        eventStartDate: events.startDate,
+        eventCreatedAt: events.createdAt,
+      })
+      .from(measurements)
+      .leftJoin(events, eq(measurements.eventId, events.id))
+      .where(
+        and(
+          eq(measurements.userId, userId),
+          inArray(measurements.metric, codes),
+          eq(measurements.date, targetDate),
+          // Intentional: only verified scores count toward a total. Failure mode: a fully
+          // entered set that contains an unverified score yields NO total, silently (the
+          // incomplete-group rule above applies, and an existing total is removed). In
+          // practice MQ scores are always verified: coach/org_admin/site_admin writes are
+          // auto-verified and athletes cannot enter MQ scores. A direct DB write, backfill
+          // or new write path that stores unverified MQ scores would hit this.
+          eq(measurements.isVerified, true)
+        )
+      );
+
+    type Group = { eventId: string | null; rows: Measurement[]; rank: number[] };
+    const groups = new Map<string, Group>();
+    for (const c of candidates) {
+      const m = c.measurement;
+      const key = m.eventId ?? '';
+      let group = groups.get(key);
+      if (!group) {
+        const start = c.eventStartDate
+          ? new Date(c.eventStartDate).getTime()
+          : m.eventDateSnapshot
+            ? new Date(m.eventDateSnapshot).getTime()
+            : 0;
+        group = {
+          eventId: m.eventId,
+          rows: [],
+          rank: [
+            m.eventId ? 1 : 0,
+            start,
+            c.eventCreatedAt ? new Date(c.eventCreatedAt).getTime() : 0,
+            0,
+          ],
+        };
+        groups.set(key, group);
+      }
+      group.rows.push(m);
+      group.rank[3] = Math.max(group.rank[3], new Date(m.createdAt).getTime());
+    }
+
+    const compare = (a: Group, b: Group): number => {
+      for (let i = 0; i < a.rank.length; i++) {
+        if (a.rank[i] !== b.rank[i]) return a.rank[i] - b.rank[i];
+      }
+      return (a.eventId ?? '').localeCompare(b.eventId ?? '');
+    };
+
+    let latestGroup: Group | undefined;
+    for (const group of groups.values()) {
+      if (!latestGroup || compare(group, latestGroup) > 0) latestGroup = group;
+    }
+    const latest = latestGroup?.rows;
+    const newest = (list: Measurement[]) =>
+      list.reduce((a, b) => (b.createdAt > a.createdAt ? b : a));
+
+    const result = new Map<string, Measurement>();
+    for (let i = 0; i < dependentMetrics.length; i++) {
+      const matching = (latest ?? []).filter((m) => m.metric === codes[i]);
+      if (matching.length === 0) {
+        if (config.missingSourceBehavior === 'skip') return null;
+        throw new Error(`Missing source measurement for metric: ${dependentMetrics[i]}`);
+      }
+      result.set(dependentMetrics[i], newest(matching));
+    }
+    return result;
   }
 
   /**
@@ -912,9 +1088,14 @@ export class DerivedMetricCalculator {
       dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
       maxDateDifference?: number;
       missingSourceBehavior: 'skip' | 'error';
+      sourceSelection?: 'latest_event';
     },
     metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
+    if (config.sourceSelection === 'latest_event' && config.dateMatchStrategy === 'same_date') {
+      return this.findLatestEventSources(dbOrTx, userId, dependentMetrics, targetDate, config);
+    }
+
     const sourceMeasurementsMap = new Map<string, Measurement>();
 
     for (const metricCode of dependentMetrics) {

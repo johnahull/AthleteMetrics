@@ -11,6 +11,8 @@ import { apiRequest } from "@/lib/queryClient";
 import { insertMeasurementSchema, type InsertMeasurement } from "@shared/schema";
 import { Save } from "lucide-react";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
+import { useAuth } from "@/lib/auth";
+import { isMovementQualityMetric } from "@shared/peer-comparison-exclusions";
 import { PairedInputFields } from "@/components/measurement/PairedInputFields";
 import { LastSetContextLine } from "@/components/measurement/LastSetContextLine";
 import { parseFieldError } from "@/lib/parse-field-error";
@@ -24,8 +26,11 @@ interface AthleteMeasurementFormProps {
 
 // Create dynamic measurement schema that accepts any metric string
 // Backend will validate against org-enabled metrics
-const dynamicMeasurementSchema = insertMeasurementSchema.omit({ metric: true }).extend({
+export const dynamicMeasurementSchema = insertMeasurementSchema.omit({ metric: true }).extend({
   metric: z.string().min(1, "Metric is required"),
+  // The shared schema allows 0 for MQ 0-3 scores (entered via the event MQ panel);
+  // this general form keeps the positive() rule so its default 0 is never submitted.
+  value: z.number().positive("Value must be positive"),
 });
 
 type DynamicInsertMeasurement = z.infer<typeof dynamicMeasurementSchema>;
@@ -34,8 +39,14 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Get available metrics using centralized hook (filters by active+enabled)
-  const { metrics: availableMetrics } = useAvailableMetrics();
+  const { user } = useAuth();
+
+  // Get available metrics using centralized hook (filters by active+enabled).
+  // Movement Quality scores are coach-entered: athletes are not offered them.
+  const { metrics: enabledMetrics } = useAvailableMetrics();
+  const availableMetrics = user?.role === "athlete"
+    ? enabledMetrics.filter((m) => !isMovementQualityMetric(m.code))
+    : enabledMetrics;
 
   const firstMetricCode = "FLY10_TIME";
 

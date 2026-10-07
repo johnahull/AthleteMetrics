@@ -937,3 +937,21 @@ describe('POST /api/coach/parent-link-requests/:id/deny', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Rate limiter configuration
+// ---------------------------------------------------------------------------
+
+describe('parent link request limiter', () => {
+  it('registers without the express-rate-limit IPv6 key generator warning', async () => {
+    const { registerParentLinkRequestRoutes } = await import('../../packages/api/routes/parent-link-request-routes');
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      registerParentLinkRequestRoutes(express());
+      const codes = errors.mock.calls.flat().map((arg: any) => arg?.code);
+      expect(codes).not.toContain('ERR_ERL_KEY_GEN_IPV6');
+    } finally {
+      errors.mockRestore();
+    }
+  });
+});

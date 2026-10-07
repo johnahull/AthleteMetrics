@@ -25,7 +25,8 @@ import { STALE_TIME } from "@/lib/queryClient";
 async function getErrorMessage(response: Response, fallback: string): Promise<string> {
   try {
     const error = await response.json();
-    return error.message || fallback;
+    // Most routes answer { message }, the event measurement routes { error }
+    return error.message || error.error || fallback;
   } catch {
     // Response might not be JSON (e.g., network errors, CORS errors)
     return fallback;
@@ -1223,6 +1224,8 @@ export interface CreateEventMeasurementInput {
   value: number;
   date: string;
   notes?: string;
+  /** Optional https link (e.g. video clip). Empty string or null clears. */
+  mediaUrl?: string | null;
 }
 
 /**
@@ -1314,6 +1317,53 @@ export async function createEventMeasurementsBulk(
   return response.json();
 }
 
+export interface MovementQualityScoreWrite {
+  metric: string;
+  value: number;
+  notes?: string;
+  mediaUrl?: string | null;
+}
+
+/** Thrown when some Movement Quality scores were rejected; nothing was saved */
+export class MovementQualitySaveError extends Error {
+  constructor(message: string, public readonly errors: Array<{ metric: string; error: string }>) {
+    super(message);
+    this.name = 'MovementQualitySaveError';
+  }
+}
+
+/**
+ * Save one athlete's Movement Quality scores for an event in one atomic request
+ * (upserts + deletes of cleared scores; all or nothing).
+ */
+export async function saveEventMovementQuality(
+  eventId: string,
+  userId: string,
+  input: { upserts: MovementQualityScoreWrite[]; deletes: string[] }
+): Promise<{ saved: Measurement[]; deleted: string[] }> {
+  const response = await fetch(`/api/events/${eventId}/athletes/${userId}/movement-quality`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    let body: any = null;
+    try {
+      body = await response.json();
+    } catch {
+      // non-JSON error body
+    }
+    const message = body?.error || body?.message || 'Failed to save Movement Quality scores';
+    if (Array.isArray(body?.errors)) {
+      throw new MovementQualitySaveError(message, body.errors);
+    }
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
 // ============================================================================
 // React Query Hooks - Event Measurements
 // ============================================================================
@@ -1383,6 +1433,37 @@ export function useCreateEventMeasurementsBulk() {
     onSuccess: (_, { eventId }) => {
       queryClient.invalidateQueries({ queryKey: ['events', eventId, 'measurements'] });
       queryClient.invalidateQueries({ queryKey: ['events', eventId, 'results'] });
+    },
+  });
+}
+
+/**
+ * Hook to save one athlete's Movement Quality scores for an event
+ */
+export function useSaveEventMovementQuality() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      eventId,
+      userId,
+      upserts,
+      deletes,
+    }: {
+      eventId: string;
+      userId: string;
+      upserts: MovementQualityScoreWrite[];
+      deletes: string[];
+    }) => saveEventMovementQuality(eventId, userId, { upserts, deletes }),
+    onSuccess: (_, { eventId }) => {
+      queryClient.invalidateQueries({ queryKey: ['events', eventId, 'measurements'] });
+      queryClient.invalidateQueries({ queryKey: ['events', eventId, 'results'] });
+      // MQI_TOTAL is recalculated server-side: refresh athlete / measurement / analytics views
+      queryClient.invalidateQueries({ queryKey: ['/api/measurements'] });
+      queryClient.invalidateQueries({ queryKey: ['measurements'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/athletes'] });
+      queryClient.invalidateQueries({ queryKey: ['athletes'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/analytics/dashboard'] });
     },
   });
 }

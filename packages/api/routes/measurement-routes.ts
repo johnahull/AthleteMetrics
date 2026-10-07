@@ -5,7 +5,7 @@
 
 import type { Express } from "express";
 import rateLimit, { type Options } from "express-rate-limit";
-import { MeasurementService } from "../services/measurement-service";
+import { MeasurementService, MediaUrlPermissionError, MovementQualityPermissionError } from "../services/measurement-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { insertMeasurementSchema, teams, userTeams, siteMetrics } from "@shared/schema";
 import {
@@ -14,6 +14,7 @@ import {
   type AuxiliaryInputConfig,
 } from "../services/paired-input-compute";
 import { dateStringSchema } from "@shared/date-utils";
+import { MeasurementValueValidationError } from "@shared/measurement-value-validation";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import {
   canVerifyMeasurement,
@@ -29,6 +30,7 @@ import { eq, and } from "drizzle-orm";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { PAGINATION } from "../constants/pagination";
 import { storage } from "../storage";
+import { clipViewer, omitClipsHiddenFromViewer } from "../utils/measurement-redaction";
 
 // Rate limiting for measurement endpoints
 const measurementLimiter = rateLimit({
@@ -160,6 +162,7 @@ interface MeasurementFilters {
   offset?: number;
   filterMode?: 'all' | 'personal' | 'org';
   orgIds?: string;
+  personalOwnerId?: string;
 }
 
 export function registerMeasurementRoutes(app: Express) {
@@ -271,9 +274,15 @@ export function registerMeasurementRoutes(app: Express) {
 
       // Site admins can query across organizations, non-admins cannot
       const allowCrossOrganization = canQueryCrossOrganization(user);
+      // SECURITY: personal (no-org) rows returned by filterMode queries are the requester's own
+      if (filters.filterMode && !allowCrossOrganization) {
+        filters.personalOwnerId = user.id;
+      }
       const result = await measurementService.getMeasurements(filters, allowCrossOrganization);
+      // Clips only for coaches / org admins of the row's org, the owning athlete and site admins
+      const viewer = clipViewer(user, allowCrossOrganization ? [] : await storage.getUserOrganizations(user.id));
       // Return just the measurements array for backwards compatibility
-      res.json(result.measurements);
+      res.json(omitClipsHiddenFromViewer(result.measurements, viewer));
     } catch (error) {
       console.error("Get measurements error:", error);
       if (error instanceof ZodError) {
@@ -311,9 +320,14 @@ export function registerMeasurementRoutes(app: Express) {
         if (!hasAccess) {
           return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.MEASUREMENT_ACCESS_DENIED) });
         }
+      } else if (measurement.userId !== user.id && !canQueryCrossOrganization(user)) {
+        // A personal (no-org) measurement belongs to its athlete only
+        return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.MEASUREMENT_ACCESS_DENIED) });
       }
 
-      res.json(measurement);
+      // Clips only for coaches / org admins of the row's org, the owning athlete and site admins
+      const viewer = clipViewer(user, isSiteAdmin(user) ? [] : await storage.getUserOrganizations(user.id));
+      res.json(omitClipsHiddenFromViewer([measurement], viewer)[0]);
     } catch (error) {
       console.error("Get measurement error:", error);
       const message = error instanceof Error ? error.message : "Failed to fetch measurement";
@@ -395,7 +409,10 @@ export function registerMeasurementRoutes(app: Express) {
       if (error instanceof ZodError) {
         return res.status(400).json({ message: "Invalid input data", errors: error.errors });
       }
-      if (error instanceof PairedInputValidationError) {
+      if (error instanceof MovementQualityPermissionError || error instanceof MediaUrlPermissionError) {
+        return res.status(403).json({ message: error.message });
+      }
+      if (error instanceof PairedInputValidationError || error instanceof MeasurementValueValidationError) {
         return res.status(400).json({ message: error.message, field: error.field });
       }
       const message = error instanceof Error ? error.message : "Failed to create measurement";
@@ -547,7 +564,8 @@ export function registerMeasurementRoutes(app: Express) {
       const updatedMeasurement = await measurementService.updateMeasurement(
         measurementId,
         validatedData,
-        expectedOrganizationId
+        expectedOrganizationId,
+        user.role
       );
       res.json(updatedMeasurement);
     } catch (error) {
@@ -555,7 +573,10 @@ export function registerMeasurementRoutes(app: Express) {
       if (error instanceof ZodError) {
         return res.status(400).json({ message: "Invalid input data", errors: error.errors });
       }
-      if (error instanceof PairedInputValidationError) {
+      if (error instanceof MovementQualityPermissionError || error instanceof MediaUrlPermissionError) {
+        return res.status(403).json({ message: error.message });
+      }
+      if (error instanceof PairedInputValidationError || error instanceof MeasurementValueValidationError) {
         return res.status(400).json({ message: error.message, field: error.field });
       }
       const message = error instanceof Error ? error.message : "Failed to update measurement";

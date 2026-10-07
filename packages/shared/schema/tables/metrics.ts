@@ -43,6 +43,8 @@ export const siteMetrics = pgTable("site_metrics", {
     dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
     maxDateDifference?: number;
     missingSourceBehavior: 'skip' | 'error';
+    /** 'latest_event': same_date sources must all come from the single most recent event (e.g. MQI totals) */
+    sourceSelection?: 'latest_event';
     constants?: Record<string, number>;
   }>(),
   // Paired-input metric config — for metrics where one row captures (primary, auxiliary) inputs

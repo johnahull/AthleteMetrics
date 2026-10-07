@@ -26,6 +26,7 @@ import { requireAuth } from "../middleware";
 import { requireParentAccess } from "../permissions/parent-middleware";
 import { parentAthleteLinks } from "@shared/schema/tables/coppa";
 import { storage } from "../storage";
+import { omitMediaUrlFromRows } from "../utils/measurement-redaction";
 import { reports, reportShares, auditLogs } from "@shared/schema";
 import { isSiteAdmin } from "@shared/auth-utils";
 import type { AuthenticatedRequest } from "../middleware";
@@ -177,7 +178,8 @@ export function registerParentRoutes(app: Express) {
           userId: athleteId,
         });
 
-        return res.json(measurements);
+        // Decision 12: coach-attached media links are not exposed in parent views
+        return res.json(omitMediaUrlFromRows(measurements));
       } catch (error) {
         console.error("[parent-routes] GET /children/:athleteId/measurements error:", error);
         return res.status(500).json({ message: "Failed to fetch measurements" });

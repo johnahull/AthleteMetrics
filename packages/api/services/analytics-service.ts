@@ -5,6 +5,7 @@
 
 import { db } from '../db';
 import { measurements, teams, organizations, users, userTeams, siteMetrics, organizationMetrics, VALID_METRICS, INVITATION_PENDING_PASSWORD } from '@shared/schema';
+import { isPeerComparisonExcludedMetric, PeerComparisonExcludedMetricError } from '@shared/peer-comparison-exclusions';
 import { eq, and, gte, lte, lt, ne, desc, inArray, sql } from 'drizzle-orm';
 import { getAthleteIdsForScope } from '../utils/athlete-filters';
 import { LOWER_IS_BETTER_METRICS } from '@shared/analytics-types';
@@ -633,6 +634,11 @@ export class AnalyticsService {
   ): Promise<LeaderboardResponse> {
     const { teamId, startDate, endDate, limit = 10 } = options || {};
 
+    // MQ ordinal scores are excluded from leaderboards in v1 (AM-FEAT-015 D7)
+    if (isPeerComparisonExcludedMetric(metric)) {
+      throw new PeerComparisonExcludedMetricError(metric, 'leaderboards');
+    }
+
     // Get metric info for display and sorting direction
     const metricInfo = await db
       .select({
@@ -801,6 +807,11 @@ export class AnalyticsService {
     }
   ): Promise<MostImprovedResponse> {
     const { teamId, startDate, endDate, limit = 5 } = options || {};
+
+    // MQ ordinal scores are excluded from improvement rankings in v1 (AM-FEAT-015 D7)
+    if (isPeerComparisonExcludedMetric(metric)) {
+      throw new PeerComparisonExcludedMetricError(metric, 'improvement rankings');
+    }
 
     // Get metric info for display and sorting direction
     const metricInfo = await db
