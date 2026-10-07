@@ -49,6 +49,13 @@ describe('Migration 0150: FLY10 run-in variants', () => {
       }
     };
 
+    // Back to the pre-0150 state inside the (rolled-back) transaction, even if the
+    // DB holds measurements on the new codes (DOWN refuses while any exist).
+    const resetToPre = async (tx: any) => {
+      await tx`DELETE FROM measurements WHERE metric = ANY(${NEW_CODES})`;
+      await tx.unsafe(DOWN);
+    };
+
     const snapshotBenchmarks = async (tx: any) => ({
       benchmarks: await tx`SELECT * FROM site_benchmarks WHERE metric_code = 'FLY10_TIME' ORDER BY id`,
       links: await tx`SELECT i.* FROM benchmark_set_items i JOIN site_benchmarks b ON b.id = i.benchmark_id WHERE b.metric_code = 'FLY10_TIME' ORDER BY i.id`,
@@ -56,7 +63,7 @@ describe('Migration 0150: FLY10 run-in variants', () => {
 
     it('adds four codes copying FLY10_TIME shared fields; relabels FLY10_TIME only; benchmarks untouched; idempotent', async () => {
       await rollbackable(async (tx) => {
-        await tx.unsafe(DOWN);
+        await resetToPre(tx);
         const [before] = await tx`SELECT * FROM site_metrics WHERE code = 'FLY10_TIME'`;
         const snapBefore = await snapshotBenchmarks(tx);
         expect(snapBefore.benchmarks.length).toBeGreaterThan(0);
@@ -93,7 +100,7 @@ describe('Migration 0150: FLY10 run-in variants', () => {
 
     it('enables new codes only for orgs that have FLY10_TIME enabled', async () => {
       await rollbackable(async (tx) => {
-        await tx.unsafe(DOWN);
+        await resetToPre(tx);
         await tx`INSERT INTO organizations (id, name) VALUES ('org-0150-on', 'on'), ('org-0150-off', 'off'), ('org-0150-dis', 'dis')`;
         await tx`INSERT INTO organization_metrics (organization_id, metric_code, is_enabled) VALUES
           ('org-0150-on', 'FLY10_TIME', true), ('org-0150-dis', 'FLY10_TIME', false)`;
@@ -110,7 +117,7 @@ describe('Migration 0150: FLY10 run-in variants', () => {
 
     it('down removes the new codes (and their org rows), restores label/description; up/down/up round-trips', async () => {
       await rollbackable(async (tx) => {
-        await tx.unsafe(DOWN);
+        await resetToPre(tx);
         const [orig] = await tx`SELECT label, description FROM site_metrics WHERE code = 'FLY10_TIME'`;
         await tx`INSERT INTO organizations (id, name) VALUES ('org-0150-rt', 'rt')`;
         await tx`INSERT INTO organization_metrics (organization_id, metric_code) VALUES ('org-0150-rt', 'FLY10_TIME')`;
