@@ -17,6 +17,9 @@ import request from 'supertest';
 import express from 'express';
 import { storage } from '../../packages/api/storage';
 import { ocrService } from '../../packages/api/ocr/ocr-service';
+import { eq } from 'drizzle-orm';
+import { db } from '../../packages/api/db';
+import { measurements } from '@shared/schema';
 import type { Organization, User } from '@shared/schema';
 
 vi.mock('../../packages/api/vite.js', () => ({
@@ -102,6 +105,8 @@ describe('POST /api/import/photo 5-0-5 protocol', () => {
   });
 
   afterAll(async () => {
+    // deleteUser refuses while measurements exist; leftover _YD rows would break the 0144 down-guard tests
+    try { await db.delete(measurements).where(eq(measurements.userId, athlete.id)); } catch { /* ignore */ }
     try { await storage.deleteUser(athlete.id); } catch { /* ignore */ }
     try { await storage.deleteUser(coach.id); } catch { /* ignore */ }
     try { await storage.deleteOrganization(org.id); } catch { /* ignore */ }
