@@ -147,6 +147,15 @@ describe('Migration 0145: static SQL analysis', () => {
       );
     });
 
+    it('anchors every deficit-code regex with word boundaries, like the 0144 files', () => {
+      const matches = down.match(/~\*?\s*'[^']*AGILITY_COD_DEFICIT[^']*'/g) ?? [];
+      expect(matches.length).toBeGreaterThanOrEqual(4);
+      for (const m of matches) {
+        expect(m).toContain('\\m');
+        expect(m).toContain('\\M');
+      }
+    });
+
     it('header states 0145_down must run BEFORE 0144_down', () => {
       expect(fs.readFileSync(DOWN_SQL_PATH, 'utf-8')).toMatch(/0145_down[^\n]*BEFORE[^\n]*0144_down/i);
     });

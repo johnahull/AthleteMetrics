@@ -24,7 +24,7 @@ const DASHBOARD_STATS_WINDOW_DAYS = 30;
  */
 export const LOWER_IS_BETTER_SQL_CODES = LOWER_IS_BETTER_METRICS;
 
-const LOWER_IS_BETTER_SQL_LITERALS = LOWER_IS_BETTER_SQL_CODES.map(c => `'${c}'`).join(', ');
+const lowerIsBetterSqlList = () => sql.join(LOWER_IS_BETTER_SQL_CODES.map(c => sql`${c}`), sql`, `);
 
 interface AthleteStats {
   bestFly10?: number;
@@ -1106,7 +1106,7 @@ export class AnalyticsService {
         athlete_id::text as "athleteId",
         metric,
         CASE
-          WHEN metric IN (${sql.raw(LOWER_IS_BETTER_SQL_LITERALS)})
+          WHEN metric IN (${lowerIsBetterSqlList()})
             THEN ((current_avg - previous_avg) / NULLIF(previous_avg, 0)) * 100
           ELSE ((previous_avg - current_avg) / NULLIF(previous_avg, 0)) * 100
         END as "declinePercent",
@@ -1117,7 +1117,7 @@ export class AnalyticsService {
         previous_avg > 0
         AND (
           CASE
-            WHEN metric IN (${sql.raw(LOWER_IS_BETTER_SQL_LITERALS)})
+            WHEN metric IN (${lowerIsBetterSqlList()})
               THEN ((current_avg - previous_avg) / previous_avg) * 100
             ELSE ((previous_avg - current_avg) / previous_avg) * 100
           END

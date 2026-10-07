@@ -44,11 +44,11 @@ BEGIN
       (SELECT COUNT(*) FROM custom_benchmarks WHERE metric_code IN ('AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD'))
     + (SELECT COUNT(*) FROM goals             WHERE metric      IN ('AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD'))
     + (SELECT COUNT(*) FROM report_benchmarks WHERE metric_code IN ('AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD'))
-    + (SELECT COUNT(*) FROM reports           WHERE config::text ~ 'AGILITY_COD_DEFICIT_(M|YD)')
+    + (SELECT COUNT(*) FROM reports           WHERE config::text ~ '\mAGILITY_COD_DEFICIT_(M|YD)\M')
     + (SELECT COUNT(*) FROM custom_org_metrics
-        WHERE coalesce(formula, '') ~ 'AGILITY_COD_DEFICIT_(M|YD)'
-           OR coalesce(array_to_string(dependent_metrics, ','), '') ~ 'AGILITY_COD_DEFICIT_(M|YD)'
-           OR coalesce(calculation_config::text, '') ~ 'AGILITY_COD_DEFICIT_(M|YD)')
+        WHERE coalesce(formula, '') ~ '\mAGILITY_COD_DEFICIT_(M|YD)\M'
+           OR coalesce(array_to_string(dependent_metrics, ','), '') ~ '\mAGILITY_COD_DEFICIT_(M|YD)\M'
+           OR coalesce(calculation_config::text, '') ~ '\mAGILITY_COD_DEFICIT_(M|YD)\M')
   INTO v_refs;
 
   IF v_refs > 0 THEN

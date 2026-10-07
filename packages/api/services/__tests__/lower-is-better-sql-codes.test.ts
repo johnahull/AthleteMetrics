@@ -48,18 +48,21 @@ describe('LOWER_IS_BETTER_SQL_CODES', () => {
     expect(LOWER_IS_BETTER_SQL_CODES as readonly string[]).toContain('DASH_10YD');
   });
 
-  it('only contains plain metric-code literals (safe for sql.raw interpolation)', () => {
+  it('only contains plain metric codes', () => {
     for (const code of LOWER_IS_BETTER_SQL_CODES) {
       expect(code).toMatch(/^[A-Z0-9_]+$/);
     }
   });
 
-  it('is interpolated into the decline-detection SQL', async () => {
+  it('is passed to the decline-detection SQL as bound parameters, not interpolated text', async () => {
     execute.mockResolvedValue([]);
     await new AnalyticsService().getAtRiskAthletes('org-1');
 
-    const decliningSql = new PgDialect().sqlToQuery(execute.mock.calls[0][0]).sql;
-    const literals = LOWER_IS_BETTER_SQL_CODES.map(c => `'${c}'`).join(', ');
-    expect(decliningSql).toContain(`metric IN (${literals})`);
+    const { sql: decliningSql, params } = new PgDialect().sqlToQuery(execute.mock.calls[0][0]);
+    for (const code of LOWER_IS_BETTER_SQL_CODES) {
+      expect(params).toContain(code);
+      expect(decliningSql).not.toContain(`'${code}'`);
+    }
+    expect(decliningSql).toMatch(/metric IN \(\$\d+(, \$\d+)+\)/);
   });
 });
