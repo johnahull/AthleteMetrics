@@ -47,8 +47,9 @@ describe('AM-FEAT-016 metric codes', () => {
     for (const code of RETIRED) expect(list).not.toContain(code);
   });
 
-  it('COMMON_METRICS points at the yard code (Q4)', () => {
+  it('COMMON_METRICS lists both protocol 5-0-5 codes', () => {
     const list = COMMON_METRICS as readonly string[];
+    expect(list).toContain('AGILITY_505_M');
     expect(list).toContain('AGILITY_505_YD');
     expect(list).not.toContain('AGILITY_505');
   });

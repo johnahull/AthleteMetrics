@@ -346,6 +346,7 @@ export const COMMON_METRICS = [
   'FLY10_TIME',
   'VERTICAL_JUMP',
   'DASH_40YD',
+  'AGILITY_505_M',
   'AGILITY_505_YD',
   'TOP_SPEED'
 ] as const;
