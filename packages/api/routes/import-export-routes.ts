@@ -419,7 +419,7 @@ export function registerImportExportRoutes(app: Express) {
           const measurementData = {
             userId: userId,
             date: measurementDate,
-            metric: resolvedMetric as any,
+            metric: extracted.metric,
             value: numericValue,
             age: age || 18, // Default age if we can't determine it
             notes: `OCR Import - Raw: ${extracted.rawText} (Confidence: ${extracted.confidence}%)`
