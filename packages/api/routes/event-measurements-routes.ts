@@ -6,7 +6,7 @@
  */
 
 import type { Express, Request, Response } from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { z } from "zod";
 import {
   EventMeasurementsService,
@@ -48,7 +48,7 @@ function parseMediaUrl(raw: unknown): { ok: true; value: string | null | undefin
 const eventMeasurementsLimiter = rateLimit({
   windowMs: RATE_LIMIT_WINDOW_MS,
   limit: RATE_LIMITS.STANDARD,
-  keyGenerator: (req) => req.session?.user?.id ?? req.ip ?? "unknown",
+  keyGenerator: (req) => req.session?.user?.id ?? ipKeyGenerator(req.ip ?? "unknown"),
   validate: { keyGeneratorIpFallback: false },
   message: { message: "Too many event measurements requests, please try again later." },
   standardHeaders: 'draft-7',
@@ -62,7 +62,7 @@ const eventMeasurementsLimiter = rateLimit({
 const eventMeasurementsMutationLimiter = rateLimit({
   windowMs: RATE_LIMIT_WINDOW_MS,
   limit: RATE_LIMITS.STANDARD,
-  keyGenerator: (req) => req.session?.user?.id ?? req.ip ?? "unknown",
+  keyGenerator: (req) => req.session?.user?.id ?? ipKeyGenerator(req.ip ?? "unknown"),
   validate: { keyGeneratorIpFallback: false },
   message: { message: "Too many event measurements modification attempts, please try again later." },
   standardHeaders: 'draft-7',

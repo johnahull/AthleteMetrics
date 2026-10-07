@@ -53,6 +53,9 @@ describe('event measurement read limiter', () => {
     app.use((req: any, _res, next) => {
       const u = staff.find((s) => s.id === req.get('x-test-user'));
       req.session = { user: u ? { id: u.id, username: u.username, role: 'coach', isSiteAdmin: false } : undefined };
+      // Legacy admin session (no session.user): the limiter falls back to the client IP
+      if (req.get('x-test-legacy-admin')) req.session.admin = true;
+      if (req.get('x-test-ip')) Object.defineProperty(req, 'ip', { value: req.get('x-test-ip') });
       next();
     });
     registerEventMeasurementsRoutes(app);
@@ -78,5 +81,18 @@ describe('event measurement read limiter', () => {
     expect(statuses).toHaveLength(104);
     expect(statuses.filter((s) => s === 429)).toEqual([]);
     expect(statuses.every((s) => s === 200)).toBe(true);
+  }, 60000);
+
+  it('without a session user id, falls back to the IP key (IPv6 grouped by subnet, like the global limiter)', async () => {
+    const get = (ip: string) =>
+      request(app).get(`/api/events/${eventId}/measurements`).set('x-test-legacy-admin', '1').set('x-test-ip', ip);
+    // Exhaust one IPv6 client's bucket (STANDARD tier: 100 per window)
+    for (let i = 0; i < 100; i++) {
+      expect((await get('2001:db8:aa:1::1')).status).not.toBe(429);
+    }
+    expect((await get('2001:db8:aa:1::1')).status).toBe(429);
+    // Same /56 subnet shares the bucket; a different client IP has its own
+    expect((await get('2001:db8:aa:2::9')).status).toBe(429);
+    expect((await get('203.0.113.9')).status).not.toBe(429);
   }, 60000);
 });
