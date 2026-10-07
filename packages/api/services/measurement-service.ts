@@ -35,20 +35,23 @@ import {
 // Singleton achievement service instance for performance
 const achievementService = new AchievementService();
 
-/** Thrown when an athlete tries to enter a Movement Quality score (maps to HTTP 403). */
+/** Thrown when a non-coach/admin tries to enter a Movement Quality score (maps to HTTP 403). */
 export class MovementQualityPermissionError extends Error {
   constructor(metricCode: string) {
-    super(`Athletes cannot enter Movement Quality scores (${metricCode}); a coach must record them`);
+    super(`Only coaches and admins can enter Movement Quality scores (${metricCode}); a coach must record them`);
     this.name = 'MovementQualityPermissionError';
   }
 }
 
+/** Roles allowed to enter MQ scores. Everything else (athlete, parent, guest, no role) is denied. */
+const MQ_ENTRY_ROLES: ReadonlySet<string> = new Set(['coach', 'org_admin', 'site_admin']);
+
 /**
- * MQ scores are coach-entered rubric values (AM-FEAT-015): athletes may not
- * create or edit them on any write path.
+ * MQ scores are coach-entered rubric values (AM-FEAT-015): only coaches and
+ * admins may create or edit them on any write path. Fails closed on a missing role.
  */
 export function assertCanEnterMetric(role: string | undefined, metricCode: string): void {
-  if (role === 'athlete' && isMovementQualityMetric(metricCode)) {
+  if (isMovementQualityMetric(metricCode) && !(role && MQ_ENTRY_ROLES.has(role))) {
     throw new MovementQualityPermissionError(metricCode);
   }
 }
@@ -618,7 +621,7 @@ export class MeasurementService {
    * @param id Measurement ID
    * @param measurement Partial measurement data
    * @param expectedOrganizationId Optional organization ID for defense-in-depth validation (IDOR prevention)
-   * @param updaterRole Role of the user making the change (athletes cannot edit MQ scores)
+   * @param updaterRole Role of the user making the change (only coaches/admins may edit MQ scores; undefined is denied)
    * @returns Updated measurement
    * @throws Error if measurement not found, org mismatch, or transaction fails
    */
@@ -649,8 +652,8 @@ export class MeasurementService {
           throw new Error('Access denied - measurement belongs to different organization');
         }
 
-        // Both the stored metric and a new one: an athlete may neither edit an
-        // MQ score nor move a measurement onto an MQ metric.
+        // Both the stored metric and a new one: a non-coach/admin may neither edit
+        // an MQ score nor move a measurement onto an MQ metric.
         assertCanEnterMetric(updaterRole, existing.metric);
         if (measurement.metric) assertCanEnterMetric(updaterRole, measurement.metric);
 

@@ -1,9 +1,9 @@
 /**
  * AM-FEAT-015 R2: athletes may not enter Movement Quality (MQ) scores.
- * MQ scores are coach-entered rubric values, so any create/update/batch/import
- * by an athlete-role user for an MQ metric is rejected (HTTP 403 on the
- * measurement routes). Coaches and admins are unaffected, and athletes keep
- * entering their other (non-MQ) measurements.
+ * MQ scores are coach-entered rubric values, so only coach, org_admin and
+ * site_admin may create/update/batch/import an MQ metric; every other role
+ * (athlete, parent, guest, or no role at all) is rejected (HTTP 403 on the
+ * measurement routes). Athletes keep entering their other (non-MQ) measurements.
  *
  * Also resolves open item M4 (unverified athlete MQ scores never produce a
  * total): athletes cannot create MQ scores at all, so no unverified athlete
@@ -24,6 +24,7 @@ import bcrypt from 'bcrypt';
 import { db } from '../../packages/api/db';
 import { MeasurementService } from '../../packages/api/services/measurement-service';
 import { events, measurements, organizations, teams, userOrganizations, userTeams, users } from '@shared/schema';
+import { parentAthleteLinks } from '@shared/schema/tables/coppa';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 
 vi.mock('../../packages/api/vite.js', () => ({
@@ -36,7 +37,7 @@ import { registerRoutes } from '../../packages/api/routes';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const MQ_PATTERNS = ['MQ_LIN_ACCEL', 'MQ_MAX_VELO', 'MQ_DECEL', 'MQ_SHUFFLE', 'MQ_LATRUN', 'MQ_HIPTURN', 'MQ_BACKPEDAL', 'MQ_JUMP'];
-const ATHLETE_MQ_DENIED = /athletes cannot enter movement quality/i;
+const ATHLETE_MQ_DENIED = /only coaches and admins can enter movement quality/i;
 const PASSWORD = 'MqAthlete123!';
 
 describe('Athletes cannot enter Movement Quality scores (R2)', () => {
@@ -46,7 +47,12 @@ describe('Athletes cannot enter Movement Quality scores (R2)', () => {
   let teamId: string;
   let athlete: any;
   let coach: any;
+  let parent: any;
+  let guest: any;
   let athleteCookie: string;
+  let coachCookie: string;
+  let parentCookie: string;
+  let guestCookie: string;
 
   beforeAll(async () => {
     const upSql = fs.readFileSync(path.resolve(__dirname, '../../migrations/0146_seed_mqi_metrics.sql'), 'utf-8');
@@ -83,14 +89,28 @@ describe('Athletes cannot enter Movement Quality scores (R2)', () => {
       )[0];
     athlete = await mk('athlete');
     coach = await mk('coach');
+    parent = await mk('parent');
+    guest = await mk('guest');
     await db.insert(userOrganizations).values([
       { userId: athlete.id, organizationId: orgId, role: 'athlete' },
       { userId: coach.id, organizationId: orgId, role: 'coach' },
+      { userId: guest.id, organizationId: orgId, role: 'guest' },
     ] as any);
     await db.insert(userTeams).values({ userId: athlete.id, teamId, joinedAt: new Date('2020-01-01'), isActive: true });
+    // A user with no organization and an active parent link logs in with role 'parent'
+    await db.insert(parentAthleteLinks).values({
+      parentEmail: parent.emails[0],
+      parentUserId: parent.id,
+      athleteUserId: athlete.id,
+      isActive: true,
+    });
 
-    const login = await request(app).post('/api/auth/login').send({ username: athlete.username, password: PASSWORD });
-    athleteCookie = login.headers['set-cookie'][0];
+    const loginAs = async (u: any) =>
+      (await request(app).post('/api/auth/login').send({ username: u.username, password: PASSWORD })).headers['set-cookie'][0];
+    athleteCookie = await loginAs(athlete);
+    coachCookie = await loginAs(coach);
+    parentCookie = await loginAs(parent);
+    guestCookie = await loginAs(guest);
   });
 
   afterEach(async () => {
@@ -100,10 +120,11 @@ describe('Athletes cannot enter Movement Quality scores (R2)', () => {
   afterAll(async () => {
     await db.delete(measurements).where(eq(measurements.userId, athlete.id));
     await db.delete(events).where(eq(events.organizationId, orgId));
+    await db.delete(parentAthleteLinks).where(eq(parentAthleteLinks.parentUserId, parent.id));
     await db.delete(userTeams).where(eq(userTeams.teamId, teamId));
     await db.delete(userOrganizations).where(eq(userOrganizations.organizationId, orgId));
     await db.delete(teams).where(eq(teams.id, teamId));
-    await db.delete(users).where(inArray(users.id, [athlete.id, coach.id]));
+    await db.delete(users).where(inArray(users.id, [athlete.id, coach.id, parent.id, guest.id]));
     await db.delete(organizations).where(eq(organizations.id, orgId));
   });
 
@@ -129,6 +150,24 @@ describe('Athletes cannot enter Movement Quality scores (R2)', () => {
     it('create: still accepts an MQ score from a coach', async () => {
       const m = await createAs('coach', 'MQ_JUMP', 2);
       expect(Number(m.value)).toBe(2);
+    });
+
+    it('create: only coach, org_admin and site_admin may enter MQ scores (allowlist)', async () => {
+      for (const role of ['parent', 'guest', 'viewer', '']) {
+        await expect(
+          service.createMeasurement({ userId: athlete.id, metric: 'MQ_JUMP', value: 2, date: '2026-03-10' } as any, coach.id, role)
+        ).rejects.toThrow(ATHLETE_MQ_DENIED);
+      }
+      expect(await athleteRows()).toHaveLength(0);
+      for (const role of ['coach', 'org_admin', 'site_admin']) {
+        const m = await service.createMeasurement(
+          { userId: athlete.id, metric: 'MQ_JUMP', value: 2, date: '2026-03-10' } as any,
+          coach.id,
+          role
+        );
+        expect(Number(m.value)).toBe(2);
+        await db.delete(measurements).where(eq(measurements.id, m.id));
+      }
     });
 
     it('create: still accepts a non-MQ measurement from an athlete', async () => {
@@ -166,6 +205,21 @@ describe('Athletes cannot enter Movement Quality scores (R2)', () => {
       expect(await athleteRows('MQ_JUMP')).toHaveLength(0);
     });
 
+    it('update: rejects parent, guest and an undefined role editing an MQ score (fails closed)', async () => {
+      const m = await createAs('coach', 'MQ_JUMP', 2);
+      for (const role of ['parent', 'guest', undefined]) {
+        await expect(service.updateMeasurement(m.id, { value: 3 }, undefined, role)).rejects.toThrow(ATHLETE_MQ_DENIED);
+      }
+      const [row] = await athleteRows('MQ_JUMP');
+      expect(Number(row.value)).toBe(2);
+    });
+
+    it('update: org_admin and site_admin may edit an MQ score', async () => {
+      const m = await createAs('coach', 'MQ_JUMP', 1);
+      expect(Number((await service.updateMeasurement(m.id, { value: 2 }, undefined, 'org_admin')).value)).toBe(2);
+      expect(Number((await service.updateMeasurement(m.id, { value: 3 }, undefined, 'site_admin')).value)).toBe(3);
+    });
+
     it('update: still lets an athlete edit a non-MQ measurement and a coach edit an MQ score', async () => {
       const fly = await createAs('athlete', 'FLY10_TIME', 1.52);
       expect(Number((await service.updateMeasurement(fly.id, { value: 1.6 }, undefined, 'athlete')).value)).toBe(1.6);
@@ -194,6 +248,47 @@ describe('Athletes cannot enter Movement Quality scores (R2)', () => {
       expect(res.status).toBe(403);
       expect(res.body.message).toMatch(ATHLETE_MQ_DENIED);
       expect(await athleteRows()).toHaveLength(0);
+    });
+
+    it.each([
+      ['parent', () => parentCookie],
+      ['guest', () => guestCookie],
+    ])('POST /api/measurements: 403 for a %s MQ score and nothing is written', async (_role, cookie) => {
+      const res = await request(app)
+        .post('/api/measurements')
+        .set('Cookie', cookie())
+        .send({ userId: athlete.id, metric: 'MQ_JUMP', value: 2, date: '2026-03-10' });
+      expect(res.status).toBe(403);
+      expect(res.body.message).toMatch(ATHLETE_MQ_DENIED);
+      expect(await athleteRows()).toHaveLength(0);
+    });
+
+    it('POST /api/measurements: a coach MQ score still succeeds', async () => {
+      const res = await request(app)
+        .post('/api/measurements')
+        .set('Cookie', coachCookie)
+        .send({ userId: athlete.id, metric: 'MQ_JUMP', value: 2, date: '2026-03-10' });
+      expect(res.status).toBe(201);
+      expect(await athleteRows('MQ_JUMP')).toHaveLength(1);
+    });
+
+    it.each([
+      ['parent', () => parent, () => parentCookie],
+      ['guest', () => guest, () => guestCookie],
+    ])('PUT /api/measurements/:id: 403 when a %s moves their own entry onto an MQ metric', async (role, who, cookie) => {
+      const own = await service.createMeasurement(
+        { userId: athlete.id, metric: 'FLY10_TIME', value: 1.52, date: '2026-03-10', teamId } as any,
+        who().id,
+        role
+      );
+      const res = await request(app)
+        .put(`/api/measurements/${own.id}`)
+        .set('Cookie', cookie())
+        .send({ metric: 'MQ_JUMP', value: 2 });
+      expect(res.status).toBe(403);
+      expect(res.body.message).toMatch(ATHLETE_MQ_DENIED);
+      const [row] = await athleteRows();
+      expect(row.metric).toBe('FLY10_TIME');
     });
 
     it('POST /api/measurements: athlete non-MQ entry still succeeds', async () => {
