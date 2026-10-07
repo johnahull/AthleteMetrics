@@ -20,7 +20,7 @@ const dbUrl = process.env.DATABASE_URL || '';
 const isDisposableTestDb =
   process.env.NODE_ENV === 'test' && (/@(localhost|127\.0\.0\.1)[:/]/.test(dbUrl) || process.env.CI === 'true');
 
-const constraintInfo = `SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+const constraintInfo = `SELECT pg_get_constraintdef(oid) AS def, convalidated FROM pg_constraint
   WHERE conrelid = 'measurements'::regclass AND conname = 'measurements_media_url_length_check'`;
 
 const colInfo = `SELECT data_type, is_nullable FROM information_schema.columns
@@ -57,7 +57,9 @@ describe('Migration 0147: measurements.media_url', () => {
   });
 
   it('up SQL adds a 2048-char CHECK constraint (idempotently) and down drops it', () => {
-    expect(upSql).toMatch(/ADD CONSTRAINT measurements_media_url_length_check\s+CHECK \(char_length\(media_url\) <= 2048\)/i);
+    expect(upSql).toMatch(/ADD CONSTRAINT measurements_media_url_length_check\s+CHECK \(char_length\(media_url\) <= 2048\)\s+NOT VALID/i);
+    // Added NOT VALID (no full-table scan under the ADD lock), then validated separately
+    expect(upSql).toMatch(/VALIDATE CONSTRAINT measurements_media_url_length_check/i);
     expect(upSql).toMatch(/IF NOT EXISTS \(\s*SELECT 1 FROM pg_constraint/i);
     expect(downSql).toMatch(/DROP CONSTRAINT IF EXISTS measurements_media_url_length_check/i);
   });
@@ -72,6 +74,7 @@ describe('Migration 0147: measurements.media_url', () => {
         const rows = await tx.unsafe(constraintInfo);
         expect(rows).toHaveLength(1);
         expect(rows[0].def).toMatch(/char_length\(media_url\) <= 2048/);
+        expect(rows[0].convalidated).toBe(true);
         throw ROLLBACK;
       });
     } catch (e) {

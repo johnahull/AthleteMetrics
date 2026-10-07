@@ -161,6 +161,7 @@ interface MeasurementFilters {
   offset?: number;
   filterMode?: 'all' | 'personal' | 'org';
   orgIds?: string;
+  personalOwnerId?: string;
 }
 
 export function registerMeasurementRoutes(app: Express) {
@@ -272,6 +273,10 @@ export function registerMeasurementRoutes(app: Express) {
 
       // Site admins can query across organizations, non-admins cannot
       const allowCrossOrganization = canQueryCrossOrganization(user);
+      // SECURITY: personal (no-org) rows returned by filterMode queries are the requester's own
+      if (filters.filterMode && !allowCrossOrganization) {
+        filters.personalOwnerId = user.id;
+      }
       const result = await measurementService.getMeasurements(filters, allowCrossOrganization);
       // Return just the measurements array for backwards compatibility
       res.json(result.measurements);
@@ -312,6 +317,9 @@ export function registerMeasurementRoutes(app: Express) {
         if (!hasAccess) {
           return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.MEASUREMENT_ACCESS_DENIED) });
         }
+      } else if (measurement.userId !== user.id && !canQueryCrossOrganization(user)) {
+        // A personal (no-org) measurement belongs to its athlete only
+        return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.MEASUREMENT_ACCESS_DENIED) });
       }
 
       res.json(measurement);

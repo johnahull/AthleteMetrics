@@ -16,12 +16,16 @@ export function omitMediaUrlFromRows<T extends object>(rows: T[]): Array<Omit<T,
   return rows.map(omitMediaUrl);
 }
 
-/** Recursively remove every `mediaUrl` key from plain objects/arrays (Dates etc. are preserved). */
+/**
+ * Recursively remove every `mediaUrl` key from plain objects/arrays, including
+ * null-prototype objects. Class instances (Dates etc.) are preserved as-is.
+ */
 export function stripMediaUrlDeep<T>(value: T): T {
   if (Array.isArray(value)) {
     return value.map((v) => stripMediaUrlDeep(v)) as unknown as T;
   }
-  if (value !== null && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) {
+  const proto = value !== null && typeof value === "object" ? Object.getPrototypeOf(value) : undefined;
+  if (proto === Object.prototype || proto === null) {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
       if (k === "mediaUrl") continue;

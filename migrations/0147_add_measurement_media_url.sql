@@ -22,11 +22,18 @@ BEGIN
      WHERE conrelid = 'measurements'::regclass
        AND conname = 'measurements_media_url_length_check'
   ) THEN
+    -- NOT VALID: skip the full-table scan while ADD CONSTRAINT holds its lock;
+    -- new writes are checked immediately, existing rows by VALIDATE below.
     ALTER TABLE measurements
       ADD CONSTRAINT measurements_media_url_length_check
-      CHECK (char_length(media_url) <= 2048);
+      CHECK (char_length(media_url) <= 2048) NOT VALID;
   END IF;
 END $$;
+
+-- Scans existing rows under a SHARE UPDATE EXCLUSIVE lock (reads and writes
+-- continue). A no-op when the constraint is already validated (re-apply).
+ALTER TABLE measurements
+  VALIDATE CONSTRAINT measurements_media_url_length_check;
 
 COMMENT ON COLUMN measurements.media_url IS
   'Optional https link to media (e.g. video clip) for this measurement. Never included in public reports or exports.';

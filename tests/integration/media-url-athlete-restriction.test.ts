@@ -6,6 +6,7 @@
  */
 process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret-key-for-integration-tests-only';
+process.env.BYPASS_GENERAL_RATE_LIMIT = 'true'; // a 429 must not mask the 403s asserted here
 
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import { eq, inArray } from 'drizzle-orm';
@@ -14,6 +15,8 @@ import express, { type Express } from 'express';
 import bcrypt from 'bcrypt';
 import { db } from '../../packages/api/db';
 import { MeasurementService } from '../../packages/api/services/measurement-service';
+import { EventMeasurementsService } from '../../packages/api/services/event-measurements-service';
+import { storage } from '../../packages/api/storage';
 import { events, measurements, organizations, teams, userOrganizations, userTeams, users } from '@shared/schema';
 import { parentAthleteLinks } from '@shared/schema/tables/coppa';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
@@ -339,6 +342,113 @@ describe('Athletes cannot attach clips (R1)', () => {
         expect(res.body).toEqual({ error: 'Access denied' });
         expect(await athleteRows()).toHaveLength(0);
       });
+    });
+  });
+
+  describe('EventMeasurementsService enforces the clip allowlist itself', () => {
+    const eventService = new EventMeasurementsService(storage);
+    let eventId: string;
+    const input = (mediaUrl?: string | null) => ({
+      userId: athlete.id, metric: 'VERTICAL_JUMP', value: 30, date: new Date('2026-01-15'), mediaUrl,
+    });
+
+    beforeAll(async () => {
+      const [event] = await db
+        .insert(events)
+        .values({ organizationId: orgId, name: 'Clip Service Event', startDate: new Date('2026-01-15') } as any)
+        .returning({ id: events.id });
+      eventId = event.id;
+    });
+
+    it.each(['athlete', 'parent', 'guest', undefined])('createEventMeasurement: rejects a clip for role %s', async (role) => {
+      await expect(eventService.createEventMeasurement(eventId, input(CLIP), coach.id, role)).rejects.toThrow(ATHLETE_CLIP_DENIED);
+      expect(await athleteRows()).toHaveLength(0);
+    });
+
+    it('createEventMeasurement: a coach clip is stored; no clip needs no role', async () => {
+      expect((await eventService.createEventMeasurement(eventId, input(CLIP), coach.id, 'coach')).mediaUrl).toBe(CLIP);
+      expect((await eventService.createEventMeasurement(eventId, input(null), coach.id, 'athlete')).mediaUrl).toBeNull();
+    });
+
+    it.each(['athlete', 'parent', 'guest'])('createEventMeasurementsBulk: a %s clip is a per-item error and nothing is written', async (role) => {
+      const result = await eventService.createEventMeasurementsBulk(eventId, [input(CLIP)], coach.id, role);
+      expect(result.created).toHaveLength(0);
+      expect(result.errors).toEqual([{ index: 0, error: expect.stringMatching(ATHLETE_CLIP_DENIED) }]);
+      expect(await athleteRows()).toHaveLength(0);
+    });
+
+    it('createEventMeasurementsBulk: a coach clip is stored', async () => {
+      const result = await eventService.createEventMeasurementsBulk(eventId, [input(CLIP)], coach.id, 'coach');
+      expect(result.errors).toEqual([]);
+      expect(result.created[0].mediaUrl).toBe(CLIP);
+    });
+  });
+
+  describe('event writes are limited to athletes of the event organization', () => {
+    const eventService = new EventMeasurementsService(storage);
+    let eventId: string;
+    let otherOrgId: string;
+    let outsider: any;
+    const NOT_MEMBER = /not a member of this event's organization/i;
+    const outsiderRows = () => db.select().from(measurements).where(eq(measurements.userId, outsider.id));
+
+    beforeAll(async () => {
+      const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const [event] = await db
+        .insert(events)
+        .values({ organizationId: orgId, name: 'Membership Event', startDate: new Date('2026-01-15') } as any)
+        .returning({ id: events.id });
+      eventId = event.id;
+      const [otherOrg] = await db.insert(organizations).values({ name: `Other Org ${suffix}` }).returning();
+      otherOrgId = otherOrg.id;
+      [outsider] = await db
+        .insert(users)
+        .values({
+          username: `clip-outsider-${suffix}`,
+          emails: [`clip-outsider-${suffix}@test.com`],
+          password: 'x',
+          firstName: 'Out',
+          lastName: 'Sider',
+          fullName: 'Out Sider',
+        } as any)
+        .returning();
+      await db.insert(userOrganizations).values({ userId: outsider.id, organizationId: otherOrgId, role: 'athlete' } as any);
+    });
+
+    afterAll(async () => {
+      await db.delete(measurements).where(eq(measurements.userId, outsider.id));
+      await db.delete(userOrganizations).where(eq(userOrganizations.userId, outsider.id));
+      await db.delete(users).where(eq(users.id, outsider.id));
+      await db.delete(organizations).where(eq(organizations.id, otherOrgId));
+    });
+
+    const outsiderInput = () => ({ userId: outsider.id, metric: 'VERTICAL_JUMP', value: 30, date: new Date('2026-01-15') });
+
+    it('createEventMeasurement rejects an athlete from another organization', async () => {
+      await expect(eventService.createEventMeasurement(eventId, outsiderInput(), coach.id, 'coach')).rejects.toThrow(NOT_MEMBER);
+      expect(await outsiderRows()).toHaveLength(0);
+    });
+
+    it('createEventMeasurementsBulk reports an outside athlete as a per-item error', async () => {
+      const result = await eventService.createEventMeasurementsBulk(
+        eventId,
+        [outsiderInput(), { ...outsiderInput(), userId: athlete.id }],
+        coach.id,
+        'coach',
+      );
+      expect(result.errors).toEqual([{ index: 0, error: expect.stringMatching(NOT_MEMBER) }]);
+      expect(result.created.map((m) => m.userId)).toEqual([athlete.id]);
+      expect(await outsiderRows()).toHaveLength(0);
+    });
+
+    it('POST /api/events/:eventId/measurements answers 400 for an outside athlete', async () => {
+      const res = await request(app)
+        .post(`/api/events/${eventId}/measurements`)
+        .set('Cookie', coachCookie)
+        .send({ userId: outsider.id, metric: 'VERTICAL_JUMP', value: 30, date: '2026-01-15' });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(NOT_MEMBER);
+      expect(await outsiderRows()).toHaveLength(0);
     });
   });
 });

@@ -25,4 +25,9 @@ describe('measurement-redaction (AM-FEAT-015 Decision 12)', () => {
     expect(stripMediaUrlDeep({ d, n: 1 })).toEqual({ d, n: 1 });
     expect((stripMediaUrlDeep({ d }) as any).d).toBeInstanceOf(Date);
   });
+
+  it('stripMediaUrlDeep also strips null-prototype objects', () => {
+    const bare = Object.assign(Object.create(null), { mediaUrl: LEAK, v: 1 });
+    expect(stripMediaUrlDeep({ row: bare })).toEqual({ row: { v: 1 } });
+  });
 });

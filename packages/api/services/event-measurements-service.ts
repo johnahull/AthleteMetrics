@@ -130,6 +130,18 @@ export class EventMeasurementsService {
     return event;
   }
 
+  /**
+   * Event measurements may only be written for members of the event's organization
+   * (a coach must not write into another organization's athlete record).
+   */
+  private async assertAthleteInEventOrg(event: Event, userId: string): Promise<void> {
+    if (!event.organizationId) return;
+    const roles = await this.storage.getUserRoles(userId, event.organizationId);
+    if (roles.length === 0) {
+      throw new EventMeasurementInputError("Athlete is not a member of this event's organization");
+    }
+  }
+
   private async isMovementQualityScore(metric: string, dbOrTx: Db | DbTransaction = this.db): Promise<boolean> {
     const [metricRow] = await dbOrTx
       .select({ category: siteMetrics.category, isDerived: siteMetrics.isDerived })
@@ -152,9 +164,11 @@ export class EventMeasurementsService {
     event: Event,
     data: EventMeasurementInput,
     createdBy: string,
-    submitterRole: string,
+    /** No role fails closed: MeasurementService then treats the writer as an athlete */
+    submitterRole: string | undefined,
     tx?: DbTransaction
   ): Promise<Measurement> {
+    await this.assertAthleteInEventOrg(event, data.userId);
     const eventDate = eventCalendarDate(event);
     const isMq = await this.isMovementQualityScore(data.metric, tx);
 
@@ -312,7 +326,7 @@ export class EventMeasurementsService {
     eventId: string,
     data: EventMeasurementInput,
     createdBy: string,
-    submitterRole: string = "coach"
+    submitterRole?: string
   ): Promise<Measurement> {
     const event = await this.getWritableEvent(eventId);
 
@@ -331,7 +345,7 @@ export class EventMeasurementsService {
     eventId: string,
     measurementsData: EventMeasurementInput[],
     createdBy: string,
-    submitterRole: string = "coach"
+    submitterRole?: string
   ): Promise<BulkCreateResult> {
     const event = await this.getWritableEvent(eventId);
 

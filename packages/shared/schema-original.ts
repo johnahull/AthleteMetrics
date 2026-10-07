@@ -1618,12 +1618,13 @@ export const insertInvitationSchema = createInsertSchema(invitations).omit({
 /** Max length of measurements.media_url (AM-FEAT-015 Phase 2). */
 export const MEDIA_URL_MAX_LENGTH = 2048;
 
-const hasUrlCredentials = (u: string): boolean => {
+export const hasUrlCredentials = (u: string): boolean => {
   try {
     const parsed = new URL(u);
     return parsed.username !== "" || parsed.password !== "";
   } catch {
-    return false;
+    // Fail closed: an unparseable URL is treated as carrying credentials
+    return true;
   }
 };
 
