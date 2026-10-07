@@ -125,11 +125,12 @@ async function seedInvitation(params: {
 
 /** Base accept payload; birthDate/parentEmail supplied per-test. */
 function acceptPayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  const ts = Date.now() + Math.floor(Math.random() * 1000);
+  // UUID-based: Date.now() + a small random offset can collide across tests.
+  const suffix = crypto.randomUUID().replace(/-/g, '').slice(0, 12);
   return {
     firstName: 'Invited',
     lastName: 'Athlete',
-    username: `invacc${ts}`,
+    username: `invacc${suffix}`,
     password: 'ValidPass1!!',
     legalAcceptedAt: validLegalAcceptedAt(),
     ...overrides,
@@ -313,7 +314,7 @@ describe('POST /api/invitations/:token/accept — COPPA age gate', () => {
       .post(`/api/invitations/${token}/accept`)
       .send(payload);
 
-    expect(res.status).toBe(200);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.requiresParentalConsent).toBeFalsy();
     expect(hasSessionCookie(res)).toBe(true);
