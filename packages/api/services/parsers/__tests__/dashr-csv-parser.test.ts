@@ -768,6 +768,16 @@ describe('FLY10 run-in variants', () => {
     expect(result.athletes[0].drills.map(d => d.metric).sort()).toEqual(['FLY10_TIME', 'FLY10_TIME_RI10']);
   });
 
+  it('collapses two same-day metric flies with different Start Distance to the fastest FLY10M_TIME', () => {
+    const result = drills([
+      row({ type: 'Flying', start: '10', units: 'Metric', time: 1.4, dist: 10 }),
+      row({ type: 'Flying', start: '20', units: 'Metric', time: 1.2, dist: 10 }),
+    ]);
+    const m = result.athletes[0].drills.filter(d => d.metric === 'FLY10M_TIME');
+    expect(m).toHaveLength(1);
+    expect(m[0].value).toBe(1.2);
+  });
+
   it('flags outliers for the new codes using the 0.8-3.0 range', () => {
     const result = drills([row({ type: 'Flying', start: '5', time: 3.5, dist: 10 })]);
     expect(result.athletes[0].drills[0].metric).toBe('FLY10_TIME_RI5');

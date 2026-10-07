@@ -450,8 +450,9 @@ function selectBestAttempts(rows: DashrRow[]): DashrRow[] {
       row['Final Distance'] || '',
       // A metric and a yard 5-0-5 are different protocols (_M vs _YD), never alternate attempts.
       getDistanceUnit(row),
-      // Different run-ins on the same day are different metrics, not attempts at one
-      (row['Start Distance'] || '').trim() === '' ? '' : String(parseFloat_(row['Start Distance'])),
+      // Different yard run-ins on the same day are different metrics, not attempts at one.
+      // Metric flies ignore Start Distance (always FLY10M_TIME), so they still collapse.
+      isYardFly10(row) && (row['Start Distance'] || '').trim() !== '' ? String(parseFloat_(row['Start Distance'])) : '',
     ].join('|');
 
     if (!groups.has(key)) groups.set(key, []);
