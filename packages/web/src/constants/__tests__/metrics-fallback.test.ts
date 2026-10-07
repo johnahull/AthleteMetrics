@@ -108,7 +108,10 @@ describe('Metric Constants - Fallback Behavior', () => {
 
     it('should return true for other time-based metrics', () => {
       expect(isLowerBetter('DASH_40YD')).toBe(true);
-      expect(isLowerBetter('AGILITY_505')).toBe(true);
+      expect(isLowerBetter('AGILITY_505_M')).toBe(true);
+      expect(isLowerBetter('AGILITY_505_YD')).toBe(true);
+      expect(isLowerBetter('AGILITY_COD_DEFICIT_M')).toBe(true);
+      expect(isLowerBetter('AGILITY_COD_DEFICIT_YD')).toBe(true);
       expect(isLowerBetter('T_TEST')).toBe(true);
     });
   });

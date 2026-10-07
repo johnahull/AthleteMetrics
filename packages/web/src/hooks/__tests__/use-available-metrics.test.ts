@@ -222,7 +222,7 @@ describe('useAvailableMetrics', () => {
       const mockActiveMetrics = [
         createMockSiteMetric({ code: 'FLY10_TIME' }),
         createMockSiteMetric({ code: 'VERTICAL_JUMP', label: 'Vertical Jump', unit: 'in' }),
-        createMockSiteMetric({ code: 'AGILITY_505', label: '5-0-5 Agility', unit: 's' }),
+        createMockSiteMetric({ code: 'AGILITY_505_YD', label: '5-0-5 Agility', unit: 's' }),
       ];
 
       mockFetch.mockResolvedValueOnce({
@@ -239,7 +239,7 @@ describe('useAvailableMetrics', () => {
       // digit-prefixed label "10-Yard Fly" sorts before "5-0-5 Agility" (locale-aware, '1' < '5')
       expect(result.current.metrics.map(m => m.code)).toEqual([
         'FLY10_TIME',
-        'AGILITY_505',
+        'AGILITY_505_YD',
         'VERTICAL_JUMP',
       ]);
     });
@@ -260,8 +260,8 @@ describe('useAvailableMetrics', () => {
           siteMetric: createMockSiteMetric({ code: 'BROAD_JUMP', label: 'Broad Jump', unit: 'in' }),
         }),
         createMockOrgMetric({
-          metricCode: 'AGILITY_505',
-          siteMetric: createMockSiteMetric({ code: 'AGILITY_505', label: '5-0-5 Agility', unit: 's' }),
+          metricCode: 'AGILITY_505_YD',
+          siteMetric: createMockSiteMetric({ code: 'AGILITY_505_YD', label: '5-0-5 Agility', unit: 's' }),
         }),
       ];
 

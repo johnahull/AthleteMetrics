@@ -34,6 +34,16 @@ describe('athlete-dashboard-utils — metricLabels parameter', () => {
       expect(prs[0].displayName).toBe('10-Yard Fly Time');
     });
 
+    it('uses protocol-specific built-in names for 5-0-5 meters and yards', () => {
+      const prs = calculatePersonalRecords([
+        m('AGILITY_505_M', 2.45, '2024-01-01'),
+        m('AGILITY_505_YD', 2.24, '2024-01-01'),
+      ]);
+      const names = Object.fromEntries(prs.map((p: any) => [p.metric, p.displayName]));
+      expect(names.AGILITY_505_M).toBe('5-0-5 Agility (m)');
+      expect(names.AGILITY_505_YD).toBe('5-0-5 Agility (yd)');
+    });
+
     it('falls back to the built-in name map when the code is missing from supplied labels', () => {
       const labels = { VERTICAL_JUMP: 'High Hops' };
       const measurements = [m('FLY10_TIME', 1.5, '2024-01-01')];

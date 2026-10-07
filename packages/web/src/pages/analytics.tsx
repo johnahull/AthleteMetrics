@@ -21,6 +21,7 @@ import ScatterChart from "@/components/charts/scatter-chart";
 import { StatisticsSummaryCard } from "@/components/analytics/StatisticsSummaryCard";
 import { getMetricUnits, getMetricColor } from "@/lib/metrics";
 import { Gender, SoccerPosition, type Team, type Measurement } from "@shared/schema";
+import { isLowerIsBetterMetric } from "@shared/analytics-types";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { useMetricLabels } from "@/hooks/use-metric-labels";
 
@@ -298,7 +299,7 @@ export default function Analytics() {
     if (data.length === 0) return { p25: 0, p50: 0, p75: 0, p90: 0 };
 
     // For time-based metrics, lower values are better, so we need to reverse the percentile logic
-    const isTimeBased = ["FLY10_TIME", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD"].includes(metric);
+    const isTimeBased = isLowerIsBetterMetric(metric);
     const sorted = [...data].sort((a, b) => a - b);
 
     const getPercentile = (p: number) => {
@@ -445,7 +446,8 @@ export default function Analytics() {
                   <SelectItem value="all">All Metrics</SelectItem>
                   <SelectItem value="FLY10_TIME">Fly-10 Time</SelectItem>
                   <SelectItem value="VERTICAL_JUMP">Vertical Jump</SelectItem>
-                  <SelectItem value="AGILITY_505">5-0-5 Agility Test</SelectItem>
+                  <SelectItem value="AGILITY_505_M">5-0-5 Agility (m)</SelectItem>
+                  <SelectItem value="AGILITY_505_YD">5-0-5 Agility (yd)</SelectItem>
                   <SelectItem value="AGILITY_5105">5-10-5 Agility Test</SelectItem>
                   <SelectItem value="T_TEST">T-Test</SelectItem>
                   <SelectItem value="DASH_40YD">40-Yard Dash</SelectItem>

@@ -14,8 +14,8 @@ import request from 'supertest';
 import express from 'express';
 import { storage } from '../../packages/api/storage';
 import { db } from '../../packages/api/db';
-import { users } from '@shared/schema';
-import { eq } from 'drizzle-orm';
+import { users, measurements, userOrganizations } from '@shared/schema';
+import { eq, inArray } from 'drizzle-orm';
 import type { Organization, User } from '@shared/schema';
 
 vi.mock('../../packages/api/vite.js', () => ({
@@ -117,6 +117,11 @@ describe('Photo import organization scoping', () => {
   });
 
   afterAll(async () => {
+    // deleteUser / deleteOrganization refuse while measurements or memberships exist and the
+    // failures are swallowed below; a leftover org keeps its organization_metrics rows and
+    // breaks migration 0145's "with no organizations" test, so remove these first.
+    try { await db.delete(measurements).where(inArray(measurements.userId, createdUserIds)); } catch { /* ignore */ }
+    try { await db.delete(userOrganizations).where(inArray(userOrganizations.organizationId, [orgA.id, orgB.id])); } catch { /* ignore */ }
     for (const id of createdUserIds) {
       try { await storage.deleteUser(id); } catch { /* ignore */ }
     }

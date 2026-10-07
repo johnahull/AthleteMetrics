@@ -36,7 +36,7 @@ const STAGING_URL = process.env.STAGING_URL || 'http://localhost:5000';
 const METRICS: Array<{ code: string; earlier: number; latest: number }> = [
   { code: 'VERTICAL_JUMP', earlier: 24, latest: 28 },
   { code: 'FLY10_TIME', earlier: 1.35, latest: 1.22 },
-  { code: 'AGILITY_505', earlier: 2.6, latest: 2.45 },
+  { code: 'AGILITY_505_M', earlier: 2.6, latest: 2.45 },
 ];
 
 const METRIC_CODES = METRICS.map((m) => m.code);

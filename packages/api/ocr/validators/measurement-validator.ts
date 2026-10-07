@@ -7,6 +7,9 @@ export interface ValidationResult {
   normalizedValue?: number;
 }
 
+// The protocol-neutral 5-0-5 token must not appear in user-visible text.
+const displayMetric = (metric: string) => (metric === 'AGILITY_505_UNRESOLVED' ? '5-0-5' : metric);
+
 export class MeasurementValidator {
   constructor(private config: OCRConfig) {}
 
@@ -101,9 +104,9 @@ export class MeasurementValidator {
     const range = this.config.validation.measurementRanges[metric];
     if (range) {
       if (numericValue < range.min) {
-        errors.push(`Value too low for ${metric}: ${numericValue} (minimum: ${range.min})`);
+        errors.push(`Value too low for ${displayMetric(metric)}: ${numericValue} (minimum: ${range.min})`);
       } else if (numericValue > range.max) {
-        errors.push(`Value too high for ${metric}: ${numericValue} (maximum: ${range.max})`);
+        errors.push(`Value too high for ${displayMetric(metric)}: ${numericValue} (maximum: ${range.max})`);
       }
       
       // Add warnings for values near the limits
@@ -112,9 +115,9 @@ export class MeasurementValidator {
       const highThreshold = range.max - (rangeSpan * 0.1); // Top 10%
       
       if (numericValue <= lowThreshold) {
-        warnings.push(`Unusually low value for ${metric}: ${numericValue}`);
+        warnings.push(`Unusually low value for ${displayMetric(metric)}: ${numericValue}`);
       } else if (numericValue >= highThreshold) {
-        warnings.push(`Unusually high value for ${metric}: ${numericValue}`);
+        warnings.push(`Unusually high value for ${displayMetric(metric)}: ${numericValue}`);
       }
     }
 
@@ -238,7 +241,7 @@ export class MeasurementValidator {
         }
         break;
 
-      case 'AGILITY_505':
+      case 'AGILITY_505_UNRESOLVED':
       case 'AGILITY_5105':
         if (value < 2.0) {
           warnings.push('Very fast agility time - verify measurement setup');

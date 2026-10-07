@@ -15,9 +15,12 @@ describe('Metric Type Helper Functions', () => {
         expect(getMetricType('FLY10_TIME')).toBe('lower_is_better');
       });
 
-      it('should return lower_is_better for AGILITY_505', () => {
-        expect(getMetricType('AGILITY_505')).toBe('lower_is_better');
-      });
+      it.each(['AGILITY_505_M', 'AGILITY_505_YD', 'AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD'])(
+        'should return lower_is_better for %s',
+        (code) => {
+          expect(getMetricType(code)).toBe('lower_is_better');
+        },
+      );
 
       it('should return lower_is_better for AGILITY_5105', () => {
         expect(getMetricType('AGILITY_5105')).toBe('lower_is_better');
@@ -72,7 +75,10 @@ describe('Metric Type Helper Functions', () => {
   describe('LOWER_IS_BETTER_METRICS', () => {
     it('should include all known time-based metrics', () => {
       expect(LOWER_IS_BETTER_METRICS).toContain('FLY10_TIME');
-      expect(LOWER_IS_BETTER_METRICS).toContain('AGILITY_505');
+      expect(LOWER_IS_BETTER_METRICS).toContain('AGILITY_505_M');
+      expect(LOWER_IS_BETTER_METRICS).toContain('AGILITY_505_YD');
+      expect(LOWER_IS_BETTER_METRICS).toContain('AGILITY_COD_DEFICIT_M');
+      expect(LOWER_IS_BETTER_METRICS).toContain('AGILITY_COD_DEFICIT_YD');
       expect(LOWER_IS_BETTER_METRICS).toContain('AGILITY_5105');
       expect(LOWER_IS_BETTER_METRICS).toContain('T_TEST');
       expect(LOWER_IS_BETTER_METRICS).toContain('DASH_40YD');
@@ -111,7 +117,8 @@ describe('Metric Type Helper Functions', () => {
     it('should return true for time-based metrics', () => {
       expect(isLowerIsBetter('FLY10_TIME')).toBe(true);
       expect(isLowerIsBetter('DASH_40YD')).toBe(true);
-      expect(isLowerIsBetter('AGILITY_505')).toBe(true);
+      expect(isLowerIsBetter('AGILITY_505_M')).toBe(true);
+      expect(isLowerIsBetter('AGILITY_505_YD')).toBe(true);
       expect(isLowerIsBetter('T_TEST')).toBe(true);
     });
 

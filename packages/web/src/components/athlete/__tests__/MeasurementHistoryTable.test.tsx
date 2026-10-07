@@ -13,7 +13,7 @@ import type { Measurement } from '@shared/schema';
 const METRIC_LABELS: Record<string, string> = {
   FLY10_TIME: '10-Yard Fly Time',
   VERTICAL_JUMP: 'Vertical Jump',
-  AGILITY_505: '5-0-5 Agility',
+  AGILITY_505_YD: '5-0-5 Agility',
   DASH_40YD: '40-Yard Dash',
   T_TEST: 'T-Test',
 };
@@ -98,7 +98,7 @@ const mockMeasurements: Measurement[] = [
     isVerified: true,
     date: '2024-03-01',
     age: 18,
-    metric: 'AGILITY_505',
+    metric: 'AGILITY_505_YD',
     value: '2.15',
     units: 's',
     flyInDistance: null,

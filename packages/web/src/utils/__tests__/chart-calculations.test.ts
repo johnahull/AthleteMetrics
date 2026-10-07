@@ -103,7 +103,7 @@ describe('Chart Calculations', () => {
     });
 
     it('should handle both lower is better metrics', () => {
-      const labels = getPerformanceQuadrantLabels('DASH_40YD', 'AGILITY_505');
+      const labels = getPerformanceQuadrantLabels('DASH_40YD', 'AGILITY_505_M');
 
       expect(labels.bottomLeft.color).toBe('green'); // Both low times = elite
       expect(labels.topRight.color).toBe('red'); // Both high times = needs work

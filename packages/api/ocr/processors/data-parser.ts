@@ -215,13 +215,13 @@ export class DataParser {
           confidence = 50;
         } else if (lowerLine.includes('agility') || lowerLine.includes('505') || lowerLine.includes('5105')) {
           if (lowerLine.includes('505')) {
-            metric = 'AGILITY_505';
+            metric = 'AGILITY_505_UNRESOLVED';
             confidence = 65;
           } else if (lowerLine.includes('5105')) {
             metric = 'AGILITY_5105';
             confidence = 65;
           } else {
-            metric = 'AGILITY_505'; // Default agility test
+            metric = 'AGILITY_505_UNRESOLVED'; // Default agility test
             confidence = 45;
           }
         } else if (lowerLine.includes('t-test') || lowerLine.includes('t test')) {

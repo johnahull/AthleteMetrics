@@ -8,6 +8,7 @@ import { measurements, teams, organizations, users, userTeams, siteMetrics, orga
 import { isPeerComparisonExcludedMetric, PeerComparisonExcludedMetricError } from '@shared/peer-comparison-exclusions';
 import { eq, and, gte, lte, lt, ne, desc, inArray, sql } from 'drizzle-orm';
 import { getAthleteIdsForScope } from '../utils/athlete-filters';
+import { LOWER_IS_BETTER_METRICS } from '@shared/analytics-types';
 
 /**
  * Dashboard statistics time window
@@ -15,6 +16,16 @@ import { getAthleteIdsForScope } from '../utils/athlete-filters';
  * @default 30 days
  */
 const DASHBOARD_STATS_WINDOW_DAYS = 30;
+
+/**
+ * Metric codes where a rising value is a decline (time-based, lower is better).
+ * Used by the SQL decline-direction logic below. Derived from the shared single source of
+ * truth. NOTE: this intentionally now includes DASH_10YD, which the old local copy lacked
+ * (a bug fix: decline detection used the wrong sign for DASH_10YD). Fixed code literals only.
+ */
+export const LOWER_IS_BETTER_SQL_CODES = LOWER_IS_BETTER_METRICS;
+
+const lowerIsBetterSqlList = () => sql.join(LOWER_IS_BETTER_SQL_CODES.map(c => sql`${c}`), sql`, `);
 
 interface AthleteStats {
   bestFly10?: number;
@@ -38,7 +49,8 @@ interface DashboardStats {
   totalTeams: number;
   bestFLY10_TIMELast30Days?: { value: number; userName: string };
   bestVERTICAL_JUMPLast30Days?: { value: number; userName: string };
-  bestAGILITY_505Last30Days?: { value: number; userName: string };
+  bestAGILITY_505_MLast30Days?: { value: number; userName: string };
+  bestAGILITY_505_YDLast30Days?: { value: number; userName: string };
   bestAGILITY_5105Last30Days?: { value: number; userName: string };
   bestT_TESTLast30Days?: { value: number; userName: string };
   bestDASH_40YDLast30Days?: { value: number; userName: string };
@@ -1105,7 +1117,7 @@ export class AnalyticsService {
         athlete_id::text as "athleteId",
         metric,
         CASE
-          WHEN metric IN ('FLY10_TIME', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD')
+          WHEN metric IN (${lowerIsBetterSqlList()})
             THEN ((current_avg - previous_avg) / NULLIF(previous_avg, 0)) * 100
           ELSE ((previous_avg - current_avg) / NULLIF(previous_avg, 0)) * 100
         END as "declinePercent",
@@ -1116,7 +1128,7 @@ export class AnalyticsService {
         previous_avg > 0
         AND (
           CASE
-            WHEN metric IN ('FLY10_TIME', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD')
+            WHEN metric IN (${lowerIsBetterSqlList()})
               THEN ((current_avg - previous_avg) / previous_avg) * 100
             ELSE ((previous_avg - current_avg) / previous_avg) * 100
           END

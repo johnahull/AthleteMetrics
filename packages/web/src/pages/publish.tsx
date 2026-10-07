@@ -16,6 +16,7 @@ import {
 import { Download, RotateCcw, Trash2, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { getMetricUnits, getMetricColor } from "@/lib/metrics";
 import { Gender } from "@shared/schema";
+import { isLowerIsBetterMetric } from "@shared/analytics-types";
 import { DATE_CONSTANTS } from "@shared/constants";
 import jsPDF from "jspdf";
 import { useToast } from "@/hooks/use-toast";
@@ -185,7 +186,7 @@ export default function Publish() {
     if (!measurements) return [];
 
     const athleteBest = new Map();
-    const isTimeBased = ["FLY10_TIME", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD"].includes(filters.metric);
+    const isTimeBased = isLowerIsBetterMetric(filters.metric);
 
     measurements.forEach((measurement: any) => {
       const athleteId = measurement.user.id;
@@ -224,7 +225,7 @@ export default function Publish() {
   const allMeasurementsSorted = useMemo(() => {
     if (!measurements) return [];
 
-    const isTimeBased = ["FLY10_TIME", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD"].includes(filters.metric);
+    const isTimeBased = isLowerIsBetterMetric(filters.metric);
     return [...measurements].sort((a: any, b: any) => {
       const aValue = parseFloat(a.value);
       const bValue = parseFloat(b.value);

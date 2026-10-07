@@ -197,7 +197,7 @@ describe('report-utils', () => {
     const mockMetricLabels = {
       FLY10_TIME: '10-Yard Fly',
       VERTICAL_JUMP: 'Vertical Jump',
-      AGILITY_505: '5-0-5 Agility',
+      AGILITY_505_M: '5-0-5 Agility (m)',
     };
 
     it('should return "No metrics" when teamStatistics is empty', () => {
@@ -210,6 +210,11 @@ describe('report-utils', () => {
         { metric: 'VERTICAL_JUMP' },
       ];
       expect(getMetricsList(teamStatistics, mockMetricLabels)).toBe('10-Yard Fly, Vertical Jump');
+    });
+
+    it('falls back to protocol-specific 5-0-5 names when no label map entry exists', () => {
+      const teamStatistics = [{ metric: 'AGILITY_505_M' }, { metric: 'AGILITY_505_YD' }];
+      expect(getMetricsList(teamStatistics, {})).toBe('5-0-5 Agility (m), 5-0-5 Agility (yd)');
     });
 
     it('falls back to the underscore-split form when label not found', () => {
