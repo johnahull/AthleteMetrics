@@ -26,7 +26,7 @@ import { logAuthorizationFailure } from "../helpers/audit-logging";
 import { getCachedUserOrganizations } from "../helpers/cached-org-access";
 import type { SiteMetric } from "@shared/schema";
 import { DerivedMetricCalculator } from "../services/derived-metric-calculator";
-import { assertCanEnterMetric } from "../services/measurement-service";
+import { assertCanEnterMetric, MovementQualityPermissionError } from "../services/measurement-service";
 import { db } from "../db";
 
 /**
@@ -314,6 +314,9 @@ export function registerImportExportRoutes(app: Express) {
             });
             continue;
           }
+
+          // Only coaches and admins may enter MQ scores; checked before any athlete matching/creation
+          assertCanEnterMetric(currentUser.role, extracted.metric);
 
           // Find or create the athlete
           const athletes = await storage.getAthletes({
@@ -1422,6 +1425,20 @@ export function registerImportExportRoutes(app: Express) {
 
       if (action === 'select_alternative' && !selectedAthleteId) {
         return res.status(400).json({ message: "Selected athlete ID is required for select_alternative action" });
+      }
+
+      // Only coaches and admins may decide Movement Quality items; checked before
+      // the decision is recorded so a denied item stays pending
+      const pendingItem = reviewQueue.getItem(itemId);
+      if (pendingItem?.type === 'measurement' && pendingItem.originalData?.metric) {
+        try {
+          assertCanEnterMetric(currentUser.role, pendingItem.originalData.metric);
+        } catch (error) {
+          if (error instanceof MovementQualityPermissionError) {
+            return res.status(403).json({ message: error.message });
+          }
+          throw error;
+        }
       }
 
       const decision = {
