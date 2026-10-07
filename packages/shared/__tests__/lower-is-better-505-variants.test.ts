@@ -31,3 +31,22 @@ describe('web pages use the shared lower-is-better lookup, not local copies', ()
     expect(src).toMatch(/isLowerIsBetterMetric/);
   });
 });
+
+describe('lower-is-better time codes defined as lower_is_better in site_metrics migrations', () => {
+  it.each([
+    'AGILITY_5105_L',
+    'AGILITY_5105_R',
+    'DASH_5YD',
+    'DASH_20YD',
+    'DASH_30YD',
+    'DASH_10M',
+    'DASH_20M',
+    'DASH_30M',
+    'DASH_40M',
+    'FLY10M_TIME',
+    'AGILITY_COD_DEFICIT_M',
+    'AGILITY_COD_DEFICIT_YD',
+  ])('%s is lower-is-better', (code) => {
+    expect(isLowerIsBetterMetric(code)).toBe(true);
+  });
+});

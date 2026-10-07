@@ -461,9 +461,19 @@ export const LOWER_IS_BETTER_METRICS = [
   'AGILITY_COD_DEFICIT_M',
   'AGILITY_COD_DEFICIT_YD',
   'AGILITY_5105',
+  'AGILITY_5105_L',
+  'AGILITY_5105_R',
   'T_TEST',
   'DASH_40YD',
   'DASH_10YD',
+  'DASH_5YD',
+  'DASH_20YD',
+  'DASH_30YD',
+  'DASH_10M',
+  'DASH_20M',
+  'DASH_30M',
+  'DASH_40M',
+  'FLY10M_TIME',
 ] as const;
 
 export type LowerIsBetterMetric = typeof LOWER_IS_BETTER_METRICS[number];
