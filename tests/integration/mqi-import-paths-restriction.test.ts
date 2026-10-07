@@ -209,11 +209,11 @@ describe('MQ role allowlist on the import paths (CSV, OCR, review queue)', () =>
         ],
       } as any);
 
-    it.each(['parent', 'guest'])('a %s MQ row is rejected per row and nothing is written', async (role) => {
+    it('a guest MQ row is rejected per row and nothing is written', async () => {
       ocrReturns('MQ_JUMP');
       const res = await request(app)
         .post('/api/import/photo')
-        .set('Cookie', cookies[role])
+        .set('Cookie', cookies.guest)
         .field('options', JSON.stringify({ measurementMode: 'match_only' }))
         .attach('file', PNG, 'scores.png');
       expect(res.status).toBe(200);
@@ -222,11 +222,56 @@ describe('MQ role allowlist on the import paths (CSV, OCR, review queue)', () =>
       expect(await athleteRows()).toHaveLength(0);
     });
 
+    // A parent session has no organization membership (the parent role is only
+    // derived when there is none), so the org-scoped photo import rejects the
+    // whole request before OCR runs: 400 without an organization, 403 when one
+    // is supplied. Either way nothing is written.
+    it('a parent photo import is rejected before OCR and nothing is written', async () => {
+      ocrReturns('MQ_JUMP');
+      vi.mocked(ocrService.extractTextFromImage).mockClear();
+      const noOrg = await request(app)
+        .post('/api/import/photo')
+        .set('Cookie', cookies.parent)
+        .field('options', JSON.stringify({ measurementMode: 'match_only' }))
+        .attach('file', PNG, 'scores.png');
+      expect(noOrg.status).toBe(400);
+      expect(noOrg.body.message).toMatch(/organization is required/i);
+      const withOrg = await request(app)
+        .post('/api/import/photo')
+        .set('Cookie', cookies.parent)
+        .field('options', JSON.stringify({ organizationId: orgId, measurementMode: 'create_athletes' }))
+        .attach('file', PNG, 'scores.png');
+      expect(withOrg.status).toBe(403);
+      expect(ocrService.extractTextFromImage).not.toHaveBeenCalled();
+      expect(await athleteRows()).toHaveLength(0);
+    });
+
+    it('a denied MQ row in create-athletes mode is rejected before any athlete is created', async () => {
+      const first = 'Mqocrnew';
+      const last = `Nobody${Math.random().toString(36).replace(/[^a-z]/g, '').slice(0, 8)}`;
+      vi.mocked(ocrService.extractTextFromImage).mockResolvedValue({
+        text: 'raw',
+        confidence: 90,
+        warnings: [],
+        extractedData: [{ firstName: first, lastName: last, metric: 'MQ_JUMP', value: '2', date: '2026-03-10', rawText: 'raw', confidence: 90 }],
+      } as any);
+      const res = await request(app)
+        .post('/api/import/photo')
+        .set('Cookie', cookies.guest)
+        .field('options', JSON.stringify({ organizationId: orgId, measurementMode: 'create_athletes' }))
+        .attach('file', PNG, 'scores.png');
+      expect(res.status).toBe(200);
+      expect(res.body.results.successful).toBe(0);
+      expect(res.body.results.errors).toEqual([expect.objectContaining({ row: 1, error: expect.stringMatching(MQ_DENIED) })]);
+      expect(res.body.results.createdAthletes ?? []).toHaveLength(0);
+      expect(await db.select().from(users).where(eq(users.lastName, last))).toHaveLength(0);
+    });
+
     it('a denied MQ row carries the permission message, not a generic processing failure', async () => {
       ocrReturns('MQ_JUMP');
       const res = await request(app)
         .post('/api/import/photo')
-        .set('Cookie', cookies.parent)
+        .set('Cookie', cookies.guest)
         .field('options', JSON.stringify({ measurementMode: 'match_only' }))
         .attach('file', PNG, 'scores.png');
       expect(res.status).toBe(200);
