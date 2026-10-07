@@ -5,7 +5,7 @@
  */
 
 import React, { useMemo } from 'react';
-import Joyride, { CallBackProps, STATUS } from 'react-joyride';
+import { Joyride, STATUS, type EventData } from 'react-joyride';
 import { useAuth } from '@/lib/auth';
 import { useOnboarding } from './OnboardingProvider';
 import { athleteSteps } from './tour-steps/athlete-steps';
@@ -37,7 +37,7 @@ export function OnboardingTour() {
     }
   }, [user]);
 
-  const handleJoyrideCallback = (data: CallBackProps) => {
+  const handleJoyrideCallback = (data: EventData) => {
     const { status } = data;
 
     // Tour finished or skipped
@@ -55,15 +55,13 @@ export function OnboardingTour() {
       steps={steps}
       run={isOnboardingActive}
       continuous
-      showProgress
-      showSkipButton
-      callback={handleJoyrideCallback}
+      onEvent={handleJoyrideCallback}
       tooltipComponent={OnboardingTooltip}
-      styles={{
-        options: {
-          primaryColor: '#3b82f6', // blue-500
-          zIndex: 10000,
-        },
+      options={{
+        primaryColor: '#3b82f6', // blue-500
+        zIndex: 10000,
+        showProgress: true,
+        buttons: ['back', 'close', 'primary', 'skip'],
       }}
       locale={{
         back: 'Back',
