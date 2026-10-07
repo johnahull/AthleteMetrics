@@ -43,7 +43,7 @@ test.skip(
 let sql: ReturnType<typeof postgres>;
 let db: ReturnType<typeof drizzle<typeof schema>>;
 const ids: { orgA?: string; orgB?: string; coachA?: string; coachB?: string; athlete?: string; event?: string } = {};
-const usernames = { coachA: `mqi_coachA_${suffix}`, coachB: `mqi_coachB_${suffix}` };
+const usernames = { coachA: `mqi_coachA_${suffix}`, coachB: `mqi_coachB_${suffix}`, athlete: `mqi_athlete_${suffix}` };
 const ATHLETE_NAME = `Mqi Athlete${suffix}`;
 
 async function mkUser(username: string, first: string, last: string) {
@@ -77,7 +77,7 @@ test.beforeAll(async () => {
     .returning();
   const coachA = await mkUser(usernames.coachA, 'Mqi', `CoachA${suffix}`);
   const coachB = await mkUser(usernames.coachB, 'Mqi', `CoachB${suffix}`);
-  const athlete = await mkUser(`mqi_athlete_${suffix}`, 'Mqi', `Athlete${suffix}`);
+  const athlete = await mkUser(usernames.athlete, 'Mqi', `Athlete${suffix}`);
   await db.insert(schema.userOrganizations).values([
     { userId: coachA.id, organizationId: orgA.id, role: 'coach' },
     { userId: coachB.id, organizationId: orgB.id, role: 'coach' },
@@ -150,11 +150,14 @@ async function openPanel(page: Page) {
   await expect(page.getByRole('dialog')).toBeVisible();
 }
 
-const pick = (page: Page, label: string, score: number) =>
-  page
+// The score buttons are a toggle group: clicking the selected score clears it, so
+// only click a score that is not already selected (independent of earlier tests)
+async function pick(page: Page, label: string, score: number) {
+  const radio = page
     .getByRole('group', { name: `${label} score (0 to 3)` })
-    .getByRole('radio', { name: new RegExp(`^${score}\\b`) })
-    .click();
+    .getByRole('radio', { name: new RegExp(`^${score}\\b`) });
+  if ((await radio.getAttribute('aria-checked')) !== 'true') await radio.click();
+}
 
 test.describe('MQI capture on event data entry', () => {
   test('coach scores 8 patterns, sees the total, edits one, and attaches a clip link', async ({ page }) => {
@@ -261,10 +264,23 @@ test.describe('MQI capture on event data entry', () => {
     });
     expect(res.status()).toBe(403);
     expect((await res.json()).error).toMatch(/access denied/i);
+    const save = await page.request.put(`${BASE_URL}/api/events/${ids.event}/athletes/${ids.athlete}/movement-quality`, {
+      data: { upserts: [{ metric: 'MQ_JUMP', value: 1 }], deletes: [] },
+    });
+    expect(save.status()).toBe(403);
+    expect((await save.json()).error).toMatch(/access denied/i);
 
     await page.goto(`${BASE_URL}/events/${ids.event}/data-entry`);
     // Wait for a positive "denied" state before asserting that nothing is offered
     await expect(page.getByRole('heading', { name: 'Event Not Found' })).toBeVisible({ timeout: 20000 });
     await expect(page.getByRole('button', { name: /Movement Quality for/ })).toHaveCount(0);
+  });
+
+  test("an athlete of the event's organization gets Access Denied on data entry", async ({ page }) => {
+    await loginWithCredentials(page, usernames.athlete, PASSWORD);
+    await page.goto(`${BASE_URL}/events/${ids.event}/data-entry`);
+    await expect(page.getByRole('heading', { name: 'Access Denied' })).toBeVisible({ timeout: 20000 });
+    await expect(page.getByRole('button', { name: /Movement Quality for/ })).toHaveCount(0);
+    await expect(page.getByRole('textbox')).toHaveCount(0);
   });
 });
