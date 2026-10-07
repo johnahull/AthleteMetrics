@@ -14,7 +14,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { sql } from 'drizzle-orm';
-import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi, onTestFinished } from 'vitest';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
 import { MeasurementService } from '../../packages/api/services/measurement-service';
@@ -311,6 +311,32 @@ describe('MQI derived totals (calculator behavior)', () => {
     const totals = await totalsFor('MQI_TOTAL');
     expect(totals).toHaveLength(1);
     expect(Number(totals[0].value)).toBe(16);
+  });
+
+  it('(c) concurrent updates of different scores leave the correct total', async () => {
+    const rows = await scoreAllPatterns(1); // 8
+    // Widen the read-then-write window so an unserialized recalculation that read the
+    // sources before another update committed would write a stale total.
+    const proto = DerivedMetricCalculator.prototype as any;
+    const findSources = proto.findSourceMeasurementsImpl;
+    const spy = vi.spyOn(proto, 'findSourceMeasurementsImpl').mockImplementation(async function (this: any, ...args: any[]) {
+      const result = await findSources.apply(this, args);
+      await new Promise((resolve) => setTimeout(resolve, Math.random() * 30));
+      return result;
+    });
+    onTestFinished(() => spy.mockRestore());
+    for (let round = 0; round < 12; round++) {
+      const values = rows.map((_, i) => (i + round) % 4);
+      await Promise.all(
+        rows.map(async (row, i) => {
+          await new Promise((resolve) => setTimeout(resolve, Math.random() * 20));
+          return service.updateMeasurement(row.id, { value: values[i] }, undefined, 'coach');
+        }),
+      );
+      const totals = await totalsFor('MQI_TOTAL');
+      expect(totals).toHaveLength(1);
+      expect(Number(totals[0].value)).toBe(values.reduce((a, b) => a + b, 0));
+    }
   });
 
   // CURRENT BEHAVIOR on this branch: same_date source selection picks the BEST value
