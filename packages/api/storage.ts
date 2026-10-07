@@ -3716,6 +3716,12 @@ export class DatabaseStorage implements IStorage {
       eventDateSnapshot: string;  // String in 'YYYY-MM-DD' format for Drizzle's date() type
     }
   ): Promise<Measurement> {
+    // Trust boundary: this method validates values only and performs NO role
+    // check. Callers must enforce who may enter a metric (Movement Quality is
+    // coach/admin-only) before calling: MeasurementService (assertCanEnterMetric),
+    // the CSV/OCR/review-queue import routes (assertCanEnterMetric per row), and
+    // the event measurement routes (coach/org_admin/site_admin only).
+    //
     // Metric-aware value validation, same rule as MeasurementService (CSV/OCR
     // imports and other callers write through here without the service).
     // Paired-input metrics validate their own inputs.
