@@ -419,8 +419,8 @@ export class DerivedMetricCalculator {
    *   newly created calculated row inherits; defaults to the most recently created
    *   source measurement used by the formula.
    * @param deleteWhenUncomputable - Recalculation mode (recalculateForAthlete): an
-   *   existing calculated row is recalculated even when a direct measurement exists,
-   *   and is deleted when its sources are missing or the formula result is invalid.
+   *   existing calculated row is deleted when a direct measurement exists for the
+   *   date, its sources are missing, or the formula result is invalid.
    * @param allowCreate - When false, only an existing calculated row is updated.
    * @returns the created/updated calculated measurement, or null when it cannot be
    *   calculated (direct measurement exists, sources missing, invalid result)
@@ -486,9 +486,10 @@ export class DerivedMetricCalculator {
       )
       .limit(1);
 
-    if (directMeasurement && !(deleteWhenUncomputable && existingCalculated.length > 0)) {
-      // Direct measurements take priority - skip calculation
-      return null;
+    if (directMeasurement) {
+      // Direct measurements take priority - skip calculation; when recalculating,
+      // also remove a calculated row that coexists with the direct one.
+      return deleteExisting();
     }
 
     // Find source measurements for the formula

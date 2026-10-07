@@ -208,6 +208,34 @@ describe('MQI derived totals (calculator behavior)', () => {
     expect(Number(total.value)).toBe(17);
   });
 
+  it('(b) recalculation removes the calculated total when a direct total exists for the date', async () => {
+    const rows = await scoreAllPatterns(2); // calculated total 16
+    expect(await totalsFor('MQI_TOTAL')).toHaveLength(1);
+    const [direct] = await db
+      .insert(measurements)
+      .values({
+        userId: athleteId,
+        submittedBy: coachId,
+        metric: 'MQI_TOTAL',
+        value: '20',
+        units: 'score',
+        date: DATE,
+        age: 18,
+        isVerified: true,
+        organizationId: orgId,
+      } as any)
+      .returning();
+
+    await service.updateMeasurement(rows[0].id, { value: 3 }, undefined, 'coach');
+
+    // Direct measurements take priority: only the direct row remains, unchanged.
+    const totals = await totalsFor('MQI_TOTAL');
+    expect(totals).toHaveLength(1);
+    expect(totals[0].id).toBe(direct.id);
+    expect(totals[0].isCalculated).toBe(false);
+    expect(Number(totals[0].value)).toBe(20);
+  });
+
   it('(c) removes MQI_TOTAL when a source score is deleted (set becomes incomplete)', async () => {
     const rows = await scoreAllPatterns(2);
     expect(await totalsFor('MQI_TOTAL')).toHaveLength(1);
