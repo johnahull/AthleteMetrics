@@ -162,7 +162,7 @@ export function AthleteSelector({
       >
         {isOpen ? (
           <div className="flex items-center w-full">
-            <Search className="h-4 w-4 text-muted-foreground mr-2 flex-shrink-0" />
+            <Search className="h-4 w-4 text-muted-foreground mr-2 shrink-0" />
             <Input
               ref={inputRef}
               value={searchTerm}
@@ -177,7 +177,7 @@ export function AthleteSelector({
         ) : (
           <>
             <div className="flex items-center w-full">
-              <User className="h-4 w-4 text-muted-foreground mr-2 flex-shrink-0" />
+              <User className="h-4 w-4 text-muted-foreground mr-2 shrink-0" />
               <span className={cn(
                 "truncate",
                 !displayValue && "text-muted-foreground"
@@ -185,7 +185,7 @@ export function AthleteSelector({
                 {displayValue || placeholder}
               </span>
             </div>
-            <div className="flex items-center space-x-1 flex-shrink-0 ml-2">
+            <div className="flex items-center space-x-1 shrink-0 ml-2">
               {selectedAthlete && (
                 <Button
                   variant="ghost"
@@ -259,7 +259,7 @@ export function AthleteSelector({
                       )}
                     </div>
                     {selectedAthlete?.id === athlete.id && (
-                      <div className="flex-shrink-0 ml-2">
+                      <div className="shrink-0 ml-2">
                         <div className="w-2 h-2 bg-primary rounded-full" />
                       </div>
                     )}

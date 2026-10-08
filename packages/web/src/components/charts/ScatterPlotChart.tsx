@@ -981,7 +981,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
             {quadrantLegend.map((item, index) => (
               <div key={index} className="flex items-center space-x-2" role="listitem">
                 <div
-                  className="w-4 h-4 rounded border-2 flex-shrink-0"
+                  className="w-4 h-4 rounded border-2 shrink-0"
                   style={{
                     backgroundColor: item.bg,
                     borderColor: item.border

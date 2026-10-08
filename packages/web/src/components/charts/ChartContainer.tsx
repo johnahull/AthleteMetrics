@@ -302,7 +302,7 @@ export function ChartContainer({
     const cardHeight = chartType === 'radar_chart' ? CHART_HEIGHT_RADAR : CHART_HEIGHT_DEFAULT;
     return (
       <Card className={`${className} ${cardHeight} flex flex-col`}>
-        <CardHeader className="flex-shrink-0">
+        <CardHeader className="shrink-0">
           <Skeleton className="h-6 w-48" />
           {subtitle && <Skeleton className="h-4 w-32" />}
         </CardHeader>
@@ -317,7 +317,7 @@ export function ChartContainer({
     const cardHeight = chartType === 'radar_chart' ? CHART_HEIGHT_RADAR : CHART_HEIGHT_DEFAULT;
     return (
       <Card className={`${className} ${cardHeight} flex flex-col`}>
-        <CardHeader className="flex-shrink-0">
+        <CardHeader className="shrink-0">
           <CardTitle className="flex items-center gap-2 text-destructive">
             <AlertTriangle className="h-5 w-5" />
             Chart Error
@@ -339,7 +339,7 @@ export function ChartContainer({
     const cardHeight = chartType === 'radar_chart' ? CHART_HEIGHT_RADAR : CHART_HEIGHT_DEFAULT;
     return (
       <Card className={`${className} ${cardHeight} flex flex-col`}>
-        <CardHeader className="flex-shrink-0">
+        <CardHeader className="shrink-0">
           <CardTitle>Unsupported Chart Type</CardTitle>
         </CardHeader>
         <CardContent className="flex-1">
@@ -366,7 +366,7 @@ export function ChartContainer({
     const cardHeight = chartType === 'radar_chart' ? CHART_HEIGHT_RADAR : CHART_HEIGHT_DEFAULT;
     return (
       <Card className={`${className} ${cardHeight} flex flex-col`}>
-        <CardHeader className="flex-shrink-0">
+        <CardHeader className="shrink-0">
           <CardTitle>{title}</CardTitle>
           {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
         </CardHeader>
@@ -398,7 +398,7 @@ export function ChartContainer({
 
   return (
     <Card className={`${className} ${cardHeight} flex flex-col transition-all duration-300`} ref={containerRef}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 flex-shrink-0">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 shrink-0">
         <div className="flex-1">
           <CardTitle className="text-lg font-medium">{title}</CardTitle>
           {subtitle && (

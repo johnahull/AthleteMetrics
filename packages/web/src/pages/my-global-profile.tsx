@@ -334,7 +334,7 @@ export default function MyGlobalProfilePage() {
                   key={log.id}
                   className="flex items-start gap-3 p-2 rounded text-sm"
                 >
-                  <div className="flex-shrink-0 mt-0.5">
+                  <div className="shrink-0 mt-0.5">
                     {log.action === 'created' && (
                       <CheckCircle className="h-4 w-4 text-green-500" />
                     )}

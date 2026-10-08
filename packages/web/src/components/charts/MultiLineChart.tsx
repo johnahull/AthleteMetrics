@@ -477,7 +477,7 @@ export function MultiLineChart({
                   return (
                     <div key={athlete.athleteId} className="flex items-center space-x-2">
                       <div
-                        className="w-4 h-3 rounded flex-shrink-0"
+                        className="w-4 h-3 rounded shrink-0"
                         style={{ backgroundColor: color }}
                         aria-label={`Color indicator for ${athlete.athleteName}`}
                       />

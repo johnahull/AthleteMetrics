@@ -517,7 +517,7 @@ export default function AcceptInvitation() {
                 />
                 <button
                   type="button"
-                  className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 focus:text-gray-600 focus:outline-none"
+                  className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 focus:text-gray-600 focus:outline-hidden"
                   onClick={() => setShowPassword(!showPassword)}
                   tabIndex={-1}
                   aria-label={showPassword ? "Hide password" : "Show password"}
@@ -549,7 +549,7 @@ export default function AcceptInvitation() {
                 />
                 <button
                   type="button"
-                  className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 focus:text-gray-600 focus:outline-none"
+                  className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 focus:text-gray-600 focus:outline-hidden"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   tabIndex={-1}
                   aria-label={showConfirmPassword ? "Hide password" : "Show password"}

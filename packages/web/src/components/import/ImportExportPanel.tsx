@@ -949,7 +949,7 @@ Jordan,Williams,2009-01-10,2009,2027,Male,"jordan.williams@email.com,j.williams@
                 role="button"
                 tabIndex={0}
                 aria-label={`Upload ${importType} CSV file. Press Enter or Space to browse files, or drag and drop files here`}
-                className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+                className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-primary focus:border-primary"
                 onClick={() => document.getElementById('file-upload')?.click()}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -1588,7 +1588,7 @@ Jordan,Williams,2009-01-10,2009,2027,Male,"jordan.williams@email.com,j.williams@
 
           <div className="mt-6 p-4 bg-blue-50 rounded-lg">
             <div className="flex items-start space-x-3">
-              <Info className="h-5 w-5 text-blue-600 mt-1 flex-shrink-0" />
+              <Info className="h-5 w-5 text-blue-600 mt-1 shrink-0" />
               <div className="text-sm text-blue-800">
                 <p className="font-medium mb-1">Import Guidelines:</p>
                 <ul className="space-y-1 text-xs">
@@ -1675,7 +1675,7 @@ Jordan,Williams,2009-01-10,2009,2027,Male,"jordan.williams@email.com,j.williams@
 
           <div className="mt-6 p-4 bg-yellow-50 rounded-lg">
             <div className="flex items-start space-x-3">
-              <AlertTriangle className="h-5 w-5 text-yellow-600 mt-1 flex-shrink-0" />
+              <AlertTriangle className="h-5 w-5 text-yellow-600 mt-1 shrink-0" />
               <div className="text-sm text-yellow-800">
                 <p className="font-medium mb-1">Export Notes:</p>
                 <ul className="space-y-1 text-xs">

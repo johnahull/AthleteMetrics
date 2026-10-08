@@ -9,7 +9,7 @@ const LAST_UPDATED = '2024-12-13';
 
 export default function TermsOfService() {
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 to-slate-100">
+    <div className="min-h-screen flex flex-col bg-linear-to-br from-slate-50 to-slate-100">
       <div className="flex-1 py-8 px-4">
         <div className="max-w-3xl mx-auto">
           <div className="mb-6">

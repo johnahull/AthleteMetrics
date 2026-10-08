@@ -77,8 +77,5 @@
     "vaul": "^1.1.2",
     "wouter": "^3.9.0",
     "zod": "^3.24.2"
-  },
-  "devDependencies": {
-    "tailwindcss-animate": "^1.0.7"
   }
 }

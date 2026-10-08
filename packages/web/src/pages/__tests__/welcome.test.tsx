@@ -137,7 +137,7 @@ describe('Welcome Page', () => {
       const { container } = render(<Welcome />);
 
       const mainContainer = container.querySelector('.min-h-screen');
-      expect(mainContainer).toHaveClass('bg-gradient-to-br', 'from-slate-50', 'to-slate-100');
+      expect(mainContainer).toHaveClass('bg-linear-to-br', 'from-slate-50', 'to-slate-100');
     });
   });
 

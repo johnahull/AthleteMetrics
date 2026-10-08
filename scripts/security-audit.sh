@@ -35,21 +35,11 @@ set -e
 #   ^7 peer range. All seven undici advisory IDs are listed so the audit gate treats the
 #   undici/jsdom/isomorphic-dompurify chain as fully attributable to excluded advisories.
 #   Revisit when jsdom widens its undici range or isomorphic-dompurify ships a fixed jsdom.
-# - GHSA-vfj7-8cjw-p6xm (braces stack exhaustion DoS on deeply nested brace patterns)
-#   Affects every published braces release (<=3.0.3, and 3.0.3 is the latest), so no
-#   patched version exists. braces is never loaded at runtime: it is used only at build
-#   time, through tailwindcss@3 -> (chokidar, fast-glob, micromatch) -> braces, where the
-#   glob patterns are the static `content` globs in packages/web/tailwind.config.ts, never
-#   user or network input. tailwindcss and its tailwindcss-animate plugin are
-#   devDependencies, so package-lock.json marks this chain dev-only (`npm ls braces`).
-#   The only clean way off it is migrating tailwindcss 3 -> 4 (drops these deps), a
-#   separate UI-affecting migration (config/@tailwind directives rewrite) deferred.
-#   Affected (transitively): braces, micromatch, chokidar, fast-glob, tailwindcss.
-#   Revisit when braces publishes a fix or the project migrates to tailwindcss 4.
 #
 # package.json overrides added for audit fixes (remove when no longer needed):
 # - tinypool: drop once vitest >= 4 (vitest 4 no longer depends on tinypool; 3.x pins ^1).
-# - postcss-selector-parser: remove at the Tailwind 4 migration (issue #523).
+# - postcss-selector-parser: still needed after the Tailwind 4 migration (issue #523): @tailwindcss/typography
+#   pins ^6.0.10 (GHSA-rj75-hqrm-r3gf, moderate); the override forces the patched 7.x. Drop it once typography widens its range.
 #
 # Each run warns about an EXCLUDED_ADVISORIES ID that matches no current advisory,
 # so stale exclusions are noticed and pruned.
@@ -64,7 +54,7 @@ npm audit --audit-level=moderate --json > audit-results.json || true
 
 # List of excluded vulnerability advisory IDs (false positives)
 # These are vulnerabilities that don't affect our usage patterns
-EXCLUDED_ADVISORIES="GHSA-5j98-mcp5-4vw2 GHSA-mmgp-wc2j-qcv7 GHSA-gv7w-rqvm-qjhr GHSA-vmh5-mc38-953g GHSA-vxpw-j846-p89q GHSA-hm92-r4w5-c3mj GHSA-p88m-4jfj-68fv GHSA-pr7r-676h-xcf6 GHSA-35p6-xmwp-9g52 GHSA-g8m3-5g58-fq7m GHSA-vfj7-8cjw-p6xm"
+EXCLUDED_ADVISORIES="GHSA-5j98-mcp5-4vw2 GHSA-mmgp-wc2j-qcv7 GHSA-gv7w-rqvm-qjhr GHSA-vmh5-mc38-953g GHSA-vxpw-j846-p89q GHSA-hm92-r4w5-c3mj GHSA-p88m-4jfj-68fv GHSA-pr7r-676h-xcf6 GHSA-35p6-xmwp-9g52 GHSA-g8m3-5g58-fq7m"
 
 # Validate that audit results were generated
 if [ ! -f "audit-results.json" ] || [ ! -s "audit-results.json" ]; then

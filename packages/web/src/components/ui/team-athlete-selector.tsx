@@ -391,7 +391,7 @@ export function TeamAthleteSelector({
                               )}
                             />
                             <Users className={cn(
-                              "h-5 w-5 flex-shrink-0 transition-colors",
+                              "h-5 w-5 shrink-0 transition-colors",
                               (isSelected || isPartial) ? "text-primary" : "text-muted-foreground"
                             )} />
                             <label
@@ -451,10 +451,10 @@ export function TeamAthleteSelector({
                               className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                             />
                             {isDisabled ? (
-                              <Check className="h-5 w-5 flex-shrink-0 text-green-600" />
+                              <Check className="h-5 w-5 shrink-0 text-green-600" />
                             ) : (
                               <User className={cn(
-                                "h-5 w-5 flex-shrink-0 transition-colors",
+                                "h-5 w-5 shrink-0 transition-colors",
                                 isSelected ? "text-primary" : "text-muted-foreground"
                               )} />
                             )}
@@ -542,9 +542,9 @@ export function TeamAthleteSelector({
                 {selectedAthletes.map(athlete => (
                   <div
                     key={athlete.id}
-                    className="group flex items-start gap-3 p-4 bg-gradient-to-r from-accent/50 to-accent/30 rounded-lg hover:from-accent hover:to-accent/50 transition-all duration-200 border border-transparent hover:border-accent-foreground/10 hover:shadow-md"
+                    className="group flex items-start gap-3 p-4 bg-linear-to-r from-accent/50 to-accent/30 rounded-lg hover:from-accent hover:to-accent/50 transition-all duration-200 border border-transparent hover:border-accent-foreground/10 hover:shadow-md"
                   >
-                    <div className="flex-shrink-0 pt-0.5">
+                    <div className="shrink-0 pt-0.5">
                       <User className="h-5 w-5 text-primary" />
                     </div>
                     <div className="flex-1 min-w-0 space-y-1">
@@ -579,7 +579,7 @@ export function TeamAthleteSelector({
                       size="sm"
                       onClick={() => removeAthlete(athlete.id)}
                       aria-label={`Remove ${athlete.fullName}`}
-                      className="h-8 w-8 p-0 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-all hover:bg-destructive/10 hover:text-destructive focus:opacity-100"
+                      className="h-8 w-8 p-0 shrink-0 opacity-0 group-hover:opacity-100 transition-all hover:bg-destructive/10 hover:text-destructive focus:opacity-100"
                     >
                       <X className="h-4 w-4" />
                     </Button>

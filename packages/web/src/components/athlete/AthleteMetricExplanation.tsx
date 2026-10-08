@@ -71,7 +71,7 @@ export function AthleteMetricExplanation({
             className={cn(
               'inline-flex items-center gap-1 self-start rounded-sm font-medium text-blue-700',
               'underline decoration-dotted underline-offset-4 decoration-blue-400/60',
-              'hover:text-blue-800 hover:decoration-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'hover:text-blue-800 hover:decoration-blue-500 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring',
               compact ? 'text-xs' : 'text-sm',
               compact ? 'mt-0.5' : 'mt-1',
             )}
@@ -93,7 +93,7 @@ export function AthleteMetricExplanation({
               data-testid="athlete-metric-panel"
               className={cn(
                 'mt-2 rounded-md border-l-2 border-l-blue-400/70 border-y border-r border-blue-100/80',
-                'bg-gradient-to-br from-blue-50/60 via-white to-white p-3 space-y-3 shadow-sm',
+                'bg-linear-to-br from-blue-50/60 via-white to-white p-3 space-y-3 shadow-sm',
                 compact ? 'text-xs' : 'text-sm',
               )}
             >

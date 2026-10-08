@@ -132,7 +132,7 @@ export function MeasurementsTimeline({ measurements }: MeasurementsTimelineProps
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
                   <CardTitle className="text-base flex items-center gap-2">
-                    <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <User className="h-4 w-4 text-muted-foreground shrink-0" />
                     <Link href={`/athletes/${measurement.athleteId}`}>
                       <span
                         data-testid="measurement-athlete"
@@ -150,7 +150,7 @@ export function MeasurementsTimeline({ measurements }: MeasurementsTimelineProps
                 </div>
                 <Badge
                   data-testid="measurement-metric"
-                  className={`${metricColor} flex-shrink-0 ml-2`}
+                  className={`${metricColor} shrink-0 ml-2`}
                   variant="secondary"
                 >
                   <Icon className="h-3 w-3 mr-1" />

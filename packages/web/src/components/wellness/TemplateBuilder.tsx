@@ -695,7 +695,7 @@ export default function TemplateBuilder({ isOpen, onClose, template, organizatio
                         />
                       </FormControl>
                       <div className="space-y-1 leading-none">
-                        <FormLabel className="!mt-0 cursor-pointer">
+                        <FormLabel className="mt-0! cursor-pointer">
                           Any injury overrides wellness score (always red)
                         </FormLabel>
                         <p className="text-xs text-gray-500">
