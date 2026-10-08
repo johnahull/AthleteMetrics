@@ -29,6 +29,8 @@ import {
   canVerifyMeasurement,
   canUseBatchEndpoint,
   canQueryCrossOrganization,
+  getOrgRole,
+  isMeasurementWriterRole,
 } from '../../permissions/measurement-helpers';
 
 describe('Measurement Permission Helpers', () => {
@@ -202,6 +204,49 @@ describe('Measurement Permission Helpers', () => {
     });
   });
 
+  describe('getOrgRole (issue #514)', () => {
+    const orgs = [
+      { organizationId: 'org-a', role: 'coach' },
+      { organizationId: 'org-b', role: 'athlete' },
+    ];
+
+    it('returns the role in the requested organization, not the first one', async () => {
+      vi.mocked(storage.getUserOrganizations).mockResolvedValue(orgs as any);
+      expect(await getOrgRole({ id: 'u' }, 'org-a')).toBe('coach');
+      expect(await getOrgRole({ id: 'u' }, 'org-b')).toBe('athlete');
+    });
+
+    it('returns undefined for an organization the user does not belong to (fails closed)', async () => {
+      vi.mocked(storage.getUserOrganizations).mockResolvedValue(orgs as any);
+      expect(await getOrgRole({ id: 'u' }, 'org-z')).toBeUndefined();
+    });
+
+    it('returns undefined when there is no organization (a personal row), and never looks it up', async () => {
+      expect(await getOrgRole({ id: 'u' }, null)).toBeUndefined();
+      expect(await getOrgRole({ id: 'u' }, undefined)).toBeUndefined();
+      expect(storage.getUserOrganizations).not.toHaveBeenCalled();
+    });
+
+    it('is site_admin for a site admin in any organization, without a lookup', async () => {
+      expect(await getOrgRole({ id: 'u', isSiteAdmin: true }, 'org-z')).toBe('site_admin');
+      expect(storage.getUserOrganizations).not.toHaveBeenCalled();
+    });
+
+    it('treats a missing membership list as no membership', async () => {
+      vi.mocked(storage.getUserOrganizations).mockResolvedValue(undefined as any);
+      expect(await getOrgRole({ id: 'u' }, 'org-a')).toBeUndefined();
+    });
+  });
+
+  describe('isMeasurementWriterRole (issue #514)', () => {
+    it.each(['site_admin', 'org_admin', 'coach'])('%s may write for others', (role) => {
+      expect(isMeasurementWriterRole(role)).toBe(true);
+    });
+    it.each(['athlete', 'guest', 'parent', '', undefined])('%s may not write for others', (role) => {
+      expect(isMeasurementWriterRole(role as any)).toBe(false);
+    });
+  });
+
   describe('canVerifyMeasurement', () => {
     const measurement = {
       id: 'meas-1',
@@ -217,9 +262,41 @@ describe('Measurement Permission Helpers', () => {
 
     it('should deny athlete from verifying measurements', async () => {
       const user = { id: 'athlete-1', isSiteAdmin: false, role: 'athlete' };
+      vi.mocked(storage.getUserOrganizations).mockResolvedValue([
+        { organizationId: 'org-1', role: 'athlete' },
+      ] as any);
       const result = await canVerifyMeasurement(user as any, measurement as any);
       expect(result.allowed).toBe(false);
       expect(result.reason).toContain('cannot verify');
+    });
+
+    // Issue #514: the role that counts is the one in the measurement's organization, not the session role
+    // (the role in the user's first organization).
+    it("should deny a coach (session role) who is only an athlete in the measurement's organization", async () => {
+      const user = { id: 'mixed-1', isSiteAdmin: false, role: 'coach' };
+      vi.mocked(storage.getUserOrganizations).mockResolvedValue([
+        { organizationId: 'org-0', role: 'coach' },
+        { organizationId: 'org-1', role: 'athlete' },
+      ] as any);
+      const result = await canVerifyMeasurement(user as any, measurement as any);
+      expect(result.allowed).toBe(false);
+    });
+
+    it("should allow an athlete (session role) who is a coach in the measurement's organization", async () => {
+      const user = { id: 'mixed-2', isSiteAdmin: false, role: 'athlete' };
+      vi.mocked(storage.getUserOrganizations).mockResolvedValue([
+        { organizationId: 'org-0', role: 'athlete' },
+        { organizationId: 'org-1', role: 'coach' },
+      ] as any);
+      const result = await canVerifyMeasurement(user as any, measurement as any);
+      expect(result.allowed).toBe(true);
+    });
+
+    it('should deny verifying a personal measurement (no organization)', async () => {
+      const user = { id: 'coach-1', isSiteAdmin: false, role: 'coach' };
+      vi.mocked(storage.getUserOrganizations).mockResolvedValue([{ organizationId: 'org-1', role: 'coach' }] as any);
+      const result = await canVerifyMeasurement(user as any, { id: 'm', organizationId: null } as any);
+      expect(result.allowed).toBe(false);
     });
 
     it('should allow coach to verify measurement in their org', async () => {

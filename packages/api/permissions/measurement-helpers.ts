@@ -43,6 +43,33 @@ export interface UserForPermission {
 }
 
 /**
+ * The user's role in ONE organization (issue #514).
+ *
+ * session.user.role is the role in the user's FIRST organization (alphabetically), so it says nothing
+ * about the organization a measurement belongs to. A user can be a coach in one organization and an
+ * athlete in another; what they may do to a row is decided by their role in the row's organization.
+ *
+ * - site admins: 'site_admin' (everywhere)
+ * - members: their role in that organization (a user has exactly one role per organization)
+ * - no organization (a personal row), or not a member: undefined, which every caller treats as "no
+ *   rights" (fails closed)
+ */
+export async function getOrgRole(
+  user: Pick<UserForPermission, 'id' | 'isSiteAdmin' | 'role'>,
+  organizationId: string | null | undefined
+): Promise<string | undefined> {
+  if (isSiteAdmin(user)) return 'site_admin';
+  if (!organizationId) return undefined;
+  const memberships = (await storage.getUserOrganizations(user.id)) ?? [];
+  return memberships.find((m: any) => m.organizationId === organizationId)?.role ?? undefined;
+}
+
+/** Roles that may write measurements for other people (coach and org_admin of the row's organization, site admins). */
+export function isMeasurementWriterRole(role: string | undefined | null): boolean {
+  return role === 'site_admin' || role === 'org_admin' || role === 'coach';
+}
+
+/**
  * Check if user has permission to create a measurement for a target user.
  *
  * Rules:
@@ -284,43 +311,25 @@ export async function canVerifyMeasurement(
     return { allowed: true };
   }
 
-  // Validate role
-  if (!user.role || !isValidRole(user.role)) {
-    return {
-      allowed: false,
-      reason: 'Invalid or missing user role',
-    };
+  // The role that counts is the one in the measurement's organization (issue #514), not the session role:
+  // a coach in the user's first organization who is only an athlete in the row's organization cannot verify there.
+  const role = await getOrgRole(user, measurement.organizationId);
+
+  if (role === 'coach' || role === 'org_admin') {
+    return { allowed: true };
   }
 
-  // Athletes cannot verify
-  if (user.role === 'athlete' || user.role === 'guest') {
+  if (role === 'athlete' || role === 'guest') {
     return {
       allowed: false,
       reason: 'Athletes cannot verify measurements',
     };
   }
 
-  // Coaches and org_admins need org membership
-  if (user.role === 'coach' || user.role === 'org_admin') {
-    if (measurement.organizationId) {
-      const userOrgs = await storage.getUserOrganizations(user.id);
-      const userOrgIds = new Set(userOrgs.map((o: any) => o.organizationId));
-
-      if (userOrgIds.has(measurement.organizationId)) {
-        return { allowed: true };
-      }
-    }
-
-    return {
-      allowed: false,
-      reason: 'You can only verify measurements in your organization',
-    };
-  }
-
-  // Default deny
+  // Not a member of the measurement's organization, or a personal measurement (no organization)
   return {
     allowed: false,
-    reason: 'Insufficient permissions to verify measurements',
+    reason: 'You can only verify measurements in your organization',
   };
 }
 

@@ -58,6 +58,15 @@ function whereUserNotDeleted(): SQL {
 /** InsertMeasurement omits `units`; import callers may supply it to override the metric's configured unit. */
 export type CreateMeasurementInput = InsertMeasurement & { units?: string | null };
 
+/** Optional behavior of storage.createMeasurement (the storage-based import paths). */
+export interface CreateMeasurementOptions {
+  /**
+   * The submitter's role in the organization the caller authorized the import against (an import route has
+   * already checked it). When given it decides auto-verification instead of a lookup on the row's organization.
+   */
+  submitterRole?: string;
+}
+
 export interface IStorage {
   // Authentication & Users
   authenticateUser(username: string, password: string): Promise<User | null>;
@@ -261,7 +270,7 @@ export interface IStorage {
     verifiedBy?: User;
   })[]>;
   getMeasurement(id: string): Promise<Measurement | undefined>;
-  createMeasurement(measurement: CreateMeasurementInput, submittedBy: string, eventContext?: { eventId: string; eventNameSnapshot: string; eventDateSnapshot: string; organizationId?: string | null; }): Promise<Measurement>;
+  createMeasurement(measurement: CreateMeasurementInput, submittedBy: string, eventContext?: { eventId: string; eventNameSnapshot: string; eventDateSnapshot: string; organizationId?: string | null; }, options?: CreateMeasurementOptions): Promise<Measurement>;
   updateMeasurement(id: string, measurement: Partial<InsertMeasurement>): Promise<Measurement>;
   deleteMeasurement(id: string): Promise<void>;
   verifyMeasurement(id: string, verifiedBy: string): Promise<Measurement>;
@@ -3730,7 +3739,8 @@ export class DatabaseStorage implements IStorage {
       // The event's organization: an event measurement always belongs to it, and
       // team context is only taken from the athlete's teams in that organization.
       organizationId?: string | null;
-    }
+    },
+    options: CreateMeasurementOptions = {}
   ): Promise<Measurement> {
     // Trust boundary: this method validates values only and performs NO role
     // check. Callers must enforce who may enter a metric (Movement Quality is
@@ -3855,10 +3865,19 @@ export class DatabaseStorage implements IStorage {
       )
     );
 
-    // Check if submitter is site admin or has coach/org_admin role in any organization
+    // Auto-verify (issue #514). Being a coach in some OTHER organization must not verify a row: a user who
+    // coaches in one organization and is only an athlete in another would otherwise get verified rows in both.
+    const rowOrganizationId = eventOrganizationId || organizationId || null;
     let isCoach = submitter?.isSiteAdmin === true;
-    if (!isCoach && submitter) {
-      const submitterRoles = await this.getUserRoles(submitter.id);
+    if (!isCoach && options.submitterRole !== undefined) {
+      // The caller (an import route) already established the submitter's role in the organization it matched
+      // the athlete in. The row's own organization can still be null (an athlete on no team), so that role,
+      // not a lookup on the row, decides.
+      isCoach = ['site_admin', 'coach', 'org_admin'].includes(options.submitterRole);
+    } else if (!isCoach && submitter && rowOrganizationId) {
+      // Otherwise: coach / org_admin in the organization the row belongs to. A row with no organization has no
+      // role to check, so only a site admin verifies it.
+      const submitterRoles = await this.getUserRoles(submitter.id, rowOrganizationId);
       isCoach = submitterRoles.includes("coach") || submitterRoles.includes("org_admin");
     }
 
@@ -3877,7 +3896,7 @@ export class DatabaseStorage implements IStorage {
       verifiedBy: isCoach ? submittedBy : undefined,
       teamId: teamId || null,
       teamNameSnapshot: teamNameSnapshot || null,
-      organizationId: eventOrganizationId || organizationId || null,
+      organizationId: rowOrganizationId,
       season: season || null,
       teamContextAuto: teamContextAuto,
       // Event context (for measurements taken at events), passed by EventMeasurementsService

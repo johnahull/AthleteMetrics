@@ -121,6 +121,13 @@ export interface MeasurementWriteOptions {
   tx?: DbTransaction;
   /** Skip athlete notifications and achievement checks (e.g. event results not yet published) */
   suppressSideEffects?: boolean;
+  /**
+   * The organization the caller authorized this write against (issue #514); null means a personal row.
+   * When set, the organization the row really resolves to must be exactly this one, or the write is refused
+   * with MeasurementAccessDeniedError. This closes the gap between the route's authorization and this
+   * transaction (the athlete's teams changing in between, a backdated date resolving to another team).
+   */
+  expectedOrganizationId?: string | null;
 }
 
 export interface MeasurementFilters {
@@ -228,6 +235,42 @@ export class MeasurementService {
    * @returns Created measurement
    * @throws Error if user not found, team not found, or transaction fails
    */
+  /**
+   * The organization a new measurement would belong to, using the same rules createMeasurement applies:
+   * an explicit team gives that team's organization; otherwise the single team the athlete was active on at
+   * the measurement date; several teams, or none, give null (createMeasurement then stores no organization).
+   * Routes use this to authorize a write against the row's real organization before creating it (issue #514).
+   */
+  async resolveMeasurementOrganization(
+    measurement: Pick<InsertMeasurement, 'userId' | 'date' | 'teamId'>
+  ): Promise<{ organizationId: string | null; ambiguous: boolean }> {
+    if (measurement.teamId && measurement.teamId.trim() !== '') {
+      const [team] = await db
+        .select({ organizationId: teams.organizationId })
+        .from(teams)
+        .where(eq(teams.id, measurement.teamId));
+      return { organizationId: team?.organizationId ?? null, ambiguous: false };
+    }
+
+    const measurementDate = new Date(measurement.date);
+    const activeTeams = await db
+      .select({ organizationId: teams.organizationId })
+      .from(userTeams)
+      .innerJoin(teams, eq(userTeams.teamId, teams.id))
+      .where(
+        and(
+          eq(userTeams.userId, measurement.userId),
+          lte(userTeams.joinedAt, measurementDate),
+          or(isNull(userTeams.leftAt), gte(userTeams.leftAt, measurementDate)),
+          eq(userTeams.isActive, true),
+          eq(teams.isArchived, false)
+        )
+      );
+
+    if (activeTeams.length === 1) return { organizationId: activeTeams[0].organizationId, ambiguous: false };
+    return { organizationId: null, ambiguous: activeTeams.length > 1 };
+  }
+
   async createMeasurement(
     measurement: InsertMeasurement,
     submittedBy: string,
@@ -423,6 +466,15 @@ export class MeasurementService {
           // Use undefined for optional fields per TypeScript schema
           season = season ?? team.teams.season ?? undefined;
         }
+      }
+
+      // The caller authorized this write against one organization (issue #514): the organization the row
+      // really resolves to (explicit team, or the single team active at the measurement date) must be it.
+      const resolvedOrganizationId = eventContext?.organizationId || organizationId || null;
+      if (options.expectedOrganizationId !== undefined && resolvedOrganizationId !== options.expectedOrganizationId) {
+        throw new MeasurementAccessDeniedError(
+          'Access denied - this measurement would belong to a different organization than the one you are authorized for'
+        );
       }
 
       // Auto-verify measurements from coaches, org admins, and site admins

@@ -67,6 +67,8 @@ export {
   canVerifyMeasurement,
   canUseBatchEndpoint,
   canQueryCrossOrganization,
+  getOrgRole,
+  isMeasurementWriterRole,
 } from './measurement-helpers';
 
 export type {
