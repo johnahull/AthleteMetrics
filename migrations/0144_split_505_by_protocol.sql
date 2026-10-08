@@ -91,6 +91,17 @@ LANGUAGE sql IMMUTABLE AS $fn$
     FROM unnest(a) WITH ORDINALITY AS u(x, ord)
 $fn$;
 
+-- Deterministic yard-twin id. site_benchmarks.id is VARCHAR(36) and real rows
+-- carry 36-char UUIDs, so <id> || '-yd' (39 chars) overflows (22001). Short
+-- hand-named ids keep the readable '<id>-yd' form; anything that would not fit
+-- is replaced by md5(<id>-yd) rendered as a 36-char uuid string. Same input ->
+-- same output, so re-runs find the twin they already inserted.
+CREATE OR REPLACE FUNCTION pg_temp.m505_yd_id(src_id text) RETURNS text
+LANGUAGE sql IMMUTABLE AS $fn$
+  SELECT CASE WHEN length(src_id) + 3 <= 36 THEN src_id || '-yd'
+              ELSE md5(src_id || '-yd')::uuid::text END
+$fn$;
+
 -- ============================================================================
 -- Block A — new site_metrics rows
 --
@@ -340,7 +351,7 @@ DELETE FROM site_metrics
 -- Block E — approximate YD benchmarks
 --
 -- Every site_benchmarks row on a _M / _M_L / _M_R code gets a yard twin:
---   id            : <source id>-yd
+--   id            : pg_temp.m505_yd_id(<source id>)  (<source id>-yd, or an md5-uuid when that exceeds varchar(36))
 --   tier_group_id : md5(<source tier_group_id>::text || '-yd')::uuid (like 0128)
 --   name          : <source name> || ' (Yard, approx.)' (kept within varchar(100))
 --   values        : ROUND(x * 0.914, 3)  (yards = 0.914 x metres time; the turn
@@ -361,7 +372,7 @@ INSERT INTO site_benchmarks (
   color, icon
 )
 SELECT
-  src.id || '-yd',
+  pg_temp.m505_yd_id(src.id),
   map.yd_code,
   CASE WHEN map.factor <> 1
        THEN LEFT(src.name, 100 - length(' (Yard, approx.)')) || ' (Yard, approx.)'
@@ -394,9 +405,9 @@ INSERT INTO benchmark_set_items (
   id, set_id, benchmark_id, benchmark_type, display_order, custom_label
 )
 SELECT
-  bsi.id || '-yd',
+  pg_temp.m505_yd_id(bsi.id),
   bsi.set_id,
-  bsi.benchmark_id || '-yd',
+  pg_temp.m505_yd_id(bsi.benchmark_id),
   'site',
   bsi.display_order,
   bsi.custom_label
@@ -405,7 +416,7 @@ JOIN site_benchmarks sb
   ON sb.id = bsi.benchmark_id
  AND bsi.benchmark_type = 'site'
 WHERE sb.metric_code IN ('AGILITY_505_M', 'AGILITY_505_M_L', 'AGILITY_505_M_R', 'AGILITY_505_M_LSI')
-  AND EXISTS (SELECT 1 FROM site_benchmarks yd WHERE yd.id = sb.id || '-yd')
+  AND EXISTS (SELECT 1 FROM site_benchmarks yd WHERE yd.id = pg_temp.m505_yd_id(sb.id))
 ON CONFLICT (set_id, benchmark_id, benchmark_type) DO NOTHING;
 
 -- ============================================================================
@@ -421,7 +432,10 @@ BEGIN
   SELECT COUNT(*) INTO v_metrics FROM site_metrics WHERE code ~ '^AGILITY_505_(M|YD)';
   SELECT COUNT(*) INTO v_m_bench FROM site_benchmarks WHERE metric_code IN ('AGILITY_505_M', 'AGILITY_505_M_L', 'AGILITY_505_M_R', 'AGILITY_505_M_LSI');
   SELECT COUNT(*) INTO v_yd_bench FROM site_benchmarks WHERE metric_code IN ('AGILITY_505_YD', 'AGILITY_505_YD_L', 'AGILITY_505_YD_R', 'AGILITY_505_YD_LSI');
-  SELECT COUNT(*) INTO v_yd_items FROM benchmark_set_items WHERE id LIKE '%-yd';
+  SELECT COUNT(*) INTO v_yd_items
+    FROM benchmark_set_items bsi
+    JOIN site_benchmarks sb ON sb.id = bsi.benchmark_id AND bsi.benchmark_type = 'site'
+   WHERE sb.metric_code IN ('AGILITY_505_YD', 'AGILITY_505_YD_L', 'AGILITY_505_YD_R', 'AGILITY_505_YD_LSI');
 
   RAISE NOTICE 'Migration 0144 complete: % 5-0-5 protocol site_metrics rows, % metric-protocol benchmarks (repointed in place), % yard benchmarks seeded, % yard benchmark_set_items.',
     v_metrics, v_m_bench, v_yd_bench, v_yd_items;
