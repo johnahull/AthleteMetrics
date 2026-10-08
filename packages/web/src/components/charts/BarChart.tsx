@@ -324,7 +324,7 @@ export function BarChart({
       </div>
 
       {/* Performance indicators */}
-      <div className="flex-shrink-0 mt-4 grid grid-cols-3 gap-4 text-sm text-center">
+      <div className="shrink-0 mt-4 grid grid-cols-3 gap-4 text-sm text-center">
         <div>
           <div className="font-medium">Best Performance</div>
           <div className="text-lg font-bold text-green-600">

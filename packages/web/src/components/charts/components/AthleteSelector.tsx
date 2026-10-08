@@ -222,7 +222,7 @@ const AthleteSelectorContent = React.memo(function AthleteSelectorContent({
                 aria-label={`Toggle ${athlete.name} selection`}
               />
               <div
-                className="w-3 h-3 rounded-full flex-shrink-0"
+                className="w-3 h-3 rounded-full shrink-0"
                 style={{ backgroundColor: athleteColor }}
                 role="img"
                 aria-label={`Color indicator for ${athlete.name}`}
@@ -249,7 +249,7 @@ const AthleteSelectorContent = React.memo(function AthleteSelectorContent({
             aria-label="Toggle group average trend line"
           />
           <div
-            className="w-3 h-3 rounded-full flex-shrink-0 bg-gray-400"
+            className="w-3 h-3 rounded-full shrink-0 bg-gray-400"
             role="img"
             aria-label="Color indicator for group average"
           />

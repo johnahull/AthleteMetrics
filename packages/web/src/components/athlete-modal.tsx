@@ -358,7 +358,7 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl w-full p-0 h-[90vh] max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="px-6 pt-6 pb-4 border-b flex-shrink-0">
+        <div className="px-6 pt-6 pb-4 border-b shrink-0">
           <DialogHeader>
             <DialogTitle>{isEditing ? `Edit ${labels.athlete}` : `Add New ${labels.athlete}`}</DialogTitle>
             <DialogDescription>
@@ -869,7 +869,7 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
             </div>
           </ScrollArea>
 
-          <div className="px-6 py-4 border-t bg-white flex-shrink-0">
+          <div className="px-6 py-4 border-t bg-white shrink-0">
             <div className="flex justify-end space-x-3">
               <Button 
                 type="button" 

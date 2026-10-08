@@ -94,7 +94,7 @@ export function BodyMapInput({
         className={cn(
           "px-3 py-2 rounded-md border text-sm transition-colors",
           "hover:bg-accent hover:text-accent-foreground",
-          "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+          "focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2",
           "min-h-[44px]", // Touch-friendly
           isSelected
             ? "bg-primary text-primary-foreground border-primary selected marked active"
