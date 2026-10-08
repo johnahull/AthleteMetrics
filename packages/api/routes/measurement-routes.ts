@@ -167,6 +167,19 @@ interface MeasurementFilters {
   personalOwnerId?: string;
 }
 
+/**
+ * The role that counts when a caller edits or deletes an EXISTING measurement (issue #514): their role in the
+ * row's own organization, never session.user.role (their role in their first organization). The owner of a row
+ * that has no organization (a personal row) is treated as an athlete; anyone else gets undefined, which grants
+ * nothing. Shared by PUT and DELETE so the two cannot drift apart.
+ */
+async function roleForExistingRow(
+  user: SessionUser,
+  row: { userId: string; organizationId?: string | null }
+): Promise<string | undefined> {
+  return (await getOrgRole(user, row.organizationId)) ?? (row.userId === user.id ? 'athlete' : undefined);
+}
+
 export function registerMeasurementRoutes(app: Express) {
   const measurementService = new MeasurementService();
 
@@ -570,11 +583,8 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(404).json({ message: "Measurement not found" });
       }
 
-      // SECURITY (issue #514): the role that counts is the caller's role in the measurement's own organization,
-      // not session.user.role (their role in their first organization). The owner of a personal row (no
-      // organization) is treated as an athlete.
-      const rowRole = await getOrgRole(user, existingMeasurement.organizationId);
-      const effectiveRole = rowRole ?? (existingMeasurement.userId === user.id ? 'athlete' : undefined);
+      // SECURITY (issue #514): the caller's role in the measurement's own organization, not the session role
+      const effectiveRole = await roleForExistingRow(user, existingMeasurement);
 
       // SECURITY: Consolidated athlete authorization checks to prevent IDOR
       // All athlete-specific checks are performed together to prevent bypass
@@ -606,7 +616,9 @@ export function registerMeasurementRoutes(app: Express) {
       // SECURITY: coach / org_admin of the measurement's organization (role in THAT organization), or an athlete
       // for a row they submitted themselves. Having submitted the row is not enough for an organization row: a
       // coach who was removed from the organization, or demoted to guest, must not keep editing its rows.
-      // Only a personal row (no organization) can still be changed by its submitter.
+      // Only a personal row (no organization) can still be changed by its submitter, including a coach who
+      // entered it for someone else: that is legacy data (the API no longer creates a null-organization row
+      // for another person) and has no organization whose roles could govern it.
       const isSubmitter = existingMeasurement.submittedBy === user.id;
       const isOrgAdminOrCoach = effectiveRole === 'coach' || effectiveRole === 'org_admin';
       const mayModify = isOrgAdminOrCoach || (effectiveRole === 'athlete' && isSubmitter) || (!existingMeasurement.organizationId && isSubmitter);
@@ -666,10 +678,8 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(404).json({ message: "Measurement not found" });
       }
 
-      // SECURITY (issue #514): the role that counts is the caller's role in the measurement's own organization,
-      // not session.user.role. The owner of a personal row (no organization) is treated as an athlete.
-      const rowRole = await getOrgRole(user, existingMeasurement.organizationId);
-      const effectiveRole = rowRole ?? (existingMeasurement.userId === user.id ? 'athlete' : undefined);
+      // SECURITY (issue #514): the caller's role in the measurement's own organization, not the session role
+      const effectiveRole = await roleForExistingRow(user, existingMeasurement);
 
       // SECURITY: Athletes cannot delete verified measurements (only coaches/admins can)
       if (effectiveRole === 'athlete' && existingMeasurement.isVerified) {
@@ -681,7 +691,9 @@ export function registerMeasurementRoutes(app: Express) {
       // SECURITY: coach / org_admin of the measurement's organization (role in THAT organization), or an athlete
       // for an unverified row they submitted themselves. Having submitted the row is not enough for an
       // organization row (a coach who left the organization must not keep deleting its rows); only a personal
-      // row (no organization) can still be deleted by its submitter.
+      // row (no organization) can still be deleted by its submitter, including a coach who entered it for
+      // someone else: that is legacy data (the API no longer creates a null-organization row for another
+      // person) and has no organization whose roles could govern it.
       const isSubmitter = existingMeasurement.submittedBy === user.id;
       const isOrgAdminOrCoach = effectiveRole === 'coach' || effectiveRole === 'org_admin';
       const mayModify = isOrgAdminOrCoach || (effectiveRole === 'athlete' && isSubmitter) || (!existingMeasurement.organizationId && isSubmitter);

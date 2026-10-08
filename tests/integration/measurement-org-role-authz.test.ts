@@ -358,10 +358,10 @@ describe('measurement writes use the role in the row\'s organization (#514)', ()
       // The caller is a coach of org A (their first org) and only an athlete in B. aX is a member of A on no team of A;
       // her only team is in B, so team auto-resolution used to attribute the row to B, auto-verified.
       const res = await importCsv('coachAathleteB', `No Such Team ${suffix}`, aX);
+      expect(res.status).toBe(200);
       const rows = await rowsOf(aX.id);
       expect(rows.every((r) => r.organizationId !== orgB), JSON.stringify(rows.map((r) => r.organizationId))).toBe(true);
       expect(rows.some((r) => r.organizationId === orgB && r.isVerified)).toBe(false);
-      void res;
     });
 
     it('coach in A / athlete in B can still import into a team of org A', async () => {
