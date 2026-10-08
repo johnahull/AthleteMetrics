@@ -16,6 +16,7 @@ describe('fly10SpeedMph (athlete profile Speed (mph) column)', () => {
     expect(fly10SpeedMph('VERTICAL_JUMP', 30)).toBeNull();
     expect(fly10SpeedMph('FLY10M_TIME', 1.5)).toBeNull();
     expect(fly10SpeedMph('TOP_SPEED', 20)).toBeNull();
+    expect(fly10SpeedMph('toString', 1.5)).toBeNull();
   });
 
   it('returns null for a non-positive or non-finite time instead of Infinity/NaN', () => {

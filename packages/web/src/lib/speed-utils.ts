@@ -30,7 +30,7 @@ export function formatFly10TimeWithSpeed(timeInSeconds: number): string {
  * For a short run-in this is the average speed over the timed 10 yd, not top speed.
  */
 export function fly10SpeedMph(metric: string, timeInSeconds: number): number | null {
-  if (!(metric in FLY10_RUN_IN_YD)) return null;
+  if (!Object.prototype.hasOwnProperty.call(FLY10_RUN_IN_YD, metric)) return null;
   if (!Number.isFinite(timeInSeconds) || timeInSeconds <= 0) return null;
   return calculateFly10Speed(timeInSeconds);
 }
