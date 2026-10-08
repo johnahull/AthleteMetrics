@@ -19,7 +19,7 @@ import { storage } from '../../packages/api/storage';
 import { ocrService } from '../../packages/api/ocr/ocr-service';
 import { eq } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
-import { measurements, userOrganizations } from '@shared/schema';
+import { measurements } from '@shared/schema';
 import type { Organization, User } from '@shared/schema';
 
 vi.mock('../../packages/api/vite.js', () => ({
@@ -28,6 +28,7 @@ vi.mock('../../packages/api/vite.js', () => ({
 }));
 
 import { registerRoutes } from '../../packages/api/routes';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 
 const PASSWORD = 'TestPass123!';
 const NEUTRAL = 'AGILITY_505_UNRESOLVED';
@@ -106,13 +107,9 @@ describe('POST /api/import/photo 5-0-5 protocol', () => {
 
   afterAll(async () => {
     // Leftover _YD measurements break the 0144 down-guard tests, and a leftover org keeps its
-    // organization_metrics rows, breaking 0145's "no organizations" test. deleteUser and
-    // deleteOrganization refuse while these exist, so remove them first.
-    try { await db.delete(measurements).where(eq(measurements.userId, athlete.id)); } catch { /* ignore */ }
-    try { await db.delete(userOrganizations).where(eq(userOrganizations.organizationId, org.id)); } catch { /* ignore */ }
-    try { await storage.deleteUser(athlete.id); } catch { /* ignore */ }
-    try { await storage.deleteUser(coach.id); } catch { /* ignore */ }
-    try { await storage.deleteOrganization(org.id); } catch { /* ignore */ }
+    // organization_metrics rows, breaking 0145's "no organizations" test.
+    await db.delete(measurements).where(eq(measurements.userId, athlete.id));
+    await purgeTestRows({ userIds: [athlete.id, coach.id], orgIds: [org.id] });
   });
 
   it('without protocol505: 422 PROTOCOL_505_REQUIRED and nothing is written', async () => {

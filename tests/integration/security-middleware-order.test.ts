@@ -31,6 +31,7 @@ vi.mock('../../packages/api/vite.js', () => ({
 }));
 
 import { registerRoutes } from '../../packages/api/routes';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 
 const PASSWORD = 'TestPass123!';
 
@@ -62,7 +63,7 @@ describe('Security middleware registration order', () => {
   });
 
   afterAll(async () => {
-    try { await storage.deleteUser(user.id); } catch { /* ignore */ }
+    await purgeTestRows({ userIds: [user.id] });
   });
 
   it('applies helmet security headers to application routes', async () => {
@@ -105,7 +106,7 @@ describe('Security middleware registration order', () => {
         .send({ username: pwUser.username, password: specialPassword });
       expect(res.status).toBe(200);
     } finally {
-      try { await storage.deleteUser(pwUser.id); } catch { /* ignore */ }
+      await purgeTestRows({ userIds: [pwUser.id] });
     }
   });
 

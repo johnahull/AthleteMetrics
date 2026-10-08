@@ -37,6 +37,7 @@ vi.mock('../../packages/api/services/email-service', () => ({
 }));
 
 import { registerRoutes } from '../../packages/api/routes';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 
 const PASSWORD = 'TestPass123!';
 const tokenOf = (link: string) => new URL(link, 'http://localhost').searchParams.get('token') ?? '';
@@ -69,8 +70,7 @@ describe('Invitation resend rotates to a usable token', () => {
   });
 
   afterAll(async () => {
-    try { await storage.deleteUser(admin.id); } catch { /* ignore */ }
-    try { await storage.deleteOrganization(org.id); } catch { /* ignore */ }
+    await purgeTestRows({ userIds: [admin.id], orgIds: [org.id] });
   });
 
   it('emails a fresh, acceptable token on resend', async () => {

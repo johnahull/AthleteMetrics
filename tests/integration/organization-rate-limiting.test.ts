@@ -39,6 +39,7 @@ vi.mock('../../packages/api/vite.js', () => ({
 }));
 
 import { registerRoutes } from '../../packages/api/routes';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 
 describe('Organization Deletion Rate Limiting', () => {
   let siteAdminUser: User;
@@ -67,11 +68,7 @@ describe('Organization Deletion Rate Limiting', () => {
 
   afterAll(async () => {
     // Cleanup
-    try {
-      await storage.deleteUser(siteAdminUser.id);
-    } catch (error) {
-      console.error('Cleanup error:', error);
-    }
+    await purgeTestRows({ userIds: [siteAdminUser.id] });
   });
 
   /**

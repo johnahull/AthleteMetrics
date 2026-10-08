@@ -5,7 +5,8 @@
  * Deleting a user, team or organization is blocked by foreign keys without ON DELETE CASCADE:
  *   user_teams -> users / teams, user_organizations -> users / organizations,
  *   athlete_profiles -> users, invitations -> organizations, teams -> organizations.
- * Everything else (measurements, tokens, links, ...) cascades or is set to null. Several afterAll blocks
+ * measurements has no foreign keys at all, so deleting users or organizations leaves their measurements behind;
+ * they are removed here. Everything else (tokens, links, ...) cascades or is set to null. Several afterAll blocks
  * swallowed the resulting error, so the rows stayed behind and polluted later files; this helper removes the
  * blockers first and lets a real failure surface.
  *
@@ -13,9 +14,9 @@
  * run one at a time against a throwaway database, so a prefix is safe; the pattern guard below stops a
  * pattern that would match every row.
  */
-import { inArray, like } from 'drizzle-orm';
+import { inArray, like, or } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
-import { athleteProfiles, invitations, organizations, teams, userOrganizations, userTeams, users } from '@shared/schema';
+import { athleteProfiles, invitations, measurements, organizations, teams, userOrganizations, userTeams, users } from '@shared/schema';
 
 export interface PurgeOptions {
   /** SQL LIKE patterns for users.username, e.g. `paemail_test_%` */
@@ -53,6 +54,13 @@ export async function purgeTestRows(options: PurgeOptions = {}): Promise<void> {
   const teamList = orgList.length
     ? (await db.select({ id: teams.id }).from(teams).where(inArray(teams.organizationId, orgList))).map((t) => t.id)
     : [];
+
+  // measurements have no FK to users/organizations, so nothing cascades to them
+  const measurementOwners = [
+    ...(userList.length ? [inArray(measurements.userId, userList)] : []),
+    ...(orgList.length ? [inArray(measurements.organizationId, orgList)] : []),
+  ];
+  await db.delete(measurements).where(or(...measurementOwners));
 
   // Rows that block the deletes below, children first
   if (orgList.length) {

@@ -19,6 +19,7 @@ import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { storage } from "../../storage";
 import { registerDashboardTrendsRoutes } from "../dashboard-trends";
+import { purgeTestRows } from "../../../../tests/helpers/purge-test-rows";
 
 // Mock session data for testing
 let mockSessionUser: any = null;
@@ -235,22 +236,10 @@ describe("GET /api/dashboard/trends", () => {
   });
 
   afterAll(async () => {
-    // Cleanup test data
-    try {
-      if (testAthlete1Id) await storage.deleteUser(testAthlete1Id).catch(e => console.error("Error:", e));
-      if (testAthlete2Id) await storage.deleteUser(testAthlete2Id).catch(e => console.error("Error:", e));
-      if (testAthlete3Id) await storage.deleteUser(testAthlete3Id).catch(e => console.error("Error:", e));
-      if (testAthleteId) await storage.deleteUser(testAthleteId).catch(e => console.error("Error:", e));
-      if (testCoachId) await storage.deleteUser(testCoachId).catch(e => console.error("Error:", e));
-      if (testOrgAdminId) await storage.deleteUser(testOrgAdminId).catch(e => console.error("Error:", e));
-      if (testSiteAdminId) await storage.deleteUser(testSiteAdminId).catch(e => console.error("Error:", e));
-      if (testTeamId1) await storage.deleteTeam(testTeamId1).catch(e => console.error("Error:", e));
-      if (testTeamId2) await storage.deleteTeam(testTeamId2).catch(e => console.error("Error:", e));
-      if (testOrgId1) await storage.deleteOrganization(testOrgId1).catch(e => console.error("Error:", e));
-      if (testOrgId2) await storage.deleteOrganization(testOrgId2).catch(e => console.error("Error:", e));
-    } catch (error) {
-      console.error("Cleanup error:", error);
-    }
+    await purgeTestRows({
+      userIds: [testAthlete1Id, testAthlete2Id, testAthlete3Id, testAthleteId, testCoachId, testOrgAdminId, testSiteAdminId].filter((id): id is string => !!id),
+      orgIds: [testOrgId1, testOrgId2].filter((id): id is string => !!id),
+    });
   });
 
   beforeEach(() => {

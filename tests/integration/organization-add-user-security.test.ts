@@ -29,6 +29,7 @@ vi.mock('../../packages/api/vite.js', () => ({
 }));
 
 import { registerRoutes } from '../../packages/api/routes';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 
 const PASSWORD = 'TestPass123!';
 
@@ -84,15 +85,9 @@ describe('POST /api/organizations/:id/users — authorization', () => {
   });
 
   afterAll(async () => {
-    for (const username of createdUsernames) {
-      try {
-        const u = await storage.getUserByUsername(username);
-        if (u) await storage.deleteUser(u.id);
-      } catch { /* best-effort cleanup */ }
-    }
-    try { await storage.deleteUser(orgAdmin.id); } catch { /* ignore */ }
-    try { await storage.deleteUser(athlete.id); } catch { /* ignore */ }
-    try { await storage.deleteOrganization(org.id); } catch { /* ignore */ }
+    const created = await Promise.all(createdUsernames.map((username) => storage.getUserByUsername(username)));
+    const createdIds = created.flatMap((u) => (u ? [u.id] : []));
+    await purgeTestRows({ userIds: [...createdIds, orgAdmin.id, athlete.id], orgIds: [org.id] });
   });
 
   it('forbids an athlete-role member from creating a site admin', async () => {
