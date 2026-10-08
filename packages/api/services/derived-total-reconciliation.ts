@@ -14,7 +14,7 @@
  * selection, e.g. MQI_TOTAL). Custom org derived metrics and latest_before/closest
  * strategies are not reconciled.
  */
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, or, sql } from 'drizzle-orm';
 import type { db as dbType } from '../db';
 import { events, measurements, siteMetrics } from '@shared/schema';
 import { DerivedMetricCalculator } from './derived-metric-calculator';
@@ -152,6 +152,12 @@ export interface ReconcileOptions {
   limit?: number;
   /** Recorded in the calculation audit trail. */
   triggeredBy?: string;
+  /**
+   * Athletes loaded per page (default 500). Source and total rows are read one page of athletes at a time,
+   * so memory is bounded by the page, not by the whole table. Every page is still scanned, so the counts
+   * (drifted, repaired, ...) stay exact.
+   */
+  athletePageSize?: number;
 }
 
 export interface ReconcileFinding {
@@ -175,6 +181,7 @@ export interface ReconcileResult {
 }
 
 const DEFAULT_LIMIT = 500;
+const DEFAULT_ATHLETE_PAGE_SIZE = 500;
 
 const snapshot = (rows: Array<{ value: string; calculatedFromMeasurementIds: string[] | null }>) =>
   JSON.stringify(
@@ -188,6 +195,7 @@ export async function reconcileDerivedTotals(
   options: ReconcileOptions = {}
 ): Promise<ReconcileResult> {
   const limit = options.limit ?? DEFAULT_LIMIT;
+  const athletePageSize = Math.max(1, Math.floor(options.athletePageSize ?? DEFAULT_ATHLETE_PAGE_SIZE));
   const result: ReconcileResult = {
     metricsChecked: [],
     skippedMetrics: [],
@@ -239,169 +247,195 @@ export async function reconcileDerivedTotals(
     const higherIsBetter: Record<string, boolean> = {};
     for (const c of depConfigs) higherIsBetter[c.code.toUpperCase()] = c.metricType === 'higher_is_better';
 
-    // Verified sources only, for every strategy: the calculator ignores unverified rows
-    const sourceRows = await database
-      .select({
-        id: measurements.id,
-        userId: measurements.userId,
-        date: measurements.date,
-        metric: measurements.metric,
-        value: measurements.value,
-        organizationId: measurements.organizationId,
-        createdAt: measurements.createdAt,
-        eventId: measurements.eventId,
-        eventStart: events.startDate,
-        eventCreatedAt: events.createdAt,
-      })
+    // Athletes that have verified sources or a total for this metric. Their rows are loaded one page of
+    // athletes at a time (groups are per athlete and date, so paging by athlete cannot split a group).
+    const athleteRows = await database
+      .selectDistinct({ userId: measurements.userId })
       .from(measurements)
-      .leftJoin(events, eq(measurements.eventId, events.id))
       .where(
         and(
-          inArray(sql`UPPER(${measurements.metric})`, deps),
-          eq(measurements.isCalculated, false),
-          eq(measurements.isVerified, true),
+          or(
+            and(
+              inArray(sql`UPPER(${measurements.metric})`, deps),
+              eq(measurements.isCalculated, false),
+              eq(measurements.isVerified, true)
+            ),
+            eq(measurements.metric, metric.code)
+          ),
           orgFilter
         )
-      );
+      )
+      .orderBy(measurements.userId);
+    const allAthleteIds = athleteRows.map((r) => r.userId);
 
-    const totalRows = await database
-      .select({
-        id: measurements.id,
-        userId: measurements.userId,
-        date: measurements.date,
-        value: measurements.value,
-        organizationId: measurements.organizationId,
-        isCalculated: measurements.isCalculated,
-        calculatedFromMeasurementIds: measurements.calculatedFromMeasurementIds,
-        calculationMetadata: measurements.calculationMetadata,
-      })
-      .from(measurements)
-      .where(and(eq(measurements.metric, metric.code), orgFilter));
+    for (let offset = 0; offset < allAthleteIds.length; offset += athletePageSize) {
+      const athleteIds = allAthleteIds.slice(offset, offset + athletePageSize);
 
-    // Group by athlete|date
-    const groups = new Map<
-      string,
-      {
-        userId: string;
-        date: string;
-        organizationId: string | null;
-        sources: DriftSource[];
-        totals: DriftTotal[];
-        hasDirectTotal: boolean;
-      }
-    >();
-    const group = (userId: string, date: string, organizationId: string | null = null) => {
-      const key = `${userId}|${date}`;
-      let g = groups.get(key);
-      if (!g) {
-        g = { userId, date, organizationId, sources: [], totals: [], hasDirectTotal: false };
-        groups.set(key, g);
-      }
-      return g;
-    };
-    for (const s of sourceRows) {
-      group(s.userId, s.date, s.organizationId).sources.push({
-        id: s.id,
-        metric: s.metric,
-        value: s.value,
-        createdAt: new Date(s.createdAt).getTime(),
-        eventId: s.eventId,
-        eventStart: s.eventStart ? new Date(s.eventStart).getTime() : undefined,
-        eventCreatedAt: s.eventCreatedAt ? new Date(s.eventCreatedAt).getTime() : undefined,
-      });
-    }
-    for (const t of totalRows) {
-      const g = groups.get(`${t.userId}|${t.date}`);
-      // A total whose sources are all gone (orphan) has no source group yet: create one,
-      // but an org-scoped run only considers totals of that org.
-      const target = g ?? group(t.userId, t.date, t.organizationId);
-      if (t.isCalculated) {
-        target.totals.push({
-          id: t.id,
-          value: t.value,
-          calculatedFromMeasurementIds: t.calculatedFromMeasurementIds,
-          calculationMetadata: t.calculationMetadata as DriftTotal['calculationMetadata'],
-        });
-      } else {
-        target.hasDirectTotal = true;
-      }
-    }
+      // Verified sources only, for every strategy: the calculator ignores unverified rows
+      const sourceRows = await database
+        .select({
+          id: measurements.id,
+          userId: measurements.userId,
+          date: measurements.date,
+          metric: measurements.metric,
+          value: measurements.value,
+          organizationId: measurements.organizationId,
+          createdAt: measurements.createdAt,
+          eventId: measurements.eventId,
+          eventStart: events.startDate,
+          eventCreatedAt: events.createdAt,
+        })
+        .from(measurements)
+        .leftJoin(events, eq(measurements.eventId, events.id))
+        .where(
+          and(
+            inArray(sql`UPPER(${measurements.metric})`, deps),
+            eq(measurements.isCalculated, false),
+            eq(measurements.isVerified, true),
+            inArray(measurements.userId, athleteIds),
+            orgFilter
+          )
+        );
 
-    for (const g of groups.values()) {
-      const reason = detectDrift({
-        dependentMetrics: deps,
-        sources: g.sources,
-        totals: g.totals,
-        hasDirectTotal: g.hasDirectTotal,
-        higherIsBetter,
-        latestEvent,
-      });
-      if (!reason) continue;
-      result.drifted++;
+      const totalRows = await database
+        .select({
+          id: measurements.id,
+          userId: measurements.userId,
+          date: measurements.date,
+          value: measurements.value,
+          organizationId: measurements.organizationId,
+          isCalculated: measurements.isCalculated,
+          calculatedFromMeasurementIds: measurements.calculatedFromMeasurementIds,
+          calculationMetadata: measurements.calculationMetadata,
+        })
+        .from(measurements)
+        .where(and(eq(measurements.metric, metric.code), inArray(measurements.userId, athleteIds), orgFilter));
 
-      const finding: ReconcileFinding = {
-        userId: g.userId,
-        metric: metric.code,
-        date: g.date,
-        reason,
-        outcome: 'detected',
-      };
-
-      if (!options.dryRun) {
-        if (attempted >= limit) {
-          result.truncated = true;
-          addFinding(finding);
-          continue;
+      // Group by athlete|date
+      const groups = new Map<
+        string,
+        {
+          userId: string;
+          date: string;
+          organizationId: string | null;
+          sources: DriftSource[];
+          totals: DriftTotal[];
+          hasDirectTotal: boolean;
         }
-        attempted++;
-        const before = snapshot(g.totals);
-        try {
-          const failuresBefore = calculator.getFailures().length;
-          await calculator.recalculateForAthlete(g.userId, deps, g.date, {
-            triggerContext: { event: 'manual_recalculation', userId: options.triggeredBy },
-            organizationId: g.organizationId,
+      >();
+      const group = (userId: string, date: string, organizationId: string | null = null) => {
+        const key = `${userId}|${date}`;
+        let g = groups.get(key);
+        if (!g) {
+          g = { userId, date, organizationId, sources: [], totals: [], hasDirectTotal: false };
+          groups.set(key, g);
+        }
+        return g;
+      };
+      for (const s of sourceRows) {
+        group(s.userId, s.date, s.organizationId).sources.push({
+          id: s.id,
+          metric: s.metric,
+          value: s.value,
+          createdAt: new Date(s.createdAt).getTime(),
+          eventId: s.eventId,
+          eventStart: s.eventStart ? new Date(s.eventStart).getTime() : undefined,
+          eventCreatedAt: s.eventCreatedAt ? new Date(s.eventCreatedAt).getTime() : undefined,
+        });
+      }
+      for (const t of totalRows) {
+        const g = groups.get(`${t.userId}|${t.date}`);
+        // A total whose sources are all gone (orphan) has no source group yet: create one,
+        // but an org-scoped run only considers totals of that org.
+        const target = g ?? group(t.userId, t.date, t.organizationId);
+        if (t.isCalculated) {
+          target.totals.push({
+            id: t.id,
+            value: t.value,
+            calculatedFromMeasurementIds: t.calculatedFromMeasurementIds,
+            calculationMetadata: t.calculationMetadata as DriftTotal['calculationMetadata'],
           });
-          // Only failures of this derived metric count (e.g. not an unrelated custom-org total)
-          if (calculator.getFailures().slice(failuresBefore).some((f) => f.metric === metric.code)) {
+        } else {
+          target.hasDirectTotal = true;
+        }
+      }
+
+      for (const g of groups.values()) {
+        const reason = detectDrift({
+          dependentMetrics: deps,
+          sources: g.sources,
+          totals: g.totals,
+          hasDirectTotal: g.hasDirectTotal,
+          higherIsBetter,
+          latestEvent,
+        });
+        if (!reason) continue;
+        result.drifted++;
+
+        const finding: ReconcileFinding = {
+          userId: g.userId,
+          metric: metric.code,
+          date: g.date,
+          reason,
+          outcome: 'detected',
+        };
+
+        if (!options.dryRun) {
+          if (attempted >= limit) {
+            result.truncated = true;
+            addFinding(finding);
+            continue;
+          }
+          attempted++;
+          const before = snapshot(g.totals);
+          try {
+            const failuresBefore = calculator.getFailures().length;
+            await calculator.recalculateForAthlete(g.userId, deps, g.date, {
+              triggerContext: { event: 'manual_recalculation', userId: options.triggeredBy },
+              organizationId: g.organizationId,
+            });
+            // Only failures of this derived metric count (e.g. not an unrelated custom-org total)
+            if (calculator.getFailures().slice(failuresBefore).some((f) => f.metric === metric.code)) {
+              finding.outcome = 'failed';
+              result.failed++;
+            } else {
+              const after = await database
+                .select({
+                  value: measurements.value,
+                  calculatedFromMeasurementIds: measurements.calculatedFromMeasurementIds,
+                })
+                .from(measurements)
+                .where(
+                  and(
+                    eq(measurements.userId, g.userId),
+                    eq(measurements.metric, metric.code),
+                    eq(measurements.date, g.date),
+                    eq(measurements.isCalculated, true)
+                  )
+                );
+              if (snapshot(after) !== before) {
+                finding.outcome = 'repaired';
+                result.repaired++;
+              } else {
+                finding.outcome = 'unchanged';
+                result.unchanged++;
+                // A false positive must not starve real drift of the repair budget
+                attempted--;
+              }
+            }
+          } catch (error) {
             finding.outcome = 'failed';
             result.failed++;
-          } else {
-            const after = await database
-              .select({
-                value: measurements.value,
-                calculatedFromMeasurementIds: measurements.calculatedFromMeasurementIds,
-              })
-              .from(measurements)
-              .where(
-                and(
-                  eq(measurements.userId, g.userId),
-                  eq(measurements.metric, metric.code),
-                  eq(measurements.date, g.date),
-                  eq(measurements.isCalculated, true)
-                )
-              );
-            if (snapshot(after) !== before) {
-              finding.outcome = 'repaired';
-              result.repaired++;
-            } else {
-              finding.outcome = 'unchanged';
-              result.unchanged++;
-              // A false positive must not starve real drift of the repair budget
-              attempted--;
-            }
+            console.error('Derived total reconciliation failed', {
+              userId: g.userId,
+              metric: metric.code,
+              date: g.date,
+              error: error instanceof Error ? error.message : String(error),
+            });
           }
-        } catch (error) {
-          finding.outcome = 'failed';
-          result.failed++;
-          console.error('Derived total reconciliation failed', {
-            userId: g.userId,
-            metric: metric.code,
-            date: g.date,
-            error: error instanceof Error ? error.message : String(error),
-          });
         }
+        addFinding(finding);
       }
-      addFinding(finding);
     }
   }
 
