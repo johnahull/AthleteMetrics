@@ -12,8 +12,11 @@
 process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret-key-for-integration-tests-only';
 
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import request from 'supertest';
 import express, { type Express } from 'express';
 import bcrypt from 'bcrypt';
@@ -35,6 +38,7 @@ vi.mock('../../packages/api/ocr/ocr-service', () => ({
 import { registerRoutes } from '../../packages/api/routes';
 import { ocrService } from '../../packages/api/ocr/ocr-service';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PASSWORD = 'Prefetch123!';
 // Smallest valid PNG header; the OCR service is mocked so the bytes are never decoded.
 const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
@@ -66,6 +70,12 @@ describe('bulk import does not repeat per-row lookups (#527)', () => {
     });
 
   beforeAll(async () => {
+    // MQ_JUMP (used for the range-rule check) is created by migration 0146, which a database built only from
+    // db:push + the default-metric seed does not have; apply the idempotent up-migration so this file does not
+    // depend on which test files ran before it.
+    const upSql = fs.readFileSync(path.resolve(__dirname, '../../migrations/0146_seed_mqi_metrics.sql'), 'utf-8');
+    await db.execute(sql.raw(upSql));
+
     app = express();
     app.use(express.json());
     await registerRoutes(app);
@@ -191,6 +201,7 @@ describe('bulk import does not repeat per-row lookups (#527)', () => {
     // These rows carry no `units`, so the stored unit comes from the metric's site_metrics row (or, when the config
     // is missing, from a legacy fallback that has no entry for them and answers 'in'). A null config is therefore
     // visible here, unlike for CSV rows (which fill the unit themselves) or for T_TEST (the fallback also says 's').
+    // Only use metrics that CI's seeded database has: AGILITY_505_M / _YD and AGILITY_5105.
     it('stores a 5-0-5 reading with its configured unit: the prefetch is keyed by the metric that is written', async () => {
       // The OCR emits a neutral token that the route rewrites to AGILITY_505_M / _YD once the protocol is known
       const res = await photo('AGILITY_505_UNRESOLVED', '2.45', { protocol505: 'M' });
@@ -202,10 +213,13 @@ describe('bulk import does not repeat per-row lookups (#527)', () => {
     });
 
     it('stores a metric whose configured unit differs from the legacy fallback with the configured unit', async () => {
-      const res = await photo('DASH_10YD', '1.7');
+      // AGILITY_5105 is in the default-metric seed that CI builds its database from as well as in migrated
+      // databases (DASH_10YD, say, only exists after the manual migrations); its configured unit is 's' while the
+      // legacy fallback answers 'in'.
+      const res = await photo('AGILITY_5105', '4.6');
       expect(res.status, JSON.stringify(res.body).slice(0, 300)).toBe(200);
       const [row] = await savedRows();
-      expect(row.metric).toBe('DASH_10YD');
+      expect(row.metric).toBe('AGILITY_5105');
       expect(row.units).toBe('s');
     });
 
