@@ -265,7 +265,16 @@ export async function reconcileDerivedTotals(
       );
 
     const totalRows = await database
-      .select()
+      .select({
+        id: measurements.id,
+        userId: measurements.userId,
+        date: measurements.date,
+        value: measurements.value,
+        organizationId: measurements.organizationId,
+        isCalculated: measurements.isCalculated,
+        calculatedFromMeasurementIds: measurements.calculatedFromMeasurementIds,
+        calculationMetadata: measurements.calculationMetadata,
+      })
       .from(measurements)
       .where(and(eq(measurements.metric, metric.code), orgFilter));
 

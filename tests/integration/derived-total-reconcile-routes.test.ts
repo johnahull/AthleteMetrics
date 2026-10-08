@@ -391,7 +391,7 @@ describe('POST /api/derived-totals/reconcile', () => {
       await db.insert(measurements).values({
         userId: other.id, organizationId: orgB.id, submittedBy: coachId, metric: 'MQI_TOTAL',
         value: '9', units: 'score', age: 17, date: DATE, isCalculated: true,
-        calculatedFromMeasurementIds: [athleteId], calculationMetadata: { formula: 'x', sourceValues: {} },
+        calculatedFromMeasurementIds: ['fake-measurement-id'], calculationMetadata: { formula: 'x', sourceValues: {} },
       } as any);
       const res = await reconcile(siteAdminCookie, { organizationId: orgId });
       expect(res.body.drifted).toBe(0);
