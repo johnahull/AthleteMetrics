@@ -340,6 +340,22 @@ export function registerImportExportRoutes(app: Express) {
         });
       }
 
+      // The protocol is known here (guard above), so the neutral 5-0-5 token resolves to a concrete code and can
+      // never reach storage or a response. One function for the prefetch below and the row loop, so the metric
+      // that is looked up is always the metric that is written.
+      const resolveOcrMetric = (metric: string | undefined): string | undefined =>
+        metric === OCR_505_NEUTRAL_METRIC ? (protocol505 === 'M' ? 'AGILITY_505_M' : 'AGILITY_505_YD') : metric;
+
+      // Looked up once for the whole photo, not once per extracted row (issue #527)
+      const photoMetricConfigs = await storage.getMetricWriteConfigs([
+        ...new Set(
+          ocrResult.extractedData
+            .map(d => resolveOcrMetric(d.metric))
+            .filter((m): m is string => typeof m === 'string' && m !== '')
+        ),
+      ]);
+      const photoSubmitter = (await storage.getActiveUserById(currentUser.id)) ?? null;
+
       // Convert extracted data to the same format as CSV import
       const processedData: any[] = [];
       const errors: any[] = [];
@@ -349,12 +365,7 @@ export function registerImportExportRoutes(app: Express) {
       for (let i = 0; i < ocrResult.extractedData.length; i++) {
         const raw = ocrResult.extractedData[i];
         const rowNum = i + 1;
-        // The protocol is known here (guard above), so the neutral token resolves to a concrete
-        // code and can never reach storage or a response.
-        const resolvedMetric: string | undefined = raw.metric === OCR_505_NEUTRAL_METRIC
-          ? (protocol505 === 'M' ? 'AGILITY_505_M' : 'AGILITY_505_YD')
-          : raw.metric;
-        const extracted = { ...raw, metric: resolvedMetric };
+        const extracted = { ...raw, metric: resolveOcrMetric(raw.metric) };
         // The athlete this row auto-created, until its measurement is saved (rolled back if the row fails)
         let rowAutoCreated: { id: string; name: string } | null = null;
 
@@ -468,7 +479,12 @@ export function registerImportExportRoutes(app: Express) {
           };
 
           // Create the measurement
-          const measurement = await storage.createMeasurement(measurementData, currentUser.id, undefined, { submitterRole: photoRole, authorizedOrganizationId: photoOrganizationId });
+          const measurement = await storage.createMeasurement(measurementData, currentUser.id, undefined, {
+            submitterRole: photoRole,
+            authorizedOrganizationId: photoOrganizationId,
+            metricConfig: photoMetricConfigs.get(extracted.metric as string),
+            submitter: photoSubmitter,
+          });
 
           // The athlete auto-created for this row now has its measurement: keep it and report it
           if (rowAutoCreated) {
@@ -1177,6 +1193,24 @@ export function registerImportExportRoutes(app: Express) {
           );
         }
 
+        // Looked up once per import instead of once per row (issue #527): the site_metrics rows of every distinct
+        // metric in the file (one query), the submitting user, and the caller's primary organization (the
+        // fallback for a row whose team name matches none of their teams).
+        const importMetricConfigs = await storage.getMetricWriteConfigs([
+          ...new Set(csvData.map((r: any) => r?.metric).filter((m: unknown): m is string => typeof m === 'string' && m !== '')),
+        ]);
+        const importSubmitter = (await storage.getActiveUserById(measurementImportUser.id)) ?? null;
+        let primaryOrganizationLookup: Promise<string | undefined> | undefined;
+        const primaryOrganizationId = () =>
+          (primaryOrganizationLookup ??= storage
+            .getUserOrganizations(measurementImportUser.id)
+            .then((orgs) => orgs[0]?.organizationId)
+            .catch((error) => {
+              // Do not cache a failure: the next row retries, as it did before the lookup was memoized
+              primaryOrganizationLookup = undefined;
+              throw error;
+            }));
+
         // The caller's role in each organization a row can belong to, looked up once per organization (#514)
         const importRoleCache = new Map<string, string | undefined>();
         const importRoleFor = async (orgId: string | undefined) => {
@@ -1221,9 +1255,8 @@ export function registerImportExportRoutes(app: Express) {
               teamId = team?.id; // Store teamId for measurement
             }
             if (!organizationId) {
-              // Fallback to current user's primary organization
-              const userOrgs = await storage.getUserOrganizations(currentUser.id);
-              organizationId = userOrgs[0]?.organizationId;
+              // Fallback to current user's primary organization (looked up once per import)
+              organizationId = await primaryOrganizationId();
             }
 
             // SECURITY (issue #514): the role in THIS row's organization decides, not the session role. Only a
@@ -1397,7 +1430,12 @@ export function registerImportExportRoutes(app: Express) {
               isVerified: "false"
             };
 
-            const measurement = await storage.createMeasurement(measurementData, req.session.user!.id, undefined, { submitterRole: rowRole, authorizedOrganizationId: organizationId });
+            const measurement = await storage.createMeasurement(measurementData, req.session.user!.id, undefined, {
+              submitterRole: rowRole,
+              authorizedOrganizationId: organizationId,
+              metricConfig: importMetricConfigs.get(metric),
+              submitter: importSubmitter,
+            });
 
             // The athlete auto-created for this row now has its measurement: keep it and report it
             if (rowAutoCreated) {

@@ -72,7 +72,21 @@ export interface CreateMeasurementOptions {
    * who belongs to the authorized organization but whose only team is in another one gets no team context.
    */
   authorizedOrganizationId?: string;
+  /**
+   * The site_metrics row of measurement.metric, fetched ONCE by a bulk import (getMetricWriteConfigs) instead of
+   * once per row (issue #527). null means "looked up, no such metric"; undefined means "not prefetched", and the
+   * row is looked up here as before.
+   */
+  metricConfig?: MetricWriteConfig | null;
+  /** The submitting user, fetched once by a bulk import (null: looked up, not found); undefined: look it up here. */
+  submitter?: User | null;
 }
+
+/** The part of a site_metrics row that a measurement write needs (validation range, precision, unit, derived flag). */
+export type MetricWriteConfig = Pick<
+  SiteMetric,
+  'validationMin' | 'validationMax' | 'decimalPrecision' | 'auxiliaryInputConfig' | 'isDerived' | 'unit'
+>;
 
 export interface IStorage {
   // Authentication & Users
@@ -278,6 +292,9 @@ export interface IStorage {
   })[]>;
   getMeasurement(id: string): Promise<Measurement | undefined>;
   createMeasurement(measurement: CreateMeasurementInput, submittedBy: string, eventContext?: { eventId: string; eventNameSnapshot: string; eventDateSnapshot: string; organizationId?: string | null; }, options?: CreateMeasurementOptions): Promise<Measurement>;
+  getMetricWriteConfig(code: string): Promise<MetricWriteConfig | null>;
+  getMetricWriteConfigs(codes: string[]): Promise<Map<string, MetricWriteConfig | null>>;
+  getActiveUserById(id: string): Promise<User | undefined>;
   updateMeasurement(id: string, measurement: Partial<InsertMeasurement>): Promise<Measurement>;
   deleteMeasurement(id: string): Promise<void>;
   verifyMeasurement(id: string, verifiedBy: string): Promise<Measurement>;
@@ -3736,6 +3753,43 @@ export class DatabaseStorage implements IStorage {
     return activeTeams;
   }
 
+  /** The site_metrics columns a measurement write needs, for one metric code (null: no such metric). */
+  async getMetricWriteConfig(code: string): Promise<MetricWriteConfig | null> {
+    return (await this.getMetricWriteConfigs([code])).get(code) ?? null;
+  }
+
+  /**
+   * The same for many codes in ONE query (a bulk import calls this once, not once per row).
+   * The map has an entry for EVERY requested code: the config, or null when no such metric exists. So
+   * `map.get(code) === undefined` can only mean "this code was never requested", and createMeasurement then
+   * looks the metric up itself; a caller must pass `map.get(code)` as is, never turn undefined into null.
+   */
+  async getMetricWriteConfigs(codes: string[]): Promise<Map<string, MetricWriteConfig | null>> {
+    const unique = [...new Set(codes)];
+    const found = new Map<string, MetricWriteConfig | null>(unique.map((code) => [code, null]));
+    if (unique.length === 0) return found;
+    const rows = await db
+      .select({
+        code: siteMetrics.code,
+        validationMin: siteMetrics.validationMin,
+        validationMax: siteMetrics.validationMax,
+        decimalPrecision: siteMetrics.decimalPrecision,
+        auxiliaryInputConfig: siteMetrics.auxiliaryInputConfig,
+        isDerived: siteMetrics.isDerived,
+        unit: siteMetrics.unit,
+      })
+      .from(siteMetrics)
+      .where(inArray(siteMetrics.code, unique));
+    for (const { code, ...config } of rows) found.set(code, config);
+    return found;
+  }
+
+  /** A user that exists and is not soft-deleted (the submitter of a measurement). */
+  async getActiveUserById(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(and(eq(users.id, id), isNull(users.deletedAt)));
+    return user;
+  }
+
   async createMeasurement(
     measurement: CreateMeasurementInput,
     submittedBy: string,
@@ -3760,17 +3814,10 @@ export class DatabaseStorage implements IStorage {
     // metric-aware range rule (0-3 scores) applies to MQ metrics only: this path
     // did no range/zero validation before AM-FEAT-015, so other metrics keep
     // accepting 0 and negative values. Paired-input metrics validate their own inputs.
-    const [metricConfig] = await db
-      .select({
-        validationMin: siteMetrics.validationMin,
-        validationMax: siteMetrics.validationMax,
-        decimalPrecision: siteMetrics.decimalPrecision,
-        auxiliaryInputConfig: siteMetrics.auxiliaryInputConfig,
-        isDerived: siteMetrics.isDerived,
-        unit: siteMetrics.unit,
-      })
-      .from(siteMetrics)
-      .where(eq(siteMetrics.code, measurement.metric));
+    // Prefetched once per import by the bulk callers (issue #527); a single write looks it up here.
+    const metricConfig = options.metricConfig !== undefined
+      ? options.metricConfig
+      : await this.getMetricWriteConfig(measurement.metric);
     // MQ totals (MQI_TOTAL, MQ_TRANSITION_TOTAL) are only ever calculated from
     // the base scores; a manual entry would shadow the calculated total.
     if (metricConfig?.isDerived && isMovementQualityMetric(measurement.metric)) {
@@ -3782,7 +3829,7 @@ export class DatabaseStorage implements IStorage {
       throw new MeasurementValueValidationError('Value must be a finite number');
     }
     if (isMovementQualityMetric(measurement.metric) && !metricConfig?.auxiliaryInputConfig) {
-      const valueError = validateMeasurementValue(measurement.value, metricConfig, measurement.metric);
+      const valueError = validateMeasurementValue(measurement.value, metricConfig ?? undefined, measurement.metric);
       if (valueError) throw new MeasurementValueValidationError(valueError);
     }
 
@@ -3869,12 +3916,9 @@ export class DatabaseStorage implements IStorage {
     }
 
     // Get submitter info to determine if auto-verify
-    const [submitter] = await db.select().from(users).where(
-      and(
-        eq(users.id, submittedBy),
-        isNull(users.deletedAt)
-      )
-    );
+    const submitter = options.submitter !== undefined
+      ? options.submitter ?? undefined
+      : await this.getActiveUserById(submittedBy);
 
     // Auto-verify (issue #514). Being a coach in some OTHER organization must not verify a row: a user who
     // coaches in one organization and is only an athlete in another would otherwise get verified rows in both.
