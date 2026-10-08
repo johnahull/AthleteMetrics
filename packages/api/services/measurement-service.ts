@@ -18,6 +18,7 @@ import {
 } from '@shared/schema';
 import { parseDateFilter } from '@shared/date-utils';
 import { validateMeasurementValue, MeasurementValueValidationError } from '@shared/measurement-value-validation';
+import { assertFlyInDistanceMatches, assertFlyInDistanceOnUpdate } from '@shared/fly-run-in';
 import { isMovementQualityMetric } from '@shared/peer-comparison-exclusions';
 import { db } from '../db';
 import { eq, and, gte, lte, or, isNull, sql, desc, inArray, arrayContains } from 'drizzle-orm';
@@ -229,6 +230,7 @@ export class MeasurementService {
   ): Promise<Measurement> {
     assertCanEnterMetric(submitterRole, measurement.metric);
     assertCanAttachClip(submitterRole, measurement.mediaUrl);
+    assertFlyInDistanceMatches(measurement.metric, measurement.flyInDistance);
 
     // Wrap entire operation in transaction to prevent race conditions
     // Race condition scenario: User joins/leaves team between active teams query and measurement insert
@@ -804,6 +806,7 @@ export class MeasurementService {
         assertCanEnterMetric(updaterRole, existing.metric);
         if (measurement.metric) assertCanEnterMetric(updaterRole, measurement.metric);
         assertCanAttachClip(updaterRole, measurement.mediaUrl);
+        assertFlyInDistanceOnUpdate(existing, measurement);
 
         // A calculated MQ total is owned by the calculator: editing it by hand
         // would be overwritten by the next recalculation (or shadow it).

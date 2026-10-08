@@ -236,10 +236,10 @@ describe('useAvailableMetrics', () => {
         expect(result.current.metrics).toHaveLength(3);
       });
 
-      // digit-prefixed label "10-Yard Fly" sorts before "5-0-5 Agility" (locale-aware, '1' < '5')
+      // numeric-aware: "5-0-5 Agility" sorts before "10-Yard Fly" (5 < 10)
       expect(result.current.metrics.map(m => m.code)).toEqual([
-        'FLY10_TIME',
         'AGILITY_505_YD',
+        'FLY10_TIME',
         'VERTICAL_JUMP',
       ]);
     });
@@ -348,6 +348,31 @@ describe('useAvailableMetrics', () => {
         'Custom Pushups',
         'Vertical Jump',
       ]);
+    });
+
+    it('orders the FLY10 run-in variants 5, 10, 15, 20, 30 yd (numeric-aware)', async () => {
+      mockAuthState.user = { id: 'athlete-1', isSiteAdmin: false };
+      mockAuthState.organizationContext = undefined;
+      mockAuthState.userOrganizations = [];
+
+      const label = (yd: number) => `10-Yard Fly, ${yd} yd run-in`;
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          createMockSiteMetric({ code: 'FLY10_TIME_RI30', label: label(30) }),
+          createMockSiteMetric({ code: 'FLY10_TIME_RI5', label: label(5) }),
+          createMockSiteMetric({ code: 'FLY10_TIME', label: label(20) }),
+          createMockSiteMetric({ code: 'FLY10_TIME_RI15', label: label(15) }),
+          createMockSiteMetric({ code: 'FLY10_TIME_RI10', label: label(10) }),
+        ],
+      });
+
+      const { result } = renderHook(() => useAvailableMetrics(), { wrapper });
+      await waitFor(() => {
+        expect(result.current.metrics).toHaveLength(5);
+      });
+
+      expect(result.current.metrics.map(m => m.label)).toEqual([5, 10, 15, 20, 30].map(label));
     });
 
     it('should sort site fallback metrics alphabetically by label', async () => {

@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { isLowerIsBetterMetric } from '../analytics-types';
+import { isLowerIsBetterMetric, LOWER_IS_BETTER_METRICS } from '../analytics-types';
+import { FLY10_RUN_IN_YD } from '../fly-run-in';
 
 describe('5-0-5 lower-is-better direction (exact lookup)', () => {
   it.each([
@@ -47,6 +48,13 @@ describe('lower-is-better time codes defined as lower_is_better in site_metrics 
     'AGILITY_COD_DEFICIT_M',
     'AGILITY_COD_DEFICIT_YD',
   ])('%s is lower-is-better', (code) => {
+    expect(isLowerIsBetterMetric(code)).toBe(true);
+  });
+});
+
+describe('FLY10 run-in variants (AM-FEAT-017) are lower-is-better', () => {
+  it.each(Object.keys(FLY10_RUN_IN_YD))('%s is in LOWER_IS_BETTER_METRICS and isLowerIsBetterMetric', (code) => {
+    expect(LOWER_IS_BETTER_METRICS as readonly string[]).toContain(code);
     expect(isLowerIsBetterMetric(code)).toBe(true);
   });
 });

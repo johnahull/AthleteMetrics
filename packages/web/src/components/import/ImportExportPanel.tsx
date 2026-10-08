@@ -19,6 +19,7 @@ import {
   MAX_ROWS_PER_BATCH,
   MAX_SAFE_FILE_SIZE
 } from "@/lib/csv";
+import { MEASUREMENTS_SAMPLE_CSV } from "@/components/import/sample-templates";
 import { PhotoUpload } from "@/components/photo-upload";
 import { ColumnMappingDialog } from "@/components/import/ColumnMappingDialog";
 import { PreviewTableDialog } from "@/components/import/PreviewTableDialog";
@@ -881,16 +882,7 @@ Mia,Chen,2009-03-15,2009,2027,Female,"mia.chen@email.com,mia.chen.athlete@gmail.
 Elise,Ramos,2008-08-22,2008,2026,Female,elise.ramos@email.com,512-555-0234,Soccer,64,118,Anderson HS,Thunder Elite
 Jordan,Williams,2009-01-10,2009,2027,Male,"jordan.williams@email.com,j.williams@school.edu","512-555-0345,512-555-6789","Track & Field,Basketball",68,140,Lake Travis HS,Lightning 08G`;
 
-  const measurementsTemplate = `firstName,lastName,gender,teamName,date,age,metric,value,units,flyInDistance,notes
-Mia,Chen,Female,FIERCE 08G,2025-01-20,15,FLY10_TIME,1.26,s,20,Electronic gates - outdoor track
-Elise,Ramos,Female,Thunder Elite,2025-01-19,16,VERTICAL_JUMP,21.5,in,,Jump mat measurement
-Jordan,Williams,Male,Lightning 08G,2025-01-18,15,FLY10_TIME,1.31,s,15,Manual timing - indoor facility
-Alex,Johnson,Male,FIERCE 08G,2025-01-17,17,VERTICAL_JUMP,24.2,in,,Approach jump
-Taylor,Rodriguez,Female,Thunder Elite,2025-01-16,16,AGILITY_505_M,2.45,s,,Left foot turn
-Morgan,Lee,Male,Lightning 08G,2025-01-15,15,T_TEST,9.8,s,,Standard protocol
-Casey,Thompson,Female,FIERCE 08G,2025-01-14,17,DASH_40YD,5.2,s,,Hand timed
-Jamie,Anderson,Not Specified,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump test
-Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with radar gun`;
+  const measurementsTemplate = MEASUREMENTS_SAMPLE_CSV;
 
   const copyToClipboard = (text: string, name: string) => {
     navigator.clipboard.writeText(text);
@@ -1597,7 +1589,7 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
                   <li>• <strong>Smart Contact Detection:</strong> Emails and phone numbers are automatically validated and placed in correct fields regardless of which column they're in</li>
                   <li>• Metric values: FLY10_TIME (seconds) or VERTICAL_JUMP (inches)</li>
                   <li>• Units will be auto-detected if missing (s for FLY10_TIME, in for VERTICAL_JUMP)</li>
-                  <li>• FlyInDistance optional field (in yards) for FLY10_TIME measurements only</li>
+                  <li>• FLY10 run-in: the metric code sets it (FLY10_TIME_RI5/RI10/RI15/RI30, FLY10_TIME = 20 yd). flyInDistance is optional and, if supplied, must match the code</li>
                   <li>• Date format: YYYY-MM-DD</li>
                   <li>• Athlete matching is case-sensitive</li>
                   <li>• Phone numbers support US format: (555) 123-4567, 555-123-4567, or 5551234567</li>

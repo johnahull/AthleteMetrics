@@ -248,6 +248,58 @@ describe('GET /api/analytics/benchmark-tiers', () => {
     expect(response.body).toHaveProperty('comparison', null);
   });
 
+  it('returns comparison null (200, no 500) for a FLY10 run-in variant that has a measurement but no benchmark', async () => {
+    // AM-FEAT-017: only FLY10_TIME (20 yd) has benchmark tiers. A tier group on
+    // FLY10_TIME must never be applied to another run-in's measurement.
+    await db.insert(measurements).values({
+      userId: testAthlete.id,
+      submittedBy: testCoach.id,
+      date: '2024-04-15',
+      age: 17,
+      metric: 'FLY10_TIME_RI10',
+      value: '1.400',
+      units: 's',
+      organizationId: testOrg.id,
+      isVerified: true,
+    });
+    const tierGroupId = randomUUID();
+    const tiers = await db.insert(customBenchmarks).values([
+      { tierOrder: 1, tierName: 'Fast', tierColor: 'green', minValue: '0.50', maxValue: '1.30' },
+      { tierOrder: 2, tierName: 'Slow', tierColor: 'gray', minValue: '1.30', maxValue: '3.00' },
+    ].map((t) => ({
+      organizationId: testOrg.id,
+      metricCode: 'FLY10_TIME',
+      name: `FLY ${t.tierName}`,
+      comparisonOperator: 'range',
+      minValue: t.minValue,
+      maxValue: t.maxValue,
+      tierGroupId,
+      tierOrder: t.tierOrder,
+      tierName: t.tierName,
+      tierColor: t.tierColor,
+      isActive: true,
+    }))).returning();
+    createdBenchmarkIds.push(...tiers.map((b) => b.id));
+    const orgBenchmarks = await db.insert(organizationBenchmarks).values(
+      tiers.map((b, idx) => ({
+        organizationId: testOrg.id,
+        benchmarkId: b.id,
+        benchmarkType: 'custom',
+        isEnabled: true,
+        displayOrder: 10 + idx,
+      }))
+    ).returning();
+    createdOrgBenchmarkIds.push(...orgBenchmarks.map((o) => o.id));
+
+    const response = await request(app)
+      .get('/api/analytics/benchmark-tiers')
+      .query({ athleteId: testAthlete.id, metric: 'FLY10_TIME_RI10' })
+      .set('Cookie', coachAuthCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveProperty('comparison', null);
+  });
+
   it('returns 400 when athleteId or metric is missing', async () => {
     const missingMetric = await request(app)
       .get('/api/analytics/benchmark-tiers')

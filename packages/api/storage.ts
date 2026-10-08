@@ -35,6 +35,7 @@ import {
 import type { WellnessTrend } from "@shared/wellness-types";
 import { validateMeasurementValue, MeasurementValueValidationError } from "@shared/measurement-value-validation";
 import { isMovementQualityMetric } from "@shared/peer-comparison-exclusions";
+import { assertFlyInDistanceMatches, assertFlyInDistanceOnUpdate } from "@shared/fly-run-in";
 import { db } from "./db";
 import { wellnessRepository, type WellnessTrend as RepoWellnessTrend } from "./repositories/wellness-repository";
 import { eq, desc, asc, and, gte, lte, gt, inArray, sql, arrayContains, or, isNull, isNotNull, exists, ne, SQL } from "drizzle-orm";
@@ -3768,6 +3769,8 @@ export class DatabaseStorage implements IStorage {
       if (valueError) throw new MeasurementValueValidationError(valueError);
     }
 
+    assertFlyInDistanceMatches(measurement.metric, measurement.flyInDistance);
+
     // Calculate age and units based on metric
     const user = await this.getUser(measurement.userId);
     if (!user) throw new Error("User not found");
@@ -3891,6 +3894,14 @@ export class DatabaseStorage implements IStorage {
     // or clip guard) and has no callers today. Measurement edits go through
     // MeasurementService.updateMeasurement, which enforces assertCanEnterMetric
     // and assertCanAttachClip itself; any new caller must enforce them first.
+    if (measurement.metric || measurement.flyInDistance !== undefined) {
+      const [existing] = await db
+        .select({ metric: measurements.metric, flyInDistance: measurements.flyInDistance })
+        .from(measurements)
+        .where(eq(measurements.id, id));
+      if (existing) assertFlyInDistanceOnUpdate(existing, measurement);
+    }
+
     const updateData: any = {};
     if (measurement.userId) updateData.userId = measurement.userId;
     // submittedBy cannot be updated after creation

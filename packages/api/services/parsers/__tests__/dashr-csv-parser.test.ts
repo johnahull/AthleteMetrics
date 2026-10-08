@@ -670,3 +670,150 @@ describe('5-0-5 protocol from the Units column', () => {
     });
   });
 });
+
+
+// ============================================================================
+// ============================================================================
+// FLY10 run-in variants (AM-FEAT-017)
+// ============================================================================
+
+describe('FLY10 run-in variants', () => {
+  const HEADER = 'Date,First Name,Middle Name,Last Name,Type,Lane ID,Units,Start Distance,Split Time 1,Split Distance 1,Split Speed 1,Start Time 2,Split Distance 2,Split Speed 2,Start Time 3,Split Distance 3,Split Speed 3,Start Time 4,Split Distance 4,Split Speed 4,Start Time 5,Split Distance 5,Split Speed 5,Start Time 6,Split Distance 6,Split Speed 6,Final Time,Final Distance,Final Speed,Jump Distance,Reaction Time,Direction'.split(',');
+
+  function row(opts: {
+    type: string;
+    start?: string;
+    units?: string;
+    time: number;
+    dist: number;
+    date?: string;
+    split1?: [number, number];
+  }): string {
+    const f = new Array(HEADER.length).fill('');
+    const set = (h: string, v: string) => (f[HEADER.indexOf(h)] = v);
+    set('Date', `${opts.date ?? '01/01/2025'} 10:00:00`);
+    set('First Name', 'John');
+    set('Last Name', 'Doe');
+    set('Type', opts.type);
+    set('Units', opts.units ?? 'Imperial');
+    if (opts.start !== undefined) set('Start Distance', opts.start);
+    if (opts.split1) {
+      set('Split Time 1', opts.split1[0].toFixed(6));
+      set('Split Distance 1', opts.split1[1].toFixed(6));
+    }
+    set('Final Time', opts.time.toFixed(6));
+    set('Final Distance', opts.dist.toFixed(6));
+    return f.join(',');
+  }
+  const csv = (rows: string[]) => Buffer.from([HEADER.join(','), ...rows].join('\n'));
+  const drills = (rows: string[]) => parser.parse(csv(rows));
+
+  it.each([
+    ['5.000000', 'FLY10_TIME_RI5'],
+    ['10.000000', 'FLY10_TIME_RI10'],
+    ['15.000000', 'FLY10_TIME_RI15'],
+    ['20.000000', 'FLY10_TIME'],
+    ['30.000000', 'FLY10_TIME_RI30'],
+  ])('maps yard Flying with Start Distance %s to %s', (start, code) => {
+    const result = drills([row({ type: 'Flying', start, time: 1.2, dist: 10 })]);
+    expect(result.athletes[0].drills.map(d => d.metric)).toEqual([code]);
+  });
+
+  it('a Start 10 fly never lands in FLY10_TIME', () => {
+    const result = drills([row({ type: 'Flying', start: '10', time: 1.4, dist: 10 })]);
+    expect(result.athletes[0].drills.some(d => d.metric === 'FLY10_TIME')).toBe(false);
+  });
+
+  it.each(['25', '0', ''])('skips yard Flying with Start Distance "%s" with a specific warning', (start) => {
+    const result = drills([row({ type: 'Flying', start, time: 1.2, dist: 10 })]);
+    expect(result.athletes.flatMap(a => a.drills)).toHaveLength(0);
+    expect(result.warnings.some(w => /Flying 10.*Start Distance/.test(w))).toBe(true);
+    expect(result.warnings.some(w => /Unsupported drill type/.test(w))).toBe(false);
+  });
+
+  it('keeps metric (meter) rows on FLY10M_TIME regardless of Start Distance', () => {
+    for (const start of ['5', '10', '20', '']) {
+      const result = drills([row({ type: 'Flying', start, units: 'Metric', time: 1.2, dist: 10 })]);
+      expect(result.athletes[0].drills.map(d => d.metric)).toEqual(['FLY10M_TIME']);
+    }
+  });
+
+  it('emits one file-level warning when the Start Distance column is absent', () => {
+    const cols = HEADER.filter(h => h !== 'Start Distance');
+    const mk = (time: string) => {
+      const f = new Array(cols.length).fill('');
+      const set = (h: string, v: string) => (f[cols.indexOf(h)] = v);
+      set('Date', '01/01/2025 10:00:00');
+      set('First Name', 'John');
+      set('Last Name', 'Doe');
+      set('Type', 'Flying');
+      set('Units', 'Imperial');
+      set('Final Time', time);
+      set('Final Distance', '10.000000');
+      return f.join(',');
+    };
+    const buffer = Buffer.from([cols.join(','), mk('1.2'), mk('1.3')].join('\n'));
+    // two rows on the same day collapse to one best attempt
+    const result = parser.parse(buffer);
+    const startWarnings = result.warnings.filter(w => /Start Distance/.test(w));
+    expect(startWarnings).toHaveLength(1);
+    expect(startWarnings[0]).toMatch(/column/i);
+  });
+
+  it('keeps two same-day flies with different Start Distance separate', () => {
+    const result = drills([
+      row({ type: 'Flying', start: '10', time: 1.4, dist: 10 }),
+      row({ type: 'Flying', start: '20', time: 1.2, dist: 10 }),
+    ]);
+    expect(result.athletes[0].drills.map(d => d.metric).sort()).toEqual(['FLY10_TIME', 'FLY10_TIME_RI10']);
+  });
+
+  it('collapses two same-day metric flies with different Start Distance to the fastest FLY10M_TIME', () => {
+    const result = drills([
+      row({ type: 'Flying', start: '10', units: 'Metric', time: 1.4, dist: 10 }),
+      row({ type: 'Flying', start: '20', units: 'Metric', time: 1.2, dist: 10 }),
+    ]);
+    const m = result.athletes[0].drills.filter(d => d.metric === 'FLY10M_TIME');
+    expect(m).toHaveLength(1);
+    expect(m[0].value).toBe(1.2);
+  });
+
+  it('flags outliers for the new codes using the 0.8-3.0 range', () => {
+    const result = drills([row({ type: 'Flying', start: '5', time: 3.5, dist: 10 })]);
+    expect(result.athletes[0].drills[0].metric).toBe('FLY10_TIME_RI5');
+    expect(result.athletes[0].drills[0].isOutlier).toBe(true);
+  });
+
+  describe('derivation', () => {
+    it('derives FLY10_TIME_RI10 from a 20yd dash with a 10yd split', () => {
+      const result = drills([row({ type: 'Dash', time: 3.2, dist: 20, split1: [1.87, 10] })]);
+      const ri10 = result.athletes[0].drills.find(d => d.metric === 'FLY10_TIME_RI10');
+      expect(ri10?.value).toBe(1.33);
+      expect(ri10?.derivedFrom).toContain('DASH_20YD');
+    });
+
+    it('a direct FLY10_TIME_RI10 suppresses the derived RI10', () => {
+      const result = drills([
+        row({ type: 'Flying', start: '10', time: 1.4, dist: 10 }),
+        row({ type: 'Dash', time: 3.2, dist: 20, split1: [1.87, 10] }),
+      ]);
+      const ri10 = result.athletes[0].drills.filter(d => d.metric === 'FLY10_TIME_RI10');
+      expect(ri10).toHaveLength(1);
+      expect(ri10[0].value).toBe(1.4);
+      expect(ri10[0].derivedFrom).toBeUndefined();
+    });
+
+    it('a direct FLY10_TIME does not suppress the derived RI10 (per run-in only)', () => {
+      const result = drills([
+        row({ type: 'Flying', start: '20', time: 1.2, dist: 10 }),
+        row({ type: 'Dash', time: 3.2, dist: 20, split1: [1.87, 10] }),
+      ]);
+      expect(result.athletes[0].drills.some(d => d.metric === 'FLY10_TIME_RI10')).toBe(true);
+    });
+
+    it('does not derive RI10 from a 20m dash', () => {
+      const result = drills([row({ type: 'Dash', units: 'Metric', time: 3.2, dist: 20, split1: [1.87, 10] })]);
+      expect(result.athletes[0].drills.some(d => d.metric.startsWith('FLY10_TIME_RI'))).toBe(false);
+    });
+  });
+});

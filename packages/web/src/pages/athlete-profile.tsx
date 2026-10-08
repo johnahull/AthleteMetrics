@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { formatFlyInDistance } from "@shared/fly-run-in";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,7 +48,6 @@ const editMeasurementSchema = z.object({
     (val) => !isNaN(Number(val)) && Number(val) >= 10 && Number(val) <= 25,
     "Age must be between 10 and 25"
   ),
-  flyInDistance: z.string().optional(),
   notes: z.string().optional(),
 });
 
@@ -77,7 +77,6 @@ export default function AthleteProfile() {
       value: "",
       date: "",
       age: "",
-      flyInDistance: "",
       notes: "",
     },
   });
@@ -230,7 +229,6 @@ export default function AthleteProfile() {
       value: measurement.value.toString(),
       date: measurement.date,
       age: measurement.age.toString(),
-      flyInDistance: measurement.flyInDistance?.toString() || "",
       notes: measurement.notes || "",
     });
     setShowEditDialog(true);
@@ -253,7 +251,6 @@ export default function AthleteProfile() {
       value: parseFloat(values.value),
       date: values.date,
       age: parseInt(values.age),
-      flyInDistance: values.flyInDistance ? parseFloat(values.flyInDistance) : null,
       notes: values.notes || null,
     };
     
@@ -591,7 +588,7 @@ export default function AthleteProfile() {
                         }
                       </td>
                       <td className="py-3 px-4 text-sm text-gray-600">
-                        {measurement.flyInDistance ? `${measurement.flyInDistance}yd` : '-'}
+                        {formatFlyInDistance(measurement.metric, measurement.flyInDistance)}
                       </td>
                       <td className="py-3 px-4 text-sm text-gray-600">
                         {measurement.notes || '-'}
@@ -718,26 +715,6 @@ export default function AthleteProfile() {
                   </FormItem>
                 )}
               />
-              {editingMeasurement?.metric === 'FLY10_TIME' && (
-                <FormField
-                  control={editForm.control}
-                  name="flyInDistance"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Fly In Distance (yards)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          placeholder="Optional"
-                          {...field}
-                          data-testid="input-edit-fly-distance"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
               <FormField
                 control={editForm.control}
                 name="notes"

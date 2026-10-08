@@ -3,6 +3,7 @@
  * Extracted from routes.ts for better maintainability
  */
 
+import { parseFlyInInput } from "@shared/fly-run-in";
 import type { Express, Request, Response } from "express";
 import multer from "multer";
 import rateLimit from "express-rate-limit";
@@ -1326,7 +1327,7 @@ export function registerImportExportRoutes(app: Express) {
               metric,
               value: parseFloat(value),
               units: units || getDefaultUnit(metric, validationContext.metrics),
-              flyInDistance: flyInDistance && !isNaN(parseInt(flyInDistance)) ? parseInt(flyInDistance) : undefined,
+              flyInDistance: parseFlyInInput(metric, flyInDistance),
               notes: notes || undefined,
               teamId: teamId || undefined, // Pass teamId from CSV teamName lookup
               isVerified: "false"
@@ -1507,7 +1508,7 @@ export function registerImportExportRoutes(app: Express) {
               metric: originalData.metric,
               value: parseFloat(originalData.value),
               units: originalData.units || getDefaultUnit(originalData.metric),
-              flyInDistance: originalData.flyInDistance && !isNaN(parseInt(originalData.flyInDistance)) ? parseInt(originalData.flyInDistance) : undefined,
+              flyInDistance: parseFlyInInput(originalData.metric, originalData.flyInDistance),
               notes: originalData.notes || `Approved from review queue by ${currentUser.firstName} ${currentUser.lastName}`,
               isVerified: "false"
             };
