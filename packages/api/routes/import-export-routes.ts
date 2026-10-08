@@ -340,6 +340,12 @@ export function registerImportExportRoutes(app: Express) {
         });
       }
 
+      // Looked up once for the whole photo, not once per extracted row (issue #527)
+      const photoMetricConfigs = await storage.getMetricWriteConfigs([
+        ...new Set(ocrResult.extractedData.map(d => d.metric).filter((m): m is string => typeof m === 'string' && m !== '')),
+      ]);
+      const photoSubmitter = (await storage.getActiveUserById(currentUser.id)) ?? null;
+
       // Convert extracted data to the same format as CSV import
       const processedData: any[] = [];
       const errors: any[] = [];
@@ -468,7 +474,12 @@ export function registerImportExportRoutes(app: Express) {
           };
 
           // Create the measurement
-          const measurement = await storage.createMeasurement(measurementData, currentUser.id, undefined, { submitterRole: photoRole, authorizedOrganizationId: photoOrganizationId });
+          const measurement = await storage.createMeasurement(measurementData, currentUser.id, undefined, {
+            submitterRole: photoRole,
+            authorizedOrganizationId: photoOrganizationId,
+            metricConfig: photoMetricConfigs.get(extracted.metric as string) ?? null,
+            submitter: photoSubmitter,
+          });
 
           // The athlete auto-created for this row now has its measurement: keep it and report it
           if (rowAutoCreated) {
@@ -1177,6 +1188,19 @@ export function registerImportExportRoutes(app: Express) {
           );
         }
 
+        // Looked up once per import instead of once per row (issue #527): the site_metrics rows of every distinct
+        // metric in the file (one query), the submitting user, and the caller's primary organization (the
+        // fallback for a row whose team name matches none of their teams).
+        const importMetricConfigs = await storage.getMetricWriteConfigs([
+          ...new Set(csvData.map((r: any) => r?.metric).filter((m: unknown): m is string => typeof m === 'string' && m !== '')),
+        ]);
+        const importSubmitter = (await storage.getActiveUserById(measurementImportUser.id)) ?? null;
+        let primaryOrganizationLookup: Promise<string | undefined> | undefined;
+        const primaryOrganizationId = () =>
+          (primaryOrganizationLookup ??= storage
+            .getUserOrganizations(measurementImportUser.id)
+            .then((orgs) => orgs[0]?.organizationId));
+
         // The caller's role in each organization a row can belong to, looked up once per organization (#514)
         const importRoleCache = new Map<string, string | undefined>();
         const importRoleFor = async (orgId: string | undefined) => {
@@ -1221,9 +1245,8 @@ export function registerImportExportRoutes(app: Express) {
               teamId = team?.id; // Store teamId for measurement
             }
             if (!organizationId) {
-              // Fallback to current user's primary organization
-              const userOrgs = await storage.getUserOrganizations(currentUser.id);
-              organizationId = userOrgs[0]?.organizationId;
+              // Fallback to current user's primary organization (looked up once per import)
+              organizationId = await primaryOrganizationId();
             }
 
             // SECURITY (issue #514): the role in THIS row's organization decides, not the session role. Only a
@@ -1397,7 +1420,12 @@ export function registerImportExportRoutes(app: Express) {
               isVerified: "false"
             };
 
-            const measurement = await storage.createMeasurement(measurementData, req.session.user!.id, undefined, { submitterRole: rowRole, authorizedOrganizationId: organizationId });
+            const measurement = await storage.createMeasurement(measurementData, req.session.user!.id, undefined, {
+              submitterRole: rowRole,
+              authorizedOrganizationId: organizationId,
+              metricConfig: importMetricConfigs.get(metric) ?? null,
+              submitter: importSubmitter,
+            });
 
             // The athlete auto-created for this row now has its measurement: keep it and report it
             if (rowAutoCreated) {
