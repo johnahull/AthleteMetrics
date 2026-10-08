@@ -240,18 +240,9 @@ User2,B,Concurrent Team`;
   });
 
   describe('CSRF Protection', () => {
-    it('should require CSRF token for non-multipart import endpoints', async () => {
-      // TODO: Test /api/import/review-decision endpoint
-      // This endpoint should require CSRF token since it's not multipart
-
-      // await expect(
-      //   fetch('/api/import/review-decision', {
-      //     method: 'POST',
-      //     body: JSON.stringify({ action: 'confirm' })
-      //     // Missing X-CSRF-Token header
-      //   })
-      // ).rejects.toThrow(/CSRF token missing/i);
-    });
+    // All /api/import/* endpoints are multipart uploads, so the narrow CSRF
+    // bypass covers every import route. If a non-multipart import endpoint is
+    // ever added, add a test that it still requires a CSRF token.
 
     it('should accept CSRF token in multipart uploads', async () => {
       // While multipart endpoints skip the CSRF middleware,
@@ -259,13 +250,6 @@ User2,B,Concurrent Team`;
 
       // TODO: Test that multipart uploads work with or without CSRF token
       // Both should succeed for backwards compatibility
-    });
-
-    it('should NOT skip CSRF for non-upload import endpoints', async () => {
-      // Verify that endpoints like review-decision still require CSRF
-      // even though they're under /import/
-
-      // This ensures the narrow CSRF bypass (only for multipart) is working
     });
   });
 
