@@ -369,15 +369,14 @@ describe('MQ role allowlist on the import paths (CSV, OCR)', () => {
     const csvFor = () =>
       ['firstName,lastName,teamName,date,metric,value', `${athlete.firstName},${athlete.lastName},${teamName},2026-03-10,MQ_JUMP,2`].join('\n');
 
-    it.each(['parent', 'guest'])('a %s MQ row is a per-row error (not a 403) and nothing is written', async (role) => {
+    it.each(['parent', 'guest'])('a %s measurement import is a 403 (#516) and nothing is written', async (role) => {
       const res = await request(app)
         .post('/api/import/measurements')
         .set('Cookie', cookies[role])
         .field('options', JSON.stringify({ measurementMode: 'match_only' }))
         .attach('file', Buffer.from(csvFor()), 'measurements.csv');
-      expect(res.status).toBe(200);
-      expect(res.body.summary.created).toBe(0);
-      expect(res.body.errors).toEqual([{ row: 2, error: expect.stringMatching(MQ_DENIED) }]);
+      expect(res.status).toBe(403);
+      expect(res.body.message).toMatch(/your role cannot import measurement data/i);
       expect(await athleteRows()).toHaveLength(0);
     });
 

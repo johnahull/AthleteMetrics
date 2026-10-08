@@ -265,7 +265,8 @@ describe('Athletes cannot enter Movement Quality scores (R2)', () => {
         .set('Cookie', cookie())
         .send({ userId: athlete.id, metric: 'MQ_JUMP', value: 2, date: '2026-03-10' });
       expect(res.status).toBe(403);
-      expect(res.body.message).toMatch(ATHLETE_MQ_DENIED);
+      // parent and guest are now stopped by the writer-role allowlist before the MQ check (#515)
+      expect(res.body.message).toMatch(/cannot create measurements/i);
       expect(await athleteRows()).toHaveLength(0);
     });
 
@@ -383,8 +384,9 @@ describe('Athletes cannot enter Movement Quality scores (R2)', () => {
         .set('Cookie', athleteCookie)
         .field('options', JSON.stringify({ organizationId: orgId, measurementMode: 'match_only' }))
         .attach('file', Buffer.from(csv), 'measurements.csv');
-      expect(res.body.summary.created).toBe(0);
-      expect(res.body.errors).toEqual([{ row: 2, error: expect.stringMatching(ATHLETE_MQ_DENIED) }]);
+      // Athletes are now rejected from measurement import outright (#516)
+      expect(res.status).toBe(403);
+      expect(res.body.message).toMatch(/your role cannot import measurement data/i);
       expect(await athleteRows()).toHaveLength(0);
     });
 

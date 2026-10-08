@@ -236,7 +236,8 @@ describe('Athletes cannot attach clips (R1)', () => {
         .set('Cookie', cookie())
         .send({ userId: athlete.id, metric: 'VERTICAL_JUMP', value: 30, date: '2026-01-15', mediaUrl: CLIP });
       expect(res.status).toBe(403);
-      expect(res.body.message).toMatch(ATHLETE_CLIP_DENIED);
+      // parent and guest are now stopped by the writer-role allowlist before the clip check (#515)
+      expect(res.body.message).toMatch(/cannot create measurements/i);
       expect(await athleteRows()).toHaveLength(0);
     });
 

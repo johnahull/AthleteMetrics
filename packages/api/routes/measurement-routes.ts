@@ -346,6 +346,11 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
+      // SECURITY: Writer-role allowlist. parent, guest and any other role cannot create measurements
+      if (!isSiteAdmin(user) && !['athlete', 'coach', 'org_admin'].includes(user.role)) {
+        return res.status(403).json({ message: "Your role cannot create measurements" });
+      }
+
       // Validate request body using Zod schema
       const validatedData = insertMeasurementSchema.parse(req.body);
 
