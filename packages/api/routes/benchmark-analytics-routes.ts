@@ -20,29 +20,9 @@ import { eq, and, inArray, or } from 'drizzle-orm';
 const VALID_GENDERS = ['Male', 'Female', 'Not Specified'] as const;
 type ValidGender = typeof VALID_GENDERS[number];
 
-// Valid metric codes from database schema
-const VALID_METRIC_CODES = [
-  'FLY10_TIME',
-  'VERTICAL_JUMP',
-  'AGILITY_505_M',
-  'AGILITY_505_YD',
-  'AGILITY_505_M_L',
-  'AGILITY_505_M_R',
-  'AGILITY_505_M_LSI',
-  'AGILITY_505_YD_L',
-  'AGILITY_505_YD_R',
-  'AGILITY_505_YD_LSI',
-  'AGILITY_COD_DEFICIT_M',
-  'AGILITY_COD_DEFICIT_YD',
-  'AGILITY_5105',
-  'T_TEST',
-  'DASH_40YD',
-  'RSI',
-  'TOP_SPEED',
-  'HEIGHT',
-  'WEIGHT',
-] as const;
-type ValidMetricCode = typeof VALID_METRIC_CODES[number];
+// Metric code format used across the API (see measurement and metric routes). The format is the only check:
+// a well-formed code with no benchmarks yields an empty result, so chart overlays degrade instead of erroring.
+const METRIC_CODE_PATTERN = /^[A-Z0-9_]{1,64}$/;
 
 // Array size limits for DoS protection
 const MAX_FILTER_IDS = 50; // Prevents DoS via excessive IN clause values in database queries
@@ -111,12 +91,12 @@ function isValidUUID(value: string): boolean {
 }
 
 /**
- * Validates that a metric code is valid
+ * Validates the format of a metric code (not that it has benchmarks)
  * @param code Metric code to validate
- * @returns True if valid metric code, false otherwise
+ * @returns True if the code is well-formed
  */
-function isValidMetricCode(code: string): code is ValidMetricCode {
-  return (VALID_METRIC_CODES as readonly string[]).includes(code);
+function isValidMetricCode(code: string): boolean {
+  return METRIC_CODE_PATTERN.test(code);
 }
 
 /**
@@ -373,10 +353,10 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
           return res.status(400).json({ message: 'metricCode is required' });
         }
 
-        // Validate metricCode
+        // Validate metricCode format only; a code without benchmarks returns an empty result
         if (!isValidMetricCode(metricCode)) {
           return res.status(400).json({
-            message: `Invalid metric code. Must be one of: ${VALID_METRIC_CODES.join(', ')}`
+            message: 'Invalid metric code. Use upper-case letters, digits and underscores (max 64 characters)'
           });
         }
 
