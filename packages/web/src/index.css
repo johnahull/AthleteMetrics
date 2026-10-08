@@ -61,6 +61,7 @@
   --container-8xl: 88rem;
   --container-9xl: 96rem;
 
+  --shadow: 0px 1px 2px 0px hsl(0, 0%, 0%, 0.05), 0px 1px 3px 0px hsl(0, 0%, 0%, 0.1);
   --shadow-2xs: 0px 1px 2px 0px hsl(0, 0%, 0%, 0.05);
   --shadow-xs: 0px 1px 2px 0px hsl(0, 0%, 0%, 0.05);
   --shadow-sm: 0px 1px 2px 0px hsl(0, 0%, 0%, 0.05), 0px 1px 3px 0px hsl(0, 0%, 0%, 0.1);
@@ -96,11 +97,14 @@
 /*
  * Tailwind v4 changed space-x/space-y to `> :not(:last-child)` with margin on the end side, which
  * drops the gap after inline children (e.g. a <label> followed by an input in shadcn FormItem).
- * These restore the v3 sibling-combinator behavior for visual parity.
+ * These restore the v3 sibling-combinator behavior for visual parity. Not supported (unused in the
+ * app): space-x-reverse / space-y-reverse, RTL, arbitrary values.
  */
 @utility space-x-* {
-  /* cancel v4's own end-margin (applied by the built-in utility of the same name) */
-  & > :not(:last-child) {
+  /* Cancel the end margin that v4's built-in utility of the same name puts on non-last children.
+     Children that set their own margin are skipped: v3 never touched the first child, and the
+     built-in rule has zero specificity so such a class already wins. */
+  & > :not(:last-child):not([class*='mr-']):not([class*='mx-']) {
     margin-right: 0;
   }
   & > :not([hidden]) ~ :not([hidden]) {
@@ -111,7 +115,7 @@
 }
 
 @utility space-y-* {
-  & > :not(:last-child) {
+  & > :not(:last-child):not([class*='mb-']):not([class*='my-']) {
     margin-bottom: 0;
   }
   & > :not([hidden]) ~ :not([hidden]) {
@@ -206,6 +210,11 @@
   th,
   td {
     padding: 1px;
+  }
+
+  /* v4 preflight makes native selects transparent; v3 kept the browser default */
+  select {
+    background-color: ButtonFace;
   }
 
   input::placeholder,
