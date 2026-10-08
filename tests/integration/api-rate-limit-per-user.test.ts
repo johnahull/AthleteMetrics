@@ -11,7 +11,6 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import express, { type Express } from 'express';
 import bcrypt from 'bcrypt';
-import { inArray } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
 import { users } from '@shared/schema';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';

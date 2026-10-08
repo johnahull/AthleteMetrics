@@ -19,7 +19,7 @@ import { storage } from '../../packages/api/storage';
 import { ocrService } from '../../packages/api/ocr/ocr-service';
 import { eq } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
-import { measurements, userOrganizations } from '@shared/schema';
+import { measurements } from '@shared/schema';
 import type { Organization, User } from '@shared/schema';
 
 vi.mock('../../packages/api/vite.js', () => ({

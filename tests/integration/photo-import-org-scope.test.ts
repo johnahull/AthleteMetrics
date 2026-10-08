@@ -14,7 +14,7 @@ import request from 'supertest';
 import express from 'express';
 import { storage } from '../../packages/api/storage';
 import { db } from '../../packages/api/db';
-import { users, measurements, userOrganizations } from '@shared/schema';
+import { users, measurements } from '@shared/schema';
 import { eq, inArray } from 'drizzle-orm';
 import type { Organization, User } from '@shared/schema';
 
