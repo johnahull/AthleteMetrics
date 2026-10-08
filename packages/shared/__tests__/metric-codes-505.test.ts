@@ -75,6 +75,7 @@ describe('repo guard: retired 5-0-5 tokens', () => {
   const ALLOWLIST: Record<string, string> = {
     'packages/shared/__tests__/metric-codes-505.test.ts': 'this guard: RETIRED list and regex self-checks',
     'packages/api/services/parsers/__tests__/dashr-csv-parser.test.ts': 'asserts the parser never emits the retired codes',
+    'tests/integration/data-generators-import.test.ts': 'asserts the generators never emit the retired codes (opt-in, GENERATORS_DIR)',
     'packages/api/routes/__tests__/benchmark-analytics-metric-codes.test.ts': 'asserts the API rejects the retired code with 400',
     'packages/api/ocr/processors/__tests__/data-parser.test.ts': 'asserts OCR metric lists no longer contain the retired code',
     'packages/api/services/__tests__/lower-is-better-sql-codes.test.ts': 'asserts the SQL lower-is-better list dropped the retired code',
