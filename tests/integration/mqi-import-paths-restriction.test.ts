@@ -152,6 +152,87 @@ describe('MQ role allowlist on the import paths (CSV, OCR)', () => {
     );
   });
 
+  describe('Careful Import: holdAmbiguousMatches (CSV measurements)', () => {
+    const importCsv = (first: string, mode: string, hold: boolean, team = teamName, last = athlete.lastName) =>
+      request(app)
+        .post('/api/import/measurements')
+        .set('Cookie', cookies.coach)
+        .field(
+          'options',
+          JSON.stringify({ organizationId: orgId, measurementMode: mode, ...(hold ? { holdAmbiguousMatches: true } : {}) })
+        )
+        .attach(
+          'file',
+          Buffer.from(
+            `firstName,lastName,teamName,date,metric,value\n${first},${last},${team},2026-03-10,VERTICAL_JUMP,30\n`
+          ),
+          'm.csv'
+        );
+    const allRows = () => db.select().from(measurements).where(inArray(measurements.userId, [athlete.id, ...extraIds]));
+    const extraIds: string[] = [];
+
+    afterEach(async () => {
+      if (extraIds.length) {
+        await db.delete(measurements).where(inArray(measurements.userId, extraIds));
+        await db.delete(userTeams).where(inArray(userTeams.userId, extraIds));
+        await db.delete(userOrganizations).where(inArray(userOrganizations.userId, extraIds));
+        await db.delete(users).where(inArray(users.id, extraIds));
+        extraIds.length = 0;
+      }
+    });
+
+    const addSameNameAthlete = async () => {
+      const [dup] = await db
+        .insert(users)
+        .values({
+          username: `dup-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          emails: [`dup-${Date.now()}@test.com`],
+          password: 'x',
+          firstName: athlete.firstName,
+          lastName: athlete.lastName,
+          fullName: `${athlete.firstName} ${athlete.lastName}`,
+          birthDate: '2008-01-01',
+          birthYear: 2008,
+        } as any)
+        .returning();
+      extraIds.push(dup.id);
+      await db.insert(userOrganizations).values({ userId: dup.id, organizationId: orgId, role: 'athlete' } as any);
+      await db.insert(userTeams).values({ userId: dup.id, teamId, joinedAt: new Date('2020-01-01'), isActive: true });
+    };
+
+    it('holds a same-name duplicate with a row error and writes nothing', async () => {
+      await addSameNameAthlete();
+      const res = await importCsv(athlete.firstName, 'match_only', true);
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body.errors).toHaveLength(1);
+      expect(res.body.errors[0].error).toMatch(/ambiguous athlete match/i);
+      expect(await allRows()).toHaveLength(0);
+    });
+
+    it('holds a partial (below 75 percent) match with a row error and writes nothing', async () => {
+      const res = await importCsv(athlete.firstName, 'match_only', true, 'Unrelated Squad', athlete.lastName.slice(0, -1));
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body.errors).toHaveLength(1);
+      expect(res.body.errors[0].error).toMatch(/ambiguous athlete match/i);
+      expect(await allRows()).toHaveLength(0);
+    });
+
+    it('still imports a clear exact match when the flag is set', async () => {
+      const res = await importCsv(athlete.firstName, 'match_only', true);
+      expect(res.body.errors).toEqual([]);
+      expect(await allRows()).toHaveLength(1);
+    });
+
+    it('plain match_only is unchanged: the same-name duplicate and the partial match are written', async () => {
+      await addSameNameAthlete();
+      const dupRes = await importCsv(athlete.firstName, 'match_only', false);
+      expect(dupRes.body.errors, JSON.stringify(dupRes.body)).toEqual([]);
+      const partialRes = await importCsv(athlete.firstName, 'match_only', false, 'Unrelated Squad', athlete.lastName.slice(0, -1));
+      expect(partialRes.body.errors, JSON.stringify(partialRes.body)).toEqual([]);
+      expect(await allRows()).toHaveLength(2);
+    });
+  });
+
   describe('POST /api/import/photo (OCR)', () => {
     const ocrReturns = (metric: string) =>
       vi.mocked(ocrService.extractTextFromImage).mockResolvedValue({

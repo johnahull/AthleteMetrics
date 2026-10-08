@@ -1,5 +1,5 @@
 /**
- * Types for import functionality with manual review capabilities
+ * Types for import functionality
  */
 
 /**
@@ -42,6 +42,7 @@ export interface ImportOptions {
   // Core import mode
   athleteMode?: AthleteImportMode;
   measurementMode?: MeasurementImportMode;
+  holdAmbiguousMatches?: boolean;   // Measurement import: skip rows whose athlete match is ambiguous or below 75% confidence (Careful Import)
 
   // Team handling
   teamHandling?: TeamHandlingMode;

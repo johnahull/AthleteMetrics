@@ -1274,6 +1274,13 @@ export function registerImportExportRoutes(app: Express) {
 
             matchedAthlete = matchResult.candidate;
 
+            // Careful Import: hold ambiguous matches back instead of writing to a guessed athlete
+            if (options.holdAmbiguousMatches && matchResult.type !== 'none' &&
+                (matchResult.requiresManualReview || matchResult.confidence < 75)) {
+              errors.push({ row: rowNum, error: `Ambiguous athlete match for ${firstName} ${lastName} (confidence: ${matchResult.confidence}%): resolve and re-import` });
+              continue;
+            }
+
             if (!matchedAthlete) {
               errors.push({ row: rowNum, error: `No valid athlete match found for ${firstName} ${lastName}` });
               continue;
