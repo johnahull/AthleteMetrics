@@ -79,7 +79,7 @@ describe('migration 0151: yard benchmark description wording', () => {
     });
   });
 
-  it('handles gte, range and no-note rows, and the _L / _R twins', async () => {
+  it('handles gte, eq, range and no-note rows, and the _L / _R twins', async () => {
     await inRolledBackTx(async (tx) => {
       const gte = await seed(tx, { code: 'AGILITY_505_YD_L', name: 'T0151 gte', op: 'gte', value: 3.1, description: `${PREFIX} note` });
       const range = await seed(tx, { code: 'AGILITY_505_YD_R', name: 'T0151 range', op: 'range', min: 2.1, max: 2.4, description: PREFIX });
@@ -87,7 +87,9 @@ describe('migration 0151: yard benchmark description wording', () => {
       expect(await descriptionOf(tx, gte)).toContain('threshold of ≥ 3.100 s,');
       expect(await descriptionOf(tx, gte)).toContain('not converted): note');
       const r = await descriptionOf(tx, range);
-      expect(r).toContain('range of 2.100 to 2.400 s,');
+      expect(r).toBe(
+        'Approximate yard-protocol range of 2.100 to 2.400 s, converted from metric-protocol research (x0.914); recalibrate with BTA data.',
+      );
       expect(r).not.toContain('source note');
     });
   });
@@ -106,19 +108,25 @@ describe('migration 0151: yard benchmark description wording', () => {
     });
   });
 
-  it('is idempotent and the down file restores the original text exactly', async () => {
+  it('is idempotent and the down file restores the original text exactly, for every operator', async () => {
     await inRolledBackTx(async (tx) => {
-      const originals = [
-        `${PREFIX} < 2.68s. Jones 2018`,
-        PREFIX,
-        `${PREFIX}  double space, trailing `,
+      const rows = [
+        { op: 'lte', value: 2.5, description: `${PREFIX} < 2.68s. Jones 2018` },
+        { op: 'lte', value: 2.5, description: PREFIX },
+        { op: 'lte', value: 2.5, description: `${PREFIX}  double space, trailing ` },
+        { op: 'gte', value: 3.1, description: `${PREFIX} gte note` },
+        { op: 'eq', value: 2.5, description: `${PREFIX} eq note` },
+        { op: 'range', min: 2.1, max: 2.4, description: `${PREFIX} range note` },
+        { op: 'range', min: 2.1, max: 2.4, description: PREFIX },
       ];
       const ids: string[] = [];
-      for (const [i, description] of originals.entries()) {
-        ids.push(await seed(tx, { code: 'AGILITY_505_YD', name: `T0151 rt ${i}`, op: 'lte', value: 2.5, description }));
+      for (const [i, r] of rows.entries()) {
+        ids.push(await seed(tx, { code: 'AGILITY_505_YD', name: `T0151 rt ${i}`, ...r }));
       }
+      const originals = rows.map((r) => r.description);
       await tx.execute(sql.raw(UP));
       const once = await Promise.all(ids.map((id) => descriptionOf(tx, id)));
+      expect(once).not.toEqual(originals);
       await tx.execute(sql.raw(UP));
       expect(await Promise.all(ids.map((id) => descriptionOf(tx, id)))).toEqual(once);
 
@@ -129,14 +137,34 @@ describe('migration 0151: yard benchmark description wording', () => {
     });
   });
 
+  it('down leaves admin-edited rows and rows without the 0151 header alone', async () => {
+    await inRolledBackTx(async (tx) => {
+      const edited = await seed(tx, { code: 'AGILITY_505_YD', name: 'T0151 dn edited', op: 'lte', value: 2.4, description: 'Recalibrated by BTA.' });
+      const metric = await seed(tx, {
+        code: 'AGILITY_505_M', name: 'T0151 dn metric', op: 'lte', value: 2.68,
+        description: 'Approximate yard-protocol threshold of \u2264 2.680 s, converted from metric-protocol research (x0.914); recalibrate with BTA data.',
+      });
+      const nul = await seed(tx, { code: 'AGILITY_505_YD', name: 'T0151 dn null', op: 'lte', value: 2.4, description: null });
+      const before = await Promise.all([edited, metric, nul].map((id) => descriptionOf(tx, id)));
+      await tx.execute(sql.raw(DOWN));
+      expect(await Promise.all([edited, metric, nul].map((id) => descriptionOf(tx, id)))).toEqual(before);
+    });
+  });
+
   it('leaves no yard benchmark still carrying the verbatim-copy prefix after it runs', async () => {
     await inRolledBackTx(async (tx) => {
+      // Seed a copy first: a CI-shaped database has no 0144 rows, which would make this vacuous.
+      await seed(tx, { code: 'AGILITY_505_YD', name: 'T0151 seeded copy', op: 'lte', value: 2.5, description: `${PREFIX} note` });
+      const count = async () => {
+        const r: any = await tx.execute(sql`
+          SELECT COUNT(*)::int AS n FROM site_benchmarks
+           WHERE metric_code IN ('AGILITY_505_YD', 'AGILITY_505_YD_L', 'AGILITY_505_YD_R')
+             AND left(description, ${PREFIX.length}) = ${PREFIX}`);
+        return (r.rows ?? r)[0].n;
+      };
+      expect(await count()).toBeGreaterThan(0);
       await tx.execute(sql.raw(UP));
-      const r: any = await tx.execute(sql`
-        SELECT COUNT(*)::int AS n FROM site_benchmarks
-         WHERE metric_code IN ('AGILITY_505_YD', 'AGILITY_505_YD_L', 'AGILITY_505_YD_R')
-           AND left(description, ${PREFIX.length}) = ${PREFIX}`);
-      expect((r.rows ?? r)[0].n).toBe(0);
+      expect(await count()).toBe(0);
     });
   });
 });

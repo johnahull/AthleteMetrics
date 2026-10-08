@@ -24,7 +24,7 @@
 --
 -- Column precision (the other half of item 4) needs no change: site_benchmarks and
 -- custom_benchmarks min_value / max_value are numeric(10,3) in migration-built
--- databases (migration 0076/0108 history) and #520 aligned the Drizzle schema, so
+-- databases (0076 added them as (10,2), 0079 widened them to (10,3)) and #520 aligned the Drizzle schema, so
 -- ROUND(x * 0.914, 3) is stored without loss. The only yard rows with min/max are the
 -- unitless LSI tiers, which 0144 copies with factor 1 and are not touched here.
 --
