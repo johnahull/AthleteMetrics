@@ -44,6 +44,11 @@ export default mergeConfig(
         // API integration tests that require database
         'packages/api/__tests__/organization-type-api.test.ts',
         'packages/api/__tests__/site-benchmark-sets.test.ts',
+
+        // The global-athlete-* files delete whole tables (global_athletes and its audit/claim tables) in
+        // beforeAll/afterAll, so they race when files run in parallel (maxForks 2) and flake with FK violations
+        // (issue #538). vitest.integration.config.ts runs them serially (fileParallelism: false), also in CI.
+        'packages/api/__tests__/global-athlete-*.test.ts',
       ],
     },
   })

@@ -41,6 +41,8 @@ export default defineConfig({
       'tests/migration/**/*.{test,spec}.{ts,tsx}',
 
       // Other tests that require real database
+      // global-athlete-*: whole-table deletes, so they must not run in parallel (issue #538)
+      'packages/api/__tests__/global-athlete-*.test.ts',
       'tests/import/import-flow-integration.test.ts',
       'tests/import/import-security.test.ts',
       'tests/email/**/*.{test,spec}.{ts,tsx}',
