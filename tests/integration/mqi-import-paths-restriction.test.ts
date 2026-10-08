@@ -252,16 +252,21 @@ describe('MQ role allowlist on the import paths (CSV, OCR)', () => {
         ],
       } as any);
 
-    it('a guest MQ row is rejected per row and nothing is written', async () => {
+    // Issue #514: only a coach / org_admin in the organization being imported into (or a site admin) may import
+    // a photo. A guest member used to get past the athlete-only check and was stopped per row for MQ metrics
+    // only; now the whole request is refused before OCR runs, so no metric can be written.
+    // The options send no organizationId on purpose: a guest has a membership, so the route defaults to their
+    // first organization and reaches the role check (only a user with NO membership gets the 400 below).
+    it('a guest photo import is refused before OCR (403) and nothing is written', async () => {
       ocrReturns('MQ_JUMP');
+      vi.mocked(ocrService.extractTextFromImage).mockClear();
       const res = await request(app)
         .post('/api/import/photo')
         .set('Cookie', cookies.guest)
         .field('options', JSON.stringify({ measurementMode: 'match_only' }))
         .attach('file', PNG, 'scores.png');
-      expect(res.status).toBe(200);
-      expect(res.body.results.successful).toBe(0);
-      expect(res.body.results.errors).toEqual([expect.objectContaining({ row: 1, error: expect.stringMatching(MQ_DENIED) })]);
+      expect(res.status).toBe(403);
+      expect(ocrService.extractTextFromImage).not.toHaveBeenCalled();
       expect(await athleteRows()).toHaveLength(0);
     });
 
@@ -289,7 +294,7 @@ describe('MQ role allowlist on the import paths (CSV, OCR)', () => {
       expect(await athleteRows()).toHaveLength(0);
     });
 
-    it('a denied MQ row in create-athletes mode is rejected before any athlete is created', async () => {
+    it('a guest photo import in create-athletes mode is refused before any athlete is created', async () => {
       const first = 'Mqocrnew';
       const last = `Nobody${Math.random().toString(36).replace(/[^a-z]/g, '').slice(0, 8)}`;
       vi.mocked(ocrService.extractTextFromImage).mockResolvedValue({
@@ -303,24 +308,19 @@ describe('MQ role allowlist on the import paths (CSV, OCR)', () => {
         .set('Cookie', cookies.guest)
         .field('options', JSON.stringify({ organizationId: orgId, measurementMode: 'create_athletes' }))
         .attach('file', PNG, 'scores.png');
-      expect(res.status).toBe(200);
-      expect(res.body.results.successful).toBe(0);
-      expect(res.body.results.errors).toEqual([expect.objectContaining({ row: 1, error: expect.stringMatching(MQ_DENIED) })]);
-      expect(res.body.results.createdAthletes ?? []).toHaveLength(0);
+      expect(res.status).toBe(403);
       expect(await db.select().from(users).where(eq(users.lastName, last))).toHaveLength(0);
     });
 
-    it('a denied MQ row carries the permission message, not a generic processing failure', async () => {
+    it('a guest photo import is refused with a clear permission message', async () => {
       ocrReturns('MQ_JUMP');
       const res = await request(app)
         .post('/api/import/photo')
         .set('Cookie', cookies.guest)
         .field('options', JSON.stringify({ measurementMode: 'match_only' }))
         .attach('file', PNG, 'scores.png');
-      expect(res.status).toBe(200);
-      expect(res.body.results.errors).toEqual([
-        expect.objectContaining({ row: 1, error: expect.stringMatching(/^Only coaches and admins can enter Movement Quality scores \(MQ_JUMP\)/) }),
-      ]);
+      expect(res.status).toBe(403);
+      expect(res.body.message).toMatch(/role cannot import measurement data/i);
     });
 
     it('a coach OCR row for a manual MQI_TOTAL is rejected and nothing is written', async () => {

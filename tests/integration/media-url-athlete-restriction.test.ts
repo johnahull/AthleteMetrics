@@ -261,7 +261,9 @@ describe('Athletes cannot attach clips (R1)', () => {
       );
       const res = await request(app).put(`/api/measurements/${own.id}`).set('Cookie', cookie()).send({ mediaUrl: CLIP });
       expect(res.status).toBe(403);
-      expect(res.body.message).toMatch(ATHLETE_CLIP_DENIED);
+      // Issue #514: a parent or guest has no coach / athlete role in the row's organization, so the route refuses
+      // the edit outright; the service's clip allowlist is the second layer behind it.
+      expect(res.body.message).toMatch(new RegExp(`${ATHLETE_CLIP_DENIED.source}|you can only update measurements`, 'i'));
       expect((await athleteRows())[0].mediaUrl).toBeNull();
     });
 

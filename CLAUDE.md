@@ -546,6 +546,16 @@ router.put('/athletes/:id', requireAuth, requireResourceAccess('athlete', 'updat
 - `canModifyMeasurement()` - Update authorization with verified check
 - `canVerifyMeasurement()` - Verification authorization
 - `canAccessLeaderboard()` - Coach-only analytics features
+- `getOrgRole(user, orgId)` / `isMeasurementWriterRole(role)` - The caller's role in ONE organization
+
+**Measurement writes use the role in the row's organization, never `session.user.role`.** The session role is the
+caller's role in their *first* organization (alphabetically by name), so for a user who is a coach in one organization
+and an athlete in another it says nothing about the row being written. Resolve the row's organization, then use
+`getOrgRole(user, thatOrgId)`: `site_admin` for site admins, the member's role there, `undefined` (no rights) for a
+non-member or a personal row. For a create, `MeasurementService.resolveMeasurementOrganization()` gives the
+organization the row will really belong to, and `createMeasurement(..., { expectedOrganizationId })` re-checks it inside
+its transaction. Batch create and bulk delete are deliberately scoped to the primary organization, with the role and the
+scope taken from that same organization.
 
 **Migration Note:** `RoleManager.requirePermission()` and `RoleManager.requireRole()` are deprecated. Use the `permissions` module instead.
 

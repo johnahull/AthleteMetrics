@@ -28,6 +28,7 @@ import { eq } from "drizzle-orm";
 import { users, userTeams, userOrganizations, type SiteMetric } from "@shared/schema";
 import { DerivedMetricCalculator } from "../services/derived-metric-calculator";
 import { assertCanEnterMetric, MovementQualityPermissionError } from "../services/measurement-service";
+import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
 import { db } from "../db";
 
 /**
@@ -267,11 +268,6 @@ export function registerImportExportRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      // Athletes cannot upload photos for import
-      if (currentUser?.role === "athlete") {
-        return res.status(403).json({ message: "Athletes cannot import measurement data" });
-      }
-
       if (!file) {
         return res.status(400).json({ message: "No image file uploaded" });
       }
@@ -316,6 +312,16 @@ export function registerImportExportRoutes(app: Express) {
       }
       if (!photoOrganizationId) {
         return res.status(400).json({ message: "An organization is required to import measurements from a photo" });
+      }
+
+      // SECURITY (issue #514): the caller's role in the organization being imported into decides, not the
+      // session role (their role in their first organization). Only a coach / org_admin there, or a site
+      // admin, may import; this also stops guest and parent members, which the old athlete-only check let through.
+      const photoRole = await getOrgRole(currentUser, photoOrganizationId);
+      if (!isMeasurementWriterRole(photoRole)) {
+        return res.status(403).json({
+          message: photoRole === 'athlete' ? "Athletes cannot import measurement data" : "Your role cannot import measurement data"
+        });
       }
 
       // Debug logging removed for production: Processing OCR for file
@@ -374,7 +380,7 @@ export function registerImportExportRoutes(app: Express) {
           }
 
           // Only coaches and admins may enter MQ scores; checked before any athlete matching/creation
-          assertCanEnterMetric(currentUser.role, extracted.metric);
+          assertCanEnterMetric(photoRole, extracted.metric);
 
           // Find or create the athlete
           const athletes = await storage.getAthletes({
@@ -462,7 +468,7 @@ export function registerImportExportRoutes(app: Express) {
           };
 
           // Create the measurement
-          const measurement = await storage.createMeasurement(measurementData, currentUser.id);
+          const measurement = await storage.createMeasurement(measurementData, currentUser.id, undefined, { submitterRole: photoRole, authorizedOrganizationId: photoOrganizationId });
 
           // The athlete auto-created for this row now has its measurement: keep it and report it
           if (rowAutoCreated) {
@@ -632,13 +638,19 @@ export function registerImportExportRoutes(app: Express) {
         return res.status(400).json({ message: "Invalid import type. Use 'athletes' or 'measurements'" });
       }
 
-      // SECURITY: Measurement import is limited to coach, org_admin and site_admin (matches /api/import/photo)
+      // SECURITY: Measurement import is limited to coach, org_admin and site_admin (matches /api/import/photo).
+      // A user needs that role in at least one organization to get here; which organization a row is written
+      // to, and whether the role there is enough, is decided per row from the role in THAT organization
+      // (issue #514), not from session.user.role (their role in their first organization).
       if (type === 'measurements') {
         if (!req.session.user?.id) {
           return res.status(401).json({ message: "User not authenticated" });
         }
-        if (!isSiteAdmin(req.session.user) && !['coach', 'org_admin'].includes(req.session.user.role ?? '')) {
-          return res.status(403).json({ message: "Your role cannot import measurement data" });
+        if (!isSiteAdmin(req.session.user)) {
+          const importMemberships = (await storage.getUserOrganizations(req.session.user.id)) ?? [];
+          if (!importMemberships.some((m: any) => m.role === 'coach' || m.role === 'org_admin')) {
+            return res.status(403).json({ message: "Your role cannot import measurement data" });
+          }
         }
       }
 
@@ -1165,6 +1177,14 @@ export function registerImportExportRoutes(app: Express) {
           );
         }
 
+        // The caller's role in each organization a row can belong to, looked up once per organization (#514)
+        const importRoleCache = new Map<string, string | undefined>();
+        const importRoleFor = async (orgId: string | undefined) => {
+          const key = orgId ?? '';
+          if (!importRoleCache.has(key)) importRoleCache.set(key, await getOrgRole(measurementImportUser, orgId));
+          return importRoleCache.get(key);
+        };
+
         // Athletes auto-created earlier in THIS import (create_athletes), so later rows for the same
         // name reuse them instead of creating a duplicate per row.
         const autoCreatedAthletes = new Map<string, any>();
@@ -1190,9 +1210,6 @@ export function registerImportExportRoutes(app: Express) {
               warnings.push(`Row ${rowNum}: ${metricValidation.warning}`);
             }
 
-            // Athletes cannot import MQ scores; checked before any athlete matching/creation
-            assertCanEnterMetric(req.session.user!.role, metric);
-
             // Get organization context and teamId for measurement
             let organizationId: string | undefined;
             let teamId: string | undefined;
@@ -1208,6 +1225,16 @@ export function registerImportExportRoutes(app: Express) {
               const userOrgs = await storage.getUserOrganizations(currentUser.id);
               organizationId = userOrgs[0]?.organizationId;
             }
+
+            // SECURITY (issue #514): the role in THIS row's organization decides, not the session role. Only a
+            // coach / org_admin there (or a site admin) may import; Movement Quality scores are checked with the
+            // same role, before any athlete matching or creation.
+            const rowRole = await importRoleFor(organizationId);
+            if (!isMeasurementWriterRole(rowRole)) {
+              errors.push({ row: rowNum, error: "Your role in this organization cannot import measurement data" });
+              continue;
+            }
+            assertCanEnterMetric(rowRole, metric);
 
             // Use simplified athlete matching system with organization filtering
             const athletes = await storage.getAthletes({
@@ -1370,7 +1397,7 @@ export function registerImportExportRoutes(app: Express) {
               isVerified: "false"
             };
 
-            const measurement = await storage.createMeasurement(measurementData, req.session.user!.id);
+            const measurement = await storage.createMeasurement(measurementData, req.session.user!.id, undefined, { submitterRole: rowRole, authorizedOrganizationId: organizationId });
 
             // The athlete auto-created for this row now has its measurement: keep it and report it
             if (rowAutoCreated) {

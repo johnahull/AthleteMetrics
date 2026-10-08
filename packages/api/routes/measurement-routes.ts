@@ -5,7 +5,7 @@
 
 import type { Express } from "express";
 import rateLimit, { type Options } from "express-rate-limit";
-import { MeasurementService, MediaUrlPermissionError, MovementQualityPermissionError } from "../services/measurement-service";
+import { MeasurementService, MediaUrlPermissionError, MovementQualityPermissionError, MeasurementAccessDeniedError } from "../services/measurement-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { insertMeasurementSchema, teams, userTeams, siteMetrics } from "@shared/schema";
 import {
@@ -17,6 +17,8 @@ import { dateStringSchema } from "@shared/date-utils";
 import { MeasurementValueValidationError } from "@shared/measurement-value-validation";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import {
+  getOrgRole,
+  isMeasurementWriterRole,
   canVerifyMeasurement,
   canUseBatchEndpoint,
   canQueryCrossOrganization,
@@ -163,6 +165,19 @@ interface MeasurementFilters {
   filterMode?: 'all' | 'personal' | 'org';
   orgIds?: string;
   personalOwnerId?: string;
+}
+
+/**
+ * The role that counts when a caller edits or deletes an EXISTING measurement (issue #514): their role in the
+ * row's own organization, never session.user.role (their role in their first organization). The owner of a row
+ * that has no organization (a personal row) is treated as an athlete; anyone else gets undefined, which grants
+ * nothing. Shared by PUT and DELETE so the two cannot drift apart.
+ */
+async function roleForExistingRow(
+  user: SessionUser,
+  row: { userId: string; organizationId?: string | null }
+): Promise<string | undefined> {
+  return (await getOrgRole(user, row.organizationId)) ?? (row.userId === user.id ? 'athlete' : undefined);
 }
 
 export function registerMeasurementRoutes(app: Express) {
@@ -346,19 +361,22 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      // SECURITY: Writer-role allowlist. parent, guest and any other role cannot create measurements
-      if (!isSiteAdmin(user) && !['athlete', 'coach', 'org_admin'].includes(user.role)) {
-        return res.status(403).json({ message: "Your role cannot create measurements" });
+      // SECURITY (issue #515): parent, guest and any other role cannot create measurements. Checked BEFORE the
+      // body is validated so such a session gets a 403 whatever it sends. A user with no organization
+      // membership has a session role of 'athlete' or 'parent' (there is no first organization to take it from).
+      let memberships: Array<{ organizationId: string; role: string }> = [];
+      if (!isSiteAdmin(user)) {
+        memberships = (await storage.getUserOrganizations(user.id)) ?? [];
+        const mayWrite = memberships.length === 0
+          ? user.role === 'athlete'
+          : memberships.some(m => ['athlete', 'coach', 'org_admin'].includes(m.role));
+        if (!mayWrite) {
+          return res.status(403).json({ message: "Your role cannot create measurements" });
+        }
       }
 
       // Validate request body using Zod schema
       const validatedData = insertMeasurementSchema.parse(req.body);
-
-      // Permission check: athletes can only create measurements for themselves
-      // Use user.id as the athlete's userId (not user.athleteId which could be undefined)
-      if (user.role === 'athlete' && validatedData.userId !== user.id) {
-        return res.status(403).json({ message: "Athletes can only create measurements for themselves" });
-      }
 
       // SECURITY: Validate teamId exists (applies to all users)
       if (validatedData.teamId) {
@@ -380,41 +398,99 @@ export function registerMeasurementRoutes(app: Express) {
         }
       }
 
-      // SECURITY: Verify coaches/org admins can only create measurements for users in their organization
-      if (!isSiteAdmin(user) && (user.role === 'coach' || user.role === 'org_admin')) {
-        const targetUserTeams = await db
-          .select({ organizationId: teams.organizationId })
-          .from(userTeams)
-          .innerJoin(teams, eq(userTeams.teamId, teams.id))
-          .where(and(
-            eq(userTeams.userId, validatedData.userId),
-            eq(userTeams.isActive, true),      // SECURITY: Only current team memberships
-            eq(teams.isArchived, false)        // SECURITY: Only active teams
-          ));
+      // SECURITY (issues #514, #515): what the caller may do is decided by their role in the organization the
+      // measurement will belong to, NOT by session.user.role (their role in their first organization).
+      // writerRole is passed to the service for the Movement Quality / clip rules and auto-verification.
+      let writerRole: string;
+      // The organization the write is authorized against; the service re-checks it inside its transaction.
+      // undefined: no restriction (site admin); null: a personal row.
+      let expectedOrganizationId: string | null | undefined;
 
-        if (targetUserTeams.length === 0) {
-          return res.status(404).json({ message: "User not found or not on any team" });
+      if (isSiteAdmin(user)) {
+        writerRole = 'site_admin';
+      } else {
+        const isSelf = validatedData.userId === user.id;
+        const hasTeam = !!validatedData.teamId && validatedData.teamId.trim() !== '';
+
+        // Writing for someone else needs a coach / org_admin role somewhere. Refuse everyone else before any
+        // lookup that depends on the target: a 404 or 400 about the target's teams would reveal who is on one.
+        if (!isSelf && !memberships.some(m => m.role === 'coach' || m.role === 'org_admin')) {
+          return res.status(403).json({ message: "Athletes can only create measurements for themselves" });
         }
 
-        // SECURITY: Validate user has access to at least one of the target user's organizations
-        const userOrgs = await storage.getUserOrganizations(user.id);
-        const userOrgIds = new Set(userOrgs.map(o => o.organizationId));
-        const hasOrgAccess = targetUserTeams.some(t => userOrgIds.has(t.organizationId));
-        if (!hasOrgAccess) {
-          return res.status(403).json({
-            message: "Cannot create measurements for users in different organizations"
-          });
+        if (isSelf && !hasTeam) {
+          // Personal self-entry: no team, no organization, the athlete's own row
+          writerRole = 'athlete';
+          expectedOrganizationId = null;
+        } else {
+          if (!isSelf) {
+            // The athlete must currently be on an active team (the same check coaches always had)
+            const targetUserTeams = await db
+              .select({ organizationId: teams.organizationId })
+              .from(userTeams)
+              .innerJoin(teams, eq(userTeams.teamId, teams.id))
+              .where(and(
+                eq(userTeams.userId, validatedData.userId),
+                eq(userTeams.isActive, true),      // SECURITY: Only current team memberships
+                eq(teams.isArchived, false)        // SECURITY: Only active teams
+              ));
+
+            if (targetUserTeams.length === 0) {
+              return res.status(404).json({ message: "User not found or not on any team" });
+            }
+
+            const target = await measurementService.resolveMeasurementOrganization(validatedData);
+            if (!target.organizationId) {
+              return res.status(400).json({
+                message: target.ambiguous
+                  ? "This athlete is on several teams: choose a team (teamId) for this measurement"
+                  : "This athlete had no team on that date: choose a team (teamId) for this measurement",
+              });
+            }
+            // SECURITY: the athlete must belong to the organization the row will be attributed to,
+            // otherwise a coach could attribute a row to their own team for any user
+            if (!targetUserTeams.some(t => t.organizationId === target.organizationId)) {
+              return res.status(403).json({
+                message: "Cannot create measurements for users in different organizations"
+              });
+            }
+            expectedOrganizationId = target.organizationId;
+          } else {
+            // Self-entry on a chosen team: the team's organization
+            expectedOrganizationId = (await measurementService.resolveMeasurementOrganization(validatedData)).organizationId;
+          }
+
+          const orgRole = await getOrgRole(user, expectedOrganizationId);
+          if (orgRole === 'athlete' && isSelf) {
+            writerRole = 'athlete';
+          } else if (orgRole === 'athlete') {
+            return res.status(403).json({ message: "Athletes can only create measurements for themselves" });
+          } else if (isMeasurementWriterRole(orgRole)) {
+            writerRole = orgRole!;
+          } else {
+            return res.status(403).json({ message: "Your role cannot create measurements in this organization" });
+          }
         }
       }
 
-      const measurement = await measurementService.createMeasurement(validatedData, user.id, user.role);
+      const measurement = await measurementService.createMeasurement(
+        validatedData,
+        user.id,
+        writerRole,
+        undefined,
+        { expectedOrganizationId }
+      );
       res.status(201).json(measurement);
     } catch (error) {
       console.error("Create measurement error:", error);
       if (error instanceof ZodError) {
         return res.status(400).json({ message: "Invalid input data", errors: error.errors });
       }
-      if (error instanceof MovementQualityPermissionError || error instanceof MediaUrlPermissionError) {
+      if (
+        error instanceof MovementQualityPermissionError ||
+        error instanceof MediaUrlPermissionError ||
+        error instanceof MeasurementAccessDeniedError
+      ) {
         return res.status(403).json({ message: error.message });
       }
       if (error instanceof PairedInputValidationError || error instanceof MeasurementValueValidationError) {
@@ -507,9 +583,12 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(404).json({ message: "Measurement not found" });
       }
 
+      // SECURITY (issue #514): the caller's role in the measurement's own organization, not the session role
+      const effectiveRole = await roleForExistingRow(user, existingMeasurement);
+
       // SECURITY: Consolidated athlete authorization checks to prevent IDOR
       // All athlete-specific checks are performed together to prevent bypass
-      if (user.role === 'athlete') {
+      if (effectiveRole === 'athlete') {
         // Athletes cannot modify verified measurements (only coaches/admins can)
         if (existingMeasurement.isVerified) {
           return res.status(403).json({
@@ -534,20 +613,17 @@ export function registerMeasurementRoutes(app: Express) {
         }
       }
 
-      // SECURITY: Validate user has access to measurement's organization via database membership
+      // SECURITY: coach / org_admin of the measurement's organization (role in THAT organization), or an athlete
+      // for a row they submitted themselves. Having submitted the row is not enough for an organization row: a
+      // coach who was removed from the organization, or demoted to guest, must not keep editing its rows.
+      // Only a personal row (no organization) can still be changed by its submitter, including a coach who
+      // entered it for someone else: that is legacy data (the API no longer creates a null-organization row
+      // for another person) and has no organization whose roles could govern it.
       const isSubmitter = existingMeasurement.submittedBy === user.id;
-      let isOrgAdminOrCoach = false;
-      let userOrgIds: Set<string> = new Set();
+      const isOrgAdminOrCoach = effectiveRole === 'coach' || effectiveRole === 'org_admin';
+      const mayModify = isOrgAdminOrCoach || (effectiveRole === 'athlete' && isSubmitter) || (!existingMeasurement.organizationId && isSubmitter);
 
-      if (!isSiteAdmin(user) && (user.role === 'org_admin' || user.role === 'coach')) {
-        const userOrgs = await storage.getUserOrganizations(user.id);
-        userOrgIds = new Set(userOrgs.map(o => o.organizationId));
-        isOrgAdminOrCoach = existingMeasurement.organizationId
-          ? userOrgIds.has(existingMeasurement.organizationId)
-          : false;
-      }
-
-      if (!isSiteAdmin(user) && !isSubmitter && !isOrgAdminOrCoach) {
+      if (!isSiteAdmin(user) && !mayModify) {
         return res.status(403).json({ message: "Access denied - you can only update measurements you submitted or measurements in your organization" });
       }
 
@@ -555,22 +631,13 @@ export function registerMeasurementRoutes(app: Express) {
       const updateSchema = insertMeasurementSchema.partial();
       const validatedData = updateSchema.parse(req.body);
 
-      // Pass organizationId for defense-in-depth validation (non-site-admins only)
-      // Use first org from actual membership, not session
-      let expectedOrganizationId: string | undefined = undefined;
-      if (!isSiteAdmin(user)) {
-        if (userOrgIds.size === 0) {
-          const userOrgs = await storage.getUserOrganizations(user.id);
-          expectedOrganizationId = userOrgs[0]?.organizationId;
-        } else {
-          expectedOrganizationId = Array.from(userOrgIds)[0];
-        }
-      }
+      // Defense-in-depth: the service re-checks that the row is in the organization we authorized against
+      const expectedOrganizationId = isSiteAdmin(user) ? undefined : (existingMeasurement.organizationId ?? undefined);
       const updatedMeasurement = await measurementService.updateMeasurement(
         measurementId,
         validatedData,
         expectedOrganizationId,
-        user.role
+        effectiveRole
       );
       res.json(updatedMeasurement);
     } catch (error) {
@@ -578,7 +645,11 @@ export function registerMeasurementRoutes(app: Express) {
       if (error instanceof ZodError) {
         return res.status(400).json({ message: "Invalid input data", errors: error.errors });
       }
-      if (error instanceof MovementQualityPermissionError || error instanceof MediaUrlPermissionError) {
+      if (
+        error instanceof MovementQualityPermissionError ||
+        error instanceof MediaUrlPermissionError ||
+        error instanceof MeasurementAccessDeniedError
+      ) {
         return res.status(403).json({ message: error.message });
       }
       if (error instanceof PairedInputValidationError || error instanceof MeasurementValueValidationError) {
@@ -607,41 +678,32 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(404).json({ message: "Measurement not found" });
       }
 
+      // SECURITY (issue #514): the caller's role in the measurement's own organization, not the session role
+      const effectiveRole = await roleForExistingRow(user, existingMeasurement);
+
       // SECURITY: Athletes cannot delete verified measurements (only coaches/admins can)
-      if (user.role === 'athlete' && existingMeasurement.isVerified) {
+      if (effectiveRole === 'athlete' && existingMeasurement.isVerified) {
         return res.status(403).json({
           message: "Cannot delete verified measurements. Contact your coach to make changes."
         });
       }
 
-      // SECURITY: Validate user has access to measurement's organization via database membership
+      // SECURITY: coach / org_admin of the measurement's organization (role in THAT organization), or an athlete
+      // for an unverified row they submitted themselves. Having submitted the row is not enough for an
+      // organization row (a coach who left the organization must not keep deleting its rows); only a personal
+      // row (no organization) can still be deleted by its submitter, including a coach who entered it for
+      // someone else: that is legacy data (the API no longer creates a null-organization row for another
+      // person) and has no organization whose roles could govern it.
       const isSubmitter = existingMeasurement.submittedBy === user.id;
-      let isOrgAdminOrCoach = false;
-      let userOrgIds: Set<string> = new Set();
+      const isOrgAdminOrCoach = effectiveRole === 'coach' || effectiveRole === 'org_admin';
+      const mayModify = isOrgAdminOrCoach || (effectiveRole === 'athlete' && isSubmitter) || (!existingMeasurement.organizationId && isSubmitter);
 
-      if (!isSiteAdmin(user) && (user.role === 'org_admin' || user.role === 'coach')) {
-        const userOrgs = await storage.getUserOrganizations(user.id);
-        userOrgIds = new Set(userOrgs.map(o => o.organizationId));
-        isOrgAdminOrCoach = existingMeasurement.organizationId
-          ? userOrgIds.has(existingMeasurement.organizationId)
-          : false;
-      }
-
-      if (!isSiteAdmin(user) && !isSubmitter && !isOrgAdminOrCoach) {
+      if (!isSiteAdmin(user) && !mayModify) {
         return res.status(403).json({ message: "Access denied - you can only delete measurements you submitted or measurements in your organization" });
       }
 
-      // Pass organizationId for defense-in-depth validation (non-site-admins only)
-      // Use first org from actual membership, not session
-      let expectedOrganizationId: string | undefined = undefined;
-      if (!isSiteAdmin(user)) {
-        if (userOrgIds.size === 0) {
-          const userOrgs = await storage.getUserOrganizations(user.id);
-          expectedOrganizationId = userOrgs[0]?.organizationId;
-        } else {
-          expectedOrganizationId = Array.from(userOrgIds)[0];
-        }
-      }
+      // Defense-in-depth: the service re-checks that the row is in the organization we authorized against
+      const expectedOrganizationId = isSiteAdmin(user) ? undefined : (existingMeasurement.organizationId ?? undefined);
       const { warnings } = await measurementService.deleteMeasurement(measurementId, expectedOrganizationId);
       res.json({
         message: "Measurement deleted successfully",
@@ -651,7 +713,9 @@ export function registerMeasurementRoutes(app: Express) {
     } catch (error) {
       console.error("Delete measurement error:", error);
       const message = error instanceof Error ? error.message : "Failed to delete measurement";
-      const statusCode = error instanceof Error && error.message.includes("not found") ? 404 : 500;
+      const statusCode = error instanceof MeasurementAccessDeniedError
+        ? 403
+        : error instanceof Error && error.message.includes("not found") ? 404 : 500;
       res.status(statusCode).json({ message });
     }
   });
@@ -680,12 +744,9 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(403).json({ message: verifyPermission.reason });
       }
 
-      // Get expected organization ID for defense-in-depth IDOR protection
-      let expectedOrganizationId: string | undefined = undefined;
-      if (!isSiteAdmin(user)) {
-        const userOrgs = await storage.getUserOrganizations(user.id);
-        expectedOrganizationId = userOrgs[0]?.organizationId;
-      }
+      // Defense-in-depth IDOR protection: the row's own organization (canVerifyMeasurement already
+      // required a coach / org_admin role in it)
+      const expectedOrganizationId = isSiteAdmin(user) ? undefined : (existingMeasurement.organizationId ?? undefined);
 
       // SECURITY FIX: Pass expectedOrganizationId for defense-in-depth IDOR protection
       const verifiedMeasurement = await measurementService.verifyMeasurement(
