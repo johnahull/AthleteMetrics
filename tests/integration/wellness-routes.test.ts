@@ -1219,33 +1219,10 @@ describe('Authorization & Cross-Organization Access', () => {
   });
 
   afterAll(async () => {
-    // Clean up org2 (order matters due to FK constraints)
-    // 1. Remove user from organization first
-    if (org2Coach && org2) {
-      try {
-        await storage.removeUserFromOrganization(org2Coach.id, org2.id);
-      } catch (e) {
-        // Ignore if already removed
-      }
-    }
-
-    // 2. Delete user
-    if (org2Coach) {
-      try {
-        await db.delete(users).where(eq(users.id, org2Coach.id));
-      } catch (e) {
-        // Ignore if already deleted
-      }
-    }
-
-    // 3. Delete organization (last)
-    if (org2) {
-      try {
-        await db.delete(organizations).where(eq(organizations.id, org2.id));
-      } catch (e) {
-        // Ignore if already deleted
-      }
-    }
+    await purgeTestRows({
+      userIds: org2Coach ? [org2Coach.id] : [],
+      orgIds: org2 ? [org2.id] : [],
+    });
   });
 
   it('should prevent cross-organization template access', async () => {
