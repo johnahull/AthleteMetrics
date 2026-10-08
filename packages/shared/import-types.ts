@@ -1,5 +1,5 @@
 /**
- * Types for import functionality with manual review capabilities
+ * Types for import functionality
  */
 
 /**
@@ -16,9 +16,7 @@ export type AthleteImportMode =
  */
 export type MeasurementImportMode =
   | 'match_only'            // Require existing athletes (default)
-  | 'create_athletes'       // Auto-create athlete records if needed
-  | 'review_all'            // Send all to manual review queue
-  | 'review_low_confidence';// Only review matches below 75% confidence
+  | 'create_athletes';      // Auto-create athlete records if needed
 
 /**
  * Team handling strategies
@@ -44,6 +42,7 @@ export interface ImportOptions {
   // Core import mode
   athleteMode?: AthleteImportMode;
   measurementMode?: MeasurementImportMode;
+  holdAmbiguousMatches?: boolean;   // Measurement import: skip rows whose athlete match is ambiguous or below 75% confidence (Careful Import)
 
   // Team handling
   teamHandling?: TeamHandlingMode;
@@ -57,53 +56,6 @@ export interface ImportOptions {
 
   // Column mappings (if using custom mapping)
   columnMappings?: Record<string, string>;
-}
-
-export interface ImportReviewItem {
-  id: string;
-  type: 'measurement' | 'athlete';
-  status: 'pending' | 'approved' | 'rejected';
-  originalData: Record<string, any>;
-  matchingCriteria: {
-    firstName: string;
-    lastName: string;
-    email?: string;
-    birthYear?: number;
-    teamName?: string;
-    gender?: string;
-  };
-  suggestedMatch?: {
-    id: string;
-    firstName: string;
-    lastName: string;
-    confidence: number;
-    reason: string;
-  };
-  alternatives?: Array<{
-    id: string;
-    firstName: string;
-    lastName: string;
-    confidence: number;
-    reason: string;
-  }>;
-  createdAt: Date;
-  createdBy: string;
-  reviewedAt?: Date;
-  reviewedBy?: string;
-  reviewNotes?: string;
-}
-
-export interface ImportReviewQueue {
-  items: ImportReviewItem[];
-  totalCount: number;
-  pendingCount: number;
-}
-
-export interface ImportReviewDecision {
-  itemId: string;
-  action: 'approve' | 'reject' | 'select_alternative';
-  selectedAthleteId?: string; // For select_alternative action
-  notes?: string;
 }
 
 export interface TeamPreview {
@@ -166,7 +118,7 @@ export interface ImportResult {
   type: 'athletes' | 'measurements';
   totalRows: number;
   results: Array<{
-    action: 'created' | 'matched' | 'updated' | 'matched_and_deactivated' | 'pending_review' | 'skipped';
+    action: 'created' | 'matched' | 'updated' | 'matched_and_deactivated' | 'skipped';
     athlete?: {
       id: string;
       name: string;
@@ -179,10 +131,6 @@ export interface ImportResult {
       metric: string;
       value: number;
       date: string;
-    };
-    reviewItem?: {
-      id: string;
-      reason: string;
     };
   }>;
   errors: Array<{
@@ -198,7 +146,6 @@ export interface ImportResult {
     failed: number;
     warnings: number;
     skipped: number;
-    pendingReview: number;
   };
   createdTeams?: Array<{
     id: string;
@@ -243,14 +190,6 @@ export const MEASUREMENT_MODE_DESCRIPTIONS: Record<MeasurementImportMode, { labe
     label: 'Create Athletes if Needed',
     description: 'Automatically create athlete records when not found (useful for historical data)'
   },
-  review_all: {
-    label: 'Review All Matches',
-    description: 'Send all athlete matches to manual review queue for verification'
-  },
-  review_low_confidence: {
-    label: 'Review Low Confidence',
-    description: 'Auto-approve high confidence matches (&gt;75%), review ambiguous matches'
-  }
 };
 
 export const TEAM_HANDLING_DESCRIPTIONS: Record<TeamHandlingMode, { label: string; description: string }> = {

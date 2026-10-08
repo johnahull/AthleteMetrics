@@ -57,6 +57,7 @@ export default function ImportExportPanel() {
   // New import mode states
   const [athleteMode, setAthleteMode] = useState<AthleteImportMode>("smart_import");
   const [measurementMode, setMeasurementMode] = useState<MeasurementImportMode>("match_only");
+  const [holdAmbiguousMatches, setHoldAmbiguousMatches] = useState(false); // set only by the Careful Import preset
   const [teamHandling, setTeamHandling] = useState<TeamHandlingMode>("auto_create_confirm");
 
   // Additional options
@@ -379,6 +380,7 @@ export default function ImportExportPanel() {
     const options: ImportOptions = {
       athleteMode: importType === 'athletes' ? athleteMode : undefined,
       measurementMode: importType === 'measurements' ? measurementMode : undefined,
+      holdAmbiguousMatches: importType === 'measurements' && holdAmbiguousMatches ? true : undefined,
       teamHandling,
       updateExisting,
       skipDuplicates,
@@ -1066,6 +1068,7 @@ Jordan,Williams,2009-01-10,2009,2027,Male,"jordan.williams@email.com,j.williams@
                         setSkipDuplicates(false);
                       } else {
                         setMeasurementMode('create_athletes');
+                        setHoldAmbiguousMatches(false);
                         setTeamHandling('auto_create_silent');
                       }
                     }}
@@ -1084,7 +1087,8 @@ Jordan,Williams,2009-01-10,2009,2027,Male,"jordan.williams@email.com,j.williams@
                         setUpdateExisting(true);
                         setSkipDuplicates(false);
                       } else {
-                        setMeasurementMode('review_low_confidence');
+                        setMeasurementMode('match_only');
+                        setHoldAmbiguousMatches(true);
                         setTeamHandling('auto_create_confirm');
                       }
                     }}
@@ -1104,6 +1108,7 @@ Jordan,Williams,2009-01-10,2009,2027,Male,"jordan.williams@email.com,j.williams@
                         setSkipDuplicates(true);
                       } else {
                         setMeasurementMode('match_only');
+                        setHoldAmbiguousMatches(false);
                         setTeamHandling('require_existing');
                       }
                     }}
@@ -1123,6 +1128,7 @@ Jordan,Williams,2009-01-10,2009,2027,Male,"jordan.williams@email.com,j.williams@
                         setSkipDuplicates(false);
                       } else {
                         setMeasurementMode('create_athletes');
+                        setHoldAmbiguousMatches(false);
                         setTeamHandling('auto_create_silent');
                       }
                     }}
@@ -1197,7 +1203,7 @@ Jordan,Williams,2009-01-10,2009,2027,Male,"jordan.williams@email.com,j.williams@
                     </label>
                     <Select
                       value={measurementMode}
-                      onValueChange={(value) => setMeasurementMode(value as MeasurementImportMode)}
+                      onValueChange={(value) => { setMeasurementMode(value as MeasurementImportMode); setHoldAmbiguousMatches(false); }}
                     >
                       <SelectTrigger data-testid="select-measurement-mode">
                         <SelectValue />

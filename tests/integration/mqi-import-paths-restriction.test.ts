@@ -1,6 +1,6 @@
 /**
- * AM-FEAT-015 R2 on the storage-based import paths: the CSV import, the photo
- * (OCR) import and the import review queue write through storage.createMeasurement,
+ * AM-FEAT-015 R2 on the storage-based import paths: the CSV import and the photo
+ * (OCR) import write through storage.createMeasurement,
  * not MeasurementService, so each applies the MQ role allowlist itself.
  * Only coach, org_admin and site_admin may write a Movement Quality score;
  * athlete, parent and guest sessions are denied and nothing is written.
@@ -33,7 +33,6 @@ vi.mock('../../packages/api/ocr/ocr-service', () => ({
 }));
 
 import { registerRoutes } from '../../packages/api/routes';
-import { reviewQueue } from '../../packages/api/review-queue';
 import { ocrService } from '../../packages/api/ocr/ocr-service';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -43,7 +42,7 @@ const PASSWORD = 'MqImport123!';
 // Smallest valid PNG header; the OCR service is mocked so the bytes are never decoded.
 const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
 
-describe('MQ role allowlist on the import paths (CSV, OCR, review queue)', () => {
+describe('MQ role allowlist on the import paths (CSV, OCR)', () => {
   let app: Express;
   let orgId: string;
   let teamId: string;
@@ -128,80 +127,109 @@ describe('MQ role allowlist on the import paths (CSV, OCR, review queue)', () =>
 
   const athleteRows = () => db.select().from(measurements).where(eq(measurements.userId, athlete.id));
 
-  describe('POST /api/import/review-decision', () => {
-    // In the current registration order POST /api/import/:type is declared first
-    // and shadows this route (it answers 400 "No file uploaded"). The handler is
-    // still guarded so it stays safe if the order changes; promote its layer
-    // ahead of /api/import/:type here so the tests reach it.
-    beforeAll(() => {
-      const stack: any[] = (app as any)._router.stack;
-      const isRoute = (l: any, p: string) => l.route?.path === p && l.route.methods.post;
-      const decision = stack.findIndex((l) => isRoute(l, '/api/import/review-decision'));
-      const generic = stack.findIndex((l) => isRoute(l, '/api/import/:type'));
-      expect(decision).toBeGreaterThan(generic);
-      const [layer] = stack.splice(decision, 1);
-      stack.splice(generic, 0, layer);
+  describe('removed review queue (#517)', () => {
+    it('registers no review-decision or review-queue route', () => {
+      const paths = ((app as any)._router.stack as any[])
+        .filter((l) => l.route)
+        .map((l) => l.route.path);
+      expect(paths).not.toContain('/api/import/review-decision');
+      expect(paths).not.toContain('/api/import/review-queue');
     });
 
-    const queueMqItem = () =>
-      reviewQueue.addItem({
-        type: 'measurement',
-        originalData: {
-          firstName: athlete.firstName,
-          lastName: athlete.lastName,
-          teamName,
-          date: '2026-03-10',
-          metric: 'MQ_JUMP',
-          value: '2',
-        },
-        matchingCriteria: {} as any,
-        suggestedMatch: {
-          id: athlete.id,
-          firstName: athlete.firstName,
-          lastName: athlete.lastName,
-          confidence: 60,
-          reason: 'test',
-        },
-        createdBy: coach.id,
-      } as any);
-
-    it.each(['athlete', 'parent', 'guest'])(
-      '403 when a %s approves an MQ review item; nothing is written and the item stays pending',
-      async (role) => {
-        const item = queueMqItem();
+    it.each(['review_all', 'review_low_confidence'])(
+      'CSV measurement import rejects the removed %s mode with 400 and writes nothing',
+      async (mode) => {
+        const csv = `firstName,lastName,teamName,date,metric,value\n${athlete.firstName},${athlete.lastName},${teamName},2026-03-10,VERTICAL_JUMP,30\n`;
         const res = await request(app)
-          .post('/api/import/review-decision')
-          .set('Cookie', cookies[role])
-          .send({ itemId: item.id, action: 'approve' });
-        expect(res.status, JSON.stringify(res.body)).toBe(403);
-        expect(res.body.message).toMatch(MQ_DENIED);
+          .post('/api/import/measurements')
+          .set('Cookie', cookies.coach)
+          .field('options', JSON.stringify({ organizationId: orgId, measurementMode: mode }))
+          .attach('file', Buffer.from(csv), 'm.csv');
+        expect(res.status, JSON.stringify(res.body)).toBe(400);
+        expect(res.body.message).toMatch(/review.*no longer supported/i);
         expect(await athleteRows()).toHaveLength(0);
-        expect(reviewQueue.getItem(item.id)?.status).toBe('pending');
       }
     );
+  });
 
-    it('a coach approving an MQ review item creates the score', async () => {
-      const item = queueMqItem();
-      const res = await request(app)
-        .post('/api/import/review-decision')
+  describe('Careful Import: holdAmbiguousMatches (CSV measurements)', () => {
+    const importCsv = (first: string, mode: string, hold: boolean, team = teamName, last = athlete.lastName) =>
+      request(app)
+        .post('/api/import/measurements')
         .set('Cookie', cookies.coach)
-        .send({ itemId: item.id, action: 'approve' });
-      expect(res.status, JSON.stringify(res.body)).toBe(200);
-      expect(res.body.measurement.metric).toBe('MQ_JUMP');
-      const rows = await athleteRows();
-      expect(rows).toHaveLength(1);
-      expect(Number(rows[0].value)).toBe(2);
+        .field(
+          'options',
+          JSON.stringify({ organizationId: orgId, measurementMode: mode, ...(hold ? { holdAmbiguousMatches: true } : {}) })
+        )
+        .attach(
+          'file',
+          Buffer.from(
+            `firstName,lastName,teamName,date,metric,value\n${first},${last},${team},2026-03-10,VERTICAL_JUMP,30\n`
+          ),
+          'm.csv'
+        );
+    const allRows = () => db.select().from(measurements).where(inArray(measurements.userId, [athlete.id, ...extraIds]));
+    const extraIds: string[] = [];
+
+    afterEach(async () => {
+      if (extraIds.length) {
+        await db.delete(measurements).where(inArray(measurements.userId, extraIds));
+        await db.delete(userTeams).where(inArray(userTeams.userId, extraIds));
+        await db.delete(userOrganizations).where(inArray(userOrganizations.userId, extraIds));
+        await db.delete(users).where(inArray(users.id, extraIds));
+        extraIds.length = 0;
+      }
     });
 
-    it('a site admin with no organization membership approving an MQ review item creates the score', async () => {
-      const item = queueMqItem();
-      const res = await request(app)
-        .post('/api/import/review-decision')
-        .set('Cookie', cookies.siteAdmin)
-        .send({ itemId: item.id, action: 'approve' });
+    const addSameNameAthlete = async () => {
+      const [dup] = await db
+        .insert(users)
+        .values({
+          username: `dup-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          emails: [`dup-${Date.now()}@test.com`],
+          password: 'x',
+          firstName: athlete.firstName,
+          lastName: athlete.lastName,
+          fullName: `${athlete.firstName} ${athlete.lastName}`,
+          birthDate: '2008-01-01',
+          birthYear: 2008,
+        } as any)
+        .returning();
+      extraIds.push(dup.id);
+      await db.insert(userOrganizations).values({ userId: dup.id, organizationId: orgId, role: 'athlete' } as any);
+      await db.insert(userTeams).values({ userId: dup.id, teamId, joinedAt: new Date('2020-01-01'), isActive: true });
+    };
+
+    it('holds a same-name duplicate with a row error and writes nothing', async () => {
+      await addSameNameAthlete();
+      const res = await importCsv(athlete.firstName, 'match_only', true);
       expect(res.status, JSON.stringify(res.body)).toBe(200);
-      expect(res.body.measurement.metric).toBe('MQ_JUMP');
-      expect(await athleteRows()).toHaveLength(1);
+      expect(res.body.errors).toHaveLength(1);
+      expect(res.body.errors[0].error).toMatch(/ambiguous athlete match/i);
+      expect(await allRows()).toHaveLength(0);
+    });
+
+    it('holds a partial (below 75 percent) match with a row error and writes nothing', async () => {
+      const res = await importCsv(athlete.firstName, 'match_only', true, 'Unrelated Squad', athlete.lastName.slice(0, -1));
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body.errors).toHaveLength(1);
+      expect(res.body.errors[0].error).toMatch(/ambiguous athlete match/i);
+      expect(await allRows()).toHaveLength(0);
+    });
+
+    it('still imports a clear exact match when the flag is set', async () => {
+      const res = await importCsv(athlete.firstName, 'match_only', true);
+      expect(res.body.errors).toEqual([]);
+      expect(await allRows()).toHaveLength(1);
+    });
+
+    it('plain match_only is unchanged: the same-name duplicate and the partial match are written', async () => {
+      await addSameNameAthlete();
+      const dupRes = await importCsv(athlete.firstName, 'match_only', false);
+      expect(dupRes.body.errors, JSON.stringify(dupRes.body)).toEqual([]);
+      const partialRes = await importCsv(athlete.firstName, 'match_only', false, 'Unrelated Squad', athlete.lastName.slice(0, -1));
+      expect(partialRes.body.errors, JSON.stringify(partialRes.body)).toEqual([]);
+      expect(await allRows()).toHaveLength(2);
     });
   });
 

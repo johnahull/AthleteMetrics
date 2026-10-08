@@ -12,7 +12,6 @@ import { requireAuth } from "../middleware";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { sanitizeCSVValue } from "../utils/csv-utils";
 import { ocrService } from "../ocr/ocr-service";
-import { reviewQueue } from "../review-queue";
 import { findBestAthleteMatch, type MatchingCriteria, type MatchResult } from "../athlete-matching";
 import { isSiteAdmin } from "@shared/auth-utils";
 import { METRIC_CONFIG } from "@shared/analytics-types";
@@ -614,6 +613,11 @@ export function registerImportExportRoutes(app: Express) {
       } catch (error) {
         console.error('JSON parse error for CSV import options:', error);
         return res.status(400).json({ message: "Invalid options JSON format" });
+      }
+
+      // The manual review queue was removed; stale clients must not fall through to a direct import.
+      if (options.measurementMode === 'review_all' || options.measurementMode === 'review_low_confidence') {
+        return res.status(400).json({ message: `Import mode '${options.measurementMode}' is no longer supported: the manual review queue was removed. Use 'match_only' or 'create_athletes'.` });
       }
 
       // Tenant isolation: reject a client-supplied organizationId the caller
@@ -1268,45 +1272,14 @@ export function registerImportExportRoutes(app: Express) {
               }
             }
 
-            // Handle review queue based on mode
-            const shouldReview = measurementMode === 'review_all' ||
-                                (measurementMode === 'review_low_confidence' &&
-                                 (matchResult.requiresManualReview || matchResult.confidence < 75));
+            matchedAthlete = matchResult.candidate;
 
-            if (shouldReview && matchResult.candidate) {
-              // Add to review queue instead of processing immediately
-              const reviewItem = reviewQueue.addItem({
-                type: 'measurement',
-                originalData: row,
-                matchingCriteria,
-                suggestedMatch: matchResult.candidate ? {
-                  id: matchResult.candidate.id,
-                  firstName: matchResult.candidate.firstName,
-                  lastName: matchResult.candidate.lastName,
-                  confidence: matchResult.confidence,
-                  reason: matchResult.candidate.matchReason
-                } : undefined,
-                alternatives: matchResult.alternatives?.map(alt => ({
-                  id: alt.id,
-                  firstName: alt.firstName,
-                  lastName: alt.lastName,
-                  confidence: alt.matchScore,
-                  reason: alt.matchReason
-                })),
-                createdBy: req.session.user!.id
-              });
-
-              results.push({
-                action: 'pending_review',
-                reviewItem: {
-                  id: reviewItem.id,
-                  reason: `Low confidence match (${matchResult.confidence}%) requires manual review`
-                }
-              });
+            // Careful Import: hold ambiguous matches back instead of writing to a guessed athlete
+            if (options.holdAmbiguousMatches && matchResult.type !== 'none' &&
+                (matchResult.requiresManualReview || matchResult.confidence < 75)) {
+              errors.push({ row: rowNum, error: `Ambiguous athlete match for ${firstName} ${lastName} (confidence: ${matchResult.confidence}%): resolve and re-import` });
               continue;
             }
-
-            matchedAthlete = matchResult.candidate;
 
             if (!matchedAthlete) {
               errors.push({ row: rowNum, error: `No valid athlete match found for ${firstName} ${lastName}` });
@@ -1378,8 +1351,6 @@ export function registerImportExportRoutes(app: Express) {
         }
       }
 
-      const pendingReviewCount = results.filter(r => r.action === 'pending_review').length;
-
       // Count different action types for summary
       createdCount = results.filter(r => r.action === 'created').length;
       updatedCount = results.filter(r => r.action === 'updated').length;
@@ -1403,8 +1374,7 @@ export function registerImportExportRoutes(app: Express) {
           matched: matchedCount,
           failed: errors.length,
           warnings: warnings.length,
-          skipped: skippedCount,
-          pendingReview: pendingReviewCount
+          skipped: skippedCount
         },
         options
       };
@@ -1423,145 +1393,6 @@ export function registerImportExportRoutes(app: Express) {
     } catch (error) {
       console.error('Import error:', error);
       res.status(500).json({ message: "Import failed", error: error instanceof Error ? error.message : 'Unknown error' });
-    }
-  });
-
-  // Review Queue endpoints
-  app.get("/api/import/review-queue", requireAuth, async (req, res) => {
-    try {
-      const currentUser = req.session.user;
-      if (!currentUser?.id) {
-        return res.status(401).json({ message: "User not authenticated" });
-      }
-
-      // Get organization context for filtering (if needed)
-      const organizationId = (currentUser as any)?.organizationId || '';
-
-      const queue = reviewQueue.getPendingItems(organizationId);
-      res.json(queue);
-    } catch (error) {
-      console.error('Review queue error:', error);
-      res.status(500).json({ message: "Failed to fetch review queue", error: error instanceof Error ? error.message : 'Unknown error' });
-    }
-  });
-
-  app.post("/api/import/review-decision", requireAuth, async (req, res) => {
-    try {
-      const currentUser = req.session.user;
-      if (!currentUser?.id) {
-        return res.status(401).json({ message: "User not authenticated" });
-      }
-
-      const { itemId, action, selectedAthleteId, notes } = req.body;
-
-      if (!itemId || !action) {
-        return res.status(400).json({ message: "Item ID and action are required" });
-      }
-
-      // Validate action parameter
-      if (!['approve', 'reject', 'select_alternative'].includes(action)) {
-        return res.status(400).json({ message: "Invalid action. Must be 'approve', 'reject', or 'select_alternative'" });
-      }
-
-      if (action === 'select_alternative' && !selectedAthleteId) {
-        return res.status(400).json({ message: "Selected athlete ID is required for select_alternative action" });
-      }
-
-      // Only coaches and admins may decide Movement Quality items; checked before
-      // the decision is recorded so a denied item stays pending
-      const pendingItem = reviewQueue.getItem(itemId);
-      if (pendingItem?.type === 'measurement' && pendingItem.originalData?.metric) {
-        try {
-          assertCanEnterMetric(currentUser.role, pendingItem.originalData.metric);
-        } catch (error) {
-          if (error instanceof MovementQualityPermissionError) {
-            return res.status(403).json({ message: error.message });
-          }
-          throw error;
-        }
-      }
-
-      const decision = {
-        itemId,
-        action,
-        selectedAthleteId,
-        notes
-      };
-
-      const updatedItem = reviewQueue.processDecision(decision, currentUser.id);
-
-      if (!updatedItem) {
-        return res.status(404).json({ message: "Review item not found" });
-      }
-
-      // If approved, process the measurement
-      if (updatedItem.status === 'approved') {
-        try {
-          const originalData = updatedItem.originalData;
-          const athleteId = selectedAthleteId || updatedItem.suggestedMatch?.id;
-
-          if (athleteId && updatedItem.type === 'measurement') {
-            const measurementData = {
-              userId: athleteId,
-              date: originalData.date,
-              age: originalData.age && !isNaN(parseInt(originalData.age)) ? parseInt(originalData.age) : undefined,
-              metric: originalData.metric,
-              value: parseFloat(originalData.value),
-              units: originalData.units || getDefaultUnit(originalData.metric),
-              flyInDistance: parseFlyInInput(originalData.metric, originalData.flyInDistance),
-              notes: originalData.notes || `Approved from review queue by ${currentUser.firstName} ${currentUser.lastName}`,
-              isVerified: "false"
-            };
-
-            const measurement = await storage.createMeasurement(measurementData, currentUser.id);
-
-            // DERIVED METRICS: Trigger automatic calculation of derived metrics
-            try {
-              const calculator = new DerivedMetricCalculator(db);
-              await calculator.processNewMeasurement(measurement, {
-                event: 'bulk_import',
-                userId: currentUser.id,
-                sourceMeasurementId: measurement.id,
-              });
-            } catch (derivedError) {
-              console.warn(`[REVIEW QUEUE] Derived metric calculation failed for measurement ${measurement.id}:`, derivedError);
-            }
-
-            // PROFILE SYNC: Update user profile weight/height when physical metrics are imported
-            try {
-              await syncPhysicalMetricToProfile(
-                athleteId,
-                measurement.metric,
-                parseFloat(measurement.value),
-                measurement.units || '',
-              );
-            } catch (syncError) {
-              console.warn(`[REVIEW QUEUE] Profile sync failed for measurement ${measurement.id}:`, syncError);
-            }
-
-            res.json({
-              success: true,
-              item: updatedItem,
-              measurement: {
-                id: measurement.id,
-                metric: measurement.metric,
-                value: measurement.value,
-                date: measurement.date
-              }
-            });
-          } else {
-            res.json({ success: true, item: updatedItem });
-          }
-        } catch (error) {
-          console.error('Error processing approved measurement:', error);
-          res.status(500).json({ message: "Failed to process approved measurement", error: error instanceof Error ? error.message : 'Unknown error' });
-        }
-      } else {
-        res.json({ success: true, item: updatedItem });
-      }
-    } catch (error) {
-      console.error('Review decision error:', error);
-      res.status(500).json({ message: "Failed to process review decision", error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 

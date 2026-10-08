@@ -1,5 +1,5 @@
 /**
- * AM-FEAT-015: the CSV / OCR / review-decision import paths write through
+ * AM-FEAT-015: the CSV / OCR import paths write through
  * storage.createMeasurement, which must apply the same metric-aware value
  * validation as MeasurementService (0-3 for MQ scores, positive elsewhere).
  * Re-applies migration 0146 in beforeAll.
@@ -94,7 +94,7 @@ describe('storage.createMeasurement value validation (import paths)', () => {
     expect(m.units).toBe('score');
   });
 
-  // Review-queue approval fills a missing unit with getDefaultUnit(metric) = 's';
+  // The CSV import fills a missing unit with getDefaultUnit(metric) = 's';
   // an MQ score keeps 'score', while a standard metric honors the caller's unit.
   it("keeps 'score' for an MQ score even when the caller supplies another unit", async () => {
     const mq = await storage.createMeasurement(
