@@ -28,7 +28,7 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import bcrypt from 'bcrypt';
 import { db } from '../../packages/api/db';
-import { measurements, organizations, teams, userOrganizations, userTeams, users } from '@shared/schema';
+import { measurements, organizations, siteMetrics, teams, userOrganizations, userTeams, users } from '@shared/schema';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 
 vi.mock('../../packages/api/vite.js', () => ({
@@ -71,6 +71,18 @@ describe.skipIf(!GENERATORS_DIR)('am-data-generators output imports into Athlete
     athleteIds.length ? db.select().from(measurements).where(inArray(measurements.userId, athleteIds)) : Promise.resolve([]);
 
   beforeAll(async () => {
+    // Fail with the real cause up front: without these definitions nothing is derived and the assertions
+    // below would fail far downstream. Other suites delete derived site_metrics rows from a shared database.
+    const required = ['AGILITY_COD_DEFICIT_YD', 'MQI_TOTAL', 'MQ_TRANSITION_TOTAL'];
+    const present = await db.select({ code: siteMetrics.code }).from(siteMetrics).where(inArray(siteMetrics.code, required));
+    const missing = required.filter((c) => !present.some((p) => p.code === c));
+    if (missing.length) {
+      throw new Error(
+        `Derived metric definitions missing from site_metrics: ${missing.join(', ')}. ` +
+          'Use a database built with db:push + db:migrate:manual that has not been used by the unit suite.',
+      );
+    }
+
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'am-generators-'));
     generate('generate_roster.py', [
       '--out', path.join(tmp, 'roster.csv'), '--num', '4', '--sport', 'Volleyball',
@@ -116,7 +128,11 @@ describe.skipIf(!GENERATORS_DIR)('am-data-generators output imports into Athlete
   afterAll(async () => {
     // Re-query the team's members instead of trusting athleteIds alone: a roster import that fails partway
     // creates users before the test captures their ids, and those would otherwise leak into the database.
-    const members = await db.select({ id: userTeams.userId }).from(userTeams).where(eq(userTeams.teamId, teamId));
+    // beforeAll can fail before the org, team or coach exist (e.g. a broken generators checkout), so each step
+    // is guarded; an unguarded query on an undefined id throws a second error that buries the real one.
+    const members = teamId
+      ? await db.select({ id: userTeams.userId }).from(userTeams).where(eq(userTeams.teamId, teamId))
+      : [];
     const ids = [...new Set([...athleteIds, ...members.map((m) => m.id)])];
     if (ids.length) {
       await db.delete(measurements).where(inArray(measurements.userId, ids));
@@ -124,12 +140,14 @@ describe.skipIf(!GENERATORS_DIR)('am-data-generators output imports into Athlete
       await db.delete(userOrganizations).where(inArray(userOrganizations.userId, ids));
       await db.delete(users).where(inArray(users.id, ids));
     }
-    await db.delete(userTeams).where(eq(userTeams.teamId, teamId));
-    await db.delete(userOrganizations).where(eq(userOrganizations.userId, coachId));
-    await db.delete(users).where(eq(users.id, coachId));
-    await db.delete(teams).where(eq(teams.id, teamId));
-    await db.delete(organizations).where(eq(organizations.id, orgId));
-    fs.rmSync(tmp, { recursive: true, force: true });
+    if (teamId) await db.delete(userTeams).where(eq(userTeams.teamId, teamId));
+    if (coachId) {
+      await db.delete(userOrganizations).where(eq(userOrganizations.userId, coachId));
+      await db.delete(users).where(eq(users.id, coachId));
+    }
+    if (teamId) await db.delete(teams).where(eq(teams.id, teamId));
+    if (orgId) await db.delete(organizations).where(eq(organizations.id, orgId));
+    if (tmp) fs.rmSync(tmp, { recursive: true, force: true });
   });
 
   it('imports the generated roster', async () => {
@@ -159,6 +177,8 @@ describe.skipIf(!GENERATORS_DIR)('am-data-generators output imports into Athlete
       // The anthropometric metrics are not seeded by any migration (they are created through the admin UI),
       // so a freshly built database warns about them; the importer treats unknown codes as warnings and
       // still stores the rows. Any other unknown code (e.g. a retired AGILITY_505) must fail this test.
+      // If the generators start emitting another metric that no migration seeds, add its code here.
+      expect(Array.isArray(res.body.warnings), 'response must include a warnings array').toBe(true);
       const unexpected = (res.body.warnings as string[]).filter(
         (w) => !/Metric code '(HEIGHT_IN|WEIGHT_LBS|WINGSPAN|STANDING_REACH)' not found/.test(w),
       );
