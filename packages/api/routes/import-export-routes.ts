@@ -24,10 +24,30 @@ import { getPgErrorCode, PG_UNIQUE_VIOLATION } from "../lib/pg-error";
 import { importValidationService, type ValidationContext } from "../services/import-validation-service";
 import { logAuthorizationFailure } from "../helpers/audit-logging";
 import { getCachedUserOrganizations } from "../helpers/cached-org-access";
-import type { SiteMetric } from "@shared/schema";
+import { eq } from "drizzle-orm";
+import { users, userTeams, userOrganizations, type SiteMetric } from "@shared/schema";
 import { DerivedMetricCalculator } from "../services/derived-metric-calculator";
 import { assertCanEnterMetric, MovementQualityPermissionError } from "../services/measurement-service";
 import { db } from "../db";
+
+/**
+ * Remove an athlete that a CSV row auto-created (create_athletes) when the same row then failed, so a failed
+ * row leaves nothing behind. The athlete has no measurements yet (the write is what failed); only the team and
+ * organization links added during creation exist. Best effort: a cleanup failure is logged, not thrown, so it
+ * cannot mask the row's own error.
+ */
+async function removeAutoCreatedAthlete(userId: string): Promise<void> {
+  try {
+    // One transaction: either the athlete and its links are all removed, or none of them are
+    await db.transaction(async (tx) => {
+      await tx.delete(userTeams).where(eq(userTeams.userId, userId));
+      await tx.delete(userOrganizations).where(eq(userOrganizations.userId, userId));
+      await tx.delete(users).where(eq(users.id, userId));
+    });
+  } catch (cleanupError) {
+    console.warn(`[CSV IMPORT] Could not remove auto-created athlete ${userId} after a failed row:`, cleanupError);
+  }
+}
 
 /**
  * Tenant-isolation guard for imports. A client-supplied organizationId must be
@@ -329,6 +349,8 @@ export function registerImportExportRoutes(app: Express) {
           ? (protocol505 === 'M' ? 'AGILITY_505_M' : 'AGILITY_505_YD')
           : raw.metric;
         const extracted = { ...raw, metric: resolvedMetric };
+        // The athlete this row auto-created, until its measurement is saved (rolled back if the row fails)
+        let rowAutoCreated: { id: string; name: string } | null = null;
 
         try {
           if (!extracted.firstName || !extracted.lastName || !extracted.metric || !extracted.value) {
@@ -393,7 +415,7 @@ export function registerImportExportRoutes(app: Express) {
 
               userId = newAthlete.id;
               athleteCreated = true;
-              createdAthletes.push({ id: newAthlete.id, name: `${newAthlete.firstName} ${newAthlete.lastName}` });
+              rowAutoCreated = { id: newAthlete.id, name: `${newAthlete.firstName} ${newAthlete.lastName}` };
 
               // Add to the selected organization so a repeat import finds this athlete
               try {
@@ -442,6 +464,12 @@ export function registerImportExportRoutes(app: Express) {
           // Create the measurement
           const measurement = await storage.createMeasurement(measurementData, currentUser.id);
 
+          // The athlete auto-created for this row now has its measurement: keep it and report it
+          if (rowAutoCreated) {
+            createdAthletes.push(rowAutoCreated);
+            rowAutoCreated = null;
+          }
+
           // DERIVED METRICS: Trigger automatic calculation of derived metrics
           try {
             const calculator = new DerivedMetricCalculator(db);
@@ -474,6 +502,10 @@ export function registerImportExportRoutes(app: Express) {
           });
 
         } catch (error) {
+          // The row failed after its athlete was auto-created: do not leave an orphan behind
+          if (rowAutoCreated) {
+            await removeAutoCreatedAthlete(rowAutoCreated.id);
+          }
           if (error instanceof MovementQualityPermissionError) {
             errors.push({ row: rowNum, error: error.message, data: extracted });
             continue;
@@ -1123,10 +1155,16 @@ export function registerImportExportRoutes(app: Express) {
           );
         }
 
+        // Athletes auto-created earlier in THIS import (create_athletes), so later rows for the same
+        // name reuse them instead of creating a duplicate per row.
+        const autoCreatedAthletes = new Map<string, any>();
+
         // Process measurements import
         for (let i = 0; i < csvData.length; i++) {
           const row = csvData[i];
           const rowNum = i + 2; // Account for header row
+          // The athlete this row auto-created, until its measurement is written (rolled back if the row fails)
+          let rowAutoCreated: { id: string; key: string; name: string; createdTeamName?: string } | null = null;
           try {
             const { firstName, lastName, teamName, date, age, metric, value, units, flyInDistance, notes, gender } = row;
 
@@ -1183,73 +1221,87 @@ export function registerImportExportRoutes(app: Express) {
             if (matchResult.type === 'none') {
               // No suitable match found
               if (measurementMode === 'create_athletes') {
-                // Auto-create athlete
-                const baseUsername = `${firstName.toLowerCase()}${lastName.toLowerCase()}`.replace(/[^a-z0-9]/g, '');
-                let username = baseUsername;
-                let counter = 1;
-                while (await storage.getUserByUsername(username)) {
-                  username = `${baseUsername}${counter}`;
-                  counter++;
-                }
+                const athleteKey = `${organizationId ?? ''}:${firstName.toLowerCase().trim()}:${lastName.toLowerCase().trim()}`;
+                const alreadyCreated = autoCreatedAthletes.get(athleteKey);
 
-                const newAthlete = await storage.createUser({
-                  username,
-                  firstName,
-                  lastName,
-                  emails: [`${username}@temp.local`],
-                  phoneNumbers: [],
-                  gender: gender || 'Not Specified',
-                  password: 'INVITATION_PENDING',
-                  isActive: false,
-                  role: 'athlete'
-                } as any);
+                if (alreadyCreated) {
+                  // Created by an earlier row of this import: reuse it rather than creating a duplicate
+                  matchedAthlete = alreadyCreated;
+                } else {
+                  // Auto-create athlete
+                  const baseUsername = `${firstName.toLowerCase()}${lastName.toLowerCase()}`.replace(/[^a-z0-9]/g, '');
+                  let username = baseUsername;
+                  let counter = 1;
+                  while (await storage.getUserByUsername(username)) {
+                    username = `${baseUsername}${counter}`;
+                    counter++;
+                  }
 
-                matchedAthlete = newAthlete;
-                createdAthletes.push({
-                  id: newAthlete.id,
-                  name: `${firstName} ${lastName}`
-                });
+                  const newAthlete = await storage.createUser({
+                    username,
+                    firstName,
+                    lastName,
+                    emails: [`${username}@temp.local`],
+                    phoneNumbers: [],
+                    gender: gender || 'Not Specified',
+                    password: 'INVITATION_PENDING',
+                    isActive: false,
+                    role: 'athlete'
+                  } as any);
 
-                // Add to team if specified
-                if (teamName) {
-                  const teams = await storage.getTeams();
-                  let team = teams.find(t => t.name?.toLowerCase().trim() === teamName.toLowerCase().trim());
+                  matchedAthlete = newAthlete;
+                  rowAutoCreated = { id: newAthlete.id, key: athleteKey, name: `${firstName} ${lastName}` };
+                  autoCreatedAthletes.set(athleteKey, newAthlete);
 
-                  // Handle team creation if needed
-                  if (!team && organizationId &&
-                      (options.teamHandling === 'auto_create_silent' ||
-                       options.teamHandling === 'auto_create_confirm')) {
-                    const newTeam = await storage.createTeam({
-                      organizationId,
-                      name: teamName,
-                      level: undefined,
-                      notes: 'Auto-created during measurement import'
-                    });
-                    team = newTeam as any;
+                  // Add to team if specified. Tenant isolation: only teams the caller may use
+                  // (allTeamsForMeasurements), never the unfiltered storage.getTeams().
+                  if (teamName) {
+                    let team = allTeamsForMeasurements.find(t => t.name?.toLowerCase().trim() === teamName.toLowerCase().trim());
 
-                    if (!createdTeams.has(teamName)) {
-                      createdTeams.set(teamName, {
-                        id: newTeam.id,
-                        name: newTeam.name,
-                        athleteCount: 0
+                    // Handle team creation if needed
+                    if (!team && organizationId &&
+                        (options.teamHandling === 'auto_create_silent' ||
+                         options.teamHandling === 'auto_create_confirm')) {
+                      const newTeam = await storage.createTeam({
+                        organizationId,
+                        name: teamName,
+                        level: undefined,
+                        notes: 'Auto-created during measurement import'
                       });
+                      team = newTeam as any;
+                      // Later rows for this team name must find the team created here
+                      allTeamsForMeasurements.push({ ...newTeam, organization: { id: organizationId } } as any);
+
+                      if (!createdTeams.has(teamName)) {
+                        createdTeams.set(teamName, {
+                          id: newTeam.id,
+                          name: newTeam.name,
+                          athleteCount: 0
+                        });
+                      }
+                      createdTeams.get(teamName)!.athleteCount++;
+                      rowAutoCreated.createdTeamName = teamName;
                     }
-                    createdTeams.get(teamName)!.athleteCount++;
+
+                    if (team) {
+                      try {
+                        await storage.addUserToTeam(newAthlete.id, team.id);
+                      } catch (error) {
+                        console.warn(`Could not add athlete to team:`, error);
+                      }
+                    }
                   }
 
-                  if (team) {
+                  // The row's organization (the team's, or the caller's fallback) owns the new athlete; an
+                  // auto-created team has no .organization, so do not depend on it.
+                  if (organizationId) {
                     try {
-                      await storage.addUserToTeam(newAthlete.id, team.id);
-                      if (team.organization?.id) {
-                        await storage.addUserToOrganization(newAthlete.id, team.organization.id, 'athlete');
-                      }
+                      await storage.addUserToOrganization(newAthlete.id, organizationId, 'athlete');
                     } catch (error) {
-                      console.warn(`Could not add athlete to team:`, error);
+                      console.warn(`Could not add athlete to organization:`, error);
                     }
                   }
                 }
-
-                warnings.push(`Row ${rowNum}: Created new athlete ${firstName} ${lastName}`);
 
               } else {
                 // match_only mode - fail if not found
@@ -1272,7 +1324,8 @@ export function registerImportExportRoutes(app: Express) {
               }
             }
 
-            matchedAthlete = matchResult.candidate;
+            // Keep the athlete auto-created above (a 'none' match has no candidate)
+            matchedAthlete = matchedAthlete ?? matchResult.candidate;
 
             // Careful Import: hold ambiguous matches back instead of writing to a guessed athlete
             if (options.holdAmbiguousMatches && matchResult.type !== 'none' &&
@@ -1287,7 +1340,8 @@ export function registerImportExportRoutes(app: Express) {
             }
 
             // Add warning for medium-confidence matches that were auto-approved
-            if (matchResult.confidence < 90) {
+            // (not for an athlete created above: a 'none' match has no matchReason)
+            if (matchResult.type !== 'none' && matchResult.confidence < 90) {
               const warningMsg = `${firstName} ${lastName} matched to ${matchedAthlete.firstName} ${matchedAthlete.lastName} ` +
                 `(confidence: ${matchResult.confidence}%, reason: ${matchedAthlete.matchReason})`;
               warnings.push(warningMsg);
@@ -1307,6 +1361,13 @@ export function registerImportExportRoutes(app: Express) {
             };
 
             const measurement = await storage.createMeasurement(measurementData, req.session.user!.id);
+
+            // The athlete auto-created for this row now has its measurement: keep it and report it
+            if (rowAutoCreated) {
+              createdAthletes.push({ id: rowAutoCreated.id, name: rowAutoCreated.name });
+              warnings.push(`Row ${rowNum}: Created new athlete ${rowAutoCreated.name}`);
+              rowAutoCreated = null;
+            }
 
             // DERIVED METRICS: Trigger automatic calculation of derived metrics
             // This ensures metrics like BLOCK_REACH (=BLOCK_JUMP + STANDING_REACH) get calculated on import
@@ -1346,6 +1407,14 @@ export function registerImportExportRoutes(app: Express) {
             });
           } catch (error) {
             console.error('Error processing measurement row:', error);
+            // The row failed after its athlete was auto-created: do not leave an orphan behind
+            if (rowAutoCreated) {
+              autoCreatedAthletes.delete(rowAutoCreated.key);
+              await removeAutoCreatedAthlete(rowAutoCreated.id);
+              // The team stays (the CSV asked for it) but must not report an athlete that no longer exists
+              const reportedTeam = rowAutoCreated.createdTeamName ? createdTeams.get(rowAutoCreated.createdTeamName) : undefined;
+              if (reportedTeam && reportedTeam.athleteCount > 0) reportedTeam.athleteCount--;
+            }
             errors.push({ row: rowNum, error: error instanceof Error ? error.message : 'Unknown error' });
           }
         }
