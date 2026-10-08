@@ -59,10 +59,13 @@ LANGUAGE sql IMMUTABLE AS $fn$
            '\magility_505_m\M',     'agility_505',     'g')
 $fn$;
 
+-- array_agg over zero rows is NULL: keep a NULL array NULL and an empty array empty (byte-identical).
 CREATE OR REPLACE FUNCTION pg_temp.m505_unmap_arr(a text[]) RETURNS text[]
 LANGUAGE sql IMMUTABLE AS $fn$
-  SELECT array_agg(pg_temp.m505_unmap(u.x) ORDER BY u.ord)
-    FROM unnest(a) WITH ORDINALITY AS u(x, ord)
+  SELECT CASE WHEN a IS NULL THEN NULL
+              ELSE COALESCE((SELECT array_agg(pg_temp.m505_unmap(u.x) ORDER BY u.ord)
+                               FROM unnest(a) WITH ORDINALITY AS u(x, ord)), '{}'::text[])
+         END
 $fn$;
 
 -- ============================================================================

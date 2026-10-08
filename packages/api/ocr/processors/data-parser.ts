@@ -203,8 +203,26 @@ export class DataParser {
         let metric = 'UNKNOWN';
         let confidence = 40; // Lower confidence for inferred measurements
         
-        // Try to infer measurement type from context
-        if (lowerLine.includes('40') || lowerLine.includes('forty')) {
+        // Try to infer measurement type from context.
+        // Agility drills come first: their names contain digits ('5-10-5', 'T-test 10.2') that the generic
+        // 40 / 10 / sprint checks below would otherwise claim. A drill is filed under the 5-0-5 only when the
+        // line says 5-0-5 (a bare "agility" is any agility drill), so the meters/yards prompt never asks users
+        // to confirm a label the text does not support.
+        const isTTest = /\bt[\s-]?test\b/.test(lowerLine);
+        const is5105 = lowerLine.includes('5105') || /\b5[\s-]10[\s-]5\b/.test(lowerLine);
+        const isProAgility = /\bpro[\s-]agility\b/.test(lowerLine); // the pro agility drill is the 5-10-5
+        const is505 = lowerLine.includes('505') || /\b5[\s-]0[\s-]5\b/.test(lowerLine);
+
+        if (isTTest) {
+          metric = 'T_TEST';
+          confidence = 65;
+        } else if (is5105 || isProAgility) {
+          metric = 'AGILITY_5105';
+          confidence = is5105 ? 65 : 55;
+        } else if (is505) {
+          metric = 'AGILITY_505_UNRESOLVED';
+          confidence = 65;
+        } else if (lowerLine.includes('40') || lowerLine.includes('forty')) {
           metric = 'DASH_40YD';
           confidence = 60;
         } else if (lowerLine.includes('10') || lowerLine.includes('ten')) {
@@ -213,20 +231,6 @@ export class DataParser {
         } else if (lowerLine.includes('sprint') || lowerLine.includes('dash')) {
           metric = 'DASH_40YD';
           confidence = 50;
-        } else if (lowerLine.includes('agility') || lowerLine.includes('505') || lowerLine.includes('5105')) {
-          if (lowerLine.includes('505')) {
-            metric = 'AGILITY_505_UNRESOLVED';
-            confidence = 65;
-          } else if (lowerLine.includes('5105')) {
-            metric = 'AGILITY_5105';
-            confidence = 65;
-          } else {
-            metric = 'AGILITY_505_UNRESOLVED'; // Default agility test
-            confidence = 45;
-          }
-        } else if (lowerLine.includes('t-test') || lowerLine.includes('t test')) {
-          metric = 'T_TEST';
-          confidence = 65;
         }
         
         if (metric !== 'UNKNOWN') {

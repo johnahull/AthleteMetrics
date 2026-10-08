@@ -18,7 +18,11 @@
 -- yourself first, then re-run. No flag skips the guard.
 --
 -- The same refusal applies when custom_benchmarks, goals, report_benchmarks,
--- reports.config or custom_org_metrics reference the deficit codes.
+-- reports.config, custom_org_metrics, site_benchmarks, event_metrics or
+-- site_metric_explanations reference the deficit codes. Deleting the site_metrics
+-- rows would cascade-delete those site_benchmarks / event_metrics /
+-- site_metric_explanations rows, and benchmark_set_items / organization_benchmarks
+-- (no FK) that point at such benchmarks would survive as orphans.
 --
 -- The 0144 state (the _M / _YD 5-0-5 metrics) is not touched.
 --
@@ -38,13 +42,17 @@ BEGIN
     RAISE EXCEPTION 'Migration 0145 down refused: % manually entered (non-calculated) COD deficit measurement(s) exist and would be orphaned; export and delete them first', v_manual;
   END IF;
 
-  -- Other references would be cascade-deleted (custom_benchmarks) or block the
-  -- delete / dangle (goals, report_benchmarks, reports.config, custom_org_metrics).
+  -- Other references would be cascade-deleted (custom_benchmarks, site_benchmarks, event_metrics,
+  -- site_metric_explanations) or block the delete / dangle (goals, report_benchmarks, reports.config,
+  -- custom_org_metrics).
   SELECT
       (SELECT COUNT(*) FROM custom_benchmarks WHERE metric_code IN ('AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD'))
     + (SELECT COUNT(*) FROM goals             WHERE metric      IN ('AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD'))
     + (SELECT COUNT(*) FROM report_benchmarks WHERE metric_code IN ('AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD'))
     + (SELECT COUNT(*) FROM reports           WHERE config::text ~ '\mAGILITY_COD_DEFICIT_(M|YD)\M')
+    + (SELECT COUNT(*) FROM site_benchmarks   WHERE metric_code IN ('AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD'))
+    + (SELECT COUNT(*) FROM event_metrics     WHERE metric_code IN ('AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD'))
+    + (SELECT COUNT(*) FROM site_metric_explanations WHERE metric_code IN ('AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD'))
     + (SELECT COUNT(*) FROM custom_org_metrics
         WHERE coalesce(formula, '') ~ '\mAGILITY_COD_DEFICIT_(M|YD)\M'
            OR coalesce(array_to_string(dependent_metrics, ','), '') ~ '\mAGILITY_COD_DEFICIT_(M|YD)\M'
@@ -52,7 +60,7 @@ BEGIN
   INTO v_refs;
 
   IF v_refs > 0 THEN
-    RAISE EXCEPTION 'Migration 0145 down refused: % reference(s) to the COD deficit codes exist in custom_benchmarks, goals, report_benchmarks, reports.config or custom_org_metrics; remove them first', v_refs;
+    RAISE EXCEPTION 'Migration 0145 down refused: % reference(s) to the COD deficit codes exist in custom_benchmarks, goals, report_benchmarks, reports.config, custom_org_metrics, site_benchmarks, event_metrics or site_metric_explanations; remove them first', v_refs;
   END IF;
 END $$;
 

@@ -26,11 +26,37 @@ describe('DataParser 5-0-5 neutrality', () => {
     expect(data.find((d) => d.metric === NEUTRAL)?.value).toBe('2.45');
   });
 
-  it('emits the neutral token for the "agility" fallback without 505', () => {
+  // Issue #541 item 5: the inferred (fallback) mapping must resolve to the 5-0-5 only when the line says 5-0-5.
+  // A bare "agility" line is any agility drill, so filing it under the 5-0-5 made the meters/yards prompt ask
+  // users to confirm a wrong label.
+  it('does not file a bare "agility" line under the 5-0-5', () => {
     const data = parse('John Smith agility 2.80');
-    const m = data.find((d) => d.value === '2.80');
+    expect(data.find((d) => d.value === '2.80')).toBeUndefined();
+  });
+
+  it('files a "T-test agility" line under T_TEST, not the 5-0-5', () => {
+    const m = parse('John Smith T-test agility 9.80').find((d) => d.value === '9.80');
+    expect(m?.metric).toBe('T_TEST');
+  });
+
+  it('files a T-test time containing "10" under T_TEST, not FLY10_TIME', () => {
+    const m = parse('John Smith t test 10.20').find((d) => d.value === '10.20');
+    expect(m?.metric).toBe('T_TEST');
+  });
+
+  it('files a "Pro agility" line under the 5-10-5, not the 5-0-5', () => {
+    const m = parse('John Smith Pro agility 4.52').find((d) => d.value === '4.52');
+    expect(m?.metric).toBe('AGILITY_5105');
+  });
+
+  it('files a 5-10-5 line under AGILITY_5105 (its "10" is not a 10-yard fly)', () => {
+    const m = parse('John Smith 5-10-5 4.60').find((d) => d.value === '4.60');
+    expect(m?.metric).toBe('AGILITY_5105');
+  });
+
+  it('still resolves an "agility 505" line to the neutral token', () => {
+    const m = parse('John Smith agility 505 2.45').find((d) => d.value === '2.45');
     expect(m?.metric).toBe(NEUTRAL);
-    expect(m?.confidence).toBe(45);
   });
 
   it('keys the default measurement range on the neutral token (1.3-4.0)', () => {
