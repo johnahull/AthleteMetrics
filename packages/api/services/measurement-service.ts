@@ -25,6 +25,13 @@ import { eq, and, gte, lte, or, isNull, sql, desc, inArray, arrayContains } from
 import { alias } from 'drizzle-orm/pg-core';
 import { PAGINATION } from '../constants/pagination';
 import { DerivedMetricCalculator, type TriggerContext } from './derived-metric-calculator';
+import {
+  staleWarning,
+  warningsFromCalculator,
+  dedupeWarnings,
+  withWarnings,
+  type DerivedTotalWarning,
+} from './derived-total-warnings';
 import { AchievementService } from './achievement-service';
 import { notifyNewMeasurement } from './measurement-notification-service';
 import {
@@ -227,7 +234,7 @@ export class MeasurementService {
     submitterRole: string = 'athlete',
     eventContext?: MeasurementEventContext,
     options: MeasurementWriteOptions = {}
-  ): Promise<Measurement> {
+  ): Promise<Measurement & { warnings?: DerivedTotalWarning[] }> {
     assertCanEnterMetric(submitterRole, measurement.metric);
     assertCanAttachClip(submitterRole, measurement.mediaUrl);
     assertFlyInDistanceMatches(measurement.metric, measurement.flyInDistance);
@@ -556,20 +563,14 @@ export class MeasurementService {
     // connection, so inside the transaction it cannot see the row just inserted
     // (the last source measurement would never produce its derived total).
     // Failures are logged, not thrown: the source measurement is already persisted.
+    const derivedWarnings: DerivedTotalWarning[] = [];
+    const calculator = new DerivedMetricCalculator(db);
     try {
-      const calculator = new DerivedMetricCalculator(db);
       await calculator.processNewMeasurement(newMeasurement, {
         event: 'measurement_insert',
         userId: submittedBy,
         sourceMeasurementId: newMeasurement.id,
       });
-      const previous = replaced as Measurement | null;
-      if (previous && previous.date !== newMeasurement.date) {
-        // An upsert moved the score to another date: refresh the old date's totals too
-        await calculator.recalculateForAthlete(previous.userId, previous.metric, previous.date, {
-          triggerContext: { event: 'measurement_update', sourceMeasurementId: newMeasurement.id },
-        });
-      }
     } catch (derivedError) {
       console.error('Derived metric calculation failed after measurement create:', {
         measurementId: newMeasurement.id,
@@ -578,12 +579,35 @@ export class MeasurementService {
         date: newMeasurement.date,
         error: derivedError,
       });
+      derivedWarnings.push(staleWarning(newMeasurement.metric, newMeasurement.date, newMeasurement.userId));
     }
+    const previous = replaced as Measurement | null;
+    if (previous && previous.date !== newMeasurement.date) {
+      // An upsert moved the score to another date: refresh the old date's totals too.
+      // Attempted (and warned) independently of the recalculation above.
+      try {
+        await calculator.recalculateForAthlete(previous.userId, previous.metric, previous.date, {
+          triggerContext: { event: 'measurement_update', sourceMeasurementId: newMeasurement.id },
+        });
+      } catch (derivedError) {
+        console.error('Derived metric recalculation failed for the previous date after measurement create:', {
+          measurementId: newMeasurement.id,
+          userId: previous.userId,
+          metric: previous.metric,
+          date: previous.date,
+          error: derivedError,
+        });
+        derivedWarnings.push(staleWarning(previous.metric, previous.date, previous.userId));
+      }
+    }
+    derivedWarnings.push(...warningsFromCalculator(calculator));
+    // Additive response field (#526): the measurement is saved, its derived total may be stale
+    const result = withWarnings(newMeasurement, derivedWarnings);
 
     // Event entries before results are published (and in-place score edits) do not
     // notify the athlete or award achievements.
     if (options.suppressSideEffects || replaced) {
-      return newMeasurement;
+      return result;
     }
 
     // ACHIEVEMENTS: Check for newly unlocked achievements AFTER transaction commits
@@ -618,7 +642,7 @@ export class MeasurementService {
       }).catch(err => console.error('Measurement notification failed:', err));
     }
 
-    return newMeasurement;
+    return result;
   }
 
   /**
@@ -779,7 +803,7 @@ export class MeasurementService {
     expectedOrganizationId?: string,
     updaterRole?: string,
     options: Pick<MeasurementWriteOptions, 'tx'> = {}
-  ): Promise<Measurement> {
+  ): Promise<Measurement & { warnings?: DerivedTotalWarning[] }> {
     // Wrap in transaction to prevent race conditions during concurrent updates
     // Race condition scenario: Two users update same measurement simultaneously
     try {
@@ -974,6 +998,7 @@ export class MeasurementService {
       // sees the updated row. Failures are logged: the update is already persisted.
       // recalculateForAthlete also creates a total that does not exist yet, so a
       // source moved onto a date/metric that completes a set produces its total.
+      const derivedWarnings: DerivedTotalWarning[] = [];
       if (
         !options.tx &&
         (measurement.value !== undefined ||
@@ -982,45 +1007,45 @@ export class MeasurementService {
           measurement.metric !== undefined ||
           measurement.userId !== undefined)
       ) {
-        try {
-          const calculator = new DerivedMetricCalculator(db);
-          const triggerContext = {
-            event: 'measurement_update' as const,
-            sourceMeasurementId: txUpdated.id,
-          };
-          await calculator.recalculateForAthlete(
-            txUpdated.userId,
-            txUpdated.metric,
-            txUpdated.date,
-            { triggerContext, organizationId: txUpdated.organizationId }
-          );
-          // If the source moved (date, metric or athlete), the derived value it
-          // used to feed must be recalculated/invalidated too, otherwise a stale
-          // total remains on the old date/metric/athlete.
-          if (
-            previous.date !== txUpdated.date ||
-            previous.metric !== txUpdated.metric ||
-            previous.userId !== txUpdated.userId
-          ) {
-            await calculator.recalculateForAthlete(
-              previous.userId,
-              previous.metric,
-              previous.date,
-              { triggerContext, organizationId: previous.organizationId }
-            );
+        const calculator = new DerivedMetricCalculator(db);
+        const triggerContext = {
+          event: 'measurement_update' as const,
+          sourceMeasurementId: txUpdated.id,
+        };
+        const recalc = async (
+          target: { userId: string; metric: string; date: string; organizationId: string | null }
+        ) => {
+          try {
+            await calculator.recalculateForAthlete(target.userId, target.metric, target.date, {
+              triggerContext,
+              organizationId: target.organizationId,
+            });
+          } catch (derivedError) {
+            console.error('Derived metric recalculation failed after measurement update:', {
+              measurementId: txUpdated.id,
+              userId: target.userId,
+              metric: target.metric,
+              date: target.date,
+              error: derivedError,
+            });
+            derivedWarnings.push(staleWarning(target.metric, target.date, target.userId));
           }
-        } catch (derivedError) {
-          console.error('Derived metric recalculation failed after measurement update:', {
-            measurementId: txUpdated.id,
-            userId: txUpdated.userId,
-            metric: txUpdated.metric,
-            date: txUpdated.date,
-            error: derivedError,
-          });
+        };
+        await recalc(txUpdated);
+        // If the source moved (date, metric or athlete), the derived value it
+        // used to feed must be recalculated/invalidated too, otherwise a stale
+        // total remains on the old date/metric/athlete. Attempted independently.
+        if (
+          previous.date !== txUpdated.date ||
+          previous.metric !== txUpdated.metric ||
+          previous.userId !== txUpdated.userId
+        ) {
+          await recalc(previous);
         }
+        derivedWarnings.push(...warningsFromCalculator(calculator));
       }
 
-      return txUpdated;
+      return withWarnings(txUpdated, derivedWarnings);
     } catch (error) {
       // Preserve error specificity
       if (
@@ -1059,7 +1084,7 @@ export class MeasurementService {
     id: string,
     expectedOrganizationId?: string,
     options: Pick<MeasurementWriteOptions, 'tx'> = {}
-  ): Promise<void> {
+  ): Promise<{ warnings: DerivedTotalWarning[] }> {
     // Wrap in transaction to prevent race conditions during concurrent operations
     // Race condition scenario: User deletes measurement while another user verifies/updates it
     try {
@@ -1093,15 +1118,16 @@ export class MeasurementService {
       // Inside a caller's transaction the deletion is not committed yet: the caller
       // recalculates derived metrics after its commit.
       if (options.tx) {
-        return;
+        return { warnings: [] };
       }
 
       // DERIVED METRICS: Trigger recalculation after the deletion has committed.
       // Inside the transaction the calculator (separate connection) would still
       // see the deleted row, leaving a stale derived total. Failures are logged:
       // the deletion is already persisted.
+      const warnings: DerivedTotalWarning[] = [];
+      const calculator = new DerivedMetricCalculator(db);
       try {
-        const calculator = new DerivedMetricCalculator(db);
         await calculator.recalculateForAthlete(deleted.userId, deleted.metric, deleted.date, {
           triggerContext: {
             event: 'measurement_delete',
@@ -1117,7 +1143,10 @@ export class MeasurementService {
           date: deleted.date,
           error: derivedError,
         });
+        warnings.push(staleWarning(deleted.metric, deleted.date, deleted.userId));
       }
+      warnings.push(...warningsFromCalculator(calculator));
+      return { warnings: dedupeWarnings(warnings) };
     } catch (error) {
       // Preserve error specificity
       if (error instanceof MeasurementAccessDeniedError) {
@@ -1404,7 +1433,12 @@ export class MeasurementService {
   async bulkDelete(
     measurementIds: string[],
     expectedOrganizationId?: string
-  ): Promise<{ deleted: number; failed: number; errors: Array<{ id: string; message: string }> }> {
+  ): Promise<{
+    deleted: number;
+    failed: number;
+    errors: Array<{ id: string; message: string }>;
+    warnings: DerivedTotalWarning[];
+  }> {
     type RecalcKey = { userId: string; metric: string; date: string; organizationId: string | null };
     type TxResult = {
       deleted: number;
@@ -1480,9 +1514,11 @@ export class MeasurementService {
         deleted: 0,
         failed: measurementIds.length,
         errors: measurementIds.map(id => ({ id, message })),
+        warnings: [],
       };
     }
 
+    const warnings: DerivedTotalWarning[] = [];
     if (txResult.recalcKeys.length > 0) {
       const calculator = new DerivedMetricCalculator(db);
       const seen = new Set<string>();
@@ -1503,14 +1539,17 @@ export class MeasurementService {
             date: key.date,
             error: e instanceof Error ? e.message : String(e),
           });
+          warnings.push(staleWarning(key.metric, key.date, key.userId));
         }
       }
+      warnings.push(...warningsFromCalculator(calculator));
     }
 
     return {
       deleted: txResult.deleted,
       failed: txResult.errors.length,
       errors: txResult.errors,
+      warnings: dedupeWarnings(warnings),
     };
   }
 
