@@ -19,6 +19,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest
 import request from 'supertest';
 import express, { type Express } from 'express';
 import { storage } from '../../packages/api/storage';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 import type { User } from '@shared/schema';
 
 // Mock vite module before importing registerRoutes
@@ -99,6 +100,9 @@ describe('Rate Limiting Security - Production Safeguards', () => {
         console.error('Error cleaning up test user:', error);
       }
     }
+
+    // storage.deleteUser refuses while memberships exist and the bypass test creates athletes; sweep by prefix
+    await purgeTestRows({ usernameLike: ['test-ratelimit-security-%', 'testathlete%bypass%'] });
   });
 
   afterEach(() => {
