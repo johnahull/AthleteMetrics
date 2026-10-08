@@ -81,9 +81,11 @@ describe('migration 0151: yard benchmark description wording', () => {
 
   it('handles gte, eq, range and no-note rows, and the _L / _R twins', async () => {
     await inRolledBackTx(async (tx) => {
+      const eq = await seed(tx, { code: 'AGILITY_505_YD', name: 'T0151 eq', op: 'eq', value: 2.5, description: `${PREFIX} eq note` });
       const gte = await seed(tx, { code: 'AGILITY_505_YD_L', name: 'T0151 gte', op: 'gte', value: 3.1, description: `${PREFIX} note` });
       const range = await seed(tx, { code: 'AGILITY_505_YD_R', name: 'T0151 range', op: 'range', min: 2.1, max: 2.4, description: PREFIX });
       await tx.execute(sql.raw(UP));
+      expect(await descriptionOf(tx, eq)).toContain('threshold of = 2.500 s,');
       expect(await descriptionOf(tx, gte)).toContain('threshold of ≥ 3.100 s,');
       expect(await descriptionOf(tx, gte)).toContain('not converted): note');
       const r = await descriptionOf(tx, range);
