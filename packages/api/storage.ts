@@ -293,7 +293,7 @@ export interface IStorage {
   getMeasurement(id: string): Promise<Measurement | undefined>;
   createMeasurement(measurement: CreateMeasurementInput, submittedBy: string, eventContext?: { eventId: string; eventNameSnapshot: string; eventDateSnapshot: string; organizationId?: string | null; }, options?: CreateMeasurementOptions): Promise<Measurement>;
   getMetricWriteConfig(code: string): Promise<MetricWriteConfig | null>;
-  getMetricWriteConfigs(codes: string[]): Promise<Map<string, MetricWriteConfig>>;
+  getMetricWriteConfigs(codes: string[]): Promise<Map<string, MetricWriteConfig | null>>;
   getActiveUserById(id: string): Promise<User | undefined>;
   updateMeasurement(id: string, measurement: Partial<InsertMeasurement>): Promise<Measurement>;
   deleteMeasurement(id: string): Promise<void>;
@@ -3758,10 +3758,15 @@ export class DatabaseStorage implements IStorage {
     return (await this.getMetricWriteConfigs([code])).get(code) ?? null;
   }
 
-  /** The same for many codes in ONE query (a bulk import calls this once, not once per row). */
-  async getMetricWriteConfigs(codes: string[]): Promise<Map<string, MetricWriteConfig>> {
+  /**
+   * The same for many codes in ONE query (a bulk import calls this once, not once per row).
+   * The map has an entry for EVERY requested code: the config, or null when no such metric exists. So
+   * `map.get(code) === undefined` can only mean "this code was never requested", and createMeasurement then
+   * looks the metric up itself; a caller must pass `map.get(code)` as is, never turn undefined into null.
+   */
+  async getMetricWriteConfigs(codes: string[]): Promise<Map<string, MetricWriteConfig | null>> {
     const unique = [...new Set(codes)];
-    const found = new Map<string, MetricWriteConfig>();
+    const found = new Map<string, MetricWriteConfig | null>(unique.map((code) => [code, null]));
     if (unique.length === 0) return found;
     const rows = await db
       .select({

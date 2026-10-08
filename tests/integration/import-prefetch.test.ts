@@ -27,9 +27,17 @@ vi.mock('../../packages/api/vite.js', () => ({
   serveStatic: vi.fn(),
 }));
 
+// The photo route's OCR step is replaced so a test controls the extracted rows.
+vi.mock('../../packages/api/ocr/ocr-service', () => ({
+  ocrService: { extractTextFromImage: vi.fn() },
+}));
+
 import { registerRoutes } from '../../packages/api/routes';
+import { ocrService } from '../../packages/api/ocr/ocr-service';
 
 const PASSWORD = 'Prefetch123!';
+// Smallest valid PNG header; the OCR service is mocked so the bytes are never decoded.
+const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
 
 describe('bulk import does not repeat per-row lookups (#527)', () => {
   let app: Express;
@@ -128,7 +136,7 @@ describe('bulk import does not repeat per-row lookups (#527)', () => {
     const spy = vi.spyOn(storage, 'getActiveUserById');
     await importRows(rowsFor(6));
     // the route's one lookup; before the change every createMeasurement call did its own
-    expect(spy.mock.calls.filter(([id]) => id === coach.id).length).toBeLessThanOrEqual(1);
+    expect(spy.mock.calls.filter(([id]) => id === coach.id)).toHaveLength(1);
   });
 
   it("looks the caller's organizations up the same number of times for 2 rows and for 6 (no per-row fallback query)", async () => {
@@ -161,5 +169,51 @@ describe('bulk import does not repeat per-row lookups (#527)', () => {
     expect(bad.body.errors).toHaveLength(1);
     const unknown = await importRows([`${a.firstName},${a.lastName},${teamName},2026-04-02,NOT_A_REAL_METRIC,5`]);
     expect(unknown.body.summary.created).toBe(1);
+  });
+
+  describe('photo import', () => {
+    const savedRows = () => db.select().from(measurements).where(inArray(measurements.userId, athletes.map((a) => a.id)));
+    const photo = (metric: string, value: string, extra: Record<string, unknown> = {}) => {
+      const a = athletes[0];
+      vi.mocked(ocrService.extractTextFromImage).mockResolvedValue({
+        text: 'raw',
+        confidence: 90,
+        warnings: [],
+        extractedData: [{ firstName: a.firstName, lastName: a.lastName, metric, value, date: '2026-03-10', rawText: 'raw', confidence: 90 }],
+      } as any);
+      return request(app)
+        .post('/api/import/photo')
+        .set('Cookie', cookie)
+        .field('options', JSON.stringify({ organizationId: orgId, measurementMode: 'match_only', ...extra }))
+        .attach('file', PNG, 'scores.png');
+    };
+
+    // These rows carry no `units`, so the stored unit comes from the metric's site_metrics row (or, when the config
+    // is missing, from a legacy fallback that has no entry for them and answers 'in'). A null config is therefore
+    // visible here, unlike for CSV rows (which fill the unit themselves) or for T_TEST (the fallback also says 's').
+    it('stores a 5-0-5 reading with its configured unit: the prefetch is keyed by the metric that is written', async () => {
+      // The OCR emits a neutral token that the route rewrites to AGILITY_505_M / _YD once the protocol is known
+      const res = await photo('AGILITY_505_UNRESOLVED', '2.45', { protocol505: 'M' });
+      expect(res.status, JSON.stringify(res.body).slice(0, 300)).toBe(200);
+      expect(res.body.results.errors).toEqual([]);
+      const [row] = await savedRows();
+      expect(row.metric).toBe('AGILITY_505_M');
+      expect(row.units).toBe('s');
+    });
+
+    it('stores a metric whose configured unit differs from the legacy fallback with the configured unit', async () => {
+      const res = await photo('DASH_10YD', '1.7');
+      expect(res.status, JSON.stringify(res.body).slice(0, 300)).toBe(200);
+      const [row] = await savedRows();
+      expect(row.metric).toBe('DASH_10YD');
+      expect(row.units).toBe('s');
+    });
+
+    it('prefetches the metric that is actually written, in one batch', async () => {
+      const batch = vi.spyOn(storage, 'getMetricWriteConfigs');
+      await photo('AGILITY_505_UNRESOLVED', '2.45', { protocol505: 'YD' });
+      expect(batch).toHaveBeenCalledTimes(1);
+      expect(batch.mock.calls[0][0]).toEqual(['AGILITY_505_YD']);
+    });
   });
 });

@@ -340,9 +340,19 @@ export function registerImportExportRoutes(app: Express) {
         });
       }
 
+      // The protocol is known here (guard above), so the neutral 5-0-5 token resolves to a concrete code and can
+      // never reach storage or a response. One function for the prefetch below and the row loop, so the metric
+      // that is looked up is always the metric that is written.
+      const resolveOcrMetric = (metric: string | undefined): string | undefined =>
+        metric === OCR_505_NEUTRAL_METRIC ? (protocol505 === 'M' ? 'AGILITY_505_M' : 'AGILITY_505_YD') : metric;
+
       // Looked up once for the whole photo, not once per extracted row (issue #527)
       const photoMetricConfigs = await storage.getMetricWriteConfigs([
-        ...new Set(ocrResult.extractedData.map(d => d.metric).filter((m): m is string => typeof m === 'string' && m !== '')),
+        ...new Set(
+          ocrResult.extractedData
+            .map(d => resolveOcrMetric(d.metric))
+            .filter((m): m is string => typeof m === 'string' && m !== '')
+        ),
       ]);
       const photoSubmitter = (await storage.getActiveUserById(currentUser.id)) ?? null;
 
@@ -355,12 +365,7 @@ export function registerImportExportRoutes(app: Express) {
       for (let i = 0; i < ocrResult.extractedData.length; i++) {
         const raw = ocrResult.extractedData[i];
         const rowNum = i + 1;
-        // The protocol is known here (guard above), so the neutral token resolves to a concrete
-        // code and can never reach storage or a response.
-        const resolvedMetric: string | undefined = raw.metric === OCR_505_NEUTRAL_METRIC
-          ? (protocol505 === 'M' ? 'AGILITY_505_M' : 'AGILITY_505_YD')
-          : raw.metric;
-        const extracted = { ...raw, metric: resolvedMetric };
+        const extracted = { ...raw, metric: resolveOcrMetric(raw.metric) };
         // The athlete this row auto-created, until its measurement is saved (rolled back if the row fails)
         let rowAutoCreated: { id: string; name: string } | null = null;
 
@@ -477,7 +482,7 @@ export function registerImportExportRoutes(app: Express) {
           const measurement = await storage.createMeasurement(measurementData, currentUser.id, undefined, {
             submitterRole: photoRole,
             authorizedOrganizationId: photoOrganizationId,
-            metricConfig: photoMetricConfigs.get(extracted.metric as string) ?? null,
+            metricConfig: photoMetricConfigs.get(extracted.metric as string),
             submitter: photoSubmitter,
           });
 
@@ -1199,7 +1204,12 @@ export function registerImportExportRoutes(app: Express) {
         const primaryOrganizationId = () =>
           (primaryOrganizationLookup ??= storage
             .getUserOrganizations(measurementImportUser.id)
-            .then((orgs) => orgs[0]?.organizationId));
+            .then((orgs) => orgs[0]?.organizationId)
+            .catch((error) => {
+              // Do not cache a failure: the next row retries, as it did before the lookup was memoized
+              primaryOrganizationLookup = undefined;
+              throw error;
+            }));
 
         // The caller's role in each organization a row can belong to, looked up once per organization (#514)
         const importRoleCache = new Map<string, string | undefined>();
@@ -1423,7 +1433,7 @@ export function registerImportExportRoutes(app: Express) {
             const measurement = await storage.createMeasurement(measurementData, req.session.user!.id, undefined, {
               submitterRole: rowRole,
               authorizedOrganizationId: organizationId,
-              metricConfig: importMetricConfigs.get(metric) ?? null,
+              metricConfig: importMetricConfigs.get(metric),
               submitter: importSubmitter,
             });
 
