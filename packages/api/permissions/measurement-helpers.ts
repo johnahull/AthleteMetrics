@@ -61,7 +61,7 @@ export async function getOrgRole(
   if (isSiteAdmin(user)) return 'site_admin';
   if (!organizationId) return undefined;
   const memberships = (await storage.getUserOrganizations(user.id)) ?? [];
-  return memberships.find((m: any) => m.organizationId === organizationId)?.role ?? undefined;
+  return memberships.find((m: any) => m.organizationId === organizationId)?.role;
 }
 
 /** Roles that may write measurements for other people (coach and org_admin of the row's organization, site admins). */

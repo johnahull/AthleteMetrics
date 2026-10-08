@@ -351,8 +351,9 @@ export function registerMeasurementRoutes(app: Express) {
       // SECURITY (issue #515): parent, guest and any other role cannot create measurements. Checked BEFORE the
       // body is validated so such a session gets a 403 whatever it sends. A user with no organization
       // membership has a session role of 'athlete' or 'parent' (there is no first organization to take it from).
+      let memberships: Array<{ organizationId: string; role: string }> = [];
       if (!isSiteAdmin(user)) {
-        const memberships = (await storage.getUserOrganizations(user.id)) ?? [];
+        memberships = (await storage.getUserOrganizations(user.id)) ?? [];
         const mayWrite = memberships.length === 0
           ? user.role === 'athlete'
           : memberships.some(m => ['athlete', 'coach', 'org_admin'].includes(m.role));
@@ -397,6 +398,12 @@ export function registerMeasurementRoutes(app: Express) {
       } else {
         const isSelf = validatedData.userId === user.id;
         const hasTeam = !!validatedData.teamId && validatedData.teamId.trim() !== '';
+
+        // Writing for someone else needs a coach / org_admin role somewhere. Refuse everyone else before any
+        // lookup that depends on the target: a 404 or 400 about the target's teams would reveal who is on one.
+        if (!isSelf && !memberships.some(m => m.role === 'coach' || m.role === 'org_admin')) {
+          return res.status(403).json({ message: "Athletes can only create measurements for themselves" });
+        }
 
         if (isSelf && !hasTeam) {
           // Personal self-entry: no team, no organization, the athlete's own row
@@ -596,11 +603,15 @@ export function registerMeasurementRoutes(app: Express) {
         }
       }
 
-      // SECURITY: coach / org_admin of the measurement's organization (role in THAT organization)
+      // SECURITY: coach / org_admin of the measurement's organization (role in THAT organization), or an athlete
+      // for a row they submitted themselves. Having submitted the row is not enough for an organization row: a
+      // coach who was removed from the organization, or demoted to guest, must not keep editing its rows.
+      // Only a personal row (no organization) can still be changed by its submitter.
       const isSubmitter = existingMeasurement.submittedBy === user.id;
       const isOrgAdminOrCoach = effectiveRole === 'coach' || effectiveRole === 'org_admin';
+      const mayModify = isOrgAdminOrCoach || (effectiveRole === 'athlete' && isSubmitter) || (!existingMeasurement.organizationId && isSubmitter);
 
-      if (!isSiteAdmin(user) && !isSubmitter && !isOrgAdminOrCoach) {
+      if (!isSiteAdmin(user) && !mayModify) {
         return res.status(403).json({ message: "Access denied - you can only update measurements you submitted or measurements in your organization" });
       }
 
@@ -622,7 +633,11 @@ export function registerMeasurementRoutes(app: Express) {
       if (error instanceof ZodError) {
         return res.status(400).json({ message: "Invalid input data", errors: error.errors });
       }
-      if (error instanceof MovementQualityPermissionError || error instanceof MediaUrlPermissionError) {
+      if (
+        error instanceof MovementQualityPermissionError ||
+        error instanceof MediaUrlPermissionError ||
+        error instanceof MeasurementAccessDeniedError
+      ) {
         return res.status(403).json({ message: error.message });
       }
       if (error instanceof PairedInputValidationError || error instanceof MeasurementValueValidationError) {
@@ -663,11 +678,15 @@ export function registerMeasurementRoutes(app: Express) {
         });
       }
 
-      // SECURITY: coach / org_admin of the measurement's organization (role in THAT organization)
+      // SECURITY: coach / org_admin of the measurement's organization (role in THAT organization), or an athlete
+      // for an unverified row they submitted themselves. Having submitted the row is not enough for an
+      // organization row (a coach who left the organization must not keep deleting its rows); only a personal
+      // row (no organization) can still be deleted by its submitter.
       const isSubmitter = existingMeasurement.submittedBy === user.id;
       const isOrgAdminOrCoach = effectiveRole === 'coach' || effectiveRole === 'org_admin';
+      const mayModify = isOrgAdminOrCoach || (effectiveRole === 'athlete' && isSubmitter) || (!existingMeasurement.organizationId && isSubmitter);
 
-      if (!isSiteAdmin(user) && !isSubmitter && !isOrgAdminOrCoach) {
+      if (!isSiteAdmin(user) && !mayModify) {
         return res.status(403).json({ message: "Access denied - you can only delete measurements you submitted or measurements in your organization" });
       }
 
@@ -682,7 +701,9 @@ export function registerMeasurementRoutes(app: Express) {
     } catch (error) {
       console.error("Delete measurement error:", error);
       const message = error instanceof Error ? error.message : "Failed to delete measurement";
-      const statusCode = error instanceof Error && error.message.includes("not found") ? 404 : 500;
+      const statusCode = error instanceof MeasurementAccessDeniedError
+        ? 403
+        : error instanceof Error && error.message.includes("not found") ? 404 : 500;
       res.status(statusCode).json({ message });
     }
   });

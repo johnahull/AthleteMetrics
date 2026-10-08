@@ -255,6 +255,8 @@ describe('MQ role allowlist on the import paths (CSV, OCR)', () => {
     // Issue #514: only a coach / org_admin in the organization being imported into (or a site admin) may import
     // a photo. A guest member used to get past the athlete-only check and was stopped per row for MQ metrics
     // only; now the whole request is refused before OCR runs, so no metric can be written.
+    // The options send no organizationId on purpose: a guest has a membership, so the route defaults to their
+    // first organization and reaches the role check (only a user with NO membership gets the 400 below).
     it('a guest photo import is refused before OCR (403) and nothing is written', async () => {
       ocrReturns('MQ_JUMP');
       vi.mocked(ocrService.extractTextFromImage).mockClear();

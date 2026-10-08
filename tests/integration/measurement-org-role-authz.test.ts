@@ -53,6 +53,9 @@ describe('measurement writes use the role in the row\'s organization (#514)', ()
   const teamNameB = `BBB Team ${suffix}`;
   // athlete in A, athlete in B, athlete on two teams of A, plain coach of B (seeds rows)
   let aA: any, aB: any, aTwo: any, coachB: any;
+  // aX: a member of org A with no team there, whose only team is in org B; exCoach: a coach of A who left org B;
+  // aNoOrg: an athlete with no organization membership at all
+  let aX: any, exCoach: any, aNoOrg: any;
   // the two users with different roles in the two organizations
   let coachAathleteB: any;
   let athleteAcoachB: any;
@@ -92,8 +95,8 @@ describe('measurement writes use the role in the row\'s organization (#514)', ()
     teamB = tb.id;
 
     const hashed = await bcrypt.hash(PASSWORD, BCRYPT_SALT_ROUNDS);
-    [aA, aB, aTwo, coachB, coachAathleteB, athleteAcoachB] = await Promise.all(
-      ['aA', 'aB', 'aTwo', 'coachB', 'coachAathleteB', 'athleteAcoachB'].map((n) => mk(n, hashed)),
+    [aA, aB, aTwo, coachB, coachAathleteB, athleteAcoachB, aX, exCoach, aNoOrg] = await Promise.all(
+      ['aA', 'aB', 'aTwo', 'coachB', 'coachAathleteB', 'athleteAcoachB', 'aX', 'exCoach', 'aNoOrg'].map((n) => mk(n, hashed)),
     );
     await db.insert(userOrganizations).values([
       { userId: aA.id, organizationId: orgA, role: 'athlete' },
@@ -104,6 +107,8 @@ describe('measurement writes use the role in the row\'s organization (#514)', ()
       { userId: coachAathleteB.id, organizationId: orgB, role: 'athlete' },
       { userId: athleteAcoachB.id, organizationId: orgA, role: 'athlete' },
       { userId: athleteAcoachB.id, organizationId: orgB, role: 'coach' },
+      { userId: aX.id, organizationId: orgA, role: 'athlete' },
+      { userId: exCoach.id, organizationId: orgA, role: 'coach' },
     ]);
     const joinedAt = new Date('2020-01-01');
     await db.insert(userTeams).values([
@@ -112,9 +117,10 @@ describe('measurement writes use the role in the row\'s organization (#514)', ()
       { userId: aTwo.id, teamId: teamA2, joinedAt, isActive: true },
       { userId: aB.id, teamId: teamB, joinedAt, isActive: true },
       { userId: coachAathleteB.id, teamId: teamB, joinedAt, isActive: true },
+      { userId: aX.id, teamId: teamB, joinedAt, isActive: true },
     ]);
 
-    for (const [name, u] of Object.entries({ coachAathleteB, athleteAcoachB })) {
+    for (const [name, u] of Object.entries({ coachAathleteB, athleteAcoachB, aA, aB, aNoOrg, exCoach })) {
       const login = await request(app).post('/api/auth/login').send({ username: u.username, password: PASSWORD });
       expect(login.status, `${name} login`).toBe(200);
       cookies[name] = login.headers['set-cookie'][0];
@@ -122,12 +128,12 @@ describe('measurement writes use the role in the row\'s organization (#514)', ()
   });
 
   afterEach(async () => {
-    await db.delete(measurements).where(inArray(measurements.userId, [aA.id, aB.id, aTwo.id, coachAathleteB.id]));
+    await db.delete(measurements).where(inArray(measurements.userId, [aA.id, aB.id, aTwo.id, coachAathleteB.id, aX.id, aNoOrg.id]));
   });
 
   afterAll(async () => {
-    await db.delete(measurements).where(inArray(measurements.userId, [aA.id, aB.id, aTwo.id, coachAathleteB.id]));
-    const userIds = [aA, aB, aTwo, coachB, coachAathleteB, athleteAcoachB].map((u) => u.id);
+    await db.delete(measurements).where(inArray(measurements.userId, [aA.id, aB.id, aTwo.id, coachAathleteB.id, aX.id, aNoOrg.id]));
+    const userIds = [aA, aB, aTwo, coachB, coachAathleteB, athleteAcoachB, aX, exCoach, aNoOrg].map((u) => u.id);
     await db.delete(userTeams).where(inArray(userTeams.teamId, [teamA, teamA2, teamB]));
     await db.delete(userOrganizations).where(inArray(userOrganizations.organizationId, [orgA, orgB]));
     await db.delete(teams).where(inArray(teams.id, [teamA, teamA2, teamB]));
@@ -232,6 +238,44 @@ describe('measurement writes use the role in the row\'s organization (#514)', ()
       expect(await rowsOf(aTwo.id)).toHaveLength(0);
     });
 
+    it('an athlete can enter their own measurement on a team of their organization (unverified)', async () => {
+      const res = await request(app).post('/api/measurements').set('Cookie', cookies.aB).send(body(aB.id, { teamId: teamB }));
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      const [row] = await rowsOf(aB.id);
+      expect(row.organizationId).toBe(orgB);
+      expect(row.isVerified).toBe(false);
+    });
+
+    it('an athlete with no organization membership can still enter a personal measurement', async () => {
+      const res = await request(app).post('/api/measurements').set('Cookie', cookies.aNoOrg).send(body(aNoOrg.id));
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      expect((await rowsOf(aNoOrg.id))[0].organizationId).toBeNull();
+    });
+
+    it('asks for a teamId when the athlete had no team on the measurement date', async () => {
+      // aA joined team A in 2020, so 2019 has no team
+      const res = await request(app).post('/api/measurements').set('Cookie', cookies.coachAathleteB).send(body(aA.id, { date: '2019-01-01' }));
+      expect(res.status, JSON.stringify(res.body)).toBe(400);
+      expect(res.body.message).toMatch(/team/i);
+      expect(await rowsOf(aA.id)).toHaveLength(0);
+    });
+
+    it('a coach\'s own measurement without a team is a personal, unverified row (self-entry is not team work)', async () => {
+      const res = await request(app).post('/api/measurements').set('Cookie', cookies.coachAathleteB).send(body(coachAathleteB.id));
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      const [row] = await rowsOf(coachAathleteB.id);
+      expect(row.organizationId).toBeNull();
+      expect(row.isVerified).toBe(false);
+    });
+
+    it('does not reveal who is on a team to a user without a coach role: the answer is the same 403 for any target', async () => {
+      const real = await request(app).post('/api/measurements').set('Cookie', cookies.aA).send(body(aB.id));
+      const none = await request(app).post('/api/measurements').set('Cookie', cookies.aA).send(body('00000000-0000-4000-8000-000000000000'));
+      expect(real.status).toBe(403);
+      expect(none.status).toBe(403);
+      expect(none.body.message).toBe(real.body.message);
+    });
+
     it('still lets a user enter their own personal (no team) measurement', async () => {
       const res = await request(app).post('/api/measurements').set('Cookie', cookies.athleteAcoachB).send(body(athleteAcoachB.id));
       expect(res.status, JSON.stringify(res.body)).toBe(201);
@@ -262,6 +306,16 @@ describe('measurement writes use the role in the row\'s organization (#514)', ()
       const res = await request(app).post(`/api/measurements/${row.id}/verify`).set('Cookie', cookies.coachAathleteB);
       expect(res.status, JSON.stringify(res.body)).toBe(403);
       expect((await rowsOf(aB.id))[0].isVerified).toBe(false);
+    });
+
+    it('a coach who submitted the row but is no longer a member of org B cannot edit or delete it', async () => {
+      const row = await seedRowB({ submittedBy: exCoach.id });
+      const put = await request(app).put(`/api/measurements/${row.id}`).set('Cookie', cookies.exCoach).send({ value: 31 });
+      expect(put.status, JSON.stringify(put.body)).toBe(403);
+      const del = await request(app).delete(`/api/measurements/${row.id}`).set('Cookie', cookies.exCoach);
+      expect(del.status, JSON.stringify(del.body)).toBe(403);
+      const [still] = await rowsOf(aB.id);
+      expect(still.value).toBe('30.000');
     });
 
     it('athlete in A / coach in B can edit, verify and delete it', async () => {
@@ -300,6 +354,16 @@ describe('measurement writes use the role in the row\'s organization (#514)', ()
       expect(row.isVerified).toBe(true);
     });
 
+    it('does not write a row into org B for an athlete of org A whose only team is in org B (team name not found)', async () => {
+      // The caller is a coach of org A (their first org) and only an athlete in B. aX is a member of A on no team of A;
+      // her only team is in B, so team auto-resolution used to attribute the row to B, auto-verified.
+      const res = await importCsv('coachAathleteB', `No Such Team ${suffix}`, aX);
+      const rows = await rowsOf(aX.id);
+      expect(rows.every((r) => r.organizationId !== orgB), JSON.stringify(rows.map((r) => r.organizationId))).toBe(true);
+      expect(rows.some((r) => r.organizationId === orgB && r.isVerified)).toBe(false);
+      void res;
+    });
+
     it('coach in A / athlete in B can still import into a team of org A', async () => {
       const res = await importCsv('coachAathleteB', teamNameA, aA);
       expect(res.body.errors, JSON.stringify(res.body).slice(0, 300)).toEqual([]);
@@ -328,6 +392,14 @@ describe('measurement writes use the role in the row\'s organization (#514)', ()
       const res = await photo('coachAathleteB', aB, orgB);
       expect(res.status, JSON.stringify(res.body).slice(0, 300)).toBe(403);
       expect(await rowsOf(aB.id)).toHaveLength(0);
+    });
+
+    it('does not write a row into org B for an athlete of org A whose only team is in org B', async () => {
+      const res = await photo('coachAathleteB', aX, orgA);
+      expect(res.status, JSON.stringify(res.body).slice(0, 300)).toBe(200);
+      const rows = await rowsOf(aX.id);
+      expect(rows.every((r) => r.organizationId !== orgB), JSON.stringify(rows.map((r) => r.organizationId))).toBe(true);
+      expect(rows.some((r) => r.organizationId === orgB && r.isVerified)).toBe(false);
     });
 
     it('athlete in A / coach in B can import a photo into org B', async () => {

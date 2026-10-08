@@ -293,7 +293,9 @@ describe('Athletes cannot enter Movement Quality scores (R2)', () => {
         .set('Cookie', cookie())
         .send({ metric: 'MQ_JUMP', value: 2 });
       expect(res.status).toBe(403);
-      expect(res.body.message).toMatch(ATHLETE_MQ_DENIED);
+      // Issue #514: a parent or guest has no coach / athlete role in the row's organization, so the route refuses
+      // the edit outright; the service's MQ allowlist is the second layer behind it.
+      expect(res.body.message).toMatch(new RegExp(`${ATHLETE_MQ_DENIED.source}|you can only update measurements`, 'i'));
       const [row] = await athleteRows();
       expect(row.metric).toBe('FLY10_TIME');
     });

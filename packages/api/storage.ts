@@ -65,6 +65,13 @@ export interface CreateMeasurementOptions {
    * already checked it). When given it decides auto-verification instead of a lookup on the row's organization.
    */
   submitterRole?: string;
+  /**
+   * The organization the caller authorized this import against (their role there is `submitterRole`). The
+   * athlete's team is then taken only from that organization, like event writes, so a row can never be
+   * attributed to (and auto-verified in) another organization where the caller has no such role: an athlete
+   * who belongs to the authorized organization but whose only team is in another one gets no team context.
+   */
+  authorizedOrganizationId?: string;
 }
 
 export interface IStorage {
@@ -3822,7 +3829,8 @@ export class DatabaseStorage implements IStorage {
     if (!teamId || teamId.trim() === "") {
       // Get athlete's active teams at measurement date (only the event's org for event writes)
       const activeTeams = (await this.getAthleteActiveTeamsAtDate(measurement.userId, measurementDate))
-        .filter(t => !eventOrganizationId || t.organizationId === eventOrganizationId);
+        .filter(t => !eventOrganizationId || t.organizationId === eventOrganizationId)
+        .filter(t => !options.authorizedOrganizationId || t.organizationId === options.authorizedOrganizationId);
 
       if (activeTeams.length === 1) {
         // Single team - auto-assign
@@ -3854,6 +3862,9 @@ export class DatabaseStorage implements IStorage {
       if (team) {
         teamNameSnapshot = team.name;
         organizationId = team.organizationId;
+      }
+      if (options.authorizedOrganizationId && organizationId && organizationId !== options.authorizedOrganizationId) {
+        throw new Error('The team belongs to a different organization than the one this import is authorized for');
       }
     }
 

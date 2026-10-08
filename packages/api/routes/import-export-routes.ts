@@ -468,7 +468,7 @@ export function registerImportExportRoutes(app: Express) {
           };
 
           // Create the measurement
-          const measurement = await storage.createMeasurement(measurementData, currentUser.id, undefined, { submitterRole: photoRole });
+          const measurement = await storage.createMeasurement(measurementData, currentUser.id, undefined, { submitterRole: photoRole, authorizedOrganizationId: photoOrganizationId });
 
           // The athlete auto-created for this row now has its measurement: keep it and report it
           if (rowAutoCreated) {
@@ -1397,7 +1397,7 @@ export function registerImportExportRoutes(app: Express) {
               isVerified: "false"
             };
 
-            const measurement = await storage.createMeasurement(measurementData, req.session.user!.id, undefined, { submitterRole: rowRole });
+            const measurement = await storage.createMeasurement(measurementData, req.session.user!.id, undefined, { submitterRole: rowRole, authorizedOrganizationId: organizationId });
 
             // The athlete auto-created for this row now has its measurement: keep it and report it
             if (rowAutoCreated) {
