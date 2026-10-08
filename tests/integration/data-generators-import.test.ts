@@ -140,7 +140,6 @@ describe.skipIf(!GENERATORS_DIR)('am-data-generators output imports into Athlete
       await db.delete(userOrganizations).where(inArray(userOrganizations.userId, ids));
       await db.delete(users).where(inArray(users.id, ids));
     }
-    if (teamId) await db.delete(userTeams).where(eq(userTeams.teamId, teamId));
     if (coachId) {
       await db.delete(userOrganizations).where(eq(userOrganizations.userId, coachId));
       await db.delete(users).where(eq(users.id, coachId));
@@ -163,8 +162,10 @@ describe.skipIf(!GENERATORS_DIR)('am-data-generators output imports into Athlete
     const members = await db.select({ id: userTeams.userId }).from(userTeams).where(eq(userTeams.teamId, teamId));
     athleteIds = members.map((m) => m.id);
     expect(athleteIds).toHaveLength(4);
-  }, 60_000);
+  }, 30_000);
 
+  // These tests run in order and depend on the roster test above (it populates athleteIds): do not run them
+  // alone or shuffled.
   describe('measurements CSV', () => {
     it('imports with no errors and no unknown-metric warnings', async () => {
       const res = await request(app)
@@ -184,7 +185,9 @@ describe.skipIf(!GENERATORS_DIR)('am-data-generators output imports into Athlete
       );
       expect(unexpected).toEqual([]);
       expect(res.body.summary.created).toBeGreaterThan(0);
-    }, 180_000);
+    // ~600 rows, each with derived-metric recalculation: 3-7 s locally. 60 s is headroom for a slow CI runner
+    // while still failing on a real slowdown (e.g. an N+1 insert loop).
+    }, 60_000);
 
     it('stores yard 5-0-5 and no retired 5-0-5 codes', async () => {
       expect(athleteIds).toHaveLength(4);
@@ -273,6 +276,6 @@ describe.skipIf(!GENERATORS_DIR)('am-data-generators output imports into Athlete
         expect(metrics.has('AGILITY_505_YD_L'), `YD_L ${userId}`).toBe(true);
         expect(metrics.has('AGILITY_505_YD_R'), `YD_R ${userId}`).toBe(true);
       }
-    }, 120_000);
+    }, 30_000);
   });
 });
