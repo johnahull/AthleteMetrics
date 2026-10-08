@@ -90,6 +90,13 @@ describe('Migration 0144: static SQL analysis', () => {
       expect(up.indexOf(m![0])).toBeLessThan(up.search(/DELETE\s+FROM\s+site_metrics/i));
     });
 
+    it('never builds a derived yard-twin id with a bare `id || \'-yd\'` (site_benchmarks.id is varchar(36))', () => {
+      // 36-char UUID ids + '-yd' = 39 chars -> 22001 on the real testing DB.
+      expect(up).not.toMatch(/\bid\s*\|\|\s*'-yd'/i);
+      expect(up).not.toMatch(/benchmark_id\s*\|\|\s*'-yd'/i);
+      expect(up).not.toMatch(/LIKE\s+'%-yd'/i);
+    });
+
     it('does not manage its own transaction (the runner supplies it)', () => {
       expect(up).not.toMatch(/^\s*(BEGIN|COMMIT|ROLLBACK)\s*;/im);
     });
@@ -1035,4 +1042,111 @@ describe.skipIf(!DATABASE_URL)('Migration 0144: behavioral (real DB, rolled back
       expect(await snapshot(tx)).toEqual(once);
     });
   }, TEST_TIMEOUT);
+
+  // --------------------------------------------------------------------------
+  // Regression: real rows carry 36-char UUID ids (gen_random_uuid()); the yard
+  // twin id must stay within site_benchmarks.id varchar(36).
+  // --------------------------------------------------------------------------
+  describe('UUID-id source benchmarks (production shape)', () => {
+    const SRC_SQL = `
+      create temp table uu_src (ord serial, kind text, code text, id text, bsi text, tg uuid) on commit drop;
+      insert into uu_src (kind, code, id, bsi, tg)
+        select 'flat', c, gen_random_uuid()::text, gen_random_uuid()::text, null
+          from unnest(array['AGILITY_505','AGILITY_505_L','AGILITY_505_R','AGILITY_505_LSI']) c;
+      insert into uu_src (kind, code, id, bsi, tg)
+        select 'tier', 'AGILITY_505', gen_random_uuid()::text, gen_random_uuid()::text, gen_random_uuid()
+          from generate_series(1,2);
+      -- both tier rows share one tier_group_id
+      update uu_src set tg = (select min(tg::text)::uuid from uu_src where kind = 'tier') where kind = 'tier';
+      insert into site_benchmarks (id, metric_code, name, comparison_operator, benchmark_value, min_value, max_value,
+                                   tier_group_id, tier_order, tier_name, gender, is_system_default, is_active, display_order)
+        select id, code, 'UU ' || kind || ' ' || id, case when kind = 'tier' then 'range' else 'lte' end,
+               case when kind = 'tier' then null else 2.5 end,
+               case when kind = 'tier' then 2.3 end, case when kind = 'tier' then 2.8 end,
+               tg, case when kind = 'tier' then ord end, case when kind = 'tier' then 'Tier' end, 'Female', true, true, 950
+          from uu_src;
+      insert into benchmark_sets (id, name, is_template, is_active) values ('uu-set', 'UU Set', true, true);
+      insert into benchmark_set_items (id, set_id, benchmark_id, benchmark_type, display_order)
+        select bsi, 'uu-set', id, 'site', 1 from uu_src;
+    `;
+
+    async function seedUu(tx: Tx) {
+      await toPreState(tx);
+      // The production/testing DBs are built from migration 0024 (id VARCHAR(36));
+      // a drizzle-kit push DB has an unbounded varchar. Pin the real width
+      // (transactional DDL, rolled back with the test).
+      await tx.unsafe(`alter table site_benchmarks alter column id type varchar(36)`);
+      await tx.unsafe(SRC_SQL);
+    }
+    const srcIds = `(select id from uu_src)`;
+    const origSnapshot = async (tx: Tx) => ({
+      b: await jsonRows(tx, `select * from site_benchmarks where id in ${srcIds} order by id`),
+      i: await jsonRows(tx, `select * from benchmark_set_items where benchmark_id in ${srcIds} order by id`),
+    });
+
+    it('UP succeeds, creates one <=36-char twin per source and links the set items to the right twin', async () => {
+      await inTx(async (tx) => {
+        await seedUu(tx);
+        await tx.unsafe(upSql);
+        // one yard twin per source (twin name starts with the unique source name)
+        const pairs = await tx.unsafe(
+          `select s.id as sid, s.metric_code as scode, y.id as yid, y.metric_code as ycode
+             from site_benchmarks s
+             join site_benchmarks y on y.name like s.name || '%' and y.metric_code ~ '^AGILITY_505_YD' and y.id <> s.id
+            where s.id in ${srcIds}`,
+        );
+        expect(pairs).toHaveLength(6);
+        expect(new Set(pairs.map((r: { yid: string }) => r.yid)).size).toBe(6);
+        for (const r of pairs as { yid: string; scode: string; ycode: string }[]) {
+          expect(r.yid.length).toBeLessThanOrEqual(36);
+          expect(r.ycode).toBe(r.scode.replace('AGILITY_505', 'AGILITY_505_YD').replace(/^(AGILITY_505_YD)_M/, '$1'));
+        }
+        // each source set item has a mirrored item pointing at that source's twin
+        const [{ ok }] = await tx.unsafe(
+          `select count(*)::int as ok from uu_src u
+             join site_benchmarks s on s.id = u.id
+             join site_benchmarks y on y.name like s.name || '%' and y.metric_code ~ '^AGILITY_505_YD'
+             join benchmark_set_items yi on yi.set_id = 'uu-set' and yi.benchmark_id = y.id and yi.benchmark_type = 'site'`,
+        );
+        expect(ok).toBe(6);
+        const [{ items }] = await tx.unsafe(`select count(*)::int as items from benchmark_set_items where set_id = 'uu-set'`);
+        expect(items).toBe(12);
+        // tier twins keep a shared (hashed) tier group
+        const [{ tgs }] = await tx.unsafe(
+          `select count(distinct y.tier_group_id)::int as tgs from site_benchmarks y
+            where y.metric_code = 'AGILITY_505_YD' and y.name like 'UU tier %'`,
+        );
+        expect(tgs).toBe(1);
+      });
+    }, TEST_TIMEOUT);
+
+    it('is deterministic and idempotent: a second UP changes nothing', async () => {
+      await inTx(async (tx) => {
+        await seedUu(tx);
+        await tx.unsafe(upSql);
+        const ids1 = await tx.unsafe(`select id from site_benchmarks where metric_code ~ '^AGILITY_505_YD' order by id`);
+        const items1 = await tx.unsafe(`select id, benchmark_id from benchmark_set_items where set_id = 'uu-set' order by id`);
+        await tx.unsafe(upSql);
+        expect(await tx.unsafe(`select id from site_benchmarks where metric_code ~ '^AGILITY_505_YD' order by id`)).toEqual(ids1);
+        expect(await tx.unsafe(`select id, benchmark_id from benchmark_set_items where set_id = 'uu-set' order by id`)).toEqual(items1);
+      });
+    }, TEST_TIMEOUT);
+
+    it('DOWN removes the twins and leaves the original rows untouched (UUID and short ids)', async () => {
+      await inTx(async (tx) => {
+        await seedUu(tx);
+        await seedFixture(tx);
+        const pre = await origSnapshot(tx);
+        const preAll = await snapshot(tx);
+        await tx.unsafe(upSql);
+        await tx.unsafe(downSql);
+        expect(await origSnapshot(tx)).toEqual(pre);
+        expect(await snapshot(tx)).toEqual(preAll);
+        const [{ n }] = await tx.unsafe(`select count(*)::int as n from site_benchmarks where metric_code ~ '^AGILITY_505_(M|YD)'`);
+        expect(n).toBe(0);
+        const [{ k }] = await tx.unsafe(`select count(*)::int as k from benchmark_set_items where set_id = 'uu-set'`);
+        expect(k).toBe(6);
+      });
+    }, TEST_TIMEOUT);
+  });
 });
