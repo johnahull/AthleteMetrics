@@ -222,7 +222,7 @@
 
   input::placeholder,
   textarea::placeholder {
-    color: var(--color-gray-400);
+    color: #9ca3af; /* v3 gray-400, hardcoded so the shim survives deleting tailwind-v3-palette.css */
   }
 
   * {
