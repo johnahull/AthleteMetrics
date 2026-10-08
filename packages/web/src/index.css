@@ -5,6 +5,9 @@
 @plugin '@tailwindcss/typography';
 
 @custom-variant dark (&:is(.dark *));
+/* v4 only applies hover styles where the device supports hover; keep v3 behavior so hover-revealed
+   controls (e.g. group-hover:opacity-100) stay reachable on touch devices. */
+@custom-variant hover (&:hover);
 
 @theme inline {
   --color-background: var(--background);

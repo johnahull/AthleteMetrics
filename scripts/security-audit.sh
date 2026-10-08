@@ -39,7 +39,7 @@ set -e
 # package.json overrides added for audit fixes (remove when no longer needed):
 # - tinypool: drop once vitest >= 4 (vitest 4 no longer depends on tinypool; 3.x pins ^1).
 # - postcss-selector-parser: still needed after the Tailwind 4 migration (issue #523): @tailwindcss/typography
-#   pins ^6.0.10 (GHSA-rj75-hqrm-r3gf, moderate); the override forces the patched 7.x. Drop it once typography widens its range.
+#   pins 6.0.10 exactly (GHSA-rj75-hqrm-r3gf, moderate); the override forces the patched 7.x. Drop it once typography widens its range.
 #
 # Each run warns about an EXCLUDED_ADVISORIES ID that matches no current advisory,
 # so stale exclusions are noticed and pruned.

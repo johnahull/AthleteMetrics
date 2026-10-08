@@ -951,7 +951,7 @@ export default function UserManagement() {
                 return (
                   <div key={org.id} className="space-y-3 border-b pb-6">
                     <div
-                      className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-2 rounded -m-2 transition-colors select-none"
+                      className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-2 rounded -mx-2 -mt-2 -mb-2 transition-colors select-none"
                       onClick={() => toggleOrgExpansion(org.id)}
                       role="button"
                       tabIndex={0}

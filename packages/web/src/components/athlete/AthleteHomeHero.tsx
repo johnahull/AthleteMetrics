@@ -53,7 +53,7 @@ export function AthleteHomeHero({
   return (
     <div
       data-testid="athlete-home-hero"
-      className="bg-linear-to-r from-blue-600 to-purple-600 text-white rounded-xl p-5 sm:p-8 mb-6 shadow-lg"
+      className="bg-linear-to-r/srgb from-blue-600 to-purple-600 text-white rounded-xl p-5 sm:p-8 mb-6 shadow-lg"
     >
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>

@@ -289,7 +289,7 @@ export default function MyMeasurementsPage() {
             {/* Metric explanation header — shown when filtered to a single metric */}
             {metricFilter !== 'all' && metricExplanations[metricFilter] && (
               <div
-                className="mt-6 rounded-md border-l-2 border-l-blue-400/70 border-y border-r border-blue-100/80 bg-linear-to-br from-blue-50/60 via-white to-white p-4 shadow-sm"
+                className="mt-6 rounded-md border-l-2 border-l-blue-400/70 border-y border-r border-blue-100/80 bg-linear-to-br/srgb from-blue-50/60 via-white to-white p-4 shadow-sm"
                 data-testid="metric-explanation-header"
               >
                 <AthleteMetricExplanation

@@ -93,7 +93,7 @@ export function AthleteMetricExplanation({
               data-testid="athlete-metric-panel"
               className={cn(
                 'mt-2 rounded-md border-l-2 border-l-blue-400/70 border-y border-r border-blue-100/80',
-                'bg-linear-to-br from-blue-50/60 via-white to-white p-3 space-y-3 shadow-sm',
+                'bg-linear-to-br/srgb from-blue-50/60 via-white to-white p-3 space-y-3 shadow-sm',
                 compact ? 'text-xs' : 'text-sm',
               )}
             >

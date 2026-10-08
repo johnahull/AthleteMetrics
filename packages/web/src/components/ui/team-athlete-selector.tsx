@@ -542,7 +542,7 @@ export function TeamAthleteSelector({
                 {selectedAthletes.map(athlete => (
                   <div
                     key={athlete.id}
-                    className="group flex items-start gap-3 p-4 bg-linear-to-r from-accent/50 to-accent/30 rounded-lg hover:from-accent hover:to-accent/50 transition-all duration-200 border border-transparent hover:border-accent-foreground/10 hover:shadow-md"
+                    className="group flex items-start gap-3 p-4 bg-linear-to-r/srgb from-accent/50 to-accent/30 rounded-lg hover:from-accent hover:to-accent/50 transition-all duration-200 border border-transparent hover:border-accent-foreground/10 hover:shadow-md"
                   >
                     <div className="shrink-0 pt-0.5">
                       <User className="h-5 w-5 text-primary" />
