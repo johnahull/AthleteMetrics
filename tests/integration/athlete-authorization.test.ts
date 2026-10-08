@@ -28,6 +28,7 @@ vi.mock('../../packages/api/vite.js', () => ({
 }));
 
 import { registerRoutes } from '../../packages/api/routes';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 
 const PASSWORD = 'TestPass123!';
 
@@ -84,11 +85,7 @@ describe('Athlete management authorization', () => {
   });
 
   afterAll(async () => {
-    for (const id of trackedUserIds) {
-      try { await storage.deleteUser(id); } catch { /* best-effort */ }
-    }
-    try { await storage.deleteTeam(team.id); } catch { /* ignore */ }
-    try { await storage.deleteOrganization(org.id); } catch { /* ignore */ }
+    await purgeTestRows({ userIds: trackedUserIds, orgIds: [org.id] });
   });
 
   it('forbids an athlete from deleting their own account', async () => {

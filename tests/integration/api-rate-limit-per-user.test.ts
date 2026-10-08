@@ -22,6 +22,7 @@ vi.mock('../../packages/api/vite.js', () => ({
 }));
 
 import { registerRoutes } from '../../packages/api/routes';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 
 const PASSWORD = 'ApiLimiter123!';
 const LIMIT = 100;
@@ -62,7 +63,7 @@ describe('app-wide /api rate limiter', () => {
   });
 
   afterAll(async () => {
-    if (created.length) await db.delete(users).where(inArray(users.id, created));
+    await purgeTestRows({ userIds: created });
   });
 
   const hit = (ip: string, cookie?: string) => {

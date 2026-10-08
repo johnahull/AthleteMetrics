@@ -4,14 +4,15 @@
  * Deleting a user, team or organization is blocked by foreign keys without ON DELETE CASCADE
  * (user_teams, user_organizations, athlete_profiles, invitations and teams -> organizations), and several
  * afterAll blocks swallowed that error, so the rows stayed behind. purgeTestRows removes those dependents
- * first and then the users, teams and organizations, and reports a failure instead of swallowing it.
+ * first and then the users, teams and organizations, and reports a failure instead of swallowing it. measurements
+ * carry no foreign keys, so nothing cascades to them; the helper deletes them by user and organization.
  */
 process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 
 import { describe, it, expect, afterAll } from 'vitest';
 import { eq, inArray } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
-import { athleteProfiles, invitations, organizations, teams, userOrganizations, userTeams, users } from '@shared/schema';
+import { athleteProfiles, invitations, measurements, organizations, teams, userOrganizations, userTeams, users } from '@shared/schema';
 import { purgeTestRows } from '../helpers/purge-test-rows';
 
 describe('purgeTestRows (issue #539)', () => {
@@ -39,6 +40,7 @@ describe('purgeTestRows (issue #539)', () => {
   afterAll(async () => {
     // plain cleanup of the bystander rows (no helper: this test's subject is the helper)
     if (keep.userId) {
+      await db.delete(measurements).where(eq(measurements.userId, keep.userId));
       await db.delete(userOrganizations).where(eq(userOrganizations.userId, keep.userId));
       await db.delete(users).where(eq(users.id, keep.userId));
     }
@@ -84,11 +86,19 @@ describe('purgeTestRows (issue #539)', () => {
     const [doomedOrg] = await db.insert(organizations).values({ name: `Purge Doomed Org ${suffix}` }).returning();
     const doomed = await mkUser('doomed');
     await db.insert(userOrganizations).values({ userId: doomed.id, organizationId: doomedOrg.id, role: 'athlete' });
+    const mkMeasurement = (userId: string, organizationId: string) =>
+      db.insert(measurements).values({
+        userId, submittedBy: userId, organizationId, date: '2024-01-01', age: 16, metric: 'VERTICAL_JUMP', value: '30', units: 'in',
+      });
+    await mkMeasurement(doomed.id, doomedOrg.id);
+    await mkMeasurement(bystander.id, org.id);
 
     await purgeTestRows({ userIds: [doomed.id], orgIds: [doomedOrg.id] });
 
     expect(await db.select().from(users).where(eq(users.id, doomed.id))).toHaveLength(0);
     expect(await db.select().from(organizations).where(eq(organizations.id, doomedOrg.id))).toHaveLength(0);
+    expect(await db.select().from(measurements).where(eq(measurements.userId, doomed.id))).toHaveLength(0);
+    expect(await db.select().from(measurements).where(eq(measurements.userId, bystander.id))).toHaveLength(1);
     expect(await db.select().from(users).where(eq(users.id, bystander.id))).toHaveLength(1);
     expect(await db.select().from(organizations).where(eq(organizations.id, org.id))).toHaveLength(1);
     expect(await db.select().from(userOrganizations).where(eq(userOrganizations.userId, bystander.id))).toHaveLength(1);

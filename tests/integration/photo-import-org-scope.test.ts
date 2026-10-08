@@ -25,6 +25,7 @@ vi.mock('../../packages/api/vite.js', () => ({
 
 import { registerRoutes } from '../../packages/api/routes';
 import { ocrService } from '../../packages/api/ocr/ocr-service';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 
 const PASSWORD = 'TestPass123!';
 
@@ -117,16 +118,10 @@ describe('Photo import organization scoping', () => {
   });
 
   afterAll(async () => {
-    // deleteUser / deleteOrganization refuse while measurements or memberships exist and the
-    // failures are swallowed below; a leftover org keeps its organization_metrics rows and
-    // breaks migration 0145's "with no organizations" test, so remove these first.
-    try { await db.delete(measurements).where(inArray(measurements.userId, createdUserIds)); } catch { /* ignore */ }
-    try { await db.delete(userOrganizations).where(inArray(userOrganizations.organizationId, [orgA.id, orgB.id])); } catch { /* ignore */ }
-    for (const id of createdUserIds) {
-      try { await storage.deleteUser(id); } catch { /* ignore */ }
-    }
-    try { await storage.deleteOrganization(orgA.id); } catch { /* ignore */ }
-    try { await storage.deleteOrganization(orgB.id); } catch { /* ignore */ }
+    // A leftover org keeps its organization_metrics rows and breaks migration 0145's "with no
+    // organizations" test; measurements are removed first as they hold the users in place.
+    await db.delete(measurements).where(inArray(measurements.userId, createdUserIds));
+    await purgeTestRows({ userIds: createdUserIds, orgIds: [orgA.id, orgB.id] });
   });
 
   it('writes the reading only to the same-named athlete in the selected organization', async () => {

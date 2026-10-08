@@ -11,6 +11,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { storage } from '../../packages/api/storage';
 import type { Organization, Team, User } from '@shared/schema';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 
 describe('Team Update Integration Tests', () => {
   let testOrg: Organization;
@@ -82,30 +83,8 @@ describe('Team Update Integration Tests', () => {
   });
 
   afterAll(async () => {
-    // Cleanup in reverse order of dependencies
-    for (const userId of createdUsers) {
-      try {
-        await storage.deleteUser(userId);
-      } catch (error) {
-        console.error(`Failed to delete user ${userId}:`, error);
-      }
-    }
-
-    for (const teamId of createdTeams) {
-      try {
-        await storage.deleteTeam(teamId);
-      } catch (error) {
-        console.error(`Failed to delete team ${teamId}:`, error);
-      }
-    }
-
-    for (const orgId of createdOrgs) {
-      try {
-        await storage.deleteOrganization(orgId);
-      } catch (error) {
-        console.error(`Failed to delete org ${orgId}:`, error);
-      }
-    }
+    // purgeTestRows deletes every team of the orgs, so createdTeams needs no separate pass
+    await purgeTestRows({ userIds: createdUsers, orgIds: createdOrgs });
   });
 
   describe('Update Team Without Name Change', () => {
