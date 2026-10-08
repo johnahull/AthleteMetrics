@@ -65,6 +65,12 @@ describe('Migration 0151: MOMENTUM derived metric', () => {
          VALUES ('WEIGHT_LBS', 'Weight', 'Physical', 'lbs', 'tracking', false, true, 990)
          ON CONFLICT (code) DO NOTHING`;
 
+    const seedUsers = (tx: any) =>
+      tx`INSERT INTO users (id, username, emails, password, first_name, last_name, full_name) VALUES
+         ('u-0151', 'u0151', ARRAY['u0151@test.com'], 'x', 'U', 'U', 'U U'),
+         ('c-0151', 'c0151', ARRAY['c0151@test.com'], 'x', 'C', 'C', 'C C')
+         ON CONFLICT (id) DO NOTHING`;
+
     // Pre-0151 state: no MOMENTUM row, no MOMENTUM measurements
     const resetToPre = async (tx: any) => {
       await tx`DELETE FROM measurements WHERE metric = 'MOMENTUM'`;
@@ -136,13 +142,48 @@ describe('Migration 0151: MOMENTUM derived metric', () => {
       });
     });
 
-    it('raises when WEIGHT_LBS is missing and creates nothing', async () => {
+    it('creates WEIGHT_LBS with the production attributes when it is missing, then inserts MOMENTUM', async () => {
       await rollbackable(async (tx) => {
         await resetToPre(tx);
+        await tx`DELETE FROM organization_metrics WHERE metric_code = 'WEIGHT_LBS'`;
         await tx`DELETE FROM site_metrics WHERE code = 'WEIGHT_LBS'`;
-        await tx`SAVEPOINT s`;
-        await expect(tx.unsafe(UP)).rejects.toThrow(/WEIGHT_LBS/);
-        await tx`ROLLBACK TO SAVEPOINT s`;
+        await tx.unsafe(UP);
+        const [w] = await tx`SELECT * FROM site_metrics WHERE code = 'WEIGHT_LBS'`;
+        expect(w).toMatchObject({
+          label: 'Weight (lb)',
+          category: 'Physical',
+          unit: 'lbs',
+          metric_type: 'tracking',
+          is_derived: false,
+          is_active: true,
+          decimal_precision: 3,
+        });
+        expect(await tx`SELECT 1 FROM site_metrics WHERE code = 'MOMENTUM'`).toHaveLength(1);
+      });
+    });
+
+    it('leaves an existing WEIGHT_LBS untouched', async () => {
+      await rollbackable(async (tx) => {
+        await resetToPre(tx);
+        await tx`DELETE FROM organization_metrics WHERE metric_code = 'WEIGHT_LBS'`;
+        await tx`DELETE FROM site_metrics WHERE code = 'WEIGHT_LBS'`;
+        await tx`INSERT INTO site_metrics (code, label, category, unit, metric_type, is_system_default, is_active, decimal_precision)
+                 VALUES ('WEIGHT_LBS', 'Custom label', 'Anthropometrics', 'kg', 'higher_is_better', true, false, 1)`;
+        const [before] = await tx`SELECT * FROM site_metrics WHERE code = 'WEIGHT_LBS'`;
+        await tx.unsafe(UP);
+        const [after] = await tx`SELECT * FROM site_metrics WHERE code = 'WEIGHT_LBS'`;
+        expect(after).toEqual(before);
+      });
+    });
+
+    it('down does not delete WEIGHT_LBS', async () => {
+      await rollbackable(async (tx) => {
+        await resetToPre(tx);
+        await tx`DELETE FROM organization_metrics WHERE metric_code = 'WEIGHT_LBS'`;
+        await tx`DELETE FROM site_metrics WHERE code = 'WEIGHT_LBS'`;
+        await tx.unsafe(UP);
+        await tx.unsafe(DOWN);
+        expect(await tx`SELECT 1 FROM site_metrics WHERE code = 'WEIGHT_LBS'`).toHaveLength(1);
         expect(await tx`SELECT 1 FROM site_metrics WHERE code = 'MOMENTUM'`).toHaveLength(0);
       });
     });
@@ -154,7 +195,7 @@ describe('Migration 0151: MOMENTUM derived metric', () => {
         await tx`DELETE FROM site_benchmarks WHERE metric_code = 'FLY10_TIME'`;
         await tx`DELETE FROM site_metrics WHERE code = 'FLY10_TIME'`;
         await tx`SAVEPOINT s`;
-        await expect(tx.unsafe(UP)).rejects.toThrow(/FLY10_TIME/);
+        await expect(tx.unsafe(UP)).rejects.toThrow(/missing site_metrics rows: FLY10_TIME/);
         await tx`ROLLBACK TO SAVEPOINT s`;
       });
     });
@@ -164,6 +205,7 @@ describe('Migration 0151: MOMENTUM derived metric', () => {
         await resetToPre(tx);
         await seedWeight(tx);
         await tx.unsafe(UP);
+        await seedUsers(tx);
         await tx`INSERT INTO measurements (user_id, submitted_by, date, age, metric, value, units, is_calculated)
                  VALUES ('u-0151', 'c-0151', '2026-03-10', 17, 'MOMENTUM', '478.6', 'kg*m/s', true),
                         ('u-0151', 'c-0151', '2026-03-11', 17, 'MOMENTUM', '480.0', 'kg*m/s', false),
@@ -181,6 +223,7 @@ describe('Migration 0151: MOMENTUM derived metric', () => {
         await resetToPre(tx);
         await seedWeight(tx);
         await tx.unsafe(UP);
+        await seedUsers(tx);
         await tx`INSERT INTO measurements (user_id, submitted_by, date, age, metric, value, units, is_calculated)
                  VALUES ('u-0151', 'c-0151', '2026-03-10', 17, 'MOMENTUM', '478.6', 'kg*m/s', true)`;
         await tx`INSERT INTO users (id, username, emails, password, first_name, last_name, full_name)

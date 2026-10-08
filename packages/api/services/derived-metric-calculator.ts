@@ -973,7 +973,7 @@ export class DerivedMetricCalculator {
       return [triggerDate];
     }
 
-    const maxDays = config?.maxDateDifference || 7;
+    const maxDays = config?.maxDateDifference ?? 7;
     const center = Date.parse(`${triggerDate}T00:00:00Z`);
     const dayMs = 24 * 60 * 60 * 1000;
     const minDate = new Date(center - maxDays * dayMs).toISOString().split('T')[0];

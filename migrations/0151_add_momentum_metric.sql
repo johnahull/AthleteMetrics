@@ -14,24 +14,35 @@
 -- derived values). metric_type 'tracking': no better/worse direction, so no
 -- trend arrows or rankings. No benchmark tiers are seeded.
 --
--- Requires WEIGHT_LBS and FLY10_TIME in site_metrics. WEIGHT_LBS has no seed in
--- the migrations (it was created through the admin UI in production), so a fresh
--- environment fails loudly here instead of getting a momentum metric with no source.
+-- Requires FLY10_TIME in site_metrics (RAISE EXCEPTION otherwise). WEIGHT_LBS has no seed
+-- in the migrations (it was created through the admin UI in production), so it is created
+-- here when missing, with the production attributes; an existing row is never modified.
+-- The down migration does not delete WEIGHT_LBS.
 --
 -- Transaction: supplied by scripts/apply-manual-migrations.js, so no BEGIN/COMMIT.
 -- Idempotent: ON CONFLICT (code) DO UPDATE.
 
+-- FLY10_TIME is seeded by earlier migrations; fail loudly if it is missing.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM site_metrics WHERE code = 'FLY10_TIME') THEN
+    RAISE EXCEPTION 'Migration 0151 requires the MOMENTUM source metrics; missing site_metrics rows: FLY10_TIME';
+  END IF;
+END $$;
+
+-- WEIGHT_LBS exists in production (created via the admin UI) but has no seed, so a fresh
+-- database (db:push + manual migrations) lacks it. Create it with the production attributes;
+-- ON CONFLICT DO NOTHING never modifies an existing row.
 DO $$
 DECLARE
-  v_missing TEXT;
+  v_created INTEGER;
 BEGIN
-  SELECT string_agg(req.code, ', ' ORDER BY req.code)
-    INTO v_missing
-    FROM (VALUES ('FLY10_TIME'), ('WEIGHT_LBS')) AS req(code)
-   WHERE NOT EXISTS (SELECT 1 FROM site_metrics s WHERE s.code = req.code);
-
-  IF v_missing IS NOT NULL THEN
-    RAISE EXCEPTION 'Migration 0151 requires the MOMENTUM source metrics; missing site_metrics rows: % (WEIGHT_LBS exists in production only; create it first)', v_missing;
+  INSERT INTO site_metrics (code, label, category, unit, metric_type, is_derived, is_active, decimal_precision)
+  VALUES ('WEIGHT_LBS', 'Weight (lb)', 'Physical', 'lbs', 'tracking', false, true, 3)
+  ON CONFLICT (code) DO NOTHING;
+  GET DIAGNOSTICS v_created = ROW_COUNT;
+  IF v_created > 0 THEN
+    RAISE NOTICE 'Migration 0151: WEIGHT_LBS was missing and has been created (Weight (lb), Physical, lbs, tracking).';
   END IF;
 END $$;
 
