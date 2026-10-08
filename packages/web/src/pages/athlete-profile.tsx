@@ -11,7 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Calendar, MapPin, Trophy, TrendingUp, User, Zap, Edit, Plus, Mail, Phone, Edit2, Trash2, Clock, CalendarDays, Shield } from "lucide-react";
-import { calculateFly10Speed } from "@/lib/speed-utils";
+import { calculateFly10Speed, fly10SpeedMph } from "@/lib/speed-utils";
 import AthleteModal from "@/components/athlete-modal";
 import AthleteMeasurementForm from "@/components/athlete-measurement-form";
 import { LlmExportButton } from "@/components/athletes/LlmExportButton";
@@ -582,10 +582,7 @@ export default function AthleteProfile() {
                         {measurement.value}{measurement.units}
                       </td>
                       <td className="py-3 px-4 text-sm font-mono text-gray-600">
-                        {measurement.metric === "FLY10_TIME" 
-                          ? calculateFly10Speed(parseFloat(measurement.value)).toFixed(1) 
-                          : '-'
-                        }
+                        {fly10SpeedMph(measurement.metric, parseFloat(measurement.value))?.toFixed(1) ?? '-'}
                       </td>
                       <td className="py-3 px-4 text-sm text-gray-600">
                         {formatFlyInDistance(measurement.metric, measurement.flyInDistance)}
