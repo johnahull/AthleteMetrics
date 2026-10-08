@@ -355,6 +355,9 @@ describe.skipIf(!DATABASE_URL)('Migration 0145: behavioral (real DB, rolled back
   it('seeds no benchmarks and, with no organizations, enables nothing', async () => {
     await inTx(async (tx) => {
       await to0144(tx);
+      // Make "no organizations" true inside this (rolled-back) tx regardless of what other
+      // test files left in the shared DB: no org has either protocol leg enabled.
+      await tx`delete from organization_metrics where metric_code like 'AGILITY_505%'`;
       const [{ sb }] = await tx`select count(*)::int as sb from site_benchmarks`;
       await tx.unsafe(upSql);
       const [{ sb2 }] = await tx`select count(*)::int as sb2 from site_benchmarks`;

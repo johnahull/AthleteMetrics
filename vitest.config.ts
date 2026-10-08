@@ -49,6 +49,11 @@ export default defineConfig({
       'tests/e2e/**',
       // Exclude integration tests by default (need database)
       'tests/integration/**',
+      // Migration tests apply/revert DDL and seed data against the shared database, so they
+      // cannot run in parallel with other files here. CI runs them serially via
+      // vitest.integration.config.ts (fileParallelism: false); unit config excludes them too.
+      'tests/migrations/**',
+      'tests/migration/**',
     ],
 
   },
