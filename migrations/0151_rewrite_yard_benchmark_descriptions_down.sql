@@ -13,18 +13,15 @@ UPDATE site_benchmarks sb
    SET description =
          'Approximate: converted from metric-protocol research (x0.914); recalibrate with BTA data.'
          || CASE
-              WHEN strpos(sb.description, ' Metric-protocol source note (times in seconds, not converted):') > 0
-                THEN substr(
-                       sb.description,
-                       strpos(sb.description, ' Metric-protocol source note (times in seconds, not converted):')
-                         + length(' Metric-protocol source note (times in seconds, not converted):')
-                     )
+              WHEN strpos(sb.description, m.marker) > 0
+                THEN substr(sb.description, strpos(sb.description, m.marker) + length(m.marker))
               ELSE ''
             END
+  FROM (SELECT ' Metric-protocol source note (times in seconds, not converted):'::text AS marker) m
  WHERE sb.metric_code IN ('AGILITY_505_YD', 'AGILITY_505_YD_L', 'AGILITY_505_YD_R')
    AND sb.description ~ '^Approximate yard-protocol (threshold|range)[^,]*, converted from metric-protocol research \(x0\.914\); recalibrate with BTA data\.'
    AND (
-     strpos(sb.description, ' Metric-protocol source note (times in seconds, not converted):') > 0
+     strpos(sb.description, m.marker) > 0
      OR sb.description ~ 'recalibrate with BTA data\.$'
    );
 
