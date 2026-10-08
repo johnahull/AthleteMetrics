@@ -602,7 +602,10 @@ export function registerImportExportRoutes(app: Express) {
 
       // SECURITY: Measurement import is limited to coach, org_admin and site_admin (matches /api/import/photo)
       if (type === 'measurements') {
-        if (!isSiteAdmin(req.session.user) && !['coach', 'org_admin'].includes(req.session.user?.role ?? '')) {
+        if (!req.session.user?.id) {
+          return res.status(401).json({ message: "User not authenticated" });
+        }
+        if (!isSiteAdmin(req.session.user) && !['coach', 'org_admin'].includes(req.session.user.role ?? '')) {
           return res.status(403).json({ message: "Your role cannot import measurement data" });
         }
       }
