@@ -110,6 +110,14 @@ export function SendReportToMultipleAthletesDialog({
               </Alert>
             )}
 
+            <Alert data-testid="under-13-bulk-note">
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                Athletes under 13, or with no date of birth on file, are skipped. Send their report as a PDF or a share
+                link to their parent instead.
+              </AlertDescription>
+            </Alert>
+
             {/* Warning about large selection */}
             {hasWarning && (
               <Alert variant="destructive">

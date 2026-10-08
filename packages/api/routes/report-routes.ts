@@ -33,7 +33,7 @@ import { eq, and, desc, asc, sql, inArray, isNull, type SQL } from "drizzle-orm"
 import { isSiteAdmin } from "../utils/auth-helpers";
 import { coppaService } from "../services/coppa-service";
 import { parentalConsents, parentAthleteLinks } from "@shared/schema/tables/coppa";
-import { COPPA_ACTIONS } from "@shared/coppa-utils";
+import { COPPA_ACTIONS, isUnder13OrUnknownDob } from "@shared/coppa-utils";
 import type { MetricExplanation } from "@shared/metric-explanations";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { jsPDF } from "jspdf";
@@ -139,6 +139,10 @@ const bulkDistributeReportsSchema = z.object({
   reportIds: z.array(z.string().uuid()).min(1, "At least one report ID is required").max(100, "Cannot distribute more than 100 reports at once"),
   message: z.string().max(1000, "Message cannot exceed 1000 characters").optional(),
 });
+
+// Share-to-athlete (account, email, push) is blocked for under-13 athletes and athletes with no valid
+// date of birth (AM-FEAT-019 P4). Links sent to a parent are not share-to-athlete and are unaffected.
+const UNDER_13_SHARE_BLOCKED_CODE = 'UNDER_13_SHARE_BLOCKED';
 
 // Maximum athletes that can be shared with in a single bulk request
 const MAX_BULK_SHARE = 100;
@@ -1889,6 +1893,7 @@ export function registerReportRoutes(app: Express) {
             lastName: users.lastName,
             fullName: users.fullName,
             emails: users.emails,
+            birthDate: users.birthDate,
           })
           .from(users)
           .where(eq(users.id, athleteId))
@@ -1897,6 +1902,14 @@ export function registerReportRoutes(app: Express) {
 
         if (!athlete) {
           return res.status(400).json({ message: "Athlete not found" });
+        }
+
+        if (isUnder13OrUnknownDob(athlete.birthDate)) {
+          return res.status(403).json({
+            code: UNDER_13_SHARE_BLOCKED_CODE,
+            message:
+              "This athlete is under 13 or has no date of birth on file, so the report cannot be shared to their account. Send the PDF or a share link to their parent instead.",
+          });
         }
 
         // Attempt to create share
@@ -2056,6 +2069,7 @@ export function registerReportRoutes(app: Express) {
    *   shared: number,           // Successfully shared count
    *   skipped: number,          // Already shared count (duplicates)
    *   alreadyShared: number     // Same as skipped for backwards compatibility
+   *   blockedUnder13: number    // Athletes skipped because they are under 13 or have no date of birth
    * }
    *
    * @example
@@ -2161,6 +2175,7 @@ export function registerReportRoutes(app: Express) {
             lastName: users.lastName,
             fullName: users.fullName,
             emails: users.emails,
+            birthDate: users.birthDate,
           })
           .from(users)
           .where(inArray(users.id, targetAthleteIds));
@@ -2191,12 +2206,14 @@ export function registerReportRoutes(app: Express) {
         const results: Array<{
           athleteId: string;
           athleteName: string;
-          status: 'shared' | 'skipped' | 'already_shared' | 'failed';
+          status: 'shared' | 'skipped' | 'already_shared' | 'failed' | 'blocked_under_13';
           reason?: string;
         }> = [];
 
         let skipped = 0;
         let alreadyShared = 0;
+        let blockedUnder13 = 0;
+        const birthDateById = new Map(athletes.map((a) => [a.id, a.birthDate]));
 
         // Prepare list of shares to insert
         const sharesToInsert: Array<{
@@ -2230,6 +2247,18 @@ export function registerReportRoutes(app: Express) {
               reason: 'Not in organization',
             });
             skipped++;
+            continue;
+          }
+
+          // Under-13 or unknown date of birth: no share, no notification (athleteId is already org-validated)
+          if (isUnder13OrUnknownDob(birthDateById.get(athleteId))) {
+            results.push({
+              athleteId,
+              athleteName,
+              status: 'blocked_under_13',
+              reason: 'Under 13 or no date of birth',
+            });
+            blockedUnder13++;
             continue;
           }
 
@@ -2381,6 +2410,7 @@ export function registerReportRoutes(app: Express) {
           shared,
           skipped,
           alreadyShared,
+          blockedUnder13,
           results,
         });
       } catch (error) {
@@ -2433,6 +2463,7 @@ export function registerReportRoutes(app: Express) {
    *   distributed: number,      // Successfully distributed count
    *   skipped: number,          // Already distributed count (duplicates)
    *   failed: number            // Failed count (invalid athleteId, access denied, etc.)
+   *   blockedUnder13: number    // Under-13 or no-date-of-birth athletes skipped (summary.blockedUnder13)
    * }
    *
    * @example
@@ -2536,6 +2567,7 @@ export function registerReportRoutes(app: Express) {
             lastName: users.lastName,
             fullName: users.fullName,
             emails: users.emails,
+            birthDate: users.birthDate,
           })
           .from(users)
           .where(inArray(users.id, athleteIds));
@@ -2563,7 +2595,7 @@ export function registerReportRoutes(app: Express) {
           reportName: string;
           athleteId: string;
           athleteName: string;
-          status: 'sent' | 'already_sent' | 'skipped';
+          status: 'sent' | 'already_sent' | 'skipped' | 'blocked_under_13';
           reason?: string;
         }> = [];
         const sharesToInsert: Array<{
@@ -2601,6 +2633,19 @@ export function registerReportRoutes(app: Express) {
               athleteName,
               status: 'skipped',
               reason: 'Athlete not found',
+            });
+            continue;
+          }
+
+          // Under-13 or unknown date of birth: no share, no notification
+          if (isUnder13OrUnknownDob(athlete.birthDate)) {
+            results.push({
+              reportId,
+              reportName: reportInfo.reportName,
+              athleteId: reportInfo.athleteId,
+              athleteName,
+              status: 'blocked_under_13',
+              reason: 'Under 13 or no date of birth',
             });
             continue;
           }
@@ -2761,6 +2806,7 @@ export function registerReportRoutes(app: Express) {
 
         // Calculate summary
         const alreadySent = results.filter((r) => r.status === 'already_sent').length;
+        const blockedUnder13 = results.filter((r) => r.status === 'blocked_under_13').length;
         const skipped = results.filter((r) => r.status === 'skipped').length + skippedReports.length;
 
         res.status(200).json({
@@ -2768,6 +2814,7 @@ export function registerReportRoutes(app: Express) {
             sent,
             alreadySent,
             skipped,
+            blockedUnder13,
           },
           results,
           skippedReports,
