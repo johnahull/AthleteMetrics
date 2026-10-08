@@ -273,6 +273,17 @@ export class MetricService extends BaseService {
         }
       }
 
+      // The schema can only check anchorMetric against dependentMetrics sent in the same patch;
+      // when the patch has none, check against the stored ones.
+      const patchedAnchor = validatedData.calculationConfig?.anchorMetric;
+      if (patchedAnchor && !validatedData.dependentMetrics) {
+        const stored = await this.storage.getSiteMetric(code);
+        const deps = stored?.dependentMetrics ?? [];
+        if (!deps.some(d => d.toUpperCase() === patchedAnchor.toUpperCase())) {
+          throw new Error("anchorMetric must be one of the dependent metrics");
+        }
+      }
+
       // Update metric
       const metric = await this.storage.updateSiteMetric(code, validatedData);
 

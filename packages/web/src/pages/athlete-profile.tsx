@@ -36,6 +36,7 @@ import {
 } from "@/utils/athlete-dashboard-utils";
 import { getMetricUnits } from "@/lib/metrics";
 import { useMetricLabels } from "@/hooks/use-metric-labels";
+import { useAvailableMetrics } from "@/hooks/use-available-metrics";
 
 // Edit measurement form schema
 const editMeasurementSchema = z.object({
@@ -58,6 +59,7 @@ export default function AthleteProfile() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { getLabel } = useMetricLabels();
+  const { metrics: metricConfigs } = useAvailableMetrics();
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddMeasurementModal, setShowAddMeasurementModal] = useState(false);
@@ -430,6 +432,7 @@ export default function AthleteProfile() {
                 measurements={measurementsByMetric[metric]}
                 units={getMetricUnits(metric)}
                 personalRecord={personalRecords.find(pr => pr.metric === metric)}
+                metricType={metricConfigs.find(m => m.code === metric)?.metricType}
               />
             ))}
           </div>

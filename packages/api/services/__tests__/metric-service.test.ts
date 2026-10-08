@@ -373,6 +373,23 @@ describe('MetricService', () => {
       ).rejects.toThrow('Unauthorized: Only site administrators can update metrics');
     });
 
+    it('validates a patched anchorMetric against the STORED dependentMetrics when the patch has none', async () => {
+      await db.update(siteMetrics).set({ dependentMetrics: ['SRC_A', 'SRC_B'] }).where(eq(siteMetrics.code, testMetricCode));
+      const config = (anchorMetric: string) => ({
+        dateMatchStrategy: 'closest' as const,
+        maxDateDifference: 45,
+        missingSourceBehavior: 'skip' as const,
+        anchorMetric,
+      });
+
+      await expect(
+        metricService.updateSiteMetric(testMetricCode, { calculationConfig: config('NOT_A_SOURCE') }, siteAdminUserId)
+      ).rejects.toThrow(/anchorMetric/);
+
+      const ok = await metricService.updateSiteMetric(testMetricCode, { calculationConfig: config('src_a') }, siteAdminUserId);
+      expect(ok.calculationConfig?.anchorMetric).toBe('src_a');
+    });
+
     it('should reject update of non-existent metric', async () => {
       await expect(
         metricService.updateSiteMetric(
