@@ -144,6 +144,11 @@ describe('measurement write role gaps (#515, #516)', () => {
       expect(await victimRows()).toHaveLength(0);
     });
 
+    it.each(['parent', 'guest'])('403 (not 400) when a %s session sends a malformed body', async (role) => {
+      const res = await request(app).post('/api/measurements').set('Cookie', cookies[role]).send({});
+      expect(res.status, JSON.stringify(res.body)).toBe(403);
+    });
+
     it('a coach in the same organization can still create the measurement', async () => {
       const res = await request(app).post('/api/measurements').set('Cookie', cookies.coach).send(body());
       expect(res.status, JSON.stringify(res.body)).toBe(201);

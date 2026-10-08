@@ -602,8 +602,7 @@ export function registerImportExportRoutes(app: Express) {
 
       // SECURITY: Measurement import is limited to coach, org_admin and site_admin (matches /api/import/photo)
       if (type === 'measurements') {
-        const importUser = req.session.user;
-        if (!isSiteAdmin(importUser) && !['coach', 'org_admin'].includes(importUser?.role ?? '')) {
+        if (!isSiteAdmin(req.session.user) && !['coach', 'org_admin'].includes(req.session.user?.role ?? '')) {
           return res.status(403).json({ message: "Your role cannot import measurement data" });
         }
       }
