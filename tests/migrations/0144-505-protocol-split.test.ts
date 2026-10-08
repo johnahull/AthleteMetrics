@@ -678,6 +678,47 @@ describe.skipIf(!DATABASE_URL)('Migration 0144: behavioral (real DB, rolled back
     });
   }, TEST_TIMEOUT);
 
+  it('remaps mixed-case spellings instead of aborting on them (issue #541 item 1)', async () => {
+    await inTx(async (tx) => {
+      await toPreState(tx);
+      await seedFixture(tx);
+      // The selection and the Block C assertion are case-insensitive; the remap must be too, or the
+      // assertion raises and the whole deploy rolls back.
+      await tx.unsafe(`insert into custom_org_metrics (id, organization_id, code, label, metric_type, is_derived, formula, dependent_metrics) values
+        ('fx505-com-mixed', '${FX_ORG}', 'FX_COD_MIXED', 'FX Mixed', 'lower_is_better', true, 'Agility_505_L * 1', ARRAY['Agility_505_L'])`);
+      await tx.unsafe(`update reports set config = '{"metrics":["Agility_505","agility_505_R"]}'::jsonb where id = 'fx505-report'`);
+
+      await tx.unsafe(upSql);
+
+      expect(await oldReferenceCount(tx)).toBe(0);
+      const [row] = (await tx.unsafe(
+        `select formula, dependent_metrics from custom_org_metrics where id = 'fx505-com-mixed'`,
+      )) as Record<string, unknown>[];
+      expect(row.formula).toBe('AGILITY_505_M_L * 1');
+      expect(row.dependent_metrics).toEqual(['AGILITY_505_M_L']);
+      const [report] = (await tx.unsafe(`select config from reports where id = 'fx505-report'`)) as Record<string, unknown>[];
+      // Mixed-case spellings are normalised to the upper-case new code
+      expect(report.config).toEqual({ metrics: ['AGILITY_505_M', 'AGILITY_505_M_R'] });
+    });
+  }, TEST_TIMEOUT);
+
+  it('keeps an empty dependent_metrics array empty instead of turning it into NULL (issue #541 item 2)', async () => {
+    await inTx(async (tx) => {
+      await toPreState(tx);
+      await seedFixture(tx);
+      await tx.unsafe(`insert into custom_org_metrics (id, organization_id, code, label, metric_type, is_derived, formula, dependent_metrics) values
+        ('fx505-com-empty', '${FX_ORG}', 'FX_COD_EMPTY', 'FX Empty', 'lower_is_better', true, 'AGILITY_505 * 3', '{}'::text[])`);
+
+      await tx.unsafe(upSql);
+
+      const [row] = (await tx.unsafe(
+        `select formula, dependent_metrics from custom_org_metrics where id = 'fx505-com-empty'`,
+      )) as Record<string, unknown>[];
+      expect(row.formula).toBe('AGILITY_505_M * 3');
+      expect(row.dependent_metrics).toEqual([]);
+    });
+  }, TEST_TIMEOUT);
+
   async function om(tx: Tx, org: string) {
     return (await tx`select metric_code, is_enabled, display_order, custom_label from organization_metrics
                       where organization_id = ${org} and metric_code ~ '^AGILITY_505' order by metric_code`) as Record<string, any>[];

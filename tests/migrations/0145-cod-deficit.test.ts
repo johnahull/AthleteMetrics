@@ -579,6 +579,14 @@ describe.skipIf(!DATABASE_URL)('Migration 0145: behavioral (real DB, rolled back
       custom_org_metrics: `insert into custom_org_metrics (id, organization_id, code, label, metric_type, is_derived, formula, dependent_metrics)
                            values ('fx145-com', '${FX_ORG}', 'FX_USES_DEFICIT', 'FX', 'lower_is_better', true,
                                    'AGILITY_COD_DEFICIT_M * 2', ARRAY['AGILITY_COD_DEFICIT_M'])`,
+      // Issue #541 item 3: deleting the site_metrics rows would cascade-delete these (or orphan the
+      // FK-less set items / organization benchmarks that point at them), so the guard must refuse first.
+      site_benchmarks: `insert into site_benchmarks (id, metric_code, name, comparison_operator, benchmark_value, is_system_default, is_active, display_order)
+                        values ('fx145-sb', 'AGILITY_COD_DEFICIT_M', 'FX', 'lte', 0.9, false, true, 999)`,
+      event_metrics: `insert into events (id, name, start_date) values ('fx145-event', 'FX 145 Event', now());
+                      insert into event_metrics (id, event_id, metric_code) values ('fx145-em', 'fx145-event', 'AGILITY_COD_DEFICIT_YD')`,
+      site_metric_explanations: `insert into site_metric_explanations (id, metric_code, title)
+                                 values ('fx145-expl', 'AGILITY_COD_DEFICIT_M', 'FX 145 title')`,
     };
     for (const [name, stmt] of Object.entries(cases)) {
       await inTx(async (tx) => {

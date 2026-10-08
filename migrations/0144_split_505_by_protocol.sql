@@ -64,13 +64,23 @@
 -- The user re-uploads the file. NOTE: the runner tracks migrations by name, so
 -- this only takes effect in environments that have not yet applied 0144.
 --
+-- Residual risk: only status='pending' batches can still be committed (the other
+-- statuses are terminal: completed, rolled_back, expired), so expiring them is
+-- complete for stored batches. A commit already IN FLIGHT when this runs (it read
+-- its batch before the batch was expired) could still write retired codes
+-- afterwards. Deploy in a quiet window and, after the deploy, check:
+--   SELECT COUNT(*) FROM measurements
+--    WHERE metric IN ('AGILITY_505','AGILITY_505_L','AGILITY_505_R','AGILITY_505_LSI');
+-- Any rows found were written by such a commit; triage them by hand (see above).
+--
 -- Deliberately NOT done: report_snapshots, user_achievements.metadata,
 -- completed import_batches, audit_logs (historical).
 
 -- ============================================================================
 -- Block 0 — helpers (pg_temp: vanish with the session, nothing persists)
 -- ============================================================================
-CREATE OR REPLACE FUNCTION pg_temp.m505_remap(t text) RETURNS text
+-- Exact spellings (upper and lower case) keep their case. Any other spelling is handled by m505_remap below.
+CREATE OR REPLACE FUNCTION pg_temp.m505_remap_exact(t text) RETURNS text
 LANGUAGE sql IMMUTABLE AS $fn$
   SELECT regexp_replace(regexp_replace(regexp_replace(regexp_replace(
          regexp_replace(regexp_replace(regexp_replace(regexp_replace(
@@ -85,10 +95,28 @@ LANGUAGE sql IMMUTABLE AS $fn$
            '\magility_505\M',     'agility_505_m',     'g')
 $fn$;
 
+-- The selection predicates and the Block C assertion match case-insensitively (~*), so the remap must too:
+-- a mixed-case spelling ('Agility_505_L' in a custom formula, "Agility_505" in a report config) would
+-- otherwise survive, Block C would raise, and the whole deploy would roll back. After the exact pass only
+-- other spellings can remain (the exact pass leaves no bare retired token), so they are normalised to the
+-- upper-case new code.
+CREATE OR REPLACE FUNCTION pg_temp.m505_remap(t text) RETURNS text
+LANGUAGE sql IMMUTABLE AS $fn$
+  SELECT regexp_replace(regexp_replace(regexp_replace(regexp_replace(
+           pg_temp.m505_remap_exact(t),
+           '\mAGILITY_505_LSI\M', 'AGILITY_505_M_LSI', 'gi'),
+           '\mAGILITY_505_R\M',   'AGILITY_505_M_R',   'gi'),
+           '\mAGILITY_505_L\M',   'AGILITY_505_M_L',   'gi'),
+           '\mAGILITY_505\M',     'AGILITY_505_M',     'gi')
+$fn$;
+
+-- array_agg over zero rows is NULL: keep a NULL array NULL and an empty array empty (byte-identical).
 CREATE OR REPLACE FUNCTION pg_temp.m505_remap_arr(a text[]) RETURNS text[]
 LANGUAGE sql IMMUTABLE AS $fn$
-  SELECT array_agg(pg_temp.m505_remap(u.x) ORDER BY u.ord)
-    FROM unnest(a) WITH ORDINALITY AS u(x, ord)
+  SELECT CASE WHEN a IS NULL THEN NULL
+              ELSE COALESCE((SELECT array_agg(pg_temp.m505_remap(u.x) ORDER BY u.ord)
+                               FROM unnest(a) WITH ORDINALITY AS u(x, ord)), '{}'::text[])
+         END
 $fn$;
 
 -- Deterministic yard-twin id. site_benchmarks.id is VARCHAR(36) and real rows
