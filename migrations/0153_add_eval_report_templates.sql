@@ -125,6 +125,15 @@ SELECT NULL, 'SOCCER', 'Soccer eval (yards)',
 HAVING count(*) > 0;
 
 -- ============================================================================
+-- Block C2 - Lookup index for eval reports
+-- ============================================================================
+-- COPPA deletion/export/merge, the defaults route and the report loader find eval reports by
+-- config->>'athleteId' and config->>'eventId'; without this they scan every report row.
+CREATE INDEX IF NOT EXISTS reports_eval_athlete_event_idx
+  ON reports ((config->>'athleteId'), (config->>'eventId'))
+  WHERE report_type = 'eval';
+
+-- ============================================================================
 -- Block D - Summary
 -- ============================================================================
 DO $$

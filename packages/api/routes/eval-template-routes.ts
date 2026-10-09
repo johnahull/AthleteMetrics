@@ -140,7 +140,7 @@ export function registerEvalTemplateRoutes(app: Express) {
       const event = await writableEvent(req);
       if (!event) return res.status(404).json(NOT_FOUND);
       const parsed = applyEvalTemplateSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: "templateId is required" });
+      if (!parsed.success) return res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
       const template = await svc.getVisibleTemplate(userOf(req), parsed.data.templateId);
       // A template of another organization is invisible here even to a writer of both organizations
       if (!template || template.archivedAt || (template.organizationId && template.organizationId !== event.organizationId)) {

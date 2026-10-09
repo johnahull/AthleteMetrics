@@ -335,6 +335,11 @@ describe('eval templates and org eval report settings', () => {
       expect(upd.body.name).toBe(`${PREFIX}-life2`);
       expect(upd.body.metrics).toHaveLength(1);
 
+      await as('adminA').patch(`/api/eval-templates/${id}`).send({ description: 'about' });
+      const cleared = await as('adminA').patch(`/api/eval-templates/${id}`).send({ description: null });
+      expect(cleared.status).toBe(200);
+      expect(cleared.body.description).toBeNull();
+
       expect((await as('adminA').post(`/api/eval-templates/${id}/archive`)).status).toBe(200);
       const list = await as('coachA').get(`/api/organizations/${orgA}/eval-templates`);
       expect(list.body.map((t: any) => t.id)).not.toContain(id);
@@ -426,6 +431,24 @@ describe('eval templates and org eval report settings', () => {
       expect(res.status).toBe(200);
       expect(res.body.added.sort()).toEqual([...existing].sort());
       expect(await codesOf(ev)).toEqual([...existing].sort());
+    });
+
+    it('answers 200 with an empty result when every metric is optional and none is chosen', async () => {
+      const allOptional = (await as('coachB').post(`/api/organizations/${orgB}/eval-templates`).send({
+        name: `${PREFIX}-all-optional`, sport: 'SOCCER', metrics: [{ metricKey: 'CMJ_HOH', isRequired: false, displayOrder: 1 }],
+      })).body.id;
+      const ev = await newEvent(orgB);
+      const res = await as('coachB').post(`/api/events/${ev}/apply-eval-template`).send({ templateId: allOptional });
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ added: [], skipped: [], alreadyPresent: [] });
+      expect(await codesOf(ev)).toEqual([]);
+    });
+
+    it('answers 400 with details when the body is malformed', async () => {
+      const ev = await newEvent(orgB);
+      const res = await as('coachB').post(`/api/events/${ev}/apply-eval-template`).send({ templateId: tplB, includeOptional: 'CMJ_HOH' });
+      expect(res.status).toBe(400);
+      expect(res.body.details?.fieldErrors?.includeOptional).toBeDefined();
     });
 
     it('refuses a frozen event with 409 and adds nothing', async () => {
