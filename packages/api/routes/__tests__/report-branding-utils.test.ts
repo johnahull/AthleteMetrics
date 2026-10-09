@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { ServerResponse, IncomingMessage } from 'http';
+import { Socket } from 'net';
 import { hexToRgb, isSafeLogoUrl, fetchLogoBase64, sanitizeFilename } from '../report-branding-utils';
 
 describe('hexToRgb', () => {
@@ -380,6 +382,25 @@ describe('sanitizeFilename', () => {
   it('removes CR/LF, quotes and path characters', () => {
     const out = sanitizeFilename('a\r\nb"c/../d');
     expect(out).not.toMatch(/[\r\n"/]/);
+  });
+
+  it('folds accents and replaces the en dash so the header is valid (José – Team Report)', () => {
+    const out = sanitizeFilename('José – Team Report');
+    expect(out).toMatch(/^[\x20-\x7e]+$/);
+    expect(out.startsWith('Jose')).toBe(true);
+    expect(out).toContain('Team Report');
+    expect(out).not.toContain('–');
+  });
+
+  it('folds accents in Müller and builds a Content-Disposition header Node accepts', () => {
+    const out = sanitizeFilename('Müller');
+    expect(out).toBe('Muller');
+    const res = new ServerResponse(new IncomingMessage(new Socket()));
+    for (const name of ['José – Team Report', 'Müller', 'Plain Name']) {
+      expect(() =>
+        res.setHeader('Content-Disposition', `attachment; filename="${sanitizeFilename(name)}.pdf"`),
+      ).not.toThrow();
+    }
   });
 
   it('falls back to "report" for an empty name', () => {
