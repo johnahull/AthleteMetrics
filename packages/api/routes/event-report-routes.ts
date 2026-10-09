@@ -26,6 +26,7 @@ import {
 import { EVAL_REPORT_TYPE, evalReportConfigSchema, evalReportRequestSchema } from "@shared/eval-report-config";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { z, ZodError } from "zod";
+import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 
 // Lighter limit for the eval report preview and defaults (reads; nothing is saved)
 const evalReadLimiter = rateLimit({
@@ -34,6 +35,7 @@ const evalReadLimiter = rateLimit({
   message: { message: "Too many requests, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  skip: (req) => shouldSkipRateLimiting(req, 'general'),
 });
 
 // Rate limiting for report generation (expensive operation)
@@ -43,6 +45,7 @@ const reportGenerationLimiter = rateLimit({
   message: { message: "Too many report generation requests, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  skip: (req) => shouldSkipRateLimiting(req, 'general'),
 });
 
 /**
