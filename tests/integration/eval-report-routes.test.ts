@@ -11,6 +11,7 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
+import { loadEvalReportInputs } from '../../packages/api/services/eval-report-service';
 import { registerEventReportRoutes } from '../../packages/api/routes/event-report-routes';
 import { eventRegistrations, events, measurements, organizations, reports, siteBenchmarks, siteMetrics, userOrganizations, users } from '@shared/schema';
 import { evalReportConfigSchema } from '@shared/eval-report-config';
@@ -353,6 +354,16 @@ describe('eval report routes', () => {
     expect(res.status).toBe(200);
     expect(res.body.model.freshAndHealthy.balance.status).toBe('worth_working_on');
     expect(JSON.stringify(res.body)).not.toMatch(/risk|injur/i);
+  });
+
+  it('gives an athlete with no sport only the sport-less left-right balance benchmark set', async () => {
+    const [event] = await db.select().from(events).where(eq(events.id, eventA));
+    const inputs = await loadEvalReportInputs(db, { event, athleteId: u.noSport.id });
+    expect(inputs.benchmarks.length).toBeGreaterThan(0);
+    for (const b of inputs.benchmarks) {
+      expect(b.sport).toBeNull();
+      expect(b.metricCode).toBe('AGILITY_505_YD_LSI');
+    }
   });
 
   it('returns 404 for an unknown event, and 409 for an event without an organization (site admin)', async () => {

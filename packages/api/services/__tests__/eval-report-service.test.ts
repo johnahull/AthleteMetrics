@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   assembleEvalReportModel,
   computeEvalDefaults,
+  evalInputErrorResponse,
+  type EvalReportInputErrorCode,
   type EvalAssemblyInput,
   type EvalMeasurementRow,
 } from '../eval-report-service';
@@ -399,5 +401,17 @@ describe('M4: balance wording and gender', () => {
     expect(metric(ns, 'DASH_10YD')!.comparison).toBeNull();
     const upper = assembleEvalReportModel(input({ athlete: { ...input().athlete, sport: 'SOCCER' } }));
     expect(metric(upper, 'DASH_10YD')!.comparison).not.toBeNull();
+  });
+});
+
+describe('evalInputErrorResponse', () => {
+  it('maps every known code to its status', () => {
+    expect(evalInputErrorResponse('event_has_no_organization')).toEqual({ status: 409, message: 'Event has no organization' });
+    expect(evalInputErrorResponse('invalid_override')).toEqual({ status: 400, message: 'Override names a metric that is not in the report' });
+    expect(evalInputErrorResponse('athlete_not_found')).toEqual({ status: 404, message: 'Not found' });
+  });
+  it('answers 500, not 404, for a code it does not know', () => {
+    const res = evalInputErrorResponse('brand_new_code' as EvalReportInputErrorCode);
+    expect(res.status).toBe(500);
   });
 });
