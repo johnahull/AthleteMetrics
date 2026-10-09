@@ -8,6 +8,8 @@
 >
 > **Reserved numbers:** 0144 and 0145 are reserved for AM-FEAT-016, so the manual sequence has a
 > gap there until that feature lands (AM-FEAT-015 uses 0146-0149).
+> 0153 is provisional for AM-FEAT-019 (eval report templates; 0151 is taken by both the yard-benchmark
+> description rewrite and the unmerged AM-FEAT-018 momentum branch): take the next free number at merge.
 
 ## Current State (2025-10-30)
 
