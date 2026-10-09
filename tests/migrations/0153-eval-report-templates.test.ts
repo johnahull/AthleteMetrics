@@ -41,8 +41,8 @@ describe('Migration 0153: static analysis', () => {
     // No guessed codes: every seeded code is created by some other migration, except these, which are
     // allowed because they are named codes that will exist later (RSI_105 from the spec, JUMP_CMJ_SL_L/R
     // single-leg CMJ, MOMENTUM from AM-FEAT-018) or are canonical codes created outside migrations
-    // (HEIGHT, WEIGHT exist in production via the admin UI / metric constants).
-    const ALLOWED_WITHOUT_MIGRATION = ['RSI_105', 'JUMP_CMJ_SL_L', 'JUMP_CMJ_SL_R', 'MOMENTUM', 'HEIGHT', 'WEIGHT'];
+    // (HEIGHT_IN, WEIGHT_LBS exist on staging and production, created outside migrations).
+    const ALLOWED_WITHOUT_MIGRATION = ['RSI_105', 'JUMP_CMJ_SL_L', 'JUMP_CMJ_SL_R', 'MOMENTUM', 'HEIGHT_IN', 'WEIGHT_LBS'];
     const otherMigrations = fs
       .readdirSync(path.resolve(__dirname, '../../migrations'))
       .filter((f) => f.endsWith('.sql') && !f.startsWith('0153_'))
@@ -53,11 +53,11 @@ describe('Migration 0153: static analysis', () => {
       expect(otherMigrations, `${c} is created by no migration`).toContain(`'${c}'`);
     }
     for (const guessed of ['RSI_105_GCT', 'RSI_105_FLIGHT', 'SITTING_HEIGHT']) expect(codes).not.toContain(guessed);
-    for (const banned of ['WEIGHT_LBS', 'AGILITY_505_YD', 'AGILITY_505_YD_LSI', 'MQI_TOTAL', 'MQ_TRANSITION_TOTAL', 'RSI', 'SQUAT_1RM_KG']) {
+    for (const banned of ['HEIGHT', 'WEIGHT', 'AGILITY_505_YD', 'AGILITY_505_YD_LSI', 'MQI_TOTAL', 'MQ_TRANSITION_TOTAL', 'RSI', 'SQUAT_1RM_KG']) {
       expect(codes, banned).not.toContain(banned);
     }
     const required = (c: string) => rows.find((r) => r[2] === c)?.[3] === 'true';
-    for (const c of ['HEIGHT', 'WEIGHT', 'JUMP_SJ_HEIGHT', 'JUMP_CMJ_HOH', 'VERTICAL_JUMP', 'RSI_105', 'DASH_40YD', 'FLY10_TIME', 'AGILITY_505_YD_L', 'AGILITY_505_YD_R', 'MQ_LIN_ACCEL', 'MQ_TRANS_LAT_LINEAR']) {
+    for (const c of ['HEIGHT_IN', 'WEIGHT_LBS', 'JUMP_SJ_HEIGHT', 'JUMP_CMJ_HOH', 'VERTICAL_JUMP', 'RSI_105', 'DASH_40YD', 'FLY10_TIME', 'AGILITY_505_YD_L', 'AGILITY_505_YD_R', 'MQ_LIN_ACCEL', 'MQ_TRANS_LAT_LINEAR']) {
       expect(required(c), c).toBe(true);
     }
     for (const c of ['RSI_L', 'RSI_R', 'JUMP_CMJ_SL_L', 'JUMP_CMJ_SL_R', 'SQUAT_1RM', 'BENCH_1RM', 'DEADLIFT_1RM', 'OHP_1RM', 'MOMENTUM']) {
@@ -159,6 +159,31 @@ describe.skipIf(!isDisposableTestDb)('Migration 0153: against a disposable DB (r
     });
   });
 
+  it('seeds body height and weight as required metrics under their real codes', async () => {
+    await rollbackable(async (tx) => {
+      await resetToPre(tx);
+      await tx.unsafe(UP);
+      const metrics = (await seed(tx)).metrics as Array<{ metricKey: string; isRequired: boolean }>;
+      for (const [key, code] of [['BODY_HEIGHT', 'HEIGHT_IN'], ['BODY_WEIGHT', 'WEIGHT_LBS']]) {
+        expect(metrics.find((m) => m.metricKey === key)?.isRequired, key).toBe(true);
+        expect(resolveTemplateKey(key)).toBe(code);
+      }
+    });
+  });
+
+  it('does not seed a metric whose site_metrics row is inactive, and the NOTICE names it', async () => {
+    await rollbackable(async (tx) => {
+      await resetToPre(tx);
+      await tx`UPDATE site_metrics SET is_active = false WHERE code = 'DASH_40YD'`;
+      notices.length = 0;
+      await tx.unsafe(UP);
+      const keys = ((await seed(tx)).metrics as Array<{ metricKey: string }>).map((m) => m.metricKey);
+      expect(keys).not.toContain('DASH_40');
+      expect(keys).toContain('DASH_30');
+      expect(notices.find((n) => n.includes('Migration 0153 complete')) ?? '').toContain('DASH_40 (DASH_40YD)');
+    });
+  });
+
   it('creates reports_eval_athlete_event_idx on up and removes it on down', async () => {
     await rollbackable(async (tx) => {
       await resetToPre(tx);
@@ -178,7 +203,7 @@ describe.skipIf(!isDisposableTestDb)('Migration 0153: against a disposable DB (r
   it('skips site_metrics codes that do not exist, without error', async () => {
     await rollbackable(async (tx) => {
       await resetToPre(tx);
-      await tx`DELETE FROM site_metrics WHERE code = ANY(${['MQ_LIN_ACCEL', 'SQUAT_1RM', 'WEIGHT']})`;
+      await tx`DELETE FROM site_metrics WHERE code = ANY(${['MQ_LIN_ACCEL', 'SQUAT_1RM', 'WEIGHT_LBS']})`;
       await tx.unsafe(UP);
       const keys = ((await seed(tx)).metrics as Array<{ metricKey: string }>).map((m) => m.metricKey);
       expect(keys).not.toContain('PATTERN_LIN_ACCEL');
@@ -191,7 +216,7 @@ describe.skipIf(!isDisposableTestDb)('Migration 0153: against a disposable DB (r
   it('NOTICE names every skipped key', async () => {
     await rollbackable(async (tx) => {
       await resetToPre(tx);
-      await tx`DELETE FROM site_metrics WHERE code = ANY(${['SQUAT_1RM', 'WEIGHT']})`;
+      await tx`DELETE FROM site_metrics WHERE code = ANY(${['SQUAT_1RM', 'WEIGHT_LBS']})`;
       notices.length = 0;
       await tx.unsafe(UP);
       const msg = notices.find((n) => n.includes('Migration 0153 complete')) ?? '';

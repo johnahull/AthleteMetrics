@@ -130,6 +130,8 @@ describe('offeredMetrics', () => {
       'FLY10_TIME_RI10',
       'HEIGHT',
       'WEIGHT',
+      'HEIGHT_IN',
+      'WEIGHT_LBS',
       'SPRINT_V0',
       'AGILITY_505_YD_L',
     ]),
@@ -148,7 +150,7 @@ describe('offeredMetrics', () => {
 
   it('never drops a measured metric, including ones outside the key map', () => {
     const codes = offered.available.map((m) => m.code);
-    for (const code of ['VERTICAL_JUMP', 'TOP_SPEED', 'JUMP_BROAD', 'FLY10_TIME_RI10', 'HEIGHT', 'WEIGHT', 'SPRINT_V0']) {
+    for (const code of ['VERTICAL_JUMP', 'TOP_SPEED', 'JUMP_BROAD', 'FLY10_TIME_RI10', 'HEIGHT', 'WEIGHT', 'HEIGHT_IN', 'WEIGHT_LBS', 'SPRINT_V0']) {
       expect(codes).toContain(code);
     }
   });
@@ -158,6 +160,8 @@ describe('offeredMetrics', () => {
     expect(byCode.VERTICAL_JUMP).toBe('Hands-free jump height');
     expect(byCode.JUMP_BROAD).toBe('Broad jump');
     expect(byCode.FLY10_TIME_RI10).toBe('Fly 10 (10-yard run-in)');
+    expect(byCode.HEIGHT_IN).toBe('Height');
+    expect(byCode.WEIGHT_LBS).toBe('Weight');
     expect(byCode.SPRINT_V0).toBe('SPRINT_V0');
   });
 
@@ -166,6 +170,8 @@ describe('offeredMetrics', () => {
     expect(groupOf('TOP_SPEED')).toBe('speed');
     expect(groupOf('JUMP_BROAD')).toBe('power');
     expect(groupOf('HEIGHT')).toBe('other');
+    expect(groupOf('HEIGHT_IN')).toBe('other');
+    expect(groupOf('WEIGHT_LBS')).toBe('other');
   });
 
   it('offers nothing for metrics without data', () => {
