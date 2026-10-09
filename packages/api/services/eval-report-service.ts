@@ -214,6 +214,23 @@ export function computeEvalDefaults(input: EvalAssemblyInput) {
 
 export type EvalReportInputErrorCode = "event_has_no_organization" | "athlete_not_found" | "invalid_override";
 
+/** HTTP answer for each input error code; an unlisted code is a server bug, not a 404. */
+export function evalInputErrorResponse(code: EvalReportInputErrorCode): { status: number; message: string } {
+  switch (code) {
+    case "event_has_no_organization":
+      return { status: 409, message: "Event has no organization" };
+    case "invalid_override":
+      return { status: 400, message: "Override names a metric that is not in the report" };
+    case "athlete_not_found":
+      return { status: 404, message: "Not found" };
+    default: {
+      const unhandled: never = code;
+      console.error("Unhandled eval report input error code", unhandled);
+      return { status: 500, message: "Failed to build eval report" };
+    }
+  }
+}
+
 export class EvalReportInputError extends Error {
   constructor(readonly code: EvalReportInputErrorCode) {
     super(code);
@@ -291,13 +308,14 @@ export async function loadEvalReportInputs(
   const sport = user.sports?.[0] ?? null;
   const sex = user.gender === "Male" || user.gender === "Female" ? user.gender : null;
   // Rows for the athlete's sex in their sport, plus the sport-less left-right balance set (no sport needed)
-  const sportMatch = sport ? sql`lower(${siteBenchmarks.sport}) = lower(${sport})` : undefined;
   const lsiSet = and(isNull(siteBenchmarks.sport), eq(siteBenchmarks.metricCode, metricCode("505_LSI")));
+  // An athlete with no sport gets the left-right set only (or() would silently drop an undefined arm)
+  const sportOrLsi = sport ? or(sql`lower(${siteBenchmarks.sport}) = lower(${sport})`, lsiSet) : lsiSet;
   const benchmarkRows = sex
     ? await db
         .select()
         .from(siteBenchmarks)
-        .where(and(eq(siteBenchmarks.isActive, true), eq(siteBenchmarks.gender, sex), or(sportMatch, lsiSet)))
+        .where(and(eq(siteBenchmarks.isActive, true), eq(siteBenchmarks.gender, sex), sportOrLsi))
     : [];
 
   return {
