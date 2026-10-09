@@ -29,6 +29,7 @@ vi.mock('express-rate-limit', async (importOriginal) => {
 });
 
 import { registerRoutes } from '../../packages/api/routes';
+import { canEditTemplate } from '../../packages/api/services/eval-template-service';
 
 const PASSWORD = 'EvalTemplates123!';
 const PREFIX = `evaltpl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -56,7 +57,7 @@ describe('eval templates and org eval report settings', () => {
     delete: (url: string) => request(app).delete(url).set('Cookie', cookies[who]),
   });
 
-  // Two required tests, then optional ones. JUMP_CMJ_SL_L/R may not exist on a push-only DB; beforeAll adds them.
+  // Two required tests, then optional ones. Their site_metrics rows may not exist on a push-only DB; beforeAll adds what is absent.
   const metrics = [
     { metricKey: 'DASH_10', isRequired: true, displayOrder: 1 },
     { metricKey: 'FLY_10', isRequired: true, displayOrder: 2 },
@@ -110,12 +111,23 @@ describe('eval templates and org eval report settings', () => {
       cookies[who] = login.headers['set-cookie'][0];
     }
 
-    for (const code of ['JUMP_CMJ_SL_L', 'JUMP_CMJ_SL_R']) {
-      const found = await db.select({ code: siteMetrics.code }).from(siteMetrics).where(eq(siteMetrics.code, code));
-      if (found.length === 0) {
-        await db.insert(siteMetrics).values({ code, label: code, category: 'power', unit: 'in', metricType: 'higher_is_better' } as any);
-        createdSiteMetricCodes.push(code);
-      }
+    // Every site_metrics row the file resolves or measures. CI builds the DB with db:push + the default seed only
+    // (no manual migrations), so create what is absent and remember which rows this file created.
+    const needed: Array<[string, string, string]> = [
+      ['DASH_10YD', 'speed', 's'],
+      ['FLY10_TIME', 'speed', 's'],
+      ['JUMP_CMJ_HOH', 'power', 'in'],
+      ['RSI_L', 'power', 'ratio'],
+      ['JUMP_CMJ_SL_L', 'power', 'in'],
+      ['JUMP_CMJ_SL_R', 'power', 'in'],
+    ];
+    for (const [code, category, unit] of needed) {
+      const inserted = await db
+        .insert(siteMetrics)
+        .values({ code, label: code, category, unit, metricType: 'higher_is_better' } as any)
+        .onConflictDoNothing()
+        .returning({ code: siteMetrics.code });
+      if (inserted.length > 0) createdSiteMetricCodes.push(code);
     }
 
     [{ id: eventA }, { id: eventB }] = await db
@@ -450,6 +462,24 @@ describe('eval templates and org eval report settings', () => {
     it('rejects an invalid preset name and an athlete\'s write', async () => {
       expect((await as('coachA').put(`/api/organizations/${orgA}/eval-report-settings`).send({ presets: { college: {} } })).status).toBe(400);
       expect((await as('athleteA').put(`/api/organizations/${orgA}/eval-report-settings`).send({ presets: {} })).status).toBe(404);
+    });
+  });
+
+  describe('canEditTemplate is safe standalone', () => {
+    it('lets only that org\'s writers edit an org template (no prior visibility check needed)', async () => {
+      const tpl = { organizationId: orgA } as any;
+      expect(await canEditTemplate(u.coachA, tpl)).toBe(true);
+      expect(await canEditTemplate(u.adminA, tpl)).toBe(true);
+      expect(await canEditTemplate(u.siteAdmin, tpl)).toBe(true);
+      expect(await canEditTemplate(u.athleteA, tpl)).toBe(false);
+      expect(await canEditTemplate(u.coachB, tpl)).toBe(false);
+    });
+
+    it('lets only a site admin edit the global default', async () => {
+      const tpl = { organizationId: null } as any;
+      expect(await canEditTemplate(u.siteAdmin, tpl)).toBe(true);
+      expect(await canEditTemplate(u.coachA, tpl)).toBe(false);
+      expect(await canEditTemplate(u.adminA, tpl)).toBe(false);
     });
   });
 });

@@ -94,8 +94,19 @@ describe.skipIf(!isDisposableTestDb)('Migration 0153: against a disposable DB (r
     }
   };
 
+  // CI builds its DB with db:push and the default seed only, so most codes the seed names do not exist there.
+  // Create the missing ones inside the rolled-back transaction so the checks do not depend on manual migrations.
+  const SEED_CODES = [...new Set([...UP.matchAll(/^\s*\('([A-Z0-9_]+)',\s*'([A-Z0-9_]+)',\s*(?:true|false),\s*\d+\)/gm)].map((r) => r[2]))];
+  // RSI_105 is created by no migration (the spec names it for later), so it stays absent as on a migrated DB.
+  const ensureSeedCodes = async (tx: any) => {
+    for (const code of SEED_CODES.filter((c) => c !== 'RSI_105')) {
+      await tx`INSERT INTO site_metrics (code, label, category, unit, metric_type) VALUES (${code}, ${code}, 'speed', 's', 'lower_is_better') ON CONFLICT (code) DO NOTHING`;
+    }
+  };
+
   // Back to the pre-0153 state inside the rolled-back transaction, whatever other files left behind.
   const resetToPre = async (tx: any) => {
+    await ensureSeedCodes(tx);
     if ((await tx`SELECT to_regclass('eval_battery_templates') AS t`)[0].t) {
       await tx`DELETE FROM eval_battery_templates WHERE organization_id IS NOT NULL`;
       await tx`DELETE FROM org_eval_report_settings`;

@@ -9,7 +9,7 @@ import { and, asc, eq, inArray, isNull, or } from "drizzle-orm";
 import { db } from "../db";
 import { storage } from "../storage";
 import { evalBatteryTemplates, eventMetrics, orgEvalReportSettings, organizations, siteMetrics } from "@shared/schema";
-import type { EvalBatteryTemplate, OrgEvalReportSettings } from "@shared/schema";
+import type { EvalBatteryTemplate, OrgEvalReportSettings, UserOrganization } from "@shared/schema";
 import type { EvalTemplateMetric, EvalReportSettingsInput } from "@shared/eval-template-schemas";
 import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
 import { isSiteAdmin } from "../permissions/helpers";
@@ -31,8 +31,8 @@ export async function isOrgWriter(user: Actor, organizationId: string | null | u
 
 async function isWriterAnywhere(user: Actor): Promise<boolean> {
   if (isSiteAdmin(user)) return true;
-  const memberships = (await storage.getUserOrganizations(user.id)) ?? [];
-  return memberships.some((m: any) => isMeasurementWriterRole(m.role));
+  const memberships: Pick<UserOrganization, "role">[] = (await storage.getUserOrganizations(user.id)) ?? [];
+  return memberships.some((m) => isMeasurementWriterRole(m.role));
 }
 
 function isUniqueViolation(e: any): boolean {
@@ -47,9 +47,9 @@ export async function getVisibleTemplate(user: Actor, id: string): Promise<EvalB
   return allowed ? row : null;
 }
 
-/** Editing the global default is for site admins only; an org template for that org's writers. */
-export function canEditTemplate(user: Actor, template: EvalBatteryTemplate): boolean {
-  return template.organizationId ? true : isSiteAdmin(user);
+/** Editing the global default is for site admins only; an org template for that org's writers (or a site admin). */
+export async function canEditTemplate(user: Actor, template: Pick<EvalBatteryTemplate, "organizationId">): Promise<boolean> {
+  return template.organizationId ? isOrgWriter(user, template.organizationId) : isSiteAdmin(user);
 }
 
 export async function listTemplates(organizationId: string): Promise<EvalBatteryTemplate[]> {
@@ -191,7 +191,11 @@ export async function applyTemplateToEvent(eventId: string, userId: string, temp
   return { added: toAdd.map((m) => m.code), skipped, alreadyPresent };
 }
 
-export async function getSettings(organizationId: string) {
+/** What GET returns: a stored row, or the synthetic default when none exists yet (no timestamps or author). */
+export type EvalReportSettingsView = Pick<OrgEvalReportSettings, "organizationId" | "presets" | "lastSelection"> &
+  Partial<Omit<OrgEvalReportSettings, "organizationId" | "presets" | "lastSelection">>;
+
+export async function getSettings(organizationId: string): Promise<EvalReportSettingsView> {
   const [row] = await db.select().from(orgEvalReportSettings).where(eq(orgEvalReportSettings.organizationId, organizationId));
   return row ?? { organizationId, presets: {}, lastSelection: null };
 }
