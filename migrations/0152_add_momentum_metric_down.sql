@@ -1,12 +1,12 @@
--- Down Migration 0151: Remove the MOMENTUM derived metric
+-- Down Migration 0152: Remove the MOMENTUM derived metric
 --
 -- Refuses to run if any goal, report benchmark, event metric, custom benchmark or
 -- site benchmark references MOMENTUM, so nothing is orphaned or cascade-deleted.
 -- MOMENTUM measurements are only ever calculated (recomputable from WEIGHT_LBS +
--- FLY10_TIME by re-applying 0151), so all of them are deleted before the site_metrics
+-- FLY10_TIME by re-applying 0152), so all of them are deleted before the site_metrics
 -- row. Source metrics are untouched. organization_metrics rows cascade-delete with the
 -- site_metrics row; peer_percentile_cache is a recomputable cache.
--- Also forgets the manual_migrations row so db:migrate:manual re-applies 0151.
+-- Also forgets the manual_migrations row so db:migrate:manual re-applies 0152.
 
 DO $$
 DECLARE
@@ -23,7 +23,7 @@ BEGIN
   SELECT COUNT(*) INTO v_site_benchmarks FROM site_benchmarks WHERE metric_code = 'MOMENTUM';
 
   IF v_goals + v_report_benchmarks + v_event_metrics + v_custom_benchmarks + v_site_benchmarks > 0 THEN
-    RAISE EXCEPTION 'Migration 0151 (down) refused: MOMENTUM is still referenced (% goals, % report_benchmarks, % event_metrics, % custom_benchmarks, % site_benchmarks). Delete them first if removal is intended.',
+    RAISE EXCEPTION 'Migration 0152 (down) refused: MOMENTUM is still referenced (% goals, % report_benchmarks, % event_metrics, % custom_benchmarks, % site_benchmarks). Delete them first if removal is intended.',
       v_goals, v_report_benchmarks, v_event_metrics, v_custom_benchmarks, v_site_benchmarks;
   END IF;
 END $$;
@@ -35,7 +35,7 @@ DELETE FROM site_metrics WHERE code = 'MOMENTUM';
 DO $$
 BEGIN
   IF to_regclass('manual_migrations') IS NOT NULL THEN
-    DELETE FROM manual_migrations WHERE migration_name = '0151_add_momentum_metric';
+    DELETE FROM manual_migrations WHERE migration_name = '0152_add_momentum_metric';
   END IF;
-  RAISE NOTICE 'Migration 0151 (down): Removed MOMENTUM metric and its measurements.';
+  RAISE NOTICE 'Migration 0152 (down): Removed MOMENTUM metric and its measurements.';
 END $$;

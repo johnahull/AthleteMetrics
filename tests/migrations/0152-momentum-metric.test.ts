@@ -1,5 +1,5 @@
 /**
- * Migration 0151 (AM-FEAT-018): MOMENTUM derived metric (body mass x fly speed).
+ * Migration 0152 (AM-FEAT-018): MOMENTUM derived metric (body mass x fly speed).
  * Live checks run in a rolled-back transaction and only on a disposable test DB.
  * WEIGHT_LBS only exists in production (created via the admin UI), so the live tests
  * seed it inside the rolled-back transaction.
@@ -13,8 +13,8 @@ import { evaluateFormula, validateFormula } from '../../packages/api/services/fo
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const read = (f: string) => fs.readFileSync(path.resolve(__dirname, '../../migrations', f), 'utf-8');
-const UP = read('0151_add_momentum_metric.sql');
-const DOWN = read('0151_add_momentum_metric_down.sql');
+const UP = read('0152_add_momentum_metric.sql');
+const DOWN = read('0152_add_momentum_metric_down.sql');
 
 const FORMULA = 'weight_lbs * 0.45359237 * 9.144 / fly10_time';
 
@@ -22,14 +22,14 @@ const dbUrl = process.env.DATABASE_URL || '';
 const isDisposableTestDb =
   process.env.NODE_ENV === 'test' && (/@(localhost|127\.0\.0\.1)[:/]/.test(dbUrl) || process.env.CI === 'true');
 
-describe('Migration 0151: MOMENTUM derived metric', () => {
+describe('Migration 0152: MOMENTUM derived metric', () => {
   it('has static guards: upsert, source guard, notice, down tracking row', () => {
     expect(UP).toMatch(/ON CONFLICT \(code\) DO UPDATE/);
     expect(UP).toMatch(/RAISE EXCEPTION/);
     expect(UP).toContain('WEIGHT_LBS');
     expect(UP).toContain('FLY10_TIME');
     expect(UP).toMatch(/RAISE NOTICE/);
-    expect(DOWN).toMatch(/DELETE FROM manual_migrations WHERE migration_name = '0151_add_momentum_metric'/);
+    expect(DOWN).toMatch(/DELETE FROM manual_migrations WHERE migration_name = '0152_add_momentum_metric'/);
   });
 
   it('the stored formula parses and gives 150 lb / 1.30 s = 478.6 kg*m/s', () => {
@@ -67,11 +67,11 @@ describe('Migration 0151: MOMENTUM derived metric', () => {
 
     const seedUsers = (tx: any) =>
       tx`INSERT INTO users (id, username, emails, password, first_name, last_name, full_name) VALUES
-         ('u-0151', 'u0151', ARRAY['u0151@test.com'], 'x', 'U', 'U', 'U U'),
-         ('c-0151', 'c0151', ARRAY['c0151@test.com'], 'x', 'C', 'C', 'C C')
+         ('u-0152', 'u0152', ARRAY['u0152@test.com'], 'x', 'U', 'U', 'U U'),
+         ('c-0152', 'c0152', ARRAY['c0152@test.com'], 'x', 'C', 'C', 'C C')
          ON CONFLICT (id) DO NOTHING`;
 
-    // Pre-0151 state: no MOMENTUM row, no MOMENTUM measurements
+    // Pre-0152 state: no MOMENTUM row, no MOMENTUM measurements
     const resetToPre = async (tx: any) => {
       await tx`DELETE FROM measurements WHERE metric = 'MOMENTUM'`;
       await tx`DELETE FROM site_metrics WHERE code = 'MOMENTUM'`;
@@ -123,21 +123,21 @@ describe('Migration 0151: MOMENTUM derived metric', () => {
         await resetToPre(tx);
         await seedWeight(tx);
         await tx`INSERT INTO organizations (id, name) VALUES
-          ('org-0151-both', 'both'), ('org-0151-fly', 'fly'), ('org-0151-wt', 'wt'),
-          ('org-0151-dis', 'dis'), ('org-0151-none', 'none')`;
+          ('org-0152-both', 'both'), ('org-0152-fly', 'fly'), ('org-0152-wt', 'wt'),
+          ('org-0152-dis', 'dis'), ('org-0152-none', 'none')`;
         await tx`INSERT INTO organization_metrics (organization_id, metric_code, is_enabled) VALUES
-          ('org-0151-both', 'FLY10_TIME', true), ('org-0151-both', 'WEIGHT_LBS', true),
-          ('org-0151-fly', 'FLY10_TIME', true),
-          ('org-0151-wt', 'WEIGHT_LBS', true),
-          ('org-0151-dis', 'FLY10_TIME', true), ('org-0151-dis', 'WEIGHT_LBS', false)`;
+          ('org-0152-both', 'FLY10_TIME', true), ('org-0152-both', 'WEIGHT_LBS', true),
+          ('org-0152-fly', 'FLY10_TIME', true),
+          ('org-0152-wt', 'WEIGHT_LBS', true),
+          ('org-0152-dis', 'FLY10_TIME', true), ('org-0152-dis', 'WEIGHT_LBS', false)`;
         await tx.unsafe(UP);
         const rows = await tx`SELECT organization_id, is_enabled FROM organization_metrics WHERE metric_code = 'MOMENTUM'`;
-        expect(rows).toEqual([{ organization_id: 'org-0151-both', is_enabled: true }]);
+        expect(rows).toEqual([{ organization_id: 'org-0152-both', is_enabled: true }]);
 
         // An admin turns it off; re-applying must not turn it back on
-        await tx`UPDATE organization_metrics SET is_enabled = false WHERE organization_id = 'org-0151-both' AND metric_code = 'MOMENTUM'`;
+        await tx`UPDATE organization_metrics SET is_enabled = false WHERE organization_id = 'org-0152-both' AND metric_code = 'MOMENTUM'`;
         await tx.unsafe(UP);
-        const [r] = await tx`SELECT is_enabled FROM organization_metrics WHERE organization_id = 'org-0151-both' AND metric_code = 'MOMENTUM'`;
+        const [r] = await tx`SELECT is_enabled FROM organization_metrics WHERE organization_id = 'org-0152-both' AND metric_code = 'MOMENTUM'`;
         expect(r.is_enabled).toBe(false);
       });
     });
@@ -207,13 +207,13 @@ describe('Migration 0151: MOMENTUM derived metric', () => {
         await tx.unsafe(UP);
         await seedUsers(tx);
         await tx`INSERT INTO measurements (user_id, submitted_by, date, age, metric, value, units, is_calculated)
-                 VALUES ('u-0151', 'c-0151', '2026-03-10', 17, 'MOMENTUM', '478.6', 'kg*m/s', true),
-                        ('u-0151', 'c-0151', '2026-03-11', 17, 'MOMENTUM', '480.0', 'kg*m/s', false),
-                        ('u-0151', 'c-0151', '2026-03-10', 17, 'FLY10_TIME', '1.3', 's', false)`;
+                 VALUES ('u-0152', 'c-0152', '2026-03-10', 17, 'MOMENTUM', '478.6', 'kg*m/s', true),
+                        ('u-0152', 'c-0152', '2026-03-11', 17, 'MOMENTUM', '480.0', 'kg*m/s', false),
+                        ('u-0152', 'c-0152', '2026-03-10', 17, 'FLY10_TIME', '1.3', 's', false)`;
         await tx.unsafe(DOWN);
         expect(await tx`SELECT 1 FROM site_metrics WHERE code = 'MOMENTUM'`).toHaveLength(0);
         expect(await tx`SELECT 1 FROM measurements WHERE metric = 'MOMENTUM'`).toHaveLength(0);
-        expect(await tx`SELECT 1 FROM measurements WHERE metric = 'FLY10_TIME' AND user_id = 'u-0151'`).toHaveLength(1);
+        expect(await tx`SELECT 1 FROM measurements WHERE metric = 'FLY10_TIME' AND user_id = 'u-0152'`).toHaveLength(1);
         expect(await tx`SELECT 1 FROM site_metrics WHERE code IN ('FLY10_TIME', 'WEIGHT_LBS')`).toHaveLength(2);
       });
     });
@@ -225,13 +225,13 @@ describe('Migration 0151: MOMENTUM derived metric', () => {
         await tx.unsafe(UP);
         await seedUsers(tx);
         await tx`INSERT INTO measurements (user_id, submitted_by, date, age, metric, value, units, is_calculated)
-                 VALUES ('u-0151', 'c-0151', '2026-03-10', 17, 'MOMENTUM', '478.6', 'kg*m/s', true)`;
+                 VALUES ('u-0152', 'c-0152', '2026-03-10', 17, 'MOMENTUM', '478.6', 'kg*m/s', true)`;
         await tx`INSERT INTO users (id, username, emails, password, first_name, last_name, full_name)
-                 VALUES ('u-0151-g', 'u0151g', ARRAY['u0151g@test.com'], 'x', 'G', 'G', 'G G')`;
+                 VALUES ('u-0152-g', 'u0152g', ARRAY['u0152g@test.com'], 'x', 'G', 'G', 'G G')`;
         await tx`INSERT INTO goals (user_id, metric, goal_type, target_value, baseline_value, current_value, target_date)
-                 VALUES ('u-0151-g', 'MOMENTUM', 'target', 500, 400, 450, '2027-01-01')`;
-        await tx`INSERT INTO organizations (id, name) VALUES ('org-0151-bm', 'bm')`;
-        await tx`INSERT INTO custom_benchmarks (organization_id, metric_code, name, benchmark_value) VALUES ('org-0151-bm', 'MOMENTUM', 'cb', 500)`;
+                 VALUES ('u-0152-g', 'MOMENTUM', 'target', 500, 400, 450, '2027-01-01')`;
+        await tx`INSERT INTO organizations (id, name) VALUES ('org-0152-bm', 'bm')`;
+        await tx`INSERT INTO custom_benchmarks (organization_id, metric_code, name, benchmark_value) VALUES ('org-0152-bm', 'MOMENTUM', 'cb', 500)`;
         await tx`INSERT INTO site_benchmarks (metric_code, name, benchmark_value) VALUES ('MOMENTUM', 'sb', 500)`;
         await tx.unsafe('SAVEPOINT g');
         await expect(tx.unsafe(DOWN)).rejects.toThrow(/refused.*1 goals.*1 custom_benchmarks.*1 site_benchmarks/s);
@@ -244,9 +244,9 @@ describe('Migration 0151: MOMENTUM derived metric', () => {
     it('down forgets the manual_migrations tracking row', async () => {
       await rollbackable(async (tx) => {
         await tx`CREATE TABLE IF NOT EXISTS manual_migrations (id SERIAL PRIMARY KEY, migration_name TEXT NOT NULL UNIQUE, applied_at TIMESTAMP NOT NULL DEFAULT NOW())`;
-        await tx`INSERT INTO manual_migrations (migration_name) VALUES ('0151_add_momentum_metric') ON CONFLICT DO NOTHING`;
+        await tx`INSERT INTO manual_migrations (migration_name) VALUES ('0152_add_momentum_metric') ON CONFLICT DO NOTHING`;
         await tx.unsafe(DOWN);
-        expect(await tx`SELECT 1 FROM manual_migrations WHERE migration_name = '0151_add_momentum_metric'`).toHaveLength(0);
+        expect(await tx`SELECT 1 FROM manual_migrations WHERE migration_name = '0152_add_momentum_metric'`).toHaveLength(0);
       });
     });
 

@@ -1,4 +1,4 @@
--- Migration 0151: MOMENTUM derived metric (body mass x fly speed)
+-- Migration 0152: MOMENTUM derived metric (body mass x fly speed)
 --
 -- Spec: AM-FEAT-018
 --
@@ -26,7 +26,7 @@
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM site_metrics WHERE code = 'FLY10_TIME') THEN
-    RAISE EXCEPTION 'Migration 0151 requires the MOMENTUM source metrics; missing site_metrics rows: FLY10_TIME';
+    RAISE EXCEPTION 'Migration 0152 requires the MOMENTUM source metrics; missing site_metrics rows: FLY10_TIME';
   END IF;
 END $$;
 
@@ -42,7 +42,7 @@ BEGIN
   ON CONFLICT (code) DO NOTHING;
   GET DIAGNOSTICS v_created = ROW_COUNT;
   IF v_created > 0 THEN
-    RAISE NOTICE 'Migration 0151: WEIGHT_LBS was missing and has been created (Weight (lb), Physical, lbs, tracking).';
+    RAISE NOTICE 'Migration 0152: WEIGHT_LBS was missing and has been created (Weight (lb), Physical, lbs, tracking).';
   END IF;
 END $$;
 
@@ -98,5 +98,5 @@ ON CONFLICT (organization_id, metric_code) DO NOTHING;
 
 DO $$
 BEGIN
-  RAISE NOTICE 'Migration 0151 complete: MOMENTUM derived metric (kg*m/s) from WEIGHT_LBS + FLY10_TIME, closest within 45 days anchored on FLY10_TIME; no benchmarks seeded.';
+  RAISE NOTICE 'Migration 0152 complete: MOMENTUM derived metric (kg*m/s) from WEIGHT_LBS + FLY10_TIME, closest within 45 days anchored on FLY10_TIME; no benchmarks seeded.';
 END $$;
