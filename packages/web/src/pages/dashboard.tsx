@@ -559,6 +559,7 @@ export default function Dashboard() {
               units={getMetricUnits(metric)}
               personalRecord={athleteDashboardData.personalRecords.find(pr => pr.metric === metric)}
               showConfetti={false}
+              metricType={availableMetrics.find(m => m.code === metric)?.metricType}
             />
           ))}
         </div>

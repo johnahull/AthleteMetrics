@@ -68,6 +68,7 @@ const metricFormSchema = z.object({
     dateMatchStrategy: z.enum(['same_date', 'latest_before', 'closest']).default('same_date'),
     maxDateDifference: z.number().int().min(1).max(365).optional(),
     missingSourceBehavior: z.enum(['skip', 'error']).default('skip'),
+    anchorMetric: z.string().max(50).optional(),
   }).optional(),
 }).refine(data => !data.isDerived || data.formula, {
   message: "Formula is required for derived metrics",
