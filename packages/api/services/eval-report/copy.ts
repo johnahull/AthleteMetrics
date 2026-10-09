@@ -1,4 +1,5 @@
 import { MQI_BANDS } from "@shared/mqi-band";
+import { LOAD_LABELS, BALANCE_LABELS, LEFT_RIGHT_SUFFIX } from "@shared/eval-report-copy";
 import type { EvalMetricKey } from "./metric-key-map";
 
 /**
@@ -60,18 +61,7 @@ export const FRESH_AND_HEALTHY_LABELS = {
   movement: "Movement",
 } as const;
 
-export const LOAD_LABELS = {
-  light: "Light week",
-  medium: "Medium week",
-  heavy: "Heavy week",
-} as const;
-
-export const BALANCE_LABELS = {
-  balanced: "Balanced",
-  keep_an_eye: "Keep an eye on it",
-  worth_working_on: "Worth working on",
-  neutral: "Left-right balance",
-} as const;
+export { LOAD_LABELS, BALANCE_LABELS };
 
 /** Strings drawn by the eval PDF renderer (utils/eval-report-pdf.ts); all are covered by the copy lint. */
 export const PDF_COPY = {
@@ -94,7 +84,7 @@ export const PDF_COPY = {
   classOfPrefix: "Class of",
   evaluatedPrefix: "Evaluated",
   footerLabel: "Evaluation report",
-  leftRightSuffix: "left vs right",
+  leftRightSuffix: LEFT_RIGHT_SUFFIX,
 } as const;
 
 export const NO_TIER_NOTE = "An age-group comparison is not available for this measurement yet.";

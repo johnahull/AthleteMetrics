@@ -38,9 +38,11 @@ interface ShareReportDialogProps {
   reportId: string;
   open: boolean;
   onClose: () => void;
+  /** True when the report's athlete is under 13 or has no date of birth (cannot be shared to their account). */
+  athleteShareBlockedUnder13?: boolean;
 }
 
-export function ShareReportDialog({ reportId, open, onClose }: ShareReportDialogProps) {
+export function ShareReportDialog({ reportId, open, onClose, athleteShareBlockedUnder13 = false }: ShareReportDialogProps) {
   const [expirationDays, setExpirationDays] = useState("7");
   const [customExpiration, setCustomExpiration] = useState("");
   const [generatedUrl, setGeneratedUrl] = useState("");
@@ -102,6 +104,13 @@ export function ShareReportDialog({ reportId, open, onClose }: ShareReportDialog
         </DialogHeader>
 
         <div className="space-y-6">
+          {athleteShareBlockedUnder13 && (
+            <p className="text-sm rounded-lg border p-3 bg-muted" data-testid="under-13-link-note">
+              This athlete is under 13 or has no date of birth on file, so the report cannot be sent to their account.
+              The PDF or a share link sent to their parent is how this family receives the report.
+            </p>
+          )}
+
           {/* Create New Link */}
           <div className="space-y-4 border rounded-lg p-4">
             <h3 className="font-semibold">Create New Share Link</h3>

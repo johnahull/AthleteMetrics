@@ -19,6 +19,7 @@ import { invitations, emailVerificationTokens, accountLinkingTokens } from '@sha
 import { eq } from 'drizzle-orm';
 import { hashToken } from '../../packages/api/lib/token-hash';
 import type { Organization, User } from '@shared/schema';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 
 describe('Bearer tokens are hashed at rest', () => {
   let org: Organization;
@@ -38,8 +39,7 @@ describe('Bearer tokens are hashed at rest', () => {
   });
 
   afterAll(async () => {
-    try { await storage.deleteUser(user.id); } catch { /* ignore */ }
-    try { await storage.deleteOrganization(org.id); } catch { /* ignore */ }
+    await purgeTestRows({ userIds: [user.id], orgIds: [org.id] });
   });
 
   it('invitation token is stored as a hash', async () => {
