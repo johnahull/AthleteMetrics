@@ -1087,6 +1087,8 @@ export class ReportService extends BaseService {
     snapshotData = stripMediaUrlDeep(snapshotData);
 
     // shareBlockedUnder13 is a coach-UI flag derived from the date of birth; never freeze it into a public snapshot
+    // Known snapshot paths carrying this flag: snapshotData.athlete and snapshotData.athletes[]. If a new snapshot
+    // shape embeds athletes elsewhere, extend this strip; the integration test's JSON.stringify assertion is the safety net.
     const snapshotAthletes = snapshotData as any;
     const athletesArray: any[] = [snapshotAthletes.athlete, ...(snapshotAthletes.athletes ?? [])];
     for (const a of athletesArray) if (a) delete (a as any).shareBlockedUnder13;
