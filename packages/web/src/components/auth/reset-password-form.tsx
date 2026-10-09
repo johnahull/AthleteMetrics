@@ -198,7 +198,7 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
       
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
+          <div className="grid gap-y-2">
             <Label htmlFor="password">New Password</Label>
             <div className="relative">
               <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
@@ -233,7 +233,7 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
             className="mb-4"
           />
 
-          <div className="space-y-2">
+          <div className="grid gap-y-2">
             <Label htmlFor="confirmPassword">Confirm New Password</Label>
             <div className="relative">
               <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />

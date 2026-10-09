@@ -185,7 +185,7 @@ export function AthleteSelector({
                 {displayValue || placeholder}
               </span>
             </div>
-            <div className="flex items-center space-x-1 shrink-0 ml-2">
+            <div className="flex items-center gap-x-1 shrink-0 ml-2">
               {selectedAthlete && (
                 <Button
                   variant="ghost"

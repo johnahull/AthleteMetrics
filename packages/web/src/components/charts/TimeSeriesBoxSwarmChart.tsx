@@ -668,7 +668,7 @@ export function TimeSeriesBoxSwarmChart({
   return (
     <div className="w-full h-full">
       {/* Toggle control for athlete names */}
-      <div className="flex items-center space-x-2 mb-4 px-2">
+      <div className="flex items-center gap-x-2 mb-4 px-2">
         <Switch
           id="show-names-timeseries"
           checked={localShowAthleteNames}

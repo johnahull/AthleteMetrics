@@ -508,15 +508,15 @@ export default function TemplateBuilder({ isOpen, onClose, template, organizatio
                         <RadioGroup
                           value={field.value || 'higher_is_better'}
                           onValueChange={field.onChange}
-                          className="flex flex-col space-y-2"
+                          className="flex flex-col gap-y-2"
                         >
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center gap-x-2">
                             <RadioGroupItem value="higher_is_better" id="higher" />
                             <label htmlFor="higher" className="text-sm font-normal cursor-pointer">
                               Higher is better (5 = excellent, 1 = poor)
                             </label>
                           </div>
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center gap-x-2">
                             <RadioGroupItem value="lower_is_better" id="lower" />
                             <label htmlFor="lower" className="text-sm font-normal cursor-pointer">
                               Lower is better (1 = excellent, 5 = poor)
@@ -540,15 +540,15 @@ export default function TemplateBuilder({ isOpen, onClose, template, organizatio
                         <RadioGroup
                           value={field.value || 'average'}
                           onValueChange={field.onChange}
-                          className="flex flex-col space-y-2"
+                          className="flex flex-col gap-y-2"
                         >
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center gap-x-2">
                             <RadioGroupItem value="average" id="method-average" />
                             <label htmlFor="method-average" className="text-sm font-normal cursor-pointer">
                               Average (standard wellness scoring)
                             </label>
                           </div>
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center gap-x-2">
                             <RadioGroupItem value="sum" id="method-sum" />
                             <label htmlFor="method-sum" className="text-sm font-normal cursor-pointer">
                               Sum (Modified Hooper Index)
@@ -686,7 +686,7 @@ export default function TemplateBuilder({ isOpen, onClose, template, organizatio
                   control={form.control}
                   name="config.statusConfig.injuryOverride"
                   render={({ field }) => (
-                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                    <FormItem className="flex flex-row items-start gap-x-3 gap-y-0">
                       <FormControl>
                         <Checkbox
                           checked={field.value ?? false}

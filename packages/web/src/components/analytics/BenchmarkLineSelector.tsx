@@ -228,7 +228,7 @@ export const BenchmarkLineSelector = React.memo(function BenchmarkLineSelector({
           return (
             <div
               key={benchmark.id}
-              className="flex items-start space-x-3 p-2 rounded hover:bg-gray-100"
+              className="flex items-start gap-x-3 p-2 rounded hover:bg-gray-100"
             >
               <Checkbox
                 id={`benchmark-${benchmark.id}`}

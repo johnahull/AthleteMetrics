@@ -387,7 +387,7 @@ export function CustomOrgMetricForm({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Sport Associations</FormLabel>
-                        <FormDescription className="mb-2">
+                        <FormDescription>
                           Select sports that commonly use this metric
                         </FormDescription>
                         <div className="flex flex-wrap gap-2">

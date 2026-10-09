@@ -140,19 +140,19 @@ export function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) 
           {scaleOrientation === 'lower_is_better' ? (
             // For lower_is_better: low scores = good (green), high scores = bad (red)
             <>
-              <div className="flex items-center space-x-1">
+              <div className="flex items-center gap-x-1">
                 <div className="w-4 h-4 bg-green-500 rounded"></div>
                 <span className="text-xs text-gray-600">
                   Good (&lt;{statusThresholds.yellowThreshold})
                 </span>
               </div>
-              <div className="flex items-center space-x-1">
+              <div className="flex items-center gap-x-1">
                 <div className="w-4 h-4 bg-yellow-400 rounded"></div>
                 <span className="text-xs text-gray-600">
                   Moderate ({statusThresholds.yellowThreshold}-{statusThresholds.redThreshold - 1})
                 </span>
               </div>
-              <div className="flex items-center space-x-1">
+              <div className="flex items-center gap-x-1">
                 <div className="w-4 h-4 bg-red-500 rounded"></div>
                 <span className="text-xs text-gray-600">
                   Concerning (≥{statusThresholds.redThreshold})
@@ -162,19 +162,19 @@ export function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) 
           ) : (
             // For higher_is_better: low scores = bad (red), high scores = good (green)
             <>
-              <div className="flex items-center space-x-1">
+              <div className="flex items-center gap-x-1">
                 <div className="w-4 h-4 bg-red-500 rounded"></div>
                 <span className="text-xs text-gray-600">
                   Low (≤{statusThresholds.redThreshold})
                 </span>
               </div>
-              <div className="flex items-center space-x-1">
+              <div className="flex items-center gap-x-1">
                 <div className="w-4 h-4 bg-yellow-400 rounded"></div>
                 <span className="text-xs text-gray-600">
                   Medium ({statusThresholds.redThreshold + 1}-{statusThresholds.yellowThreshold})
                 </span>
               </div>
-              <div className="flex items-center space-x-1">
+              <div className="flex items-center gap-x-1">
                 <div className="w-4 h-4 bg-green-500 rounded"></div>
                 <span className="text-xs text-gray-600">
                   Good (&gt;{statusThresholds.yellowThreshold})
@@ -182,7 +182,7 @@ export function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) 
               </div>
             </>
           )}
-          <div className="flex items-center space-x-1">
+          <div className="flex items-center gap-x-1">
             <div className="w-4 h-4 bg-gray-100 border border-gray-300 rounded"></div>
             <span className="text-xs text-gray-600">No data</span>
           </div>

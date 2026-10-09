@@ -337,7 +337,7 @@ export default function AthleteProfile() {
         </Button>
         <div className="flex-1">
           <h1 className="text-2xl font-semibold text-gray-900">{athlete?.fullName}</h1>
-          <div className="flex items-center space-x-4 text-sm text-gray-600 mt-1">
+          <div className="flex items-center gap-x-4 text-sm text-gray-600 mt-1">
             <span className="flex items-center">
               <User className="h-4 w-4 mr-1" />
               Birth Year: {athlete?.birthYear}
@@ -370,7 +370,7 @@ export default function AthleteProfile() {
             )}
           </div>
         </div>
-        <div className="flex space-x-3 flex-wrap gap-y-2">
+        <div className="flex gap-x-3 flex-wrap gap-y-2">
           <Button
             onClick={() => setShowEditModal(true)}
             variant="outline"
@@ -453,7 +453,7 @@ export default function AthleteProfile() {
                   </h4>
                   <div className="space-y-2">
                     {athlete.emails.map((email: any, index: number) => (
-                      <div key={index} className="flex items-center space-x-2">
+                      <div key={index} className="flex items-center gap-x-2">
                         <a
                           href={`mailto:${email}`}
                           className="text-blue-600 hover:text-blue-800 hover:underline"
@@ -476,7 +476,7 @@ export default function AthleteProfile() {
                   </h4>
                   <div className="space-y-2">
                     {athlete.phoneNumbers.map((phone: any, index: number) => (
-                      <div key={index} className="flex items-center space-x-2">
+                      <div key={index} className="flex items-center gap-x-2">
                         <a
                           href={`tel:${phone}`}
                           className="text-blue-600 hover:text-blue-800 hover:underline"
@@ -580,7 +580,7 @@ export default function AthleteProfile() {
                       </td>
                       {canEditMeasurements && (
                         <td className="py-3 px-4 text-sm">
-                          <div className="flex space-x-1">
+                          <div className="flex gap-x-1">
                             <Button
                               variant="ghost"
                               size="sm"
@@ -717,7 +717,7 @@ export default function AthleteProfile() {
                   </FormItem>
                 )}
               />
-              <div className="flex justify-end space-x-2">
+              <div className="flex justify-end gap-x-2">
                 <Button
                   type="button"
                   variant="outline"

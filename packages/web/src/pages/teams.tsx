@@ -212,10 +212,10 @@ export default function Teams() {
     <div className="p-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <div className="flex flex-col space-y-2">
+        <div className="flex flex-col gap-y-2">
           <h1 className="text-2xl font-semibold text-gray-900">{labels.teams} Management</h1>
           <div className="flex items-center gap-4">
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-x-2">
               <Checkbox
                 id="show-archived"
                 checked={showArchived}

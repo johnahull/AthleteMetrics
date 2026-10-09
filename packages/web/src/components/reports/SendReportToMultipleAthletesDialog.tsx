@@ -131,7 +131,7 @@ export function SendReportToMultipleAthletesDialog({
           />
 
           {/* Optional message */}
-          <div className="space-y-2">
+          <div className="grid gap-y-2">
             <Label htmlFor="message">Message (optional)</Label>
             <Textarea
               id="message"
