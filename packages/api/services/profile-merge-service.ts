@@ -105,7 +105,7 @@ export interface MergeResult {
     achievementsTransferred: number;
     wellnessResponsesTransferred: number;
     eventRegistrationsTransferred: number;
-    /** Eval reports re-pointed to the target (absent on a dry run) */
+    /** Eval reports re-pointed to the target. Always set by a live merge; the dry-run preview does not count them, so it is omitted there. */
     evalReportsTransferred?: number;
     emailsMerged: number;
     sessionsInvalidated: number;

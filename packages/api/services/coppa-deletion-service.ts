@@ -336,8 +336,10 @@ export class CoppaDeletionService extends BaseService {
         // STEP 4: Delete report shares and collect affected report IDs.
         // We capture reportIds before deleting so we can null AI coaching
         // insights on those reports in step 4b.
-        // Shares of this athlete's eval reports to other accounts vanish with the cascade in step 4c and are
-        // counted only under eval_reports.
+        // A share row whose athleteId is this athlete is deleted here and counted under report_shares, including
+        // shares of the athlete's own eval reports. Shares of those eval reports to OTHER accounts (athleteId is
+        // someone else) are not matched here; they vanish with the reports.id cascade in step 4c and are not
+        // counted separately, only under eval_reports.
         const deletedShares = await tx.delete(reportShares)
           .where(eq(reportShares.athleteId, athleteUserId))
           .returning({ id: reportShares.id, reportId: reportShares.reportId });
