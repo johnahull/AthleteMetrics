@@ -21,6 +21,12 @@ export type Actor = { id: string; isSiteAdmin?: boolean; role?: string };
 export class TemplateConflictError extends Error {}
 export class EventFrozenError extends Error {}
 export class EmptyEventError extends Error {}
+/** A 404: the template vanished between the authorization check and the write. */
+export class TemplateNotFoundError extends Error {
+  constructor() {
+    super("Template not found");
+  }
+}
 /** A 400: the message says what is wrong with the request. */
 export class TemplateValidationError extends Error {}
 
@@ -132,6 +138,7 @@ export async function updateTemplate(
       .set({ name, sport, description, metrics, updatedAt: new Date() })
       .where(eq(evalBatteryTemplates.id, id))
       .returning();
+    if (!row) throw new TemplateNotFoundError();
     return row;
   } catch (e) {
     if (isUniqueViolation(e)) throw new TemplateConflictError("A template with this name already exists");
@@ -141,6 +148,7 @@ export async function updateTemplate(
 
 export async function archiveTemplate(id: string) {
   const [row] = await db.update(evalBatteryTemplates).set({ archivedAt: new Date(), updatedAt: new Date() }).where(eq(evalBatteryTemplates.id, id)).returning();
+  if (!row) throw new TemplateNotFoundError();
   return row;
 }
 
