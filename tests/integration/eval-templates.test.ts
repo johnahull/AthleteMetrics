@@ -347,6 +347,22 @@ describe('eval templates and org eval report settings', () => {
       expect((await as('adminA').delete(`/api/eval-templates/${id}`)).status).toBe(204);
       expect((await as('adminA').get(`/api/eval-templates/${id}`)).status).toBe(404);
     });
+
+    it('refuses to edit or archive an archived template (409), but still reads it', async () => {
+      const id = (await as('coachA').post(`/api/organizations/${orgA}/eval-templates`).send({ name: `${PREFIX}-arch`, sport: 'SOCCER', metrics })).body.id;
+      expect((await as('coachA').post(`/api/eval-templates/${id}/archive`)).status).toBe(200);
+
+      const patched = await as('coachA').patch(`/api/eval-templates/${id}`).send({ name: `${PREFIX}-arch2` });
+      expect(patched.status).toBe(409);
+      expect(patched.body).toEqual({ error: 'Template is archived' });
+      const again = await as('coachA').post(`/api/eval-templates/${id}/archive`);
+      expect(again.status).toBe(409);
+      expect(again.body).toEqual({ error: 'Template is archived' });
+
+      expect((await as('coachA').get(`/api/eval-templates/${id}`)).status).toBe(200);
+      const [row] = await db.select().from(evalBatteryTemplates).where(eq(evalBatteryTemplates.id, id));
+      expect(row.name).toBe(`${PREFIX}-arch`);
+    });
   });
 
   describe('apply template to event', () => {

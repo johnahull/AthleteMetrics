@@ -28,6 +28,7 @@ const NOT_FOUND = { error: "Not found" };
 
 function handleError(res: Response, error: unknown) {
   if (error instanceof svc.TemplateNotFoundError) return res.status(404).json({ error: error.message });
+  if (error instanceof svc.TemplateArchivedError) return res.status(409).json({ error: error.message });
   if (error instanceof svc.TemplateConflictError) return res.status(409).json({ error: error.message });
   if (error instanceof svc.EventFrozenError) return res.status(409).json({ error: error.message });
   if (error instanceof svc.EmptyEventError) return res.status(400).json({ error: error.message });
