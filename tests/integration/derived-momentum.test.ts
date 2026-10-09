@@ -66,8 +66,13 @@ describe('Anchored derived metric (MOMENTUM-like)', () => {
 
   beforeAll(seedMetrics);
 
+  // Every athlete/coach this file creates; the final sweep only touches their rows
+  const createdUserIds: string[] = [];
+
   afterAll(async () => {
-    await db.execute(sql`DELETE FROM measurements WHERE metric IN (${DERIVED}, ${WEIGHT}, ${FLY_RI})`);
+    if (createdUserIds.length > 0) {
+      await db.delete(measurements).where(inArray(measurements.userId, createdUserIds));
+    }
     await db.execute(sql`DELETE FROM site_metrics WHERE code IN (${DERIVED}, ${WEIGHT}, ${FLY_RI})`);
   });
 
@@ -94,6 +99,7 @@ describe('Anchored derived metric (MOMENTUM-like)', () => {
       } as any)
       .returning();
     athleteId = athlete.id;
+    createdUserIds.push(athleteId);
     const [coach] = await db
       .insert(users)
       .values({
@@ -106,6 +112,7 @@ describe('Anchored derived metric (MOMENTUM-like)', () => {
       } as any)
       .returning();
     coachId = coach.id;
+    createdUserIds.push(coachId);
     await db.insert(userOrganizations).values({ userId: athleteId, organizationId: orgId, role: 'athlete' } as any);
     await db.insert(userTeams).values({ userId: athleteId, teamId, joinedAt: new Date('2020-01-01'), isActive: true });
   });

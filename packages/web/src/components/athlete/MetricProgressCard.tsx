@@ -127,7 +127,7 @@ export function MetricProgressCard({
         console.warn('Failed to trigger confetti:', error);
       }
     }
-  }, [personalRecord?.isRecent, showConfetti, personalRecord, isTracking]);
+  }, [showConfetti, personalRecord, isTracking]);
 
   // Filter to best measurement per date for sparkline and trend
   const filteredMeasurements = useMemo(

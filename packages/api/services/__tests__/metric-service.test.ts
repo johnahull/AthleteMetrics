@@ -373,8 +373,11 @@ describe('MetricService', () => {
       ).rejects.toThrow('Unauthorized: Only site administrators can update metrics');
     });
 
-    it('validates a patched anchorMetric against the STORED dependentMetrics when the patch has none', async () => {
-      await db.update(siteMetrics).set({ dependentMetrics: ['SRC_A', 'SRC_B'] }).where(eq(siteMetrics.code, testMetricCode));
+    describe('anchorMetric', () => {
+      let srcA: string;
+      let srcB: string;
+      let derivedSrc: string;
+      const cleanup: string[] = [];
       const config = (anchorMetric: string) => ({
         dateMatchStrategy: 'closest' as const,
         maxDateDifference: 45,
@@ -382,12 +385,73 @@ describe('MetricService', () => {
         anchorMetric,
       });
 
-      await expect(
-        metricService.updateSiteMetric(testMetricCode, { calculationConfig: config('NOT_A_SOURCE') }, siteAdminUserId)
-      ).rejects.toThrow(/anchorMetric/);
+      beforeEach(async () => {
+        const sfx = testMetricCode.replace('TEST_METRIC_', '');
+        srcA = `ANCA_${sfx}`;
+        srcB = `ANCB_${sfx}`;
+        derivedSrc = `ANCD_${sfx}`;
+        cleanup.push(srcA, srcB, derivedSrc);
+        await db.insert(siteMetrics).values([
+          { code: srcA, label: 'A', category: 'test', unit: 's', metricType: 'lower_is_better', isActive: true },
+          { code: srcB, label: 'B', category: 'test', unit: 's', metricType: 'lower_is_better', isActive: true },
+          { code: derivedSrc, label: 'D', category: 'test', unit: 's', metricType: 'lower_is_better', isActive: true, isDerived: true, formula: `${srcA.toLowerCase()} * 2`, dependentMetrics: [srcA], calculationConfig: { dateMatchStrategy: 'same_date', missingSourceBehavior: 'skip' } },
+        ] as any);
+      });
 
-      const ok = await metricService.updateSiteMetric(testMetricCode, { calculationConfig: config('src_a') }, siteAdminUserId);
-      expect(ok.calculationConfig?.anchorMetric).toBe('src_a');
+      afterEach(async () => {
+        await db.delete(siteMetrics).where(or(...cleanup.splice(0).map(c => eq(siteMetrics.code, c)), eq(siteMetrics.code, `${testMetricCode}_NEW`)));
+      });
+
+      it('validates a patched anchorMetric against the STORED dependentMetrics when the patch has none', async () => {
+        await db.update(siteMetrics).set({ dependentMetrics: [srcA, srcB] }).where(eq(siteMetrics.code, testMetricCode));
+        await expect(
+          metricService.updateSiteMetric(testMetricCode, { calculationConfig: config('NOT_A_SOURCE') }, siteAdminUserId)
+        ).rejects.toThrow(/anchorMetric/);
+        const ok = await metricService.updateSiteMetric(testMetricCode, { calculationConfig: config(srcA.toLowerCase()) }, siteAdminUserId);
+        expect(ok.calculationConfig?.anchorMetric).toBe(srcA.toLowerCase());
+      });
+
+      it('update rejects an anchorMetric that is itself derived (the anchor gate would delete every row)', async () => {
+        await db.update(siteMetrics).set({ dependentMetrics: [srcA, derivedSrc] }).where(eq(siteMetrics.code, testMetricCode));
+        await expect(
+          metricService.updateSiteMetric(testMetricCode, { calculationConfig: config(derivedSrc) }, siteAdminUserId)
+        ).rejects.toThrow(/anchorMetric.*derived/i);
+      });
+
+      it('update rejects an anchorMetric with no site_metrics row', async () => {
+        const ghost = `GHOST_${srcA}`;
+        await expect(
+          metricService.updateSiteMetric(testMetricCode, { dependentMetrics: [srcA, ghost], calculationConfig: config(ghost) }, siteAdminUserId)
+        ).rejects.toThrow(/anchorMetric.*(exist|found)/i);
+      });
+
+      const createInput = (anchor: string, deps: string[]) => ({
+        code: `${testMetricCode}_NEW`,
+        label: 'Anchored',
+        metricType: 'tracking',
+        isDerived: true,
+        formula: `${deps[0].toLowerCase()} * ${deps[1].toLowerCase()}`,
+        dependentMetrics: deps,
+        calculationConfig: config(anchor),
+      } as any);
+
+      it('create accepts a non-derived anchorMetric among the dependents', async () => {
+        const m = await metricService.createSiteMetric(createInput(srcA, [srcA, srcB]), siteAdminUserId);
+        expect(m.calculationConfig?.anchorMetric).toBe(srcA);
+      });
+
+      it('create rejects a derived anchorMetric', async () => {
+        await expect(
+          metricService.createSiteMetric(createInput(derivedSrc, [derivedSrc, srcB]), siteAdminUserId)
+        ).rejects.toThrow(/anchorMetric.*derived/i);
+      });
+
+      it('create rejects an anchorMetric with no site_metrics row', async () => {
+        const ghost = `GHOST_${srcA}`;
+        await expect(
+          metricService.createSiteMetric(createInput(ghost, [ghost, srcB]), siteAdminUserId)
+        ).rejects.toThrow();
+      });
     });
 
     it('should reject update of non-existent metric', async () => {

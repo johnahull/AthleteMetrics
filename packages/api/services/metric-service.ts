@@ -103,6 +103,26 @@ export class MetricService extends BaseService {
   }
 
   /**
+   * An anchorMetric must be one of the dependent metrics and resolve to an existing,
+   * NON-derived site metric: the calculator's anchor gate requires a directly measured
+   * (non-calculated) anchor row, so a derived anchor would delete every derived value.
+   */
+  private async validateAnchorMetric(anchorMetric: string | undefined, dependentMetrics: string[]): Promise<void> {
+    if (!anchorMetric) return;
+    const anchor = anchorMetric.toUpperCase();
+    if (!dependentMetrics.some(d => d.toUpperCase() === anchor)) {
+      throw new Error("anchorMetric must be one of the dependent metrics");
+    }
+    const row = await this.storage.getSiteMetric(anchor);
+    if (!row) {
+      throw new Error(`anchorMetric ${anchor} does not exist as a site metric`);
+    }
+    if (row.isDerived) {
+      throw new Error(`anchorMetric ${anchor} is a derived metric; the anchor must be a directly measured metric`);
+    }
+  }
+
+  /**
    * Create a new site metric (site admin only)
    */
   async createSiteMetric(
@@ -168,6 +188,8 @@ export class MetricService extends BaseService {
       }
 
       // Create metric
+      await this.validateAnchorMetric(validatedData.calculationConfig?.anchorMetric, validatedData.dependentMetrics ?? []);
+
       const metric = await this.storage.createSiteMetric(validatedData, requestingUserId);
 
       // Invalidate metric config cache so new metric is picked up immediately
@@ -275,13 +297,11 @@ export class MetricService extends BaseService {
 
       // The schema can only check anchorMetric against dependentMetrics sent in the same patch;
       // when the patch has none, check against the stored ones.
-      const patchedAnchor = validatedData.calculationConfig?.anchorMetric;
-      if (patchedAnchor && !validatedData.dependentMetrics) {
-        const stored = await this.storage.getSiteMetric(code);
-        const deps = stored?.dependentMetrics ?? [];
-        if (!deps.some(d => d.toUpperCase() === patchedAnchor.toUpperCase())) {
-          throw new Error("anchorMetric must be one of the dependent metrics");
-        }
+      if (validatedData.calculationConfig?.anchorMetric) {
+        await this.validateAnchorMetric(
+          validatedData.calculationConfig.anchorMetric,
+          validatedData.dependentMetrics ?? (await this.storage.getSiteMetric(code))?.dependentMetrics ?? []
+        );
       }
 
       // Update metric
