@@ -9,6 +9,7 @@
 
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import EventDetail from '../event-detail';
 
@@ -88,6 +89,9 @@ vi.mock('@/components/events', () => ({
   EventMetricsTab: () => <div data-testid="metrics-tab">Metrics Content</div>,
   EventResultsTab: () => <div data-testid="results-tab">Results Content</div>,
   EventReportsTab: () => <div data-testid="reports-tab">Reports Content</div>,
+  EventEvalReportsCard: ({ canManage }: { canManage: boolean }) => (
+    <div data-testid="eval-reports-card">{canManage ? 'can-manage' : 'read-only'}</div>
+  ),
   CheckInTab: () => <div data-testid="checkin-tab">Check-In Content</div>,
   InviteAthletesModal: () => null,
 }));
@@ -254,6 +258,17 @@ describe('Event Detail Page Permissions', () => {
       expect(screen.getByTestId('tab-results')).toBeInTheDocument();
       expect(screen.getByTestId('tab-reports')).toBeInTheDocument();
       expect(screen.getByTestId('tab-settings')).toBeInTheDocument();
+    });
+
+    it('should offer eval reports in the Reports tab for coaches (AM-FEAT-019 P5)', async () => {
+      render(<EventDetail />, { wrapper: createWrapper() });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('tab-reports')).toBeInTheDocument();
+      });
+      await userEvent.click(screen.getByTestId('tab-reports'));
+
+      expect(await screen.findByTestId('eval-reports-card')).toHaveTextContent('can-manage');
     });
 
     it('should show Edit Event button for coaches', async () => {

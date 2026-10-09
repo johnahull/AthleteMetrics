@@ -483,6 +483,7 @@ interface ReportCardProps {
 
 function ReportCard({ report, onExportPDF, onShare, isPDFExporting }: ReportCardProps) {
   const isTeamReport = report.reportType === 'team';
+  const isEvalReport = report.reportType === 'eval';
   const hasAiInsights = !!report.coachingInsights;
 
   return (
@@ -511,7 +512,7 @@ function ReportCard({ report, onExportPDF, onShare, isPDFExporting }: ReportCard
             )}
           </div>
           <p className="text-xs text-muted-foreground">
-            {isTeamReport ? 'Team Report' : 'Individual Report'} •{' '}
+            {isTeamReport ? 'Team Report' : isEvalReport ? 'Eval report' : 'Individual Report'} •{' '}
             {format(new Date(report.createdAt), "MMM d, yyyy 'at' h:mm a")}
           </p>
         </div>

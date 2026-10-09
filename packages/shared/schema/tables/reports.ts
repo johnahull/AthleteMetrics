@@ -76,6 +76,10 @@ export const reports = pgTable("reports", {
   orgPinnedNotArchivedIdx: index("reports_org_pinned_not_archived_idx")
     .on(table.organizationId, table.isPinned)
     .where(sql`${table.archivedAt} IS NULL`),
+  // Eval report lookups by athlete and event (migration 0153)
+  evalAthleteEventIdx: index("reports_eval_athlete_event_idx")
+    .on(sql`(${table.config}->>'athleteId')`, sql`(${table.config}->>'eventId')`)
+    .where(sql`${table.reportType} = 'eval'`),
 }));
 
 export const reportSnapshots = pgTable("report_snapshots", {

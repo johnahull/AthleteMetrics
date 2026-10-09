@@ -9,9 +9,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Send, Loader2, UserCircle } from "lucide-react";
+import { Send, Loader2, UserCircle, AlertTriangle } from "lucide-react";
 
 interface SendReportToAthleteDialogProps {
   open: boolean;
@@ -21,6 +22,8 @@ interface SendReportToAthleteDialogProps {
   athleteId: string;
   athleteName: string;
   athleteEmail?: string;
+  /** True when the athlete is under 13 or has no date of birth; the API rejects the share. */
+  shareBlockedUnder13?: boolean;
 }
 
 export function SendReportToAthleteDialog({
@@ -31,6 +34,7 @@ export function SendReportToAthleteDialog({
   athleteId,
   athleteName,
   athleteEmail,
+  shareBlockedUnder13 = false,
 }: SendReportToAthleteDialogProps) {
   const [message, setMessage] = useState("");
   const shareReport = useShareReport();
@@ -57,6 +61,16 @@ export function SendReportToAthleteDialog({
         </DialogHeader>
 
         <div className="space-y-4">
+          {shareBlockedUnder13 && (
+            <Alert variant="destructive" data-testid="under-13-share-warning">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                {athleteName} is under 13 or has no date of birth on file, so this report cannot be sent to their
+                account. Send the PDF or a share link to their parent instead.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Recipient info */}
           <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
             <UserCircle className="h-10 w-10 text-muted-foreground" />
@@ -94,7 +108,7 @@ export function SendReportToAthleteDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="cancel-share-button">
             Cancel
           </Button>
-          <Button onClick={handleShare} disabled={shareReport.isPending} data-testid="confirm-share-button">
+          <Button onClick={handleShare} disabled={shareReport.isPending || shareBlockedUnder13} data-testid="confirm-share-button">
             {shareReport.isPending ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />

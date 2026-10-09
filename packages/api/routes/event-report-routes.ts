@@ -12,10 +12,31 @@ import { EventRegistrationService, type IRegistrationStorage } from "../services
 import { requireAuth, type AuthenticatedRequest } from "../middleware";
 import { storage } from "../storage";
 import { db } from "../db";
-import { reports, insertReportSchema } from "@shared/schema";
-import { desc } from "drizzle-orm";
+import { reports, insertReportSchema, events, measurements } from "@shared/schema";
+import { and, desc, eq, sql } from "drizzle-orm";
+import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
+import { isSiteAdmin } from "../permissions/helpers";
+import {
+  EvalReportInputError,
+  buildEvalReportModel,
+  computeEvalDefaults,
+  evalInputErrorResponse,
+  loadEvalReportInputs,
+} from "../services/eval-report-service";
+import { EVAL_REPORT_TYPE, evalReportConfigSchema, evalReportRequestSchema } from "@shared/eval-report-config";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
-import { ZodError } from "zod";
+import { z, ZodError } from "zod";
+import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
+
+// Lighter limit for the eval report preview and defaults (reads; nothing is saved)
+const evalReadLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: RATE_LIMITS.STANDARD,
+  message: { message: "Too many requests, please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  skip: (req) => shouldSkipRateLimiting(req, 'general'),
+});
 
 // Rate limiting for report generation (expensive operation)
 const reportGenerationLimiter = rateLimit({
@@ -24,6 +45,7 @@ const reportGenerationLimiter = rateLimit({
   message: { message: "Too many report generation requests, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  skip: (req) => shouldSkipRateLimiting(req, 'general'),
 });
 
 /**
@@ -34,7 +56,8 @@ async function canAccessEventReports(
   eventId: string,
   eventService: EventService
 ): Promise<boolean> {
-  const event = await eventService.getEvent(eventId, userId);
+  // getEvent throws for a non-member; that is "no access", not a server error
+  const event = await eventService.getEvent(eventId, userId).catch(() => null);
   if (!event) return false;
 
   // Site admins can access all
@@ -49,6 +72,60 @@ async function canAccessEventReports(
 
   // Public events - creator can access
   return event.createdBy === userId;
+}
+
+const uuidParam = z.string().uuid();
+
+/**
+ * Resolve the event and athlete of an eval report request, or send the error and return null.
+ * Authorization uses the role in the EVENT's organization (not the session's primary role). Anyone who may
+ * not see the event, and an athlete who is not part of it, gets 404 so the response reveals nothing.
+ */
+async function resolveEvalTarget(req: AuthenticatedRequest, res: Response) {
+  const { eventId, athleteId } = req.params;
+  // A malformed id would reach Postgres as an invalid uuid and surface as a 500. A well-formed but unknown id
+  // still falls through to the 404 below, so inaccessible and nonexistent rows stay indistinguishable.
+  if (!uuidParam.safeParse(eventId).success || !uuidParam.safeParse(athleteId).success) {
+    res.status(400).json({ message: "Invalid id" });
+    return null;
+  }
+  const notFound = () => {
+    res.status(404).json({ message: "Not found" });
+    return null;
+  };
+
+  const [event] = await db.select().from(events).where(eq(events.id, eventId)).limit(1);
+  if (!event) return notFound();
+  if (event.organizationId === null) {
+    // No organization to authorize against: only a site admin learns why (409), everyone else gets the 404
+    if (!isSiteAdmin(req.user)) return notFound();
+    res.status(409).json({ message: "Event has no organization" });
+    return null;
+  }
+  const role = await getOrgRole(req.user!, event.organizationId);
+  if (!isMeasurementWriterRole(role)) return notFound();
+
+  // The athlete must have verified measurements in this event (in the event's organization), as loadEvalReportInputs reads.
+  // Deliberately less strict than loadEvalReportInputs, which also requires an active, not-deleted user: a
+  // deactivated athlete passes this check but the service then refuses, so the caller gets a 404 from the service
+  // (the UI explains it).
+  const [measured] = await db
+    .select({ id: measurements.id })
+    .from(measurements)
+    .where(and(eq(measurements.eventId, eventId), eq(measurements.userId, athleteId), eq(measurements.organizationId, event.organizationId), eq(measurements.isVerified, true)))
+    .limit(1);
+  if (!measured) return notFound();
+  return { event, organizationId: event.organizationId, eventId, athleteId };
+}
+
+function sendEvalError(res: Response, error: unknown, fallback: string) {
+  if (error instanceof ZodError) return res.status(400).json({ message: "Invalid request", errors: error.errors });
+  if (error instanceof EvalReportInputError) {
+    const { status, message } = evalInputErrorResponse(error.code);
+    return res.status(status).json({ message });
+  }
+  console.error(fallback, error);
+  return res.status(500).json({ message: fallback });
 }
 
 export function registerEventReportRoutes(app: Express) {
@@ -81,23 +158,26 @@ export function registerEventReportRoutes(app: Express) {
           return res.status(404).json({ message: "Event not found" });
         }
 
-        // Fetch reports for this organization
+        // Scope in SQL: this event's reports, in the event's organization when it has one
         const eventReports = await db
           .select()
           .from(reports)
+          .where(
+            and(
+              sql`${reports.config}->>'eventId' = ${eventId}`,
+              event.organizationId ? eq(reports.organizationId, event.organizationId) : undefined,
+            ),
+          )
           .orderBy(desc(reports.createdAt));
 
-        // Filter to reports that have eventId in config
-        const filteredReports = eventReports.filter(report => {
-          // Only include reports from the same organization (if event has one)
-          if (event.organizationId && report.organizationId !== event.organizationId) {
-            return false;
-          }
-          const config = report.config as Record<string, unknown>;
-          return config?.eventId === eventId;
+        // The list does not need an eval row's frozen model; keep its event date
+        const payload = eventReports.map((report) => {
+          if (report.reportType !== EVAL_REPORT_TYPE) return report;
+          const { model, ...rest } = (report.config ?? {}) as Record<string, unknown> & { model?: { eventDate?: string } };
+          return { ...report, config: { ...rest, eventDate: model?.eventDate } };
         });
 
-        return res.json(filteredReports);
+        return res.json(payload);
       } catch (error: unknown) {
         console.error("Error fetching event reports:", error);
         const message = error instanceof Error ? error.message : "Failed to fetch event reports";
@@ -291,6 +371,140 @@ export function registerEventReportRoutes(app: Express) {
         }
         const message = error instanceof Error ? error.message : "Failed to generate quick report";
         return res.status(500).json({ message });
+      }
+    }
+  );
+
+  /**
+   * POST /api/events/:eventId/athletes/:athleteId/eval-report/preview
+   * Returns the eval report model as JSON. Saves nothing.
+   */
+  app.post(
+    "/api/events/:eventId/athletes/:athleteId/eval-report/preview",
+    requireAuth,
+    evalReadLimiter,
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const target = await resolveEvalTarget(req, res);
+        if (!target) return;
+        const body = evalReportRequestSchema.parse(req.body ?? {});
+        const model = await buildEvalReportModel(db, {
+          event: target.event,
+          athleteId: target.athleteId,
+          selection: body.selection ?? {},
+          load: body.load ?? null,
+          coachNote: body.coachNote ?? null,
+          overrides: { strengths: body.strengthsOverride, developmentAreas: body.developmentAreasOverride, limiter: body.limiterOverride },
+        });
+        return res.json({ model });
+      } catch (error: unknown) {
+        return sendEvalError(res, error, "Failed to preview eval report");
+      }
+    }
+  );
+
+  /**
+   * POST /api/events/:eventId/athletes/:athleteId/eval-report
+   * Builds the eval report model and saves it as a new reports row (every generation is a new row).
+   */
+  app.post(
+    "/api/events/:eventId/athletes/:athleteId/eval-report",
+    requireAuth,
+    reportGenerationLimiter,
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const target = await resolveEvalTarget(req, res);
+        if (!target) return;
+        const body = evalReportRequestSchema.parse(req.body ?? {});
+        const selection = body.selection ?? {};
+        const model = await buildEvalReportModel(db, {
+          event: target.event,
+          athleteId: target.athleteId,
+          selection,
+          load: body.load ?? null,
+          coachNote: body.coachNote ?? null,
+          overrides: { strengths: body.strengthsOverride, developmentAreas: body.developmentAreasOverride, limiter: body.limiterOverride },
+        });
+        const parsedConfig = evalReportConfigSchema.safeParse({
+          eventId: target.eventId,
+          athleteId: target.athleteId,
+          metrics: model.metrics.map((m) => m.code),
+          selection,
+          load: body.load ?? null,
+          coachNote: body.coachNote ?? null,
+          strengthsOverride: body.strengthsOverride,
+          developmentAreasOverride: body.developmentAreasOverride,
+          limiterOverride: body.limiterOverride,
+          model,
+        });
+        // The model is built by the server: a config that does not validate is a server fault, not a bad request
+        if (!parsedConfig.success) {
+          console.error("Eval report config failed validation", parsedConfig.error.errors);
+          return res.status(500).json({ message: "Failed to save eval report" });
+        }
+        const config = parsedConfig.data;
+
+        const [report] = await db
+          .insert(reports)
+          .values({
+            id: crypto.randomUUID(),
+            organizationId: target.organizationId,
+            // The legacy session admin (id "admin") has no users row, so createdBy must be null (FK to users)
+            createdBy: req.user!.id === "admin" ? null : req.user!.id,
+            name: `${model.athlete.name} - Eval Report - ${model.eventDate}`.slice(0, 200),
+            reportType: EVAL_REPORT_TYPE,
+            config,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .returning();
+
+        return res.status(201).json({ report, model });
+      } catch (error: unknown) {
+        return sendEvalError(res, error, "Failed to save eval report");
+      }
+    }
+  );
+
+  /**
+   * GET /api/events/:eventId/athletes/:athleteId/eval-report/defaults
+   * Pre-fill for the selection screen: the latest saved eval report for this event and athlete, else computed defaults.
+   */
+  app.get(
+    "/api/events/:eventId/athletes/:athleteId/eval-report/defaults",
+    requireAuth,
+    evalReadLimiter,
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const target = await resolveEvalTarget(req, res);
+        if (!target) return;
+        const [inputs, [latest]] = await Promise.all([
+          loadEvalReportInputs(db, { event: target.event, athleteId: target.athleteId }),
+          db
+            .select()
+            .from(reports)
+            .where(
+              and(
+                eq(reports.organizationId, target.organizationId),
+                eq(reports.reportType, EVAL_REPORT_TYPE),
+                sql`${reports.config}->>'eventId' = ${target.eventId}`,
+                sql`${reports.config}->>'athleteId' = ${target.athleteId}`,
+              ),
+            )
+            .orderBy(desc(reports.createdAt))
+            .limit(1),
+        ]);
+        // Deliberately returns only selection, load and coachNote from the saved config: the strengths, development
+        // and limiter overrides are per-report edits and are not restored onto a new report.
+        const computed = computeEvalDefaults({ ...inputs, selection: {}, load: null, coachNote: null, overrides: {} });
+        const saved = latest ? evalReportConfigSchema.safeParse(latest.config) : null;
+        if (latest && saved?.success) {
+          const { selection, load, coachNote } = saved.data;
+          return res.json({ source: "saved", reportId: latest.id, selection, load, coachNote, offered: computed.offered });
+        }
+        return res.json({ source: "computed", ...computed });
+      } catch (error: unknown) {
+        return sendEvalError(res, error, "Failed to load eval report defaults");
       }
     }
   );

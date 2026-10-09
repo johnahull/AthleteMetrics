@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress";
 import { Calendar, Users, Settings, Check, ArrowLeft, ArrowRight } from "lucide-react";
 import { MetricsSelector, type SelectedMetric } from "./MetricsSelector";
+import { EvalTemplatePicker, type EvalTemplateChoice } from "./EvalTemplatePicker";
 import type { InsertEvent, EventVisibility, RegistrationMode, ResultsVisibility } from "@shared/schema";
 import { eventVisibilityEnum, registrationModeEnum, resultsVisibilityEnum } from "@shared/schema";
 
@@ -49,6 +50,8 @@ type EventFormValues = z.infer<typeof eventFormSchema>;
 // Extended form data that includes selected metrics
 export interface EventFormData extends EventFormValues {
   selectedMetrics: SelectedMetric[];
+  /** Eval battery template to apply once the event exists (create mode only) */
+  evalTemplate?: EvalTemplateChoice | null;
 }
 
 interface EventFormProps {
@@ -79,6 +82,7 @@ const steps = [
 export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, organizationId, mode = "create" }: EventFormProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedMetrics, setSelectedMetrics] = useState<SelectedMetric[]>([]);
+  const [evalTemplate, setEvalTemplate] = useState<EvalTemplateChoice | null>(null);
 
   const isEditMode = mode === "edit";
 
@@ -132,6 +136,7 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, organ
       const formData: EventFormData = {
         ...data,
         selectedMetrics,
+        evalTemplate,
       };
       onSubmit(formData, isDraft);
     })();
@@ -435,7 +440,10 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, organ
                 Select which tests will be conducted at this event. You can also configure metrics after creating the event.
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-6">
+              {!isEditMode && (
+                <EvalTemplatePicker organizationId={organizationId} value={evalTemplate} onChange={setEvalTemplate} />
+              )}
               <MetricsSelector
                 selectedMetrics={selectedMetrics}
                 onMetricsChange={setSelectedMetrics}

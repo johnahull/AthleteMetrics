@@ -28,6 +28,7 @@ import {
   eventRegistrations,
   eventInvitations,
   reportShares,
+  reports,
   athleteProfiles,
   userGlobalAthleteLinks,
   pushSubscriptions,
@@ -40,6 +41,7 @@ import {
   auditLogs,
 } from "@shared/schema";
 import type { User } from "@shared/schema";
+import { EVAL_REPORT_TYPE } from "@shared/eval-report-config";
 
 /**
  * Result of a merge preview operation
@@ -103,6 +105,8 @@ export interface MergeResult {
     achievementsTransferred: number;
     wellnessResponsesTransferred: number;
     eventRegistrationsTransferred: number;
+    /** Eval reports re-pointed to the target. Always set by a live merge; the dry-run preview does not count them, so it is omitted there. */
+    evalReportsTransferred?: number;
     emailsMerged: number;
     sessionsInvalidated: number;
   };
@@ -308,6 +312,7 @@ export class ProfileMergeService extends BaseService {
         achievementsTransferred: 0,
         wellnessResponsesTransferred: 0,
         eventRegistrationsTransferred: 0,
+        evalReportsTransferred: 0,
         emailsMerged: 0,
         sessionsInvalidated: 0,
       };
@@ -473,6 +478,18 @@ export class ProfileMergeService extends BaseService {
             .where(eq(reportShares.id, share.id));
         }
       }
+
+      // 8b. Re-point this org's eval reports (AM-FEAT-019): they name the athlete only in config.athleteId,
+      // which COPPA deletion and export key on. The frozen config.model is a historical snapshot and stays as saved.
+      const evalReportsResult = await tx.update(reports)
+        .set({ config: sql`jsonb_set(${reports.config}, '{athleteId}', to_jsonb(${targetUserId}::text))` })
+        .where(and(
+          eq(reports.reportType, EVAL_REPORT_TYPE),
+          eq(reports.organizationId, orgId),
+          sql`${reports.config}->>'athleteId' = ${sourceUserId}`,
+        ))
+        .returning({ id: reports.id });
+      summary.evalReportsTransferred = evalReportsResult.length;
 
       // 9. Transfer/merge athlete profile
       const [sourceProfile] = await tx.select()

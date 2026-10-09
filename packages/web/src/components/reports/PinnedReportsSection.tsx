@@ -227,7 +227,7 @@ export function PinnedReportsSection({
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className="capitalize">
-                          {report.reportType}
+                          {report.reportType === 'eval' ? 'Eval report' : report.reportType}
                         </Badge>
                         <span>{format(new Date(report.createdAt), 'MMM dd, yyyy')}</span>
                       </div>
