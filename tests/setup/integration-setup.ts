@@ -7,6 +7,8 @@
  * environment variables before running tests.
  */
 
+import { findForbiddenPattern } from '../helpers/forbidden-db-url';
+
 // Set test environment variables BEFORE any imports
 // These will be overridden by actual env vars in CI/CD
 process.env.NODE_ENV = process.env.NODE_ENV || 'test';
@@ -70,7 +72,6 @@ console.log('✅ Integration test database validated:', sanitizedUrl);
 console.log('   Environment:', process.env.NODE_ENV || 'test');
 
 import { beforeAll, afterAll } from 'vitest';
-import { findForbiddenPattern } from '../helpers/forbidden-db-url';
 import { closeDatabase } from '../../packages/api/db.js';
 
 // Store original console methods

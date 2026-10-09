@@ -10,6 +10,8 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { purgeTestRows } from '../helpers/purge-test-rows';
 
+// Each case boots a nested vitest (setup, DB snapshot, teardown), well over the lane's 10s default
+const NESTED_RUN_TIMEOUT_MS = 120_000;
 const root = path.resolve(__dirname, '../..');
 const runNested = (env: Record<string, string | undefined> = {}) =>
   spawnSync('npx', ['vitest', 'run', '--config', 'tests/leak-fixtures/vitest.config.ts'], {
@@ -28,18 +30,18 @@ describe('integration leak check exit code (issue #539)', () => {
     const result = runNested();
     expect(result.status).not.toBe(0);
     expect(`${result.stdout}${result.stderr}`).toMatch(/organizations: 1 left behind: Leak Check Fixture/);
-  });
+  }, NESTED_RUN_TIMEOUT_MS);
 
   it('SKIP_LEAK_CHECK=1 opts out', () => {
     const result = runNested({ SKIP_LEAK_CHECK: '1' });
     expect(result.status).toBe(0);
     expect(`${result.stdout}${result.stderr}`).toContain('SKIP_LEAK_CHECK=1');
-  });
+  }, NESTED_RUN_TIMEOUT_MS);
 
   it('does not connect to a database that matches the production/staging guard', () => {
     const result = runNested({ DATABASE_URL: 'postgresql://u:p@staging.example.invalid:5432/db' });
     const output = `${result.stdout}${result.stderr}`;
     expect(output).toContain('not connecting');
     expect(output).not.toContain('left behind');
-  });
+  }, NESTED_RUN_TIMEOUT_MS);
 });
