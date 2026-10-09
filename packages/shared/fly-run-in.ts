@@ -13,6 +13,31 @@ export const FLY10_RUN_IN_YD: Readonly<Record<string, number>> = {
   FLY10_TIME_RI30: 30,
 };
 
+/** Run-in distances (yd) a user can pick when a photo import finds a 10-yard fly reading. */
+export type FlyRunInYd = 5 | 10 | 15 | 20 | 30;
+
+/** The FLY10 metric code for each run-in distance (inverse of FLY10_RUN_IN_YD). */
+export const FLY10_CODE_BY_RUN_IN_YD: Readonly<Record<FlyRunInYd, string>> = {
+  5: 'FLY10_TIME_RI5',
+  10: 'FLY10_TIME_RI10',
+  15: 'FLY10_TIME_RI15',
+  20: 'FLY10_TIME',
+  30: 'FLY10_TIME_RI30',
+};
+
+/**
+ * Run-in-neutral token the OCR parser emits for a 10-yard fly reading. The photo route resolves it to one of
+ * the five FLY10 codes from the user's choice (options.flyRunIn) and it must never reach storage or a response.
+ */
+export const OCR_FLY10_NEUTRAL_METRIC = 'FLY10_TIME_UNRESOLVED';
+
+/** A client-supplied flyRunIn: only the five numeric distances count; anything else is undefined (invalid). */
+export function parseFlyRunInChoice(v: unknown): FlyRunInYd | undefined {
+  return typeof v === 'number' && Object.prototype.hasOwnProperty.call(FLY10_CODE_BY_RUN_IN_YD, v)
+    ? (v as FlyRunInYd)
+    : undefined;
+}
+
 type FlyInValue = number | string | null | undefined;
 
 const isBlank = (v: FlyInValue): v is null | undefined | '' => v === null || v === undefined || v === '';

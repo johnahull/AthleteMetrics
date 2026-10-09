@@ -760,9 +760,9 @@ export default function Athletes() {
   return (
     <div className="p-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 space-y-4 sm:space-y-0">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-y-4 sm:gap-y-0">
         <h1 className="text-2xl font-semibold text-gray-900">{labels.athletes} Management</h1>
-        <div className="flex space-x-3">
+        <div className="flex gap-x-3">
           <Button 
             variant="outline" 
             onClick={refreshData}
@@ -867,7 +867,7 @@ export default function Athletes() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-center space-x-2 pt-6">
+            <div className="flex items-center gap-x-2 pt-6">
               <Checkbox
                 id="includeUnknownBirthYear"
                 checked={filters.includeUnknownBirthYear}
@@ -898,9 +898,9 @@ export default function Athletes() {
 
           {(filters.teamId || filters.gender !== 'all' || filters.birthYearFrom || filters.birthYearTo || filters.search) && (
             <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
-              <div className="flex items-center space-x-4">
+              <div className="flex items-center gap-x-4">
                 <span className="text-sm text-gray-600">Applied filters:</span>
-                <div className="flex space-x-2">
+                <div className="flex gap-x-2">
                   {filters.teamId && filters.teamId !== 'all' && (
                     <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
                       {labels.team}: {filters.teamId === 'none' ? `Independent ${labels.athletes}` : teams?.find((t: any) => t.id === filters.teamId)?.name}
@@ -1254,7 +1254,7 @@ export default function Athletes() {
                         />
                       </td>
                       <td className="px-6 py-4">
-                        <div className="flex items-center space-x-3">
+                        <div className="flex items-center gap-x-3">
                           <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
                             <span className="text-white font-medium text-sm">
                               {athlete.firstName.charAt(0)}{athlete.lastName.charAt(0)}
@@ -1334,7 +1334,7 @@ export default function Athletes() {
                         })()}
                       </td>
                       <td className="px-6 py-4">
-                        <div className="flex space-x-2">
+                        <div className="flex gap-x-2">
                           <Button
                             variant="ghost"
                             size="sm"

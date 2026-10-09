@@ -291,7 +291,7 @@ export function NotificationPreferencesCard() {
             <>
               {/* Master Push Toggle */}
               <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
+                <div className="grid gap-y-0.5">
                   <Label htmlFor="push-enabled">Push Notifications</Label>
                   <p className="text-sm text-muted-foreground">
                     Receive push notifications on this device
@@ -449,7 +449,7 @@ export function NotificationPreferencesCard() {
         <CardContent className="space-y-6">
           {/* Master Email Toggle */}
           <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
+            <div className="grid gap-y-0.5">
               <Label htmlFor="email-enabled">Email Notifications</Label>
               <p className="text-sm text-muted-foreground">
                 Receive notification emails
@@ -546,7 +546,7 @@ export function NotificationPreferencesCard() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
+            <div className="grid gap-y-0.5">
               <Label htmlFor="quiet-hours">Enable Quiet Hours</Label>
               <p className="text-sm text-muted-foreground">
                 Mute notifications during set times
@@ -562,7 +562,7 @@ export function NotificationPreferencesCard() {
           {prefs.quietHoursEnabled && (
             <div className="grid gap-4 pt-2">
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
+                <div className="grid gap-y-2">
                   <Label htmlFor="quiet-start">Start Time</Label>
                   <Input
                     id="quiet-start"
@@ -573,7 +573,7 @@ export function NotificationPreferencesCard() {
                     }
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="grid gap-y-2">
                   <Label htmlFor="quiet-end">End Time</Label>
                   <Input
                     id="quiet-end"

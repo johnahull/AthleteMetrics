@@ -48,8 +48,8 @@ const app = createTestApp();
 // Test data IDs
 let testOrgId1: string;
 let testOrgId2: string;
+const extraOrgIds: string[] = []; // orgs created inside single tests; purged in afterAll even if an assertion fails
 let testTeamId1: string;
-let testTeamId2: string;
 let testCoachId: string;
 let testOrgAdminId: string;
 let testAthleteId: string;
@@ -92,7 +92,6 @@ describe("GET /api/dashboard/trends", () => {
       organizationId: testOrgId2,
       level: "HS",
     });
-    testTeamId2 = team2.id;
 
     // Create test users
     const coach = await storage.createUser({
@@ -238,7 +237,7 @@ describe("GET /api/dashboard/trends", () => {
   afterAll(async () => {
     await purgeTestRows({
       userIds: [testAthlete1Id, testAthlete2Id, testAthlete3Id, testAthleteId, testCoachId, testOrgAdminId, testSiteAdminId].filter((id): id is string => !!id),
-      orgIds: [testOrgId1, testOrgId2].filter((id): id is string => !!id),
+      orgIds: [testOrgId1, testOrgId2, ...extraOrgIds].filter((id): id is string => !!id),
     });
   });
 
@@ -489,6 +488,7 @@ describe("GET /api/dashboard/trends", () => {
         benchmarksEnabled: false,
         allowCustomBenchmarks: false,
       });
+      extraOrgIds.push(emptyOrg.id);
 
       await storage.addUserToOrganization(testCoachId, emptyOrg.id, "coach");
 
@@ -524,6 +524,7 @@ describe("GET /api/dashboard/trends", () => {
         benchmarksEnabled: false,
         allowCustomBenchmarks: false,
       });
+      extraOrgIds.push(emptyOrg.id);
 
       await storage.addUserToOrganization(testSiteAdminId, emptyOrg.id, "org_admin");
 

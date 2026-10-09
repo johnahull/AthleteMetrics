@@ -145,7 +145,7 @@ export async function exportChartAsPNG(
 
   try {
     // Dynamically import html2canvas
-    const html2canvas = (await import('html2canvas')).default;
+    const html2canvas = (await import('html2canvas-pro')).default;
 
     // Capture the entire container
     canvas = await html2canvas(containerElement, {
@@ -191,7 +191,7 @@ export async function exportChartAsPNG(
  */
 export async function getChartPngDataUrl(containerElement: HTMLElement): Promise<string> {
   // Dynamically import html2canvas
-  const html2canvas = (await import('html2canvas')).default;
+  const html2canvas = (await import('html2canvas-pro')).default;
 
   const canvas = await html2canvas(containerElement, {
     backgroundColor: '#ffffff',
@@ -260,7 +260,7 @@ export async function copyChartToClipboard(
 
   try {
     // Dynamically import html2canvas
-    const html2canvas = (await import('html2canvas')).default;
+    const html2canvas = (await import('html2canvas-pro')).default;
 
     // Capture the entire container
     canvas = await html2canvas(containerElement, {
@@ -389,7 +389,7 @@ export async function shareChart(
 
   try {
     // Dynamically import html2canvas
-    const html2canvas = (await import('html2canvas')).default;
+    const html2canvas = (await import('html2canvas-pro')).default;
 
     // Capture the entire container
     canvas = await html2canvas(containerElement, {

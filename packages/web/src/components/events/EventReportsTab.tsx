@@ -304,7 +304,7 @@ export function EventReportsTab({
                 {/* Athlete Selection */}
                 <div className="space-y-4">
                   {/* Select All */}
-                  <div className="flex items-center space-x-2 pb-2 border-b">
+                  <div className="flex items-center gap-x-2 pb-2 border-b">
                     <Checkbox
                       id="select-all"
                       checked={selectedAthletes.length === eligibleAthletes.length && eligibleAthletes.length > 0}
@@ -324,7 +324,7 @@ export function EventReportsTab({
                           key={registration.id}
                           className="flex items-center justify-between py-2 border-b last:border-b-0"
                         >
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center gap-x-2">
                             <Checkbox
                               id={`athlete-${registration.userId}`}
                               checked={selectedAthletes.includes(registration.userId)}
@@ -352,7 +352,7 @@ export function EventReportsTab({
 
                   {/* Options */}
                   <div className="space-y-3 pt-2 border-t">
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center gap-x-2">
                       <Checkbox
                         id="event-percentiles"
                         checked={includeEventPercentiles}
@@ -363,7 +363,7 @@ export function EventReportsTab({
                         Include Event Percentiles
                       </Label>
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center gap-x-2">
                       <Checkbox
                         id="ai-insights"
                         checked={generateAiInsights}

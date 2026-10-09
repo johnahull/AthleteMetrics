@@ -42,7 +42,7 @@ export function TrendIndicator({ trend }: TrendIndicatorProps) {
   const { Icon, text, color } = config[trend];
 
   return (
-    <div className="flex items-center space-x-1">
+    <div className="flex items-center gap-x-1">
       <Icon className={`h-4 w-4 ${color}`} />
       <span className={`text-sm font-medium ${color}`}>{text}</span>
     </div>

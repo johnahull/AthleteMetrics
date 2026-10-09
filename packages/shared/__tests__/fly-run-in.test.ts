@@ -134,3 +134,24 @@ describe('formatFlyInDistance (display)', () => {
     expect(formatFlyInDistance('VERTICAL_JUMP', '')).toBe('-');
   });
 });
+
+describe('OCR neutral fly-10 token (AM-FEAT-017)', () => {
+  it('maps each supported run-in distance to its FLY10 code', async () => {
+    const { FLY10_CODE_BY_RUN_IN_YD, parseFlyRunInChoice } = await import('../fly-run-in');
+    expect(FLY10_CODE_BY_RUN_IN_YD).toEqual({
+      5: 'FLY10_TIME_RI5',
+      10: 'FLY10_TIME_RI10',
+      15: 'FLY10_TIME_RI15',
+      20: 'FLY10_TIME',
+      30: 'FLY10_TIME_RI30',
+    });
+    expect(parseFlyRunInChoice(15)).toBe(15);
+  });
+
+  it('accepts only the five numeric distances as a choice', async () => {
+    const { parseFlyRunInChoice } = await import('../fly-run-in');
+    for (const bad of ['15', 12, 0, -5, null, '', NaN, undefined, {}, [15], 15.5]) {
+      expect(parseFlyRunInChoice(bad)).toBeUndefined();
+    }
+  });
+});

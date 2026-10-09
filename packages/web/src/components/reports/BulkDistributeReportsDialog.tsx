@@ -150,7 +150,7 @@ export function BulkDistributeReportsDialog({
           </div>
 
           {/* Optional message */}
-          <div className="space-y-2">
+          <div className="grid gap-y-2">
             <Label htmlFor="distribute-message">Message (optional)</Label>
             <Textarea
               id="distribute-message"

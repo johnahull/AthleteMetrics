@@ -85,7 +85,7 @@ describe('Athlete management authorization', () => {
   });
 
   afterAll(async () => {
-    await purgeTestRows({ userIds: trackedUserIds, orgIds: [org.id] });
+    await purgeTestRows({ userIds: trackedUserIds, orgIds: [org?.id] });
   });
 
   it('forbids an athlete from deleting their own account', async () => {

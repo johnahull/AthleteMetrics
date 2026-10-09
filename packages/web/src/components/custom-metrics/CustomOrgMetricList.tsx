@@ -134,7 +134,7 @@ export function CustomOrgMetricList({ organizationId, embedded = false }: Custom
         <Card className="mb-6 bg-blue-50 border-blue-200 dark:bg-blue-950 dark:border-blue-800">
           <CardContent className="pt-6">
             <div className="flex gap-3">
-              <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
                   Organization-Specific Metrics

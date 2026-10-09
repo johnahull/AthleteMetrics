@@ -208,7 +208,7 @@ export function ReportsFilterBar({
               <ScrollArea className="h-64">
                 <div className="space-y-2">
                   {teams.map((team) => (
-                    <div key={team.id} className="flex items-center space-x-2">
+                    <div key={team.id} className="flex items-center gap-x-2">
                       <Checkbox
                         id={`team-${team.id}`}
                         checked={filters.teamIds?.includes(team.id) || false}
@@ -255,7 +255,7 @@ export function ReportsFilterBar({
               <ScrollArea className="h-64">
                 <div className="space-y-2">
                   {metrics.map((metric) => (
-                    <div key={metric.code} className="flex items-center space-x-2">
+                    <div key={metric.code} className="flex items-center gap-x-2">
                       <Checkbox
                         id={`metric-${metric.code}`}
                         checked={filters.metrics?.includes(metric.code) || false}
