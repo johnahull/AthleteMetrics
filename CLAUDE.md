@@ -625,7 +625,7 @@ AthleteMetrics supports Google and Apple OAuth authentication via Passport.js as
 ### Eval Report (AM-FEAT-019)
 Coach-generated, family-facing PDF for one athlete at one evaluation event. Each generation is a saved `reports` row with `reportType = 'eval'` whose `config` holds the frozen `EvalReportModel`; snapshots, shares and public links reuse the existing report plumbing. Data is event-, athlete-, organization- and verified-only; derived metrics are recomputed from per-leg bests; age-group sets are single "Average" rows, so the comparison is above/below average and the PDF never prints tier names. No wellness data; MQI is a band word only.
 
-**Rule: eval reports are `reports` rows gated by `canAccessEvalRow` (`packages/api/routes/report-routes.ts`): coach / org admin / site admin of the report row's own organization, otherwise 404. Any new route that touches reports must gate eval rows.** Eval `config` is immutable (only name/description editable); athletes reach an eval only through an explicit share.
+**Rule: eval reports are `reports` rows gated by `canAccessEvalRow` (`packages/api/routes/eval-report-access.ts`): coach / org admin / site admin of the report row's own organization, otherwise 404. Any new route that touches reports must gate eval rows.** Eval `config` is immutable (only name/description editable); athletes reach an eval only through an explicit share.
 
 **Key files:**
 - `packages/api/services/eval-report/` - pure domain logic (`tier-match`, `selection`, `derived`, `balance`, `metric-key-map`, `template-keys`, `model`, `copy`); `model-guard.ts` fails `tsc` on wellness-named fields

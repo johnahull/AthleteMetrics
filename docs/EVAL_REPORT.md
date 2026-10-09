@@ -149,7 +149,7 @@ Screenshots for UI changes go in `screenshots/` per `CLAUDE.md`.
 
 Before a release that touches reports or eval, confirm **athletes (and other org members who are not coach, org admin or site admin of the report's organization) cannot read eval reports**. The P3c gates are the guarantee:
 
-- `canAccessEvalRow` in `packages/api/routes/report-routes.ts` on every report route that loads a report row, answering 404.
+- `canAccessEvalRow` (`packages/api/routes/eval-report-access.ts`, imported by `report-routes.ts`) on every report route that loads a report row, answering 404.
 - `GET /api/reports` list filter; `stripEvalModel` on list payloads.
 - `canOpenRestrictedEval` for restricted public snapshots (writer, the athlete, or a parent actively linked to that athlete).
 - `evalShareBlocked` and `dropBlockedEvalShares` for what an athlete is shown.
