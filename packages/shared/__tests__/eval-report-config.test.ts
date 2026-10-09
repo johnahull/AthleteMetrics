@@ -95,3 +95,21 @@ describe('evalReportRequestSchema', () => {
     expect(evalReportRequestSchema.safeParse({}).success).toBe(true);
   });
 });
+
+describe('strengths and development area overrides', () => {
+  it('accepts valid metric ids', () => {
+    const r = evalReportRequestSchema.safeParse({
+      strengthsOverride: ['DASH_10', 'TOP_SPEED'],
+      developmentAreasOverride: ['FLY_10'],
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it('rejects a junk key in strengthsOverride', () => {
+    expect(evalReportRequestSchema.safeParse({ strengthsOverride: ['bad key!'] }).success).toBe(false);
+  });
+
+  it('rejects a junk key in developmentAreasOverride', () => {
+    expect(evalReportRequestSchema.safeParse({ developmentAreasOverride: ['DASH_10', 'bad key!'] }).success).toBe(false);
+  });
+});

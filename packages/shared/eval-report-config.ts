@@ -32,11 +32,14 @@ const coachNoteSchema = z
   .pipe(z.string().max(COACH_NOTE_MAX_LENGTH))
   .transform((s) => (s === "" ? null : s));
 
-/** A logical key ("DASH_10") or a metric code ("TOP_SPEED"): upper-case identifiers */
+/**
+ * A metric id: letters, digits and underscore only (case is not enforced). A logical key ("DASH_10") or a
+ * measured metric code ("TOP_SPEED"). limiterOverride takes the report's own metric ids (logical key or measured code).
+ */
 const METRIC_ID = /^[A-Za-z0-9_]+$/;
 const metricId = z.string().min(1).max(METRIC_KEY_MAX_LENGTH).regex(METRIC_ID);
 
-const metricKeyList = z.array(z.string().min(1).max(METRIC_KEY_MAX_LENGTH)).max(MAX_METRICS);
+const metricKeyList = z.array(metricId).max(MAX_METRICS);
 
 /** What the coach chose on the selection screen. Every field is optional; the preset fills the rest. */
 export const evalSelectionInputSchema = z.object({
