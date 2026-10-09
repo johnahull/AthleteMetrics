@@ -368,6 +368,8 @@ export function EvalReportDialog({ open, onOpenChange, eventId, organizationId, 
 
   const errors = form.formState.errors;
   const noteLength = values.coachNote.length;
+  // Heads-up only: this uses the age frozen at the event date, not the athlete's age today, so it is deliberately
+  // conservative. The API decides what is allowed based on age today.
   const under13 = result ? result.model.athlete.age === null || result.model.athlete.age < 13 : false;
 
   const checklist = (list: EvalOfferedMetric[]) =>
