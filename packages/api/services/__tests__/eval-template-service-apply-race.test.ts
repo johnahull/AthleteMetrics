@@ -62,4 +62,15 @@ describe('applyTemplateToEvent: concurrent add', () => {
     expect(r.added).toEqual([b]);
     expect(r.alreadyPresent).toEqual([a]);
   });
+
+  it('skips a template metric whose site_metrics row is inactive, reporting it as skipped', async () => {
+    // the known-codes query filters on is_active, so an inactive FLY_10 row never comes back
+    const a = codeOf('DASH_10');
+    selectResults.push([{ code: a }], []);
+    bulkAddMetrics.mockResolvedValue([{ metricCode: a }]);
+    const r = await applyTemplateToEvent('ev', 'u', template);
+    expect(r.skipped).toEqual(['FLY_10']);
+    expect(r.added).toEqual([a]);
+    expect(bulkAddMetrics.mock.calls[0][2].map((m: any) => m.metricCode)).toEqual([a]);
+  });
 });

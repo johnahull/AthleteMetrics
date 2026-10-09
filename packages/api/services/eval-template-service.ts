@@ -183,7 +183,7 @@ const SINGLE_LEG_CMJ = ["CMJ_SL_LEFT", "CMJ_SL_RIGHT"];
 
 /**
  * Pre-load the event's metrics from a template: the required ones, plus the optional ones named in
- * `includeOptional` (at most one single-leg CMJ). Keys whose site_metrics code does not exist are skipped
+ * `includeOptional` (at most one single-leg CMJ). Keys whose site_metrics code does not exist or is inactive are skipped
  * and returned in `skipped`; metrics already on the event are left alone (`alreadyPresent`). The write goes
  * through EventMetricsService.bulkAddMetrics (frozen check and audit log).
  */
@@ -200,7 +200,7 @@ export async function applyTemplateToEvent(eventId: string, userId: string, temp
     .map((m) => ({ ...m, code: resolveTemplateKey(m.metricKey) }));
   if (chosen.length === 0) return { added: [], skipped: [], alreadyPresent: [] };
   const known = new Set(
-    (await db.select({ code: siteMetrics.code }).from(siteMetrics).where(inArray(siteMetrics.code, chosen.map((m) => m.code)))).map((r) => r.code)
+    (await db.select({ code: siteMetrics.code }).from(siteMetrics).where(and(inArray(siteMetrics.code, chosen.map((m) => m.code)), eq(siteMetrics.isActive, true)))).map((r) => r.code)
   );
   const present = new Set(
     (await db.select({ code: eventMetrics.metricCode }).from(eventMetrics).where(eq(eventMetrics.eventId, eventId))).map((r) => r.code)

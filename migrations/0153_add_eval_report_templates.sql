@@ -13,8 +13,8 @@
 -- from another id. Template metrics store LOGICAL keys (see eval-report/template-keys.ts); the seed
 -- (Block C) is a point-in-time snapshot of that resolution. Derived metrics (MQI_TOTAL, 505 LSI, ...) are
 -- never event metrics and are not seeded. The seed SKIPS any code that does not exist in site_metrics
--- (RSI_105, MOMENTUM, JUMP_CMJ_SL_*, HEIGHT/WEIGHT on a fresh DB may be absent), so it never references
--- a nonexistent code and never fails; the NOTICE lists every key skipped by name.
+-- (RSI_105, MOMENTUM, JUMP_CMJ_SL_*, and HEIGHT_IN/WEIGHT_LBS on a fresh test DB, may be absent), so it never references
+-- a nonexistent code and never fails; the NOTICE lists every key skipped by name. An inactive site_metrics row counts as absent.
 --
 -- Spec metrics with no site_metrics code yet: ground contact time, flight time, sitting height,
 -- RSI_105 (bilateral 10/5), momentum. Ground contact, flight time and sitting height are deliberately NOT
@@ -73,8 +73,8 @@ CREATE TEMP TABLE _eval_battery_seed (
 
 INSERT INTO _eval_battery_seed (metric_key, code, is_required, display_order) VALUES
   -- Required set
-  ('BODY_HEIGHT',               'HEIGHT',                   true,   1),
-  ('BODY_WEIGHT',               'WEIGHT',                   true,   2),
+  ('BODY_HEIGHT',               'HEIGHT_IN',                true,   1),
+  ('BODY_WEIGHT',               'WEIGHT_LBS',               true,   2),
   ('SQUAT_JUMP',                'JUMP_SJ_HEIGHT',           true,   3),
   ('CMJ_HOH',                   'JUMP_CMJ_HOH',             true,   4),
   ('HANDS_FREE_JUMP',           'VERTICAL_JUMP',            true,   5),
@@ -117,7 +117,7 @@ SELECT NULL, 'SOCCER', 'Soccer eval (yards)',
          ORDER BY b.display_order
        )
   FROM _eval_battery_seed b
-  JOIN site_metrics sm ON sm.code = b.code
+  JOIN site_metrics sm ON sm.code = b.code AND sm.is_active = true
  -- Any global copy, archived or not: a rerun under a renumbered migration must not add a second one
  WHERE NOT EXISTS (
    SELECT 1 FROM eval_battery_templates WHERE organization_id IS NULL AND name = 'Soccer eval (yards)'
@@ -149,7 +149,7 @@ BEGIN
 
   SELECT string_agg(b.metric_key || ' (' || b.code || ')', ', ' ORDER BY b.display_order) INTO v_skipped
     FROM _eval_battery_seed b
-   WHERE NOT EXISTS (SELECT 1 FROM site_metrics sm WHERE sm.code = b.code);
+   WHERE NOT EXISTS (SELECT 1 FROM site_metrics sm WHERE sm.code = b.code AND sm.is_active = true);
 
   RAISE NOTICE 'Migration 0153 complete: eval_battery_templates, org_eval_report_settings; global template ''Soccer eval (yards)'' has % metrics. Spec metrics with no site_metrics code yet: ground contact time, flight time, sitting height, RSI_105 (bilateral 10/5), momentum. Seed keys skipped for lack of a code: %',
     COALESCE(v_keys, 0), COALESCE(v_skipped, 'none');
