@@ -226,7 +226,7 @@ export class DataParser {
           metric = 'DASH_40YD';
           confidence = 60;
         } else if (lowerLine.includes('10') || lowerLine.includes('ten')) {
-          metric = 'FLY10_TIME';
+          metric = 'FLY10_TIME_UNRESOLVED';
           confidence = 60;
         } else if (lowerLine.includes('sprint') || lowerLine.includes('dash')) {
           metric = 'DASH_40YD';

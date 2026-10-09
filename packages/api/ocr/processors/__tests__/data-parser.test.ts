@@ -111,3 +111,36 @@ describe('neutral token never appears in user-visible validator text', () => {
     expect(low.warnings.join(' ')).toContain('Unusually low value for 5-0-5');
   });
 });
+
+describe('DataParser fly-10 run-in neutrality (AM-FEAT-017)', () => {
+  const FLY = 'FLY10_TIME_UNRESOLVED';
+
+  it('emits the neutral token for a "10 yd fly 1.45" reading, never a concrete FLY10 code', () => {
+    const data = parse('John Smith 10 yd fly 1.45');
+    const metrics = data.map((d) => d.metric);
+    expect(metrics).toContain(FLY);
+    expect(metrics.filter((m) => /^FLY10_TIME(_RI\d+)?$/.test(m ?? ''))).toEqual([]);
+    expect(data.find((d) => d.metric === FLY)?.value).toBe('1.45');
+  });
+
+  it('emits the neutral token for the inferred (generic) "10" line too', () => {
+    const m = parse('John Smith ten 1.50').find((d) => d.value === '1.50');
+    expect(m?.metric).toBe(FLY);
+  });
+
+  it('keeps T-test and 5-10-5 lines out of the fly bucket', () => {
+    expect(parse('John Smith t test 10.20').find((d) => d.value === '10.20')?.metric).toBe('T_TEST');
+    expect(parse('John Smith 5-10-5 4.60').find((d) => d.value === '4.60')?.metric).toBe('AGILITY_5105');
+  });
+
+  it('validates a neutral fly reading (range and warnings) and hides the token in user-visible text', () => {
+    const validator = new MeasurementValidator(config);
+    const ok = validator.validateMeasurement({ firstName: 'John', lastName: 'Smith', metric: FLY, value: '1.45', confidence: 85 });
+    expect(ok.isValid).toBe(true);
+    const fast = validator.validateMeasurement({ firstName: 'John', lastName: 'Smith', metric: FLY, value: '0.9', confidence: 85 });
+    expect(fast.warnings.some((w) => /fly/i.test(w))).toBe(true);
+    const high = validator.validateMeasurement({ firstName: 'John', lastName: 'Smith', metric: FLY, value: '3.5', confidence: 85 });
+    expect(high.errors).toContain('Value too high for 10-yard fly: 3.5 (maximum: 3)');
+    expect(JSON.stringify([ok, fast, high])).not.toContain('UNRESOLVED');
+  });
+});
