@@ -32,7 +32,8 @@ export const MEASUREMENT_PATTERNS: Record<string, PatternConfig> = {
     }
   },
   
-  FLY10_TIME: {
+  // Run-in-neutral: the photo route resolves this to one of the five FLY10 codes from the user's choice.
+  FLY10_TIME_UNRESOLVED: {
     patterns: [
       /(?:10|ten).*?(?:yard|yd).*?(?:fly|time).*?(\d\.\d{2})/gi,
       /(?:fly|time).*?(?:10|ten).*?(\d\.\d{2})/gi,

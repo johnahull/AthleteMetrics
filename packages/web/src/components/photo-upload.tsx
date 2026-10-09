@@ -10,6 +10,8 @@ import { UploadControls } from "./photo-upload/upload-controls";
 import { ProgressIndicator } from "./photo-upload/progress-indicator";
 import { OCRResults } from "./photo-upload/ocr-results";
 import { Protocol505Picker, type Protocol505, type Protocol505PickerHandle } from "./photo-upload/protocol-505-picker";
+import { FlyRunInPicker, type FlyRunInPickerHandle } from "./photo-upload/fly-run-in-picker";
+import type { FlyRunInYd } from "@shared/fly-run-in";
 import { useAuth } from "@/lib/auth";
 import type {
   MeasurementImportMode,
@@ -48,12 +50,21 @@ interface OCRResult {
 }
 
 const PROTOCOL_505_REQUIRED_CODE = 'PROTOCOL_505_REQUIRED';
+const FLY10_RUN_IN_REQUIRED_CODE = 'FLY10_RUN_IN_REQUIRED';
 
 /** Server answered 422: the photo has a 5-0-5 reading and no protocol was sent. Nothing was saved. */
 class Protocol505RequiredError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'Protocol505RequiredError';
+  }
+}
+
+/** Server answered 422: the photo has a 10-yard fly reading and no run-in was sent. Nothing was saved. */
+class FlyRunInRequiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'FlyRunInRequiredError';
   }
 }
 
@@ -75,13 +86,17 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
 
   const [protocolError, setProtocolError] = useState<string | undefined>(undefined);
   const pickerRef = useRef<Protocol505PickerHandle>(null);
+  // Fly-10 run-in (AM-FEAT-017): same contract, deliberately no default.
+  const [flyRunIn, setFlyRunIn] = useState<FlyRunInYd | undefined>(undefined);
+  const [flyRunInError, setFlyRunInError] = useState<string | undefined>(undefined);
+  const flyPickerRef = useRef<FlyRunInPickerHandle>(null);
 
   const { toast } = useToast();
   const { userOrganizations } = useAuth();
   const queryClient = useQueryClient();
 
   const uploadMutation = useMutation({
-    mutationFn: async ({ file, protocol505: protocol }: { file: File; protocol505?: Protocol505 }) => {
+    mutationFn: async ({ file, protocol505: protocol, flyRunIn: runIn }: { file: File; protocol505?: Protocol505; flyRunIn?: FlyRunInYd }) => {
       const formData = new FormData();
       formData.append('file', file);
 
@@ -89,7 +104,8 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
       const options = {
         measurementMode,
         organizationId: userOrganizations?.[0]?.organizationId,
-        ...(protocol ? { protocol505: protocol } : {})
+        ...(protocol ? { protocol505: protocol } : {}),
+        ...(runIn ? { flyRunIn: runIn } : {})
       };
       formData.append('options', JSON.stringify(options));
 
@@ -108,6 +124,9 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
         const body = await response.json().catch(() => null);
         if (body?.code === PROTOCOL_505_REQUIRED_CODE) {
           throw new Protocol505RequiredError(body.message);
+        }
+        if (body?.code === FLY10_RUN_IN_REQUIRED_CODE) {
+          throw new FlyRunInRequiredError(body.message);
         }
       }
 
@@ -163,6 +182,12 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
         setTimeout(() => pickerRef.current?.focus(), 0);
         return;
       }
+      if (error instanceof FlyRunInRequiredError) {
+        setOcrResult(null);
+        setFlyRunInError(`${error.message}. Nothing was saved; choose below and upload again.`);
+        setTimeout(() => flyPickerRef.current?.focus(), 0);
+        return;
+      }
       console.error('Photo upload failed:', error);
       toast({
         title: "Upload Failed",
@@ -197,6 +222,8 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
     setOcrResult(null); // Clear previous results
     setProtocol505(undefined); // The choice belongs to the photo it was made for
     setProtocolError(undefined);
+    setFlyRunIn(undefined);
+    setFlyRunInError(undefined);
     
     // Create preview for images
     if (file.type.startsWith('image/')) {
@@ -213,7 +240,8 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
   const handleUpload = () => {
     if (!selectedFile) return;
     setProtocolError(undefined);
-    uploadMutation.mutate({ file: selectedFile, protocol505 });
+    setFlyRunInError(undefined);
+    uploadMutation.mutate({ file: selectedFile, protocol505, flyRunIn });
   };
 
   const handleClear = () => {
@@ -222,6 +250,8 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
     setOcrResult(null);
     setProtocol505(undefined);
     setProtocolError(undefined);
+    setFlyRunIn(undefined);
+    setFlyRunInError(undefined);
   };
 
 
@@ -256,6 +286,17 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
             }}
             disabled={uploadMutation.isPending}
             error={protocolError}
+          />
+
+          <FlyRunInPicker
+            ref={flyPickerRef}
+            value={flyRunIn}
+            onChange={(v) => {
+              setFlyRunIn(v);
+              setFlyRunInError(undefined);
+            }}
+            disabled={uploadMutation.isPending}
+            error={flyRunInError}
           />
 
           {/* Import Options */}
