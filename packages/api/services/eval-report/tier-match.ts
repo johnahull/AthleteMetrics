@@ -54,11 +54,15 @@ const NO_TIER_CODES: ReadonlySet<string> = new Set([
 
 const YMD = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-function parseYmd(text: string): [number, number, number] | null {
+/** Strict YYYY-MM-DD parse with a real calendar check (rejects 2012-02-30, 2013-02-29, 2012-04-31). */
+export function parseYmd(text: string): [number, number, number] | null {
   const m = YMD.exec(text);
   if (!m) return null;
   const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  return mo >= 1 && mo <= 12 && d >= 1 && d <= 31 ? [y, mo, d] : null;
+  const date = new Date(Date.UTC(y, mo - 1, d));
+  // Date.UTC maps years 0-99 to 1900-1999, so setUTCFullYear keeps the year literal for the round trip.
+  date.setUTCFullYear(y);
+  return date.getUTCFullYear() === y && date.getUTCMonth() === mo - 1 && date.getUTCDate() === d ? [y, mo, d] : null;
 }
 
 /** Completed years at `onDate`. NaN unless both are well-formed YYYY-MM-DD (so "", "2012", datetimes are rejected). */
@@ -157,7 +161,12 @@ export function matchTierGroup(args: {
   return null;
 }
 
-/** The secondary "college standard": the D1 Average row for the athlete's sex and sport (no age bounds). */
+/**
+ * The secondary "college standard": the D1 Average row for the athlete's sex and sport (no age bounds).
+ * The row is identified by name, /average/i on tierName (or name when there is no tier name), so it relies on
+ * the seed naming: migrations 0129, 0132 and 0136 seed rows such as "Soccer D1 Average" (tier "D1 Average")
+ * next to "Soccer D1 Top 25%", which must not match.
+ */
 export function matchCollegeStandard(args: {
   metricCode: string;
   value: number;

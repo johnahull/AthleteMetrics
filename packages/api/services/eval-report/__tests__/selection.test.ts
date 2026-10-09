@@ -72,6 +72,14 @@ describe('resolvePreset', () => {
     expect(at(null, '2026-10-08', '2009-01-01')).toBe('senior'); // 17
   });
 
+  it.each(['', '2026', '2026-13-01', '2026-02-30', 'garbage', '2026-10-08T00:00:00.000Z'])(
+    'returns the High school default when graduation year is set but event date %j is invalid',
+    (badEvent) => {
+      expect(at(2027, badEvent)).toBe('high_school'); // would be senior with a valid date
+      expect(at(2031, badEvent)).toBe('high_school'); // would be middle school
+    },
+  );
+
   it('defaults to high school when neither is known', () => {
     expect(at(null, '2026-10-08')).toBe('high_school');
   });
