@@ -4,8 +4,10 @@ import userEvent from '@testing-library/user-event';
 import { EvalReportView, EvalReportBody, formatEvalEventDate } from '../EvalReportView';
 import { SharedReportCard } from '../SharedReportCard';
 import { AthleteReportView } from '../AthleteReportView';
-import type { Report, EvalReportModelView } from '@/types/report-types';
+import type { Report, EvalReportModelView, EvalMetricResultView } from '@/types/report-types';
 import { exportEventReportPDF } from '@/lib/events-api';
+import { LOAD_LABELS, BALANCE_LABELS, LEFT_RIGHT_SUFFIX } from '@shared/eval-report-copy';
+import { LOAD_LABELS as API_LOAD, BALANCE_LABELS as API_BALANCE, PDF_COPY } from '../../../../../api/services/eval-report/copy';
 
 vi.mock('@/lib/events-api', () => ({ exportEventReportPDF: vi.fn() }));
 vi.mock('@/hooks/use-toast', () => ({ useToast: () => ({ toast: vi.fn() }) }));
@@ -133,5 +135,72 @@ describe('EvalReportView', () => {
       />
     );
     expect(screen.getByTestId('eval-report-badge')).toHaveTextContent('Eval report');
+  });
+
+  describe('college gauge is per metric only', () => {
+    const college = { status: 'at_or_better', name: 'D1' } as unknown as EvalMetricResultView['collegeStandard'];
+    const withGauge = (reportWide: boolean, metricOn: boolean): EvalReportModelView =>
+      ({
+        ...model,
+        selection: { collegeGauge: reportWide },
+        metrics: [{ ...model.metrics[0], collegeStandard: college, collegeGauge: metricOn }],
+      }) as EvalReportModelView;
+
+    it('report-wide ON does not override a per-metric OFF', () => {
+      render(<EvalReportBody model={withGauge(true, false)} />);
+      expect(screen.queryByText(/college average/)).not.toBeInTheDocument();
+    });
+
+    it('per-metric ON shows the college line', () => {
+      render(<EvalReportBody model={withGauge(false, true)} />);
+      expect(screen.getByText('At or better than the college average')).toBeInTheDocument();
+    });
+  });
+
+  describe('Fresh & Healthy wording matches the PDF', () => {
+    it('neutral balance shows the value like the PDF', () => {
+      const m = { ...model, freshAndHealthy: { balance: { status: 'neutral', label: 'Left-right balance', lsiPercent: 92.34 } } };
+      render(<EvalReportBody model={m} />);
+      expect(screen.getByText(`92.3% ${PDF_COPY.leftRightSuffix}`)).toBeInTheDocument();
+    });
+
+    it('load uses the PDF wording', () => {
+      const m = { ...model, freshAndHealthy: { load: 'light' as const } };
+      render(<EvalReportBody model={m} />);
+      expect(screen.getByText(LOAD_LABELS.light)).toBeInTheDocument();
+    });
+
+    it('web and API share the same phrases', () => {
+      expect(LOAD_LABELS).toEqual(API_LOAD);
+      expect(BALANCE_LABELS).toEqual(API_BALANCE);
+      expect(LEFT_RIGHT_SUFFIX).toBe(PDF_COPY.leftRightSuffix);
+    });
+  });
+
+  describe('family-facing copy lint', () => {
+    const banned = [/Elevated Risk/i, /injur/i, /\brisk/i, /medical/i, /FIERCE/i, /\$/, /D1 path/i, /Data-Driven Path/i, /placement/i];
+    const full = {
+      ...model,
+      selection: { collegeGauge: true },
+      metrics: [
+        { ...model.metrics[0], collegeGauge: true, collegeStandard: { status: 'below' }, trend: { direction: 'improved', change: 0.1 } },
+        { ...model.metrics[1], key: 'MQI', code: 'MQI', label: 'Movement', value: 72, unit: '' },
+      ],
+      freshAndHealthy: { load: 'heavy', balance: { status: 'worth_working_on', label: 'Worth working on', lsiPercent: 80 }, movement: 'Efficient' },
+      developmentAreas: ['CMJ_HOH'],
+      limiter: 'CMJ_HOH',
+      coachNote: 'Great session',
+    } as unknown as EvalReportModelView;
+
+    it('visible text has none of the banned phrases', () => {
+      const { container } = render(<EvalReportBody model={full} />);
+      const text = container.textContent ?? '';
+      for (const re of banned) expect(text).not.toMatch(re);
+    });
+
+    it('static strings in this view and the API copy are clean', () => {
+      const strings = [...Object.values(LOAD_LABELS), ...Object.values(BALANCE_LABELS), LEFT_RIGHT_SUFFIX];
+      for (const str of strings) for (const re of banned) expect(str).not.toMatch(re);
+    });
   });
 });

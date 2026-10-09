@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { exportEventReportPDF } from "@/lib/events-api";
+import { LOAD_LABELS, balanceText } from "@shared/eval-report-copy";
 import type { EvalReportModelView, EvalMetricResultView, Report } from "@/types/report-types";
 
 /** "2026-05-01" -> "May 1, 2026" without a timezone shift */
@@ -102,7 +103,7 @@ export function EvalReportBody({ model }: { model: EvalReportModelView }) {
           {metrics.map((m) => {
             const text = comparisonText(m);
             const progress = tierProgress(m);
-            const college = sel?.collegeGauge || m.collegeGauge ? collegeText(m) : null;
+            const college = m.collegeGauge === true ? collegeText(m) : null;
             return (
               <div key={m.code} className="space-y-1" data-testid={`eval-metric-${m.code}`}>
                 <div className="flex items-baseline justify-between gap-2">
@@ -143,12 +144,12 @@ export function EvalReportBody({ model }: { model: EvalReportModelView }) {
           <CardContent className="space-y-1 text-sm">
             {fh.load && (
               <p>
-                <span className="font-medium">Load:</span> <span className="capitalize">{fh.load}</span>
+                <span className="font-medium">Load:</span> {LOAD_LABELS[fh.load] ?? fh.load}
               </p>
             )}
             {fh.balance && (
               <p>
-                <span className="font-medium">Balance:</span> {fh.balance.label}
+                <span className="font-medium">Balance:</span> {balanceText(fh.balance)}
               </p>
             )}
             {fh.movement && (

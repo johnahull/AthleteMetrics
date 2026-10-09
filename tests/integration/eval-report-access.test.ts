@@ -23,6 +23,14 @@ const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const NOT_FOUND = { message: 'Report not found' };
 const WELLNESS_KEY = /^(sleep|soreness|stress|energy|cycle|wellness|mood|readiness|pain)$/i;
 
+/** Relative to now so the fixture stays under 13 as the calendar moves on */
+function elevenYearsAgo(): string {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - 11);
+  d.setDate(d.getDate() - 100);
+  return d.toISOString().slice(0, 10);
+}
+
 function wellnessKeys(value: unknown, path = ''): string[] {
   if (Array.isArray(value)) return value.flatMap((v, i) => wellnessKeys(v, `${path}[${i}]`));
   if (value && typeof value === 'object') {
@@ -82,7 +90,7 @@ describe('eval report access hardening', () => {
     await mkUser('kid', { gender: 'Female', birthDate: '2013-06-01', sports: ['Soccer'], isMinor: true });
     // A second adult to receive a successful /share, a child under 13 TODAY, and an athlete without a birth date
     await mkUser('adult2', { gender: 'Female', birthDate: '2000-03-01', sports: ['Soccer'] });
-    await mkUser('youngKid', { gender: 'Female', birthDate: '2016-01-01', sports: ['Soccer'], isMinor: true });
+    await mkUser('youngKid', { gender: 'Female', birthDate: elevenYearsAgo(), sports: ['Soccer'], isMinor: true });
     await mkUser('noDob', { gender: 'Female', sports: ['Soccer'] });
     await mkUser('parentOfKid');
     await mkUser('parentOfOther');
