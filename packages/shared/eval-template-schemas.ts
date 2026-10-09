@@ -34,7 +34,8 @@ export const createEvalTemplateFromEventSchema = z.object({ ...templateFields, s
 export const updateEvalTemplateSchema = z.object({
   name: templateFields.name.optional(),
   sport: templateFields.sport.optional(),
-  description: templateFields.description,
+  /** null clears the description; absent leaves it unchanged. */
+  description: templateFields.description.nullish(),
   metrics: evalTemplateMetricsSchema.optional(),
 });
 

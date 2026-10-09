@@ -21,6 +21,7 @@ BEGIN
   END IF;
 END $$;
 
+DROP INDEX IF EXISTS reports_eval_athlete_event_idx;
 DROP TABLE IF EXISTS org_eval_report_settings;
 DROP TABLE IF EXISTS eval_battery_templates;
 

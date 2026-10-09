@@ -5,6 +5,7 @@ import {
   evalSelectionSchema,
   evalReportSettingsInputSchema,
   applyEvalTemplateSchema,
+  updateEvalTemplateSchema,
 } from '../eval-template-schemas';
 
 const metric = (metricKey: string, extra: Record<string, unknown> = {}) => ({ metricKey, isRequired: true, displayOrder: 1, ...extra });
@@ -55,5 +56,13 @@ describe('applyEvalTemplateSchema', () => {
     expect(applyEvalTemplateSchema.parse({ templateId: 'x' }).includeOptional).toBeUndefined();
     expect(applyEvalTemplateSchema.parse({ templateId: 'x', includeOptional: ['RSI_LEFT'] }).includeOptional).toEqual(['RSI_LEFT']);
     expect(applyEvalTemplateSchema.safeParse({ templateId: 'x', includeOptional: 'RSI_LEFT' }).success).toBe(false);
+  });
+});
+
+describe('updateEvalTemplateSchema', () => {
+  it('accepts a null description so a patch can clear it, and keeps absent as undefined', () => {
+    expect(updateEvalTemplateSchema.parse({ description: null }).description).toBeNull();
+    expect(updateEvalTemplateSchema.parse({}).description).toBeUndefined();
+    expect(updateEvalTemplateSchema.safeParse({ description: 'x'.repeat(2001) }).success).toBe(false);
   });
 });
