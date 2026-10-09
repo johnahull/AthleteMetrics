@@ -90,6 +90,20 @@ export function useShareReport() {
   });
 }
 
+export function buildBulkShareDescription(
+  result: Pick<BulkShareReportResult, "shared" | "alreadyShared" | "skipped" | "blockedUnder13">,
+): string {
+  const { shared, alreadyShared, skipped, blockedUnder13 = 0 } = result;
+  const parts: string[] = [];
+  if (shared > 0) parts.push(`Report sent to ${shared} athlete${shared !== 1 ? 's' : ''}`);
+  if (alreadyShared > 0) parts.push(`${alreadyShared} already had access`);
+  if (blockedUnder13 > 0) {
+    parts.push(`${blockedUnder13} under 13 or without a date of birth skipped (send their PDF to a parent)`);
+  }
+  if (skipped > 0) parts.push(`${skipped} skipped due to errors`);
+  return parts.length > 0 ? parts.join(', ') : 'No report was sent';
+}
+
 export function useBulkShareReport() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -105,18 +119,7 @@ export function useBulkShareReport() {
     onSuccess: (data, { reportId }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/reports", reportId, "shares"] });
 
-      const { shared, alreadyShared, skipped, blockedUnder13 = 0 } = data;
-
-      let description = `Report sent to ${shared} athlete${shared !== 1 ? 's' : ''}`;
-      if (alreadyShared > 0) {
-        description += `, ${alreadyShared} already had access`;
-      }
-      if (blockedUnder13 > 0) {
-        description += `, ${blockedUnder13} under 13 or without a date of birth skipped (send their PDF to a parent)`;
-      }
-      if (skipped > 0) {
-        description += `, ${skipped} skipped due to errors`;
-      }
+      const description = buildBulkShareDescription(data);
 
       toast({
         title: "Success",
