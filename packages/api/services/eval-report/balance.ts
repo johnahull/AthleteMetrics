@@ -6,6 +6,7 @@ export type BalanceStatus = "balanced" | "keep_an_eye" | "worth_working_on" | "n
 export interface BalanceLine {
   status: BalanceStatus;
   label: string;
+  /** Intentionally the raw, unrounded value; classification uses the rounded one. */
   lsiPercent: number;
 }
 
