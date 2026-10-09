@@ -315,7 +315,7 @@ export default function TeamModal({ isOpen, onClose, team, organizationId }: Tea
               )}
             />
 
-            <div className="flex justify-end space-x-3 pt-4">
+            <div className="flex justify-end gap-x-3 pt-4">
               <Button
                 type="button"
                 variant="outline"

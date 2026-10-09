@@ -372,7 +372,7 @@ function BaseAnalyticsViewContent({
 
                       {/* Individual Athlete Selection */}
                       {type === 'individual' && showIndividualAthleteSelection && (
-                        <div className="space-y-2">
+                        <div className="grid gap-y-2">
                           <label className="text-sm font-medium">Select Athlete *</label>
                           <AthleteSelector
                             athletes={athletesForSelector}
@@ -415,7 +415,7 @@ function BaseAnalyticsViewContent({
 
                       {/* Multi-Group Selection */}
                       {type === 'multi_group' && (
-                        <div className="space-y-2">
+                        <div className="grid gap-y-2">
                           <label className="text-sm font-medium">Create Groups for Comparison</label>
                           <GroupSelector
                             organizationId={effectiveOrganizationId || ''}

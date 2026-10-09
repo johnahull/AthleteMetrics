@@ -4,14 +4,15 @@
  * Deleting a user, team or organization is blocked by foreign keys without ON DELETE CASCADE
  * (user_teams, user_organizations, athlete_profiles, invitations and teams -> organizations), and several
  * afterAll blocks swallowed that error, so the rows stayed behind. purgeTestRows removes those dependents
- * first and then the users, teams and organizations, and reports a failure instead of swallowing it.
+ * first and then the users, teams and organizations, and reports a failure instead of swallowing it. measurements
+ * carry no foreign keys, so nothing cascades to them; the helper deletes them by user and organization.
  */
 process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 
 import { describe, it, expect, afterAll } from 'vitest';
 import { eq, inArray } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
-import { athleteProfiles, invitations, organizations, teams, userOrganizations, userTeams, users } from '@shared/schema';
+import { athleteProfiles, invitations, measurements, organizations, teams, userOrganizations, userTeams, users } from '@shared/schema';
 import { purgeTestRows } from '../helpers/purge-test-rows';
 
 describe('purgeTestRows (issue #539)', () => {
@@ -39,6 +40,7 @@ describe('purgeTestRows (issue #539)', () => {
   afterAll(async () => {
     // plain cleanup of the bystander rows (no helper: this test's subject is the helper)
     if (keep.userId) {
+      await db.delete(measurements).where(eq(measurements.userId, keep.userId));
       await db.delete(userOrganizations).where(eq(userOrganizations.userId, keep.userId));
       await db.delete(users).where(eq(users.id, keep.userId));
     }
@@ -84,14 +86,43 @@ describe('purgeTestRows (issue #539)', () => {
     const [doomedOrg] = await db.insert(organizations).values({ name: `Purge Doomed Org ${suffix}` }).returning();
     const doomed = await mkUser('doomed');
     await db.insert(userOrganizations).values({ userId: doomed.id, organizationId: doomedOrg.id, role: 'athlete' });
+    const mkMeasurement = (userId: string, organizationId: string) =>
+      db.insert(measurements).values({
+        userId, submittedBy: userId, organizationId, date: '2024-01-01', age: 16, metric: 'VERTICAL_JUMP', value: '30', units: 'in',
+      });
+    await mkMeasurement(doomed.id, doomedOrg.id);
+    await mkMeasurement(bystander.id, org.id);
 
     await purgeTestRows({ userIds: [doomed.id], orgIds: [doomedOrg.id] });
 
     expect(await db.select().from(users).where(eq(users.id, doomed.id))).toHaveLength(0);
     expect(await db.select().from(organizations).where(eq(organizations.id, doomedOrg.id))).toHaveLength(0);
+    expect(await db.select().from(measurements).where(eq(measurements.userId, doomed.id))).toHaveLength(0);
+    expect(await db.select().from(measurements).where(eq(measurements.userId, bystander.id))).toHaveLength(1);
     expect(await db.select().from(users).where(eq(users.id, bystander.id))).toHaveLength(1);
     expect(await db.select().from(organizations).where(eq(organizations.id, org.id))).toHaveLength(1);
     expect(await db.select().from(userOrganizations).where(eq(userOrganizations.userId, bystander.id))).toHaveLength(1);
+  });
+
+  it('removes teams given by id (also in an org that is kept) and measurements tied to them or submitted by a purged user', async () => {
+    const [keptOrg] = await db.insert(organizations).values({ name: `Purge Shared Org ${suffix}` }).returning();
+    const [team] = await db.insert(teams).values({ name: `Purge Shared Team ${suffix}`, organizationId: keptOrg.id, level: 'College' }).returning();
+    const submitter = await mkUser('submitter');
+    const athleteKept = await mkUser('athletekept');
+    await db.insert(userTeams).values({ userId: athleteKept.id, teamId: team.id, joinedAt: new Date('2020-01-01'), isActive: true });
+    const base = { date: '2024-01-01', age: 16, metric: 'VERTICAL_JUMP', value: '30', units: 'in' };
+    await db.insert(measurements).values([
+      { ...base, userId: athleteKept.id, submittedBy: submitter.id, organizationId: keptOrg.id },
+      { ...base, userId: athleteKept.id, submittedBy: athleteKept.id, organizationId: keptOrg.id, teamId: team.id },
+    ]);
+
+    await purgeTestRows({ userIds: [submitter.id, athleteKept.id], teamIds: [team.id] });
+
+    expect(await db.select().from(teams).where(eq(teams.id, team.id))).toHaveLength(0);
+    expect(await db.select().from(measurements).where(eq(measurements.userId, athleteKept.id))).toHaveLength(0);
+    // the org itself was not selected, so it stays and is removed here without the helper
+    expect(await db.select().from(organizations).where(eq(organizations.id, keptOrg.id))).toHaveLength(1);
+    await db.delete(organizations).where(eq(organizations.id, keptOrg.id));
   });
 
   it('does nothing (and does not throw) when nothing matches', async () => {

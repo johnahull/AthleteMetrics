@@ -652,7 +652,7 @@ export default function MeasurementForm() {
 
         {/* Quick Add Athlete */}
         <div className="border-t border-gray-200 pt-6">
-          <div className="flex items-center space-x-2 mb-4">
+          <div className="flex items-center gap-x-2 mb-4">
             <Checkbox 
               id="quick-add-athlete" 
               checked={showQuickAdd}
@@ -799,7 +799,7 @@ export default function MeasurementForm() {
         </div>
 
         {/* Submit Button */}
-        <div className="flex justify-end space-x-3">
+        <div className="flex justify-end gap-x-3">
           <Button 
             type="button" 
             variant="outline"

@@ -18,6 +18,7 @@ import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { storage } from "../../storage";
 import { registerAthleteRoutes } from "../athlete-routes";
+import { purgeTestRows } from "../../../../tests/helpers/purge-test-rows";
 
 // Mock session data for testing
 let mockSessionUser: any = null;
@@ -46,6 +47,7 @@ const app = createTestApp();
 // Test data IDs (will be populated in beforeAll)
 let testOrgId1: string;
 let testOrgId2: string;
+const extraOrgIds: string[] = []; // orgs created inside single tests; purged in afterAll even if an assertion fails
 let testTeamId1: string;
 let testTeamId2: string;
 let testCoachId: string;
@@ -269,30 +271,10 @@ describe("GET /api/athletes/recent", () => {
   });
 
   afterAll(async () => {
-    // Cleanup test data
-    try {
-      // Delete measurements first (no FK constraints, but good practice)
-      // Delete users (athletes, coach, admins) - must be before orgs
-      if (testAthlete1Id) await storage.deleteUser(testAthlete1Id).catch(e => console.error("Error deleting athlete1:", e));
-      if (testAthlete2Id) await storage.deleteUser(testAthlete2Id).catch(e => console.error("Error deleting athlete2:", e));
-      if (testAthlete3Id) await storage.deleteUser(testAthlete3Id).catch(e => console.error("Error deleting athlete3:", e));
-      if (testAthlete4Id) await storage.deleteUser(testAthlete4Id).catch(e => console.error("Error deleting athlete4:", e));
-      if (testAthlete5Id) await storage.deleteUser(testAthlete5Id).catch(e => console.error("Error deleting athlete5:", e));
-      if (testAthlete6Id) await storage.deleteUser(testAthlete6Id).catch(e => console.error("Error deleting athlete6:", e));
-      if (testCoachId) await storage.deleteUser(testCoachId).catch(e => console.error("Error deleting coach:", e));
-      if (testOrgAdminId) await storage.deleteUser(testOrgAdminId).catch(e => console.error("Error deleting orgAdmin:", e));
-      if (testSiteAdminId) await storage.deleteUser(testSiteAdminId).catch(e => console.error("Error deleting siteAdmin:", e));
-
-      // Delete teams
-      if (testTeamId1) await storage.deleteTeam(testTeamId1).catch(e => console.error("Error deleting team1:", e));
-      if (testTeamId2) await storage.deleteTeam(testTeamId2).catch(e => console.error("Error deleting team2:", e));
-
-      // Delete organizations
-      if (testOrgId1) await storage.deleteOrganization(testOrgId1).catch(e => console.error("Error deleting org1:", e));
-      if (testOrgId2) await storage.deleteOrganization(testOrgId2).catch(e => console.error("Error deleting org2:", e));
-    } catch (error) {
-      console.error("Cleanup error:", error);
-    }
+    await purgeTestRows({
+      userIds: [testAthlete1Id, testAthlete2Id, testAthlete3Id, testAthlete4Id, testAthlete5Id, testAthlete6Id, testCoachId, testOrgAdminId, testSiteAdminId].filter((id): id is string => !!id),
+      orgIds: [testOrgId1, testOrgId2, ...extraOrgIds].filter((id): id is string => !!id),
+    });
   });
 
   describe("Authentication", () => {
@@ -496,6 +478,7 @@ describe("GET /api/athletes/recent", () => {
         benchmarksEnabled: false,
         allowCustomBenchmarks: false,
       });
+      extraOrgIds.push(emptyOrg.id);
 
       // Add site admin to the empty org so they have permission
       await storage.addUserToOrganization(testSiteAdminId, emptyOrg.id, "org_admin");

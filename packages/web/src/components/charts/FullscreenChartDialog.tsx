@@ -450,7 +450,7 @@ export function FullscreenChartDialog({
         aria-label={`Fullscreen view of ${title}`}
       >
         {/* Header */}
-        <DialogHeader className="px-6 py-4 border-b flex-shrink-0">
+        <DialogHeader className="px-6 py-4 border-b shrink-0">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
               <DialogTitle className="text-xl font-semibold">{title}</DialogTitle>
