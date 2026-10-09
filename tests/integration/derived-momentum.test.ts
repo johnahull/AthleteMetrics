@@ -7,7 +7,8 @@
  *   calculationConfig {dateMatchStrategy:'closest', maxDateDifference:45, anchorMetric:'FLY10_TIME'}
  *   dependent_metrics ['FLY10_TIME', 'TST_BODY_WT']
  *
- * Run with TZ=UTC (the 'closest' window arithmetic is local-time based).
+ * Run with TZ=UTC: the 'closest' branch of findSourceMeasurementsImpl builds its window with
+ * local-time Date arithmetic, whereas expandTargetDates uses UTC date arithmetic.
  */
 process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret-key-for-integration-tests-only';
@@ -449,5 +450,52 @@ describe('Anchored derived metric (MOMENTUM-like)', () => {
     await db.delete(measurements).where(eq(measurements.id, fly.id));
     await new DerivedMetricCalculator(db).recalculateForAthlete(athleteId, [FLY, WEIGHT], '2026-03-10');
     expect(await derivedDates()).toEqual([]);
+  });
+  describe('verification changes feed the derived value', () => {
+    const insertUnverified = async (metric: string, value: string, units: string, date: string) => {
+      const [row] = await db
+        .insert(measurements)
+        .values({
+          userId: athleteId,
+          submittedBy: coachId,
+          metric,
+          value,
+          units,
+          date,
+          age: 18,
+          isVerified: false,
+          organizationId: orgId,
+        } as any)
+        .returning();
+      return row;
+    };
+
+    it('unverifying the fly (bulkUnverify) removes the derived row; verifying it again (verifyMeasurement) restores it', async () => {
+      await add(WEIGHT, 150, '2026-03-01');
+      const fly = await add(FLY, 1.3, '2026-03-10');
+      expect(await derivedDates()).toEqual(['2026-03-10']);
+      await service.bulkUnverify([fly.id]);
+      expect(await derivedDates()).toEqual([]);
+      await service.verifyMeasurement(fly.id, coachId);
+      expect(await derivedDates()).toEqual(['2026-03-10']);
+    });
+
+    it('verifying an unverified fly (bulkVerify) creates the derived row', async () => {
+      await add(WEIGHT, 150, '2026-03-01');
+      const fly = await insertUnverified(FLY, '1.3', 's', '2026-03-10');
+      expect(await derivedDates()).toEqual([]);
+      await service.bulkVerify([fly.id], coachId);
+      expect(await derivedDates()).toEqual(['2026-03-10']);
+    });
+
+    it('unverifying the weight removes the derived row; verifying it again restores it', async () => {
+      const weight = await add(WEIGHT, 150, '2026-03-01');
+      await add(FLY, 1.3, '2026-03-10');
+      expect(await derivedDates()).toEqual(['2026-03-10']);
+      await service.bulkUnverify([weight.id]);
+      expect(await derivedDates()).toEqual([]);
+      await service.verifyMeasurement(weight.id, coachId);
+      expect(await derivedDates()).toEqual(['2026-03-10']);
+    });
   });
 });

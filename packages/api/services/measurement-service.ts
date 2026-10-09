@@ -1221,6 +1221,34 @@ export class MeasurementService {
   }
 
   /**
+   * Derived calculations only read verified sources, so flipping isVerified changes the
+   * derived values built on the row. Recalculate for each row whose state changed, after the
+   * verification committed. Failures are logged: the verification is already persisted.
+   */
+  private async recalculateAfterVerificationChange(
+    rows: Array<{ id: string; userId: string; metric: string; date: string; organizationId: string | null }>
+  ): Promise<void> {
+    if (rows.length === 0) return;
+    const calculator = new DerivedMetricCalculator(db);
+    for (const row of rows) {
+      try {
+        await calculator.recalculateForAthlete(row.userId, row.metric, row.date, {
+          triggerContext: { event: 'measurement_update' as const, sourceMeasurementId: row.id },
+          organizationId: row.organizationId,
+        });
+      } catch (error) {
+        console.error('Derived metric recalculation failed after verification change:', {
+          measurementId: row.id,
+          userId: row.userId,
+          metric: row.metric,
+          date: row.date,
+          error,
+        });
+      }
+    }
+  }
+
+  /**
    * Mark measurement as verified
    * IMPORTANT: Wrapped in transaction with FOR UPDATE lock to prevent race conditions
    * Idempotent operation - can be called multiple times safely
@@ -1242,7 +1270,8 @@ export class MeasurementService {
     // Wrap in transaction to prevent race conditions during concurrent verifications
     // Race condition scenario: Two admins verify same measurement simultaneously, overwriting audit trail
     try {
-      return await db.transaction(async (tx) => {
+      let wasVerified = true;
+      const result = await db.transaction(async (tx) => {
         // Lock the row with FOR UPDATE to prevent concurrent modifications
         const [existing] = await tx
           .select()
@@ -1265,6 +1294,8 @@ export class MeasurementService {
           return existing;
         }
 
+        wasVerified = existing.isVerified;
+
         // Update verification status
         const [updated] = await tx
           .update(measurements)
@@ -1277,6 +1308,10 @@ export class MeasurementService {
 
         return updated;
       });
+      if (!wasVerified) {
+        await this.recalculateAfterVerificationChange([result]);
+      }
+      return result;
     } catch (error) {
       // Preserve error specificity
       if (error instanceof Error) {
@@ -1313,7 +1348,8 @@ export class MeasurementService {
     const errors: Array<{ id: string; message: string }> = [];
 
     try {
-      return await db.transaction(async (tx) => {
+      let changed: Measurement[] = [];
+      const outcome = await db.transaction(async (tx) => {
         // Lock and validate all measurements with FOR UPDATE
         const existingMeasurements = await tx
           .select()
@@ -1323,6 +1359,7 @@ export class MeasurementService {
 
         // Build map of found measurements
         const foundMap = new Map(existingMeasurements.map(m => [m.id, m]));
+        changed = existingMeasurements.filter(m => !m.isVerified);
 
         // Validate each measurement and collect valid IDs
         const validIds: string[] = [];
@@ -1366,12 +1403,16 @@ export class MeasurementService {
           }
         }
 
+        const validSet = new Set(validIds);
+        changed = changed.filter(m => validSet.has(m.id));
         return {
           success: actualUpdated,
           failed: errors.length,
           errors,
         };
       });
+      await this.recalculateAfterVerificationChange(changed);
+      return outcome;
     } catch (error) {
       // Transaction failed - all measurements failed
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -1399,7 +1440,8 @@ export class MeasurementService {
     const errors: Array<{ id: string; message: string }> = [];
 
     try {
-      return await db.transaction(async (tx) => {
+      let changed: Measurement[] = [];
+      const outcome = await db.transaction(async (tx) => {
         // Lock and validate all measurements with FOR UPDATE
         const existingMeasurements = await tx
           .select()
@@ -1409,6 +1451,7 @@ export class MeasurementService {
 
         // Build map of found measurements
         const foundMap = new Map(existingMeasurements.map(m => [m.id, m]));
+        changed = existingMeasurements.filter(m => m.isVerified);
 
         // Validate each measurement and collect valid IDs
         const validIds: string[] = [];
@@ -1452,12 +1495,16 @@ export class MeasurementService {
           }
         }
 
+        const validSet = new Set(validIds);
+        changed = changed.filter(m => validSet.has(m.id));
         return {
           success: actualUpdated,
           failed: errors.length,
           errors,
         };
       });
+      await this.recalculateAfterVerificationChange(changed);
+      return outcome;
     } catch (error) {
       // Transaction failed - all measurements failed
       const message = error instanceof Error ? error.message : 'Unknown error';
