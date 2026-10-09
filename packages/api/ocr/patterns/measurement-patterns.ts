@@ -35,10 +35,13 @@ export const MEASUREMENT_PATTERNS: Record<string, PatternConfig> = {
   // Run-in-neutral: the photo route resolves this to one of the five FLY10 codes from the user's choice.
   FLY10_TIME_UNRESOLVED: {
     patterns: [
-      /(?:10|ten).*?(?:yard|yd).*?(?:fly|time).*?(\d\.\d{2})/gi,
-      /(?:fly|time).*?(?:10|ten).*?(\d\.\d{2})/gi,
-      /10.*?fly.*?(\d\.\d{2})/gi,
-      /fly.*?10.*?(\d\.\d{2})/gi,
+      // Every pattern requires the word "fly" ("time" alone is not enough) and a standalone 10 / ten: a date
+      // ("10/05"), part of a value ("2.10") or a name ("Stenson") must not read as a fly reading, because a fly
+      // reading makes the photo import ask for a run-in distance (422).
+      /(?<![\d.])(?:10|\bten\b)(?!\d).*?(?:yard|yd).*?\bfly\b.*?(\d\.\d{2})/gi,
+      /\bfly\b.*?(?<![\d.])(?:10|\bten\b)(?!\d).*?(\d\.\d{2})/gi,
+      /(?<![\d.])10(?!\d).*?\bfly\b.*?(\d\.\d{2})/gi,
+      /\bfly(?=10|\W).*?(?<![\d.])10(?!\d).*?(\d\.\d{2})/gi,
     ],
     confidence: 80,
     validator: (value: string) => {

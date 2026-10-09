@@ -12,6 +12,7 @@ import { OCRResults } from "./photo-upload/ocr-results";
 import { Protocol505Picker, type Protocol505, type Protocol505PickerHandle } from "./photo-upload/protocol-505-picker";
 import { FlyRunInPicker, type FlyRunInPickerHandle } from "./photo-upload/fly-run-in-picker";
 import type { FlyRunInYd } from "@shared/fly-run-in";
+import { OCR_REQUIRED_CHOICE_MESSAGES, type OcrRequiredChoice } from "@shared/ocr-types";
 import { useAuth } from "@/lib/auth";
 import type {
   MeasurementImportMode,
@@ -52,18 +53,12 @@ interface OCRResult {
 const PROTOCOL_505_REQUIRED_CODE = 'PROTOCOL_505_REQUIRED';
 const FLY10_RUN_IN_REQUIRED_CODE = 'FLY10_RUN_IN_REQUIRED';
 
-type RequiredChoice = 'protocol505' | 'flyRunIn';
-const REQUIRED_MESSAGES: Record<RequiredChoice, string> = {
-  protocol505: 'Choose meters or yards for 5-0-5 readings',
-  flyRunIn: 'Choose the run-in distance for 10-yard fly readings',
-};
-
 /**
  * Server answered 422: the photo has a 5-0-5 and/or a 10-yard fly reading and the matching choice(s) were not
  * sent. `required` lists every missing choice so one retry can carry them all. Nothing was saved.
  */
 class ChoicesRequiredError extends Error {
-  constructor(readonly required: RequiredChoice[], message: string) {
+  constructor(readonly required: OcrRequiredChoice[], message: string) {
     super(message);
     this.name = 'ChoicesRequiredError';
   }
@@ -127,9 +122,9 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
         if (code === PROTOCOL_505_REQUIRED_CODE || code === FLY10_RUN_IN_REQUIRED_CODE) {
           // Older servers send only `code`; newer ones also list every missing choice in `required`.
           const listed = Array.isArray(body.required)
-            ? body.required.filter((r: unknown): r is RequiredChoice => r === 'protocol505' || r === 'flyRunIn')
+            ? body.required.filter((r: unknown): r is OcrRequiredChoice => r === 'protocol505' || r === 'flyRunIn')
             : [];
-          const required: RequiredChoice[] =
+          const required: OcrRequiredChoice[] =
             listed.length > 0 ? listed : [code === PROTOCOL_505_REQUIRED_CODE ? 'protocol505' : 'flyRunIn'];
           throw new ChoicesRequiredError(required, body.message);
         }
@@ -186,11 +181,11 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
         const nothingSaved = '. Nothing was saved; choose below and upload again.';
         if (error.required.includes('protocol505')) {
           // A single-choice response carries the server's own wording; a combined one uses each picker's text.
-          const message = error.required.length === 1 ? error.message : REQUIRED_MESSAGES.protocol505;
+          const message = error.required.length === 1 ? error.message : OCR_REQUIRED_CHOICE_MESSAGES.protocol505;
           setProtocolError(`${message}${nothingSaved}`);
         }
         if (error.required.includes('flyRunIn')) {
-          const message = error.required.length === 1 ? error.message : REQUIRED_MESSAGES.flyRunIn;
+          const message = error.required.length === 1 ? error.message : OCR_REQUIRED_CHOICE_MESSAGES.flyRunIn;
           setFlyRunInError(`${message}${nothingSaved}`);
         }
         // Focus the first missing picker (5-0-5 comes first on the form)

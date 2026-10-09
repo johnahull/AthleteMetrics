@@ -52,9 +52,9 @@ describe('FlyRunInPicker', () => {
   it('ties the help text to the group so assistive tech announces it, with or without an error', () => {
     const { container, rerender } = render(<FlyRunInPicker value={undefined} onChange={() => {}} />);
     const group = container.querySelector('[role="radiogroup"]')!;
-    const hint = container.querySelector('p')!;
+    const hintId = group.getAttribute('aria-describedby')!;
+    const hint = container.querySelector(`#${CSS.escape(hintId)}`)!;
     expect(hint).toHaveTextContent(/needed only if the photo has 10-yard fly readings/i);
-    expect(group.getAttribute('aria-describedby')).toBe(hint.id);
     rerender(<FlyRunInPicker value={undefined} onChange={() => {}} error="e" />);
     const alert = container.querySelector('[role="alert"]')!;
     expect(group.getAttribute('aria-describedby')!.split(' ').sort()).toEqual([hint.id, alert.id].sort());
