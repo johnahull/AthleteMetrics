@@ -126,7 +126,7 @@ export function EvalReportBody({ model }: { model: EvalReportModelView }) {
                   <p className="text-xs text-muted-foreground">
                     {m.trend.direction === "unchanged"
                       ? "Unchanged since the last evaluation"
-                      : `${m.trend.direction === "improved" ? "Improved" : "Declined"} by ${Math.abs(m.trend.change)} ${m.unit} since the last evaluation`}
+                      : `${m.trend.direction === "improved" ? "Improved" : "Declined"} by ${formatValueWithUnit(Math.abs(m.trend.change), m.unit)} since the last evaluation`}
                   </p>
                 )}
               </div>

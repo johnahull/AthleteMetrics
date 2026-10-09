@@ -93,6 +93,19 @@ describe('EvalReportView', () => {
     expect(() => render(<EvalReportBody model={bare} />)).not.toThrow();
   });
 
+  it('formats the retest trend like the PDF (seconds to 2 decimals, % without a space)', () => {
+    const withTrend = {
+      ...model,
+      metrics: [
+        { ...model.metrics[0], trend: { direction: 'improved', change: -0.2 } },
+        { ...model.metrics[1], unit: '%', trend: { direction: 'improved', change: 8 } },
+      ],
+    } as unknown as EvalReportModelView;
+    render(<EvalReportBody model={withTrend} />);
+    expect(screen.getByText('Improved by 0.20 s since the last evaluation')).toBeInTheDocument();
+    expect(screen.getByText('Improved by 8% since the last evaluation')).toBeInTheDocument();
+  });
+
   it('omits sections the saved selection turned off', () => {
     const off = { ...model, selection: { freshAndHealthy: false, strengths: false, coachNote: false } };
     render(<EvalReportBody model={off} />);
