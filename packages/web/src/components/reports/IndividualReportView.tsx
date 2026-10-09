@@ -378,6 +378,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
           reportId={report.id}
           open={showShareDialog}
           onClose={() => setShowShareDialog(false)}
+          athleteShareBlockedUnder13={athlete?.shareBlockedUnder13}
         />
       )}
 
@@ -390,6 +391,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
           athleteId={athleteId}
           athleteName={athlete.userName || 'Athlete'}
           athleteEmail={athlete.email}
+          shareBlockedUnder13={athlete.shareBlockedUnder13}
         />
       )}
     </div>

@@ -22,6 +22,7 @@ import {
   type ReportSnapshot,
   type ReportBenchmark,
 } from '@shared/schema';
+import { isUnder13OrUnknownDob } from '@shared/coppa-utils';
 import { eq, and, gte, lte, inArray, desc, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { quantileRank, median, mean, min, max, standardDeviation } from 'simple-statistics';
@@ -88,6 +89,7 @@ interface AthletePerformance {
   gender?: 'Male' | 'Female' | 'Not Specified';
   positions?: string[];
   age?: number;
+  shareBlockedUnder13?: boolean; // derived from the date of birth; the DOB itself is never sent
   sports?: string[];
   teams?: string[];
   measurements: Record<string, number>;
@@ -614,6 +616,7 @@ export class ReportService extends BaseService {
       age: athlete.birthYear
         ? new Date().getFullYear() - athlete.birthYear
         : undefined,
+      shareBlockedUnder13: isUnder13OrUnknownDob(athlete.birthDate),
       sports: athlete.sports || undefined,
       teams: teamNames.length > 0 ? teamNames : undefined,
       measurements: bestPerformances,
@@ -1112,6 +1115,11 @@ export class ReportService extends BaseService {
 
     // Decision 12: defense in depth - media links never appear in a public snapshot
     snapshotData = stripMediaUrlDeep(snapshotData);
+
+    // shareBlockedUnder13 is a coach-UI flag derived from the date of birth; never freeze it into a public snapshot
+    const snapshotAthletes = snapshotData as any;
+    const athletesArray: any[] = [snapshotAthletes.athlete, ...(snapshotAthletes.athletes ?? [])];
+    for (const a of athletesArray) if (a) delete (a as any).shareBlockedUnder13;
 
     // Generate secure token
     const publicToken = nanoid(21);

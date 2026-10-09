@@ -144,23 +144,26 @@ export function registerEventReportRoutes(app: Express) {
           return res.status(404).json({ message: "Event not found" });
         }
 
-        // Fetch reports for this organization
+        // Scope in SQL: this event's reports, in the event's organization when it has one
         const eventReports = await db
           .select()
           .from(reports)
+          .where(
+            and(
+              sql`${reports.config}->>'eventId' = ${eventId}`,
+              event.organizationId ? eq(reports.organizationId, event.organizationId) : undefined,
+            ),
+          )
           .orderBy(desc(reports.createdAt));
 
-        // Filter to reports that have eventId in config
-        const filteredReports = eventReports.filter(report => {
-          // Only include reports from the same organization (if event has one)
-          if (event.organizationId && report.organizationId !== event.organizationId) {
-            return false;
-          }
-          const config = report.config as Record<string, unknown>;
-          return config?.eventId === eventId;
+        // The list does not need an eval row's frozen model; keep its event date
+        const payload = eventReports.map((report) => {
+          if (report.reportType !== EVAL_REPORT_TYPE) return report;
+          const { model, ...rest } = (report.config ?? {}) as Record<string, unknown> & { model?: { eventDate?: string } };
+          return { ...report, config: { ...rest, eventDate: model?.eventDate } };
         });
 
-        return res.json(filteredReports);
+        return res.json(payload);
       } catch (error: unknown) {
         console.error("Error fetching event reports:", error);
         const message = error instanceof Error ? error.message : "Failed to fetch event reports";

@@ -23,6 +23,14 @@ const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const NOT_FOUND = { message: 'Report not found' };
 const WELLNESS_KEY = /^(sleep|soreness|stress|energy|cycle|wellness|mood|readiness|pain)$/i;
 
+/** Relative to now so the fixture stays under 13 as the calendar moves on */
+function elevenYearsAgo(): string {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - 11);
+  d.setDate(d.getDate() - 100);
+  return d.toISOString().slice(0, 10);
+}
+
 function wellnessKeys(value: unknown, path = ''): string[] {
   if (Array.isArray(value)) return value.flatMap((v, i) => wellnessKeys(v, `${path}[${i}]`));
   if (value && typeof value === 'object') {
@@ -78,11 +86,11 @@ describe('eval report access hardening', () => {
     await mkUser('siteAdmin', { isSiteAdmin: true });
     await mkUser('athleteRole', { gender: 'Female', birthDate: '2000-03-01', sports: ['Soccer'] });
     await mkUser('adult', { gender: 'Female', birthDate: '2000-03-01', sports: ['Soccer'] });
-    // 12 at the 2026-05-01 event: restricted snapshot, under-13 account
+    // 12 at the 2026-05-01 event (restricted public snapshot) but 13 today, so sharing to the athlete is allowed
     await mkUser('kid', { gender: 'Female', birthDate: '2013-06-01', sports: ['Soccer'], isMinor: true });
     // A second adult to receive a successful /share, a child under 13 TODAY, and an athlete without a birth date
     await mkUser('adult2', { gender: 'Female', birthDate: '2000-03-01', sports: ['Soccer'] });
-    await mkUser('youngKid', { gender: 'Female', birthDate: '2016-01-01', sports: ['Soccer'], isMinor: true });
+    await mkUser('youngKid', { gender: 'Female', birthDate: elevenYearsAgo(), sports: ['Soccer'], isMinor: true });
     await mkUser('noDob', { gender: 'Female', sports: ['Soccer'] });
     await mkUser('parentOfKid');
     await mkUser('parentOfOther');
@@ -321,8 +329,8 @@ describe('eval report access hardening', () => {
       expect(res.status).toBe(201);
     });
 
-    it('refuses to share an eval to an under-13, a minor-flagged or no-DOB athlete (403 UNDER_13_SHARE_BLOCKED, no row)', async () => {
-      for (const t of ['kid', 'youngKid', 'noDob']) {
+    it('refuses to share an eval to an under-13 or no-DOB athlete (403 UNDER_13_SHARE_BLOCKED, no row)', async () => {
+      for (const t of ['youngKid', 'noDob']) {
         const res = await as('coachA', 'post', `/api/reports/${rid[t]}/share`).send({ athleteId: u[t].id });
         expect(res.status, t).toBe(403);
         expect(res.body.code, t).toBe('UNDER_13_SHARE_BLOCKED');
@@ -331,11 +339,11 @@ describe('eval report access hardening', () => {
     });
 
     it('bulk-distribute blocks those athletes with status blocked_under_13 and creates no share row', async () => {
-      const ids = [rid.kid, rid.youngKid, rid.noDob];
+      const ids = [rid.youngKid, rid.noDob];
       const res = await as('coachA', 'post', '/api/reports/bulk-distribute').send({ reportIds: ids });
       expect(res.status).toBe(200);
-      expect(res.body.results.map((r: any) => r.status)).toEqual(['blocked_under_13', 'blocked_under_13', 'blocked_under_13']);
-      expect(res.body.summary.blockedUnder13).toBe(3);
+      expect(res.body.results.map((r: any) => r.status)).toEqual(['blocked_under_13', 'blocked_under_13']);
+      expect(res.body.summary.blockedUnder13).toBe(2);
       expect(res.body.summary.sent).toBe(0);
       expect(await db.select().from(reportShares).where(inArray(reportShares.reportId, ids))).toEqual([]);
     });
@@ -382,7 +390,7 @@ describe('eval report access hardening', () => {
   describe('/api/my/reports for an under-13 with a pre-existing eval share (defence in depth)', () => {
     it('hides it from the list and returns 404 on the detail route', async () => {
       const rows = [];
-      for (const t of ['youngKid', 'kid', 'noDob']) {
+      for (const t of ['youngKid', 'noDob']) {
         const [row] = await db.insert(reportShares).values({ reportId: rid[t], athleteId: u[t].id, sharedBy: u.coachA.id, organizationId: orgA } as any).returning();
         rows.push([t, row] as const);
       }

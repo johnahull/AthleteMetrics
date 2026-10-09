@@ -125,6 +125,8 @@ export interface TeamReportData {
 export interface IndividualAthleteData {
   userName: string;
   age?: number;
+  /** Derived server-side; true when under 13 or no valid date of birth (the DOB itself is never sent). */
+  shareBlockedUnder13?: boolean;
   gender?: string;
   sports?: string[];
   teams?: string[];
