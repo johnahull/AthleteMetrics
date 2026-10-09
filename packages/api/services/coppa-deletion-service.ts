@@ -15,7 +15,7 @@
  * 3.  Event registrations / invitations
  * 4.  Report shares (removes athlete from shared reports)
  * 5.  AI coaching insights (nulled on report snapshots — not hard-deleted)
- * 5b. Eval reports (reports.report_type = 'eval' with config.athleteId = athlete; shares/snapshots cascade)
+ * 5b. Eval reports (code STEP 4c; reports.report_type = 'eval' with config.athleteId = athlete; shares/snapshots cascade)
  * 6.  Global athlete links (unlink from cross-org profile)
  * 7.  Organization memberships + team memberships
  * 8.  Parent-athlete links
