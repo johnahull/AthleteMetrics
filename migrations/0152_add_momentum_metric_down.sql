@@ -2,9 +2,10 @@
 --
 -- Refuses to run if any goal, report benchmark, event metric, custom benchmark or
 -- site benchmark references MOMENTUM, so nothing is orphaned or cascade-deleted.
--- MOMENTUM measurements are only ever calculated (recomputable from WEIGHT_LBS +
--- FLY10_TIME by re-applying 0152), so all of them are deleted before the site_metrics
--- row. Source metrics are untouched. organization_metrics rows cascade-delete with the
+-- ALL MOMENTUM measurements are deleted deliberately, including any directly entered
+-- (non-calculated) rows: the metric is derived, so rows are normally calculated and
+-- recomputable from WEIGHT_LBS + FLY10_TIME by re-applying 0152, and the measurements
+-- must go before the site_metrics row. Source metrics are untouched. organization_metrics rows cascade-delete with the
 -- site_metrics row; peer_percentile_cache is a recomputable cache.
 -- Also forgets the manual_migrations row so db:migrate:manual re-applies 0152.
 

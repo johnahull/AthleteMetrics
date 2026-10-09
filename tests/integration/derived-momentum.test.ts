@@ -288,14 +288,16 @@ describe('Anchored derived metric (MOMENTUM-like)', () => {
   });
 
   it('getFailures() records an anchored recalculation failure', async () => {
+    // Fixture first, without the spy, so only the deferred weight recalculation can fail
+    await add(FLY, 1.3, '2026-03-10');
+    const weight = await add(WEIGHT, 150, '2026-03-01');
     const calc = new DerivedMetricCalculator(db);
     const spy = vi
       .spyOn(DerivedMetricCalculator.prototype as any, 'computeAndUpsertDerived')
       .mockRejectedValue(new Error('boom'));
     try {
-      await add(FLY, 1.3, '2026-03-10');
-      const weight = await add(WEIGHT, 150, '2026-03-01');
       await calc.processNewMeasurement(weight as any);
+      expect(spy).toHaveBeenCalledTimes(1);
       expect(calc.getFailures()).toEqual([{ metric: DERIVED, date: '2026-03-10', userId: athleteId }]);
     } finally {
       spy.mockRestore();
@@ -432,5 +434,13 @@ describe('Anchored derived metric (MOMENTUM-like)', () => {
       await db.execute(sql`DELETE FROM measurements WHERE metric = ${ALT}`);
       await db.execute(sql`DELETE FROM site_metrics WHERE code = ${ALT}`);
     }
+  });
+  it('a fly delete recalculated together with the weight (multi-metric trigger) removes the derived row on the fly date', async () => {
+    await add(WEIGHT, 150, '2026-03-01');
+    const fly = await add(FLY, 1.3, '2026-03-10');
+    expect(await derivedDates()).toEqual(['2026-03-10']);
+    await db.delete(measurements).where(eq(measurements.id, fly.id));
+    await new DerivedMetricCalculator(db).recalculateForAthlete(athleteId, [FLY, WEIGHT], '2026-03-10');
+    expect(await derivedDates()).toEqual([]);
   });
 });

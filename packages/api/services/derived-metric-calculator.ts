@@ -997,9 +997,9 @@ export class DerivedMetricCalculator {
           )
         )
       );
-    const dates = new Set(rows.map(r => r.date));
-    if (triggerMetrics.has(anchorMetric)) dates.add(triggerDate);
-    return Array.from(dates).sort();
+    // The trigger date needs no special case: a verified anchor on it, or the (now stale) derived
+    // row left there by a deleted or moved anchor, is already among the rows.
+    return Array.from(new Set(rows.map(r => r.date))).sort();
   }
 
   /**

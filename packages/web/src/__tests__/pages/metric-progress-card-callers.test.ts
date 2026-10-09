@@ -64,8 +64,12 @@ describe('MetricProgressCard callers', () => {
     (f) => !f.endsWith(path.join('athlete', 'MetricProgressCard.tsx')) && /<MetricProgressCard[\s>]/.test(fs.readFileSync(f, 'utf-8'))
   );
 
-  it('finds the known callers', () => {
-    expect(callers.length).toBeGreaterThanOrEqual(3);
+  it('finds exactly the known callers (update this list when a caller is added or removed)', () => {
+    expect(callers.map((f) => path.relative(srcRoot, f)).sort()).toEqual([
+      path.join('pages', 'athlete-profile.tsx'),
+      path.join('pages', 'dashboard.tsx'),
+      path.join('pages', 'my-dashboard.tsx'),
+    ]);
   });
 
   it.each(callers.map((f) => [path.relative(srcRoot, f), f]))('%s passes metricType', (_name, file) => {
