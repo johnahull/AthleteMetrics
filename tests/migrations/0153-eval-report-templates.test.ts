@@ -65,6 +65,11 @@ describe('Migration 0153: static analysis', () => {
     }
   });
 
+  it('creates the partial eval lookup index on reports idempotently and drops it on down', () => {
+    expect(UP).toMatch(/CREATE INDEX IF NOT EXISTS reports_eval_athlete_event_idx\s+ON reports \(\(config->>'athleteId'\), \(config->>'eventId'\)\)\s+WHERE report_type = 'eval'/);
+    expect(DOWN).toMatch(/DROP INDEX IF EXISTS reports_eval_athlete_event_idx/);
+  });
+
   it('seed joins site_metrics so a missing code is skipped, and down refuses to drop user data', () => {
     expect(UP).toMatch(/JOIN site_metrics sm ON sm\.code = b\.code/);
     expect(DOWN).toMatch(/RAISE EXCEPTION/);
@@ -151,6 +156,22 @@ describe.skipIf(!isDisposableTestDb)('Migration 0153: against a disposable DB (r
       expect(derived).toHaveLength(0);
       const fly = metrics.find((m) => resolveTemplateKey(m.metricKey) === 'FLY10_TIME');
       expect(fly?.isRequired).toBe(true);
+    });
+  });
+
+  it('creates reports_eval_athlete_event_idx on up and removes it on down', async () => {
+    await rollbackable(async (tx) => {
+      await resetToPre(tx);
+      const idx = () => tx`SELECT indexdef FROM pg_indexes WHERE tablename = 'reports' AND indexname = 'reports_eval_athlete_event_idx'`;
+      expect(await idx()).toHaveLength(0);
+      await tx.unsafe(UP);
+      await tx.unsafe(UP);
+      const [row] = await idx();
+      expect(row.indexdef).toContain("config ->> 'athleteId'");
+      expect(row.indexdef).toContain("config ->> 'eventId'");
+      expect(row.indexdef).toContain("report_type)::text = 'eval'");
+      await tx.unsafe(DOWN);
+      expect(await idx()).toHaveLength(0);
     });
   });
 

@@ -122,7 +122,7 @@ export async function createTemplateFromEvent(
 
 export async function updateTemplate(
   id: string,
-  patch: { name?: string; sport?: string; description?: string; metrics?: EvalTemplateMetric[] }
+  patch: { name?: string; sport?: string; description?: string | null; metrics?: EvalTemplateMetric[] }
 ) {
   if (patch.metrics) await validateMetrics(patch.metrics);
   const { name, sport, description, metrics } = patch;
@@ -167,6 +167,7 @@ export async function applyTemplateToEvent(eventId: string, userId: string, temp
   const chosen = template.metrics
     .filter((m) => m.isRequired || includeOptional.includes(m.metricKey))
     .map((m) => ({ ...m, code: resolveTemplateKey(m.metricKey) }));
+  if (chosen.length === 0) return { added: [], skipped: [], alreadyPresent: [] };
   const known = new Set(
     (await db.select({ code: siteMetrics.code }).from(siteMetrics).where(inArray(siteMetrics.code, chosen.map((m) => m.code)))).map((r) => r.code)
   );
