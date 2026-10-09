@@ -170,7 +170,8 @@ describe('COPPA deletion and export of eval reports', () => {
   it('profile merge re-points the source eval rows of the merge org to the target, and nothing else', async () => {
     const cfgOf = async (id: string) => (await db.select().from(reports).where(eq(reports.id, id)))[0].config as any;
     const modelBefore = (await cfgOf(mEvalA)).model;
-    await new ProfileMergeService().mergeProfiles(orgA, u.m1.id, u.m2.id, u.admin.id);
+    const merge = await new ProfileMergeService().mergeProfiles(orgA, u.m1.id, u.m2.id, u.admin.id);
+    expect(merge.summary.evalReportsTransferred).toBe(1); // mEvalA only, recorded in the merge summary and audit log
 
     const merged = await cfgOf(mEvalA);
     expect(merged.athleteId).toBe(u.m2.id);
