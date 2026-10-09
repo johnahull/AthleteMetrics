@@ -66,7 +66,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (testCoach) {
-    await purgeTestRows({ userIds: [testCoach.id] });
+    await purgeTestRows({ userIds: [testCoach?.id] });
   }
 });
 

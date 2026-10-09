@@ -14,6 +14,8 @@ export default defineConfig({
     globals: true,
     environment: 'happy-dom',
     setupFiles: ['./tests/setup/integration-setup.ts'],
+    // Fails the run when a test leaves organizations, users, teams or measurements behind (issue #539)
+    globalSetup: ['./tests/setup/leak-check-global.ts'],
     hookTimeout: 30000,
     testTimeout: 10000,
     clearMocks: true,

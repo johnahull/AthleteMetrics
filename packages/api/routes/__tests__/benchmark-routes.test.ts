@@ -16,6 +16,7 @@ import type { Request, Response, NextFunction } from "express";
 import crypto from "crypto";
 import { storage } from "../../storage";
 import { registerBenchmarkRoutes } from "../benchmark-routes";
+import { purgeTestRows } from "../../../../tests/helpers/purge-test-rows";
 
 // Mock session data for testing
 let mockSessionUser: any = null;
@@ -187,27 +188,15 @@ describe("Benchmark API Routes - Tier Groups", () => {
   });
 
   afterAll(async () => {
-    // Clean up test data
-    try {
-      // Delete benchmarks (no tier group tracking in DB, so just delete benchmarks)
-      if (testBenchmark1Id) await storage.deleteSiteBenchmark(testBenchmark1Id, testSiteAdminId);
-      if (testBenchmark2Id) await storage.deleteSiteBenchmark(testBenchmark2Id, testSiteAdminId);
-      if (testBenchmark3Id) await storage.deleteSiteBenchmark(testBenchmark3Id, testSiteAdminId);
+    // Benchmarks have no tier group tracking in the DB, so delete them one by one
+    if (testBenchmark1Id) await storage.deleteSiteBenchmark(testBenchmark1Id, testSiteAdminId);
+    if (testBenchmark2Id) await storage.deleteSiteBenchmark(testBenchmark2Id, testSiteAdminId);
+    if (testBenchmark3Id) await storage.deleteSiteBenchmark(testBenchmark3Id, testSiteAdminId);
 
-      // Remove users from organization before deleting
-      if (testCoachId && testOrgId) await storage.removeUserFromOrganization(testCoachId, testOrgId);
-      if (testOrgAdminId && testOrgId) await storage.removeUserFromOrganization(testOrgAdminId, testOrgId);
-
-      // Delete users
-      if (testCoachId) await storage.deleteUser(testCoachId);
-      if (testOrgAdminId) await storage.deleteUser(testOrgAdminId);
-      if (testSiteAdminId) await storage.deleteUser(testSiteAdminId);
-
-      // Delete organization
-      if (testOrgId) await storage.deleteOrganization(testOrgId);
-    } catch (error) {
-      console.error("Cleanup error in benchmark-routes.test.ts:", error);
-    }
+    await purgeTestRows({
+      userIds: [testCoachId, testOrgAdminId, testSiteAdminId].filter((id): id is string => !!id),
+      orgIds: [testOrgId].filter((id): id is string => !!id),
+    });
   });
 
   beforeEach(() => {

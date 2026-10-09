@@ -87,7 +87,7 @@ describe('POST /api/organizations/:id/users — authorization', () => {
   afterAll(async () => {
     const created = await Promise.all(createdUsernames.map((username) => storage.getUserByUsername(username)));
     const createdIds = created.flatMap((u) => (u ? [u.id] : []));
-    await purgeTestRows({ userIds: [...createdIds, orgAdmin.id, athlete.id], orgIds: [org.id] });
+    await purgeTestRows({ userIds: [...createdIds, orgAdmin?.id, athlete?.id], orgIds: [org?.id] });
   });
 
   it('forbids an athlete-role member from creating a site admin', async () => {
