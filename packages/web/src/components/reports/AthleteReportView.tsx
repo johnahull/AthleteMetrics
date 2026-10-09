@@ -23,6 +23,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { ReportLoadingState } from "./ReportLoadingState";
 import { ReportErrorState } from "./ReportErrorState";
+import { EvalReportView } from "./EvalReportView";
 import {
   Table,
   TableBody,
@@ -59,7 +60,7 @@ import {
 } from "./report-utils";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { useTeams } from "@/hooks/use-teams";
-import type { Report, TeamReportData, TeamStatistic, AthleteRanking, PdfFormat, IndividualReportData, BenchmarkComparison } from "@/types/report-types";
+import type { Report, TeamReportData, TeamStatistic, AthleteRanking, PdfFormat, IndividualReportData, BenchmarkComparison, TeamReportConfig } from "@/types/report-types";
 
 interface AthleteReportViewProps {
   report: Report;
@@ -69,6 +70,10 @@ export function AthleteReportView({ report }: AthleteReportViewProps) {
   // Render appropriate view based on report type
   if (report.reportType === "team") {
     return <AthleteTeamReportView report={report} />;
+  }
+  // AM-FEAT-019: an eval renders from its saved model (the PDF route is coach-only, so no download here)
+  if (report.reportType === "eval") {
+    return <EvalReportView report={report} showDownload={false} />;
   }
   return <AthleteIndividualReportView report={report} />;
 }
@@ -429,7 +434,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-muted-foreground">Testing Period</p>
-                <p className="text-base font-semibold mt-1">{formatDateRange(report.config.timeframe)}</p>
+                <p className="text-base font-semibold mt-1">{formatDateRange((report.config as TeamReportConfig).timeframe)}</p>
               </div>
             </div>
 

@@ -51,7 +51,8 @@ async function canAccessEventReports(
   eventId: string,
   eventService: EventService
 ): Promise<boolean> {
-  const event = await eventService.getEvent(eventId, userId);
+  // getEvent throws for a non-member; that is "no access", not a server error
+  const event = await eventService.getEvent(eventId, userId).catch(() => null);
   if (!event) return false;
 
   // Site admins can access all

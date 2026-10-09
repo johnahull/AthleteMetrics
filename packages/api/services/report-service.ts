@@ -171,7 +171,7 @@ const sprintFvService = new SprintFvService();
  * parseable birth date, and was 13+ at the EVENT date). Fails closed on any error.
  * TODO: dedupe with P4's isUnder13OrUnknownDob once that branch lands (this one uses the event date).
  */
-async function isEvalSnapshotRestricted(athleteId: unknown, eventDate: unknown): Promise<boolean> {
+export async function isEvalSnapshotRestricted(athleteId: unknown, eventDate: unknown): Promise<boolean> {
   try {
     if (typeof athleteId !== 'string' || typeof eventDate !== 'string') return true;
     const [athlete] = await db

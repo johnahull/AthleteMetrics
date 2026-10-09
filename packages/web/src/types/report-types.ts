@@ -150,14 +150,65 @@ export interface IndividualReportData {
 
 export type PdfFormat = 'visual' | 'simplified';
 
+/**
+ * AM-FEAT-019: the frozen model of a saved eval report, as the web renders it. Structural mirror of
+ * EvalReportModel (packages/api/services/eval-report/model.ts); the web does not import from the api package.
+ */
+export interface EvalMetricResultView {
+  key: string | null;
+  code: string;
+  label: string;
+  value: number;
+  unit: string;
+  comparison:
+    | { kind: "tiers"; comparison: BenchmarkComparison }
+    | { kind: "average"; name: string | null; averageValue: number; status: "at_or_better" | "below"; distancePct: number }
+    | null;
+  collegeStandard: { kind: "average"; status: "at_or_better" | "below"; distancePct: number } | null;
+  collegeGauge: boolean;
+  trend: { change: number; direction: "improved" | "declined" | "unchanged" } | null;
+}
+
+export interface EvalReportModelView {
+  athlete: { name: string; age: number | null; graduationYear: number | null; sport: string | null; team: string | null };
+  /** YYYY-MM-DD */
+  eventDate: string;
+  metrics: EvalMetricResultView[];
+  freshAndHealthy: {
+    load?: "light" | "medium" | "heavy";
+    balance?: { status: string; label: string; lsiPercent: number };
+    movement?: string;
+  };
+  strengths: string[];
+  developmentAreas?: string[];
+  limiter?: string | null;
+  coachNote: string | null;
+  selection?: {
+    collegeGauge?: boolean;
+    freshAndHealthy?: boolean;
+    coachNote?: boolean;
+    strengths?: boolean;
+    retestTrend?: boolean;
+  };
+}
+
+/** Config of an eval row. List payloads drop `model` and carry `eventDate` instead; the single-report route returns the model. */
+export interface EvalReportConfig {
+  eventId: string;
+  athleteId: string;
+  metrics: string[];
+  eventDate?: string;
+  model?: EvalReportModelView;
+}
+
 export interface Report {
   id: string;
   organizationId: string;
   createdBy: string;
   name: string;
   description?: string;
-  reportType: "team" | "individual";
-  config: TeamReportConfig | IndividualReportConfig;
+  reportType: "team" | "individual" | "eval";
+  config: TeamReportConfig | IndividualReportConfig | EvalReportConfig;
   isTemplate: boolean;
   isPinned: boolean;
   createdAt: string;

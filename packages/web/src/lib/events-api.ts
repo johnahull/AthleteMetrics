@@ -1478,7 +1478,7 @@ export function useSaveEventMovementQuality() {
 export interface EventReport {
   id: string;
   name: string;
-  reportType: 'team' | 'individual';
+  reportType: 'team' | 'individual' | 'eval';
   organizationId: string;
   config: {
     eventId?: string;

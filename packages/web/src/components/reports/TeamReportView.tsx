@@ -243,7 +243,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-muted-foreground">Testing Period</p>
-                <p className="text-base font-semibold mt-1">{formatDateRange(report.config.timeframe)}</p>
+                <p className="text-base font-semibold mt-1">{formatDateRange((report.config as TeamReportConfig).timeframe)}</p>
               </div>
             </div>
 
@@ -648,7 +648,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
           metricUnits={metricUnits}
           metricDirections={reportData.metricDirections}
           athleteRankings={athleteRankings}
-          timeframe={report.config.timeframe}
+          timeframe={(report.config as TeamReportConfig).timeframe}
         />
       )}
 
