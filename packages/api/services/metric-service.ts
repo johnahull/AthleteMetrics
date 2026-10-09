@@ -103,6 +103,29 @@ export class MetricService extends BaseService {
   }
 
   /**
+   * An anchorMetric must be one of the dependent metrics and resolve to an existing,
+   * NON-derived site metric: the calculator's anchor gate requires a directly measured
+   * (non-calculated) anchor row, so a derived anchor would delete every derived value.
+   */
+  private async validateAnchorMetric(anchorMetric: string | undefined, dependentMetrics: string[] | null): Promise<void> {
+    if (!anchorMetric) return;
+    const anchor = anchorMetric.toUpperCase();
+    // null = the dependents are unknown (a malformed stored row): skip only the membership check
+    if (dependentMetrics === null) {
+      console.warn(`anchorMetric ${anchor}: dependentMetrics unavailable, skipping the membership check`);
+    } else if (!dependentMetrics.some(d => d.toUpperCase() === anchor)) {
+      throw new Error("anchorMetric must be one of the dependent metrics");
+    }
+    const row = await this.storage.getSiteMetric(anchor);
+    if (!row) {
+      throw new Error(`anchorMetric ${anchor} does not exist as a site metric`);
+    }
+    if (row.isDerived) {
+      throw new Error(`anchorMetric ${anchor} is a derived metric; the anchor must be a directly measured metric`);
+    }
+  }
+
+  /**
    * Create a new site metric (site admin only)
    */
   async createSiteMetric(
@@ -168,6 +191,8 @@ export class MetricService extends BaseService {
       }
 
       // Create metric
+      await this.validateAnchorMetric(validatedData.calculationConfig?.anchorMetric, validatedData.dependentMetrics ?? []);
+
       const metric = await this.storage.createSiteMetric(validatedData, requestingUserId);
 
       // Invalidate metric config cache so new metric is picked up immediately
@@ -271,6 +296,21 @@ export class MetricService extends BaseService {
         if (circularCheck.hasCircular && circularCheck.cycle?.includes(code)) {
           throw new Error(`Circular dependency detected: ${circularCheck.cycle?.join(' → ')}`);
         }
+      }
+
+      // The schema can only check anchorMetric against dependentMetrics sent in the same patch;
+      // when the patch has none, check against the stored ones.
+      if (validatedData.calculationConfig?.anchorMetric) {
+        // Dependents supplied by the patch are checked strictly; otherwise use the stored ones
+        // (null/empty stored dependents are treated as unknown rather than blocking the patch).
+        // undefined = not in the patch, so the stored dependents are used; an explicit [] counts as
+        // supplied and fails the membership check.
+        let dependents: string[] | null = validatedData.dependentMetrics ?? null;
+        if (!validatedData.dependentMetrics) {
+          const stored = (await this.storage.getSiteMetric(code))?.dependentMetrics;
+          dependents = stored && stored.length > 0 ? stored : null;
+        }
+        await this.validateAnchorMetric(validatedData.calculationConfig.anchorMetric, dependents);
       }
 
       // Update metric

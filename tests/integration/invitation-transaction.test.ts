@@ -43,7 +43,7 @@ describe('acceptInvitation transaction atomicity', () => {
 
   afterAll(async () => {
     // purgeTestRows removes the org's invitations before the users and the org.
-    await purgeTestRows({ userIds: trackedUserIds, orgIds: [org.id] });
+    await purgeTestRows({ userIds: trackedUserIds, orgIds: [org?.id] });
   });
 
   async function makeInvitation(email: string) {

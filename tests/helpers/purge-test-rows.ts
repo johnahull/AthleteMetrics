@@ -23,9 +23,14 @@ export interface PurgeOptions {
   usernameLike?: string[];
   /** SQL LIKE patterns for organizations.name, e.g. `InvCoppaTestOrg-%` */
   orgNameLike?: string[];
-  userIds?: string[];
-  orgIds?: string[];
+  /** Explicit ids. Undefined/null entries are skipped, so `[user?.id]` is safe when beforeAll failed early. */
+  userIds?: Array<string | null | undefined>;
+  orgIds?: Array<string | null | undefined>;
+  /** Teams to remove besides every team of the selected organizations, e.g. a team in an org the test keeps */
+  teamIds?: Array<string | null | undefined>;
 }
+
+const definedIds = (ids: PurgeOptions['userIds']): string[] => (ids ?? []).filter((id): id is string => !!id);
 
 /** A pattern must keep some literal text, or `%` would delete every user or organization. */
 function assertSafePattern(pattern: string): void {
@@ -38,8 +43,8 @@ export async function purgeTestRows(options: PurgeOptions = {}): Promise<void> {
   const patterns = [...(options.usernameLike ?? []), ...(options.orgNameLike ?? [])];
   patterns.forEach(assertSafePattern);
 
-  const userIds = new Set(options.userIds ?? []);
-  const orgIds = new Set(options.orgIds ?? []);
+  const userIds = new Set(definedIds(options.userIds));
+  const orgIds = new Set(definedIds(options.orgIds));
 
   for (const pattern of options.usernameLike ?? []) {
     for (const row of await db.select({ id: users.id }).from(users).where(like(users.username, pattern))) userIds.add(row.id);
@@ -47,20 +52,23 @@ export async function purgeTestRows(options: PurgeOptions = {}): Promise<void> {
   for (const pattern of options.orgNameLike ?? []) {
     for (const row of await db.select({ id: organizations.id }).from(organizations).where(like(organizations.name, pattern))) orgIds.add(row.id);
   }
-  if (userIds.size === 0 && orgIds.size === 0) return;
+  const teamIdSet = new Set(definedIds(options.teamIds));
+  if (userIds.size === 0 && orgIds.size === 0 && teamIdSet.size === 0) return;
 
   const userList = [...userIds];
   const orgList = [...orgIds];
-  const teamList = orgList.length
-    ? (await db.select({ id: teams.id }).from(teams).where(inArray(teams.organizationId, orgList))).map((t) => t.id)
-    : [];
+  if (orgList.length) {
+    for (const row of await db.select({ id: teams.id }).from(teams).where(inArray(teams.organizationId, orgList))) teamIdSet.add(row.id);
+  }
+  const teamList = [...teamIdSet];
 
-  // measurements have no FK to users/organizations, so nothing cascades to them
+  // measurements have no FK to users/organizations/teams, so nothing cascades to them
   const measurementOwners = [
-    ...(userList.length ? [inArray(measurements.userId, userList)] : []),
+    ...(userList.length ? [inArray(measurements.userId, userList), inArray(measurements.submittedBy, userList)] : []),
     ...(orgList.length ? [inArray(measurements.organizationId, orgList)] : []),
+    ...(teamList.length ? [inArray(measurements.teamId, teamList)] : []),
   ];
-  await db.delete(measurements).where(or(...measurementOwners));
+  if (measurementOwners.length) await db.delete(measurements).where(or(...measurementOwners));
 
   // Rows that block the deletes below, children first
   if (orgList.length) {

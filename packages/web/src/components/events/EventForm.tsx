@@ -313,9 +313,9 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, organ
                         defaultValue={field.value}
                         className="space-y-2"
                       >
-                        <div className="flex items-start space-x-3 p-3 border rounded-lg">
+                        <div className="flex items-start gap-x-3 p-3 border rounded-lg">
                           <RadioGroupItem value="org_private" id="org_private" />
-                          <div className="space-y-1">
+                          <div className="grid gap-y-1">
                             <Label htmlFor="org_private" className="font-medium">
                               Organization Only
                             </Label>
@@ -324,9 +324,9 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, organ
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-start space-x-3 p-3 border rounded-lg">
+                        <div className="flex items-start gap-x-3 p-3 border rounded-lg">
                           <RadioGroupItem value="public" id="public" />
-                          <div className="space-y-1">
+                          <div className="grid gap-y-1">
                             <Label htmlFor="public" className="font-medium">
                               Public
                             </Label>
@@ -335,9 +335,9 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, organ
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-start space-x-3 p-3 border rounded-lg">
+                        <div className="flex items-start gap-x-3 p-3 border rounded-lg">
                           <RadioGroupItem value="invite_only" id="invite_only" />
-                          <div className="space-y-1">
+                          <div className="grid gap-y-1">
                             <Label htmlFor="invite_only" className="font-medium">
                               Invite Only
                             </Label>
@@ -365,9 +365,9 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, organ
                         defaultValue={field.value}
                         className="space-y-2"
                       >
-                        <div className="flex items-start space-x-3 p-3 border rounded-lg">
+                        <div className="flex items-start gap-x-3 p-3 border rounded-lg">
                           <RadioGroupItem value="open" id="open" />
-                          <div className="space-y-1">
+                          <div className="grid gap-y-1">
                             <Label htmlFor="open" className="font-medium">
                               Open Registration
                             </Label>
@@ -376,9 +376,9 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, organ
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-start space-x-3 p-3 border rounded-lg">
+                        <div className="flex items-start gap-x-3 p-3 border rounded-lg">
                           <RadioGroupItem value="request_approval" id="request_approval" />
-                          <div className="space-y-1">
+                          <div className="grid gap-y-1">
                             <Label htmlFor="request_approval" className="font-medium">
                               Approval Required
                             </Label>
@@ -387,9 +387,9 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, organ
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-start space-x-3 p-3 border rounded-lg">
+                        <div className="flex items-start gap-x-3 p-3 border rounded-lg">
                           <RadioGroupItem value="invitation_only" id="invitation_only" />
-                          <div className="space-y-1">
+                          <div className="grid gap-y-1">
                             <Label htmlFor="invitation_only" className="font-medium">
                               Invitation Only
                             </Label>
@@ -474,9 +474,9 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, organ
                         defaultValue={field.value}
                         className="space-y-2"
                       >
-                        <div className="flex items-start space-x-3 p-3 border rounded-lg">
+                        <div className="flex items-start gap-x-3 p-3 border rounded-lg">
                           <RadioGroupItem value="immediate" id="immediate" />
-                          <div className="space-y-1">
+                          <div className="grid gap-y-1">
                             <Label htmlFor="immediate" className="font-medium">
                               Immediate
                             </Label>
@@ -485,9 +485,9 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, organ
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-start space-x-3 p-3 border rounded-lg">
+                        <div className="flex items-start gap-x-3 p-3 border rounded-lg">
                           <RadioGroupItem value="after_event" id="after_event" />
-                          <div className="space-y-1">
+                          <div className="grid gap-y-1">
                             <Label htmlFor="after_event" className="font-medium">
                               After Event
                             </Label>
@@ -496,9 +496,9 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, organ
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-start space-x-3 p-3 border rounded-lg">
+                        <div className="flex items-start gap-x-3 p-3 border rounded-lg">
                           <RadioGroupItem value="manual" id="manual" />
-                          <div className="space-y-1">
+                          <div className="grid gap-y-1">
                             <Label htmlFor="manual" className="font-medium">
                               Manual Publish
                             </Label>

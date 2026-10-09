@@ -47,6 +47,7 @@ const app = createTestApp();
 // Test data IDs (will be populated in beforeAll)
 let testOrgId1: string;
 let testOrgId2: string;
+const extraOrgIds: string[] = []; // orgs created inside single tests; purged in afterAll even if an assertion fails
 let testTeamId1: string;
 let testTeamId2: string;
 let testCoachId: string;
@@ -272,7 +273,7 @@ describe("GET /api/athletes/recent", () => {
   afterAll(async () => {
     await purgeTestRows({
       userIds: [testAthlete1Id, testAthlete2Id, testAthlete3Id, testAthlete4Id, testAthlete5Id, testAthlete6Id, testCoachId, testOrgAdminId, testSiteAdminId].filter((id): id is string => !!id),
-      orgIds: [testOrgId1, testOrgId2].filter((id): id is string => !!id),
+      orgIds: [testOrgId1, testOrgId2, ...extraOrgIds].filter((id): id is string => !!id),
     });
   });
 
@@ -477,6 +478,7 @@ describe("GET /api/athletes/recent", () => {
         benchmarksEnabled: false,
         allowCustomBenchmarks: false,
       });
+      extraOrgIds.push(emptyOrg.id);
 
       // Add site admin to the empty org so they have permission
       await storage.addUserToOrganization(testSiteAdminId, emptyOrg.id, "org_admin");

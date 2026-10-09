@@ -37,7 +37,7 @@ export function FormErrorSummary({
       aria-live="polite"
     >
       <div className="flex items-start">
-        <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+        <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
         <div className="ml-3 flex-1">
           <h3 className="text-sm font-semibold text-red-800">
             Please fix the following {errorCount} {errorText}:
@@ -48,7 +48,7 @@ export function FormErrorSummary({
                 {onErrorClick ? (
                   <button
                     type="button"
-                    className="hover:underline focus:outline-none focus:underline"
+                    className="hover:underline focus:outline-hidden focus:underline"
                     onClick={() => onErrorClick(error.field)}
                   >
                     {error.message}

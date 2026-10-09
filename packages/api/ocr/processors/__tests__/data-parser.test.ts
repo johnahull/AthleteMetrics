@@ -111,3 +111,70 @@ describe('neutral token never appears in user-visible validator text', () => {
     expect(low.warnings.join(' ')).toContain('Unusually low value for 5-0-5');
   });
 });
+
+describe('DataParser fly-10 run-in neutrality (AM-FEAT-017)', () => {
+  const FLY = 'FLY10_TIME_UNRESOLVED';
+
+  it('emits the neutral token for a "10 yd fly 1.45" reading, never a concrete FLY10 code', () => {
+    const data = parse('John Smith 10 yd fly 1.45');
+    const metrics = data.map((d) => d.metric);
+    expect(metrics).toContain(FLY);
+    expect(metrics.filter((m) => /^FLY10_TIME(_RI\d+)?$/.test(m ?? ''))).toEqual([]);
+    expect(data.find((d) => d.metric === FLY)?.value).toBe('1.45');
+  });
+
+  it('does not file a line as a fly just because a "10" appears in a date or in the value', () => {
+    // Before the fix these were guessed as fly readings and forced a 422 on the whole photo.
+    expect(parse('John Smith 10/05 2.45').find((d) => d.value === '2.45')).toBeUndefined();
+    expect(parse('Jane Doe 2.10').find((d) => d.value === '2.10')).toBeUndefined();
+    expect(parse('Jane Doe tendon 1.50').find((d) => d.value === '1.50')).toBeUndefined();
+  });
+
+  it('does not read a date or a name as a fly through the "time" / "ten" patterns', () => {
+    for (const line of ['John Smith time 10/05 2.45', 'John Smith 10/05 40 yd time 2.85', 'John Stenson 1.05', 'Jane Tennyson time 1.50']) {
+      const rows = parse(line);
+      expect(rows.filter((d) => d.metric === FLY), line).toEqual([]);
+    }
+  });
+
+  it('still reads real fly lines through the explicit patterns', () => {
+    for (const line of [
+      'John Smith 10 fly 1.05',
+      'John Smith fly 10 1.05',
+      'John Smith 10 yd fly 1.05',
+      'John Smith 10-yard fly 1.05',
+      'John Smith 10 yard fly time 1.05',
+      'John Smith ten yard fly 1.05',
+      'John Smith fly10 1.05',
+      'John Smith fly time 10 1.05',
+    ]) {
+      expect(parse(line).find((d) => d.value === '1.05')?.metric, line).toBe(FLY);
+    }
+  });
+
+  it('the generic fallback needs fly: value-first lines', () => {
+    expect(parse('John Smith 1.05 10 yd fly').find((d) => d.value === '1.05')?.metric).toBe(FLY);
+    expect(parse('John Smith 1.05 10 yd').find((d) => d.value === '1.05')).toBeUndefined();
+  });
+
+  it('files a "10 fly" / "fly 10" line under the neutral token', () => {
+    expect(parse('John Smith 10 fly 1.05').find((d) => d.value === '1.05')?.metric).toBe(FLY);
+    expect(parse('John Smith fly 10 1.05').find((d) => d.value === '1.05')?.metric).toBe(FLY);
+  });
+
+  it('keeps T-test and 5-10-5 lines out of the fly bucket', () => {
+    expect(parse('John Smith t test 10.20').find((d) => d.value === '10.20')?.metric).toBe('T_TEST');
+    expect(parse('John Smith 5-10-5 4.60').find((d) => d.value === '4.60')?.metric).toBe('AGILITY_5105');
+  });
+
+  it('validates a neutral fly reading (range and warnings) and hides the token in user-visible text', () => {
+    const validator = new MeasurementValidator(config);
+    const ok = validator.validateMeasurement({ firstName: 'John', lastName: 'Smith', metric: FLY, value: '1.45', confidence: 85 });
+    expect(ok.isValid).toBe(true);
+    const fast = validator.validateMeasurement({ firstName: 'John', lastName: 'Smith', metric: FLY, value: '0.9', confidence: 85 });
+    expect(fast.warnings.some((w) => /fly/i.test(w))).toBe(true);
+    const high = validator.validateMeasurement({ firstName: 'John', lastName: 'Smith', metric: FLY, value: '3.5', confidence: 85 });
+    expect(high.errors).toContain('Value too high for 10-yard fly: 3.5 (maximum: 3)');
+    expect(JSON.stringify([ok, fast, high])).not.toContain('UNRESOLVED');
+  });
+});

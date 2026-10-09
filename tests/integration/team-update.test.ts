@@ -21,7 +21,6 @@ describe('Team Update Integration Tests', () => {
   let orgAdminUser: User;
   let coachUser: User;
   let createdUsers: string[] = [];
-  let createdTeams: string[] = [];
   let createdOrgs: string[] = [];
 
   beforeAll(async () => {
@@ -48,14 +47,12 @@ describe('Team Update Integration Tests', () => {
       notes: 'Original notes',
       season: '2024-Fall',
     });
-    createdTeams.push(testTeam.id);
 
     otherTeam = await storage.createTeam({
       name: `Other Team ${timestamp}`,
       level: 'HS',
       organizationId: testOrg.id,
     });
-    createdTeams.push(otherTeam.id);
 
     // Create org admin user
     orgAdminUser = await storage.createUser({
@@ -83,7 +80,7 @@ describe('Team Update Integration Tests', () => {
   });
 
   afterAll(async () => {
-    // purgeTestRows deletes every team of the orgs, so createdTeams needs no separate pass
+    // purgeTestRows deletes every team of the orgs
     await purgeTestRows({ userIds: createdUsers, orgIds: createdOrgs });
   });
 
@@ -191,7 +188,6 @@ describe('Team Update Integration Tests', () => {
         level: 'Club',
         organizationId: testOrg.id,
       });
-      createdTeams.push(team1.id);
 
       // Create team in second org with the same name - should succeed
       const team2 = await storage.createTeam({
@@ -199,7 +195,6 @@ describe('Team Update Integration Tests', () => {
         level: 'Club',
         organizationId: otherOrg.id,
       });
-      createdTeams.push(team2.id);
 
       expect(team1.name).toBe(sharedName);
       expect(team2.name).toBe(sharedName);

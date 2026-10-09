@@ -318,7 +318,7 @@ export function GroupSelector({
                     }).length;
 
                     return (
-                      <div key={team} className="flex items-center space-x-2">
+                      <div key={team} className="flex items-center gap-x-2">
                         <Checkbox
                           id={`team-${team}`}
                           checked={isSelected}
@@ -364,7 +364,7 @@ export function GroupSelector({
                     ).length;
 
                     return (
-                      <div key={range.label} className="flex items-center space-x-2">
+                      <div key={range.label} className="flex items-center gap-x-2">
                         <Checkbox
                           id={`age-${range.label}`}
                           checked={isSelected}

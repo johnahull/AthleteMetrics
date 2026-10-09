@@ -14,8 +14,8 @@ import request from 'supertest';
 import express from 'express';
 import { storage } from '../../packages/api/storage';
 import { db } from '../../packages/api/db';
-import { users, measurements } from '@shared/schema';
-import { eq, inArray } from 'drizzle-orm';
+import { users } from '@shared/schema';
+import { eq } from 'drizzle-orm';
 import type { Organization, User } from '@shared/schema';
 
 vi.mock('../../packages/api/vite.js', () => ({
@@ -118,10 +118,9 @@ describe('Photo import organization scoping', () => {
   });
 
   afterAll(async () => {
-    // A leftover org keeps its organization_metrics rows and breaks migration 0145's "with no
-    // organizations" test; measurements are removed first as they hold the users in place.
-    await db.delete(measurements).where(inArray(measurements.userId, createdUserIds));
-    await purgeTestRows({ userIds: createdUserIds, orgIds: [orgA.id, orgB.id] });
+    // purgeTestRows also removes the users' measurements. A leftover org keeps its organization_metrics rows
+    // and breaks migration 0145's "with no organizations" test.
+    await purgeTestRows({ userIds: createdUserIds, orgIds: [orgA?.id, orgB?.id] });
   });
 
   it('writes the reading only to the same-named athlete in the selected organization', async () => {

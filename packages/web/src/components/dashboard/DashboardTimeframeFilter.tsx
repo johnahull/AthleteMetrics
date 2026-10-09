@@ -184,7 +184,7 @@ export function DashboardTimeframeFilter({
         ) : (
           /* Custom range section */
           <div className="p-4 space-y-4">
-            <div className="space-y-2">
+            <div className="grid gap-y-2">
               <label id="from-date-label" className="text-sm font-medium">From</label>
               <Calendar
                 mode="single"
@@ -195,7 +195,7 @@ export function DashboardTimeframeFilter({
                 initialFocus
               />
             </div>
-            <div className="space-y-2">
+            <div className="grid gap-y-2">
               <label id="to-date-label" className="text-sm font-medium">To</label>
               <Calendar
                 mode="single"

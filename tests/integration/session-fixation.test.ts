@@ -58,7 +58,7 @@ describe('Login session fixation', () => {
   });
 
   afterAll(async () => {
-    await purgeTestRows({ userIds: [user.id] });
+    await purgeTestRows({ userIds: [user?.id] });
   });
 
   it('regenerates the session ID on login', async () => {

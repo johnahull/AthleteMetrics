@@ -6,6 +6,7 @@ import { z } from "zod";
 import { PASSWORD_REQUIREMENTS, PASSWORD_REGEX } from "./password-requirements";
 import { validateUsername } from "./username-validation";
 import { isSafePublicUrl } from "./url-safety";
+import type { DerivedCalculationConfig } from "./schema/tables/metrics";
 import { DEFAULT_AI_MODEL_KEY, SELECTABLE_AI_MODEL_KEYS } from "./ai-models";
 
 // AI Coaching Insights constants
@@ -191,14 +192,7 @@ export const siteMetrics = pgTable("site_metrics", {
   isDerived: boolean("is_derived").default(false).notNull(), // Whether this metric is calculated from other metrics
   formula: text("formula"), // Formula for calculation (e.g., "10 / fly10_time * 2.045")
   dependentMetrics: text("dependent_metrics").array(), // Metric codes this formula depends on
-  calculationConfig: jsonb("calculation_config").$type<{
-    dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
-    maxDateDifference?: number;
-    missingSourceBehavior: 'skip' | 'error';
-    /** 'latest_event': same_date sources must all come from the single most recent event (e.g. MQI totals) */
-    sourceSelection?: 'latest_event';
-    constants?: Record<string, number>;
-  }>(),
+  calculationConfig: jsonb("calculation_config").$type<DerivedCalculationConfig>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }), // Site admin who created
   updatedAt: timestamp("updated_at"),
@@ -1689,6 +1683,23 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
   season: z.string().optional(),
 });
 
+// An anchored derived metric (calculationConfig.anchorMetric) must anchor on one of its own sources.
+// Checked only when the payload carries both fields (a partial PATCH cannot be checked here).
+function addAnchorMetricIssue(
+  data: { dependentMetrics?: string[] | null; calculationConfig?: { anchorMetric?: string } | null },
+  ctx: z.RefinementCtx
+) {
+  const anchor = data.calculationConfig?.anchorMetric;
+  if (!anchor || !data.dependentMetrics) return;
+  if (!data.dependentMetrics.some((d) => d.toUpperCase() === anchor.toUpperCase())) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "anchorMetric must be one of the dependent metrics",
+      path: ['calculationConfig', 'anchorMetric'],
+    });
+  }
+}
+
 export const insertSiteMetricSchema = createInsertSchema(siteMetrics).omit({
   id: true,
   createdAt: true,
@@ -1727,8 +1738,10 @@ export const insertSiteMetricSchema = createInsertSchema(siteMetrics).omit({
     maxDateDifference: z.number().int().positive().optional(),
     missingSourceBehavior: z.enum(['skip', 'error']),
     sourceSelection: z.enum(['latest_event']).optional(),
+    anchorMetric: z.string().max(50).optional(),
   }).optional(),
 }).superRefine((data, ctx) => {
+  addAnchorMetricIssue(data, ctx);
   // Cross-field validation: If isDerived is true, formula is required
   if (data.isDerived === true) {
     if (!data.formula || data.formula.trim() === '') {
@@ -1784,8 +1797,10 @@ export const updateSiteMetricSchema = z.object({
     maxDateDifference: z.number().int().positive().optional(),
     missingSourceBehavior: z.enum(['skip', 'error']),
     sourceSelection: z.enum(['latest_event']).optional(),
+    anchorMetric: z.string().max(50).optional(),
   }).nullable().optional(),
 }).superRefine((data, ctx) => {
+  addAnchorMetricIssue(data, ctx);
   // Cross-field validation: If isDerived is being set to true, formula should be provided
   if (data.isDerived === true) {
     if (data.formula !== undefined && (!data.formula || data.formula.trim() === '')) {

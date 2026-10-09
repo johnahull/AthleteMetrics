@@ -113,7 +113,7 @@ export function ColumnMappingDialog({
           {/* DEFENSIVE: Show error if parseResult is missing */}
           {!parseResult && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
-              <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
               <div className="text-sm text-red-800">
                 <p className="font-medium">Error: No CSV data available</p>
                 <p>Please upload a valid CSV file to continue.</p>
@@ -123,7 +123,7 @@ export function ColumnMappingDialog({
 
           {missingRequired.length > 0 && parseResult && (
             <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
-              <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
               <div className="text-sm text-amber-800">
                 <p className="font-medium">Missing required fields:</p>
                 <p>{missingRequired.map(f => systemFields.find(sf => sf.value === f)?.label).join(', ')}</p>

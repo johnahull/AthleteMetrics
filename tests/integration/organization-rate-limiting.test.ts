@@ -68,7 +68,7 @@ describe('Organization Deletion Rate Limiting', () => {
 
   afterAll(async () => {
     // Cleanup
-    await purgeTestRows({ userIds: [siteAdminUser.id] });
+    await purgeTestRows({ userIds: [siteAdminUser?.id] });
   });
 
   /**

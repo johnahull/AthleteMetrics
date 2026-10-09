@@ -400,8 +400,8 @@ export default function EventDetail() {
       </div>
 
       {/* Tabs */}
-      <Tabs value={selectedTab} onValueChange={(v) => setSelectedTab(v as TabValue)} className="space-y-6">
-        <TabsList>
+      <Tabs value={selectedTab} onValueChange={(v) => setSelectedTab(v as TabValue)} className="flex flex-col gap-y-6 [&>[role=tabpanel]]:mt-0">
+        <TabsList className="self-start">
           <TabsTrigger value="overview" data-testid="tab-overview">
             Overview
           </TabsTrigger>

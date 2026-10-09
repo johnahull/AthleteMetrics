@@ -122,7 +122,7 @@ export default function QuestionEditor({ isOpen, onClose, onSave, question }: Qu
 
         <div className="space-y-4">
           {/* Question Type */}
-          <div className="space-y-2">
+          <div className="grid gap-y-2">
             <Label htmlFor="question-type">Question Type</Label>
             <Select
               value={questionType}
@@ -142,7 +142,7 @@ export default function QuestionEditor({ isOpen, onClose, onSave, question }: Qu
           </div>
 
           {/* Question Label */}
-          <div className="space-y-2">
+          <div className="grid gap-y-2">
             <Label htmlFor="label">Question *</Label>
             <Input
               id="label"
@@ -154,7 +154,7 @@ export default function QuestionEditor({ isOpen, onClose, onSave, question }: Qu
           </div>
 
           {/* Description */}
-          <div className="space-y-2">
+          <div className="grid gap-y-2">
             <Label htmlFor="description">Description (Optional)</Label>
             <Textarea
               id="description"
@@ -169,7 +169,7 @@ export default function QuestionEditor({ isOpen, onClose, onSave, question }: Qu
           {questionType === 'scale' && (
             <>
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
+                <div className="grid gap-y-2">
                   <Label htmlFor="scale-min">Minimum Value</Label>
                   <Input
                     id="scale-min"
@@ -179,7 +179,7 @@ export default function QuestionEditor({ isOpen, onClose, onSave, question }: Qu
                     data-testid="input-scale-min"
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="grid gap-y-2">
                   <Label htmlFor="scale-max">Maximum Value</Label>
                   <Input
                     id="scale-max"
@@ -191,7 +191,7 @@ export default function QuestionEditor({ isOpen, onClose, onSave, question }: Qu
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
+                <div className="grid gap-y-2">
                   <Label htmlFor="min-label">Min Label (Optional)</Label>
                   <Input
                     id="min-label"
@@ -201,7 +201,7 @@ export default function QuestionEditor({ isOpen, onClose, onSave, question }: Qu
                     data-testid="input-scale-min-label"
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="grid gap-y-2">
                   <Label htmlFor="max-label">Max Label (Optional)</Label>
                   <Input
                     id="max-label"
@@ -217,7 +217,7 @@ export default function QuestionEditor({ isOpen, onClose, onSave, question }: Qu
 
           {questionType === 'text' && (
             <>
-              <div className="space-y-2">
+              <div className="grid gap-y-2">
                 <Label htmlFor="placeholder">Placeholder (Optional)</Label>
                 <Input
                   id="placeholder"
@@ -227,7 +227,7 @@ export default function QuestionEditor({ isOpen, onClose, onSave, question }: Qu
                   data-testid="input-text-placeholder"
                 />
               </div>
-              <div className="space-y-2">
+              <div className="grid gap-y-2">
                 <Label htmlFor="max-length">Max Length (Optional)</Label>
                 <Input
                   id="max-length"
@@ -241,7 +241,7 @@ export default function QuestionEditor({ isOpen, onClose, onSave, question }: Qu
           )}
 
           {questionType === 'body_map' && (
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-x-2">
               <Checkbox
                 id="allow-multiple"
                 checked={allowMultiple}
@@ -253,7 +253,7 @@ export default function QuestionEditor({ isOpen, onClose, onSave, question }: Qu
 
           {questionType === 'multiple_choice' && (
             <>
-              <div className="space-y-2">
+              <div className="grid gap-y-2">
                 <Label>Answer Options *</Label>
                 {options.map((option, index) => (
                   <div key={index} className="flex gap-2">
@@ -284,6 +284,7 @@ export default function QuestionEditor({ isOpen, onClose, onSave, question }: Qu
                   <Button
                     type="button"
                     variant="outline"
+                    className="justify-self-start"
                     onClick={() => {
                       setOptions([...options, `Option ${options.length + 1}`]);
                     }}
@@ -292,7 +293,7 @@ export default function QuestionEditor({ isOpen, onClose, onSave, question }: Qu
                   </Button>
                 )}
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-x-2">
                 <Checkbox
                   id="allow-multiple-mc"
                   checked={allowMultiple}
@@ -304,7 +305,7 @@ export default function QuestionEditor({ isOpen, onClose, onSave, question }: Qu
           )}
 
           {/* Required Checkbox */}
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-x-2">
             <Checkbox
               id="required"
               checked={required}

@@ -144,7 +144,7 @@ export function TimeframeSelector({
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Analysis Type Selection */}
-        <div className="space-y-2">
+        <div className="grid gap-y-2">
           <Label className="text-sm font-medium">Analysis Type *</Label>
           <Select value={timeframe.type} onValueChange={handleTypeChange}>
             <SelectTrigger>
@@ -184,7 +184,7 @@ export function TimeframeSelector({
         </div>
 
         {/* Time Period Selection */}
-        <div className="space-y-2">
+        <div className="grid gap-y-2">
           <Label className="text-sm font-medium">Time Period *</Label>
           <Select value={timeframe.period} onValueChange={handlePeriodChange}>
             <SelectTrigger>
@@ -209,7 +209,7 @@ export function TimeframeSelector({
 
         {/* Custom Date Range */}
         {timeframe.period === 'custom' && (
-          <div className="space-y-2">
+          <div className="grid gap-y-2">
             <Label className="text-sm font-medium">Custom Date Range</Label>
             <div className="flex gap-2">
               <Popover>
@@ -270,7 +270,7 @@ export function TimeframeSelector({
 
         {/* Recommendations */}
         {recommendations.length > 0 && (
-          <div className="space-y-2">
+          <div className="grid gap-y-2">
             <Label className="text-sm font-medium text-blue-700">Recommended Settings</Label>
             <div className="space-y-2">
               {recommendations.map((rec, index) => (

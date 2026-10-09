@@ -104,6 +104,27 @@ describe('purgeTestRows (issue #539)', () => {
     expect(await db.select().from(userOrganizations).where(eq(userOrganizations.userId, bystander.id))).toHaveLength(1);
   });
 
+  it('removes teams given by id (also in an org that is kept) and measurements tied to them or submitted by a purged user', async () => {
+    const [keptOrg] = await db.insert(organizations).values({ name: `Purge Shared Org ${suffix}` }).returning();
+    const [team] = await db.insert(teams).values({ name: `Purge Shared Team ${suffix}`, organizationId: keptOrg.id, level: 'College' }).returning();
+    const submitter = await mkUser('submitter');
+    const athleteKept = await mkUser('athletekept');
+    await db.insert(userTeams).values({ userId: athleteKept.id, teamId: team.id, joinedAt: new Date('2020-01-01'), isActive: true });
+    const base = { date: '2024-01-01', age: 16, metric: 'VERTICAL_JUMP', value: '30', units: 'in' };
+    await db.insert(measurements).values([
+      { ...base, userId: athleteKept.id, submittedBy: submitter.id, organizationId: keptOrg.id },
+      { ...base, userId: athleteKept.id, submittedBy: athleteKept.id, organizationId: keptOrg.id, teamId: team.id },
+    ]);
+
+    await purgeTestRows({ userIds: [submitter.id, athleteKept.id], teamIds: [team.id] });
+
+    expect(await db.select().from(teams).where(eq(teams.id, team.id))).toHaveLength(0);
+    expect(await db.select().from(measurements).where(eq(measurements.userId, athleteKept.id))).toHaveLength(0);
+    // the org itself was not selected, so it stays and is removed here without the helper
+    expect(await db.select().from(organizations).where(eq(organizations.id, keptOrg.id))).toHaveLength(1);
+    await db.delete(organizations).where(eq(organizations.id, keptOrg.id));
+  });
+
   it('does nothing (and does not throw) when nothing matches', async () => {
     await expect(purgeTestRows({ usernameLike: [`no-such-user-${suffix}`], orgNameLike: [`no-such-org-${suffix}`] })).resolves.toBeUndefined();
     await expect(purgeTestRows({})).resolves.toBeUndefined();

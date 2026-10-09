@@ -85,7 +85,7 @@ describe('Organization route authorization (org-admin gate)', () => {
   });
 
   afterAll(async () => {
-    await purgeTestRows({ userIds: trackedUserIds, orgIds: [org.id] });
+    await purgeTestRows({ userIds: trackedUserIds, orgIds: [org?.id] });
   });
 
   describe('POST /api/organizations/:id/users', () => {

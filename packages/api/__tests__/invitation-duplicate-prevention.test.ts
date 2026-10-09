@@ -16,6 +16,7 @@ import { db } from "../db";
 import { storage } from "../storage";
 import { organizations, users, invitations, userOrganizations } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { purgeTestRows } from "../../../tests/helpers/purge-test-rows";
 
 describe("Invitation Duplicate User Prevention", () => {
   const timestamp = Date.now().toString();
@@ -74,11 +75,8 @@ describe("Invitation Duplicate User Prevention", () => {
   });
 
   afterAll(async () => {
-    // Clean up all test data
-    await db.delete(invitations).where(eq(invitations.organizationId, testOrgId));
-    await db.delete(userOrganizations).where(eq(userOrganizations.organizationId, testOrgId));
-    await db.delete(users).where(eq(users.id, testInviterUserId));
-    await db.delete(organizations).where(eq(organizations.id, testOrgId));
+    // Users the tests create (existing/second-org users) carry testSuffix in their username
+    await purgeTestRows({ userIds: [testInviterUserId], orgIds: [testOrgId], usernameLike: [`%${testSuffix}`] });
   });
 
   describe("Email doesn't exist - create new user (existing behavior)", () => {

@@ -218,6 +218,7 @@ export default function MyDashboardPage() {
                 dependentMetrics={metricConfig?.dependentMetrics}
                 dependentMetricLabels={metricLabelMap}
                 explanation={explanations[metric]}
+                metricType={metricConfig?.metricType}
               />
             );
           })}
