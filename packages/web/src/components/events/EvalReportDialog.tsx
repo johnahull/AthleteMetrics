@@ -472,7 +472,7 @@ export function EvalReportDialog({ open, onOpenChange, eventId, organizationId, 
                 <Alert>
                   <AlertTitle>Send this PDF to a parent</AlertTitle>
                   <AlertDescription>
-                    This athlete is under 13 or has no date of birth on file, so the report is not shared to their own account. Send the PDF to a parent yourself.
+                    Athletes under 13, or with no date of birth on file, are never sent reports through their own account. Share this PDF with a parent yourself.
                   </AlertDescription>
                 </Alert>
               )}
