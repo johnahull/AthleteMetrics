@@ -11,7 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Calendar, MapPin, Trophy, TrendingUp, User, Zap, Edit, Plus, Mail, Phone, Edit2, Trash2, Clock, CalendarDays, Shield } from "lucide-react";
-import { calculateFly10Speed, fly10SpeedMph } from "@/lib/speed-utils";
+import { fly10SpeedMph } from "@/lib/speed-utils";
 import AthleteModal from "@/components/athlete-modal";
 import AthleteMeasurementForm from "@/components/athlete-measurement-form";
 import { LlmExportButton } from "@/components/athletes/LlmExportButton";
@@ -295,18 +295,6 @@ export default function AthleteProfile() {
       </div>
     );
   }
-
-  const fly10Measurements = measurements.filter((m: any) => m.metric === "FLY10_TIME");
-  const verticalMeasurements = measurements.filter((m: any) => m.metric === "VERTICAL_JUMP");
-
-  const bestFly10 = fly10Measurements.length > 0 
-    ? Math.min(...fly10Measurements.map((m: any) => parseFloat(m.value)))
-    : null;
-  const bestVertical = verticalMeasurements.length > 0 
-    ? Math.max(...verticalMeasurements.map((m: any) => parseFloat(m.value)))
-    : null;
-
-  const bestFly10Speed = bestFly10 ? calculateFly10Speed(bestFly10) : null;
 
   const getRecentMeasurements = () => {
     return measurements
