@@ -174,6 +174,22 @@ interface BulkDistributeResult {
   }>;
 }
 
+export function buildBulkDistributeDescription(
+  summary: BulkDistributeResult["summary"],
+): string {
+  const { sent, alreadySent, skipped, blockedUnder13 = 0 } = summary;
+  const parts: string[] = [];
+  if (sent > 0) parts.push(`Sent ${sent} report${sent !== 1 ? 's' : ''}.`);
+  if (alreadySent > 0) parts.push(`${alreadySent} already sent.`);
+  if (blockedUnder13 > 0) {
+    parts.push(
+      `${blockedUnder13} athlete${blockedUnder13 !== 1 ? 's' : ''} under 13 or without a date of birth ${blockedUnder13 !== 1 ? 'were' : 'was'} skipped; send their PDF to a parent.`,
+    );
+  }
+  if (skipped > 0) parts.push(`${skipped} skipped.`);
+  return parts.length > 0 ? parts.join(' ') : 'No reports were sent.';
+}
+
 export function useBulkDistributeReports() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -190,18 +206,7 @@ export function useBulkDistributeReports() {
       // Invalidate reports list to refresh sentToAthlete status
       queryClient.invalidateQueries({ queryKey: ["/api/reports"] });
 
-      const { sent, alreadySent, skipped, blockedUnder13 = 0 } = data.summary;
-
-      let description = `Sent ${sent} report${sent !== 1 ? 's' : ''} to athletes`;
-      if (alreadySent > 0) {
-        description += `, ${alreadySent} already sent`;
-      }
-      if (blockedUnder13 > 0) {
-        description += `, ${blockedUnder13} under 13 or without a date of birth skipped (send their PDF to a parent)`;
-      }
-      if (skipped > 0) {
-        description += `, ${skipped} skipped`;
-      }
+      const description = buildBulkDistributeDescription(data.summary);
 
       toast({
         title: "Success",
