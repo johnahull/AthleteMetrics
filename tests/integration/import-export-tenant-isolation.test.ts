@@ -71,7 +71,7 @@ describe('Import/export tenant isolation', () => {
   });
 
   afterAll(async () => {
-    await purgeTestRows({ userIds: [userA.id], orgIds: [orgA.id, orgB.id, orgC.id] });
+    await purgeTestRows({ userIds: [userA?.id], orgIds: [orgA?.id, orgB?.id, orgC?.id] });
   });
 
   it('GET /api/export/teams returns teams from all the caller\'s orgs, and no others', async () => {

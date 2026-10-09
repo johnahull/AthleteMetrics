@@ -63,7 +63,7 @@ describe('Security middleware registration order', () => {
   });
 
   afterAll(async () => {
-    await purgeTestRows({ userIds: [user.id] });
+    await purgeTestRows({ userIds: [user?.id] });
   });
 
   it('applies helmet security headers to application routes', async () => {
