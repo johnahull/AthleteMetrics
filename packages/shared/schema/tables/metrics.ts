@@ -159,6 +159,8 @@ export const customOrgMetrics = pgTable("custom_org_metrics", {
   isDerived: boolean("is_derived").default(false).notNull(),
   formula: text("formula"),
   dependentMetrics: text("dependent_metrics").array(),
+  // anchorMetric is only supported for SITE derived metrics: custom-org metrics have no admin UI or
+  // tests for it, and the custom-org routes' zod schema strips it.
   calculationConfig: jsonb("calculation_config").$type<DerivedCalculationConfig>(),
   // Paired-input metric config — see siteMetrics.auxiliaryInputConfig for semantics.
   // Mutually exclusive with isDerived at the application layer.

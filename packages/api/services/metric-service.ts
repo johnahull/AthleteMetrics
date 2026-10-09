@@ -303,6 +303,8 @@ export class MetricService extends BaseService {
       if (validatedData.calculationConfig?.anchorMetric) {
         // Dependents supplied by the patch are checked strictly; otherwise use the stored ones
         // (null/empty stored dependents are treated as unknown rather than blocking the patch).
+        // undefined = not in the patch, so the stored dependents are used; an explicit [] counts as
+        // supplied and fails the membership check.
         let dependents: string[] | null = validatedData.dependentMetrics ?? null;
         if (!validatedData.dependentMetrics) {
           const stored = (await this.storage.getSiteMetric(code))?.dependentMetrics;
