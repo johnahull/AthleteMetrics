@@ -36,6 +36,8 @@ export const OTHER_METRIC_LABELS: Record<string, string> = {
   TOP_SPEED_MPH: "Top speed",
   HEIGHT: "Height",
   WEIGHT: "Weight",
+  WEIGHT_LBS: "Weight",
+  AGILITY_5105: "5-10-5 agility",
   FLY10_TIME_RI5: "Fly 10 (5-yard run-in)",
   FLY10_TIME_RI10: "Fly 10 (10-yard run-in)",
   FLY10_TIME_RI15: "Fly 10 (15-yard run-in)",

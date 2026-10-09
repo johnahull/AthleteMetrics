@@ -15,9 +15,11 @@ export type LoadLevel = "light" | "medium" | "heavy";
 
 export interface EvalSelection {
   preset: EvalPreset;
-  metricKeys: EvalMetricKey[];
+  /** Logical keys, or metric codes for measured metrics outside the key map; MQI here means Movement is shown */
+  metricKeys: string[];
   collegeGauge: boolean;
   headline: boolean;
+  noteFirst: boolean;
   freshAndHealthy: boolean;
   coachNote: boolean;
   strengths: boolean;
@@ -25,7 +27,8 @@ export interface EvalSelection {
 }
 
 export interface EvalMetricResult {
-  key: EvalMetricKey;
+  /** Null for a measured metric outside the key map (no ranking, no limiter) */
+  key: EvalMetricKey | null;
   code: string;
   label: string;
   value: number;
