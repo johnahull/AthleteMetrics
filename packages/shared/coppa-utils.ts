@@ -99,6 +99,7 @@ export function isUnder13(birthDate: string | Date): boolean {
  */
 export function isUnder13OrUnknownDob(birthDate: string | Date | null | undefined): boolean {
   try {
+    if (birthDate == null) return true;
     if (typeof birthDate === 'string') {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) return true;
       const [y, m, d] = birthDate.split('-').map(Number);

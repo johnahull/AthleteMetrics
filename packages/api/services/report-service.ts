@@ -1117,6 +1117,8 @@ export class ReportService extends BaseService {
     snapshotData = stripMediaUrlDeep(snapshotData);
 
     // shareBlockedUnder13 is a coach-UI flag derived from the date of birth; never freeze it into a public snapshot
+    // Known snapshot paths carrying this flag: snapshotData.athlete and snapshotData.athletes[]. If a new snapshot
+    // shape embeds athletes elsewhere, extend this strip; the integration test's JSON.stringify assertion is the safety net.
     const snapshotAthletes = snapshotData as any;
     const athletesArray: any[] = [snapshotAthletes.athlete, ...(snapshotAthletes.athletes ?? [])];
     for (const a of athletesArray) if (a) delete (a as any).shareBlockedUnder13;
@@ -1138,33 +1140,35 @@ export class ReportService extends BaseService {
         (report.config as any)?.athleteId,
         (snapshotData as any).model?.eventDate
       );
-    } else try {
-      const data = snapshotData as any;
-      const athleteIds: string[] = [];
+    } else {
+      try {
+        const data = snapshotData as any;
+        const athleteIds: string[] = [];
 
-      // Collect athlete IDs from team or individual report
-      if (report.reportType === 'individual') {
-        const config = report.config as any;
-        if (config?.athleteId) athleteIds.push(config.athleteId);
-      } else if (data?.athleteRankings) {
-        for (const a of data.athleteRankings) {
-          if (a?.userId) athleteIds.push(a.userId);
+        // Collect athlete IDs from team or individual report
+        if (report.reportType === 'individual') {
+          const config = report.config as any;
+          if (config?.athleteId) athleteIds.push(config.athleteId);
+        } else if (data?.athleteRankings) {
+          for (const a of data.athleteRankings) {
+            if (a?.userId) athleteIds.push(a.userId);
+          }
         }
-      }
 
-      if (athleteIds.length > 0) {
-        const minorCheck = await db
-          .select({ isMinor: users.isMinor })
-          .from(users)
-          .where(inArray(users.id, athleteIds));
-        containsMinorData = minorCheck.some(u => u.isMinor === true);
+        if (athleteIds.length > 0) {
+          const minorCheck = await db
+            .select({ isMinor: users.isMinor })
+            .from(users)
+            .where(inArray(users.id, athleteIds));
+          containsMinorData = minorCheck.some(u => u.isMinor === true);
+        }
+      } catch (err) {
+        // Fail-closed: if we can't determine whether the snapshot contains minor
+        // data, conservatively restrict public access. Better to over-restrict
+        // than to expose COPPA-protected data publicly.
+        console.error('[COPPA] Failed to check minor data in snapshot:', err);
+        containsMinorData = true;
       }
-    } catch (err) {
-      // Fail-closed: if we can't determine whether the snapshot contains minor
-      // data, conservatively restrict public access. Better to over-restrict
-      // than to expose COPPA-protected data publicly.
-      console.error('[COPPA] Failed to check minor data in snapshot:', err);
-      containsMinorData = true;
     }
 
     // Create snapshot

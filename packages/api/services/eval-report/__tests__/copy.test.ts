@@ -36,5 +36,8 @@ describe('labels', () => {
     expect(formatValue(1.93, 's')).toBe('1.93 s');
     expect(formatValue(21.5, 'in')).toBe('21.5 in');
     expect(formatValue(92, '%')).toBe('92%');
+    expect(formatValue(1.9, 's')).toBe('1.90 s');
+    expect(formatValue(2, 's')).toBe('2.00 s');
+    expect(formatValue(18.2, 'in')).toBe('18.2 in');
   });
 });

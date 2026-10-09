@@ -39,6 +39,7 @@ export function strengthsAndLimiter(metrics: readonly PositionedMetric[]): {
   });
   const best = [...ranked].sort((a, b) => b.position - a.position);
   const strengths = best.slice(0, 2);
+  // Worst-first on purpose: take the bottom two, then reverse so the weakest leads.
   const developmentAreas = best.slice(2).slice(-2).reverse();
 
   const limiterGroups = new Set(["speed", "power", "change_of_direction"]);

@@ -6,7 +6,7 @@
 process.env.NODE_ENV = 'test';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret-key-for-integration-tests-only';
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import express, { type Express } from 'express';
 import { eq, inArray } from 'drizzle-orm';
@@ -17,6 +17,7 @@ import {
   events, measurements, organizations, parentAthleteLinks, reports, reportShares, reportSnapshots,
   userOrganizations, users,
 } from '@shared/schema';
+import * as measurementHelpers from '../../packages/api/permissions/measurement-helpers';
 import { purgeTestRows } from '../helpers/purge-test-rows';
 
 const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -402,6 +403,65 @@ describe('eval report access hardening', () => {
         expect(JSON.stringify(detail.body), t).not.toContain('model');
       }
       await db.delete(reportShares).where(inArray(reportShares.id, rows.map(([, r]) => r.id)));
+    });
+  });
+
+  describe('query counts on batch and list paths', () => {
+    const mkEval = async () => (await as('coachA', 'post', `/api/events/${eventId}/athletes/${u.adult2.id}/eval-report`).send({})).body.report.id as string;
+
+    it('resolves the org role once per distinct organization, not once per eval row', async () => {
+      const [one, ...many] = [await mkEval(), await mkEval(), await mkEval(), await mkEval()];
+      const roleLookups = async (ids: string[]) => {
+        const spy = vi.spyOn(measurementHelpers, 'getOrgRole');
+        const res = await as('coachA', 'post', '/api/reports/bulk-archive').send({ reportIds: ids });
+        const calls = spy.mock.calls.length;
+        spy.mockRestore();
+        expect(res.status).toBe(200);
+        return calls;
+      };
+      const single = await roleLookups([one]);
+      const batch = await roleLookups(many);
+      expect(batch).toBe(single);
+    });
+
+    it('a batch holding an eval from an org the caller cannot write to is refused as a whole, with one lookup per org', async () => {
+      const [mine] = await db.select().from(reports).where(eq(reports.id, rid.adult2));
+      const [foreign] = await db.insert(reports).values({ ...mine, id: undefined, organizationId: orgB, archivedAt: null } as any).returning();
+      const spy = vi.spyOn(measurementHelpers, 'getOrgRole');
+      const res = await as('coachA', 'post', '/api/reports/bulk-archive').send({ reportIds: [rid.adult2, rid.adult, foreign.id] });
+      const orgIds = spy.mock.calls.map((c) => c[1]);
+      spy.mockRestore();
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual(NOT_FOUND);
+      expect(orgIds.filter((o) => o === orgA).length).toBe(1);
+      expect(orgIds.filter((o) => o === orgB).length).toBe(1);
+      const rows = await db.select().from(reports).where(inArray(reports.id, [rid.adult2, rid.adult, foreign.id]));
+      expect(rows.every((r) => r.archivedAt === null)).toBe(true);
+    });
+
+    it('/api/my/reports looks the athlete up once however many eval shares they hold', async () => {
+      const ids = [await mkEval(), await mkEval(), await mkEval()];
+      const shareIds: string[] = [];
+      const selectCount = async () => {
+        const spy = vi.spyOn(db, 'select');
+        const res = await as('adult2', 'get', '/api/my/reports');
+        const calls = spy.mock.calls.length;
+        spy.mockRestore();
+        expect(res.status).toBe(200);
+        return { calls, evals: res.body.reports.filter((r: any) => r.reportType === 'eval').length };
+      };
+      const share = async (reportId: string) => {
+        const [row] = await db.insert(reportShares).values({ reportId, athleteId: u.adult2.id, sharedBy: u.coachA.id, organizationId: orgA } as any).returning();
+        shareIds.push(row.id);
+      };
+      await share(ids[0]);
+      const one = await selectCount();
+      await share(ids[1]);
+      await share(ids[2]);
+      const three = await selectCount();
+      await db.delete(reportShares).where(inArray(reportShares.id, shareIds));
+      expect(three.evals).toBe(one.evals + 2);
+      expect(three.calls).toBe(one.calls);
     });
   });
 
