@@ -50,6 +50,7 @@ import { renderEvalReportPdf } from "../utils/eval-report-pdf";
 import { canAccessEvalRow, hasInaccessibleEval } from "./eval-report-access";
 import { EVAL_REPORT_TYPE, frozenModelSchema } from "@shared/eval-report-config";
 import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
+import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 
 const REPORT_NOT_FOUND = { message: "Report not found" };
 
@@ -171,6 +172,7 @@ const reportLimiter = rateLimit({
   message: { message: "Too many report requests, please try again later." },
   standardHeaders: "draft-7",
   legacyHeaders: false,
+  skip: (req) => shouldSkipRateLimiting(req, 'general'),
   handler: (req, res) => {
     console.warn(`Rate limit exceeded for report endpoints - IP: ${req.ip}, User: ${req.session.user?.id || 'unauthenticated'}`);
     res.status(429).json({ message: "Too many report requests, please try again later." });
