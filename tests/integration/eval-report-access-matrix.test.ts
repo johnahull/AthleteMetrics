@@ -79,13 +79,18 @@ describe('eval report access matrix', () => {
     await mkUser('young', { gender: 'Female', birthDate: bornAbout(11), sports: ['Soccer'], isMinor: false });
     // 13-17 and not flagged isMinor: current behaviour is that the share goes through
     await mkUser('teen', { gender: 'Female', birthDate: bornAbout(15), sports: ['Soccer'], isMinor: false });
+    // 15 and flagged isMinor: sharing is blocked for under-13 only, so this account can receive its eval
+    await mkUser('teenMinor', { gender: 'Female', birthDate: bornAbout(15), sports: ['Soccer'], isMinor: true });
+    // 13 today, 12 at the event, flagged isMinor: age TODAY decides
+    await mkUser('justTurned13', { gender: 'Female', birthDate: bornAbout(13), sports: ['Soccer'], isMinor: true });
+    await mkUser('noDob', { gender: 'Female', sports: ['Soccer'] });
     await mkUser('parentOfOther');
 
     await db.insert(userOrganizations).values([
       { userId: u.coachA.id, organizationId: orgA, role: 'coach' },
       { userId: u.coachB.id, organizationId: orgB, role: 'coach' },
       { userId: u.orgAdminB.id, organizationId: orgB, role: 'org_admin' },
-      ...['adult', 'other', 'young', 'teen'].map((t) => ({ userId: u[t].id, organizationId: orgA, role: 'athlete' })),
+      ...['adult', 'other', 'young', 'teen', 'teenMinor', 'justTurned13', 'noDob'].map((t) => ({ userId: u[t].id, organizationId: orgA, role: 'athlete' })),
     ] as any);
 
     await db.insert(parentAthleteLinks).values([
@@ -100,7 +105,7 @@ describe('eval report access matrix', () => {
     otherEventId = e2.id;
     eventIdB = eb.id;
     const today = now.toISOString().slice(0, 10);
-    for (const t of ['adult', 'other', 'young', 'teen']) {
+    for (const t of ['adult', 'other', 'young', 'teen', 'teenMinor', 'justTurned13', 'noDob']) {
       await db.insert(measurements).values({
         userId: u[t].id, submittedBy: u.coachA.id, date: today, age: 15, metric: 'DASH_10YD',
         value: '2.0', units: 's', isVerified: true, eventId, organizationId: orgA,
@@ -120,10 +125,18 @@ describe('eval report access matrix', () => {
     registerEventReportRoutes(app);
     registerReportRoutes(app);
 
-    for (const t of ['adult', 'other', 'young', 'teen']) {
+    for (const t of ['adult', 'other', 'young', 'teen', 'teenMinor', 'justTurned13', 'noDob']) {
       const res = await as('coachA', 'post', `/api/events/${eventId}/athletes/${u[t].id}/eval-report`).send({ coachNote: 'Private coach note' });
       expect(res.status, t).toBe(201);
       rid[t] = res.body.report.id;
+    }
+    // justTurned13 was 12 on the event date: dated before the 13th birthday, still shareable because age today decides
+    {
+      const [row] = await db.select().from(reports).where(eq(reports.id, rid.justTurned13));
+      const cfg = row.config as any;
+      const [y, m, d] = String(u.justTurned13.birthDate).split('-').map(Number);
+      const at12 = new Date(y + 12, m - 1, d).toISOString().slice(0, 10);
+      await db.update(reports).set({ config: { ...cfg, model: { ...cfg.model, eventDate: at12 } } as any }).where(eq(reports.id, rid.justTurned13));
     }
     // The 'young' eval is dated after the athlete's 13th birthday so that, for the report row, the age-at-event
     // check says "not restricted". Only the current-age check (isUnder13(birthDate)) can then block the share.
@@ -162,6 +175,35 @@ describe('eval report access matrix', () => {
     it('13-17 with isMinor=false: /share succeeds (current behaviour for isMinor=false only)', async () => {
       const res = await as('coachA', 'post', `/api/reports/${rid.teen}/share`).send({ athleteId: u.teen.id });
       expect(res.status).toBe(201);
+    });
+
+    it('15 with isMinor=true: /share is 201 and the athlete sees the eval in /api/my/reports', async () => {
+      const res = await as('coachA', 'post', `/api/reports/${rid.teenMinor}/share`).send({ athleteId: u.teenMinor.id });
+      expect(res.status).toBe(201);
+      const mine = await as('teenMinor', 'get', '/api/my/reports');
+      expect(mine.status).toBe(200);
+      expect(mine.body.reports.find((r: any) => r.reportId === rid.teenMinor)).toBeTruthy();
+    });
+
+    it('bulk-distribute delivers to a 15-year-old flagged isMinor=true', async () => {
+      await db.delete(reportShares).where(eq(reportShares.reportId, rid.teenMinor));
+      const res = await as('coachA', 'post', '/api/reports/bulk-distribute').send({ reportIds: [rid.teenMinor] });
+      expect(res.status).toBe(200);
+      expect(res.body.results.map((r: any) => r.status)).not.toContain('blocked_under_13');
+      expect(await db.select().from(reportShares).where(eq(reportShares.reportId, rid.teenMinor))).toHaveLength(1);
+    });
+
+    it('12 at the event but 13 today (isMinor=true): not blocked, age today decides', async () => {
+      const res = await as('coachA', 'post', `/api/reports/${rid.justTurned13}/share`).send({ athleteId: u.justTurned13.id });
+      expect(res.status).toBe(201);
+    });
+
+    it('no date of birth: blocked on /share and bulk-distribute', async () => {
+      const res = await as('coachA', 'post', `/api/reports/${rid.noDob}/share`).send({ athleteId: u.noDob.id });
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('UNDER_13_SHARE_BLOCKED');
+      const bulk = await as('coachA', 'post', '/api/reports/bulk-distribute').send({ reportIds: [rid.noDob] });
+      expect(bulk.body.results.map((r: any) => r.status)).toEqual(['blocked_under_13']);
     });
   });
 
@@ -307,7 +349,7 @@ describe('eval report access matrix', () => {
     it('drops config.model from eval rows but keeps what the list uses', async () => {
       const res = await as('coachA', 'get', `/api/events/${eventId}/reports`);
       const evals = res.body.filter((r: any) => r.reportType === 'eval');
-      expect(evals.length).toBe(4);
+      expect(evals.length).toBe(7);
       const [full] = await db.select().from(reports).where(eq(reports.id, rid.adult));
       for (const r of evals) {
         expect(r.config.model).toBeUndefined();

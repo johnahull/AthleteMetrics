@@ -48,9 +48,8 @@ import { notificationPreferences } from "@shared/schema";
 import { hexToRgb, isSafeLogoUrl, fetchLogoBase64, sanitizeFilename } from "./report-branding-utils";
 import { renderEvalReportPdf } from "../utils/eval-report-pdf";
 import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
-import { isEvalSnapshotRestricted } from "../services/report-service";
 import { EVAL_REPORT_TYPE } from "@shared/eval-report-config";
-import { isUnder13 } from "@shared/coppa-utils";
+import { calculateAge, isUnder13 } from "@shared/coppa-utils";
 
 /** Organization branding fields used for PDF generation */
 type ReportOrg = Pick<
@@ -1930,7 +1929,7 @@ export function registerReportRoutes(app: Express) {
         if (report.reportType === 'eval' && athleteId !== (report.config as { athleteId?: string })?.athleteId) {
           return res.status(400).json({ message: "An eval report can only be shared with its own athlete" });
         }
-        if (report.reportType === 'eval' && await evalShareBlocked(athleteId, (report.config as any)?.model?.eventDate)) {
+        if (report.reportType === 'eval' && await evalShareBlocked(athleteId)) {
           return res.status(403).json({ code: 'UNDER_13_SHARE_BLOCKED', message: "This eval cannot be shared to the athlete's account; send the PDF to their parent instead" });
         }
 
@@ -2580,7 +2579,7 @@ export function registerReportRoutes(app: Express) {
         }
 
         // Build a map of athleteId -> report for individual reports
-        const reportAthleteMap: Map<string, { reportId: string; reportName: string; athleteId: string; organizationId: string; evalEventDate?: unknown; isEval?: boolean }> = new Map();
+        const reportAthleteMap: Map<string, { reportId: string; reportName: string; athleteId: string; organizationId: string; isEval?: boolean }> = new Map();
         const skippedReports: Array<{ reportId: string; reportName: string; reason: string }> = [];
 
         for (const report of targetReports) {
@@ -2617,7 +2616,7 @@ export function registerReportRoutes(app: Express) {
             reportName: report.name,
             athleteId,
             organizationId: report.organizationId,
-            ...(report.reportType === EVAL_REPORT_TYPE ? { evalEventDate: (report.config as any)?.model?.eventDate, isEval: true } : {}),
+            ...(report.reportType === EVAL_REPORT_TYPE ? { isEval: true } : {}),
           });
         }
 
@@ -2708,7 +2707,7 @@ export function registerReportRoutes(app: Express) {
           }
 
           // AM-FEAT-019: never deliver an eval to an under-13, no-DOB or restricted athlete (no share row, no email/push)
-          if (reportInfo.isEval && await evalShareBlocked(reportInfo.athleteId, reportInfo.evalEventDate)) {
+          if (reportInfo.isEval && await evalShareBlocked(reportInfo.athleteId)) {
             results.push({
               reportId,
               reportName: reportInfo.reportName,
@@ -3192,7 +3191,6 @@ export function registerReportRoutes(app: Express) {
           reportId: reportShares.reportId,
           reportName: reports.name,
           reportType: reports.reportType,
-          evalEventDate: sql<string | null>`${reports.config}->'model'->>'eventDate'`,
           sharedById: reportShares.sharedBy,
           sharedByFirstName: users.firstName,
           sharedByLastName: users.lastName,
@@ -3338,7 +3336,7 @@ export function registerReportRoutes(app: Express) {
         }
 
         // AM-FEAT-019: never return an eval's config/model to an under-13 / no-DOB athlete
-        if (share.reportType === EVAL_REPORT_TYPE && await evalShareBlocked(user.id, (share.reportConfig as any)?.model?.eventDate)) {
+        if (share.reportType === EVAL_REPORT_TYPE && await evalShareBlocked(user.id)) {
           return res.status(404).json({ message: "Shared report not found" });
         }
 
@@ -3975,25 +3973,25 @@ async function hasInaccessibleEval(
 }
 
 /**
- * AM-FEAT-019: an eval is never delivered to an athlete who is under 13 today, has no usable birth date, or whose
- * eval snapshot would be restricted (isMinor, or under 13 at the event date). Fails closed on any error.
- * Single early check per route; P4 (#560) adds its own all-report-types guard to the same routes.
+ * AM-FEAT-019: an eval is never delivered to an athlete account who is under 13 TODAY or whose date of birth is
+ * missing or unusable. Age today decides: neither isMinor nor the age at the event date matters here
+ * (isEvalSnapshotRestricted is a separate control for PUBLIC snapshots). Fails closed on any error.
  */
-async function evalShareBlocked(athleteId: string, eventDate: unknown): Promise<boolean> {
+async function evalShareBlocked(athleteId: string): Promise<boolean> {
   try {
     const [athlete] = await db.select({ birthDate: users.birthDate }).from(users).where(eq(users.id, athleteId)).limit(1);
-    if (!athlete?.birthDate || isUnder13(athlete.birthDate)) return true;
-    return await isEvalSnapshotRestricted(athleteId, eventDate);
+    if (!athlete?.birthDate) return true;
+    return Number.isNaN(calculateAge(athlete.birthDate)) || isUnder13(athlete.birthDate);
   } catch {
     return true;
   }
 }
 
 /** Remove eval shares the athlete may not be shown (see evalShareBlocked). Non-eval rows pass through. */
-async function dropBlockedEvalShares<T extends { reportType: string; evalEventDate: string | null }>(shares: T[], athleteId: string): Promise<T[]> {
+async function dropBlockedEvalShares<T extends { reportType: string }>(shares: T[], athleteId: string): Promise<T[]> {
   const kept: T[] = [];
   for (const share of shares) {
-    if (share.reportType === EVAL_REPORT_TYPE && (await evalShareBlocked(athleteId, share.evalEventDate))) continue;
+    if (share.reportType === EVAL_REPORT_TYPE && (await evalShareBlocked(athleteId))) continue;
     kept.push(share);
   }
   return kept;
