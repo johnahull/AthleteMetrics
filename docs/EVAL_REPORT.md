@@ -4,7 +4,7 @@ A coach opens an evaluation event, picks an athlete, chooses metrics and section
 
 Design record and reasons: `docs/adr/ADR-002-eval-report-v2.md`. Open items: `docs/EVAL_REPORT_FOLLOWUPS.md`.
 
-Scope of this tree: P1, P2, P3a-c and P5. COPPA retention (P3d, `feature/eval-report-p3d-coppa-retention`) and the all-report-types under-13 guard (P4, #560, `feature/eval-report-p4-under13`) are separate PRs; items below that depend on them say so.
+Scope of this tree: P1, P2, P3a-d and P5. The all-report-types under-13 guard (P4, #560, `feature/eval-report-p4-under13`) is a separate PR, not in this tree.
 
 ## What it does
 
@@ -101,7 +101,7 @@ The PDF is served by `GET`/`POST /api/reports/:id/pdf` (`sendEvalReportPdf`) and
 
 ## Testing
 
-Commands below are the repo scripts with a path filter; they were not run while writing this guide.
+Commands below are the repo scripts with a path filter; they were not run while writing this guide. The unit paths are matched by the `include` patterns in `vitest.unit.config.ts` (`packages/api/**/__tests__/**`, `packages/shared/__tests__/**`), and the integration paths by `tests/integration/**` in `vitest.integration.config.ts`.
 
 ```bash
 # Unit: domain modules, config schemas, PDF block positions, web helpers
@@ -111,7 +111,7 @@ npm run test:unit -- packages/api/services/eval-report packages/api/services/__t
 
 # Integration (needs a Postgres in .env.local)
 npm run test:integration -- tests/integration/eval-report-routes.test.ts tests/integration/eval-report-access.test.ts \
-  tests/integration/eval-report-pdf.test.ts tests/integration/eval-templates.test.ts
+  tests/integration/eval-report-pdf.test.ts tests/integration/eval-templates.test.ts tests/integration/coppa-eval-reports.test.ts
 
 # E2E (local; see below)
 npx playwright test tests/e2e/eval-report.spec.ts --config=playwright.testing.config.ts
@@ -154,4 +154,8 @@ Before a release that touches reports or eval, confirm **athletes (and other org
 - `evalShareBlocked` and `dropBlockedEvalShares` for what an athlete is shown.
 - Run `tests/integration/eval-report-access.test.ts`.
 
-Any new route that touches reports must gate eval rows with `canAccessEvalRow`. Also confirm P3d (COPPA deletion, export, profile merge) has merged before eval rows exist for under-13 athletes, and that P4 is merged for the all-report-types share guard.
+Any new route that touches reports must gate eval rows with `canAccessEvalRow`. Also confirm P4 is merged for the all-report-types share guard.
+
+## COPPA retention (P3d)
+
+Eval rows name the athlete only in `config.athleteId` (no foreign key), so the user cascade never reaches them. `coppa-deletion-service.ts` step 4c deletes them (snapshots and shares cascade), `coppa-export-service.ts` includes them in the `evalReports` export section, and `profile-merge-service.ts` step 8b re-points `config.athleteId` on merge (`summary.evalReportsTransferred`). All three select by athlete id across organizations. Test: `tests/integration/coppa-eval-reports.test.ts`. Normal (non-COPPA) user deletion does not remove eval rows.

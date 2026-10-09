@@ -635,7 +635,7 @@ Coach-generated, family-facing PDF for one athlete at one evaluation event. Each
 - `packages/shared/eval-report-config.ts`, `packages/shared/eval-template-schemas.ts` - Zod schemas
 - `migrations/0153_add_eval_report_templates.sql` - number provisional; renumber at merge
 - Web: `packages/web/src/components/events/EvalReportDialog.tsx`, `EventEvalReportsCard.tsx`, `EvalTemplatePicker.tsx`, `SaveEvalTemplateDialog.tsx`, `components/reports/EvalReportView.tsx`
-- COPPA: P3d (deletion, export, profile merge) and P4 (all-report-types under-13 share guard, #560) are separate PRs
+- COPPA: `coppa-deletion-service.ts` (step 4c), `coppa-export-service.ts` (`evalReports`) and `profile-merge-service.ts` (step 8b) cover eval rows (test: `tests/integration/coppa-eval-reports.test.ts`); P4 (all-report-types under-13 share guard, #560) is a separate PR
 
 **Docs:** `docs/EVAL_REPORT.md` (guide, API, testing, troubleshooting, release gate), `docs/adr/ADR-002-eval-report-v2.md` (decisions), `docs/EVAL_REPORT_FOLLOWUPS.md` (open items). The eval E2E (`tests/e2e/eval-report.spec.ts`) is run locally until the E2E suite is green (#490).
 
