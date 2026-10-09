@@ -237,9 +237,19 @@ describe('eval report access hardening', () => {
       for (const key of outsiders) {
         const res = await as(key, 'delete', `/api/reports/${rid.adult}/snapshots/${snap.body.id}`);
         expect(res.status, key).toBe(404);
+        expect(res.body, key).toEqual(NOT_FOUND);
       }
       const [row] = await db.select().from(reportSnapshots).where(eq(reportSnapshots.id, snap.body.id));
       expect(row.isActive).toBe(true);
+    });
+
+    it('DELETE of an unknown snapshot id gives the same 404 body as a hidden eval (no existence oracle)', async () => {
+      const unknown = '00000000-0000-4000-8000-000000000000';
+      for (const key of [...outsiders, ...writers]) {
+        const res = await as(key, 'delete', `/api/reports/${rid.adult}/snapshots/${unknown}`);
+        expect(res.status, key).toBe(404);
+        expect(res.body, key).toEqual(NOT_FOUND);
+      }
     });
   });
 

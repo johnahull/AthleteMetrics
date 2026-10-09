@@ -182,6 +182,8 @@ export async function isEvalSnapshotRestricted(athleteId: unknown, eventDate: un
       .where(eq(users.id, athleteId))
       .limit(1);
     if (!athlete || athlete.isMinor === true || !athlete.birthDate) return true;
+    // Deliberately a LOCAL calendar date: wasUnder13At parses the birth date as a LOCAL calendar date too
+    // (coppa-utils.ts), so both sides share the same calendar semantics. Do not switch only one of them to UTC.
     const [y, m, d] = eventDate.split('-').map(Number);
     const eventAt = new Date(y, m - 1, d);
     if (Number.isNaN(eventAt.getTime())) return true;
