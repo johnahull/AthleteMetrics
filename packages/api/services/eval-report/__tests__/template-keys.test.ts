@@ -8,8 +8,8 @@ describe('template key resolution', () => {
     expect(resolveTemplateKey('505_LEFT')).toBe('AGILITY_505_YD_L');
   });
   it('resolves the template-only logical keys', () => {
-    expect(resolveTemplateKey('BODY_HEIGHT')).toBe('HEIGHT');
-    expect(resolveTemplateKey('BODY_WEIGHT')).toBe('WEIGHT');
+    expect(resolveTemplateKey('BODY_HEIGHT')).toBe('HEIGHT_IN');
+    expect(resolveTemplateKey('BODY_WEIGHT')).toBe('WEIGHT_LBS');
     expect(resolveTemplateKey('HANDS_FREE_JUMP')).toBe('VERTICAL_JUMP');
     expect(resolveTemplateKey('PATTERN_LIN_ACCEL')).toBe('MQ_LIN_ACCEL');
     expect(resolveTemplateKey('TRANSITION_LAT_LINEAR')).toBe('MQ_TRANS_LAT_LINEAR');

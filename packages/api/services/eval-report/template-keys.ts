@@ -7,8 +7,8 @@ import { EVAL_METRIC_CODES } from "./metric-key-map";
  */
 export const TEMPLATE_METRIC_CODES: Readonly<Record<string, string>> = {
   ...EVAL_METRIC_CODES,
-  BODY_HEIGHT: "HEIGHT",
-  BODY_WEIGHT: "WEIGHT",
+  BODY_HEIGHT: "HEIGHT_IN",
+  BODY_WEIGHT: "WEIGHT_LBS",
   HANDS_FREE_JUMP: "VERTICAL_JUMP",
   RSI_LEFT: "RSI_L",
   RSI_RIGHT: "RSI_R",
