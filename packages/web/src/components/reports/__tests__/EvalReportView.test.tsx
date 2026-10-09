@@ -99,6 +99,18 @@ describe('EvalReportView', () => {
     expect(screen.queryByText('What we saw')).not.toBeInTheDocument();
   });
 
+  it('puts the coach note first when the selection says note first (middle school)', () => {
+    const headings = (m: EvalReportModelView) => {
+      const { unmount } = render(<EvalReportBody model={m} />);
+      const text = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+      unmount();
+      return text;
+    };
+    expect(headings({ ...model, selection: { noteFirst: true } })[0]).toBe('What we saw');
+    const last = headings(model);
+    expect(last[last.length - 1]).toBe('What we saw');
+  });
+
   it('downloads the PDF through GET /api/reports/:id/pdf', async () => {
     (exportEventReportPDF as any).mockResolvedValue(new Blob(['%PDF-'], { type: 'application/pdf' }));
     (window.URL as any).createObjectURL = vi.fn(() => 'blob:x');

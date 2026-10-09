@@ -1197,6 +1197,8 @@ export function useUpdateResultsVisibility() {
  * Event measurement with user details for display
  */
 export interface EventMeasurementWithDetails extends Measurement {
+  /** The athlete, as returned by GET /api/events/:eventId/measurements */
+  user?: { id: string; fullName?: string; firstName?: string; lastName?: string };
   userFullName?: string;
   userEmail?: string;
   metricLabel?: string;

@@ -70,6 +70,18 @@ export function EvalReportBody({ model }: { model: EvalReportModelView }) {
   const showNote = sel?.coachNote !== false && !!model.coachNote;
   const athlete = model.athlete;
 
+  const noteCard = showNote && (
+    <Card>
+      <CardHeader>
+        <SectionHeading>What we saw</SectionHeading>
+      </CardHeader>
+      {/* React escapes the coach's free text */}
+      <CardContent className="whitespace-pre-wrap text-sm">{model.coachNote}</CardContent>
+    </Card>
+  );
+  // The middle school preset puts the coach's note first
+  const noteFirst = sel?.noteFirst === true;
+
   return (
     <div className="space-y-6" data-testid="eval-report-body">
       <Card>
@@ -93,6 +105,8 @@ export function EvalReportBody({ model }: { model: EvalReportModelView }) {
           </p>
         </CardHeader>
       </Card>
+
+      {noteFirst && noteCard}
 
       <Card>
         <CardHeader>
@@ -181,15 +195,7 @@ export function EvalReportBody({ model }: { model: EvalReportModelView }) {
         </Card>
       )}
 
-      {showNote && (
-        <Card>
-          <CardHeader>
-            <SectionHeading>What we saw</SectionHeading>
-          </CardHeader>
-          {/* React escapes the coach's free text */}
-          <CardContent className="whitespace-pre-wrap text-sm">{model.coachNote}</CardContent>
-        </Card>
-      )}
+      {!noteFirst && noteCard}
     </div>
   );
 }

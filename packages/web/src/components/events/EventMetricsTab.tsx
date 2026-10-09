@@ -35,12 +35,15 @@ import {
   Lock,
   AlertCircle,
 } from "lucide-react";
+import { SaveEvalTemplateDialog } from "./SaveEvalTemplateDialog";
 import type { EventMetric, SiteMetric } from "@shared/schema";
 
 interface EventMetricsTabProps {
   eventId: string;
   organizationId?: string;
   isFrozen?: boolean;
+  /** Coach, org admin or site admin: shows "Save metrics as template" */
+  canSaveTemplate?: boolean;
 }
 
 // Extended metric type with details from site_metrics
@@ -50,7 +53,7 @@ interface EventMetricWithDetails extends EventMetric {
   units?: string;
 }
 
-export function EventMetricsTab({ eventId, organizationId, isFrozen = false }: EventMetricsTabProps) {
+export function EventMetricsTab({ eventId, organizationId, isFrozen = false, canSaveTemplate = false }: EventMetricsTabProps) {
   const { toast } = useToast();
   const [selectedMetric, setSelectedMetric] = useState<string>("");
 
@@ -195,6 +198,12 @@ export function EventMetricsTab({ eventId, organizationId, isFrozen = false }: E
               {typedEventMetrics.length > 0 && ` ${typedEventMetrics.length} metrics configured.`}
             </CardDescription>
           </div>
+          <SaveEvalTemplateDialog
+            eventId={eventId}
+            organizationId={organizationId}
+            canSave={canSaveTemplate}
+            hasMetrics={typedEventMetrics.length > 0}
+          />
         </div>
       </CardHeader>
       <CardContent className="space-y-6">

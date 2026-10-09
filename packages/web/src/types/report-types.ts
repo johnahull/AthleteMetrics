@@ -184,11 +184,17 @@ export interface EvalReportModelView {
   limiter?: string | null;
   coachNote: string | null;
   selection?: {
+    preset?: "middle_school" | "high_school" | "senior";
+    /** Logical keys, or metric codes for measured metrics outside the key map */
+    metricKeys?: string[];
     collegeGauge?: boolean;
+    headline?: boolean;
+    noteFirst?: boolean;
     freshAndHealthy?: boolean;
     coachNote?: boolean;
     strengths?: boolean;
     retestTrend?: boolean;
+    radar?: boolean;
   };
 }
 

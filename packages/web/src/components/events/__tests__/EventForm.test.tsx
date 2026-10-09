@@ -38,6 +38,15 @@ vi.mock('../MetricsSelector', () => ({
   ),
 }));
 
+// Mock the eval template picker (AM-FEAT-019 P5)
+vi.mock('../EvalTemplatePicker', () => ({
+  EvalTemplatePicker: ({ onChange }: { onChange: (v: unknown) => void }) => (
+    <button type="button" onClick={() => onChange({ templateId: 'tpl-1', includeOptional: ['STRENGTH_SQUAT'] })}>
+      Pick template
+    </button>
+  ),
+}));
+
 // Create wrapper with providers
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -259,6 +268,40 @@ describe('EventForm', () => {
       render(<EventForm {...defaultProps} />, { wrapper: createWrapper() });
 
       expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
+    });
+  });
+
+  describe('Eval template', () => {
+    async function goToMetricsStep(user: ReturnType<typeof userEvent.setup>) {
+      await user.type(screen.getByLabelText(/event name/i), 'Test Event');
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      await user.type(screen.getByLabelText(/start date/i), tomorrow.toISOString().split('T')[0]);
+      await user.click(screen.getByRole('button', { name: /next/i }));
+      await waitFor(() => expect(screen.getByText('Registration Settings')).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /next/i }));
+      await waitFor(() => expect(screen.getByText('Event Metrics')).toBeInTheDocument());
+    }
+
+    it('offers the template picker on the metrics step when creating', async () => {
+      const user = userEvent.setup();
+      render(<EventForm {...defaultProps} />, { wrapper: createWrapper() });
+      await goToMetricsStep(user);
+      expect(screen.getByRole('button', { name: 'Pick template' })).toBeInTheDocument();
+    });
+
+    it('passes the chosen template with the submitted form data', async () => {
+      const user = userEvent.setup();
+      const onSubmit = vi.fn();
+      render(<EventForm {...defaultProps} onSubmit={onSubmit} />, { wrapper: createWrapper() });
+      await goToMetricsStep(user);
+      await user.click(screen.getByRole('button', { name: 'Pick template' }));
+      await user.click(screen.getByRole('button', { name: /next/i }));
+      await waitFor(() => expect(screen.getByText('Results Visibility')).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /create event|publish/i }));
+
+      await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+      expect(onSubmit.mock.calls[0][0].evalTemplate).toEqual({ templateId: 'tpl-1', includeOptional: ['STRENGTH_SQUAT'] });
     });
   });
 

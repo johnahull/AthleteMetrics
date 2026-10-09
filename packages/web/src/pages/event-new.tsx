@@ -9,6 +9,8 @@ import { useCreateEvent, addEventMetric } from "@/lib/events-api";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { EventForm, type EventFormData } from "@/components/events";
+import { applyEvalTemplate, apiErrorMessage } from "@/hooks/use-eval-report";
+import { describeTemplateResult, templateFailureTitle } from "@/lib/eval-template-labels";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
@@ -48,8 +50,8 @@ export default function EventNew() {
 
   const handleSubmit = async (data: EventFormData, isDraft: boolean) => {
     try {
-      // Extract selectedMetrics from form data
-      const { selectedMetrics, ...formData } = data;
+      // Extract selectedMetrics and the optional eval template from form data
+      const { selectedMetrics, evalTemplate, ...formData } = data;
 
       const status: EventStatus = isDraft ? "draft" : "published";
       const eventData = {
@@ -84,11 +86,36 @@ export default function EventNew() {
         }
       }
 
+      // Then apply the chosen eval template (required tests, plus any optional ones that were ticked)
+      let templateNote = "";
+      if (evalTemplate) {
+        try {
+          const applied = describeTemplateResult(
+            await applyEvalTemplate(event.id, {
+              templateId: evalTemplate.templateId,
+              includeOptional: evalTemplate.includeOptional,
+            })
+          );
+          templateNote = ` ${applied.title}: ${applied.description}`;
+        } catch (templateError) {
+          // One toast at a time: report the event as saved, and why the template was not applied
+          toast({
+            variant: "destructive",
+            title: templateFailureTitle(isDraft),
+            description: apiErrorMessage(templateError, "The template could not be applied."),
+          });
+          navigate(`/events/${event.id}`);
+          return;
+        }
+      }
+
       toast({
         title: isDraft ? "Draft Saved" : "Event Created",
-        description: isDraft
-          ? "Your event has been saved as a draft."
-          : `Your event has been ${selectedMetrics?.length ? `created with ${selectedMetrics.length} metrics` : "published"}.`,
+        description: `${
+          isDraft
+            ? "Your event has been saved as a draft."
+            : `Your event has been ${selectedMetrics?.length ? `created with ${selectedMetrics.length} metrics` : "published"}.`
+        }${templateNote}`,
       });
 
       // Navigate to the event detail page

@@ -35,7 +35,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { EventStatusBadge, EventMetricsTab, EventResultsTab, EventReportsTab, CheckInTab, InviteAthletesModal } from "@/components/events";
+import { EventStatusBadge, EventMetricsTab, EventResultsTab, EventReportsTab, EventEvalReportsCard, CheckInTab, InviteAthletesModal } from "@/components/events";
 import {
   ArrowLeft,
   Calendar,
@@ -812,6 +812,7 @@ export default function EventDetail() {
             eventId={eventId!}
             organizationId={event.organizationId || undefined}
             isFrozen={event.isFrozen}
+            canSaveTemplate={canManageEvent}
           />
         </TabsContent>
         )}
@@ -832,7 +833,12 @@ export default function EventDetail() {
 
         {/* Reports Tab - Admin Only */}
         {canManageEvent && (
-        <TabsContent value="reports">
+        <TabsContent value="reports" className="space-y-6">
+          <EventEvalReportsCard
+            eventId={eventId!}
+            organizationId={event.organizationId || undefined}
+            canManage={canManageEvent}
+          />
           <EventReportsTab
             eventId={eventId!}
             eventName={event.name}
