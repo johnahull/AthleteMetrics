@@ -38,7 +38,7 @@ export const ChartSkeleton = React.memo(function ChartSkeleton({
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="flex items-center space-x-2">
+              <div key={i} className="flex items-center gap-x-2">
                 <div className="w-4 h-4 bg-gray-200 rounded"></div>
                 <div className="w-3 h-3 bg-gray-200 rounded-full"></div>
                 <div className="h-3 bg-gray-200 rounded flex-1"></div>
@@ -107,7 +107,7 @@ export const ChartSkeleton = React.memo(function ChartSkeleton({
               <div className="h-4 bg-gray-200 rounded w-24 mb-2"></div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="flex items-center space-x-2">
+                  <div key={i} className="flex items-center gap-x-2">
                     <div className="w-4 h-3 bg-gray-200 rounded"></div>
                     <div className="h-3 bg-gray-200 rounded flex-1"></div>
                   </div>
@@ -120,7 +120,7 @@ export const ChartSkeleton = React.memo(function ChartSkeleton({
               <div className="h-4 bg-gray-200 rounded w-32 mb-2"></div>
               <div className="space-y-2">
                 {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="flex items-center space-x-3">
+                  <div key={i} className="flex items-center gap-x-3">
                     <div className="w-8 h-2 bg-gray-200 rounded"></div>
                     <div className="h-3 bg-gray-200 rounded flex-1"></div>
                   </div>

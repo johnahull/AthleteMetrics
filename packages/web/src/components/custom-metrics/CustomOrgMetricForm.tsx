@@ -387,7 +387,7 @@ export function CustomOrgMetricForm({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Sport Associations</FormLabel>
-                        <FormDescription className="mb-2">
+                        <FormDescription>
                           Select sports that commonly use this metric
                         </FormDescription>
                         <div className="flex flex-wrap gap-2">
@@ -567,7 +567,7 @@ export function CustomOrgMetricForm({
                     name="isDerived"
                     render={({ field }) => (
                       <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                        <div className="space-y-0.5">
+                        <div className="grid gap-y-0.5">
                           <FormLabel className="text-base">Derived Metric</FormLabel>
                           <FormDescription>
                             Calculate this metric from other metrics using a formula

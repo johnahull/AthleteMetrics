@@ -16,6 +16,7 @@ import {
   type InsertMeasurement,
   type SiteMetric,
   type CustomOrgMetric,
+  type DerivedCalculationConfig,
   events,
 } from '@shared/schema';
 import { eq, and, gte, lte, sql, or, desc, asc, inArray } from 'drizzle-orm';
@@ -283,8 +284,12 @@ export class DerivedMetricCalculator {
     measurement: Measurement,
     triggerContext?: TriggerContext
   ): Promise<Measurement[]> {
+    // Anchored metrics whose anchor is not this measurement's metric (e.g. a weight feeding a
+    // fly-anchored momentum) derive onto other dates: handled after the commit below.
+    let hasDeferredAnchored = false;
+
     // RACE CONDITION FIX: Wrap entire operation in transaction
-    return await this.db.transaction(async (tx) => {
+    const calculated = await this.db.transaction(async (tx) => {
       // Find all active derived site metrics
       const siteDerivedMetrics = await tx
         .select()
@@ -334,7 +339,7 @@ export class DerivedMetricCalculator {
         code: string;
         formula: string | null;
         dependentMetrics: string[] | null;
-        calculationConfig: { dateMatchStrategy: 'same_date' | 'latest_before' | 'closest'; maxDateDifference?: number; missingSourceBehavior: 'skip' | 'error'; sourceSelection?: 'latest_event' } | null;
+        calculationConfig: DerivedCalculationConfig | null;
         unit: string | null;
         isCustomOrg: boolean;
       };
@@ -386,6 +391,11 @@ export class DerivedMetricCalculator {
       // Sorted so concurrent calculations take the per-metric advisory locks in the same order
       allDependentDerivedMetrics.sort((a, b) => a.code.localeCompare(b.code));
       for (const derivedMetric of allDependentDerivedMetrics) {
+        const anchor = derivedMetric.calculationConfig?.anchorMetric?.toUpperCase();
+        if (anchor && anchor !== measurementMetricUpper) {
+          hasDeferredAnchored = true;
+          continue;
+        }
         try {
           const createdMeasurement = await this.computeAndUpsertDerived(
             tx,
@@ -413,6 +423,20 @@ export class DerivedMetricCalculator {
 
       return calculatedMeasurements;
     });
+
+    if (hasDeferredAnchored) {
+      // Each anchor date is written in its own savepoint, after this measurement committed
+      await this.recalculateForAthleteInternal(
+        this.db,
+        measurement.userId,
+        measurement.metric,
+        measurement.date,
+        triggerContext || { event: 'measurement_insert' },
+        measurement.organizationId,
+        true
+      );
+    }
+    return calculated;
   }
 
   /**
@@ -444,7 +468,7 @@ export class DerivedMetricCalculator {
       code: string;
       formula: string | null;
       dependentMetrics: string[] | null;
-      calculationConfig: { dateMatchStrategy: 'same_date' | 'latest_before' | 'closest'; maxDateDifference?: number; missingSourceBehavior: 'skip' | 'error'; sourceSelection?: 'latest_event' } | null;
+      calculationConfig: DerivedCalculationConfig | null;
       unit: string | null;
     },
     userId: string,
@@ -506,6 +530,29 @@ export class DerivedMetricCalculator {
       // Direct measurements take priority - skip calculation; when recalculating,
       // also remove a calculated row that coexists with the direct one.
       return deleteExisting();
+    }
+
+    // Anchored metric (e.g. MOMENTUM): only exists on dates with a verified direct
+    // measurement of the anchor metric. Without one (anchor deleted, moved, unverified,
+    // or the date is a non-anchor source's date) there is nothing to derive on this date.
+    const anchorMetric = derivedMetric.calculationConfig?.anchorMetric?.toUpperCase();
+    if (anchorMetric) {
+      const [anchorRow] = await tx
+        .select({ id: measurements.id })
+        .from(measurements)
+        .where(
+          and(
+            eq(measurements.userId, userId),
+            eq(measurements.metric, anchorMetric),
+            eq(measurements.date, date),
+            eq(measurements.isVerified, true),
+            eq(measurements.isCalculated, false)
+          )
+        )
+        .limit(1);
+      if (!anchorRow) {
+        return deleteExisting();
+      }
     }
 
     // Find source measurements for the formula
@@ -727,7 +774,8 @@ export class DerivedMetricCalculator {
     metricCode: string | string[],
     date?: string,
     triggerContext?: TriggerContext,
-    triggeringOrganizationId?: string | null
+    triggeringOrganizationId?: string | null,
+    anchoredOnly = false
   ): Promise<void> {
     // Find all derived site metrics that depend on this source metric
     const siteDerivedMetrics = await dbOrTx
@@ -788,7 +836,7 @@ export class DerivedMetricCalculator {
       code: string;
       formula: string | null;
       dependentMetrics: string[] | null;
-      calculationConfig: { dateMatchStrategy: 'same_date' | 'latest_before' | 'closest'; maxDateDifference?: number; missingSourceBehavior: 'skip' | 'error'; sourceSelection?: 'latest_event' } | null;
+      calculationConfig: DerivedCalculationConfig | null;
       unit: string | null;
       organizationId?: string;
     };
@@ -811,6 +859,16 @@ export class DerivedMetricCalculator {
         organizationId: m.organizationId,
       })),
     ];
+
+    if (anchoredOnly) {
+      for (let i = allDependentDerivedMetrics.length - 1; i >= 0; i--) {
+        // Only anchored metrics whose anchor is NOT the trigger: the rest were already computed
+        const anchor = allDependentDerivedMetrics[i].calculationConfig?.anchorMetric?.toUpperCase();
+        if (!anchor || metricCodesUpper.has(anchor)) {
+          allDependentDerivedMetrics.splice(i, 1);
+        }
+      }
+    }
 
     if (allDependentDerivedMetrics.length === 0) {
       return;
@@ -839,7 +897,7 @@ export class DerivedMetricCalculator {
         // sources now form a complete set), else every date with a calculated row.
         let dates: string[];
         if (date) {
-          dates = [date];
+          dates = await this.expandTargetDates(dbOrTx, userId, derivedMetric, metricCodesUpper, date);
         } else {
           const calculatedMeasurements = await dbOrTx
             .select({ date: measurements.date })
@@ -860,13 +918,25 @@ export class DerivedMetricCalculator {
         const allowCreate =
           !derivedMetric.organizationId || derivedMetric.organizationId === triggeringOrganizationId;
         for (const targetDate of dates) {
-          await dbOrTx.transaction((tx) =>
-            this.computeAndUpsertDerived(
-              tx, derivedMetric, userId, targetDate, metricConfigsMap, triggerContext, undefined, true, allowCreate
-            )
-          );
+          // One failing date must not skip the later ones; it is recorded against its own date
+          try {
+            await dbOrTx.transaction((tx) =>
+              this.computeAndUpsertDerived(
+                tx, derivedMetric, userId, targetDate, metricConfigsMap, triggerContext, undefined, true, allowCreate
+              )
+            );
+          } catch (error) {
+            console.error(`Error recalculating derived metric ${derivedMetric.code}:`, {
+              userId,
+              metric: derivedMetric.code,
+              date: targetDate,
+              error,
+            });
+            this.failures.push({ metric: derivedMetric.code, date: targetDate, userId });
+          }
         }
       } catch (error) {
+        // Failure before any date was attempted (e.g. listing the target dates)
         console.error(`Error recalculating derived metric ${derivedMetric.code}:`, {
           userId,
           metric: derivedMetric.code,
@@ -879,6 +949,60 @@ export class DerivedMetricCalculator {
   }
 
   /**
+   * Dates to recalculate when `triggerMetrics` changed on `triggerDate`.
+   * Normally just the trigger date. For an anchored derived metric whose anchor is not the
+   * trigger (e.g. a weight edit feeding a fly-anchored momentum), the derived value lives on
+   * the anchor's dates: every verified direct anchor date and existing calculated date within
+   * maxDateDifference of the trigger date, ascending (consistent advisory-lock order).
+   */
+  private async expandTargetDates(
+    dbOrTx: typeof dbType | DbTransaction,
+    userId: string,
+    derivedMetric: { code: string; dependentMetrics: string[] | null; calculationConfig: DerivedCalculationConfig | null },
+    triggerMetrics: Set<string>,
+    triggerDate: string
+  ): Promise<string[]> {
+    const config = derivedMetric.calculationConfig;
+    const anchorMetric = config?.anchorMetric?.toUpperCase();
+    // Only a non-anchor source changing moves the derived value onto other dates
+    const nonAnchorTriggered = (derivedMetric.dependentMetrics ?? []).some((d) => {
+      const code = d.toUpperCase();
+      return code !== anchorMetric && triggerMetrics.has(code);
+    });
+    if (!anchorMetric || !nonAnchorTriggered) {
+      return [triggerDate];
+    }
+
+    const maxDays = config?.maxDateDifference ?? 7;
+    const center = Date.parse(`${triggerDate}T00:00:00Z`);
+    const dayMs = 24 * 60 * 60 * 1000;
+    const minDate = new Date(center - maxDays * dayMs).toISOString().split('T')[0];
+    const maxDate = new Date(center + maxDays * dayMs).toISOString().split('T')[0];
+
+    const rows = await dbOrTx
+      .selectDistinct({ date: measurements.date })
+      .from(measurements)
+      .where(
+        and(
+          eq(measurements.userId, userId),
+          gte(measurements.date, minDate),
+          lte(measurements.date, maxDate),
+          or(
+            and(
+              eq(measurements.metric, anchorMetric),
+              eq(measurements.isVerified, true),
+              eq(measurements.isCalculated, false)
+            ),
+            and(eq(measurements.metric, derivedMetric.code), eq(measurements.isCalculated, true))
+          )
+        )
+      );
+    // The trigger date needs no special case: a verified anchor on it, or the (now stale) derived
+    // row left there by a deleted or moved anchor, is already among the rows.
+    return Array.from(new Set(rows.map(r => r.date))).sort();
+  }
+
+  /**
    * Find source measurements using a specific db or transaction context.
    * Used by recalculateForAthleteInternal to support both transaction and non-transaction modes.
    */
@@ -887,12 +1011,7 @@ export class DerivedMetricCalculator {
     userId: string,
     dependentMetrics: string[],
     targetDate: string,
-    config: {
-      dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
-      maxDateDifference?: number;
-      missingSourceBehavior: 'skip' | 'error';
-      sourceSelection?: 'latest_event';
-    },
+    config: DerivedCalculationConfig,
     metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
     return this.findSourceMeasurementsImpl(dbOrTx, userId, dependentMetrics, targetDate, config, metricConfigs);
@@ -928,12 +1047,7 @@ export class DerivedMetricCalculator {
     userId: string,
     dependentMetrics: string[],
     targetDate: string,
-    config: {
-      dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
-      maxDateDifference?: number;
-      missingSourceBehavior: 'skip' | 'error';
-      sourceSelection?: 'latest_event';
-    },
+    config: DerivedCalculationConfig,
     metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
     return this.findSourceMeasurements(userId, dependentMetrics, targetDate, config, metricConfigs);
@@ -948,12 +1062,7 @@ export class DerivedMetricCalculator {
     userId: string,
     dependentMetrics: string[],
     targetDate: string,
-    config: {
-      dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
-      maxDateDifference?: number;
-      missingSourceBehavior: 'skip' | 'error';
-      sourceSelection?: 'latest_event';
-    },
+    config: DerivedCalculationConfig,
     metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
     return this.findSourceMeasurementsImpl(tx, userId, dependentMetrics, targetDate, config, metricConfigs);
@@ -967,12 +1076,7 @@ export class DerivedMetricCalculator {
     userId: string,
     dependentMetrics: string[],
     targetDate: string,
-    config: {
-      dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
-      maxDateDifference?: number;
-      missingSourceBehavior: 'skip' | 'error';
-      sourceSelection?: 'latest_event';
-    },
+    config: DerivedCalculationConfig,
     metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
     return this.findSourceMeasurementsImpl(this.db, userId, dependentMetrics, targetDate, config, metricConfigs);
@@ -1095,12 +1199,7 @@ export class DerivedMetricCalculator {
     userId: string,
     dependentMetrics: string[],
     targetDate: string,
-    config: {
-      dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
-      maxDateDifference?: number;
-      missingSourceBehavior: 'skip' | 'error';
-      sourceSelection?: 'latest_event';
-    },
+    config: DerivedCalculationConfig,
     metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
     if (config.sourceSelection === 'latest_event' && config.dateMatchStrategy === 'same_date') {
@@ -1118,6 +1217,9 @@ export class DerivedMetricCalculator {
       // Default to true (higher is better) if not specified
       const higherIsBetter = metricConfigs?.get(normalizedMetricCode)?.higherIsBetter ?? true;
 
+      // An anchored metric is only computed on dates with a verified direct anchor measurement
+      // (the gate in computeAndUpsertDerived), and 'closest' returns a same-date match first, so
+      // the anchor needs no special-casing here.
       switch (config.dateMatchStrategy) {
         case 'same_date':
           // Only use exact date matches
@@ -1549,7 +1651,10 @@ export class DerivedMetricCalculator {
 
         // Get the primary dependent metric (first one) to find potential source data
         // Normalize to uppercase to match database metric codes
-        const primaryDepMetric = derivedMetric.dependentMetrics[0].toUpperCase();
+        // (an anchored metric is only derived on its anchor metric's dates)
+        const primaryDepMetric = (
+          derivedMetric.calculationConfig?.anchorMetric ?? derivedMetric.dependentMetrics[0]
+        ).toUpperCase();
 
         // Find all unique (userId, date) combinations with the primary source metric
         // that don't already have a derived measurement

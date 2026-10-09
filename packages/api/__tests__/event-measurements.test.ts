@@ -20,6 +20,7 @@ import {
 } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { EventMeasurementsService } from "../services/event-measurements-service";
+import { purgeTestRows } from "../../../tests/helpers/purge-test-rows";
 
 describe("Event Measurements Service", () => {
   const timestamp = Date.now().toString();
@@ -133,10 +134,9 @@ describe("Event Measurements Service", () => {
     await db.delete(eventRegistrations).where(eq(eventRegistrations.eventId, testEventId));
     await db.delete(events).where(eq(events.id, testEventId));
     await db.delete(events).where(eq(events.id, frozenEventId));
-    await db.delete(userOrganizations).where(eq(userOrganizations.organizationId, testOrgId));
-    await db.delete(users).where(eq(users.id, testOrgAdminId));
-    await db.delete(users).where(eq(users.id, testAthleteId));
-    await db.delete(organizations).where(eq(organizations.id, testOrgId));
+    // Derived (calculated) measurements, e.g. TOP_SPEED_CALC, carry no eventId and are written asynchronously,
+    // so they survive the eventId-based deletes above; purgeTestRows removes them by user and organization.
+    await purgeTestRows({ userIds: [testOrgAdminId, testAthleteId], orgIds: [testOrgId] });
   });
 
   afterEach(async () => {

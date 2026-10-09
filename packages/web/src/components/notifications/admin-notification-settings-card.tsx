@@ -231,7 +231,7 @@ export function AdminNotificationSettingsCard() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
+            <div className="grid gap-y-0.5">
               <Label htmlFor="global-push">Enable Push Notifications</Label>
               <p className="text-sm text-muted-foreground">
                 Master kill switch for all push notifications platform-wide
@@ -402,7 +402,7 @@ export function AdminNotificationSettingsCard() {
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
-                <div className="space-y-2">
+                <div className="grid gap-y-2">
                   <Label htmlFor="broadcast-title">Title</Label>
                   <Input
                     id="broadcast-title"
@@ -412,7 +412,7 @@ export function AdminNotificationSettingsCard() {
                     maxLength={100}
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="grid gap-y-2">
                   <Label htmlFor="broadcast-body">Message</Label>
                   <Textarea
                     id="broadcast-body"

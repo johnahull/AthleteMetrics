@@ -9,6 +9,22 @@ import { pgTable, varchar, integer, decimal, timestamp, boolean, unique, index, 
 import { metricTypeEnum, organizationTypeEnum } from "../enums";
 import { organizations, users } from "./core";
 
+/** Date matching / source selection config for derived metrics (site and custom org). */
+export type DerivedCalculationConfig = {
+  dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
+  maxDateDifference?: number;
+  missingSourceBehavior: 'skip' | 'error';
+  /** 'latest_event': same_date sources must all come from the single most recent event (e.g. MQI totals) */
+  sourceSelection?: 'latest_event';
+  constants?: Record<string, number>;
+  /**
+   * Metric code (one of dependentMetrics) that anchors the derived value: it is only
+   * calculated on dates with a verified direct measurement of this metric, which is
+   * matched on the same date; the other sources use dateMatchStrategy.
+   */
+  anchorMetric?: string;
+};
+
 // Site-level metric definitions (master catalog)
 export const siteMetrics = pgTable("site_metrics", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -39,14 +55,7 @@ export const siteMetrics = pgTable("site_metrics", {
   isDerived: boolean("is_derived").default(false).notNull(), // Whether this metric is calculated from other metrics
   formula: text("formula"), // Formula for calculation (e.g., "10 / fly10_time * 2.045")
   dependentMetrics: text("dependent_metrics").array(), // Metric codes this formula depends on
-  calculationConfig: jsonb("calculation_config").$type<{
-    dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
-    maxDateDifference?: number;
-    missingSourceBehavior: 'skip' | 'error';
-    /** 'latest_event': same_date sources must all come from the single most recent event (e.g. MQI totals) */
-    sourceSelection?: 'latest_event';
-    constants?: Record<string, number>;
-  }>(),
+  calculationConfig: jsonb("calculation_config").$type<DerivedCalculationConfig>(),
   // Paired-input metric config — for metrics where one row captures (primary, auxiliary) inputs
   // and the formula computes the stored value (e.g., 1RM estimate from load + reps).
   // Mutually exclusive with isDerived at the application layer.
@@ -150,11 +159,9 @@ export const customOrgMetrics = pgTable("custom_org_metrics", {
   isDerived: boolean("is_derived").default(false).notNull(),
   formula: text("formula"),
   dependentMetrics: text("dependent_metrics").array(),
-  calculationConfig: jsonb("calculation_config").$type<{
-    dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
-    maxDateDifference?: number;
-    missingSourceBehavior: 'skip' | 'error';
-  }>(),
+  // anchorMetric is only supported for SITE derived metrics: custom-org metrics have no admin UI or
+  // tests for it, and the custom-org routes' zod schema strips it.
+  calculationConfig: jsonb("calculation_config").$type<DerivedCalculationConfig>(),
   // Paired-input metric config — see siteMetrics.auxiliaryInputConfig for semantics.
   // Mutually exclusive with isDerived at the application layer.
   auxiliaryInputConfig: jsonb("auxiliary_input_config").$type<{

@@ -331,7 +331,7 @@ export default function OrganizationSettings() {
                 name="benchmarksEnabled"
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
+                    <div className="grid gap-y-0.5">
                       <FormLabel className="text-base">Benchmarks Feature</FormLabel>
                       <FormDescription>
                         Enable benchmark management for this organization
@@ -352,7 +352,7 @@ export default function OrganizationSettings() {
                 name="allowCustomBenchmarks"
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
+                    <div className="grid gap-y-0.5">
                       <FormLabel className="text-base">Custom Benchmarks</FormLabel>
                       <FormDescription>
                         Allow organization to create custom benchmarks (requires Benchmarks Feature enabled)
@@ -374,7 +374,7 @@ export default function OrganizationSettings() {
                 name="aiEnabledBySiteAdmin"
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
+                    <div className="grid gap-y-0.5">
                       <FormLabel className="text-base">Coaching Insights</FormLabel>
                       <FormDescription>
                         Allow coaches to generate AI insights in reports (Site Admin Only)
@@ -395,7 +395,7 @@ export default function OrganizationSettings() {
                 name="wellnessEnabled"
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
+                    <div className="grid gap-y-0.5">
                       <FormLabel className="text-base">Wellness Module</FormLabel>
                       <FormDescription>
                         Enable wellness questionnaires and health tracking for this organization
@@ -416,7 +416,7 @@ export default function OrganizationSettings() {
                 name="sprintFvEnabled"
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
+                    <div className="grid gap-y-0.5">
                       <FormLabel className="text-base">Sprint F-V Profiling</FormLabel>
                       <FormDescription>
                         {siteSettings?.sprintFvEnabled === false
@@ -440,7 +440,7 @@ export default function OrganizationSettings() {
                 name="customMetricsEnabled"
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
+                    <div className="grid gap-y-0.5">
                       <FormLabel className="text-base">Custom Metrics</FormLabel>
                       <FormDescription>
                         Allow organization to create custom performance metrics (org-specific, not shared)
@@ -472,7 +472,7 @@ export default function OrganizationSettings() {
                 name="isActive"
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
+                    <div className="grid gap-y-0.5">
                       <FormLabel className="text-base">Active Status</FormLabel>
                       <FormDescription>
                         {field.value
@@ -515,7 +515,7 @@ export default function OrganizationSettings() {
                 name="coppaEnabled"
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
+                    <div className="grid gap-y-0.5">
                       <FormLabel className="text-base">Enable Minor Athlete Consent Flow</FormLabel>
                       <FormDescription>
                         When enabled, athletes under 13 must obtain parental consent before using the platform.

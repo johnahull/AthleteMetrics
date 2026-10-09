@@ -25,6 +25,7 @@ vi.mock('../../packages/api/vite.js', () => ({
 }));
 
 import { registerRoutes } from '../../packages/api/routes';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 
 const PASSWORD = 'TestPass123!';
 
@@ -57,7 +58,7 @@ describe('Login session fixation', () => {
   });
 
   afterAll(async () => {
-    try { await storage.deleteUser(user.id); } catch { /* ignore */ }
+    await purgeTestRows({ userIds: [user?.id] });
   });
 
   it('regenerates the session ID on login', async () => {

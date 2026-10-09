@@ -20,6 +20,7 @@ import { storage } from "../../storage";
 import { registerAthleteRoutes } from "../athlete-routes";
 import { db } from "../../db";
 import { userTeams } from "@shared/schema";
+import { purgeTestRows } from "../../../../tests/helpers/purge-test-rows";
 
 // Mock session data for testing
 let mockSessionUser: any = null;
@@ -195,27 +196,11 @@ describe("GET /api/athletes/:id/active-teams", () => {
   });
 
   afterAll(async () => {
-    // Cleanup test data
-    try {
-      // Delete users (athletes, coach, admins) - must be before orgs
-      if (testAthleteId1) await storage.deleteUser(testAthleteId1).catch(e => console.error("Error deleting athlete1:", e));
-      if (testAthleteId2) await storage.deleteUser(testAthleteId2).catch(e => console.error("Error deleting athlete2:", e));
-      if (testAthleteId3) await storage.deleteUser(testAthleteId3).catch(e => console.error("Error deleting athlete3:", e));
-      if (testCoachId) await storage.deleteUser(testCoachId).catch(e => console.error("Error deleting coach:", e));
-      if (testOrgAdminId) await storage.deleteUser(testOrgAdminId).catch(e => console.error("Error deleting orgAdmin:", e));
-      if (testSiteAdminId) await storage.deleteUser(testSiteAdminId).catch(e => console.error("Error deleting siteAdmin:", e));
-
-      // Delete teams
-      if (testTeamId1) await storage.deleteTeam(testTeamId1).catch(e => console.error("Error deleting team1:", e));
-      if (testTeamId2) await storage.deleteTeam(testTeamId2).catch(e => console.error("Error deleting team2:", e));
-      if (testTeamId3) await storage.deleteTeam(testTeamId3).catch(e => console.error("Error deleting team3:", e));
-
-      // Delete organizations
-      if (testOrgId1) await storage.deleteOrganization(testOrgId1).catch(e => console.error("Error deleting org1:", e));
-      if (testOrgId2) await storage.deleteOrganization(testOrgId2).catch(e => console.error("Error deleting org2:", e));
-    } catch (error) {
-      console.error("Cleanup error:", error);
-    }
+    await purgeTestRows({
+      userIds: [testAthleteId1, testAthleteId2, testAthleteId3, testCoachId, testOrgAdminId, testSiteAdminId].filter((id): id is string => !!id),
+      orgIds: [testOrgId1, testOrgId2].filter((id): id is string => !!id),
+      teamIds: [testTeamId1, testTeamId2, testTeamId3].filter((id): id is string => !!id),
+    });
   });
 
   describe("Authentication", () => {

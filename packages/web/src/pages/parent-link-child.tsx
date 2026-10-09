@@ -107,7 +107,7 @@ export default function ParentLinkChild() {
           ) : (
             <>
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-2">
+                <div className="grid gap-y-2">
                   <Label htmlFor="childIdentifier">
                     Username or Email <span className="text-destructive">*</span>
                   </Label>

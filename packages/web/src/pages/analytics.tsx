@@ -518,9 +518,9 @@ export default function Analytics() {
           </div>
 
           <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center gap-x-4">
               <span className="text-sm text-gray-600">Applied filters:</span>
-              <div className="flex space-x-2">
+              <div className="flex gap-x-2">
                 {filters.teamIds.length > 0 && (
                   <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
                     {filters.teamIds.length} {filters.teamIds.length === 1 ? labels.team : labels.teams}
@@ -605,7 +605,7 @@ export default function Analytics() {
                 <div className="space-y-2">
                   {leaderboards.fly10.map((measurement: any, index: number) => (
                     <div key={measurement.id} className="flex items-center justify-between py-2">
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center gap-x-3">
                         <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
                           index === 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'
                         }`}>
@@ -636,7 +636,7 @@ export default function Analytics() {
                 <div className="space-y-2">
                   {leaderboards.vertical.map((measurement: any, index: number) => (
                     <div key={measurement.id} className="flex items-center justify-between py-2">
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center gap-x-3">
                         <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
                           index === 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'
                         }`}>
@@ -744,7 +744,7 @@ export default function Analytics() {
                   {measurements.map((measurement: any, index: number) => (
                     <tr key={`${measurement.id}-${index}`} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
-                        <div className="flex items-center space-x-3">
+                        <div className="flex items-center gap-x-3">
                           <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
                             <span className="text-white font-medium text-xs">
                               {measurement.user.fullName.split(' ').map((n: string) => n[0]).join('')}
@@ -785,7 +785,7 @@ export default function Analytics() {
                         {new Date(measurement.date).toLocaleDateString()}
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center gap-x-2">
                           <Button
                             variant="ghost"
                             size="sm"
@@ -896,7 +896,7 @@ export default function Analytics() {
                   </FormItem>
                 )}
               />
-              <div className="flex justify-end space-x-2">
+              <div className="flex justify-end gap-x-2">
                 <Button
                   type="button"
                   variant="outline"

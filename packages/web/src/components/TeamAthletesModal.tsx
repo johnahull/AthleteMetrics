@@ -836,7 +836,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
                       role="listitem"
                     >
                       <CardContent className="flex items-center justify-between p-4">
-                        <div className="flex items-center space-x-3">
+                        <div className="flex items-center gap-x-3">
                           <Checkbox
                             checked={isSelected}
                             onCheckedChange={(checked) => handleCurrentAthleteSelection(athlete.id, checked === true)}
@@ -905,7 +905,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
 
             {/* Pagination for current athletes */}
             {totalPagesCurrent > 1 && (
-              <nav aria-label="Current athletes pagination" className="flex items-center justify-center space-x-2 py-4">
+              <nav aria-label="Current athletes pagination" className="flex items-center justify-center gap-x-2 py-4">
                 <Button
                   variant="outline"
                   size="sm"
@@ -952,8 +952,8 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
           >
             {/* Add Athletes Content */}
             <div className="flex items-center justify-between" role="toolbar" aria-label="Athlete filtering options">
-              <div className="flex items-center space-x-4">
-                <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-x-4">
+                <div className="flex items-center gap-x-2">
                   <Checkbox
                     id="show-available"
                     checked={showOnlyAvailable}
@@ -964,7 +964,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
                     Show only available athletes
                   </Label>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-x-2">
                   <Label htmlFor="season-filter" className="text-sm">
                     Season:
                   </Label>
@@ -1058,7 +1058,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
                       }`}
                     >
                       <CardContent className="flex items-center justify-between p-4">
-                        <div className="flex items-center space-x-3">
+                        <div className="flex items-center gap-x-3">
                           <Checkbox
                             checked={isSelected}
                             onCheckedChange={(checked) => handleAthleteSelection(athlete.id, checked === true)}
@@ -1106,7 +1106,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
 
             {/* Pagination for available athletes */}
             {totalPagesAvailable > 1 && (
-              <div className="flex items-center justify-center space-x-2 py-4">
+              <div className="flex items-center justify-center gap-x-2 py-4">
                 <Button
                   variant="outline"
                   size="sm"
