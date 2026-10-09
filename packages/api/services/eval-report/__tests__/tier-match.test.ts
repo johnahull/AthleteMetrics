@@ -61,6 +61,16 @@ describe('ageAtDate', () => {
     expect(ageAtDate('2012-06-15', bad)).toBeNaN();
   });
 
+  it.each(['2012-02-30', '2013-02-29', '2012-04-31', '2012-06-31'])('is NaN for the impossible calendar date %j', (bad) => {
+    expect(ageAtDate(bad, '2025-03-01')).toBeNaN();
+    expect(ageAtDate('2012-06-15', bad)).toBeNaN();
+  });
+
+  it('accepts a leap day', () => {
+    expect(ageAtDate('2012-02-29', '2025-02-28')).toBe(12);
+    expect(ageAtDate('2012-02-29', '2025-03-01')).toBe(13);
+  });
+
   it('counts completed years at the given date', () => {
     expect(ageAtDate('2012-06-15', '2025-06-14')).toBe(12);
     expect(ageAtDate('2012-06-15', '2025-06-15')).toBe(13);
@@ -272,6 +282,16 @@ describe('matchCollegeStandard', () => {
     const a = d1Row({ benchmarkValue: 2.0, _source: 'site', tierName: 'D1 Average' });
     const b = d1Row({ benchmarkValue: 2.2, _source: 'custom', tierName: 'D1 Average' });
     expect(matchCollegeStandard({ ...args, candidates: [a, b] })).toEqual(matchCollegeStandard({ ...args, candidates: [b, a] }));
+  });
+
+  // The D1 average rows are seeded by migrations 0129/0132/0136 (e.g. 'Soccer D1 Average', tier 'D1 Average');
+  // the match depends on that naming.
+  it('picks the D1 Average row, never another D1 tier such as Top 25%', () => {
+    const top = d1Row({ tierName: 'D1 Top 25%', name: 'Soccer D1 Top 25%', benchmarkValue: 1.8, displayOrder: 1 });
+    const average = d1Row({ tierName: null, name: 'Soccer D1 Average', benchmarkValue: 2.0, displayOrder: 2 });
+    expect(matchCollegeStandard({ ...args, candidates: [top] })).toBeNull();
+    expect(matchCollegeStandard({ ...args, candidates: [top, average] })).toMatchObject({ averageValue: 2.0, name: 'Soccer D1 Average' });
+    expect(matchCollegeStandard({ ...args, candidates: [average, top] })).toMatchObject({ averageValue: 2.0 });
   });
 
   it('is null for metrics that never get a comparison', () => {
