@@ -114,7 +114,7 @@ describe('POST /api/import/photo 5-0-5 protocol', () => {
 
     const res = await upload().expect(422);
 
-    expect(res.body).toEqual({ message: PROTOCOL_MSG, code: 'PROTOCOL_505_REQUIRED' });
+    expect(res.body).toEqual({ message: PROTOCOL_MSG, code: 'PROTOCOL_505_REQUIRED', required: ['protocol505'] });
     expect(spy).not.toHaveBeenCalled();
     expect(await savedMetrics()).toEqual([]);
   });

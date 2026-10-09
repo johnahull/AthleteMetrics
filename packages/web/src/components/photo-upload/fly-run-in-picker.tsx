@@ -3,7 +3,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { FLY10_CODE_BY_RUN_IN_YD, type FlyRunInYd } from "@shared/fly-run-in";
 
-const RUN_INS = (Object.keys(FLY10_CODE_BY_RUN_IN_YD) as string[]).map(Number) as FlyRunInYd[];
+const RUN_INS = (Object.keys(FLY10_CODE_BY_RUN_IN_YD).map(Number) as FlyRunInYd[]).sort((a, b) => a - b);
 
 interface FlyRunInPickerProps {
   /** undefined means nothing chosen; there is deliberately no default. */
@@ -28,6 +28,7 @@ function FlyRunInPicker({ value, onChange, disabled, error }, ref) {
   const baseId = useId();
   const legendId = `${baseId}-legend`;
   const errorId = `${baseId}-error`;
+  const hintId = `${baseId}-hint`;
   const fieldsetRef = useRef<HTMLFieldSetElement>(null);
   useImperativeHandle(ref, () => ({
     focus: () => {
@@ -46,7 +47,7 @@ function FlyRunInPicker({ value, onChange, disabled, error }, ref) {
         onValueChange={(v) => onChange(Number(v) as FlyRunInYd)}
         required
         aria-labelledby={legendId}
-        aria-describedby={error ? errorId : undefined}
+        aria-describedby={error ? `${hintId} ${errorId}` : hintId}
         aria-invalid={error ? true : undefined}
         className="flex flex-wrap gap-x-6 gap-y-2"
       >
@@ -60,11 +61,11 @@ function FlyRunInPicker({ value, onChange, disabled, error }, ref) {
           );
         })}
       </RadioGroup>
-      <p className="text-xs text-muted-foreground">
+      <p id={hintId} className="text-xs text-muted-foreground">
         Needed only if the photo has 10-yard fly readings: pick the run-in distance used for the test. The photo is not imported without it.
       </p>
       {error && (
-        <p id={errorId} role="alert" aria-live="assertive" className="text-sm font-medium text-destructive">
+        <p id={errorId} role="alert" className="text-sm font-medium text-destructive">
           {error}
         </p>
       )}
