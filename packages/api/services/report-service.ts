@@ -1088,8 +1088,8 @@ export class ReportService extends BaseService {
 
     // shareBlockedUnder13 is a coach-UI flag derived from the date of birth; never freeze it into a public snapshot
     const snapshotAthletes = snapshotData as any;
-    delete snapshotAthletes.athlete?.shareBlockedUnder13;
-    for (const a of snapshotAthletes.athletes ?? []) delete a?.shareBlockedUnder13;
+    const athletesArray: any[] = [snapshotAthletes.athlete, ...(snapshotAthletes.athletes ?? [])];
+    for (const a of athletesArray) if (a) delete (a as any).shareBlockedUnder13;
 
     // Generate secure token
     const publicToken = nanoid(21);

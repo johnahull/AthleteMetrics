@@ -98,6 +98,10 @@ export function SendReportToMultipleAthletesDialog({
         </DialogHeader>
 
         <div className="space-y-4">
+          <p className="text-xs text-muted-foreground" data-testid="under-13-bulk-note">
+            Athletes under 13, or without a date of birth, are skipped. Send their report as a PDF or share the parent link instead.
+          </p>
+
           {/* Alerts with aria-live for screen reader announcements */}
           <div aria-live="polite" className="space-y-2">
             {/* Info about already sent */}
@@ -109,14 +113,6 @@ export function SendReportToMultipleAthletesDialog({
                 </AlertDescription>
               </Alert>
             )}
-
-            <Alert data-testid="under-13-bulk-note">
-              <Info className="h-4 w-4" />
-              <AlertDescription>
-                Athletes under 13, or with no date of birth on file, are skipped. Send their report as a PDF or a share
-                link to their parent instead.
-              </AlertDescription>
-            </Alert>
 
             {/* Warning about large selection */}
             {hasWarning && (

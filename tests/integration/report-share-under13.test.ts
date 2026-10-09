@@ -19,7 +19,7 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { db } from '../../packages/api/db';
 import { organizations, users, userOrganizations, reports, reportShares, reportSnapshots } from '@shared/schema';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 import { purgeTestRows } from '../helpers/purge-test-rows';
@@ -130,7 +130,20 @@ async function createReport(type: 'team' | 'individual', athleteId?: string) {
 }
 
 const sharesFor = (reportId: string) => db.select().from(reportShares).where(eq(reportShares.reportId, reportId));
-const flush = () => new Promise((r) => setTimeout(r, 200)); // bulk notifications are fire-and-forget
+// Bulk notifications are fire-and-forget, so the HTTP response can return before they run.
+// Positive expectations poll the spy (vi.waitFor) instead of sleeping a fixed time.
+// "Must NOT be called" expectations cannot be polled, so they use settle(): drain the event loop
+// (several setImmediate turns plus DB round-trips) so any queued notification would have fired.
+// Where a test also has a positive notification (one allowed athlete), it first waits for that
+// call, so the negative check runs after the notification loop has demonstrably started.
+const waitForCalls = (spy: { mock: { calls: unknown[] } }, n: number) =>
+  vi.waitFor(() => expect(spy.mock.calls.length).toBeGreaterThanOrEqual(n), { timeout: 5000, interval: 10 });
+const settle = async () => {
+  for (let i = 0; i < 5; i++) {
+    await new Promise((r) => setImmediate(r));
+    await db.execute(sql`select 1`);
+  }
+};
 
 describe('POST /api/reports/:id/share', () => {
   it('blocks an under-13 athlete: 403, no share row, no email, no push', async () => {
@@ -195,7 +208,8 @@ describe('POST /api/reports/:id/share-bulk', () => {
       .post(`/api/reports/${report.id}/share-bulk`)
       .set('Cookie', cookie)
       .send({ athleteIds: [young.id, unknown.id, teen.id] });
-    await flush();
+    await waitForCalls(emailSpy, 1);
+    await settle();
 
     expect(res.status).toBe(200);
     expect(res.body.shared).toBe(1);
@@ -215,7 +229,7 @@ describe('POST /api/reports/:id/share-bulk', () => {
     const report = await createReport('team');
 
     const res = await request(app).post(`/api/reports/${report.id}/share-bulk`).set('Cookie', cookie).send({});
-    await flush();
+    await settle();
 
     expect(res.status).toBe(200);
     expect(res.body.blockedUnder13).toBe(1);
@@ -239,7 +253,7 @@ describe('already-shared under-13 athletes', () => {
     await db.insert(reportShares).values({ reportId: report.id, athleteId: young.id, sharedBy: testCoach.id, organizationId: testOrg.id });
 
     const res = await request(app).post(`/api/reports/${report.id}/share-bulk`).set('Cookie', cookie).send({ athleteIds: [young.id] });
-    await flush();
+    await settle();
 
     expect(res.status).toBe(200);
     expect(res.body.results[0].status).toBe('already_shared');
@@ -255,7 +269,7 @@ describe('already-shared under-13 athletes', () => {
     await db.insert(reportShares).values({ reportId: report.id, athleteId: young.id, sharedBy: testCoach.id, organizationId: testOrg.id });
 
     const res = await request(app).post('/api/reports/bulk-distribute').set('Cookie', cookie).send({ reportIds: [report.id] });
-    await flush();
+    await settle();
 
     expect(res.status).toBe(200);
     expect(res.body.results[0].status).toBe('already_sent');
@@ -279,7 +293,8 @@ describe('POST /api/reports/bulk-distribute', () => {
       .post('/api/reports/bulk-distribute')
       .set('Cookie', cookie)
       .send({ reportIds: [rYoung.id, rUnknown.id, rTeen.id] });
-    await flush();
+    await waitForCalls(emailSpy, 1);
+    await settle();
 
     expect(res.status).toBe(200);
     expect(res.body.summary.sent).toBe(1);
