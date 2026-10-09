@@ -1,5 +1,5 @@
 import { MQI_BANDS } from "@shared/mqi-band";
-import { LOAD_LABELS, BALANCE_LABELS, LEFT_RIGHT_SUFFIX } from "@shared/eval-report-copy";
+import { LOAD_LABELS, BALANCE_LABELS, LEFT_RIGHT_SUFFIX, formatValue } from "@shared/eval-report-copy";
 import type { EvalMetricKey } from "./metric-key-map";
 
 /**
@@ -93,11 +93,7 @@ export function metricLabel(key: EvalMetricKey): string {
   return METRIC_LABELS[key];
 }
 
-export function formatValue(value: number, unit: string): string {
-  // Times in seconds always show two decimals so 1.90 and 1.85 line up.
-  const text = unit === "s" ? value.toFixed(2) : String(Math.round(value * 100) / 100);
-  return unit === "%" ? `${text}%` : `${text} ${unit}`;
-}
+export { formatValue };
 
 /** Every template string, for the copy lint test. */
 export function templateStrings(): string[] {

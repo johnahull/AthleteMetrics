@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { exportEventReportPDF } from "@/lib/events-api";
-import { LOAD_LABELS, balanceText } from "@shared/eval-report-copy";
+import { LOAD_LABELS, balanceText, formatValue as formatValueWithUnit } from "@shared/eval-report-copy";
 import type { EvalReportModelView, EvalMetricResultView, Report } from "@/types/report-types";
 
 /** "2026-05-01" -> "May 1, 2026" without a timezone shift */
@@ -26,8 +26,7 @@ export function formatEvalEventDate(eventDate: string | undefined | null): strin
 
 function formatValue(m: EvalMetricResultView): string {
   if (typeof m.value !== "number" || Number.isNaN(m.value)) return "";
-  const value = Number.isInteger(m.value) ? String(m.value) : m.value.toFixed(2);
-  return m.unit ? `${value} ${m.unit}` : value;
+  return m.unit ? formatValueWithUnit(m.value, m.unit) : String(Math.round(m.value * 100) / 100);
 }
 
 /** Percent of the way to the best tier for a tier comparison; null when there is nothing to draw */
