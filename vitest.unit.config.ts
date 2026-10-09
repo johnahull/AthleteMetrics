@@ -25,6 +25,7 @@ export default mergeConfig(
         'tests/server/**/*.{test,spec}.{ts,tsx}', // Server unit tests (startup, error handling, etc.)
         'tests/import/csv-parsing.test.ts', // Parsing logic only
         'tests/auth/site-admin.test.ts', // Logic tests
+        'tests/helpers/**/*.test.ts', // Pure test-infrastructure helpers (leak check, forbidden DB url)
       ],
       exclude: [
         '**/node_modules/**',
