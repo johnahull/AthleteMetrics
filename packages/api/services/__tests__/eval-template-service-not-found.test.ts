@@ -11,6 +11,10 @@ vi.mock('../../db', () => {
   chain.set = () => chain;
   chain.where = () => chain;
   chain.returning = () => Promise.resolve([]);
+  // the archived-or-gone check after an empty update: the row is gone
+  chain.select = () => chain;
+  chain.from = () => chain;
+  chain.then = (res: any, rej: any) => Promise.resolve([]).then(res, rej);
   return { db: chain };
 });
 vi.mock('../../storage', () => ({ storage: {} }));
