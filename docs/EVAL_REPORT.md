@@ -157,6 +157,12 @@ Before a release that touches reports or eval, confirm **athletes (and other org
 
 Any new route that touches reports must gate eval rows with `canAccessEvalRow`.
 
+### Rollout and rollback
+
+There is no feature flag (decision: the feature is additive, manual and writer-only). Roll out by enabling nothing special: generate a few reports on the Railway preview and a test organization first, compare the numbers and the PDF with the expected values, then release.
+
+Rolling back only part of the stack once eval reports exist is unsafe: the old report routes have no eval access gate, so any org member could read the saved rows. Safe order: deactivate eval snapshots (`report_snapshots.is_active = false`) and archive or delete `reports` rows with `report_type = 'eval'` first, then revert the code, and only then (if at all) run the 0153 down migration. Revert the stack as a whole, never P3c on its own.
+
 ## COPPA retention (P3d)
 
 Eval rows name the athlete only in `config.athleteId` (no foreign key), so the user cascade never reaches them. `coppa-deletion-service.ts` step 4c deletes them (snapshots and shares cascade), `coppa-export-service.ts` includes them in the `evalReports` export section, and `profile-merge-service.ts` step 8b re-points `config.athleteId` on merge (`summary.evalReportsTransferred`). All three select by athlete id across organizations. Test: `tests/integration/coppa-eval-reports.test.ts`. Normal (non-COPPA) user deletion does not remove eval rows.
