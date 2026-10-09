@@ -7,6 +7,7 @@ process.env.NODE_ENV = 'test';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret-key-for-integration-tests-only';
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import express, { type Express } from 'express';
 import { and, eq, inArray } from 'drizzle-orm';
@@ -318,7 +319,24 @@ describe('eval report routes', () => {
       expect((await save('coachA', eventA, u[key].id)).status, key).toBe(404);
       expect((await defaults('coachA', eventA, u[key].id)).status, key).toBe(404);
     }
-    expect((await preview('coachA', eventA, 'no-such-user')).status).toBe(404);
+    // well-formed but unknown id: still 404 (reveals nothing)
+    expect((await preview('coachA', eventA, randomUUID())).status).toBe(404);
+  });
+
+  it('returns 400 for a malformed event or athlete id, before any database query, on all three routes', async () => {
+    for (const bad of ['no-such-user', '123', 'not-a-uuid']) {
+      for (const res of [
+        await preview('coachA', eventA, bad),
+        await save('coachA', eventA, bad),
+        await defaults('coachA', eventA, bad),
+        await preview('coachA', bad),
+        await save('coachA', bad),
+        await defaults('coachA', bad),
+      ]) {
+        expect(res.status, bad).toBe(400);
+        expect(res.body).toEqual({ message: 'Invalid id' });
+      }
+    }
   });
 
   it('returns 404 when the athlete has only unverified measurements, so no empty report is saved', async () => {
@@ -367,7 +385,7 @@ describe('eval report routes', () => {
   });
 
   it('returns 404 for an unknown event, and 409 for an event without an organization (site admin)', async () => {
-    expect((await preview('coachA', 'no-such-event')).status).toBe(404);
+    expect((await preview('coachA', randomUUID())).status).toBe(404);
     expect((await preview('coachA', eventNoOrg)).status).toBe(404);
     expect((await preview('siteAdmin', eventNoOrg)).status).toBe(409);
   });

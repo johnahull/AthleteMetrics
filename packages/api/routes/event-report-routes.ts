@@ -25,7 +25,7 @@ import {
 } from "../services/eval-report-service";
 import { EVAL_REPORT_TYPE, evalReportConfigSchema, evalReportRequestSchema } from "@shared/eval-report-config";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
-import { ZodError } from "zod";
+import { z, ZodError } from "zod";
 
 // Lighter limit for the eval report preview and defaults (reads; nothing is saved)
 const evalReadLimiter = rateLimit({
@@ -70,6 +70,8 @@ async function canAccessEventReports(
   return event.createdBy === userId;
 }
 
+const uuidParam = z.string().uuid();
+
 /**
  * Resolve the event and athlete of an eval report request, or send the error and return null.
  * Authorization uses the role in the EVENT's organization (not the session's primary role). Anyone who may
@@ -77,6 +79,12 @@ async function canAccessEventReports(
  */
 async function resolveEvalTarget(req: AuthenticatedRequest, res: Response) {
   const { eventId, athleteId } = req.params;
+  // A malformed id would reach Postgres as an invalid uuid and surface as a 500. A well-formed but unknown id
+  // still falls through to the 404 below, so inaccessible and nonexistent rows stay indistinguishable.
+  if (!uuidParam.safeParse(eventId).success || !uuidParam.safeParse(athleteId).success) {
+    res.status(400).json({ message: "Invalid id" });
+    return null;
+  }
   const notFound = () => {
     res.status(404).json({ message: "Not found" });
     return null;
@@ -93,7 +101,10 @@ async function resolveEvalTarget(req: AuthenticatedRequest, res: Response) {
   const role = await getOrgRole(req.user!, event.organizationId);
   if (!isMeasurementWriterRole(role)) return notFound();
 
-  // The athlete must have verified measurements in this event (in the event's organization), as loadEvalReportInputs reads
+  // The athlete must have verified measurements in this event (in the event's organization), as loadEvalReportInputs reads.
+  // Deliberately less strict than loadEvalReportInputs, which also requires an active, not-deleted user: a
+  // deactivated athlete passes this check but the service then refuses, so the caller gets a 404 from the service
+  // (the UI explains it).
   const [measured] = await db
     .select({ id: measurements.id })
     .from(measurements)
@@ -476,6 +487,8 @@ export function registerEventReportRoutes(app: Express) {
             .orderBy(desc(reports.createdAt))
             .limit(1),
         ]);
+        // Deliberately returns only selection, load and coachNote from the saved config: the strengths, development
+        // and limiter overrides are per-report edits and are not restored onto a new report.
         const computed = computeEvalDefaults({ ...inputs, selection: {}, load: null, coachNote: null, overrides: {} });
         const saved = latest ? evalReportConfigSchema.safeParse(latest.config) : null;
         if (latest && saved?.success) {
