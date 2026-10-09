@@ -1272,7 +1272,8 @@ export function registerReportRoutes(app: Express) {
           .innerJoin(reports, eq(reportSnapshots.reportId, reports.id))
           .where(eq(reportSnapshots.id, snapshotId))
           .limit(1);
-        if (owner && !(await canAccessEvalRow(user, owner))) return res.status(404).json(REPORT_NOT_FOUND);
+        // An unknown id and a hidden eval answer the same 404 (no existence oracle)
+        if (!owner || !(await canAccessEvalRow(user, owner))) return res.status(404).json(REPORT_NOT_FOUND);
 
         await reportService.revokeSnapshot(snapshotId, user.id);
 
@@ -4037,8 +4038,9 @@ function sendEvalModelUnavailable(res: express.Response, reportId: string): void
 
 /** AM-FEAT-019: PDF of a saved eval report. Coach / org_admin / site admin of the report's org only; 404 otherwise. */
 async function sendEvalReportPdf(user: { id: string; isSiteAdmin?: boolean; role?: string }, report: Report, res: express.Response): Promise<void> {
-  if (!isMeasurementWriterRole(await getOrgRole(user, report.organizationId))) {
-    res.status(404).json({ message: "Report not found" });
+  // Defense in depth: the callers' own guards already ran; the access rule itself lives in canAccessEvalRow
+  if (!(await canAccessEvalRow(user, report))) {
+    res.status(404).json(REPORT_NOT_FOUND);
     return;
   }
   const model = (report.config as any)?.model;

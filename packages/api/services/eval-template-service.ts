@@ -27,6 +27,12 @@ export class TemplateNotFoundError extends Error {
     super("Template not found");
   }
 }
+/** A 409: archived templates are read-only. */
+export class TemplateArchivedError extends Error {
+  constructor() {
+    super("Template is archived");
+  }
+}
 /** A 400: the message says what is wrong with the request. */
 export class TemplateValidationError extends Error {}
 
@@ -130,6 +136,13 @@ export async function createTemplateFromEvent(
   return createTemplate(event.organizationId, userId, { ...input, metrics });
 }
 
+/** The update matched no active row: the template is gone (404) or archived (409). */
+async function throwNotFoundOrArchived(id: string): Promise<never> {
+  const [row] = await db.select({ archivedAt: evalBatteryTemplates.archivedAt }).from(evalBatteryTemplates).where(eq(evalBatteryTemplates.id, id));
+  if (row?.archivedAt) throw new TemplateArchivedError();
+  throw new TemplateNotFoundError();
+}
+
 export async function updateTemplate(
   id: string,
   patch: { name?: string; sport?: string; description?: string | null; metrics?: EvalTemplateMetric[] }
@@ -137,12 +150,14 @@ export async function updateTemplate(
   if (patch.metrics) await validateMetrics(patch.metrics);
   const { name, sport, description, metrics } = patch;
   try {
+    // Drizzle's .set() skips undefined fields, which is what makes this a partial update
+    // (null, by contrast, is written, so description: null clears it).
     const [row] = await db
       .update(evalBatteryTemplates)
       .set({ name, sport, description, metrics, updatedAt: new Date() })
-      .where(eq(evalBatteryTemplates.id, id))
+      .where(and(eq(evalBatteryTemplates.id, id), isNull(evalBatteryTemplates.archivedAt)))
       .returning();
-    if (!row) throw new TemplateNotFoundError();
+    if (!row) return await throwNotFoundOrArchived(id);
     return row;
   } catch (e) {
     if (isUniqueViolation(e)) throw new TemplateConflictError("A template with this name already exists");
@@ -151,8 +166,12 @@ export async function updateTemplate(
 }
 
 export async function archiveTemplate(id: string) {
-  const [row] = await db.update(evalBatteryTemplates).set({ archivedAt: new Date(), updatedAt: new Date() }).where(eq(evalBatteryTemplates.id, id)).returning();
-  if (!row) throw new TemplateNotFoundError();
+  const [row] = await db
+    .update(evalBatteryTemplates)
+    .set({ archivedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(evalBatteryTemplates.id, id), isNull(evalBatteryTemplates.archivedAt)))
+    .returning();
+  if (!row) return await throwNotFoundOrArchived(id);
   return row;
 }
 
@@ -190,18 +209,22 @@ export async function applyTemplateToEvent(eventId: string, userId: string, temp
   const skipped = chosen.filter((m) => !known.has(m.code)).map((m) => m.metricKey);
   const alreadyPresent = chosen.filter((m) => known.has(m.code) && present.has(m.code)).map((m) => m.code);
   const toAdd = chosen.filter((m) => known.has(m.code) && !present.has(m.code));
+  let inserted: Set<string>;
   try {
-    await new EventMetricsService(storage).bulkAddMetrics(
+    const rows = await new EventMetricsService(storage).bulkAddMetrics(
       eventId,
       userId,
       toAdd.map((m) => ({ metricCode: m.code, displayOrder: m.displayOrder, isRequired: m.isRequired, customLabel: m.customLabel })),
       { skipExisting: true }
     );
+    inserted = new Set(rows.map((r) => r.metricCode));
   } catch (e) {
     if (e instanceof EventMetricsFrozenError) throw new EventFrozenError(e.message);
     throw e;
   }
-  return { added: toAdd.map((m) => m.code), skipped, alreadyPresent };
+  // `added` is what the insert confirmed; a code a concurrent request added in between was skipped by it
+  const raced = toAdd.filter((m) => !inserted.has(m.code)).map((m) => m.code);
+  return { added: toAdd.filter((m) => inserted.has(m.code)).map((m) => m.code), skipped, alreadyPresent: [...alreadyPresent, ...raced] };
 }
 
 /** What GET returns: a stored row, or the synthetic default when none exists yet (no timestamps or author). */
