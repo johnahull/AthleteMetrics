@@ -7,6 +7,7 @@ import { render, screen, fireEvent, waitFor, within, cleanup } from '@testing-li
 import '@testing-library/jest-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PhotoUpload } from '../../photo-upload';
+import { OCR_REQUIRED_CHOICE_MESSAGES } from '@shared/ocr-types';
 
 vi.mock('@/lib/auth', () => ({
   useAuth: () => ({ userOrganizations: [{ organizationId: 'org-1' }] }),
@@ -15,7 +16,7 @@ vi.mock('@/hooks/use-metric-labels', () => ({
   useMetricLabels: () => ({ getLabel: (c: string) => c, labels: {}, isLoading: false }),
 }));
 
-const RUN_IN_MSG = 'Choose the run-in distance for 10-yard fly readings';
+const RUN_IN_MSG = OCR_REQUIRED_CHOICE_MESSAGES.flyRunIn;
 
 const success = {
   success: true,
@@ -136,7 +137,7 @@ describe('PhotoUpload fly-10 run-in', () => {
     fetchMock().mockResolvedValueOnce({
       ok: false, status: 422, statusText: 'Unprocessable Entity',
       json: async () => ({
-        message: 'Choose meters or yards for 5-0-5 readings',
+        message: 'combined server text is not shown per picker',
         code: 'PROTOCOL_505_REQUIRED',
         required: ['protocol505', 'flyRunIn'],
       }),
@@ -147,8 +148,9 @@ describe('PhotoUpload fly-10 run-in', () => {
 
     const alerts = await screen.findAllByRole('alert', {}, { timeout: 5000 });
     expect(alerts).toHaveLength(2);
-    expect(alerts[0]).toHaveTextContent('Choose meters or yards for 5-0-5 readings');
-    expect(alerts[1]).toHaveTextContent(RUN_IN_MSG);
+    expect(alerts[0]).toHaveTextContent(OCR_REQUIRED_CHOICE_MESSAGES.protocol505);
+    expect(alerts[1]).toHaveTextContent(OCR_REQUIRED_CHOICE_MESSAGES.flyRunIn);
+    expect(alerts[0]).not.toHaveTextContent('combined server text');
     expect(screen.getByRole('radiogroup', { name: /5-0-5 protocol/i })).toHaveAttribute('aria-describedby', expect.stringContaining(alerts[0].id));
     expect(screen.getByRole('radiogroup', { name: /10-yard fly run-in/i })).toHaveAttribute('aria-describedby', expect.stringContaining(alerts[1].id));
     // focus goes to the first missing picker
