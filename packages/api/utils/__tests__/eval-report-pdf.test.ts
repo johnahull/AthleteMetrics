@@ -81,7 +81,7 @@ describe('eval report PDF renderer', () => {
       expect(text).toContain('May 1, 2026');
       expect(text).toContain('Big Time Athletes');
       expect(text).toContain('10-yard dash');
-      expect(text).toContain('2 s');
+      expect(text).toContain('2.00 s');
       expect(blocks.filter((b) => b.kind === 'gauge')).toHaveLength(n);
     }
   });
@@ -232,7 +232,7 @@ describe('eval report PDF renderer', () => {
     m.metrics[0].trend = { change: -0.2, direction: 'improved' };
     const text = pdfText(buildEvalReportPdf(m, org).doc);
     expect(text).toContain('Since the last evaluation');
-    expect(text).toContain('Improved by 0.2 s');
+    expect(text).toContain('Improved by 0.20 s');
     expect(pdfText(buildEvalReportPdf(model(3), org).doc)).not.toContain('Since the last evaluation');
   });
 
