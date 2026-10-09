@@ -15,6 +15,7 @@ import { db } from "../db";
 import { reports, insertReportSchema, events, measurements } from "@shared/schema";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
+import { isSiteAdmin } from "../permissions/helpers";
 import {
   EvalReportInputError,
   buildEvalReportModel,
@@ -82,18 +83,20 @@ async function resolveEvalTarget(req: AuthenticatedRequest, res: Response) {
 
   const [event] = await db.select().from(events).where(eq(events.id, eventId)).limit(1);
   if (!event) return notFound();
-  const role = await getOrgRole(req.user!, event.organizationId);
-  if (!isMeasurementWriterRole(role)) return notFound();
-  if (!event.organizationId) {
+  if (event.organizationId === null) {
+    // No organization to authorize against: only a site admin learns why (409), everyone else gets the 404
+    if (!isSiteAdmin(req.user)) return notFound();
     res.status(409).json({ message: "Event has no organization" });
     return null;
   }
+  const role = await getOrgRole(req.user!, event.organizationId);
+  if (!isMeasurementWriterRole(role)) return notFound();
 
-  // The athlete must have measurements in this event (in the event's organization)
+  // The athlete must have verified measurements in this event (in the event's organization), as loadEvalReportInputs reads
   const [measured] = await db
     .select({ id: measurements.id })
     .from(measurements)
-    .where(and(eq(measurements.eventId, eventId), eq(measurements.userId, athleteId), eq(measurements.organizationId, event.organizationId)))
+    .where(and(eq(measurements.eventId, eventId), eq(measurements.userId, athleteId), eq(measurements.organizationId, event.organizationId), eq(measurements.isVerified, true)))
     .limit(1);
   if (!measured) return notFound();
   return { event, organizationId: event.organizationId, eventId, athleteId };
@@ -428,7 +431,8 @@ export function registerEventReportRoutes(app: Express) {
           .values({
             id: crypto.randomUUID(),
             organizationId: target.organizationId,
-            createdBy: req.user!.id === "admin" ? null : req.user!.id, // the legacy admin session has no user row
+            // The legacy session admin (id "admin") has no users row, so createdBy must be null (FK to users)
+            createdBy: req.user!.id === "admin" ? null : req.user!.id,
             name: `${model.athlete.name} - Eval Report - ${model.eventDate}`.slice(0, 200),
             reportType: EVAL_REPORT_TYPE,
             config,

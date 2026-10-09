@@ -6,7 +6,7 @@ import { EVAL_METRIC_CODES, metricCode } from '../metric-key-map';
 // Codes the spec names that no seed migration creates yet; they stay plain string keys until one does.
 const CODES_NOT_YET_IN_MIGRATIONS = ['RSI_105', 'JUMP_CMJ_SL_L', 'JUMP_CMJ_SL_R', 'JUMP_CMJ_SL_ASYM', 'MOMENTUM'];
 
-const migrationsDir = resolve(process.cwd(), 'migrations') + '/';
+const migrationsDir = resolve(__dirname, '../../../../../migrations') + '/';
 // Only the INSERT INTO site_metrics statements count, not any other mention of a code in a migration.
 const siteMetricInserts = readdirSync(migrationsDir)
   .filter((f) => f.endsWith('.sql') && !f.endsWith('_down.sql'))
