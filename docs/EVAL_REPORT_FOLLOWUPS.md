@@ -25,7 +25,6 @@ Prioritized open items after P1-P6. Size: S under half a day, M 1-2 days, L more
 
 | # | Item | Why | Size | Where |
 |---|---|---|---|---|
-| 10 | Expression index on `reports ((config->>'athleteId')) WHERE report_type = 'eval'` | The defaults endpoint, COPPA deletion/export and profile merge filter on `config->>'athleteId'`; only `reports_org_type_idx` helps today. Needs a migration (take the next free number). | S | new migration, `packages/shared/schema/tables/reports.ts` |
 | 11 | Sequential awaits in `hasInaccessibleEval` and `dropBlockedEvalShares` | One `getOrgRole` / `evalShareBlocked` round trip per row; bulk routes and the athlete's report list scale linearly. Cache the role per organization within the call and batch the user lookup. | S | `packages/api/routes/report-routes.ts` |
 | 12 | Defaults endpoint loads benchmarks it does not use | `computeEvalDefaults` only needs the metric list, but `loadEvalReportInputs` also loads the prior event, metadata and benchmarks. Split a lighter loader. | S | `packages/api/services/eval-report-service.ts`, `packages/api/routes/event-report-routes.ts` |
 | 13 | Template and settings limiter vs `lastSelection` writes | Writes share the MUTATION limit (20 per 15 minutes) and the dialog saves `lastSelection` after every generation, so a busy session can exhaust it and the save is silently dropped (the dialog catches the error). Give the settings write a STANDARD-tier limiter or debounce. | S | `packages/api/routes/eval-template-routes.ts`, `packages/web/src/components/events/EvalReportDialog.tsx` |
@@ -57,6 +56,7 @@ Prioritized open items after P1-P6. Size: S under half a day, M 1-2 days, L more
 
 ## Resolved
 
+- Expression index for eval report lookups (was #10): `reports_eval_athlete_event_idx` on `((config->>'athleteId'), (config->>'eventId')) WHERE report_type = 'eval'`, created by migration 0153 Block C2 and also declared in `packages/shared/schema/tables/reports.ts`, so push-only CI databases have it too.
 - Profile merge re-pointing of `config.athleteId` (P3d, step 8b).
 - Under-13 share guard for all report types (P4, #560) and the share-to-athlete rule decision (under 13 only, 2026-10-09).
 - Snapshot-flag leak and the EOL rewrite (reported fixed by the coordinator; not re-verified here).

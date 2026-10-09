@@ -56,7 +56,7 @@ After an evaluation event a coach needs a family-facing report: only that event'
 
 ### Negative
 - Safety rests on a convention: every route that reads or changes reports must call the gate. A forgotten route would expose eval rows to any org member, athletes included. The access integration test (`tests/integration/eval-report-access.test.ts`) is the net.
-- Eval rows are found by `config->>'athleteId'` with no index (`reports_org_type_idx` narrows by organization and type only).
+- Eval rows are found by `config->>'athleteId'` / `config->>'eventId'`; the partial expression index `reports_eval_athlete_event_idx` (migration 0153, also in the drizzle table) covers these lookups.
 - The frozen model duplicates data and is not re-derived when benchmarks change.
 - Non-Latin names print as `?` in the PDF.
 - The college gauge depends on D1 row naming; an unnamed or renamed row silently drops the gauge.
@@ -67,4 +67,4 @@ After an evaluation event a coach needs a family-facing report: only that event'
 
 ## Known limitations / follow-ups
 
-See `docs/EVAL_REPORT_FOLLOWUPS.md` for the prioritized list. Highlights: expression index on `config->>'athleteId'`; embedded Unicode font; merge-time renumbering of 0153; male benchmarks (AM-FEAT-020) and tier ladders for age-group sets; the eval Playwright spec is not in CI because the E2E suite is red (#490).
+See `docs/EVAL_REPORT_FOLLOWUPS.md` for the prioritized list. Highlights: embedded Unicode font; merge-time renumbering of 0153; male benchmarks (AM-FEAT-020) and tier ladders for age-group sets; the eval Playwright spec is not in CI because the E2E suite is red (#490).
