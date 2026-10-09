@@ -18,7 +18,7 @@ export function BooleanQuestionInput({
   error,
 }: BooleanQuestionInputProps) {
   return (
-    <div className="space-y-4" data-testid="question-boolean">
+    <div className="grid gap-y-4" data-testid="question-boolean">
       <Label className="text-base font-medium">
         {question.label}
         {question.required && <span className="text-destructive ml-1">*</span>}

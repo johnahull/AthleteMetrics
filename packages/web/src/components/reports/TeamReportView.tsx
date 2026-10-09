@@ -232,7 +232,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-muted-foreground">{labels.teams}</p>
-                <p className="text-base font-semibold mt-1 break-words">{getTeamNames(report.config as { filters?: { teamIds?: string[] } }, teams, labels.teams)}</p>
+                <p className="text-base font-semibold mt-1 wrap-break-word">{getTeamNames(report.config as { filters?: { teamIds?: string[] } }, teams, labels.teams)}</p>
               </div>
             </div>
 
@@ -267,7 +267,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-muted-foreground">Metrics</p>
-                <p className="text-base font-semibold mt-1 break-words">{getMetricsList(teamStatistics, metricLabels)}</p>
+                <p className="text-base font-semibold mt-1 wrap-break-word">{getMetricsList(teamStatistics, metricLabels)}</p>
               </div>
             </div>
           </div>

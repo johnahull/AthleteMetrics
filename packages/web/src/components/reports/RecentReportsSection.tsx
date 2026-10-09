@@ -163,7 +163,7 @@ export function RecentReportsSection({
                   <div className="flex items-start justify-between gap-2">
                     {/* Checkbox for selection mode */}
                     {isSelectionMode && (
-                      <div className="flex-shrink-0 pt-1" onClick={(e) => e.stopPropagation()}>
+                      <div className="shrink-0 pt-1" onClick={(e) => e.stopPropagation()}>
                         <Checkbox
                           checked={isSelected}
                           onCheckedChange={() => {
@@ -193,7 +193,7 @@ export function RecentReportsSection({
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-8 w-8 p-0 flex-shrink-0"
+                          className="h-8 w-8 p-0 shrink-0"
                           onClick={(e) => handlePin(report.id, e)}
                           disabled={pinReport.isPending}
                           title="Pin report"
@@ -207,7 +207,7 @@ export function RecentReportsSection({
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-8 w-8 p-0 flex-shrink-0"
+                            className="h-8 w-8 p-0 shrink-0"
                             onClick={(e) => onArchive(report.id, e)}
                             title="Archive report"
                             aria-label="Archive report"
@@ -221,7 +221,7 @@ export function RecentReportsSection({
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-8 w-8 p-0 flex-shrink-0"
+                            className="h-8 w-8 p-0 shrink-0"
                             onClick={(e) => onDelete(report.id, e)}
                             title="Delete report"
                             aria-label="Delete report"

@@ -39,7 +39,7 @@ describe('Bearer tokens are hashed at rest', () => {
   });
 
   afterAll(async () => {
-    await purgeTestRows({ userIds: [user.id], orgIds: [org.id] });
+    await purgeTestRows({ userIds: [user?.id], orgIds: [org?.id] });
   });
 
   it('invitation token is stored as a hash', async () => {

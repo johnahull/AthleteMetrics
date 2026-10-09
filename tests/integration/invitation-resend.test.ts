@@ -70,7 +70,7 @@ describe('Invitation resend rotates to a usable token', () => {
   });
 
   afterAll(async () => {
-    await purgeTestRows({ userIds: [admin.id], orgIds: [org.id] });
+    await purgeTestRows({ userIds: [admin?.id], orgIds: [org?.id] });
   });
 
   it('emails a fresh, acceptable token on resend', async () => {

@@ -9,6 +9,9 @@ import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { MetricProgressCard } from '@/components/athlete/MetricProgressCard';
 
+const confettiMock = vi.hoisted(() => vi.fn());
+vi.mock('canvas-confetti', () => ({ default: confettiMock }));
+
 // Mock Chart.js component
 vi.mock('react-chartjs-2', () => ({
   Line: ({ data, options }: any) => (
@@ -531,6 +534,71 @@ describe('MetricProgressCard', () => {
       // This is a ~15% improvement from average of first two (1.70) to 1.45
       const trendBadge = screen.getByTestId('trend-badge');
       expect(trendBadge).toHaveTextContent(/improving/i);
+    });
+  });
+  describe('Tracking metrics (no better/worse direction)', () => {
+    const momentum = [
+      { value: 400, date: '2023-12-15' },
+      { value: 410, date: '2023-12-20' },
+      { value: 420, date: '2023-12-25' },
+      { value: 480, date: '2023-12-28' },
+      { value: 500, date: '2024-01-01' },
+      { value: 520, date: '2024-01-05' },
+    ];
+
+    it('shows no improving/declining trend badge or comparison text', () => {
+      render(
+        <MetricProgressCard metric="MOMENTUM" displayName="Momentum" measurements={momentum} units="kg*m/s" metricType="tracking" />
+      );
+      expect(screen.queryByTestId('trend-badge')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('comparison-text')).not.toBeInTheDocument();
+    });
+
+    it('still shows a trend for a performance metric', () => {
+      render(
+        <MetricProgressCard metric="MOMENTUM" displayName="Momentum" measurements={momentum} units="kg*m/s" metricType="higher_is_better" />
+      );
+      expect(screen.getByTestId('trend-badge')).toBeInTheDocument();
+    });
+  });
+  describe('Tracking metrics: no PR affordances', () => {
+    const recentPr = {
+      metric: 'MOMENTUM',
+      value: 520,
+      date: new Date().toISOString().split('T')[0],
+      isRecent: true,
+      improvementText: 'Improved 10% from last PR',
+    } as any;
+    const today = new Date();
+    const d = (n: number) => {
+      const x = new Date(today);
+      x.setDate(x.getDate() - n);
+      return x.toISOString().split('T')[0];
+    };
+    const recent = [
+      { value: 400, date: d(40) },
+      { value: 450, date: d(20) },
+      { value: 520, date: d(1) },
+    ];
+
+    it('shows no New PR badge, improvement text, best-in-90d badge or confetti for tracking', () => {
+      render(
+        <MetricProgressCard metric="MOMENTUM" displayName="Momentum" measurements={recent} units="kg*m/s" personalRecord={recentPr} metricType="tracking" />
+      );
+      expect(screen.queryByTestId('new-pr-badge')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Improved 10% from last PR/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Best in last 90d/i)).not.toBeInTheDocument();
+      expect(confettiMock).not.toHaveBeenCalled();
+    });
+
+    it('still shows them for a performance metric', () => {
+      render(
+        <MetricProgressCard metric="MOMENTUM" displayName="Momentum" measurements={recent} units="kg*m/s" personalRecord={recentPr} metricType="higher_is_better" />
+      );
+      expect(screen.getByTestId('new-pr-badge')).toBeInTheDocument();
+      expect(screen.getByText(/Improved 10% from last PR/)).toBeInTheDocument();
+      expect(screen.getByText(/Best in last 90d/i)).toBeInTheDocument();
+      expect(confettiMock).toHaveBeenCalled();
     });
   });
 });

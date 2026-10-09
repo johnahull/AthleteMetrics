@@ -1017,30 +1017,7 @@ describe('Wellness Dashboard Routes', () => {
     }
 
     // Clean up other resources
-    if (athlete1) {
-      try {
-        if (team1) await storage.removeUserFromTeam(athlete1.id, team1.id);
-        await storage.removeUserFromOrganization(athlete1.id, testOrg.id);
-        await db.delete(users).where(eq(users.id, athlete1.id));
-      } catch (e) {}
-    }
-    if (athlete2) {
-      try {
-        if (team2) await storage.removeUserFromTeam(athlete2.id, team2.id);
-        await storage.removeUserFromOrganization(athlete2.id, testOrg.id);
-        await db.delete(users).where(eq(users.id, athlete2.id));
-      } catch (e) {}
-    }
-    if (team1) {
-      try {
-        await db.delete(teams).where(eq(teams.id, team1.id));
-      } catch (e) {}
-    }
-    if (team2) {
-      try {
-        await db.delete(teams).where(eq(teams.id, team2.id));
-      } catch (e) {}
-    }
+    await purgeTestRows({ userIds: [athlete1?.id, athlete2?.id], teamIds: [team1?.id, team2?.id] });
   });
 
   it('GET /api/organizations/:organizationId/wellness/dashboard - returns templateAggregates array', async () => {
