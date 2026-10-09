@@ -2,7 +2,7 @@ import { METRIC_LABELS, OTHER_METRIC_LABELS } from "./copy";
 import type { EvalPreset } from "./model";
 import { FLY10_RUN_IN_YD } from "@shared/fly-run-in";
 import { EVAL_METRIC_CODES, metricCode, type EvalMetricKey } from "./metric-key-map";
-import { ageAtDate } from "./tier-match";
+import { ageAtDate, parseYmd } from "./tier-match";
 
 export type MetricGroup = "speed" | "power" | "change_of_direction" | "movement";
 
@@ -62,7 +62,9 @@ export function resolvePreset(args: {
 }): EvalPreset {
   const { graduationYear, birthDate, eventDate } = args;
   if (graduationYear !== null) {
-    const [year, month] = eventDate.split("-").map(Number);
+    const event = parseYmd(eventDate);
+    if (!event) return "high_school"; // malformed event date: the explicit default, not NaN arithmetic
+    const [year, month] = event;
     const yearsToGraduation = graduationYear - (month >= ROLLOVER_MONTH ? year + 1 : year);
     if (yearsToGraduation <= 0) return "senior";
     if (yearsToGraduation === 1 && month >= RISING_SENIOR_MONTH && month < ROLLOVER_MONTH) return "senior";
