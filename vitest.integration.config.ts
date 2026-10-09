@@ -14,7 +14,9 @@ export default defineConfig({
     globals: true,
     environment: 'happy-dom',
     setupFiles: ['./tests/setup/integration-setup.ts'],
-    // Fails the run when a test leaves organizations, users, teams or measurements behind (issue #539)
+    // Fails the run when an integration test leaves organizations, users, teams or measurements behind (issue #539).
+    // Covers this lane only: packages/api/__tests__ and packages/api/routes/__tests__ run in the unit lane.
+    // SKIP_LEAK_CHECK=1 opts out; see tests/setup/leak-check-global.ts.
     globalSetup: ['./tests/setup/leak-check-global.ts'],
     hookTimeout: 30000,
     testTimeout: 10000,

@@ -6,8 +6,17 @@
  * (they broke the 0144/0145 migration tests and made join-code pass only by accident), so the run fails and
  * names them. Ids are compared, not counts, so pre-existing rows and rows a test deletes cannot flake it.
  * The bootstrap admin user is created by the app on first start and is not a test leak.
+ *
+ * Scope: only the integration lane (vitest.integration.config.ts). Files under packages/api/__tests__ and
+ * packages/api/routes/__tests__ run in the unit lane, so this check does NOT cover them; their cleanup is
+ * verified by running each file alone against a throwaway database (see issue #539).
+ *
+ * Needs a dedicated database: any other process writing to the same database during the run (a dev server,
+ * another worktree's tests) shows up as a leak. Set SKIP_LEAK_CHECK=1 to opt out when sharing a local DB.
+ * It never connects to a database whose URL matches the production/staging guard (tests/helpers/forbidden-db-url.ts).
  */
 import postgres from 'postgres';
+import { findForbiddenPattern } from '../helpers/forbidden-db-url';
 import { diffSnapshots, emptySnapshot, formatLeaks, type Snapshot } from '../helpers/leak-check';
 
 const connectionString = process.env.DATABASE_URL;
@@ -27,6 +36,16 @@ async function takeSnapshot(sql: postgres.Sql): Promise<Snapshot> {
 
 export default async function setup(): Promise<(() => Promise<void>) | void> {
   if (!connectionString) return; // integration-setup.ts reports the missing DATABASE_URL
+  if (process.env.SKIP_LEAK_CHECK === '1') {
+    console.warn('leak check: skipped because SKIP_LEAK_CHECK=1');
+    return;
+  }
+  // integration-setup.ts rejects these URLs, but globalSetup runs first: never read rows from such a database
+  const forbidden = findForbiddenPattern(connectionString);
+  if (forbidden) {
+    console.warn(`leak check: skipping, DATABASE_URL matches the forbidden pattern "${forbidden}" (not connecting)`);
+    return;
+  }
 
   const sql = connect(connectionString);
   let before: Snapshot;
@@ -40,7 +59,11 @@ export default async function setup(): Promise<(() => Promise<void>) | void> {
     const after = connect(connectionString);
     try {
       const message = formatLeaks(diffSnapshots(before, await takeSnapshot(after)));
-      if (message) throw new Error(message);
+      if (message) {
+        // Print and set the exit code rather than throw: a thrown teardown error is labelled "Startup Error"
+        console.error(`\n${message}\n`);
+        process.exitCode = 1;
+      }
     } finally {
       await after.end();
     }
