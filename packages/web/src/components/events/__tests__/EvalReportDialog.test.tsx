@@ -368,6 +368,19 @@ describe("EvalReportDialog", () => {
     expect(mockApiRequest.mock.calls.some(([, u]) => String(u).includes("/snapshots"))).toBe(false);
   });
 
+  it("describes the share link accurately, including the minor restriction", async () => {
+    setupApi();
+    renderDialog();
+    await ready();
+    await user.click(screen.getByRole("button", { name: "Generate report" }));
+    await screen.findByText(/report saved/i);
+
+    const text = screen.getByRole("heading", { name: /share link \(optional\)/i }).parentElement!.textContent ?? "";
+    expect(text).not.toMatch(/anyone who has a share link/i);
+    expect(text).toMatch(/anyone with the link can view this report until it expires or you revoke it/i);
+    expect(text).toMatch(/if the athlete is a minor, the link only opens for a signed-in parent linked to them, so send the pdf instead/i);
+  });
+
   it("warns about the under-13 rule in the success state", async () => {
     setupApi({ age: 11 });
     renderDialog();

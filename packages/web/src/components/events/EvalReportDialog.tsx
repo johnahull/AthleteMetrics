@@ -482,7 +482,7 @@ export function EvalReportDialog({ open, onOpenChange, eventId, organizationId, 
                   Share link (optional)
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                  No link has been created. Anyone who has a share link can view this report until the link expires or you revoke it.
+                  No link has been created. Anyone with the link can view this report until it expires or you revoke it. If the athlete is a minor, the link only opens for a signed-in parent linked to them, so send the PDF instead.
                 </p>
                 <Button variant="outline" onClick={() => setShareOpen(true)}>
                   <Share2 className="mr-2 h-4 w-4" aria-hidden="true" />

@@ -12,6 +12,14 @@ import {
 } from '@shared/schema';
 import type { IStorage } from '../storage';
 
+/** Thrown when a metric change is attempted on a frozen event. The message is kept for routes that match on it. */
+export class EventMetricsFrozenError extends Error {
+  constructor(message = 'Event is frozen and cannot be modified') {
+    super(message);
+    this.name = 'EventMetricsFrozenError';
+  }
+}
+
 export interface AddMetricOptions {
   displayOrder?: number;
   isRequired?: boolean;
@@ -80,7 +88,7 @@ export class EventMetricsService {
 
     // Check if event is frozen
     if (event.isFrozen) {
-      throw new Error('Event is frozen and cannot be modified');
+      throw new EventMetricsFrozenError();
     }
 
     // Validate the metric exists
@@ -145,7 +153,7 @@ export class EventMetricsService {
 
     // Check if event is frozen
     if (event.isFrozen) {
-      throw new Error('Event is frozen and cannot be modified');
+      throw new EventMetricsFrozenError();
     }
 
     // Check if metric exists on the event
@@ -211,7 +219,7 @@ export class EventMetricsService {
 
     // Check if event is frozen
     if (event.isFrozen) {
-      throw new Error('Event is frozen and cannot be modified');
+      throw new EventMetricsFrozenError();
     }
 
     // Check if metric exists on the event
@@ -266,7 +274,7 @@ export class EventMetricsService {
 
     // Check if event is frozen
     if (event.isFrozen) {
-      throw new Error('Event is frozen and cannot be modified');
+      throw new EventMetricsFrozenError();
     }
 
     // Update each metric's display order
@@ -307,7 +315,7 @@ export class EventMetricsService {
 
     // Check if event is frozen
     if (event.isFrozen) {
-      throw new Error('Event is frozen and cannot be modified');
+      throw new EventMetricsFrozenError();
     }
 
     const addedMetrics: EventMetric[] = [];
