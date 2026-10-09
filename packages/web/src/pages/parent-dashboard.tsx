@@ -195,7 +195,7 @@ export default function ParentDashboard() {
                 onClick={() => setLocation(`/parent/children/${link.athleteId}`)}
               >
                 {/* Accent bar */}
-                <div className="h-1 bg-gradient-to-r from-primary/60 to-primary/20" />
+                <div className="h-1 bg-linear-to-r/srgb from-primary/60 to-primary/20" />
 
                 <CardHeader className="pb-2">
                   <div className="flex items-center gap-3">

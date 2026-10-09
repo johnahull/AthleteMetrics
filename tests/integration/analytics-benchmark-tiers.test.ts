@@ -43,6 +43,7 @@ vi.mock('../../packages/api/vite.js', () => ({
 }));
 
 import { registerRoutes } from '../../packages/api/routes';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 
 async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
@@ -65,7 +66,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (testCoach) {
-    await db.delete(users).where(eq(users.id, testCoach.id));
+    await purgeTestRows({ userIds: [testCoach?.id] });
   }
 });
 

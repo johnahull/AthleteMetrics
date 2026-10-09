@@ -11,7 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Calendar, MapPin, Trophy, TrendingUp, User, Zap, Edit, Plus, Mail, Phone, Edit2, Trash2, Clock, CalendarDays, Shield } from "lucide-react";
-import { calculateFly10Speed } from "@/lib/speed-utils";
+import { fly10SpeedMph } from "@/lib/speed-utils";
 import AthleteModal from "@/components/athlete-modal";
 import AthleteMeasurementForm from "@/components/athlete-measurement-form";
 import { LlmExportButton } from "@/components/athletes/LlmExportButton";
@@ -36,6 +36,7 @@ import {
 } from "@/utils/athlete-dashboard-utils";
 import { getMetricUnits } from "@/lib/metrics";
 import { useMetricLabels } from "@/hooks/use-metric-labels";
+import { useAvailableMetrics } from "@/hooks/use-available-metrics";
 
 // Edit measurement form schema
 const editMeasurementSchema = z.object({
@@ -58,6 +59,7 @@ export default function AthleteProfile() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { getLabel } = useMetricLabels();
+  const { metrics: metricConfigs } = useAvailableMetrics();
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddMeasurementModal, setShowAddMeasurementModal] = useState(false);
@@ -296,18 +298,6 @@ export default function AthleteProfile() {
     );
   }
 
-  const fly10Measurements = measurements.filter((m: any) => m.metric === "FLY10_TIME");
-  const verticalMeasurements = measurements.filter((m: any) => m.metric === "VERTICAL_JUMP");
-
-  const bestFly10 = fly10Measurements.length > 0 
-    ? Math.min(...fly10Measurements.map((m: any) => parseFloat(m.value)))
-    : null;
-  const bestVertical = verticalMeasurements.length > 0 
-    ? Math.max(...verticalMeasurements.map((m: any) => parseFloat(m.value)))
-    : null;
-
-  const bestFly10Speed = bestFly10 ? calculateFly10Speed(bestFly10) : null;
-
   const getRecentMeasurements = () => {
     return measurements
       .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -349,7 +339,7 @@ export default function AthleteProfile() {
         </Button>
         <div className="flex-1">
           <h1 className="text-2xl font-semibold text-gray-900">{athlete?.fullName}</h1>
-          <div className="flex items-center space-x-4 text-sm text-gray-600 mt-1">
+          <div className="flex items-center gap-x-4 text-sm text-gray-600 mt-1">
             <span className="flex items-center">
               <User className="h-4 w-4 mr-1" />
               Birth Year: {athlete?.birthYear}
@@ -382,7 +372,7 @@ export default function AthleteProfile() {
             )}
           </div>
         </div>
-        <div className="flex space-x-3 flex-wrap gap-y-2">
+        <div className="flex gap-x-3 flex-wrap gap-y-2">
           <Button
             onClick={() => setShowEditModal(true)}
             variant="outline"
@@ -442,6 +432,7 @@ export default function AthleteProfile() {
                 measurements={measurementsByMetric[metric]}
                 units={getMetricUnits(metric)}
                 personalRecord={personalRecords.find(pr => pr.metric === metric)}
+                metricType={metricConfigs.find(m => m.code === metric)?.metricType}
               />
             ))}
           </div>
@@ -465,7 +456,7 @@ export default function AthleteProfile() {
                   </h4>
                   <div className="space-y-2">
                     {athlete.emails.map((email: any, index: number) => (
-                      <div key={index} className="flex items-center space-x-2">
+                      <div key={index} className="flex items-center gap-x-2">
                         <a
                           href={`mailto:${email}`}
                           className="text-blue-600 hover:text-blue-800 hover:underline"
@@ -488,7 +479,7 @@ export default function AthleteProfile() {
                   </h4>
                   <div className="space-y-2">
                     {athlete.phoneNumbers.map((phone: any, index: number) => (
-                      <div key={index} className="flex items-center space-x-2">
+                      <div key={index} className="flex items-center gap-x-2">
                         <a
                           href={`tel:${phone}`}
                           className="text-blue-600 hover:text-blue-800 hover:underline"
@@ -582,10 +573,7 @@ export default function AthleteProfile() {
                         {measurement.value}{measurement.units}
                       </td>
                       <td className="py-3 px-4 text-sm font-mono text-gray-600">
-                        {measurement.metric === "FLY10_TIME" 
-                          ? calculateFly10Speed(parseFloat(measurement.value)).toFixed(1) 
-                          : '-'
-                        }
+                        {fly10SpeedMph(measurement.metric, parseFloat(measurement.value))?.toFixed(1) ?? '-'}
                       </td>
                       <td className="py-3 px-4 text-sm text-gray-600">
                         {formatFlyInDistance(measurement.metric, measurement.flyInDistance)}
@@ -595,7 +583,7 @@ export default function AthleteProfile() {
                       </td>
                       {canEditMeasurements && (
                         <td className="py-3 px-4 text-sm">
-                          <div className="flex space-x-1">
+                          <div className="flex gap-x-1">
                             <Button
                               variant="ghost"
                               size="sm"
@@ -732,7 +720,7 @@ export default function AthleteProfile() {
                   </FormItem>
                 )}
               />
-              <div className="flex justify-end space-x-2">
+              <div className="flex justify-end gap-x-2">
                 <Button
                   type="button"
                   variant="outline"

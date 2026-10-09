@@ -8,7 +8,8 @@ export interface ValidationResult {
 }
 
 // The protocol-neutral 5-0-5 token must not appear in user-visible text.
-const displayMetric = (metric: string) => (metric === 'AGILITY_505_UNRESOLVED' ? '5-0-5' : metric);
+const displayMetric = (metric: string) =>
+  metric === 'AGILITY_505_UNRESOLVED' ? '5-0-5' : metric === 'FLY10_TIME_UNRESOLVED' ? '10-yard fly' : metric;
 
 export class MeasurementValidator {
   constructor(private config: OCRConfig) {}
@@ -226,6 +227,7 @@ export class MeasurementValidator {
         break;
 
       case 'FLY10_TIME':
+      case 'FLY10_TIME_UNRESOLVED':
         if (value < 1.0) {
           warnings.push('Very fast 10-yard fly time - verify measurement setup');
         } else if (value > 2.5) {

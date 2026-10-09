@@ -230,7 +230,7 @@ export default function Organizations() {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-x-2">
                 <Building2 className="h-5 w-5 text-primary" />
                 <CardTitle>Organizations</CardTitle>
               </div>
@@ -314,7 +314,7 @@ export default function Organizations() {
                           </div>
                         )}
                       />
-                      <div className="flex justify-end space-x-2">
+                      <div className="flex justify-end gap-x-2">
                         <Button
                           type="button"
                           variant="outline"

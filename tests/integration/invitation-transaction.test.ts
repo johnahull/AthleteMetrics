@@ -17,6 +17,7 @@ process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'TestPassword123!';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { storage } from '../../packages/api/storage';
 import type { Organization, User } from '@shared/schema';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 
 const PASSWORD = 'TestPass123!';
 
@@ -41,14 +42,8 @@ describe('acceptInvitation transaction atomicity', () => {
   });
 
   afterAll(async () => {
-    // Delete invitations first (they reference the org and inviter).
-    for (const id of createdInvitationIds) {
-      try { await storage.deleteInvitation(id); } catch { /* ignore */ }
-    }
-    for (const id of trackedUserIds) {
-      try { await storage.deleteUser(id); } catch { /* ignore */ }
-    }
-    try { await storage.deleteOrganization(org.id); } catch { /* ignore */ }
+    // purgeTestRows removes the org's invitations before the users and the org.
+    await purgeTestRows({ userIds: trackedUserIds, orgIds: [org?.id] });
   });
 
   async function makeInvitation(email: string) {

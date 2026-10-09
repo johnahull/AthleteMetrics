@@ -108,6 +108,7 @@ export const ocrConfigSchema = z.object({
     })).default({
       'DASH_40YD': { min: 3.0, max: 8.0 },
       'FLY10_TIME': { min: 0.8, max: 3.0 },
+      'FLY10_TIME_UNRESOLVED': { min: 0.8, max: 3.0 },
       'VERTICAL_JUMP': { min: 10, max: 50 },
       'AGILITY_505_UNRESOLVED': { min: 1.3, max: 4.0 },
       'AGILITY_5105': { min: 2.0, max: 6.0 },
@@ -124,3 +125,13 @@ export const ocrConfigSchema = z.object({
 
 export type OCRConfigInferred = z.infer<typeof ocrConfigSchema>;
 export type ExtractedMeasurementDataInferred = z.infer<typeof extractedMeasurementSchema>;
+
+/**
+ * POST /api/import/photo answers 422 when a reading needs a choice the request did not carry; `required` lists the
+ * missing ones. One text per choice, shared by the server response and the form's inline alerts.
+ */
+export type OcrRequiredChoice = 'protocol505' | 'flyRunIn';
+export const OCR_REQUIRED_CHOICE_MESSAGES: Readonly<Record<OcrRequiredChoice, string>> = {
+  protocol505: 'Choose meters or yards for 5-0-5 readings',
+  flyRunIn: 'Choose the run-in distance for 10-yard fly readings',
+};

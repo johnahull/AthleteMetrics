@@ -348,7 +348,7 @@ export default function Profile() {
                               />
                               <button
                                 type="button"
-                                className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 focus:text-gray-600 focus:outline-none"
+                                className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 focus:text-gray-600 focus:outline-hidden"
                                 onClick={() => setShowCurrentPassword(!showCurrentPassword)}
                                 disabled={changePasswordMutation.isPending}
                                 tabIndex={-1}
@@ -384,7 +384,7 @@ export default function Profile() {
                               />
                               <button
                                 type="button"
-                                className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 focus:text-gray-600 focus:outline-none"
+                                className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 focus:text-gray-600 focus:outline-hidden"
                                 onClick={() => setShowNewPassword(!showNewPassword)}
                                 disabled={changePasswordMutation.isPending}
                                 tabIndex={-1}
@@ -420,7 +420,7 @@ export default function Profile() {
                               />
                               <button
                                 type="button"
-                                className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 focus:text-gray-600 focus:outline-none"
+                                className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 focus:text-gray-600 focus:outline-hidden"
                                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                                 disabled={changePasswordMutation.isPending}
                                 tabIndex={-1}

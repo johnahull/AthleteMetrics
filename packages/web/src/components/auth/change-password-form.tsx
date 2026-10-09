@@ -125,7 +125,7 @@ export function ChangePasswordForm({ onSuccess, onCancel }: ChangePasswordFormPr
       
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
+          <div className="grid gap-y-2">
             <Label htmlFor="currentPassword">Current Password</Label>
             <div className="relative">
               <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
@@ -151,7 +151,7 @@ export function ChangePasswordForm({ onSuccess, onCancel }: ChangePasswordFormPr
             </div>
           </div>
 
-          <div className="space-y-2">
+          <div className="grid gap-y-2">
             <Label htmlFor="newPassword">New Password</Label>
             <div className="relative">
               <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
@@ -183,7 +183,7 @@ export function ChangePasswordForm({ onSuccess, onCancel }: ChangePasswordFormPr
             className="mb-4"
           />
 
-          <div className="space-y-2">
+          <div className="grid gap-y-2">
             <Label htmlFor="confirmPassword">Confirm New Password</Label>
             <div className="relative">
               <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
