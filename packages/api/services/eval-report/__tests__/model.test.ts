@@ -9,7 +9,7 @@ const MODEL_TYPE_FILES = ['model.ts', 'balance.ts', 'retest.ts', 'tier-match.ts'
 
 describe('EvalReportModel', () => {
   it.each(MODEL_TYPE_FILES)('%s mentions no wellness fields', (file) => {
-    const src = readFileSync(resolve(process.cwd(), 'packages/api/services/eval-report', file), 'utf8').toLowerCase();
+    const src = readFileSync(resolve(__dirname, '..', file), 'utf8').toLowerCase();
     for (const word of WELLNESS) expect(src, word).not.toContain(word);
   });
 });

@@ -12,7 +12,7 @@ import express, { type Express } from 'express';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
 import { registerEventReportRoutes } from '../../packages/api/routes/event-report-routes';
-import { eventRegistrations, events, measurements, organizations, reports, siteBenchmarks, userOrganizations, users } from '@shared/schema';
+import { eventRegistrations, events, measurements, organizations, reports, siteBenchmarks, siteMetrics, userOrganizations, users } from '@shared/schema';
 import { evalReportConfigSchema } from '@shared/eval-report-config';
 import { purgeTestRows } from '../helpers/purge-test-rows';
 
@@ -45,6 +45,7 @@ describe('eval report routes', () => {
   let eventPriorB: string;
   let eventLater: string;
   const benchmarkIds: string[] = [];
+  const createdSiteMetricCodes: string[] = [];
   const u: Record<string, any> = {};
   let ipCounter = 0;
 
@@ -99,6 +100,26 @@ describe('eval report routes', () => {
     );
 
   beforeAll(async () => {
+    // Every site_metrics row this file measures or benchmarks. CI builds its DB with db:push and the default seed
+    // only (no manual migrations), so create what is absent and delete in afterAll only what was created here.
+    const neededMetrics: Array<[code: string, category: string, unit: string, metricType: string]> = [
+      ['DASH_10YD', 'speed', 's', 'lower_is_better'],
+      ['TOP_SPEED', 'speed', 'mph', 'higher_is_better'],
+      ['JUMP_BROAD', 'power', 'in', 'higher_is_better'],
+      ['JUMP_CMJ_HOH', 'power', 'in', 'higher_is_better'],
+      ['AGILITY_505_YD_L', 'agility', 's', 'lower_is_better'],
+      ['AGILITY_505_YD_R', 'agility', 's', 'lower_is_better'],
+      ['AGILITY_505_YD_LSI', 'agility', '%', 'higher_is_better'],
+    ];
+    for (const [code, category, unit, metricType] of neededMetrics) {
+      const inserted = await db
+        .insert(siteMetrics)
+        .values({ code, label: code, category, unit, metricType } as any)
+        .onConflictDoNothing()
+        .returning({ code: siteMetrics.code });
+      if (inserted.length > 0) createdSiteMetricCodes.push(code);
+    }
+
     [{ id: orgA }] = await db.insert(organizations).values({ name: `EvalRep Org A ${suffix}` }).returning();
     [{ id: orgB }] = await db.insert(organizations).values({ name: `EvalRep Org B ${suffix}` }).returning();
 
@@ -114,6 +135,7 @@ describe('eval report routes', () => {
     await mkUser('outsider', { gender: 'Female', birthDate: '2011-03-01', sports: [SPORT] });
     await mkUser('gone', { gender: 'Female', birthDate: '2011-03-01', sports: [SPORT], isActive: false });
     await mkUser('stranger');
+    await mkUser('unverifiedOnly', { gender: 'Female', birthDate: '2011-03-01', sports: [SPORT] });
     u.siteAdmin = { id: `site-admin-${suffix}`, isSiteAdmin: true };
 
     await db.insert(userOrganizations).values([
@@ -130,6 +152,7 @@ describe('eval report routes', () => {
       { userId: u.gone.id, organizationId: orgA, role: 'athlete' },
       { userId: u.registered.id, organizationId: orgA, role: 'athlete' },
       { userId: u.stranger.id, organizationId: orgA, role: 'athlete' },
+      { userId: u.unverifiedOnly.id, organizationId: orgA, role: 'athlete' },
     ] as any);
 
     const mkEvent = async (organizationId: string | null, name: string, startDate = '2026-05-01T10:00:00Z', extra = {}) => {
@@ -181,6 +204,7 @@ describe('eval report routes', () => {
     await measure(u.noSport.id, 'AGILITY_505_YD_L', 2.6);
     await measure(u.noSport.id, 'AGILITY_505_YD_R', 3.0);
     await measure(u.gone.id, 'DASH_10YD', 2.0);
+    await measure(u.unverifiedOnly.id, 'DASH_10YD', 2.0, { isVerified: false });
     // The athlete in a second organization, and earlier / later events
     await measure(u.athlete.id, 'DASH_10YD', 2.2, { eventId: eventB, organizationId: orgB });
     await measure(u.athlete.id, 'DASH_10YD', 2.1, { eventId: eventPrior });
@@ -215,6 +239,7 @@ describe('eval report routes', () => {
       usernameLike: [`evalrep-%-${suffix}`],
       orgIds: [orgA, orgB],
     });
+    if (createdSiteMetricCodes.length) await db.delete(siteMetrics).where(inArray(siteMetrics.code, createdSiteMetricCodes));
   });
 
   it('a coach of the event org previews the model and saves nothing', async () => {
@@ -293,6 +318,13 @@ describe('eval report routes', () => {
       expect((await defaults('coachA', eventA, u[key].id)).status, key).toBe(404);
     }
     expect((await preview('coachA', eventA, 'no-such-user')).status).toBe(404);
+  });
+
+  it('returns 404 when the athlete has only unverified measurements, so no empty report is saved', async () => {
+    expect((await preview('coachA', eventA, u.unverifiedOnly.id)).status).toBe(404);
+    expect((await save('coachA', eventA, u.unverifiedOnly.id)).status).toBe(404);
+    expect((await defaults('coachA', eventA, u.unverifiedOnly.id)).status).toBe(404);
+    expect(await evalRows(eventA, u.unverifiedOnly.id)).toHaveLength(0);
   });
 
   it('returns 404 for a deactivated athlete', async () => {
