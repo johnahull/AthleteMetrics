@@ -4,7 +4,7 @@ A coach opens an evaluation event, picks an athlete, chooses metrics and section
 
 Design record and reasons: `docs/adr/ADR-002-eval-report-v2.md`. Open items: `docs/EVAL_REPORT_FOLLOWUPS.md`.
 
-Scope of this tree: P1, P2, P3a-d and P5. The all-report-types under-13 guard (P4, #560, `feature/eval-report-p4-under13`) is a separate PR, not in this tree.
+Scope of this tree: P1, P2, P3a-d, P4 (#560) and P5.
 
 ## What it does
 
@@ -39,11 +39,12 @@ Preview and defaults use the STANDARD limiter (100 per 15 minutes); save uses th
 | PUT | `/api/reports/:id` | Only `name` and `description`; `config` is immutable |
 | GET, POST | `/api/reports/:id/pdf` | Writer only; renders the frozen model |
 | POST | `/api/reports/:id/snapshots` | Writer only; creates a public snapshot (link). Off unless the coach asks |
-| POST | `/api/reports/:id/share` | Writer only; must name `config.athleteId`; blocked when the athlete is under 13 today, has no birth date, or the snapshot would be restricted |
-| POST | `/api/reports/bulk-distribute` | Eval included; blocked athletes are skipped as above |
+| POST | `/api/reports/:id/share` | Writer only; must name `config.athleteId`; 403 `UNDER_13_SHARE_BLOCKED` when the athlete is under 13 today or has a missing / unparseable / future birth date (P4 guard, all report types) |
+| POST | `/api/reports/bulk-distribute` | Eval included; under-13 / unknown-DOB athletes get status `blocked_under_13` and are counted in `blockedUnder13` (same for `/share-bulk`, which rejects eval with 400) |
 | POST | `/api/reports/:id/share-bulk` | 400 for eval |
 | POST | `/api/reports/:id/generate-insights`, PATCH `/api/reports/:id/insights` | 400 for eval |
-| GET | `/api/my/reports`, `/api/my/reports/:shareId` | The athlete sees an eval only if it was explicitly shared and is not blocked |
+| GET | `/api/my/reports`, `/api/my/reports/:shareId` | The athlete sees an eval only if it was explicitly shared and `evalShareBlocked` (under 13 today or unknown DOB) does not apply |
+| GET | `/api/events/:eventId/reports` | Event report access check; filtered in SQL by organization and `config->>'eventId'`; eval rows have `config.model` dropped (event date kept) |
 
 Other report routes (delete, pin, archive, generate, snapshot list and delete, shares, bulk archive and delete) apply the same writer gate.
 
@@ -95,7 +96,7 @@ Measured metrics outside the key map are still offered, unchecked, with their co
 
 ## How the PDF is built
 
-`packages/api/utils/eval-report-pdf.ts`: `renderEvalReportPdf(model, org)` fetches the org logo (SSRF-safe helper from `report-branding-utils.ts`) and calls `buildEvalReportPdf`, which returns the jsPDF document and the position of every block (`kind`, `page`, `top`, `bottom`). It draws only the frozen model, with no database reads. Sections are measured then flowed down the A4 pages; gauge rows are never split, and only the headline and retest-trend sections may break between rows. Text goes through `winAnsi` (Helvetica is WinAnsi only; other characters print as `?`). The radar uses jsPDF primitives. Template wording is in `packages/api/services/eval-report/copy.ts`.
+`packages/api/utils/eval-report-pdf.ts`: `renderEvalReportPdf(model, org)` fetches the org logo (SSRF-safe helper from `report-branding-utils.ts`) and calls `buildEvalReportPdf`, which returns the jsPDF document and the position of every block (`kind`, `page`, `top`, `bottom`). It draws only the frozen model, with no database reads. Sections are measured then flowed down the A4 pages; gauge rows are never split, and only the headline and retest-trend sections may break between rows. Text goes through `winAnsi` (Helvetica is WinAnsi only; other characters print as `?`). The radar uses jsPDF primitives. Load and Balance wording is shared with the web view through `packages/shared/eval-report-copy.ts` (`LOAD_LABELS`, `BALANCE_LABELS`, `balanceText`, re-used by `services/eval-report/copy.ts` and `components/reports/EvalReportView.tsx`); both draw the college gauge only when the metric's `collegeGauge === true`. Template wording is in `packages/api/services/eval-report/copy.ts`.
 
 The PDF is served by `GET`/`POST /api/reports/:id/pdf` (`sendEvalReportPdf`) and, for snapshots, `generatePDF` dispatches on `reportData.reportType === 'eval'`.
 
@@ -140,7 +141,7 @@ Screenshots for UI changes go in `screenshots/` per `CLAUDE.md`.
 | Movement missing | The event has no `MQI_TOTAL` (verified), or MQI is not among the selected metrics. |
 | 404 for a coach | The caller is not a coach / org admin / site admin **in the event's or report's organization**, the athlete has no verified measurements in the event, or the event does not exist. 404 is used on purpose. |
 | 409 on preview or save | The event has no organization (site admin sees 409, others 404). |
-| Share to athlete refused | Athlete is under 13, has no birth date, or the snapshot would be restricted. Send the PDF to a parent instead. |
+| Share to athlete refused | Athlete is under 13 today or has a missing, unparseable or future birth date. Being flagged `isMinor` or under 13 at the event date does not block a share (it restricts the public link instead). Send the PDF to a parent. |
 | A name prints with `?` | Characters outside WinAnsi; embedded font not yet added. |
 | Template apply returns `skipped` | The key resolves to a code absent from `site_metrics`. |
 
@@ -154,7 +155,7 @@ Before a release that touches reports or eval, confirm **athletes (and other org
 - `evalShareBlocked` and `dropBlockedEvalShares` for what an athlete is shown.
 - Run `tests/integration/eval-report-access.test.ts`.
 
-Any new route that touches reports must gate eval rows with `canAccessEvalRow`. Also confirm P4 is merged for the all-report-types share guard.
+Any new route that touches reports must gate eval rows with `canAccessEvalRow`.
 
 ## COPPA retention (P3d)
 
