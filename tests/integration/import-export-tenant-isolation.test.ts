@@ -25,6 +25,7 @@ vi.mock('../../packages/api/vite.js', () => ({
 }));
 
 import { registerRoutes } from '../../packages/api/routes';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 
 const PASSWORD = 'TestPass123!';
 
@@ -70,13 +71,7 @@ describe('Import/export tenant isolation', () => {
   });
 
   afterAll(async () => {
-    try { await storage.deleteUser(userA.id); } catch { /* ignore */ }
-    try { await storage.deleteTeam(teamA.id); } catch { /* ignore */ }
-    try { await storage.deleteTeam(teamB.id); } catch { /* ignore */ }
-    try { await storage.deleteTeam(teamC.id); } catch { /* ignore */ }
-    try { await storage.deleteOrganization(orgA.id); } catch { /* ignore */ }
-    try { await storage.deleteOrganization(orgB.id); } catch { /* ignore */ }
-    try { await storage.deleteOrganization(orgC.id); } catch { /* ignore */ }
+    await purgeTestRows({ userIds: [userA?.id], orgIds: [orgA?.id, orgB?.id, orgC?.id] });
   });
 
   it('GET /api/export/teams returns teams from all the caller\'s orgs, and no others', async () => {

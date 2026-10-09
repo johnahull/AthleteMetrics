@@ -360,7 +360,7 @@ export function DashboardTrendsChart({
             </p>
             <div className="flex flex-wrap gap-4">
               {metrics.map((metric) => (
-                <div key={metric.code} className="flex items-center space-x-2">
+                <div key={metric.code} className="flex items-center gap-x-2">
                   <Checkbox
                     id={`metric-${metric.code}`}
                     checked={
@@ -417,7 +417,7 @@ export function DashboardTrendsChart({
           </p>
           <div className="flex flex-wrap gap-4">
             {metrics.map((metric) => (
-              <div key={metric.code} className="flex items-center space-x-2">
+              <div key={metric.code} className="flex items-center gap-x-2">
                 <Checkbox
                   id={`metric-${metric.code}`}
                   checked={

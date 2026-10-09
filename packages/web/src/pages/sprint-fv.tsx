@@ -230,8 +230,8 @@ export default function SprintFvPage() {
           </CardContent>
         </Card>
       ) : (
-        <Tabs defaultValue="generate" className="space-y-6">
-          <TabsList>
+        <Tabs defaultValue="generate" className="flex flex-col gap-y-6 [&>[role=tabpanel]]:mt-0">
+          <TabsList className="self-start">
             <TabsTrigger value="generate" className="flex items-center gap-2">
               <Zap className="h-4 w-4" />
               Generate

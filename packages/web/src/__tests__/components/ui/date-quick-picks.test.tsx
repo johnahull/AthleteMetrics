@@ -381,7 +381,7 @@ describe("DateQuickPicks", () => {
 
       expect(todayButton).toHaveFocus();
       // Focus visible class should be present
-      expect(todayButton).toHaveClass("focus-visible:outline-none");
+      expect(todayButton).toHaveClass("focus-visible:outline-hidden");
     });
 
     it("should announce selection changes to screen readers", async () => {

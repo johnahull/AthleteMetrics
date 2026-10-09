@@ -54,6 +54,7 @@ vi.mock('../../packages/api/services/email-service', () => ({
 }));
 
 import { registerRoutes } from '../../packages/api/routes';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 
 // ============================================================================
 // Helpers
@@ -138,18 +139,10 @@ beforeAll(async () => {
 
 afterAll(async () => {
   for (const id of createdInvitationIds) {
-    await db.delete(invitations).where(eq(invitations.id, id)).catch(() => {});
+    await db.delete(invitations).where(eq(invitations.id, id));
   }
-  await db.delete(parentAthleteLinks)
-    .where(like(parentAthleteLinks.parentEmail, `${TEST_PREFIX}%`))
-    .catch(() => {});
-  for (const id of createdIds) {
-    await db.delete(users).where(eq(users.id, id)).catch(() => {});
-  }
-  for (const id of createdOrgIds) {
-    await db.delete(organizations).where(eq(organizations.id, id)).catch(() => {});
-  }
-  await db.delete(users).where(like(users.username, `${TEST_PREFIX}%`)).catch(() => {});
+  await db.delete(parentAthleteLinks).where(like(parentAthleteLinks.parentEmail, `${TEST_PREFIX}%`));
+  await purgeTestRows({ userIds: createdIds, orgIds: createdOrgIds, usernameLike: [`${TEST_PREFIX}%`] });
 });
 
 // ============================================================================

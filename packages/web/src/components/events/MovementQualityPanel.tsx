@@ -223,7 +223,7 @@ export function MovementQualityPanel({
           </div>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
-          <div className="space-y-1">
+          <div className="grid gap-y-1">
             <Label htmlFor={clipId} className="sr-only">
               {metric.label} clip link
             </Label>
@@ -238,7 +238,7 @@ export function MovementQualityPanel({
               {...form.register(`rows.${metric.code}.mediaUrl`)}
             />
           </div>
-          <div className="space-y-1">
+          <div className="grid gap-y-1">
             <Label htmlFor={notesId} className="sr-only">
               {metric.label} notes
             </Label>
@@ -331,7 +331,7 @@ export function MovementQualityPanel({
             </section>
           )}
 
-          <DialogFooter className="sticky bottom-0 flex-row justify-end gap-2 bg-background pt-2 sm:space-x-0">
+          <DialogFooter className="sticky bottom-0 flex-row justify-end gap-2 bg-background pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>

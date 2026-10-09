@@ -226,7 +226,7 @@ export function DateSelector({
           return (
             <div
               key={dateInfo.date}
-              className={`flex items-center space-x-3 p-3 rounded border ${
+              className={`flex items-center gap-x-3 p-3 rounded border ${
                 isSelected ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200'
               } ${canSelect ? 'cursor-pointer hover:bg-gray-50' : 'opacity-50'}`}
               onClick={() => canSelect && toggleDate(dateInfo.date)}

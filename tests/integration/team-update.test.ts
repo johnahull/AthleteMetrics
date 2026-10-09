@@ -11,6 +11,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { storage } from '../../packages/api/storage';
 import type { Organization, Team, User } from '@shared/schema';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 
 describe('Team Update Integration Tests', () => {
   let testOrg: Organization;
@@ -20,7 +21,6 @@ describe('Team Update Integration Tests', () => {
   let orgAdminUser: User;
   let coachUser: User;
   let createdUsers: string[] = [];
-  let createdTeams: string[] = [];
   let createdOrgs: string[] = [];
 
   beforeAll(async () => {
@@ -47,14 +47,12 @@ describe('Team Update Integration Tests', () => {
       notes: 'Original notes',
       season: '2024-Fall',
     });
-    createdTeams.push(testTeam.id);
 
     otherTeam = await storage.createTeam({
       name: `Other Team ${timestamp}`,
       level: 'HS',
       organizationId: testOrg.id,
     });
-    createdTeams.push(otherTeam.id);
 
     // Create org admin user
     orgAdminUser = await storage.createUser({
@@ -82,30 +80,8 @@ describe('Team Update Integration Tests', () => {
   });
 
   afterAll(async () => {
-    // Cleanup in reverse order of dependencies
-    for (const userId of createdUsers) {
-      try {
-        await storage.deleteUser(userId);
-      } catch (error) {
-        console.error(`Failed to delete user ${userId}:`, error);
-      }
-    }
-
-    for (const teamId of createdTeams) {
-      try {
-        await storage.deleteTeam(teamId);
-      } catch (error) {
-        console.error(`Failed to delete team ${teamId}:`, error);
-      }
-    }
-
-    for (const orgId of createdOrgs) {
-      try {
-        await storage.deleteOrganization(orgId);
-      } catch (error) {
-        console.error(`Failed to delete org ${orgId}:`, error);
-      }
-    }
+    // purgeTestRows deletes every team of the orgs
+    await purgeTestRows({ userIds: createdUsers, orgIds: createdOrgs });
   });
 
   describe('Update Team Without Name Change', () => {
@@ -212,7 +188,6 @@ describe('Team Update Integration Tests', () => {
         level: 'Club',
         organizationId: testOrg.id,
       });
-      createdTeams.push(team1.id);
 
       // Create team in second org with the same name - should succeed
       const team2 = await storage.createTeam({
@@ -220,7 +195,6 @@ describe('Team Update Integration Tests', () => {
         level: 'Club',
         organizationId: otherOrg.id,
       });
-      createdTeams.push(team2.id);
 
       expect(team1.name).toBe(sharedName);
       expect(team2.name).toBe(sharedName);

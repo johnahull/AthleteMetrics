@@ -5,51 +5,16 @@ set -e
 # Runs npm audit and fails on critical or high severity vulnerabilities
 # Usage: ./scripts/security-audit.sh
 #
-# Excluded vulnerabilities (false positives or deferred fixes for this project):
-# - GHSA-5j98-mcp5-4vw2 (glob CLI command injection)
-#   This vulnerability only affects glob's CLI mode with -c/--cmd flag.
-#   AthleteMetrics uses glob programmatically through tailwindcss/sucrase,
-#   never as a CLI tool. No upstream fix available.
-#   Dependency chain: tailwindcss → sucrase → glob
-# - GHSA-mmgp-wc2j-qcv7 (@anthropic-ai/claude-code workspace trust bypass)
-#   Dev-only CLI tool, not shipped in production. Does not affect app security.
-# - GHSA-gv7w-rqvm-qjhr (esbuild missing binary integrity verification in Deno module)
-#   Affects esbuild's Deno installation path, which downloads platform binaries from
-#   NPM_CONFIG_REGISTRY without integrity verification. AthleteMetrics installs esbuild
-#   via npm only (vite, vitest, tsx, drizzle-kit); the @esbuild/* platform binaries are
-#   pinned and integrity-verified in package-lock.json. The Deno install path is never
-#   used, so the attack vector does not apply. Dev/build-time tooling, not shipped.
-#   Upstream fix (esbuild 0.28.1) is a major bump that conflicts with vite (^0.27.0) and
-#   drizzle-kit (^0.25.4) declared esbuild ranges; deferred until those tools widen them.
-#   Affected (transitively): esbuild, vite, vite-node, vitest, @vitest/*, tsx,
-#   drizzle-kit, @esbuild-kit/*, @vitejs/plugin-react.
-# - undici advisories (GHSA-vmh5-mc38-953g, GHSA-vxpw-j846-p89q, GHSA-hm92-r4w5-c3mj,
-#   GHSA-p88m-4jfj-68fv, GHSA-pr7r-676h-xcf6, GHSA-35p6-xmwp-9g52, GHSA-g8m3-5g58-fq7m)
-#   undici reaches this project ONLY transitively as jsdom's HTTP client:
-#   isomorphic-dompurify -> jsdom -> undici. isomorphic-dompurify uses jsdom solely to
-#   provide a DOM for sanitizing HTML strings (DOMPurify); it issues no network requests,
-#   so undici's HTTP-client vulnerabilities (SOCKS5/proxy routing, WebSocket DoS,
-#   keep-alive/cache/Set-Cookie handling) are not reachable in our usage. jsdom@29 pins
-#   undici to ^7; the patched line is 7.28.0 but npm's `overrides` does not move the
-#   nested resolution off 7.25.0 (npm 10.x quirk), and undici 8.x would break jsdom's
-#   ^7 peer range. All seven undici advisory IDs are listed so the audit gate treats the
-#   undici/jsdom/isomorphic-dompurify chain as fully attributable to excluded advisories.
-#   Revisit when jsdom widens its undici range or isomorphic-dompurify ships a fixed jsdom.
-# - GHSA-vfj7-8cjw-p6xm (braces stack exhaustion DoS on deeply nested brace patterns)
-#   Affects every published braces release (<=3.0.3, and 3.0.3 is the latest), so no
-#   patched version exists. braces is never loaded at runtime: it is used only at build
-#   time, through tailwindcss@3 -> (chokidar, fast-glob, micromatch) -> braces, where the
-#   glob patterns are the static `content` globs in packages/web/tailwind.config.ts, never
-#   user or network input. tailwindcss and its tailwindcss-animate plugin are
-#   devDependencies, so package-lock.json marks this chain dev-only (`npm ls braces`).
-#   The only clean way off it is migrating tailwindcss 3 -> 4 (drops these deps), a
-#   separate UI-affecting migration (config/@tailwind directives rewrite) deferred.
-#   Affected (transitively): braces, micromatch, chokidar, fast-glob, tailwindcss.
-#   Revisit when braces publishes a fix or the project migrates to tailwindcss 4.
+# Excluded vulnerabilities: none. Every advisory that was excluded earlier (glob CLI, claude-code
+# workspace trust, esbuild Deno, the undici/jsdom chain) no longer matches anything in the
+# audit output, so the exclusions were pruned (issues #523, #562). To exclude an advisory again, add
+# its GHSA id to EXCLUDED_ADVISORIES below and document here why it does not apply to this project
+# (reachability, dev-only, no upstream fix) and when to revisit it.
 #
 # package.json overrides added for audit fixes (remove when no longer needed):
 # - tinypool: drop once vitest >= 4 (vitest 4 no longer depends on tinypool; 3.x pins ^1).
-# - postcss-selector-parser: remove at the Tailwind 4 migration (issue #523).
+# - postcss-selector-parser: still needed after the Tailwind 4 migration (issue #523): @tailwindcss/typography
+#   pins 6.0.10 exactly (GHSA-rj75-hqrm-r3gf, moderate); the override forces the patched 7.x. Drop it once typography widens its range.
 #
 # Each run warns about an EXCLUDED_ADVISORIES ID that matches no current advisory,
 # so stale exclusions are noticed and pruned.
@@ -64,7 +29,7 @@ npm audit --audit-level=moderate --json > audit-results.json || true
 
 # List of excluded vulnerability advisory IDs (false positives)
 # These are vulnerabilities that don't affect our usage patterns
-EXCLUDED_ADVISORIES="GHSA-5j98-mcp5-4vw2 GHSA-mmgp-wc2j-qcv7 GHSA-gv7w-rqvm-qjhr GHSA-vmh5-mc38-953g GHSA-vxpw-j846-p89q GHSA-hm92-r4w5-c3mj GHSA-p88m-4jfj-68fv GHSA-pr7r-676h-xcf6 GHSA-35p6-xmwp-9g52 GHSA-g8m3-5g58-fq7m GHSA-vfj7-8cjw-p6xm"
+EXCLUDED_ADVISORIES=""
 
 # Validate that audit results were generated
 if [ ! -f "audit-results.json" ] || [ ! -s "audit-results.json" ]; then
@@ -87,8 +52,8 @@ if command -v jq &> /dev/null; then
   # only if EVERY advisory at the root of its `via` chain is in the excluded
   # list — this both catches transitive dependents (the previous URL-only match
   # missed them) and never hides a package that also has a non-excluded advisory.
-  # Example: GHSA-5j98-mcp5-4vw2 (glob) affects glob, sucrase, tailwindcss, etc.;
-  # GHSA-gv7w-rqvm-qjhr (esbuild) affects esbuild, vite, vitest, tsx, drizzle-kit.
+  # Example (hypothetical): excluding an advisory on esbuild also covers the packages that only
+  # depend on it (vite, vitest, tsx, drizzle-kit), but not one that has another advisory of its own.
   EXCLUDED_VULN_COUNT=$(EXCLUDED_ADVISORIES="$EXCLUDED_ADVISORIES" node -e '
     const audit = require("./audit-results.json");
     const excluded = (process.env.EXCLUDED_ADVISORIES || "").split(/\s+/).filter(Boolean);

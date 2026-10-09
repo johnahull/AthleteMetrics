@@ -283,7 +283,7 @@ describe("FormErrorSummary", () => {
       errorButton.focus();
 
       expect(errorButton).toHaveFocus();
-      expect(errorButton).toHaveClass("focus:outline-none");
+      expect(errorButton).toHaveClass("focus:outline-hidden");
       expect(errorButton).toHaveClass("focus:underline");
     });
   });
