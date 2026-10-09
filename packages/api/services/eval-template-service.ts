@@ -13,7 +13,7 @@ import type { EvalBatteryTemplate, OrgEvalReportSettings, UserOrganization } fro
 import type { EvalTemplateMetric, EvalReportSettingsInput } from "@shared/eval-template-schemas";
 import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
 import { isSiteAdmin } from "../permissions/helpers";
-import { EventMetricsService } from "./event-metrics-service";
+import { EventMetricsService, EventMetricsFrozenError } from "./event-metrics-service";
 import { keyForCode, resolveTemplateKey } from "./eval-report/template-keys";
 
 export type Actor = { id: string; isSiteAdmin?: boolean; role?: string };
@@ -41,8 +41,12 @@ async function isWriterAnywhere(user: Actor): Promise<boolean> {
   return memberships.some((m) => isMeasurementWriterRole(m.role));
 }
 
-function isUniqueViolation(e: any): boolean {
-  return e?.code === "23505" || e?.cause?.code === "23505";
+function hasCode(v: unknown, code: string): boolean {
+  return typeof v === "object" && v !== null && (v as { code?: unknown }).code === code;
+}
+
+function isUniqueViolation(e: unknown): boolean {
+  return hasCode(e, "23505") || (typeof e === "object" && e !== null && hasCode((e as { cause?: unknown }).cause, "23505"));
 }
 
 /** The template if the user may see it (own-org writer, or any writer for the global default), else null. */
@@ -194,7 +198,7 @@ export async function applyTemplateToEvent(eventId: string, userId: string, temp
       { skipExisting: true }
     );
   } catch (e) {
-    if (e instanceof Error && e.message.startsWith("Event is frozen")) throw new EventFrozenError(e.message);
+    if (e instanceof EventMetricsFrozenError) throw new EventFrozenError(e.message);
     throw e;
   }
   return { added: toAdd.map((m) => m.code), skipped, alreadyPresent };
