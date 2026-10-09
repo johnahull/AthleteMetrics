@@ -4058,11 +4058,11 @@ function sendEvalModelUnavailable(res: express.Response, reportId: string): void
 
 /** AM-FEAT-019: PDF of a saved eval report. Coach / org_admin / site admin of the report's org only; 404 otherwise. */
 async function sendEvalReportPdf(user: { id: string; isSiteAdmin?: boolean; role?: string }, report: Report, res: express.Response): Promise<void> {
-  const model = (report.config as any)?.model;
   if (!isMeasurementWriterRole(await getOrgRole(user, report.organizationId))) {
     res.status(404).json({ message: "Report not found" });
     return;
   }
+  const model = (report.config as any)?.model;
   // The frozen model is written by the save route; a missing or corrupt one is a server fault, not a 404
   if (!isRenderableEvalModel(model)) {
     sendEvalModelUnavailable(res, report.id);
