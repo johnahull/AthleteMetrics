@@ -104,7 +104,8 @@ export function metricLabel(key: EvalMetricKey): string {
 }
 
 export function formatValue(value: number, unit: string): string {
-  const text = String(Math.round(value * 100) / 100);
+  // Times in seconds always show two decimals so 1.90 and 1.85 line up.
+  const text = unit === "s" ? value.toFixed(2) : String(Math.round(value * 100) / 100);
   return unit === "%" ? `${text}%` : `${text} ${unit}`;
 }
 

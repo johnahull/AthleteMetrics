@@ -20,6 +20,7 @@ import {
   EvalReportInputError,
   buildEvalReportModel,
   computeEvalDefaults,
+  evalInputErrorResponse,
   loadEvalReportInputs,
 } from "../services/eval-report-service";
 import { EVAL_REPORT_TYPE, evalReportConfigSchema, evalReportRequestSchema } from "@shared/eval-report-config";
@@ -105,9 +106,8 @@ async function resolveEvalTarget(req: AuthenticatedRequest, res: Response) {
 function sendEvalError(res: Response, error: unknown, fallback: string) {
   if (error instanceof ZodError) return res.status(400).json({ message: "Invalid request", errors: error.errors });
   if (error instanceof EvalReportInputError) {
-    if (error.code === "event_has_no_organization") return res.status(409).json({ message: "Event has no organization" });
-    if (error.code === "invalid_override") return res.status(400).json({ message: "Override names a metric that is not in the report" });
-    return res.status(404).json({ message: "Not found" });
+    const { status, message } = evalInputErrorResponse(error.code);
+    return res.status(status).json({ message });
   }
   console.error(fallback, error);
   return res.status(500).json({ message: fallback });
@@ -460,27 +460,23 @@ export function registerEventReportRoutes(app: Express) {
       try {
         const target = await resolveEvalTarget(req, res);
         if (!target) return;
-        const computed = computeEvalDefaults({
-          ...(await loadEvalReportInputs(db, { event: target.event, athleteId: target.athleteId })),
-          selection: {},
-          load: null,
-          coachNote: null,
-          overrides: {},
-        });
-
-        const [latest] = await db
-          .select()
-          .from(reports)
-          .where(
-            and(
-              eq(reports.organizationId, target.organizationId),
-              eq(reports.reportType, EVAL_REPORT_TYPE),
-              sql`${reports.config}->>'eventId' = ${target.eventId}`,
-              sql`${reports.config}->>'athleteId' = ${target.athleteId}`,
-            ),
-          )
-          .orderBy(desc(reports.createdAt))
-          .limit(1);
+        const [inputs, [latest]] = await Promise.all([
+          loadEvalReportInputs(db, { event: target.event, athleteId: target.athleteId }),
+          db
+            .select()
+            .from(reports)
+            .where(
+              and(
+                eq(reports.organizationId, target.organizationId),
+                eq(reports.reportType, EVAL_REPORT_TYPE),
+                sql`${reports.config}->>'eventId' = ${target.eventId}`,
+                sql`${reports.config}->>'athleteId' = ${target.athleteId}`,
+              ),
+            )
+            .orderBy(desc(reports.createdAt))
+            .limit(1),
+        ]);
+        const computed = computeEvalDefaults({ ...inputs, selection: {}, load: null, coachNote: null, overrides: {} });
         const saved = latest ? evalReportConfigSchema.safeParse(latest.config) : null;
         if (latest && saved?.success) {
           const { selection, load, coachNote } = saved.data;
