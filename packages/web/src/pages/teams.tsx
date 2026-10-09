@@ -249,7 +249,7 @@ export default function Teams() {
           const isArchived = team.isArchived === true;
           return (
             <Card key={team.id} className={`bg-white hover:shadow-md transition-shadow ${isArchived ? 'opacity-60 border-amber-200' : ''}`}>
-              <CardHeader className="flex-row items-start justify-between space-y-0 pb-3">
+              <CardHeader className="flex-row items-start justify-between gap-y-0 pb-3">
                 <div className="flex flex-col">
                   <div className="flex items-center gap-2">
                     <h3 className="text-lg font-semibold text-gray-900">{team.name}</h3>

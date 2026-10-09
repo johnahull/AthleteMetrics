@@ -694,7 +694,7 @@ export default function TemplateBuilder({ isOpen, onClose, template, organizatio
                           data-testid="checkbox-injury-override"
                         />
                       </FormControl>
-                      <div className="space-y-1 leading-none">
+                      <div className="grid gap-y-1 leading-none">
                         <FormLabel className="mt-0! cursor-pointer">
                           Any injury overrides wellness score (always red)
                         </FormLabel>

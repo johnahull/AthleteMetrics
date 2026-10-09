@@ -71,16 +71,15 @@ describe("spacing convention (issue #562)", () => {
   }
 
   it("uses gap, not space-x/space-y, on flex and grid containers", () => {
+    // Tailwind v4's space-* puts margins on non-last children, which differs from gap on flex/grid
+    // containers (hidden children, wrapped rows). Matches per line so quoted tokens inside template
+    // literals and responsive displays (md:flex, inline-grid) are caught too.
+    const spacing = /(?<![\w-])(?:[a-z0-9-]+:)*space-[xy]-/;
+    const display = /(?<![\w-])(?:[a-z0-9-]+:)*(?:inline-)?(?:flex|grid)(?![\w-])/;
     const offenders: string[] = [];
     for (const file of sourceFiles(srcDir)) {
       readFileSync(file, "utf8").split("\n").forEach((line, i) => {
-        for (const m of line.matchAll(/(["'`])((?:\\.|(?!\1).)*)\1/g)) {
-          const tokens = m[2].split(/\s+/);
-          const spacing = tokens.some((t) => /(^|:)space-[xy]-/.test(t));
-          const display = tokens.some((t) => ["flex", "inline-flex", "grid"].includes(t));
-          // space-* margins are not applied to flex/grid items the way v3 did (and ignore hidden items); use gap-*
-          if (spacing && display) offenders.push(`${path.relative(srcDir, file)}:${i + 1}`);
-        }
+        if (spacing.test(line) && display.test(line)) offenders.push(`${path.relative(srcDir, file)}:${i + 1}`);
       });
     }
     expect(offenders).toEqual([]);
@@ -89,5 +88,13 @@ describe("spacing convention (issue #562)", () => {
   it("keeps the shadcn FormItem a grid with a row gap", () => {
     const form = readFileSync(path.join(srcDir, "components/ui/form.tsx"), "utf8");
     expect(form).toContain('cn("grid gap-y-2", className)');
+  });
+});
+
+describe("export libraries", () => {
+  it("captures charts with html2canvas-pro: html2canvas 1.4.1 throws on the oklch colors Tailwind 4 emits", () => {
+    const src = readFileSync(path.join(srcDir, "lib/chartExport.ts"), "utf8");
+    expect(src).toContain("import('html2canvas-pro')");
+    expect(src).not.toMatch(/import\(['"]html2canvas['"]\)/);
   });
 });

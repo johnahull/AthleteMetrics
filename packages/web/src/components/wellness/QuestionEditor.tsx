@@ -284,6 +284,7 @@ export default function QuestionEditor({ isOpen, onClose, onSave, question }: Qu
                   <Button
                     type="button"
                     variant="outline"
+                    className="justify-self-start"
                     onClick={() => {
                       setOptions([...options, `Option ${options.length + 1}`]);
                     }}

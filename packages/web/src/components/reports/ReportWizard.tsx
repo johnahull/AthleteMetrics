@@ -923,7 +923,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
           {step === 8 && reportType === "team" && (
             <div className="space-y-4">
               <Separator />
-              <Label>Composite Index (Optional)</Label>
+              <Label className="block">Composite Index (Optional)</Label>
               <p className="text-sm text-muted-foreground mb-4">
                 Create a weighted composite score across multiple metrics to rank athletes
               </p>

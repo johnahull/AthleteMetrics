@@ -52,8 +52,8 @@ if command -v jq &> /dev/null; then
   # only if EVERY advisory at the root of its `via` chain is in the excluded
   # list — this both catches transitive dependents (the previous URL-only match
   # missed them) and never hides a package that also has a non-excluded advisory.
-  # Example: GHSA-5j98-mcp5-4vw2 (glob) affects glob, sucrase, tailwindcss, etc.;
-  # GHSA-gv7w-rqvm-qjhr (esbuild) affects esbuild, vite, vitest, tsx, drizzle-kit.
+  # Example (hypothetical): excluding an advisory on esbuild also covers the packages that only
+  # depend on it (vite, vitest, tsx, drizzle-kit), but not one that has another advisory of its own.
   EXCLUDED_VULN_COUNT=$(EXCLUDED_ADVISORIES="$EXCLUDED_ADVISORIES" node -e '
     const audit = require("./audit-results.json");
     const excluded = (process.env.EXCLUDED_ADVISORIES || "").split(/\s+/).filter(Boolean);
