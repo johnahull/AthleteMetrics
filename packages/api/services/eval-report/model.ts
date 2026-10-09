@@ -24,6 +24,8 @@ export interface EvalSelection {
   coachNote: boolean;
   strengths: boolean;
   retestTrend: boolean;
+  /** Optional spider chart of the age-group comparisons; absent on rows saved before it existed */
+  radar?: boolean;
 }
 
 export interface EvalMetricResult {

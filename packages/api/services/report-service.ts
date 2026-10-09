@@ -42,6 +42,7 @@ import { resolveChartSelection, resolveTeamChartSelection, type ChartSelection }
 import type { ReportTrends, ReportDistributions, TeamReportTrends, TeamReportDistributions } from '@shared/report-trends-types';
 import type { ReportFvProfile } from '@shared/report-fv-types';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
+import { wasUnder13At } from '@shared/coppa-utils';
 
 interface TimeframeConfig {
   type: 'preset' | 'custom';
@@ -164,6 +165,30 @@ interface IndividualReportData {
 
 // Read-only lookups of stored F-V profiles (same pattern as sprint-fv-routes.ts).
 const sprintFvService = new SprintFvService();
+
+/**
+ * AM-FEAT-019: an eval snapshot is restricted unless the athlete is a known adult-or-teen (not isMinor, has a
+ * parseable birth date, and was 13+ at the EVENT date). Fails closed on any error.
+ * TODO: dedupe with P4's isUnder13OrUnknownDob once that branch lands (this one uses the event date).
+ */
+async function isEvalSnapshotRestricted(athleteId: unknown, eventDate: unknown): Promise<boolean> {
+  try {
+    if (typeof athleteId !== 'string' || typeof eventDate !== 'string') return true;
+    const [athlete] = await db
+      .select({ isMinor: users.isMinor, birthDate: users.birthDate })
+      .from(users)
+      .where(eq(users.id, athleteId))
+      .limit(1);
+    if (!athlete || athlete.isMinor === true || !athlete.birthDate) return true;
+    const [y, m, d] = eventDate.split('-').map(Number);
+    const eventAt = new Date(y, m - 1, d);
+    if (Number.isNaN(eventAt.getTime())) return true;
+    return wasUnder13At(athlete.birthDate, eventAt);
+  } catch (err) {
+    console.error('[COPPA] Failed to check eval snapshot minor status:', err);
+    return true;
+  }
+}
 
 export class ReportService extends BaseService {
   // Cache for metric info to prevent N+1 queries
@@ -1046,8 +1071,13 @@ export class ReportService extends BaseService {
     }
 
     // Generate report data
-    let snapshotData: TeamReportData | IndividualReportData;
-    if (report.reportType === 'team') {
+    let snapshotData: TeamReportData | IndividualReportData | { reportType: 'eval'; model: unknown; orgBranding?: unknown };
+    if (report.reportType === 'eval') {
+      // AM-FEAT-019: an eval report snapshots its frozen model; it never goes through the individual generator
+      const model = (report.config as any)?.model;
+      if (!model) throw new Error('Eval report has no saved model');
+      snapshotData = { reportType: 'eval', model };
+    } else if (report.reportType === 'team') {
       snapshotData = await this.generateTeamReport(reportId, userId);
     } else {
       // For individual reports, we need an athleteId
@@ -1095,7 +1125,12 @@ export class ReportService extends BaseService {
     // NOT current age — because we need age-at-collection, not current age.
     // This flag is immutable after snapshot creation.
     let containsMinorData = false;
-    try {
+    if (report.reportType === 'eval') {
+      containsMinorData = await isEvalSnapshotRestricted(
+        (report.config as any)?.athleteId,
+        (snapshotData as any).model?.eventDate
+      );
+    } else try {
       const data = snapshotData as any;
       const athleteIds: string[] = [];
 

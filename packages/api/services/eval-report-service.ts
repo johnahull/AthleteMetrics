@@ -106,6 +106,7 @@ export function assembleEvalReportModel(input: EvalAssemblyInput): EvalReportMod
     noteFirst: sections.noteFirst ?? defaults.noteFirst,
     strengths: sections.strengths ?? true,
     retestTrend: sections.retestTrend ?? defaults.retestTrend,
+    radar: sections.radar ?? false,
   };
   const collegeGauge = showCollegeGauge({ preset, age, explicit: selection.collegeGauge });
 
@@ -191,7 +192,7 @@ export function assembleEvalReportModel(input: EvalAssemblyInput): EvalReportMod
     freshAndHealthy,
     strengths: sectionOn.strengths ? strengths : [],
     developmentAreas: sectionOn.strengths ? developmentAreas : [],
-    limiter,
+    limiter: sectionOn.strengths ? limiter : null,
     coachNote: sectionOn.coachNote ? input.coachNote : null,
     selection: { preset, metricKeys: effective.map((e) => e.id), collegeGauge, ...sectionOn },
   };

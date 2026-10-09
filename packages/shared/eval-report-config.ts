@@ -56,6 +56,7 @@ export const evalSelectionInputSchema = z.object({
       noteFirst: z.boolean().optional(),
       strengths: z.boolean().optional(),
       retestTrend: z.boolean().optional(),
+      radar: z.boolean().optional(),
     })
     .optional(),
 });

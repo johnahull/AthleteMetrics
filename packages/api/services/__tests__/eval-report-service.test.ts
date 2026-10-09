@@ -247,6 +247,14 @@ describe('assembleEvalReportModel: selection, note and overrides', () => {
     expect(assembleEvalReportModel(input({ overrides: { limiter: null } })).limiter).toBeNull();
     expect(() => assembleEvalReportModel(input({ overrides: { limiter: 'FLY_10' } }))).toThrow(/invalid_override/);
   });
+
+  it('drops the limiter with the strengths section, and carries the optional radar flag', () => {
+    const off = assembleEvalReportModel(input({ overrides: { limiter: 'DASH_10' }, selection: { sections: { strengths: false } } }));
+    expect(off.limiter).toBeNull();
+    expect(off.strengths).toEqual([]);
+    expect(assembleEvalReportModel(input()).selection.radar).toBe(false);
+    expect(assembleEvalReportModel(input({ selection: { sections: { radar: true } } })).selection.radar).toBe(true);
+  });
 });
 
 describe('assembleEvalReportModel: privacy', () => {

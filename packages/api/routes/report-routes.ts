@@ -45,7 +45,9 @@ import { requireRole } from "../permissions/middleware";
 import { emailService } from "../services/email-service";
 import { getPushNotificationService, type NotificationPayload } from "../services/push-notification-service";
 import { notificationPreferences } from "@shared/schema";
-import { hexToRgb, isSafeLogoUrl, fetchLogoBase64 } from "./report-branding-utils";
+import { hexToRgb, isSafeLogoUrl, fetchLogoBase64, sanitizeFilename } from "./report-branding-utils";
+import { renderEvalReportPdf } from "../utils/eval-report-pdf";
+import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
 
 /** Organization branding fields used for PDF generation */
 type ReportOrg = Pick<
@@ -1117,6 +1119,12 @@ export function registerReportRoutes(app: Express) {
         const reportId = req.params.id;
         const expirationDays = req.body.expirationDays || 30;
 
+        // AM-FEAT-019: only coach / org_admin / site admin of the eval's org may snapshot an eval (same 404 as its PDF)
+        const [target] = await db.select({ reportType: reports.reportType, organizationId: reports.organizationId }).from(reports).where(eq(reports.id, reportId)).limit(1);
+        if (target?.reportType === 'eval' && !isMeasurementWriterRole(await getOrgRole(user, target.organizationId))) {
+          return res.status(404).json({ message: "Report not found" });
+        }
+
         const snapshot = await reportService.createSnapshot(
           reportId,
           user.id,
@@ -1278,6 +1286,9 @@ export function registerReportRoutes(app: Express) {
           return res.status(404).json({ message: "Report not found" });
         }
 
+        // AM-FEAT-019: eval reports render from their frozen model, after their own org + role check
+        if (report.reportType === 'eval') return await sendEvalReportPdf(user, report, res);
+
         // Generate report data
         let reportData: unknown;
         if (report.reportType === 'team') {
@@ -1416,6 +1427,9 @@ export function registerReportRoutes(app: Express) {
           return res.status(404).json({ message: "Report not found" });
         }
 
+        // AM-FEAT-019: eval reports render from their frozen model, after their own org + role check
+        if (report.reportType === 'eval') return await sendEvalReportPdf(user, report, res);
+
         // Generate report data
         let reportData: unknown;
         if (report.reportType === 'team') {
@@ -1542,6 +1556,11 @@ export function registerReportRoutes(app: Express) {
       const report = await storage.getReport(reportId);
       if (!report) {
         return res.status(404).json({ message: "Report not found" });
+      }
+
+      // AM-FEAT-019: eval reports have no AI insights
+      if (report.reportType === 'eval') {
+        return res.status(400).json({ message: "Insights are not available for eval reports" });
       }
 
       // SECURITY: Verify user has access to this report's organization
@@ -1744,6 +1763,11 @@ export function registerReportRoutes(app: Express) {
       const report = await storage.getReport(reportId);
       if (!report) {
         return res.status(404).json({ message: "Report not found" });
+      }
+
+      // AM-FEAT-019: eval reports have no AI insights
+      if (report.reportType === 'eval') {
+        return res.status(400).json({ message: "Insights are not available for eval reports" });
       }
 
       // SECURITY: Verify user has access to this organization
@@ -3553,19 +3577,6 @@ async function fetchOrgForBranding(organizationId: string | undefined | null) {
   return db.select().from(organizations).where(eq(organizations.id, organizationId)).limit(1).then((rows) => rows[0]);
 }
 
-function sanitizeFilename(filename: string): string {
-  return filename
-    .normalize('NFKD') // Unicode normalization to prevent homograph attacks
-    .replace(/[\u0300-\u036f]/g, '') // Remove combining diacritical marks
-    .replace(/[\u200B-\u200D\uFEFF]/g, '') // Remove zero-width characters
-    .replace(/[\u202A-\u202E]/g, '') // Remove bidirectional text overrides (RTL attacks)
-    .replace(/[/\\?%*:|"<>\x00-\x1f]/g, '_') // Remove dangerous characters
-    .replace(/^\.+/, '_') // Prevent hidden files
-    .replace(/\.+$/, '') // Remove trailing dots (Windows security issue)
-    .substring(0, 200) // Limit length to prevent issues
-    .trim() || 'report'; // Fallback for empty names
-}
-
 /**
  * Add footer to all pages in the PDF
  */
@@ -3786,7 +3797,23 @@ function addTrendChartsToPdf(
   });
 }
 
+/** AM-FEAT-019: PDF of a saved eval report. Coach / org_admin / site admin of the report's org only; 404 otherwise. */
+async function sendEvalReportPdf(user: { id: string; isSiteAdmin?: boolean; role?: string }, report: Report, res: express.Response): Promise<void> {
+  const model = (report.config as any)?.model;
+  if (!isMeasurementWriterRole(await getOrgRole(user, report.organizationId)) || !model) {
+    res.status(404).json({ message: "Report not found" });
+    return;
+  }
+  const pdf = await renderEvalReportPdf(model, await fetchOrgForBranding(report.organizationId));
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${sanitizeFilename(report.name)}.pdf"`);
+  res.send(Buffer.from(pdf.output("arraybuffer")));
+}
+
 async function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified', org?: ReportOrg, chartImages: Array<{ metricCode: string; dataUrl: string; title?: string }> = []): Promise<jsPDF> {
+  // AM-FEAT-019: a public eval snapshot carries its frozen model
+  if (reportData?.reportType === 'eval') return renderEvalReportPdf(reportData.model, org);
+
   const doc = new jsPDF();
   const isVisual = format === 'visual';
 

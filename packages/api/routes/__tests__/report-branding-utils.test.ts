@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { hexToRgb, isSafeLogoUrl, fetchLogoBase64 } from '../report-branding-utils';
+import { hexToRgb, isSafeLogoUrl, fetchLogoBase64, sanitizeFilename } from '../report-branding-utils';
 
 describe('hexToRgb', () => {
   it('converts a valid 6-digit hex color', () => {
@@ -363,5 +363,26 @@ describe('fetchLogoBase64', () => {
   it('returns null when fetch throws (e.g. redirect error or timeout)', async () => {
     vi.stubGlobal('fetch', () => Promise.reject(new Error('redirect')));
     expect(await fetchLogoBase64('https://example.com/logo.png')).toBeNull();
+  });
+});
+
+describe('sanitizeFilename', () => {
+  it('leaves a plain ASCII name unchanged', () => {
+    expect(sanitizeFilename('Sam Rivera - Eval Report - 2026-05-01')).toBe('Sam Rivera - Eval Report - 2026-05-01');
+  });
+
+  it('replaces an en dash and CJK characters so Content-Disposition cannot throw', () => {
+    const out = sanitizeFilename('Sam – Eval – 山田');
+    expect(out).toMatch(/^[\x20-\x7e]+$/);
+    expect(out).toContain('Sam');
+  });
+
+  it('removes CR/LF, quotes and path characters', () => {
+    const out = sanitizeFilename('a\r\nb"c/../d');
+    expect(out).not.toMatch(/[\r\n"/]/);
+  });
+
+  it('falls back to "report" for an empty name', () => {
+    expect(sanitizeFilename('')).toBe('report');
   });
 });

@@ -429,7 +429,7 @@ export function registerEventReportRoutes(app: Express) {
             id: crypto.randomUUID(),
             organizationId: target.organizationId,
             createdBy: req.user!.id === "admin" ? null : req.user!.id, // the legacy admin session has no user row
-            name: `${model.athlete.name} \u2013 Eval Report \u2013 ${model.eventDate}`.slice(0, 200),
+            name: `${model.athlete.name} - Eval Report - ${model.eventDate}`.slice(0, 200),
             reportType: EVAL_REPORT_TYPE,
             config,
             createdAt: new Date(),

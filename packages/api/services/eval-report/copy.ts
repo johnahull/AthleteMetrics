@@ -73,6 +73,30 @@ export const BALANCE_LABELS = {
   neutral: "Left-right balance",
 } as const;
 
+/** Strings drawn by the eval PDF renderer (utils/eval-report-pdf.ts); all are covered by the copy lint. */
+export const PDF_COPY = {
+  reportTitle: "Athletic Evaluation Report",
+  resultsTitle: "Results",
+  strengthsTitle: "Strengths and areas to develop",
+  limiterLabel: "Biggest opportunity",
+  statusAtOrAhead: "Ahead of or at the age-group average",
+  statusBehind: "Behind the age-group average",
+  barBehind: "Behind",
+  barAhead: "Ahead",
+  averageLabel: "Age-group average",
+  collegeNoteSuffix: "(marked on the bar)",
+  radarTitle: "Profile compared with the age-group average",
+  radarCaption: "The darker ring marks the age-group average.",
+  trendImproved: "Improved by",
+  trendDeclined: "Behind the last evaluation by",
+  trendUnchanged: "No change",
+  agePrefix: "Age",
+  classOfPrefix: "Class of",
+  evaluatedPrefix: "Evaluated",
+  footerLabel: "Evaluation report",
+  leftRightSuffix: "left vs right",
+} as const;
+
 export const NO_TIER_NOTE = "An age-group comparison is not available for this measurement yet.";
 
 export function metricLabel(key: EvalMetricKey): string {
@@ -95,5 +119,6 @@ export function templateStrings(): string[] {
     ...Object.values(BALANCE_LABELS),
     ...MQI_BANDS.map((band) => band.label),
     NO_TIER_NOTE,
+    ...Object.values(PDF_COPY),
   ];
 }
