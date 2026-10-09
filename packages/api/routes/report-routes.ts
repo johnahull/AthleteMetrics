@@ -47,6 +47,7 @@ import { getPushNotificationService, type NotificationPayload } from "../service
 import { notificationPreferences } from "@shared/schema";
 import { hexToRgb, isSafeLogoUrl, fetchLogoBase64, sanitizeFilename } from "./report-branding-utils";
 import { renderEvalReportPdf } from "../utils/eval-report-pdf";
+import { EVAL_REPORT_TYPE, frozenModelSchema } from "@shared/eval-report-config";
 import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
 import { EVAL_REPORT_TYPE } from "@shared/eval-report-config";
 
@@ -1428,6 +1429,11 @@ export function registerReportRoutes(app: Express) {
         // Fetch organization branding
         const org = await fetchOrgForBranding(report.organizationId);
 
+        // AM-FEAT-019: a corrupt frozen eval model is a server fault
+        if ((snapshot.snapshotData as any)?.reportType === EVAL_REPORT_TYPE && !isRenderableEvalModel((snapshot.snapshotData as any).model)) {
+          return sendEvalModelUnavailable(res, report.id);
+        }
+
         // Generate PDF from snapshot data
         const pdf = await generatePDF(report, snapshot.snapshotData, (format === 'visual' ? 'visual' : 'simplified'), org);
 
@@ -1572,6 +1578,11 @@ export function registerReportRoutes(app: Express) {
 
         // Fetch organization branding
         const org = await fetchOrgForBranding(report.organizationId);
+
+        // AM-FEAT-019: a corrupt frozen eval model is a server fault
+        if ((snapshot.snapshotData as any)?.reportType === EVAL_REPORT_TYPE && !isRenderableEvalModel((snapshot.snapshotData as any).model)) {
+          return sendEvalModelUnavailable(res, report.id);
+        }
 
         // Generate PDF from snapshot data
         const pdf = await generatePDF(report, snapshot.snapshotData, (format === 'visual' ? 'visual' : 'simplified'), org, chartImages);
@@ -4037,11 +4048,27 @@ const evalReportUpdateSchema = z.object({
   description: z.string().max(1000).nullable().optional(),
 });
 
+/** Structural check of a frozen eval model (top-level keys; same schema the save route validates against). */
+function isRenderableEvalModel(model: unknown): boolean {
+  return frozenModelSchema.safeParse(model).success;
+}
+
+/** 500 for a missing or corrupt frozen model. Logs the report id only (no PII). */
+function sendEvalModelUnavailable(res: express.Response, reportId: string): void {
+  console.error(`[eval-report] Frozen model missing or corrupt for report ${reportId}`);
+  res.status(500).json({ message: "Report data is unavailable" });
+}
+
 /** AM-FEAT-019: PDF of a saved eval report. Coach / org_admin / site admin of the report's org only; 404 otherwise. */
 async function sendEvalReportPdf(user: { id: string; isSiteAdmin?: boolean; role?: string }, report: Report, res: express.Response): Promise<void> {
   const model = (report.config as any)?.model;
-  if (!isMeasurementWriterRole(await getOrgRole(user, report.organizationId)) || !model) {
+  if (!isMeasurementWriterRole(await getOrgRole(user, report.organizationId))) {
     res.status(404).json({ message: "Report not found" });
+    return;
+  }
+  // The frozen model is written by the save route; a missing or corrupt one is a server fault, not a 404
+  if (!isRenderableEvalModel(model)) {
+    sendEvalModelUnavailable(res, report.id);
     return;
   }
   const pdf = await renderEvalReportPdf(model, await fetchOrgForBranding(report.organizationId));
@@ -4052,7 +4079,10 @@ async function sendEvalReportPdf(user: { id: string; isSiteAdmin?: boolean; role
 
 async function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified', org?: ReportOrg, chartImages: Array<{ metricCode: string; dataUrl: string; title?: string }> = []): Promise<jsPDF> {
   // AM-FEAT-019: a public eval snapshot carries its frozen model
-  if (reportData?.reportType === 'eval') return renderEvalReportPdf(reportData.model, org);
+  if (reportData?.reportType === 'eval') {
+    if (!isRenderableEvalModel(reportData.model)) throw new Error('Eval report model is unavailable');
+    return renderEvalReportPdf(reportData.model, org);
+  }
 
   const doc = new jsPDF();
   const isVisual = format === 'visual';

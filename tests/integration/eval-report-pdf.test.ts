@@ -215,6 +215,51 @@ describe('eval report PDF and snapshots', () => {
     vi.restoreAllMocks();
   });
 
+  describe('corrupt or missing frozen model', () => {
+    const copyWithConfig = async (mutate: (config: any) => any) => {
+      const [report] = await db.select().from(reports).where(eq(reports.id, reportIds.adult));
+      const config = mutate(JSON.parse(JSON.stringify(report.config)));
+      const [copy] = await db
+        .insert(reports)
+        .values({ ...report, id: undefined, config } as any)
+        .returning();
+      return copy;
+    };
+    const corruptions: Array<[string, (c: any) => any]> = [
+      ['model removed', (c) => { delete c.model; return c; }],
+      ['metrics not an array', (c) => ({ ...c, model: { ...c.model, metrics: 'nope' } })],
+      ['athlete removed', (c) => { delete c.model.athlete; return c; }],
+    ];
+
+    it.each(corruptions)('GET and POST /pdf return 500 Report data is unavailable (%s)', async (_name, mutate) => {
+      const copy = await copyWithConfig(mutate);
+      const get = await pdf('coachA', copy.id);
+      expect(get.status).toBe(500);
+      expect(JSON.parse((get.body as Buffer).toString()).message).toBe('Report data is unavailable');
+      const post = await as('coachA', 'post', `/api/reports/${copy.id}/pdf`).send({});
+      expect(post.status).toBe(500);
+      expect(post.body.message).toBe('Report data is unavailable');
+    });
+
+    it('still returns 404 (not 500) to an unauthorized caller of a corrupt report', async () => {
+      const copy = await copyWithConfig((c) => { delete c.model; return c; });
+      expect((await pdf('coachB', copy.id)).status).toBe(404);
+    });
+
+    it('public snapshot PDF returns 500 for a corrupted snapshotData.model, on GET and POST', async () => {
+      const snap = await snapshotOf('adult');
+      const data = JSON.parse(JSON.stringify(snap.snapshotData));
+      data.model.metrics = null;
+      await db.update(reportSnapshots).set({ snapshotData: data }).where(eq(reportSnapshots.id, snap.id));
+      const get = await as(null, 'get', `/api/public/reports/${snap.publicToken}/pdf`);
+      expect(get.status).toBe(500);
+      expect(get.body.message).toBe('Report data is unavailable');
+      const post = await as(null, 'post', `/api/public/reports/${snap.publicToken}/pdf`).send({});
+      expect(post.status).toBe(500);
+      expect(post.body.message).toBe('Report data is unavailable');
+    });
+  });
+
   it('keeps a restricted eval snapshot closed on the public PDF route', async () => {
     const snap = await snapshotOf('noDob');
     const res = await as(null, 'get', `/api/public/reports/${snap.publicToken}/pdf`);

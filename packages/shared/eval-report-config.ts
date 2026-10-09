@@ -76,7 +76,7 @@ export type EvalSelectionInput = z.infer<typeof evalSelectionInputSchema>;
 export type EvalReportRequest = z.infer<typeof evalReportRequestSchema>;
 
 /** The EvalReportModel (packages/api/services/eval-report/model.ts), frozen at generation. Top-level keys are checked. */
-const frozenModelSchema = z
+export const frozenModelSchema = z
   .object({
     athlete: z.record(z.unknown()),
     eventDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
