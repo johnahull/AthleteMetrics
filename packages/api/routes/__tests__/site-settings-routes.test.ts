@@ -20,6 +20,7 @@ import type { Request, Response, NextFunction } from "express";
 import { storage } from "../../storage";
 import siteSettingsRouter from "../site-settings-routes";
 import { getAIModel } from "@shared/ai-models";
+import { purgeTestRows } from "../../../../tests/helpers/purge-test-rows";
 
 // Mock the AI insights service to control model availability in tests
 vi.mock("../../services/ai-insights-service", () => ({
@@ -144,15 +145,10 @@ describe("Site Settings API Routes", () => {
   });
 
   afterAll(async () => {
-    // Clean up test data
-    try {
-      if (testCoachId) await storage.deleteUser(testCoachId);
-      if (testOrgAdminId) await storage.deleteUser(testOrgAdminId);
-      if (testSiteAdminId) await storage.deleteUser(testSiteAdminId);
-      if (testOrgId) await storage.deleteOrganization(testOrgId);
-    } catch (error) {
-      console.error("Cleanup error in site-settings-routes.test.ts:", error);
-    }
+    await purgeTestRows({
+      userIds: [testCoachId, testOrgAdminId, testSiteAdminId].filter((id): id is string => !!id),
+      orgIds: [testOrgId].filter((id): id is string => !!id),
+    });
   });
 
   beforeEach(() => {

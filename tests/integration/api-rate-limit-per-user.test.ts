@@ -11,7 +11,6 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import express, { type Express } from 'express';
 import bcrypt from 'bcrypt';
-import { inArray } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
 import { users } from '@shared/schema';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
@@ -22,6 +21,7 @@ vi.mock('../../packages/api/vite.js', () => ({
 }));
 
 import { registerRoutes } from '../../packages/api/routes';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 
 const PASSWORD = 'ApiLimiter123!';
 const LIMIT = 100;
@@ -62,7 +62,7 @@ describe('app-wide /api rate limiter', () => {
   });
 
   afterAll(async () => {
-    if (created.length) await db.delete(users).where(inArray(users.id, created));
+    await purgeTestRows({ userIds: created });
   });
 
   const hit = (ip: string, cookie?: string) => {
