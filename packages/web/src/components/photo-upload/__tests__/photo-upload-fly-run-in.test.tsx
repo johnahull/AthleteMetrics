@@ -97,7 +97,7 @@ describe('PhotoUpload fly-10 run-in', () => {
     expect(alert).toHaveTextContent(RUN_IN_MSG);
     expect(alert).toHaveTextContent(/nothing was saved/i);
     const group = screen.getByRole('radiogroup', { name: /10-yard fly run-in/i });
-    expect(group).toHaveAttribute('aria-describedby', alert.id);
+    expect(group).toHaveAttribute('aria-describedby', expect.stringContaining(alert.id));
     await waitFor(() => expect(group.contains(document.activeElement)).toBe(true));
     expect(screen.queryByText('OCR Results')).toBeNull();
     expect(screen.getByRole('button', { name: UPLOAD })).toBeEnabled();
@@ -130,5 +130,53 @@ describe('PhotoUpload fly-10 run-in', () => {
     expect(screen.getByRole('radiogroup', { name: /5-0-5 protocol/i })).not.toHaveAttribute('aria-describedby');
     expect(screen.getByRole('radio', { name: /meters/i })).toHaveAttribute('aria-checked', 'true');
     expect(sentOptions(0).protocol505).toBe('M');
+  });
+
+  it('one 422 listing both choices flags both pickers; one retry carries both choices', async () => {
+    fetchMock().mockResolvedValueOnce({
+      ok: false, status: 422, statusText: 'Unprocessable Entity',
+      json: async () => ({
+        message: 'Choose meters or yards for 5-0-5 readings',
+        code: 'PROTOCOL_505_REQUIRED',
+        required: ['protocol505', 'flyRunIn'],
+      }),
+    });
+    const { container } = renderForm();
+    selectFile(container);
+    fireEvent.click(screen.getByRole('button', { name: UPLOAD }));
+
+    const alerts = await screen.findAllByRole('alert', {}, { timeout: 5000 });
+    expect(alerts).toHaveLength(2);
+    expect(alerts[0]).toHaveTextContent('Choose meters or yards for 5-0-5 readings');
+    expect(alerts[1]).toHaveTextContent(RUN_IN_MSG);
+    expect(screen.getByRole('radiogroup', { name: /5-0-5 protocol/i })).toHaveAttribute('aria-describedby', expect.stringContaining(alerts[0].id));
+    expect(screen.getByRole('radiogroup', { name: /10-yard fly run-in/i })).toHaveAttribute('aria-describedby', expect.stringContaining(alerts[1].id));
+    // focus goes to the first missing picker
+    const first = screen.getByRole('radiogroup', { name: /5-0-5 protocol/i });
+    await waitFor(() => expect(first.contains(document.activeElement)).toBe(true));
+    expect(screen.queryByText('OCR Results')).toBeNull();
+
+    // choosing one clears only its own alert
+    fireEvent.click(screen.getByRole('radio', { name: /yards/i }));
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('radio', { name: '20 yd' }));
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: UPLOAD }));
+    await waitFor(() => expect(fetchMock()).toHaveBeenCalledTimes(2), { timeout: 5000 });
+    expect(sentOptions(1)).toMatchObject({ protocol505: 'YD', flyRunIn: 20 });
+  });
+
+  it('a 422 that lists only the fly choice flags only the fly picker', async () => {
+    fetchMock().mockResolvedValueOnce({
+      ok: false, status: 422, statusText: 'Unprocessable Entity',
+      json: async () => ({ message: RUN_IN_MSG, code: 'FLY10_RUN_IN_REQUIRED', required: ['flyRunIn'] }),
+    });
+    const { container } = renderForm();
+    selectFile(container);
+    fireEvent.click(screen.getByRole('button', { name: UPLOAD }));
+    const alerts = await screen.findAllByRole('alert', {}, { timeout: 5000 });
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toHaveTextContent(RUN_IN_MSG);
   });
 });

@@ -34,7 +34,7 @@ describe('FlyRunInPicker', () => {
     const group = container.querySelector('[role="radiogroup"]')!;
     const alert = container.querySelector('[role="alert"]')!;
     expect(alert).toHaveTextContent('Choose the run-in distance');
-    expect(group.getAttribute('aria-describedby')).toBe(alert.id);
+    expect(group.getAttribute('aria-describedby')!.split(' ')).toContain(alert.id);
     expect(group.getAttribute('aria-labelledby')).toBe(container.querySelector('legend')!.id);
   });
 
@@ -47,5 +47,18 @@ describe('FlyRunInPicker', () => {
     );
     const ids = Array.from(container.querySelectorAll('[id]')).map((e) => e.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('ties the help text to the group so assistive tech announces it, with or without an error', () => {
+    const { container, rerender } = render(<FlyRunInPicker value={undefined} onChange={() => {}} />);
+    const group = container.querySelector('[role="radiogroup"]')!;
+    const hint = container.querySelector('p')!;
+    expect(hint).toHaveTextContent(/needed only if the photo has 10-yard fly readings/i);
+    expect(group.getAttribute('aria-describedby')).toBe(hint.id);
+    rerender(<FlyRunInPicker value={undefined} onChange={() => {}} error="e" />);
+    const alert = container.querySelector('[role="alert"]')!;
+    expect(group.getAttribute('aria-describedby')!.split(' ').sort()).toEqual([hint.id, alert.id].sort());
+    // role="alert" already announces assertively
+    expect(alert.hasAttribute('aria-live')).toBe(false);
   });
 });

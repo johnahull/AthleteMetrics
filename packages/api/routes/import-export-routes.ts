@@ -339,21 +339,23 @@ export function registerImportExportRoutes(app: Express) {
 
       // Debug logging removed for production: OCR completed with confidence and extracted measurements
 
-      // All-or-nothing: a 5-0-5 reading needs the protocol. Reject the whole photo BEFORE any
-      // athlete lookup/creation or measurement write, so a retry can never duplicate data.
+      // All-or-nothing: a 5-0-5 reading needs the protocol and a 10-yard fly reading needs its run-in. Reject the
+      // whole photo BEFORE any athlete lookup/creation or measurement write, so a retry can never duplicate data.
+      // ONE 422 lists every missing choice (each retry re-runs OCR): `code` stays the first missing one for older
+      // clients, `required` names them all.
+      const required: Array<'protocol505' | 'flyRunIn'> = [];
       if (!protocol505 && ocrResult.extractedData.some(d => d.metric === OCR_505_NEUTRAL_METRIC)) {
-        return res.status(422).json({
-          message: PROTOCOL_505_REQUIRED_MESSAGE,
-          code: 'PROTOCOL_505_REQUIRED'
-        });
+        required.push('protocol505');
       }
-
-      // Same all-or-nothing rule for a 10-yard fly reading: its run-in decides which FLY10 code is written.
       if (flyRunIn === undefined && ocrResult.extractedData.some(d => d.metric === OCR_FLY10_NEUTRAL_METRIC)) {
-        return res.status(422).json({
-          message: FLY10_RUN_IN_REQUIRED_MESSAGE,
-          code: 'FLY10_RUN_IN_REQUIRED'
-        });
+        required.push('flyRunIn');
+      }
+      if (required.length > 0) {
+        return res.status(422).json(
+          required[0] === 'protocol505'
+            ? { message: PROTOCOL_505_REQUIRED_MESSAGE, code: 'PROTOCOL_505_REQUIRED', required }
+            : { message: FLY10_RUN_IN_REQUIRED_MESSAGE, code: 'FLY10_RUN_IN_REQUIRED', required }
+        );
       }
 
       // The protocol is known here (guard above), so the neutral 5-0-5 token resolves to a concrete code and can
@@ -362,8 +364,8 @@ export function registerImportExportRoutes(app: Express) {
       const resolveOcrMetric = (metric: string | undefined): string | undefined =>
         metric === OCR_505_NEUTRAL_METRIC
           ? (protocol505 === 'M' ? 'AGILITY_505_M' : 'AGILITY_505_YD')
-          : metric === OCR_FLY10_NEUTRAL_METRIC && flyRunIn !== undefined
-            ? FLY10_CODE_BY_RUN_IN_YD[flyRunIn]
+          : metric === OCR_FLY10_NEUTRAL_METRIC
+            ? FLY10_CODE_BY_RUN_IN_YD[flyRunIn!] // defined: the 422 above rejects a neutral fly row without it
             : metric;
 
       // Looked up once for the whole photo, not once per extracted row (issue #527)

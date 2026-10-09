@@ -123,9 +123,16 @@ describe('DataParser fly-10 run-in neutrality (AM-FEAT-017)', () => {
     expect(data.find((d) => d.metric === FLY)?.value).toBe('1.45');
   });
 
-  it('emits the neutral token for the inferred (generic) "10" line too', () => {
-    const m = parse('John Smith ten 1.50').find((d) => d.value === '1.50');
-    expect(m?.metric).toBe(FLY);
+  it('does not file a line as a fly just because a "10" appears in a date or in the value', () => {
+    // Before the fix these were guessed as fly readings and forced a 422 on the whole photo.
+    expect(parse('John Smith 10/05 2.45').find((d) => d.value === '2.45')).toBeUndefined();
+    expect(parse('Jane Doe 2.10').find((d) => d.value === '2.10')).toBeUndefined();
+    expect(parse('Jane Doe tendon 1.50').find((d) => d.value === '1.50')).toBeUndefined();
+  });
+
+  it('files a "10 fly" / "fly 10" line under the neutral token', () => {
+    expect(parse('John Smith 10 fly 1.05').find((d) => d.value === '1.05')?.metric).toBe(FLY);
+    expect(parse('John Smith fly 10 1.05').find((d) => d.value === '1.05')?.metric).toBe(FLY);
   });
 
   it('keeps T-test and 5-10-5 lines out of the fly bucket', () => {

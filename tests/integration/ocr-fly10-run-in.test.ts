@@ -110,7 +110,7 @@ describe('POST /api/import/photo fly-10 run-in', () => {
 
     const res = await upload().expect(422);
 
-    expect(res.body).toEqual({ message: RUN_IN_MSG, code: 'FLY10_RUN_IN_REQUIRED' });
+    expect(res.body).toEqual({ message: RUN_IN_MSG, code: 'FLY10_RUN_IN_REQUIRED', required: ['flyRunIn'] });
     expect(spy).not.toHaveBeenCalled();
     expect(await savedMetrics()).toEqual([]);
   });
@@ -177,17 +177,30 @@ describe('POST /api/import/photo fly-10 run-in', () => {
     expect(await storage.getAthletes({ search: `${ghostFirst} ${ghostLast}` } as any)).toHaveLength(0);
   });
 
-  it('a photo with both a 5-0-5 and a fly reading needs both choices; the 5-0-5 check runs first', async () => {
+  it('a photo with both a 5-0-5 and a fly reading gets ONE 422 listing every missing choice', async () => {
     mockOcr([
       { metric: NEUTRAL_505, value: '2.45', rawText: 'Ocrfly 5-0-5 2.45' },
       { metric: NEUTRAL, value: '1.45', rawText: 'Ocrfly 10 yd fly 1.45' },
     ]);
     const spy = vi.spyOn(storage, 'createMeasurement');
+    const ocr = vi.spyOn(ocrService, 'extractTextFromImage');
 
-    expect((await upload().expect(422)).body.code).toBe('PROTOCOL_505_REQUIRED');
-    expect((await upload({ protocol505: 'M' }).expect(422)).body.code).toBe('FLY10_RUN_IN_REQUIRED');
+    const both = await upload().expect(422);
+    // code stays the first missing choice for older clients; required lists all of them
+    expect(both.body.code).toBe('PROTOCOL_505_REQUIRED');
+    expect(both.body.required).toEqual(['protocol505', 'flyRunIn']);
+
+    // one choice supplied: only the other is still required
+    const onlyFly = await upload({ protocol505: 'M' }).expect(422);
+    expect(onlyFly.body.code).toBe('FLY10_RUN_IN_REQUIRED');
+    expect(onlyFly.body.required).toEqual(['flyRunIn']);
+    const only505 = await upload({ flyRunIn: 10 }).expect(422);
+    expect(only505.body.code).toBe('PROTOCOL_505_REQUIRED');
+    expect(only505.body.required).toEqual(['protocol505']);
     expect(spy).not.toHaveBeenCalled();
+    expect(ocr).toHaveBeenCalledTimes(3);
 
+    // one retry carrying both choices saves both rows
     const ok = await upload({ protocol505: 'YD', flyRunIn: 15 }).expect(200);
     expect(ok.body.results.successful).toBe(2);
     expect(await savedMetrics()).toEqual(expect.arrayContaining(['AGILITY_505_YD', 'FLY10_TIME_RI15']));

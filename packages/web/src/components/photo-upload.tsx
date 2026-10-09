@@ -52,19 +52,20 @@ interface OCRResult {
 const PROTOCOL_505_REQUIRED_CODE = 'PROTOCOL_505_REQUIRED';
 const FLY10_RUN_IN_REQUIRED_CODE = 'FLY10_RUN_IN_REQUIRED';
 
-/** Server answered 422: the photo has a 5-0-5 reading and no protocol was sent. Nothing was saved. */
-class Protocol505RequiredError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'Protocol505RequiredError';
-  }
-}
+type RequiredChoice = 'protocol505' | 'flyRunIn';
+const REQUIRED_MESSAGES: Record<RequiredChoice, string> = {
+  protocol505: 'Choose meters or yards for 5-0-5 readings',
+  flyRunIn: 'Choose the run-in distance for 10-yard fly readings',
+};
 
-/** Server answered 422: the photo has a 10-yard fly reading and no run-in was sent. Nothing was saved. */
-class FlyRunInRequiredError extends Error {
-  constructor(message: string) {
+/**
+ * Server answered 422: the photo has a 5-0-5 and/or a 10-yard fly reading and the matching choice(s) were not
+ * sent. `required` lists every missing choice so one retry can carry them all. Nothing was saved.
+ */
+class ChoicesRequiredError extends Error {
+  constructor(readonly required: RequiredChoice[], message: string) {
     super(message);
-    this.name = 'FlyRunInRequiredError';
+    this.name = 'ChoicesRequiredError';
   }
 }
 
@@ -122,11 +123,15 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
 
       if (response.status === 422) {
         const body = await response.json().catch(() => null);
-        if (body?.code === PROTOCOL_505_REQUIRED_CODE) {
-          throw new Protocol505RequiredError(body.message);
-        }
-        if (body?.code === FLY10_RUN_IN_REQUIRED_CODE) {
-          throw new FlyRunInRequiredError(body.message);
+        const code = body?.code;
+        if (code === PROTOCOL_505_REQUIRED_CODE || code === FLY10_RUN_IN_REQUIRED_CODE) {
+          // Older servers send only `code`; newer ones also list every missing choice in `required`.
+          const listed = Array.isArray(body.required)
+            ? body.required.filter((r: unknown): r is RequiredChoice => r === 'protocol505' || r === 'flyRunIn')
+            : [];
+          const required: RequiredChoice[] =
+            listed.length > 0 ? listed : [code === PROTOCOL_505_REQUIRED_CODE ? 'protocol505' : 'flyRunIn'];
+          throw new ChoicesRequiredError(required, body.message);
         }
       }
 
@@ -175,17 +180,21 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
       }
     },
     onError: (error: any) => {
-      if (error instanceof Protocol505RequiredError) {
-        // Nothing was saved, so retrying the same file is safe. No toast: the inline alert is the message.
+      if (error instanceof ChoicesRequiredError) {
+        // Nothing was saved, so retrying the same file is safe. No toast: the inline alerts are the message.
         setOcrResult(null);
-        setProtocolError(`${error.message}. Nothing was saved; choose below and upload again.`);
-        setTimeout(() => pickerRef.current?.focus(), 0);
-        return;
-      }
-      if (error instanceof FlyRunInRequiredError) {
-        setOcrResult(null);
-        setFlyRunInError(`${error.message}. Nothing was saved; choose below and upload again.`);
-        setTimeout(() => flyPickerRef.current?.focus(), 0);
+        const nothingSaved = '. Nothing was saved; choose below and upload again.';
+        if (error.required.includes('protocol505')) {
+          // A single-choice response carries the server's own wording; a combined one uses each picker's text.
+          const message = error.required.length === 1 ? error.message : REQUIRED_MESSAGES.protocol505;
+          setProtocolError(`${message}${nothingSaved}`);
+        }
+        if (error.required.includes('flyRunIn')) {
+          const message = error.required.length === 1 ? error.message : REQUIRED_MESSAGES.flyRunIn;
+          setFlyRunInError(`${message}${nothingSaved}`);
+        }
+        // Focus the first missing picker (5-0-5 comes first on the form)
+        setTimeout(() => (error.required.includes('protocol505') ? pickerRef : flyPickerRef).current?.focus(), 0);
         return;
       }
       console.error('Photo upload failed:', error);
