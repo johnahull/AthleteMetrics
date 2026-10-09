@@ -188,15 +188,18 @@ describe("Benchmark API Routes - Tier Groups", () => {
   });
 
   afterAll(async () => {
-    // Benchmarks have no tier group tracking in the DB, so delete them one by one
-    if (testBenchmark1Id) await storage.deleteSiteBenchmark(testBenchmark1Id, testSiteAdminId);
-    if (testBenchmark2Id) await storage.deleteSiteBenchmark(testBenchmark2Id, testSiteAdminId);
-    if (testBenchmark3Id) await storage.deleteSiteBenchmark(testBenchmark3Id, testSiteAdminId);
-
-    await purgeTestRows({
-      userIds: [testCoachId, testOrgAdminId, testSiteAdminId].filter((id): id is string => !!id),
-      orgIds: [testOrgId].filter((id): id is string => !!id),
-    });
+    try {
+      // Benchmarks have no tier group tracking in the DB, so delete them one by one
+      if (testBenchmark1Id) await storage.deleteSiteBenchmark(testBenchmark1Id, testSiteAdminId);
+      if (testBenchmark2Id) await storage.deleteSiteBenchmark(testBenchmark2Id, testSiteAdminId);
+      if (testBenchmark3Id) await storage.deleteSiteBenchmark(testBenchmark3Id, testSiteAdminId);
+    } finally {
+      // always runs, so a failing benchmark delete cannot leave the users and org behind
+      await purgeTestRows({
+        userIds: [testCoachId, testOrgAdminId, testSiteAdminId].filter((id): id is string => !!id),
+        orgIds: [testOrgId].filter((id): id is string => !!id),
+      });
+    }
   });
 
   beforeEach(() => {

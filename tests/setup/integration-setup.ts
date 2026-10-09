@@ -23,23 +23,10 @@ process.env.DISABLE_CSRF = 'true';
 // DATABASE_URL validation with production/staging protection
 const dbUrl = process.env.DATABASE_URL || '';
 
-// Block production and staging databases
-const forbiddenPatterns = [
-  'railway.app',      // Railway production/staging
-  'neon.tech',        // Neon production/staging
-  'supabase.co',      // Supabase production/staging
-  'amazonaws.com',    // AWS RDS
-  'cloudflare.com',   // Cloudflare D1
-  'planetscale',      // PlanetScale
-  'prod',             // Any URL containing "prod"
-  'production',       // Any URL containing "production"
-  'staging',          // Any URL containing "staging"
-];
+// Block production and staging databases (patterns shared with the leak check, tests/helpers/forbidden-db-url.ts)
 
 // Check if DATABASE_URL matches any forbidden pattern
-const matchedPattern = forbiddenPatterns.find(pattern =>
-  dbUrl.toLowerCase().includes(pattern.toLowerCase())
-);
+const matchedPattern = findForbiddenPattern(dbUrl);
 
 if (matchedPattern) {
   const sanitizedUrl = dbUrl.replace(/:[^:@]*@/, ':***@'); // Hide password
@@ -83,6 +70,7 @@ console.log('✅ Integration test database validated:', sanitizedUrl);
 console.log('   Environment:', process.env.NODE_ENV || 'test');
 
 import { beforeAll, afterAll } from 'vitest';
+import { findForbiddenPattern } from '../helpers/forbidden-db-url';
 import { closeDatabase } from '../../packages/api/db.js';
 
 // Store original console methods
