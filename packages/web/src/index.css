@@ -1,6 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import 'tailwindcss';
-@import './tailwind-v3-palette.css';
 @import 'tw-animate-css';
 @plugin '@tailwindcss/typography';
 
@@ -34,8 +33,7 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  /* Pre-existing mapping from tailwind.config.ts: --sidebar-background is not defined (the token is --sidebar). Kept as-is. */
-  --color-sidebar: var(--sidebar-background);
+  --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
@@ -94,37 +92,6 @@
     to {
       transform: translateX(0);
     }
-  }
-}
-
-/*
- * Tailwind v4 changed space-x/space-y to `> :not(:last-child)` with margin on the end side, which
- * drops the gap after inline children (e.g. a <label> followed by an input in shadcn FormItem).
- * These restore the v3 sibling-combinator behavior for visual parity. Not supported (unused in the
- * app): space-x-reverse / space-y-reverse, RTL, arbitrary values.
- */
-@utility space-x-* {
-  /* Cancel the end margin that v4's built-in utility of the same name puts on non-last children.
-     Children that set their own margin are skipped: v3 never touched the first child, and the
-     built-in rule has zero specificity so such a class already wins. */
-  & > :not(:last-child):not([class*='mr-']):not([class*='mx-']) {
-    margin-right: 0;
-  }
-  & > :not([hidden]) ~ :not([hidden]) {
-    --tw-space-x-reverse: 0;
-    margin-right: calc(calc(var(--spacing) * --value(number)) * var(--tw-space-x-reverse));
-    margin-left: calc(calc(var(--spacing) * --value(number)) * calc(1 - var(--tw-space-x-reverse)));
-  }
-}
-
-@utility space-y-* {
-  & > :not(:last-child):not([class*='mb-']):not([class*='my-']) {
-    margin-bottom: 0;
-  }
-  & > :not([hidden]) ~ :not([hidden]) {
-    --tw-space-y-reverse: 0;
-    margin-top: calc(calc(var(--spacing) * --value(number)) * calc(1 - var(--tw-space-y-reverse)));
-    margin-bottom: calc(calc(var(--spacing) * --value(number)) * var(--tw-space-y-reverse));
   }
 }
 
@@ -222,11 +189,15 @@
 
   input::placeholder,
   textarea::placeholder {
-    color: #9ca3af; /* v3 gray-400, hardcoded so the shim survives deleting tailwind-v3-palette.css */
+    color: var(--color-gray-400);
   }
 
-  * {
-    border-color: hsl(var(--border));
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--border);
   }
 
   body {

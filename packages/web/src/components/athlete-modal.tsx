@@ -523,7 +523,7 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
               </FormLabel>
               <div className="space-y-2">
                 {sportsFields.map((field: any, index: number) => (
-                  <div key={field.id} className="flex space-x-2">
+                  <div key={field.id} className="flex gap-x-2">
                     <FormField
                       control={form.control}
                       name={`sports.${index}`}
@@ -605,7 +605,7 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
                               name="positions"
                               render={({ field }) => {
                                 return (
-                                  <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                                  <FormItem className="flex flex-row items-start gap-x-3 gap-y-0">
                                     <FormControl>
                                       <Checkbox
                                         checked={field.value?.includes(position.code) || false}
@@ -648,7 +648,7 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
               </FormLabel>
               <div className="space-y-2">
                 {emailFields.map((field: any, index: number) => (
-                  <div key={field.id} className="flex space-x-2">
+                  <div key={field.id} className="flex gap-x-2">
                     <FormField
                       control={form.control}
                       name={`emails.${index}`}
@@ -701,7 +701,7 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
               </FormLabel>
               <div className="space-y-2">
                 {phoneFields.map((field: any, index: number) => (
-                  <div key={field.id} className="flex space-x-2">
+                  <div key={field.id} className="flex gap-x-2">
                     <FormField
                       control={form.control}
                       name={`phoneNumbers.${index}`}
@@ -783,7 +783,7 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
                   {/* Existing Teams */}
                   <div className="space-y-2">
                     {teams.filter((t: Team) => !t.isArchived).map((team: Team) => (
-                      <div key={team.id} className="flex items-center space-x-2">
+                      <div key={team.id} className="flex items-center gap-x-2">
                         <Checkbox
                           checked={selectedTeamIds.includes(team.id)}
                           onCheckedChange={(checked) => {
@@ -870,7 +870,7 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
           </ScrollArea>
 
           <div className="px-6 py-4 border-t bg-white shrink-0">
-            <div className="flex justify-end space-x-3">
+            <div className="flex justify-end gap-x-3">
               <Button 
                 type="button" 
                 variant="outline" 

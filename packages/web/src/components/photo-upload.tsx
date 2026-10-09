@@ -322,7 +322,7 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
             </div>
 
             {/* Quick Toggles */}
-            <div className="space-y-2">
+            <div className="grid gap-y-2">
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <input
                   type="checkbox"
@@ -338,7 +338,7 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
             {/* Advanced Options */}
             {showAdvanced && (
               <div className="space-y-3 pt-3 border-t">
-                <div className="space-y-2">
+                <div className="grid gap-y-2">
                   <label className="text-sm font-medium">Measurement Import Mode</label>
                   <Select value={measurementMode} onValueChange={(value) => setMeasurementMode(value as MeasurementImportMode)}>
                     <SelectTrigger>

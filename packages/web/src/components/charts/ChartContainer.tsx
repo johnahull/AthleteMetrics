@@ -398,7 +398,7 @@ export function ChartContainer({
 
   return (
     <Card className={`${className} ${cardHeight} flex flex-col transition-all duration-300`} ref={containerRef}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 shrink-0">
+      <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2 shrink-0">
         <div className="flex-1">
           <CardTitle className="text-lg font-medium">{title}</CardTitle>
           {subtitle && (

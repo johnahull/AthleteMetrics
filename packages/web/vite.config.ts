@@ -116,7 +116,7 @@ export default defineConfig({
           'vendor-utils': ['date-fns', 'lucide-react'],
 
           // Large specific modules
-          'html2canvas': ['html2canvas'],
+          'html2canvas': ['html2canvas-pro'],
           'purify': ['dompurify']
         },
         // Optimize chunk file names

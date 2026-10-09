@@ -1145,7 +1145,7 @@ Jordan,Williams,2009-01-10,2009,2027,Male,"jordan.williams@email.com,j.williams@
               <div className="space-y-4">
                 {/* Column Mapping Toggle */}
                 <div className="pb-3 border-b">
-                  <label className="flex items-center space-x-3 cursor-pointer">
+                  <label className="flex items-center gap-x-3 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={useColumnMapping}
@@ -1264,7 +1264,7 @@ Jordan,Williams,2009-01-10,2009,2027,Male,"jordan.williams@email.com,j.williams@
                 {showAdvancedOptions && (
                   <div className="space-y-3 pl-4 border-l-2 border-gray-200">
                     {athleteMode !== 'create_only' && importType === "athletes" && (
-                      <label className="flex items-center space-x-2">
+                      <label className="flex items-center gap-x-2">
                         <input
                           type="checkbox"
                           checked={updateExisting}
@@ -1278,7 +1278,7 @@ Jordan,Williams,2009-01-10,2009,2027,Male,"jordan.williams@email.com,j.williams@
                       </label>
                     )}
 
-                    <label className="flex items-center space-x-2">
+                    <label className="flex items-center gap-x-2">
                       <input
                         type="checkbox"
                         checked={skipDuplicates}
@@ -1587,7 +1587,7 @@ Jordan,Williams,2009-01-10,2009,2027,Male,"jordan.williams@email.com,j.williams@
           </div>
 
           <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-            <div className="flex items-start space-x-3">
+            <div className="flex items-start gap-x-3">
               <Info className="h-5 w-5 text-blue-600 mt-1 shrink-0" />
               <div className="text-sm text-blue-800">
                 <p className="font-medium mb-1">Import Guidelines:</p>
@@ -1674,7 +1674,7 @@ Jordan,Williams,2009-01-10,2009,2027,Male,"jordan.williams@email.com,j.williams@
           </div>
 
           <div className="mt-6 p-4 bg-yellow-50 rounded-lg">
-            <div className="flex items-start space-x-3">
+            <div className="flex items-start gap-x-3">
               <AlertTriangle className="h-5 w-5 text-yellow-600 mt-1 shrink-0" />
               <div className="text-sm text-yellow-800">
                 <p className="font-medium mb-1">Export Notes:</p>

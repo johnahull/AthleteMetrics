@@ -297,7 +297,7 @@ export function EnhancedLoginForm() {
         <form onSubmit={handleSubmit} className="space-y-4">
           {step === 'credentials' && (
             <>
-              <div className="space-y-2">
+              <div className="grid gap-y-2">
                 <Label htmlFor="username">Username or Email</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
@@ -343,7 +343,7 @@ export function EnhancedLoginForm() {
                 )}
               </div>
 
-              <div className="space-y-2">
+              <div className="grid gap-y-2">
                 <Label htmlFor="password">Password</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
@@ -380,7 +380,7 @@ export function EnhancedLoginForm() {
               </div>
 
               <div className="flex items-center justify-between">
-                <label className="flex items-center space-x-2 cursor-pointer">
+                <label className="flex items-center gap-x-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={formData.rememberMe}
@@ -412,7 +412,7 @@ export function EnhancedLoginForm() {
                 </p>
               </div>
               
-              <div className="space-y-2">
+              <div className="grid gap-y-2">
                 <Label htmlFor="mfaToken">Authentication Code</Label>
                 <Input
                   id="mfaToken"

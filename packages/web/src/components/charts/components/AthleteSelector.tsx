@@ -214,7 +214,7 @@ const AthleteSelectorContent = React.memo(function AthleteSelectorContent({
           const athleteColor = getAthleteColor(athlete.color);
 
           return (
-            <div key={athlete.id} className="flex items-center space-x-2">
+            <div key={athlete.id} className="flex items-center gap-x-2">
               <Checkbox
                 id={`athlete-${athlete.id}`}
                 checked={athleteToggles[athlete.id] || false}
@@ -241,7 +241,7 @@ const AthleteSelectorContent = React.memo(function AthleteSelectorContent({
 
       {/* Group Average Toggle - only show if enabled */}
       {showGroupAverage !== undefined && onToggleGroupAverage && (
-        <div className="flex items-center space-x-2 pt-2 border-t">
+        <div className="flex items-center gap-x-2 pt-2 border-t">
           <Checkbox
             id="group-average"
             checked={showGroupAverage}

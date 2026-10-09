@@ -209,7 +209,7 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
 
         <div className="space-y-6">
           {/* Template Selection */}
-          <div className="space-y-2">
+          <div className="grid gap-y-2">
             <Label>Select Template *</Label>
             <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
               <SelectTrigger data-testid="select-template">
@@ -226,11 +226,11 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
           </div>
 
           {/* Distribution Method */}
-          <div className="space-y-2">
+          <div className="grid gap-y-2">
             <Label>Distribution Method *</Label>
             <RadioGroup value={distributionMethod} onValueChange={(value: any) => setDistributionMethod(value)}>
               <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center space-x-2 p-4 border rounded-md cursor-pointer hover:bg-gray-50 border-primary/50 bg-primary/5">
+                <div className="flex items-center gap-x-2 p-4 border rounded-md cursor-pointer hover:bg-gray-50 border-primary/50 bg-primary/5">
                   <RadioGroupItem value="magic_link" id="magic_link" data-testid="radio-magic-link" />
                   <Label htmlFor="magic_link" className="cursor-pointer flex-1">
                     <div>
@@ -241,7 +241,7 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
                   <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Recommended</span>
                 </div>
 
-                <div className="flex items-center space-x-2 p-4 border rounded-md cursor-pointer hover:bg-gray-50">
+                <div className="flex items-center gap-x-2 p-4 border rounded-md cursor-pointer hover:bg-gray-50">
                   <RadioGroupItem value="athlete_account" id="athlete_account" />
                   <Label htmlFor="athlete_account" className="cursor-pointer">
                     <div>
@@ -251,7 +251,7 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
                   </Label>
                 </div>
 
-                <div className="flex items-center space-x-2 p-4 border rounded-md cursor-pointer hover:bg-gray-50">
+                <div className="flex items-center gap-x-2 p-4 border rounded-md cursor-pointer hover:bg-gray-50">
                   <RadioGroupItem value="team_link" id="team_link" data-testid="radio-team-link" />
                   <Label htmlFor="team_link" className="cursor-pointer">
                     <div>
@@ -261,7 +261,7 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
                   </Label>
                 </div>
 
-                <div className="flex items-center space-x-2 p-4 border rounded-md cursor-pointer hover:bg-gray-50">
+                <div className="flex items-center gap-x-2 p-4 border rounded-md cursor-pointer hover:bg-gray-50">
                   <RadioGroupItem value="qr_code" id="qr_code" data-testid="radio-qr-code" />
                   <Label htmlFor="qr_code" className="cursor-pointer">
                     <div>
@@ -275,7 +275,7 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
           </div>
 
           {/* Athlete/Team Selection */}
-          <div className="space-y-2">
+          <div className="grid gap-y-2">
             <Label>Select Athletes/Teams *</Label>
             <TeamAthleteSelector
               organizationId={organizationId}
@@ -285,19 +285,19 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
           </div>
 
           {/* Send Mode */}
-          <div className="space-y-3">
+          <div className="grid gap-y-3">
             <Label>When to send</Label>
             <RadioGroup value={sendMode} onValueChange={(v: any) => setSendMode(v)}>
               <div className="flex gap-4">
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-x-2">
                   <RadioGroupItem value="now" id="send-now" data-testid="send-mode-now" />
                   <Label htmlFor="send-now" className="cursor-pointer font-medium">Send now</Label>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-x-2">
                   <RadioGroupItem value="schedule" id="send-schedule" data-testid="send-mode-schedule" />
                   <Label htmlFor="send-schedule" className="cursor-pointer font-medium">Schedule</Label>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-x-2">
                   <RadioGroupItem value="recurring" id="send-recurring" data-testid="send-mode-recurring" />
                   <Label htmlFor="send-recurring" className="cursor-pointer font-medium">Recurring</Label>
                 </div>
@@ -306,7 +306,7 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
 
             {/* One-time schedule config */}
             {sendMode === 'schedule' && (
-              <div className="space-y-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
+              <div className="grid gap-y-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
                 <Label htmlFor="scheduled-datetime">Send at</Label>
                 <Input
                   id="scheduled-datetime"
@@ -326,7 +326,7 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
             {sendMode === 'recurring' && (
               <div className="space-y-4 p-3 bg-purple-50 border border-purple-200 rounded-md">
                 {/* Recurrence type */}
-                <div className="space-y-2">
+                <div className="grid gap-y-2">
                   <Label>Frequency</Label>
                   <Select value={recurrenceType} onValueChange={(v: any) => setRecurrenceType(v)}>
                     <SelectTrigger data-testid="select-recurrence-type">
@@ -342,7 +342,7 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
 
                 {/* Weekly: day-of-week checkboxes */}
                 {recurrenceType === 'weekly' && (
-                  <div className="space-y-2">
+                  <div className="grid gap-y-2">
                     <Label>Days of the week</Label>
                     <div className="flex gap-2">
                       {DAY_LABELS.map((label, idx) => (
@@ -368,7 +368,7 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
 
                 {/* Custom: interval input */}
                 {recurrenceType === 'custom' && (
-                  <div className="space-y-2">
+                  <div className="grid gap-y-2">
                     <Label htmlFor="custom-interval">Every ___ days</Label>
                     <Input
                       id="custom-interval"
@@ -383,7 +383,7 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
                 )}
 
                 {/* Time picker */}
-                <div className="space-y-2">
+                <div className="grid gap-y-2">
                   <Label htmlFor="schedule-time">Time of day</Label>
                   <Input
                     id="schedule-time"
@@ -395,7 +395,7 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
                 </div>
 
                 {/* End condition */}
-                <div className="space-y-2">
+                <div className="grid gap-y-2">
                   <Label>Ends</Label>
                   <RadioGroup value={endMode} onValueChange={(v: any) => setEndMode(v)}>
                     <div className="space-y-3">
@@ -436,7 +436,7 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
 
           {/* Expiry Date (only for non-recurring) */}
           {sendMode !== 'recurring' && (
-            <div className="space-y-2">
+            <div className="grid gap-y-2">
               <Label htmlFor="expiry-date">Expiry Date</Label>
               <Input
                 id="expiry-date"

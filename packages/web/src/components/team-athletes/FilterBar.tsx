@@ -98,9 +98,9 @@ export function FilterBar({
   // Filter controls for available athletes
   return (
     <div className="flex items-center justify-between" role="toolbar" aria-label="Athlete filtering options">
-      <div className="flex items-center space-x-4">
+      <div className="flex items-center gap-x-4">
         {onShowOnlyAvailableChange && (
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-x-2">
             <Checkbox
               id="show-available"
               checked={showOnlyAvailable}
@@ -114,7 +114,7 @@ export function FilterBar({
         )}
 
         {onSeasonChange && seasons.length > 0 && (
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-x-2">
             <Label htmlFor="season-filter" className="text-sm">
               Season:
             </Label>
