@@ -418,6 +418,25 @@ describe('MetricService', () => {
         ).rejects.toThrow(/anchorMetric.*derived/i);
       });
 
+      it('update with stored null dependentMetrics and a valid anchor succeeds (membership cannot be checked)', async () => {
+        await db.update(siteMetrics).set({ dependentMetrics: null }).where(eq(siteMetrics.code, testMetricCode));
+        const ok = await metricService.updateSiteMetric(testMetricCode, { calculationConfig: config(srcA) }, siteAdminUserId);
+        expect(ok.calculationConfig?.anchorMetric).toBe(srcA);
+      });
+
+      it('update with stored null dependentMetrics still rejects a derived anchor', async () => {
+        await db.update(siteMetrics).set({ dependentMetrics: null }).where(eq(siteMetrics.code, testMetricCode));
+        await expect(
+          metricService.updateSiteMetric(testMetricCode, { calculationConfig: config(derivedSrc) }, siteAdminUserId)
+        ).rejects.toThrow(/anchorMetric.*derived/i);
+      });
+
+      it('update still rejects an anchor missing from dependentMetrics supplied by the patch', async () => {
+        await expect(
+          metricService.updateSiteMetric(testMetricCode, { dependentMetrics: [srcB], calculationConfig: config(srcA) }, siteAdminUserId)
+        ).rejects.toThrow(/anchorMetric must be one of the dependent metrics/);
+      });
+
       it('update rejects an anchorMetric with no site_metrics row', async () => {
         const ghost = `GHOST_${srcA}`;
         await expect(
@@ -450,7 +469,7 @@ describe('MetricService', () => {
         const ghost = `GHOST_${srcA}`;
         await expect(
           metricService.createSiteMetric(createInput(ghost, [ghost, srcB]), siteAdminUserId)
-        ).rejects.toThrow();
+        ).rejects.toThrow(/Invalid formula: Unknown metric/);
       });
     });
 

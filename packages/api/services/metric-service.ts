@@ -107,10 +107,13 @@ export class MetricService extends BaseService {
    * NON-derived site metric: the calculator's anchor gate requires a directly measured
    * (non-calculated) anchor row, so a derived anchor would delete every derived value.
    */
-  private async validateAnchorMetric(anchorMetric: string | undefined, dependentMetrics: string[]): Promise<void> {
+  private async validateAnchorMetric(anchorMetric: string | undefined, dependentMetrics: string[] | null): Promise<void> {
     if (!anchorMetric) return;
     const anchor = anchorMetric.toUpperCase();
-    if (!dependentMetrics.some(d => d.toUpperCase() === anchor)) {
+    // null = the dependents are unknown (a malformed stored row): skip only the membership check
+    if (dependentMetrics === null) {
+      console.warn(`anchorMetric ${anchor}: dependentMetrics unavailable, skipping the membership check`);
+    } else if (!dependentMetrics.some(d => d.toUpperCase() === anchor)) {
       throw new Error("anchorMetric must be one of the dependent metrics");
     }
     const row = await this.storage.getSiteMetric(anchor);
@@ -298,10 +301,14 @@ export class MetricService extends BaseService {
       // The schema can only check anchorMetric against dependentMetrics sent in the same patch;
       // when the patch has none, check against the stored ones.
       if (validatedData.calculationConfig?.anchorMetric) {
-        await this.validateAnchorMetric(
-          validatedData.calculationConfig.anchorMetric,
-          validatedData.dependentMetrics ?? (await this.storage.getSiteMetric(code))?.dependentMetrics ?? []
-        );
+        // Dependents supplied by the patch are checked strictly; otherwise use the stored ones
+        // (null/empty stored dependents are treated as unknown rather than blocking the patch).
+        let dependents: string[] | null = validatedData.dependentMetrics ?? null;
+        if (!validatedData.dependentMetrics) {
+          const stored = (await this.storage.getSiteMetric(code))?.dependentMetrics;
+          dependents = stored && stored.length > 0 ? stored : null;
+        }
+        await this.validateAnchorMetric(validatedData.calculationConfig.anchorMetric, dependents);
       }
 
       // Update metric
