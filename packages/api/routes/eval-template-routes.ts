@@ -93,7 +93,7 @@ export function registerEvalTemplateRoutes(app: Express) {
       res.status(404).json(NOT_FOUND);
       return null;
     }
-    if (!svc.canEditTemplate(userOf(req), template)) {
+    if (!(await svc.canEditTemplate(userOf(req), template))) {
       res.status(403).json({ error: "Only a site admin can change the default template" });
       return null;
     }
