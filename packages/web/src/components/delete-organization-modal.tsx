@@ -139,7 +139,7 @@ export default function DeleteOrganizationModal({
                 </AlertDescription>
               </Alert>
 
-              <div className="space-y-2">
+              <div className="grid gap-y-2">
                 <label htmlFor="confirmation" className="text-sm font-medium">
                   Type <span className="font-mono font-semibold">{organization.name}</span> to confirm deletion:
                 </label>

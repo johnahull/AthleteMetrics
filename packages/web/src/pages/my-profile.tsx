@@ -160,7 +160,7 @@ export default function MyProfilePage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
-            <div className="space-y-1">
+            <div className="grid gap-y-1">
               <Label htmlFor="peer-comparison-toggle" className="font-medium">
                 Show peer comparisons
               </Label>

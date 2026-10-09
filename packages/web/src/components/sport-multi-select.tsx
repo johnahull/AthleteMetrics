@@ -142,7 +142,7 @@ export function SportMultiSelect({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="w-full justify-between min-h-[2.5rem] h-auto"
+          className="w-full justify-between min-h-10 h-auto"
           disabled={disabled}
           data-testid="sport-multi-select"
         >

@@ -3,7 +3,7 @@
  * Extracted from routes.ts for better maintainability
  */
 
-import { parseFlyInInput } from "@shared/fly-run-in";
+import { parseFlyInInput, parseFlyRunInChoice, FLY10_CODE_BY_RUN_IN_YD, OCR_FLY10_NEUTRAL_METRIC } from "@shared/fly-run-in";
 import type { Express, Request, Response } from "express";
 import multer from "multer";
 import rateLimit from "express-rate-limit";
@@ -14,6 +14,7 @@ import { sanitizeCSVValue } from "../utils/csv-utils";
 import { ocrService } from "../ocr/ocr-service";
 import { findBestAthleteMatch, type MatchingCriteria, type MatchResult } from "../athlete-matching";
 import { isSiteAdmin } from "@shared/auth-utils";
+import { OCR_REQUIRED_CHOICE_MESSAGES, type OcrRequiredChoice } from "@shared/ocr-types";
 import { METRIC_CONFIG } from "@shared/analytics-types";
 import { COMMON_METRICS, type ImportResult } from "@shared/import-types";
 import { globalAthleteService } from "../services/global-athlete-service";
@@ -255,7 +256,6 @@ const imageUpload = multer({
 });
 
 const OCR_505_NEUTRAL_METRIC = 'AGILITY_505_UNRESOLVED';
-const PROTOCOL_505_REQUIRED_MESSAGE = 'Choose meters or yards for 5-0-5 readings';
 
 export function registerImportExportRoutes(app: Express) {
   // Photo OCR upload route (must come before generic import route)
@@ -296,6 +296,13 @@ export function registerImportExportRoutes(app: Express) {
         return res.status(400).json({ message: "Invalid protocol505: must be 'M' or 'YD'" });
       }
 
+      // AM-FEAT-017: run-in distance (5|10|15|20|30 yd) for 10-yard fly readings. Same contract as protocol505:
+      // optional unless the photo has a fly reading (422 below), a supplied but invalid value is a 400.
+      const flyRunIn = parseFlyRunInChoice(options.flyRunIn);
+      if (options.flyRunIn !== undefined && flyRunIn === undefined) {
+        return res.status(400).json({ message: "Invalid flyRunIn: must be 5, 10, 15, 20 or 30 (yards)" });
+      }
+
       // Tenant isolation: reject a client-supplied organizationId the caller
       // does not belong to before any org-scoped read or write.
       const photoOrgAccessError = await checkImportOrgAccess(currentUser, options.organizationId);
@@ -331,20 +338,34 @@ export function registerImportExportRoutes(app: Express) {
 
       // Debug logging removed for production: OCR completed with confidence and extracted measurements
 
-      // All-or-nothing: a 5-0-5 reading needs the protocol. Reject the whole photo BEFORE any
-      // athlete lookup/creation or measurement write, so a retry can never duplicate data.
+      // All-or-nothing: a 5-0-5 reading needs the protocol and a 10-yard fly reading needs its run-in. Reject the
+      // whole photo BEFORE any athlete lookup/creation or measurement write, so a retry can never duplicate data.
+      // ONE 422 lists every missing choice (each retry re-runs OCR): `code` stays the first missing one for older
+      // clients, `required` names them all.
+      const required: OcrRequiredChoice[] = [];
       if (!protocol505 && ocrResult.extractedData.some(d => d.metric === OCR_505_NEUTRAL_METRIC)) {
-        return res.status(422).json({
-          message: PROTOCOL_505_REQUIRED_MESSAGE,
-          code: 'PROTOCOL_505_REQUIRED'
-        });
+        required.push('protocol505');
+      }
+      if (flyRunIn === undefined && ocrResult.extractedData.some(d => d.metric === OCR_FLY10_NEUTRAL_METRIC)) {
+        required.push('flyRunIn');
+      }
+      if (required.length > 0) {
+        return res.status(422).json(
+          required[0] === 'protocol505'
+            ? { message: OCR_REQUIRED_CHOICE_MESSAGES.protocol505, code: 'PROTOCOL_505_REQUIRED', required }
+            : { message: OCR_REQUIRED_CHOICE_MESSAGES.flyRunIn, code: 'FLY10_RUN_IN_REQUIRED', required }
+        );
       }
 
       // The protocol is known here (guard above), so the neutral 5-0-5 token resolves to a concrete code and can
       // never reach storage or a response. One function for the prefetch below and the row loop, so the metric
       // that is looked up is always the metric that is written.
       const resolveOcrMetric = (metric: string | undefined): string | undefined =>
-        metric === OCR_505_NEUTRAL_METRIC ? (protocol505 === 'M' ? 'AGILITY_505_M' : 'AGILITY_505_YD') : metric;
+        metric === OCR_505_NEUTRAL_METRIC
+          ? (protocol505 === 'M' ? 'AGILITY_505_M' : 'AGILITY_505_YD')
+          : metric === OCR_FLY10_NEUTRAL_METRIC
+            ? FLY10_CODE_BY_RUN_IN_YD[flyRunIn!] // defined: the 422 above rejects a neutral fly row without it
+            : metric;
 
       // Looked up once for the whole photo, not once per extracted row (issue #527)
       const photoMetricConfigs = await storage.getMetricWriteConfigs([

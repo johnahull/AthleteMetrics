@@ -452,7 +452,7 @@ export default function Register() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Name fields */}
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
+              <div className="grid gap-y-2">
                 <Label htmlFor="firstName">First Name</Label>
                 <Input
                   id="firstName"
@@ -463,7 +463,7 @@ export default function Register() {
                   required
                 />
               </div>
-              <div className="space-y-2">
+              <div className="grid gap-y-2">
                 <Label htmlFor="lastName">Last Name</Label>
                 <Input
                   id="lastName"
@@ -478,7 +478,7 @@ export default function Register() {
 
             {/* Date of Birth — required for COPPA age gate (athlete mode only) */}
             {!isParentMode && (
-              <div className="space-y-2">
+              <div className="grid gap-y-2">
                 <Label htmlFor="birthDate">Date of Birth</Label>
                 <Input
                   id="birthDate"
@@ -493,7 +493,7 @@ export default function Register() {
 
             {/* Parent/Guardian Email — shown for all minor athletes (under-18) */}
             {!isParentMode && minor && (
-              <div className="space-y-2">
+              <div className="grid gap-y-2">
                 <Label htmlFor="parentEmail">
                   Parent or Guardian Email {under13 && <span className="text-red-500">*</span>}
                 </Label>
@@ -522,7 +522,7 @@ export default function Register() {
             )}
 
             {/* Email field */}
-            <div className="space-y-2">
+            <div className="grid gap-y-2">
               <Label htmlFor="email">Email</Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
@@ -552,7 +552,7 @@ export default function Register() {
             </div>
 
             {/* Username field */}
-            <div className="space-y-2">
+            <div className="grid gap-y-2">
               <Label htmlFor="username">Username</Label>
               <div className="relative">
                 <User className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
@@ -582,7 +582,7 @@ export default function Register() {
             </div>
 
             {/* Password field */}
-            <div className="space-y-2">
+            <div className="grid gap-y-2">
               <Label htmlFor="password">Password</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
@@ -624,7 +624,7 @@ export default function Register() {
             </div>
 
             {/* Confirm Password field */}
-            <div className="space-y-2">
+            <div className="grid gap-y-2">
               <Label htmlFor="confirmPassword">Confirm Password</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
@@ -651,7 +651,7 @@ export default function Register() {
             </div>
 
             {/* Legal Acceptance Checkbox */}
-            <div className="flex items-start space-x-2">
+            <div className="flex items-start gap-x-2">
               <Checkbox
                 id="termsAccepted"
                 checked={formData.termsAccepted}

@@ -68,6 +68,7 @@ const metricFormSchema = z.object({
     dateMatchStrategy: z.enum(['same_date', 'latest_before', 'closest']).default('same_date'),
     maxDateDifference: z.number().int().min(1).max(365).optional(),
     missingSourceBehavior: z.enum(['skip', 'error']).default('skip'),
+    anchorMetric: z.string().max(50).optional(),
   }).optional(),
 }).refine(data => !data.isDerived || data.formula, {
   message: "Formula is required for derived metrics",
@@ -552,7 +553,7 @@ export default function MetricFormDialog({
                 name="isDerived"
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
+                    <div className="grid gap-y-0.5">
                       <FormLabel className="text-base">Derived Metric</FormLabel>
                       <FormDescription>
                         Calculate this metric's value from other metrics

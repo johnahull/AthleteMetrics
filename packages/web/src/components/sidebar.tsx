@@ -262,10 +262,10 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
   }
 
   return (
-    <aside className="w-64 bg-white shadow-sm border-r border-gray-200 h-screen flex-shrink-0 flex flex-col">
+    <aside className="w-64 bg-white shadow-sm border-r border-gray-200 h-screen shrink-0 flex flex-col">
       {/* Logo */}
       <div className="p-6 border-b border-gray-200">
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center gap-x-3">
           <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
             <BarChart3 className="h-6 w-6 text-white" />
           </div>

@@ -13,7 +13,7 @@ export const TimeSeriesChartControls = React.memo(function TimeSeriesChartContro
 }: TimeSeriesChartControlsProps) {
   return (
     <div className="flex flex-wrap gap-4 text-sm">
-      <div className="flex items-center space-x-2">
+      <div className="flex items-center gap-x-2">
         <Switch
           id="athlete-names"
           checked={showAthleteNames}
