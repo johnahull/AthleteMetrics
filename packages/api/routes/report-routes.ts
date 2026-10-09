@@ -47,6 +47,7 @@ import { getPushNotificationService, type NotificationPayload } from "../service
 import { notificationPreferences } from "@shared/schema";
 import { hexToRgb, isSafeLogoUrl, fetchLogoBase64, sanitizeFilename } from "./report-branding-utils";
 import { renderEvalReportPdf } from "../utils/eval-report-pdf";
+import { canAccessEvalRow, hasInaccessibleEval } from "./eval-report-access";
 import { EVAL_REPORT_TYPE, frozenModelSchema } from "@shared/eval-report-config";
 import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
 
@@ -1167,7 +1168,7 @@ export function registerReportRoutes(app: Express) {
 
         // AM-FEAT-019: only coach / org_admin / site admin of the eval's org may snapshot an eval (same 404 as its PDF)
         const [target] = await db.select({ reportType: reports.reportType, organizationId: reports.organizationId }).from(reports).where(eq(reports.id, reportId)).limit(1);
-        if (!target || (target.reportType === EVAL_REPORT_TYPE && !isMeasurementWriterRole(await getOrgRole(user, target.organizationId)))) {
+        if (!target || !(await canAccessEvalRow(user, target))) {
           return res.status(404).json(REPORT_NOT_FOUND);
         }
 
@@ -3983,30 +3984,6 @@ function addTrendChartsToPdf(
     doc.addImage(img.dataUrl, 'PNG', margin, yPos, imgWidth, imgHeight);
     yPos += imgHeight + 10;
   });
-}
-
-/**
- * AM-FEAT-019: eval reports hold one athlete's frozen model, coach note and age. Org membership is not enough:
- * the caller must be coach / org_admin / site admin in the REPORT's own organization (never the session role).
- * Every other report type passes here and keeps its existing membership check.
- */
-async function canAccessEvalRow(
-  user: { id: string; isSiteAdmin?: boolean; role?: string },
-  report: { reportType: string; organizationId: string }
-): Promise<boolean> {
-  if (report.reportType !== EVAL_REPORT_TYPE) return true;
-  return isMeasurementWriterRole(await getOrgRole(user, report.organizationId));
-}
-
-/** True when any of these rows is an eval the caller may not see or change. */
-async function hasInaccessibleEval(
-  user: { id: string; isSiteAdmin?: boolean; role?: string },
-  rows: Array<{ reportType: string; organizationId: string }>
-): Promise<boolean> {
-  // One role lookup per distinct organization (not per row)
-  const orgIds = [...new Set(rows.filter((r) => r.reportType === EVAL_REPORT_TYPE).map((r) => r.organizationId))];
-  const roles = await Promise.all(orgIds.map((orgId) => getOrgRole(user, orgId)));
-  return roles.some((role) => !isMeasurementWriterRole(role));
 }
 
 /**
