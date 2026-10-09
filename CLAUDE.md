@@ -622,6 +622,23 @@ AthleteMetrics supports Google and Apple OAuth authentication via Passport.js as
 
 **Documentation:** See `docs/OAUTH_AUTHENTICATION.md` for comprehensive setup guide, user flows, and future enhancements.
 
+### Eval Report (AM-FEAT-019)
+Coach-generated, family-facing PDF for one athlete at one evaluation event. Each generation is a saved `reports` row with `reportType = 'eval'` whose `config` holds the frozen `EvalReportModel`; snapshots, shares and public links reuse the existing report plumbing. Data is event-, athlete-, organization- and verified-only; derived metrics are recomputed from per-leg bests; age-group sets are single "Average" rows, so the comparison is above/below average and the PDF never prints tier names. No wellness data; MQI is a band word only.
+
+**Rule: eval reports are `reports` rows gated by `canAccessEvalRow` (`packages/api/routes/report-routes.ts`): coach / org admin / site admin of the report row's own organization, otherwise 404. Any new route that touches reports must gate eval rows.** Eval `config` is immutable (only name/description editable); athletes reach an eval only through an explicit share.
+
+**Key files:**
+- `packages/api/services/eval-report/` - pure domain logic (`tier-match`, `selection`, `derived`, `balance`, `metric-key-map`, `template-keys`, `model`, `copy`); `model-guard.ts` fails `tsc` on wellness-named fields
+- `packages/api/services/eval-report-service.ts` - loads inputs and assembles the model
+- `packages/api/routes/event-report-routes.ts` - preview / save / defaults; `packages/api/routes/eval-template-routes.ts` + `services/eval-template-service.ts` - templates and org settings
+- `packages/api/utils/eval-report-pdf.ts` - server-side jsPDF renderer (WinAnsi font only)
+- `packages/shared/eval-report-config.ts`, `packages/shared/eval-template-schemas.ts` - Zod schemas
+- `migrations/0153_add_eval_report_templates.sql` - number provisional; renumber at merge
+- Web: `packages/web/src/components/events/EvalReportDialog.tsx`, `EventEvalReportsCard.tsx`, `EvalTemplatePicker.tsx`, `SaveEvalTemplateDialog.tsx`, `components/reports/EvalReportView.tsx`
+- COPPA: P3d (deletion, export, profile merge) and P4 (all-report-types under-13 share guard, #560) are separate PRs
+
+**Docs:** `docs/EVAL_REPORT.md` (guide, API, testing, troubleshooting, release gate), `docs/adr/ADR-002-eval-report-v2.md` (decisions), `docs/EVAL_REPORT_FOLLOWUPS.md` (open items). The eval E2E (`tests/e2e/eval-report.spec.ts`) is run locally until the E2E suite is green (#490).
+
 ### Data Import/Export
 - CSV import with comprehensive validation and preview
 - Support for matching existing players or creating new ones
