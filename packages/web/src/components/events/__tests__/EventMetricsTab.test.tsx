@@ -60,6 +60,12 @@ describe('EventMetricsTab', () => {
     expect(within(fly).getByText('speed')).toBeInTheDocument();
 
     // Site metric deleted later: the code is the only name left
-    expect(screen.getAllByText('OLD_METRIC').length).toBeGreaterThan(0);
+    const old = screen.getAllByText('OLD_METRIC').map((el) => el.closest('div.rounded-lg') as HTMLElement)[0];
+    expect(old.querySelector('p.font-medium')).toHaveTextContent('OLD_METRIC');
+    expect(old).not.toHaveTextContent('(');
+
+    // The readable label (not the code) is what the name line shows
+    expect(vj.querySelector('p.font-medium')).toHaveTextContent('Vertical Jump');
+    expect(vj.querySelector('p.font-medium')).not.toHaveTextContent('VERTICAL_JUMP');
   });
 });

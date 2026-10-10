@@ -61,7 +61,8 @@ vi.mock('@/lib/events-api', async () => {
   };
 });
 
-import EventDataEntry, { getCellState } from '../event-data-entry';
+import EventDataEntry from '../event-data-entry';
+import { getCellState } from '@/lib/event-grid-cell-state';
 import { MovementQualitySaveError } from '@/lib/events-api';
 
 beforeAll(() => {
@@ -266,6 +267,12 @@ describe('EventDataEntry', () => {
       expect(await screen.findByRole('tooltip')).toHaveTextContent('VERTICAL_JUMP');
     });
 
+    it('gives the header label a title with the full label and code (keyboard/touch/hover friendly)', () => {
+      render(<EventDataEntry />);
+      const header = screen.getByRole('columnheader', { name: /Vertical Jump/ });
+      expect(within(header).getByText('Vertical Jump')).toHaveAttribute('title', 'Vertical Jump (VERTICAL_JUMP)');
+    });
+
     it('prefers the event custom label and falls back to the code without site details', () => {
       eventMetricsState = [
         metric('VERTICAL_JUMP', { customLabel: 'CMJ no arms' }),
@@ -280,6 +287,16 @@ describe('EventDataEntry', () => {
       eventMetricsState = [metric('VERTICAL_JUMP', { isRequired: true })];
       render(<EventDataEntry />);
       expect(screen.getByRole('columnheader', { name: /Vertical Jump.*\(required\)/ })).toBeInTheDocument();
+    });
+
+    it('keeps the required star outside the line-clamped label so long labels cannot clip it', () => {
+      eventMetricsState = [metric('VERTICAL_JUMP', { isRequired: true, customLabel: 'A very long custom label that will certainly wrap past two lines' })];
+      render(<EventDataEntry />);
+      const header = screen.getByRole('columnheader', { name: /very long custom label/ });
+      const clamped = header.querySelector('.line-clamp-2') as HTMLElement;
+      const star = within(header).getByText('*');
+      expect(clamped).toHaveTextContent('A very long custom label');
+      expect(clamped.contains(star)).toBe(false);
     });
 
     it('uses column headers for metrics and a row header per athlete', () => {
@@ -333,7 +350,17 @@ describe('EventDataEntry', () => {
       expect(screen.getByText(/2 metric columns/i)).toHaveTextContent(/scroll sideways/i);
     });
 
+    it('says "1 metric column" in the singular', () => {
+      stubWidth('scrollWidth', 1500);
+      stubWidth('clientWidth', 400);
+      eventMetricsState = [metric('FLY10_TIME')];
+      render(<EventDataEntry />);
+      expect(screen.getByText(/1 metric column\b(?!s)/)).toHaveTextContent(/scroll sideways/i);
+    });
+
     it('shows no hint when every column fits', () => {
+      stubWidth('scrollWidth', 400);
+      stubWidth('clientWidth', 400);
       render(<EventDataEntry />);
       expect(screen.queryByText(/scroll sideways/i)).toBeNull();
     });

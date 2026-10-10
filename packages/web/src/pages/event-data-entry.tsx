@@ -27,6 +27,7 @@ import { useHorizontalScrollState } from "@/hooks/use-horizontal-scroll-state";
 import { useAuth } from "@/lib/auth";
 import { canManageEvent } from "@/lib/event-permissions";
 import { getEventMetricDisplay } from "@/lib/event-metric-display";
+import { getCellState, type CellState } from "@/lib/event-grid-cell-state";
 import {
   MovementQualityPanel,
   type MovementQualitySaveInput,
@@ -68,16 +69,6 @@ interface MeasurementCell {
   originalValue?: number;
   isDirty: boolean;
   error?: string;
-}
-
-export type CellState = "error" | "dirty" | "saved" | "empty";
-
-/** Visual state of one grid cell: an error wins over unsaved, unsaved over saved. */
-export function getCellState(cell: Pick<MeasurementCell, "error" | "isDirty" | "originalValue">): CellState {
-  if (cell.error) return "error";
-  if (cell.isDirty) return "dirty";
-  if (cell.originalValue !== undefined) return "saved";
-  return "empty";
 }
 
 const CELL_STATE_CLASSES: Record<CellState, string> = {
@@ -746,7 +737,7 @@ export default function EventDataEntry() {
           {gridScroll.hasOverflow && (
             <p className="mb-2 flex items-center gap-1.5 text-sm text-muted-foreground">
               <MoveHorizontal className="h-4 w-4 shrink-0" aria-hidden="true" />
-              {metricColumnCount} metric columns - scroll sideways to see them all
+              {metricColumnCount} metric {metricColumnCount === 1 ? "column" : "columns"} · scroll sideways to see {metricColumnCount === 1 ? "it" : "them all"}
             </p>
           )}
           <div className="relative">
@@ -773,10 +764,15 @@ export default function EventDataEntry() {
                             className="w-[92px] min-w-[92px] p-1.5 text-center align-bottom font-medium"
                           >
                             <div className="flex flex-col items-center gap-0.5">
-                              <span className="line-clamp-2 text-xs sm:text-sm leading-tight">
+                              <span className="flex items-start justify-center gap-0.5 text-xs sm:text-sm leading-tight">
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <span>{display.label}</span>
+                                    <span
+                                      className="line-clamp-2"
+                                      title={`${display.label} (${display.code})`}
+                                    >
+                                      {display.label}
+                                    </span>
                                   </TooltipTrigger>
                                   <TooltipContent>
                                     <div>{display.label}</div>
@@ -785,7 +781,7 @@ export default function EventDataEntry() {
                                 </Tooltip>
                                 {metric.isRequired && (
                                   <>
-                                    <span className="text-red-500 ml-0.5" aria-hidden="true">*</span>
+                                    <span className="text-red-500" aria-hidden="true">*</span>
                                     <span className="sr-only">(required)</span>
                                   </>
                                 )}
@@ -882,13 +878,13 @@ export default function EventDataEntry() {
             {gridScroll.canScrollLeft && (
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-y-0 left-32 sm:left-44 z-10 w-3 bg-linear-to-r from-foreground/10 to-transparent"
+                className="pointer-events-none absolute top-0 bottom-4 left-32 sm:left-44 z-10 w-3 bg-linear-to-r from-foreground/10 to-transparent"
               />
             )}
             {gridScroll.canScrollRight && (
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-linear-to-l from-card to-transparent"
+                className="pointer-events-none absolute top-0 bottom-4 right-0 z-10 w-10 bg-linear-to-l from-card to-transparent"
               />
             )}
           </div>
