@@ -9,7 +9,8 @@ import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, C
 import { useCommandPalette } from './command-palette-provider';
 import { useGlobalSearch } from '@/hooks/use-global-search';
 import { useAuth } from '@/lib/auth';
-import { hasPermission, type Permission } from '@shared/role-types';
+import type { Permission } from '@shared/role-types';
+import { anyOrgGrants } from '@/lib/org-roles';
 import { getCommandActions, filterActionsByQuery, filterActionsByPermissions } from '@/lib/command-palette-actions';
 import { getRecentItems, addRecentItem, type RecentItem } from '@/lib/recent-items';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
@@ -19,7 +20,7 @@ export function CommandPalette() {
   const { isOpen, close } = useCommandPalette();
   const [query, setQuery] = useState('');
   const [, setLocation] = useLocation();
-  const { user } = useAuth();
+  const { user, userOrganizations } = useAuth();
   const { getLabel } = useMetricLabels();
 
   // Navigation function compatible with wouter
@@ -46,10 +47,9 @@ export function CommandPalette() {
 
   // Get actions and filter by permissions
   const allActions = getCommandActions(navigate);
-  const userHasPermission = (permission: Permission) => {
-    if (!user || !user.role) return false;
-    return hasPermission(user.role, permission);
-  };
+  // No single organization is in scope: available if any membership grants it (site admins
+  // always), matching Ctrl+M. Never the session role.
+  const userHasPermission = (permission: Permission) => anyOrgGrants(user, userOrganizations, permission);
 
   const permittedActions = filterActionsByPermissions(allActions, userHasPermission);
   const filteredActions = filterActionsByQuery(permittedActions, query);

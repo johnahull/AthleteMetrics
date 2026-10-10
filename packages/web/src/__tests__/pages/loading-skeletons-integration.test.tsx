@@ -18,8 +18,7 @@ const mockAuthContext = {
     id: 'test-user',
     email: 'test@example.com',
     role: 'coach',
-    isSiteAdmin: false,
-    currentOrganization: { id: 'org-1', name: 'Test Org' }
+    isSiteAdmin: false
   },
   organizationContext: 'org-1',
   userOrganizations: [{ organizationId: 'org-1', role: 'coach' }],

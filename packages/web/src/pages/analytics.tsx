@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
-import { isSiteAdmin, hasRole, type EnhancedUser } from "@/lib/types/user";
+import { getOrgRole } from "@/lib/org-roles";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -59,25 +59,23 @@ export default function Analytics() {
 
   const effectiveOrganizationId = getEffectiveOrganizationId();
 
-  // Role-based routing: redirect coaches/org_admins to appropriate analytics page
+  // Role-based routing: redirect by the role in the organization this page shows
+  // (site admins: 'site_admin'), not the session role. Waits for memberships to load.
+  const orgRole = getOrgRole(user, userOrganizations, effectiveOrganizationId);
+  const membershipsLoaded = Array.isArray(userOrganizations);
   useEffect(() => {
-    if (user) {
-      const userRole = user?.role;
-      const isUserSiteAdmin = isSiteAdmin(user);
-
-      // Coaches and org admins should use the coach analytics dashboard
-      if (isUserSiteAdmin || hasRole(user as EnhancedUser, 'coach') || hasRole(user as EnhancedUser, 'org_admin')) {
-        setLocation('/coach-analytics');
-        return;
-      }
-      
-      // Athletes should use the athlete analytics dashboard
-      if (hasRole(user as EnhancedUser, 'athlete')) {
-        setLocation('/athlete-analytics');
-        return;
-      }
+    // Coaches and org admins should use the coach analytics dashboard
+    if (orgRole === 'site_admin' || orgRole === 'coach' || orgRole === 'org_admin') {
+      setLocation('/coach-analytics');
+      return;
     }
-  }, [user, setLocation]);
+
+    // Athletes should use the athlete analytics dashboard
+    // Also when memberships have loaded and the user has no role in scope (none at all).
+    if (orgRole === 'athlete' || (membershipsLoaded && !orgRole)) {
+      setLocation('/athlete-analytics');
+    }
+  }, [orgRole, membershipsLoaded, setLocation]);
   
   // State for edit/delete functionality
   const [editingMeasurement, setEditingMeasurement] = useState<any>(null);
