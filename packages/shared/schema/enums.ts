@@ -122,6 +122,9 @@ export const resultsVisibilityEnum = ['immediate', 'after_event', 'manual'] as c
  */
 export const registrationStatusEnum = ['pending', 'approved', 'waitlisted', 'declined', 'cancelled', 'checked_in', 'completed'] as const;
 
+/** Registration statuses whose athletes can have measurements entered for the event */
+export const EVENT_DATA_ENTRY_REGISTRATION_STATUSES = ['approved', 'checked_in', 'completed'] as const satisfies readonly (typeof registrationStatusEnum)[number][];
+
 /**
  * Event invitation status enum
  */

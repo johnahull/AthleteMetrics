@@ -50,6 +50,7 @@ import {
 import { dataExportRequests, parentAthleteLinks } from '@shared/schema/tables/coppa';
 import { ReportService } from '../../packages/api/services/report-service';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
+import { allowEventEntry } from '../helpers/event-entry-fixture';
 
 const PASSWORD = 'TestCoach123!';
 const CLIP = 'https://clips.example.com/video/abc123?t=42';
@@ -137,6 +138,7 @@ beforeAll(async () => {
       createdBy: coachA.id,
     } as any)
     .returning();
+  await allowEventEntry(eventA.id, [athlete.id], ['VERTICAL_JUMP', 'T_TEST', 'DASH_40YD']);
 
   coachACookie = await login(coachA.username);
   coachBCookie = await login(coachB.username);

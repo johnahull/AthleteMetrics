@@ -26,6 +26,7 @@ import { MeasurementService } from '../../packages/api/services/measurement-serv
 import { events, measurements, organizations, teams, userOrganizations, userTeams, users } from '@shared/schema';
 import { parentAthleteLinks } from '@shared/schema/tables/coppa';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
+import { allowEventEntry } from '../helpers/event-entry-fixture';
 
 vi.mock('../../packages/api/vite.js', () => ({
   setupVite: vi.fn().mockResolvedValue(undefined),
@@ -401,6 +402,7 @@ describe('Athletes cannot enter Movement Quality scores (R2)', () => {
           .values({ organizationId: orgId, name: 'MQ Athlete Event', startDate: new Date('2026-03-10') } as any)
           .returning({ id: events.id });
         eventId = event.id;
+        await allowEventEntry(eventId, [athlete.id], ['MQ_JUMP', 'MQI_TOTAL']);
       });
 
       it('POST /api/events/:eventId/measurements: 403 for an athlete MQ score', async () => {

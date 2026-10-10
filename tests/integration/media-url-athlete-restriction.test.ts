@@ -20,6 +20,7 @@ import { storage } from '../../packages/api/storage';
 import { events, measurements, organizations, teams, userOrganizations, userTeams, users } from '@shared/schema';
 import { parentAthleteLinks } from '@shared/schema/tables/coppa';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
+import { allowEventEntry } from '../helpers/event-entry-fixture';
 
 vi.mock('../../packages/api/vite.js', () => ({
   setupVite: vi.fn().mockResolvedValue(undefined),
@@ -361,6 +362,7 @@ describe('Athletes cannot attach clips (R1)', () => {
         .values({ organizationId: orgId, name: 'Clip Service Event', startDate: new Date('2026-01-15') } as any)
         .returning({ id: events.id });
       eventId = event.id;
+      await allowEventEntry(eventId, [athlete.id], ['VERTICAL_JUMP']);
     });
 
     it.each(['athlete', 'parent', 'guest', undefined])('createEventMeasurement: rejects a clip for role %s', async (role) => {
@@ -428,6 +430,8 @@ describe('Athletes cannot attach clips (R1)', () => {
         } as any)
         .returning();
       await db.insert(userOrganizations).values({ userId: outsider.id, organizationId: otherOrgId, role: 'athlete' } as any);
+      // Registered, so these tests show the membership check, not the registration check
+      await allowEventEntry(eventId, [athlete.id, outsider.id], ['VERTICAL_JUMP']);
     });
 
     afterAll(async () => {
@@ -476,6 +480,7 @@ describe('Athletes cannot attach clips (R1)', () => {
             ...extra,
           } as any)
           .returning();
+        await allowEventEntry(eventId, [subject.id], []);
       };
       const write = () =>
         eventService.createEventMeasurement(
@@ -539,6 +544,7 @@ describe('Athletes cannot attach clips (R1)', () => {
           } as any)
           .returning();
         await db.insert(userOrganizations).values({ userId: member.id, organizationId: orgId, role: 'athlete' } as any);
+        await allowEventEntry(eventId, [member.id], []);
       });
 
       afterEach(async () => {

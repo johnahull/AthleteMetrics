@@ -21,6 +21,7 @@ import {
 import { eq, and } from "drizzle-orm";
 import { EventMeasurementsService } from "../services/event-measurements-service";
 import { purgeTestRows } from "../../../tests/helpers/purge-test-rows";
+import { allowEventEntry } from "../../../tests/helpers/event-entry-fixture";
 
 describe("Event Measurements Service", () => {
   const timestamp = Date.now().toString();
@@ -123,6 +124,9 @@ describe("Event Measurements Service", () => {
       status: "approved",
       registrationNumber: 1,
     });
+
+    // Writes are limited to the event's metrics
+    await allowEventEntry(testEventId, [], testMetricCodes);
 
     // Initialize service
     eventMeasurementsService = new EventMeasurementsService(storage);
