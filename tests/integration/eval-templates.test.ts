@@ -467,7 +467,10 @@ describe('eval templates and org eval report settings', () => {
     it('after migration 0156 the global default adds RSI_105 as a required test and no single-leg CMJ', async () => {
       // CI's DB (db:push + default seed) has RSI but none of the 0156 codes; on a migrated DB 0156 already ran (re-run here).
       const [before] = await db.select().from(evalBatteryTemplates).where(eq(evalBatteryTemplates.id, globalId));
-      const hadRsi105 = (await db.select({ code: siteMetrics.code }).from(siteMetrics).where(eq(siteMetrics.code, 'RSI_105'))).length > 0;
+      const NEW_CODES = ['RSI_105', 'JUMP_CMJ_SL_L', 'JUMP_CMJ_SL_R'];
+      const existedBefore = new Set(
+        (await db.select({ code: siteMetrics.code }).from(siteMetrics).where(inArray(siteMetrics.code, NEW_CODES))).map((r) => r.code),
+      );
       // Start from a template without the three entries and with their seed slots (6, 28, 29) free, so 0156 must add them
       const OURS = ['RSI_BILATERAL', 'RSI_105', 'CMJ_SL_LEFT', 'JUMP_CMJ_SL_L', 'CMJ_SL_RIGHT', 'JUMP_CMJ_SL_R'];
       const stripped = (before.metrics as Array<{ metricKey: string; displayOrder: number }>)
@@ -475,7 +478,8 @@ describe('eval templates and org eval report settings', () => {
       try {
         await db.update(evalBatteryTemplates).set({ metrics: stripped as any }).where(eq(evalBatteryTemplates.id, globalId));
         await db.execute(sql.raw(fs.readFileSync(path.resolve(__dirname, '../../migrations/0156_add_rsi_105_and_single_leg_cmj_metrics.sql'), 'utf-8')));
-        if (!hadRsi105) createdSiteMetricCodes.push('RSI_105');
+        // 0156 creates all three codes on CI's DB: remove every one we created in afterAll
+        for (const code of NEW_CODES) if (!existedBefore.has(code)) createdSiteMetricCodes.push(code);
         const [global] = await db.select().from(evalBatteryTemplates).where(eq(evalBatteryTemplates.id, globalId));
         expect(global.metrics).toEqual([
           ...stripped,
