@@ -12,7 +12,7 @@ An athlete ends up on an event roster (`event_registrations`, one row per event 
 
 - Managers only: org admin or coach of the event's organization, or a site admin (same check as approve/decline/check-in).
 - Body: `{ userIds: string[] (1..200 uuids, deduplicated), checkIn?: boolean (default true) }`.
-- Only active, non-deleted athlete-role members of the event's organization can be added. Anyone else is returned under `rejected` with `reason: "not_in_organization"` and nothing is created. No creating athletes and no cross-organization adds.
+- Only non-deleted athlete-role members of the event's organization can be added. Anyone else is returned under `rejected` with `reason: "not_in_organization"` and nothing is created. No creating athletes and no cross-organization adds.
 - Checked in by default so the athlete is immediately listed for data entry; `checkIn: false` stores `approved`.
 - Silent: no email, no push. The event shows up in the athlete's "My Events" because that list reads registrations.
 - Capacity and waitlist are ignored (coach override). When the add pushes the event past `maxRegistrations` the response carries `overCapacity: true`. The overCapacity count excludes `cancelled`, `declined` and `waitlisted` registrations, so a waitlist never makes an event look over capacity.

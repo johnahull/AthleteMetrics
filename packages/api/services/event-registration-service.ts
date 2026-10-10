@@ -490,7 +490,6 @@ export class EventRegistrationService {
           inArray(users.id, requested),
           eq(userOrganizations.organizationId, organizationId),
           eq(userOrganizations.role, 'athlete'),
-          eq(users.isActive, true),
           isNull(users.deletedAt),
         ));
       const memberById = new Map(members.map((m) => [m.id, m]));

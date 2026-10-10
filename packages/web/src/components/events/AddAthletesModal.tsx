@@ -86,7 +86,7 @@ export function AddAthletesModal({ eventId, eventName, organizationId, isOpen, o
 
   const athletes = useMemo(() => {
     const list = Array.isArray(athletesList) ? athletesList : [];
-    return list.filter((athlete: any) => athlete.isActive !== false).map((athlete: any) => {
+    return list.map((athlete: any) => {
       const registration = (registrations as any[] | undefined)?.find((r) => r.userId === athlete.id);
       const registrationStatus: string | undefined = registration?.status;
       return {

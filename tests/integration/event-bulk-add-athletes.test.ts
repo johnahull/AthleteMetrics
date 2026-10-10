@@ -359,15 +359,15 @@ describe('POST /api/events/:eventId/registrations/bulk-add', () => {
     expect(await regFor(ev.id, coachA.id)).toBeUndefined();
   });
 
-  it('rejects inactive and soft-deleted athletes', async () => {
+  it('adds athletes whose account is not activated and rejects soft-deleted ones', async () => {
     const ev = await mkEvent();
     const inactive = await mkAthlete(orgA, { isActive: false });
     const deleted = await mkAthlete(orgA, { deletedAt: new Date() });
     const res = await bulkAdd(ev.id, { userIds: [inactive.id, deleted.id] });
     expect(res.status).toBe(200);
-    expect(res.body.added).toEqual([]);
-    expect(res.body.rejected.map((r: any) => r.userId).sort()).toEqual([inactive.id, deleted.id].sort());
-    expect(await regFor(ev.id, inactive.id)).toBeUndefined();
+    expect(res.body.added).toEqual([inactive.id]);
+    expect(res.body.rejected).toEqual([{ userId: deleted.id, reason: 'not_in_organization' }]);
+    expect(await regFor(ev.id, inactive.id)).toBeDefined();
     expect(await regFor(ev.id, deleted.id)).toBeUndefined();
   });
 

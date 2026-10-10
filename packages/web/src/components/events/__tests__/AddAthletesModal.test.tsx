@@ -209,11 +209,12 @@ describe('AddAthletesModal', () => {
     expect(screen.getByRole('checkbox', { name: 'Maria Garcia' })).toBeEnabled();
   });
 
-  it('does not list inactive athletes', async () => {
+  it('lists athletes whose account is not activated, like the invite list', async () => {
     mockAthletes = [...defaultAthletes, { id: 'user-9', fullName: 'Dormant Dave', isActive: false }];
     renderModal();
     await screen.findByText('John Smith');
-    expect(screen.queryByText('Dormant Dave')).not.toBeInTheDocument();
+    expect(screen.getByText('Dormant Dave')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Dormant Dave' })).toBeEnabled();
   });
 
   it('caps "Select All" at 200 athletes and says so', async () => {
