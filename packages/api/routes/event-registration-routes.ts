@@ -11,6 +11,7 @@
  * - POST /api/events/:eventId/registrations/:userId/approve - Approve registration
  * - POST /api/events/:eventId/registrations/:userId/decline - Decline registration
  * - POST /api/events/:eventId/registrations/:userId/check-in - Check in athlete
+ * - POST /api/events/:eventId/registrations/bulk-add - Add organization athletes directly (silent, checked in)
  * - GET /api/events/my-registrations - List user's own registrations
  */
 
@@ -20,6 +21,7 @@ import { EventRegistrationService, type RegisterOptions, type RegistrationFilter
 import { requireAuth } from "../middleware";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { storage } from "../storage";
+import { z } from "zod";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 
 // Rate limiting for registration endpoints
@@ -55,6 +57,11 @@ async function canManageEventRegistrations(user: SessionUser, organizationId: st
   const roles = await storage.getUserRoles(user.id, organizationId);
   return roles.includes('org_admin') || roles.includes('coach');
 }
+
+const bulkAddSchema = z.object({
+  userIds: z.array(z.string().uuid()).min(1).max(200),
+  checkIn: z.boolean().optional(),
+}).strict();
 
 export function registerEventRegistrationRoutes(app: Express) {
   const registrationService = new EventRegistrationService(storage as IRegistrationStorage);
@@ -243,6 +250,63 @@ export function registerEventRegistrationRoutes(app: Express) {
       console.error("List registrations error:", error);
       const message = error instanceof Error ? error.message : "Failed to list registrations";
       res.status(500).json({ message });
+    }
+  });
+
+  /**
+   * Add organization athletes to an event directly (no invitation, no notifications)
+   * POST /api/events/:eventId/registrations/bulk-add
+   */
+  app.post("/api/events/:eventId/registrations/bulk-add", registrationMutationLimiter, requireAuth, async (req: Request, res: Response) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const { eventId } = req.params;
+
+      const event = await storage.getEvent(eventId);
+      if (!event) {
+        return res.status(404).json({ message: "Event not found" });
+      }
+
+      const canManage = await canManageEventRegistrations(user, event.organizationId);
+      if (!canManage) {
+        return res.status(403).json({
+          message: "Access denied - you must be an org admin or coach to add athletes"
+        });
+      }
+
+      if (!event.organizationId) {
+        return res.status(409).json({ message: "This event has no organization, so athletes cannot be added to it directly" });
+      }
+
+      const parsed = bulkAddSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "userIds must be 1 to 200 athlete ids and checkIn must be true or false" });
+      }
+
+      const name = [user.firstName, user.lastName].filter(Boolean).join(" ") || user.username || "a coach";
+      const result = await registrationService.addAthletesDirectly(
+        eventId,
+        parsed.data.userIds,
+        { id: user.id, name },
+        { checkIn: parsed.data.checkIn }
+      );
+      res.json(result);
+    } catch (error) {
+      console.error("Bulk add athletes error:", error);
+      const message = error instanceof Error ? error.message : "Failed to add athletes";
+
+      if (message.toLowerCase().includes('cancelled') || message.toLowerCase().includes('frozen') || message.toLowerCase().includes('try again')) {
+        return res.status(409).json({ message });
+      }
+      if (message.toLowerCase().includes('not found')) {
+        return res.status(404).json({ message });
+      }
+
+      res.status(500).json({ message: "Failed to add athletes" });
     }
   });
 
