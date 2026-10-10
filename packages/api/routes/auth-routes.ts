@@ -3,11 +3,11 @@
  */
 
 import type { Express } from "express";
-import rateLimit from "express-rate-limit";
 import { AuthService } from "../services/auth-service";
 import { coppaService } from "../services/coppa-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
+import { createAuthRateLimiters } from "../middleware/auth-rate-limiters";
 import { COPPA_ACTIONS } from "@shared/coppa-utils";
 import { storage } from "../storage";
 import { generateParentEmailToken } from "../services/coppa-email-token-store";
@@ -17,13 +17,8 @@ import { PasswordResetService } from "../auth/password-reset";
 
 const authService = new AuthService();
 
-// Rate limiting for authentication endpoints
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  limit: 5, // Limit each IP to 5 requests per windowMs
-  message: { message: "Too many authentication attempts, please try again later." },
-  standardHeaders: 'draft-7',
-  legacyHeaders: false,
+// Login counts only failed attempts; password reset has its own strict bucket
+const { loginLimiter, passwordResetLimiter } = createAuthRateLimiters({
   skip: (req) => shouldSkipRateLimiting(req, 'auth'),
 });
 
@@ -31,7 +26,7 @@ export function registerAuthRoutes(app: Express) {
   /**
    * User login
    */
-  app.post("/api/auth/login", authLimiter, async (req, res) => {
+  app.post("/api/auth/login", loginLimiter, async (req, res) => {
     try {
       const { username, password, mfaToken } = req.body;
 
@@ -337,7 +332,7 @@ export function registerAuthRoutes(app: Express) {
   // Mounted at /api/auth/* to match the web client. CSRF is skipped for these
   // unauthenticated requests. Responses never reveal whether an account exists.
 
-  app.post("/api/auth/forgot-password", authLimiter, async (req, res) => {
+  app.post("/api/auth/forgot-password", passwordResetLimiter, async (req, res) => {
     try {
       const { email } = req.body;
       if (!email || typeof email !== 'string') {
@@ -352,7 +347,7 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  app.post("/api/auth/validate-reset-token", authLimiter, async (req, res) => {
+  app.post("/api/auth/validate-reset-token", passwordResetLimiter, async (req, res) => {
     try {
       const { token } = req.body;
       if (!token || typeof token !== 'string') {
@@ -366,7 +361,7 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  app.post("/api/auth/reset-password", authLimiter, async (req, res) => {
+  app.post("/api/auth/reset-password", passwordResetLimiter, async (req, res) => {
     try {
       const { token, newPassword } = req.body;
       if (!token || !newPassword) {
