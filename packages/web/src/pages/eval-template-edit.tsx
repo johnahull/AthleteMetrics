@@ -4,6 +4,7 @@
  * The global default is read-only (with "Duplicate as my template") for everyone but a site admin, who edits it with
  * no organization and confirms once, because it changes the default for every organization.
  * Saving never changes existing events: they keep the tests copied when they were created. Last write wins.
+ * Leaving with unsaved changes (a link in the app, or closing / reloading the tab) asks first.
  */
 import { useEffect, useState } from "react";
 import { Link, Redirect, useLocation, useParams } from "wouter";
@@ -13,6 +14,7 @@ import { z } from "zod";
 import { ArrowLeft, Copy, Trash2 } from "lucide-react";
 import { createEvalTemplateSchema } from "@shared/eval-template-schemas";
 import { useAuth } from "@/lib/auth";
+import { useOrganization } from "@/lib/organization-api";
 import { canManageEvent } from "@/lib/event-permissions";
 import {
   apiErrorMessage,
@@ -62,11 +64,29 @@ const sportLabel = (sport: string) => sport.charAt(0) + sport.slice(1).toLowerCa
 
 export default function EvalTemplateEdit() {
   const { templateId } = useParams<{ templateId: string }>();
-  // A fresh editor per template (duplicating navigates from one template to another)
-  return <TemplateEditor key={templateId} templateId={templateId} />;
+  // Outside the per-template editor, so "Duplicated." is still announced on the copy's page
+  const [status, setStatus] = useState("");
+  return (
+    <>
+      <div role="status" aria-live="polite" className="sr-only">
+        {status}
+      </div>
+      {/* A fresh editor per template (duplicating navigates from one template to another) */}
+      <TemplateEditor key={templateId} templateId={templateId} setStatus={setStatus} />
+    </>
+  );
 }
 
-function TemplateEditor({ templateId }: { templateId: string }) {
+/** A link inside the app (not a new tab, a download or another site): navigation the editor can hold back */
+function inAppHref(event: MouseEvent): string | null {
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return null;
+  const anchor = (event.target as Element | null)?.closest?.("a[href]");
+  if (!anchor || anchor.getAttribute("target") === "_blank" || anchor.hasAttribute("download")) return null;
+  const href = anchor.getAttribute("href") ?? "";
+  return href.startsWith("/") && !href.startsWith("//") ? href : null;
+}
+
+function TemplateEditor({ templateId, setStatus }: { templateId: string; setStatus: (status: string) => void }) {
   const [, navigate] = useLocation();
   const { organizationContext, userOrganizations, user } = useAuth();
   const { toast } = useToast();
@@ -83,7 +103,14 @@ function TemplateEditor({ templateId }: { templateId: string }) {
   // An organization template is judged by its own organization; a site admin edits the default for no organization;
   // anyone else views the default as it applies to the organization they would duplicate it into.
   const resolveFor = template?.organizationId ?? (canEdit ? undefined : effectiveOrganizationId ?? undefined);
-  const { data: resolved, isLoading: resolving } = useResolvedEvalTemplate(template && canView ? template.id : undefined, resolveFor);
+  const {
+    data: resolved,
+    isLoading: resolving,
+    error: resolveError,
+    refetch: refetchResolved,
+  } = useResolvedEvalTemplate(template && canView ? template.id : undefined, resolveFor);
+  // Eval templates are part of the Events module of the organization they are used in (none for the default as a site admin edits it)
+  const { data: organization, isLoading: organizationLoading } = useOrganization(template && canView ? resolveFor : undefined);
 
   const updateTemplate = useUpdateEvalTemplate();
   const createTemplate = useCreateEvalTemplate(effectiveOrganizationId ?? undefined);
@@ -94,8 +121,8 @@ function TemplateEditor({ templateId }: { templateId: string }) {
   const [derived, setDerived] = useState<ResolvedEvalTemplateMetric[]>([]);
   const [baseline, setBaseline] = useState({ name: "", description: "", metrics: "" });
   const [pendingPatch, setPendingPatch] = useState<EvalTemplatePatch | null>(null);
-  const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [leaveTo, setLeaveTo] = useState<string | null>(null);
 
   useEffect(() => {
     if (!template || !resolved || selected) return;
@@ -107,6 +134,36 @@ function TemplateEditor({ templateId }: { templateId: string }) {
     setBaseline({ name: template.name, description, metrics: JSON.stringify(toTemplateMetrics(state.selected, state.unusable)) });
     form.reset({ name: template.name, description });
   }, [template, resolved, selected, form]);
+
+  const name = form.watch("name");
+  const description = form.watch("description");
+  const metrics = selected ? toTemplateMetrics(selected, unusable) : [];
+  // A derived leftover is dropped on save, so it is a change of its own (a rename-only save sends the metrics too)
+  const metricsChanged = selected !== null && (derived.length > 0 || JSON.stringify(metrics) !== baseline.metrics);
+  const dirty =
+    canEdit && selected !== null && (name.trim() !== baseline.name || description.trim() !== baseline.description || metricsChanged);
+
+  // Unsaved changes: closing or reloading the tab asks the browser's own question; a link inside the app asks ours
+  useEffect(() => {
+    if (!dirty) return;
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    const onClick = (event: MouseEvent) => {
+      const href = inAppHref(event);
+      if (!href) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setLeaveTo(href);
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    document.addEventListener("click", onClick, true);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      document.removeEventListener("click", onClick, true);
+    };
+  }, [dirty]);
 
   if (isLoading) {
     return (
@@ -131,6 +188,25 @@ function TemplateEditor({ templateId }: { templateId: string }) {
     );
   }
   if (!canView) return <Redirect to="/" />;
+  if (organizationLoading) {
+    return (
+      <div className="space-y-4 p-4 sm:p-6">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-64" />
+      </div>
+    );
+  }
+  if (organization && !organization.eventsEnabled) {
+    return (
+      <div className="p-4 sm:p-6">
+        <Card className="bg-yellow-50 border-yellow-200">
+          <CardContent className="pt-6">
+            <p className="text-yellow-800">The Events module is off for this organization, so eval templates are not available.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const backLink = (
     <Link href="/events/templates" className="inline-flex min-h-10 items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
@@ -138,11 +214,17 @@ function TemplateEditor({ templateId }: { templateId: string }) {
       Back to templates
     </Link>
   );
-  const statusRegion = (
-    <div role="status" aria-live="polite" className="sr-only">
-      {status}
-    </div>
-  );
+  const loadErrorCard =
+    resolveError && !resolved ? (
+      <Card role="alert" className="border-red-200 bg-red-50">
+        <CardContent className="flex flex-col items-start gap-3 pt-6">
+          <p className="text-red-800">Could not load the tests of this template.</p>
+          <Button type="button" variant="outline" onClick={() => void refetchResolved()}>
+            Retry
+          </Button>
+        </CardContent>
+      </Card>
+    ) : null;
   const errorRegion = error ? (
     <p role="alert" className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
       {error}
@@ -150,14 +232,18 @@ function TemplateEditor({ templateId }: { templateId: string }) {
   ) : null;
 
   if (!canEdit) {
+    const copy = resolved ? duplicateMetrics(resolved.metrics) : null;
+    const duplicateBlocked = !copy
+      ? resolveError
+        ? "Duplicate is not available: the tests could not be loaded."
+        : "Duplicate is available once the tests have loaded."
+      : copy.metrics.length === 0
+        ? "None of this template's tests are available for your organization, so there is nothing to copy."
+        : null;
     const handleDuplicate = async () => {
-      if (!resolved) return;
+      if (!copy || copy.metrics.length === 0) return;
       setError("");
-      const { metrics, leftOut } = duplicateMetrics(resolved.metrics);
-      if (metrics.length === 0) {
-        setError("None of this template's tests are available for your organization, so there is nothing to copy.");
-        return;
-      }
+      const { metrics, leftOut } = copy;
       try {
         const created = await createTemplate.mutateAsync({
           name: `${template.name.slice(0, 193)} (copy)`,
@@ -188,16 +274,24 @@ function TemplateEditor({ templateId }: { templateId: string }) {
         <p className="mt-4 rounded-md bg-muted/40 p-3 text-sm">
           Only a site admin can change the default template. Duplicate it to make a version for your organization.
         </p>
-        {statusRegion}
         <div className="mt-4 space-y-3">
           {errorRegion}
-          <Button onClick={handleDuplicate} disabled={!resolved || createTemplate.isPending}>
+          <Button
+            onClick={handleDuplicate}
+            disabled={!!duplicateBlocked || createTemplate.isPending}
+            aria-describedby={duplicateBlocked ? "duplicate-blocked" : undefined}
+          >
             <Copy className="mr-2 h-4 w-4" aria-hidden="true" />
             Duplicate as my template
           </Button>
+          {duplicateBlocked && (
+            <p id="duplicate-blocked" className="text-sm text-muted-foreground">
+              {duplicateBlocked}
+            </p>
+          )}
         </div>
         <h2 className="mb-2 mt-6 text-lg font-medium">Tests</h2>
-        {resolving ? (
+        {loadErrorCard ?? (resolving ? (
           <Skeleton className="h-32" />
         ) : (
           <ol className="space-y-2">
@@ -214,16 +308,11 @@ function TemplateEditor({ templateId }: { templateId: string }) {
               </li>
             ))}
           </ol>
-        )}
+        ))}
       </div>
     );
   }
 
-  const name = form.watch("name");
-  const description = form.watch("description");
-  const metrics = selected ? toTemplateMetrics(selected, unusable) : [];
-  const metricsChanged = selected !== null && JSON.stringify(metrics) !== baseline.metrics;
-  const dirty = name.trim() !== baseline.name || description.trim() !== baseline.description || metricsChanged;
   const singleLegConflict = selected ? bothSingleLegRequired(selected) : false;
   const canSave = selected !== null && dirty && metrics.length > 0 && !singleLegConflict && !updateTemplate.isPending;
 
@@ -232,11 +321,14 @@ function TemplateEditor({ templateId }: { templateId: string }) {
     try {
       await updateTemplate.mutateAsync({ id: template.id, patch });
       setBaseline({ name: name.trim(), description: description.trim(), metrics: JSON.stringify(metrics) });
+      if (patch.metrics) setDerived([]);
       setStatus("Saved.");
       toast({ title: "Template saved" });
     } catch (e) {
       const message = apiErrorMessage(e, "Could not save the template");
       setError(message);
+      // A duplicate name (409) is also shown on the Name field itself
+      if (e instanceof Error && e.message.startsWith("409:")) form.setError("name", { type: "server", message });
       setStatus("");
       toast({ title: "Not saved", description: message, variant: "destructive" });
     }
@@ -264,7 +356,6 @@ function TemplateEditor({ templateId }: { templateId: string }) {
           This is the default template. Changes apply to every organization's new events.
         </p>
       )}
-      {statusRegion}
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onValid)} className="space-y-6" noValidate>
@@ -301,7 +392,7 @@ function TemplateEditor({ templateId }: { templateId: string }) {
           <div>
             <h2 className="mb-2 text-lg font-medium">Tests</h2>
             {selected === null ? (
-              <Skeleton className="h-40" />
+              loadErrorCard ?? <Skeleton className="h-40" />
             ) : (
               <MetricsSelector selectedMetrics={selected} onMetricsChange={setSelected} organizationId={template.organizationId ?? undefined} />
             )}
@@ -319,6 +410,7 @@ function TemplateEditor({ templateId }: { templateId: string }) {
                 Not available for this organization
               </h2>
               <p className="text-sm text-muted-foreground">These stay in the template until you remove them. New events skip them.</p>
+              <p className="text-sm text-muted-foreground">When you save, they are saved after the tests above.</p>
               <ul className="space-y-2">
                 {unusable.map((m) => (
                   <li key={m.metricKey} className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3 sm:flex-row sm:items-center sm:justify-between">
@@ -363,6 +455,26 @@ function TemplateEditor({ templateId }: { templateId: string }) {
           </div>
         </form>
       </Form>
+
+      <AlertDialog open={leaveTo !== null} onOpenChange={(open) => !open && setLeaveTo(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Leave without saving?</AlertDialogTitle>
+            <AlertDialogDescription>Your changes to this template are not saved.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Stay</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (leaveTo) navigate(leaveTo);
+                setLeaveTo(null);
+              }}
+            >
+              Leave without saving
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={pendingPatch !== null} onOpenChange={(open) => !open && setPendingPatch(null)}>
         <AlertDialogContent>

@@ -113,7 +113,7 @@ test.describe('Manage eval templates', () => {
     const rows = page.locator('[data-metric-row]');
     await expect(rows).toHaveCount(2);
     await rows.nth(1).getByRole('switch', { name: 'Required' }).click();
-    await rows.nth(1).getByRole('button', { name: 'Move up' }).click();
+    await rows.nth(1).getByRole('button', { name: /^Move .+ up$/ }).click();
     await page.getByRole('button', { name: 'Save changes' }).click();
     await expect(page.getByText('Template saved').first()).toBeVisible();
 

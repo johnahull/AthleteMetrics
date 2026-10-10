@@ -29,6 +29,9 @@ vi.mock("@/hooks/use-eval-report", async (importOriginal) => ({
   useDeleteEvalTemplate: () => ({ mutateAsync: mockDelete, isPending: false }),
 }));
 
+const mockOrganization = vi.fn();
+vi.mock("@/lib/organization-api", () => ({ useOrganization: (...args: unknown[]) => mockOrganization(...args) }));
+
 const toast = vi.fn();
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast }) }));
 
@@ -51,6 +54,7 @@ beforeEach(() => {
   auth.current = coach;
   mockTemplates.mockReturnValue({ data: [orgTpl, defaultTpl], isLoading: false });
   mockDelete.mockResolvedValue(undefined);
+  mockOrganization.mockImplementation((id?: string) => ({ data: id ? { id, eventsEnabled: true } : undefined, isLoading: false }));
 });
 
 const card = (name: string) => screen.getByRole("heading", { name }).closest("[data-template-card]") as HTMLElement;
@@ -103,6 +107,25 @@ describe("Manage templates list", () => {
     render(<EvalTemplates />);
     expect(screen.getByText(/No templates of your own yet/)).toBeInTheDocument();
     expect(card("Soccer eval (yards)")).toBeInTheDocument();
+  });
+
+  it("shows an error with Retry, not the empty state, when the list can not be loaded", async () => {
+    const user = userEvent.setup();
+    const refetch = vi.fn();
+    mockTemplates.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("500: boom"), refetch });
+    render(<EvalTemplates />);
+    expect(screen.queryByText(/No templates of your own yet/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Could not load the templates/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(refetch).toHaveBeenCalled();
+  });
+
+  it("shows that the Events module is off for the organization", () => {
+    mockOrganization.mockImplementation((id?: string) => ({ data: id ? { id, eventsEnabled: false } : undefined, isLoading: false }));
+    render(<EvalTemplates />);
+    expect(mockOrganization).toHaveBeenCalledWith("org-1");
+    expect(screen.getByText(/Events module is off/)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Spring battery" })).not.toBeInTheDocument();
   });
 
   it("sends a user who does not manage events away", () => {

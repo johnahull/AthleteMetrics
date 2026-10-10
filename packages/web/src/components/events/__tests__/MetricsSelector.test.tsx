@@ -344,9 +344,11 @@ describe('MetricsSelector', () => {
         { wrapper: createWrapper() }
       );
 
-      // Should have move buttons
-      expect(screen.getAllByRole('button', { name: /move up/i })).toHaveLength(2);
-      expect(screen.getAllByRole('button', { name: /move down/i })).toHaveLength(2);
+      // Should have move buttons, each named after its metric (screen readers hear which one moves)
+      expect(screen.getAllByRole('button', { name: /^move .+ up$/i })).toHaveLength(2);
+      expect(screen.getAllByRole('button', { name: /^move .+ down$/i })).toHaveLength(2);
+      expect(screen.getByRole('button', { name: 'Move 10-Yard Fly up' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Move Vertical Jump down' })).toBeInTheDocument();
     });
 
     it('should move metric up when up button clicked', async () => {
@@ -366,7 +368,7 @@ describe('MetricsSelector', () => {
 
       // Find the row for "Vertical Jump" (second item) and click move up
       const vjRow = screen.getByText('Vertical Jump').closest('[data-metric-row]');
-      const moveUpButton = within(vjRow as HTMLElement).getByRole('button', { name: /move up/i });
+      const moveUpButton = within(vjRow as HTMLElement).getByRole('button', { name: /^move .+ up$/i });
       await user.click(moveUpButton);
 
       // Should call onMetricsChange with reordered metrics (VJ now first)
@@ -393,7 +395,7 @@ describe('MetricsSelector', () => {
 
       // Find the row for "10-Yard Fly" (first item) and click move down
       const flyRow = screen.getByText('10-Yard Fly').closest('[data-metric-row]');
-      const moveDownButton = within(flyRow as HTMLElement).getByRole('button', { name: /move down/i });
+      const moveDownButton = within(flyRow as HTMLElement).getByRole('button', { name: /^move .+ down$/i });
       await user.click(moveDownButton);
 
       // Should call onMetricsChange with reordered metrics (FLY10 now second)
@@ -419,7 +421,7 @@ describe('MetricsSelector', () => {
 
       // First item's move up should be disabled
       const flyRow = screen.getByText('10-Yard Fly').closest('[data-metric-row]');
-      const moveUpButton = within(flyRow as HTMLElement).getByRole('button', { name: /move up/i });
+      const moveUpButton = within(flyRow as HTMLElement).getByRole('button', { name: /^move .+ up$/i });
       expect(moveUpButton).toBeDisabled();
     });
 
@@ -439,7 +441,7 @@ describe('MetricsSelector', () => {
 
       // Last item's move down should be disabled
       const vjRow = screen.getByText('Vertical Jump').closest('[data-metric-row]');
-      const moveDownButton = within(vjRow as HTMLElement).getByRole('button', { name: /move down/i });
+      const moveDownButton = within(vjRow as HTMLElement).getByRole('button', { name: /^move .+ down$/i });
       expect(moveDownButton).toBeDisabled();
     });
   });

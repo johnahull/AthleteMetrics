@@ -223,7 +223,7 @@ export function MetricsSelector({
                     className="h-10 w-10 p-0 sm:h-8 sm:w-8"
                     onClick={() => handleMove(index, "up")}
                     disabled={index === 0}
-                    aria-label="Move up"
+                    aria-label={`Move ${metric.label} up`}
                   >
                     <ChevronUp className="h-4 w-4" />
                   </Button>
@@ -234,7 +234,7 @@ export function MetricsSelector({
                     className="h-10 w-10 p-0 sm:h-8 sm:w-8"
                     onClick={() => handleMove(index, "down")}
                     disabled={index === selectedMetrics.length - 1}
-                    aria-label="Move down"
+                    aria-label={`Move ${metric.label} down`}
                   >
                     <ChevronDown className="h-4 w-4" />
                   </Button>

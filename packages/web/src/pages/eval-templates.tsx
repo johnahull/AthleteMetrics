@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Link, Redirect } from "wouter";
 import { ArrowLeft, ClipboardList, Pencil, Eye, Trash2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { useOrganization } from "@/lib/organization-api";
 import { canManageEvent } from "@/lib/event-permissions";
 import { apiErrorMessage, useDeleteEvalTemplate, useEvalTemplates, type EvalTemplate } from "@/hooks/use-eval-report";
 import { useToast } from "@/hooks/use-toast";
@@ -42,7 +43,8 @@ export default function EvalTemplates() {
     organizationContext ||
     (!user?.isSiteAdmin && Array.isArray(userOrganizations) && userOrganizations.length > 0 ? userOrganizations[0].organizationId : null);
 
-  const { data: templates, isLoading } = useEvalTemplates(effectiveOrganizationId || undefined);
+  const { data: templates, isLoading, isError, refetch } = useEvalTemplates(effectiveOrganizationId || undefined);
+  const { data: organization, isLoading: organizationLoading } = useOrganization(effectiveOrganizationId || undefined);
   const deleteTemplate = useDeleteEvalTemplate();
 
   if (!effectiveOrganizationId) {
@@ -59,6 +61,19 @@ export default function EvalTemplates() {
 
   if (!canManageEvent(user, userOrganizations, { organizationId: effectiveOrganizationId })) {
     return <Redirect to="/" />;
+  }
+
+  // Eval templates are part of the Events module, like the Manage templates button on the Events page
+  if (organization && !organization.eventsEnabled) {
+    return (
+      <div className="p-4 sm:p-6">
+        <Card className="bg-yellow-50 border-yellow-200">
+          <CardContent className="pt-6">
+            <p className="text-yellow-800">The Events module is off for this organization, so eval templates are not available.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   const handleDelete = async (template: EvalTemplate) => {
@@ -93,12 +108,21 @@ export default function EvalTemplates() {
         {status}
       </div>
 
-      {isLoading ? (
+      {isLoading || organizationLoading ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {[...Array(3)].map((_, i) => (
             <Skeleton key={i} className="h-40" />
           ))}
         </div>
+      ) : isError ? (
+        <Card role="alert" className="border-red-200 bg-red-50">
+          <CardContent className="flex flex-col items-start gap-3 pt-6">
+            <p className="text-red-800">Could not load the templates.</p>
+            <Button variant="outline" onClick={() => void refetch()}>
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
       ) : (
         <>
           {own.length === 0 && (

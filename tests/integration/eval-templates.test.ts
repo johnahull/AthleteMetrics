@@ -797,6 +797,23 @@ describe('eval templates and org eval report settings', () => {
       expect(JSON.parse(rows[0].details!)).toMatchObject({ name: `${PREFIX}-audit-u2`, organizationId: orgA, changedFields: ['name', 'metrics'], metricCount: 2 });
     });
 
+    it('a PATCH that changes nothing writes no audit row and leaves updatedAt alone', async () => {
+      const id = (await post('coachA', orgA, { name: `${PREFIX}-noop`, metrics: [metrics[0], metrics[1]], description: 'same' })).body.id;
+      const before = await rowOf(id);
+      for (const body of [{}, { name: `${PREFIX}-noop`, description: 'same', sport: 'SOCCER', metrics: [metrics[0], metrics[1]] }]) {
+        const res = await as('coachA').patch(`/api/eval-templates/${id}`).send(body);
+        expect(res.status).toBe(200);
+        expect(res.body).toMatchObject({ id, name: `${PREFIX}-noop`, description: 'same' });
+      }
+      expect((await rowOf(id)).updatedAt).toEqual(before.updatedAt);
+      expect(await auditFor(id, 'eval_template_updated')).toHaveLength(0);
+      // Only the field that really changed is reported
+      expect((await as('coachA').patch(`/api/eval-templates/${id}`).send({ name: `${PREFIX}-noop`, description: 'other' })).status).toBe(200);
+      const rows = await auditFor(id, 'eval_template_updated');
+      expect(rows).toHaveLength(1);
+      expect(JSON.parse(rows[0].details!)).toMatchObject({ changedFields: ['description'] });
+    });
+
     it('writes an eval_template_deleted audit row with the full metrics snapshot and the organization', async () => {
       const list = [metrics[0], { ...metrics[2], displayOrder: 2 }];
       const id = (await post('coachA', orgA, { name: `${PREFIX}-audit-d`, metrics: list, description: 'gone soon' })).body.id;
@@ -810,15 +827,20 @@ describe('eval templates and org eval report settings', () => {
     it('a failed audit write does not fail the change (it is logged)', async () => {
       const id = (await post('coachA', orgA, { name: `${PREFIX}-audit-fail`, metrics: [metrics[0]] })).body.id;
       const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
-      // NOT VALID: existing rows are not checked, only new inserts
-      await db.execute(sql`ALTER TABLE audit_logs ADD CONSTRAINT zz_eval_tpl_audit_block CHECK (action NOT LIKE 'eval_template_%') NOT VALID`);
+      // A name unique to this run, so it can never collide with (or drop) another test's constraint
+      const constraint = sql.identifier(`zz_audit_block_${PREFIX.replace(/[^a-z0-9]/gi, '_')}`);
       try {
+        // NOT VALID: existing rows are not checked, only new inserts
+        await db.execute(sql`ALTER TABLE audit_logs ADD CONSTRAINT ${constraint} CHECK (action NOT LIKE 'eval_template_%') NOT VALID`);
         expect((await as('coachA').patch(`/api/eval-templates/${id}`).send({ name: `${PREFIX}-audit-fail2` })).status).toBe(200);
         expect((await as('coachA').delete(`/api/eval-templates/${id}`)).status).toBe(204);
         expect(errors).toHaveBeenCalled();
       } finally {
-        await db.execute(sql`ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS zz_eval_tpl_audit_block`);
-        errors.mockRestore();
+        try {
+          await db.execute(sql`ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS ${constraint}`);
+        } finally {
+          errors.mockRestore();
+        }
       }
       expect(await rowOf(id)).toBeUndefined();
     });

@@ -193,18 +193,32 @@ async function throwNotFoundOrArchived(id: string): Promise<never> {
   throw new TemplateNotFoundError();
 }
 
+const metricsKey = (list: EvalTemplateMetric[]) => JSON.stringify(list.map((m) => [m.metricKey, m.isRequired, m.displayOrder, m.customLabel ?? null]));
+const sameMetrics = (a: EvalTemplateMetric[], b: EvalTemplateMetric[]) => metricsKey(a) === metricsKey(b);
+
 /**
  * Partial update of `template` (the row the route authorized). The organization type comes from the template's own
  * organization (none for the global default); the eligibility rule compares with the template's stored metrics.
  * Last write wins: there is no version check, so of two concurrent saves the later one is kept.
  */
 export async function updateTemplate(
-  template: Pick<EvalBatteryTemplate, "id" | "organizationId" | "metrics">,
+  template: Pick<EvalBatteryTemplate, "id" | "organizationId" | "metrics"> & Partial<Pick<EvalBatteryTemplate, "name" | "sport" | "description" | "archivedAt">>,
   patch: { name?: string; sport?: string; description?: string | null; metrics?: EvalTemplateMetric[] },
   userId: string
 ) {
-  const metrics = patch.metrics ? await validateMetrics(patch.metrics, await orgTypeOf(template.organizationId), template.metrics) : undefined;
-  const { name, sport, description } = patch;
+  const validated = patch.metrics ? await validateMetrics(patch.metrics, await orgTypeOf(template.organizationId), template.metrics) : undefined;
+  // Only what really changes is written and audited; a PATCH that changes nothing returns the row as it is
+  // (no audit row, updatedAt untouched).
+  const name = patch.name !== undefined && patch.name !== template.name ? patch.name : undefined;
+  const sport = patch.sport !== undefined && patch.sport !== template.sport ? patch.sport : undefined;
+  const description = patch.description !== undefined && patch.description !== template.description ? patch.description : undefined;
+  const metrics = validated && !sameMetrics(validated, template.metrics) ? validated : undefined;
+  const changes = { name, sport, description, metrics };
+  const changedFields = (["name", "sport", "description", "metrics"] as const).filter((f) => changes[f] !== undefined);
+  if (changedFields.length === 0) {
+    if (template.archivedAt) return await throwNotFoundOrArchived(template.id);
+    return template as EvalBatteryTemplate;
+  }
   let row: EvalBatteryTemplate | undefined;
   try {
     // Drizzle's .set() skips undefined fields, which is what makes this a partial update
@@ -219,7 +233,6 @@ export async function updateTemplate(
     throw e;
   }
   if (!row) return await throwNotFoundOrArchived(template.id);
-  const changedFields = (["name", "sport", "description", "metrics"] as const).filter((f) => patch[f] !== undefined);
   await writeTemplateAudit(userId, "eval_template_updated", row.id, { name: row.name, organizationId: row.organizationId, changedFields, metricCount: row.metrics.length });
   return row;
 }
