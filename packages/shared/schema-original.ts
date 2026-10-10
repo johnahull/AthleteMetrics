@@ -1709,7 +1709,7 @@ export const derivedCalculationConfigSchema = z.object({
   anchorMetric: z.string().max(50).optional(),
 });
 
-export const insertSiteMetricSchema =createInsertSchema(siteMetrics).omit({
+export const insertSiteMetricSchema = createInsertSchema(siteMetrics).omit({
   id: true,
   createdAt: true,
   createdBy: true, // Set by backend from session
