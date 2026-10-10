@@ -151,3 +151,45 @@ describe('DataParser fly-10 run-in neutrality (AM-FEAT-017)', () => {
     expect(JSON.stringify([ok, fast, high])).not.toContain('UNRESOLVED');
   });
 });
+
+// Issue #585: a value cut out of a bigger number, duplicate fly rows, and a "10" that is not a distance.
+describe('DataParser value and distance boundaries (#585)', () => {
+  const FLY = 'FLY10_TIME_UNRESOLVED';
+  const context = { firstName: 'John', lastName: 'Smith', confidence: 70 };
+
+  // Raw rows from one line, before parseAthleteData's per-athlete consolidation hides duplicates.
+  function rawRows(line: string) {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    return (new DataParser(config) as any).extractMeasurements(line, context) as Array<{ metric?: string; value: string }>;
+  }
+
+  it('does not cut a fly time out of a bigger number ("10 fly 11.05" is not 1.05)', () => {
+    expect(parse('John Smith 10 fly 11.05').find((d) => d.value === '1.05')).toBeUndefined();
+  });
+
+  it('does not read "1.055" as a 1.05 fly time', () => {
+    expect(parse('John Smith fly 10 1.055').find((d) => d.value === '1.05')).toBeUndefined();
+    expect(rawRows('fly 10 1.055').find((d) => d.value === '1.05')).toBeUndefined();
+  });
+
+  it('gives exactly one fly row for "fly 10 1.05" and for "10 yd fly 1.05"', () => {
+    expect(rawRows('fly 10 1.05').filter((d) => d.metric === FLY)).toEqual([
+      expect.objectContaining({ metric: FLY, value: '1.05' }),
+    ]);
+    expect(rawRows('10 yd fly 1.05').filter((d) => d.metric === FLY)).toEqual([
+      expect.objectContaining({ metric: FLY, value: '1.05' }),
+    ]);
+  });
+
+  it('does not treat a "10" inside another number as the fly distance', () => {
+    expect(rawRows('fly 10.5 1.05').filter((d) => d.metric === FLY)).toEqual([]);
+    expect(rawRows('fly 1,10 1.05').filter((d) => d.metric === FLY)).toEqual([]);
+    expect(parse('John Smith fly 10.5 1.05').find((d) => d.metric === FLY)).toBeUndefined();
+    expect(parse('John Smith fly 1,10 1.05').find((d) => d.metric === FLY)).toBeUndefined();
+  });
+
+  it('does not cut a 40 yd or 5-0-5 time out of a bigger number', () => {
+    expect(parse('John Smith 40 yd 14.52').find((d) => d.value === '4.52')).toBeUndefined();
+    expect(parse('John Smith 505 12.45').find((d) => d.value === '2.45')).toBeUndefined();
+  });
+});

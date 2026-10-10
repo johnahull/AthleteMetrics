@@ -180,6 +180,7 @@ export class DataParser {
           } as ExtractedMeasurementData);
           
           console.log(`Found ${metric}: ${value} (confidence: ${config.confidence}%)`);
+          break; // One row per metric per line: overlapping patterns would otherwise duplicate it (#585)
         }
       }
     }
@@ -225,7 +226,7 @@ export class DataParser {
         } else if (lowerLine.includes('40') || lowerLine.includes('forty')) {
           metric = 'DASH_40YD';
           confidence = 60;
-        } else if ((lowerLine.includes('10') || lowerLine.includes('ten')) && /\bfly(ing)?\b/.test(lowerLine)) {
+        } else if ((/(?<![\d.,])10(?![.,]?\d)/.test(lowerLine) || lowerLine.includes('ten')) && /\bfly(ing)?\b/.test(lowerLine)) {
           // Only a line that says "fly" is a fly reading. A bare "10" is often a date or part of the value
           // ("10/05 2.45", "2.10"), and a guess here forces a run-in prompt (422) on the whole photo.
           metric = 'FLY10_TIME_UNRESOLVED';

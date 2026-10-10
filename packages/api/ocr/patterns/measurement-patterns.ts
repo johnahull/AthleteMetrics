@@ -20,10 +20,10 @@ export const MEASUREMENT_PATTERNS: Record<string, PatternConfig> = {
   
   DASH_40YD: {
     patterns: [
-      /(?:40|forty).*?(?:yard|yd).*?(\d\.\d{2})/gi,
-      /(\d\.\d{2})\s*(?:sec|s)?\s*(?:40|forty)/gi,
-      /40.*?(\d\.\d{2})/gi,
-      /forty.*?(\d\.\d{2})/gi,
+      /(?:40|forty).*?(?:yard|yd).*?(?<![\d.])(\d\.\d{2})(?!\d)/gi,
+      /(?<![\d.])(\d\.\d{2})(?!\d)\s*(?:sec|s)?\s*(?:40|forty)/gi,
+      /40.*?(?<![\d.])(\d\.\d{2})(?!\d)/gi,
+      /forty.*?(?<![\d.])(\d\.\d{2})(?!\d)/gi,
     ],
     confidence: 80,
     validator: (value: string) => {
@@ -35,10 +35,12 @@ export const MEASUREMENT_PATTERNS: Record<string, PatternConfig> = {
   // Run-in-neutral: the photo route resolves this to one of the five FLY10 codes from the user's choice.
   FLY10_TIME_UNRESOLVED: {
     patterns: [
-      /(?:10|ten).*?(?:yard|yd).*?(?:fly|time).*?(\d\.\d{2})/gi,
-      /(?:fly|time).*?(?:10|ten).*?(\d\.\d{2})/gi,
-      /10.*?fly.*?(\d\.\d{2})/gi,
-      /fly.*?10.*?(\d\.\d{2})/gi,
+      // The value may not be cut out of a bigger number ("11.05", "1.055"), and the 10 must be a standalone
+      // distance, not part of another number ("10.5", "1,10"). See #585.
+      /(?:(?<![\d.,])10(?![.,]?\d)|ten).*?(?:yard|yd).*?(?:fly|time).*?(?<![\d.])(\d\.\d{2})(?!\d)/gi,
+      /(?:fly|time).*?(?:(?<![\d.,])10(?![.,]?\d)|ten).*?(?<![\d.])(\d\.\d{2})(?!\d)/gi,
+      /(?<![\d.,])10(?![.,]?\d).*?fly.*?(?<![\d.])(\d\.\d{2})(?!\d)/gi,
+      /fly.*?(?<![\d.,])10(?![.,]?\d).*?(?<![\d.])(\d\.\d{2})(?!\d)/gi,
     ],
     confidence: 80,
     validator: (value: string) => {
@@ -50,9 +52,9 @@ export const MEASUREMENT_PATTERNS: Record<string, PatternConfig> = {
   // Protocol-neutral: the photo route resolves this to AGILITY_505_M or _YD from the user's choice.
   AGILITY_505_UNRESOLVED: {
     patterns: [
-      /(?:5-0-5|505).*?(\d\.\d{2})/gi,
-      /agility.*?505.*?(\d\.\d{2})/gi,
-      /(\d\.\d{2})\s*(?:sec|s)?\s*505/gi,
+      /(?:5-0-5|505).*?(?<![\d.])(\d\.\d{2})(?!\d)/gi,
+      /agility.*?505.*?(?<![\d.])(\d\.\d{2})(?!\d)/gi,
+      /(?<![\d.])(\d\.\d{2})(?!\d)\s*(?:sec|s)?\s*505/gi,
     ],
     confidence: 75,
     validator: (value: string) => {
@@ -63,9 +65,9 @@ export const MEASUREMENT_PATTERNS: Record<string, PatternConfig> = {
   
   AGILITY_5105: {
     patterns: [
-      /(?:5-10-5|5105).*?(\d\.\d{2})/gi,
-      /agility.*?5105.*?(\d\.\d{2})/gi,
-      /(\d\.\d{2})\s*(?:sec|s)?\s*5105/gi,
+      /(?:5-10-5|5105).*?(?<![\d.])(\d\.\d{2})(?!\d)/gi,
+      /agility.*?5105.*?(?<![\d.])(\d\.\d{2})(?!\d)/gi,
+      /(?<![\d.])(\d\.\d{2})(?!\d)\s*(?:sec|s)?\s*5105/gi,
     ],
     confidence: 75,
     validator: (value: string) => {
@@ -76,9 +78,9 @@ export const MEASUREMENT_PATTERNS: Record<string, PatternConfig> = {
   
   T_TEST: {
     patterns: [
-      /t[_-]?test.*?(\d{1,2}\.\d{2})/gi,
-      /(\d{1,2}\.\d{2})\s*(?:sec|s)?\s*t[_-]?test/gi,
-      /agility.*?t.*?(\d{1,2}\.\d{2})/gi,
+      /t[_-]?test.*?(?<![\d.])(\d{1,2}\.\d{2})(?!\d)/gi,
+      /(?<![\d.])(\d{1,2}\.\d{2})(?!\d)\s*(?:sec|s)?\s*t[_-]?test/gi,
+      /agility.*?t.*?(?<![\d.])(\d{1,2}\.\d{2})(?!\d)/gi,
     ],
     confidence: 75,
     validator: (value: string) => {
@@ -89,9 +91,9 @@ export const MEASUREMENT_PATTERNS: Record<string, PatternConfig> = {
   
   RSI: {
     patterns: [
-      /(?:rsi|reactive.*?strength).*?(\d\.\d{1,3})/gi,
-      /(\d\.\d{1,3})\s*rsi/gi,
-      /strength.*?index.*?(\d\.\d{1,3})/gi,
+      /(?:rsi|reactive.*?strength).*?(?<![\d.])(\d\.\d{1,3})(?!\d)/gi,
+      /(?<![\d.])(\d\.\d{1,3})(?!\d)\s*rsi/gi,
+      /strength.*?index.*?(?<![\d.])(\d\.\d{1,3})(?!\d)/gi,
     ],
     confidence: 70,
     validator: (value: string) => {
@@ -142,11 +144,11 @@ export const AGE_PATTERNS = [
 
 export const TIME_PATTERNS = [
   // Seconds with decimal (e.g., 4.35, 12.45)
-  /(\d{1,2}\.\d{2,3})\s*s?e?c?/gi,
+  /(?<![\d.])(\d{1,2}\.\d{2,3})(?!\d)\s*s?e?c?/gi,
   // Minutes:seconds format (e.g., 1:23.45)
   /(\d{1,2}:\d{2}\.\d{2})/g,
   // Just decimal numbers that could be times
-  /(\d\.\d{2,3})/g,
+  /(?<![\d.])(\d\.\d{2,3})(?!\d)/g,
 ];
 
 // Helper function to get all patterns for a measurement type
