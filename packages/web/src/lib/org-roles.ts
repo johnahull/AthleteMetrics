@@ -1,5 +1,5 @@
 import type { EnhancedUser, UserOrganization } from "./types/user";
-import { ROLE_HIERARCHY } from "@shared/role-types";
+import { hasPermission, type Permission } from "@shared/role-types";
 
 /** A user's role as far as one organization (or the whole app, for site admins) is concerned. */
 export type OrgRole = "site_admin" | UserOrganization["role"];
@@ -24,16 +24,13 @@ export function getOrgRole(
 }
 
 /**
- * The user's highest role across all their memberships ('site_admin' for a site admin),
- * for UI with no specific organization in scope, such as app-wide shortcuts. Undefined with
- * no memberships, or before they have loaded. The API still checks each row's organization.
+ * Whether the user holds the permission in at least one organization (site admins always do),
+ * for UI with no specific organization in scope, such as app-wide shortcuts. Asks each
+ * membership's role directly: roles are not a ladder (a parent has permissions a coach lacks).
+ * False with no memberships, or before they have loaded. The API still checks each row's org.
  */
-export function getHighestOrgRole(user: RoleUser, userOrganizations: Memberships): OrgRole | undefined {
-  if (!user) return undefined;
-  if (user.isSiteAdmin) return "site_admin";
-  let highest: OrgRole | undefined;
-  for (const { role } of userOrganizations ?? []) {
-    if (!highest || ROLE_HIERARCHY[role] > ROLE_HIERARCHY[highest]) highest = role;
-  }
-  return highest;
+export function anyOrgGrants(user: RoleUser, userOrganizations: Memberships, permission: Permission): boolean {
+  if (!user) return false;
+  if (user.isSiteAdmin) return true;
+  return (userOrganizations ?? []).some(({ role }) => hasPermission(role, permission));
 }

@@ -6,8 +6,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { KEYBOARD_SHORTCUTS, getShortcutDisplay } from '@/lib/hotkeys';
 import { useAuth } from '@/lib/auth';
-import { hasPermission } from '@shared/role-types';
-import { getHighestOrgRole } from '@/lib/org-roles';
+import { anyOrgGrants } from '@/lib/org-roles';
 import { Keyboard } from 'lucide-react';
 
 interface KeyboardShortcutsDialogProps {
@@ -30,8 +29,7 @@ export function KeyboardShortcutsDialog({ open, onOpenChange }: KeyboardShortcut
 
     // No single organization is in scope here: list the shortcut if any membership grants
     // it (site admins always), matching useKeyboardShortcuts. Never the session role.
-    const role = getHighestOrgRole(user, userOrganizations);
-    return role ? hasPermission(role, shortcut.requiredPermission) : false;
+    return anyOrgGrants(user, userOrganizations, shortcut.requiredPermission);
   });
 
   return (

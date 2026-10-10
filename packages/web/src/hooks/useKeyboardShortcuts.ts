@@ -5,8 +5,7 @@
 
 import { useEffect } from 'react';
 import type { EnhancedUser, UserOrganization } from '@/lib/types/user';
-import { hasPermission } from '@shared/role-types';
-import { getHighestOrgRole } from '@/lib/org-roles';
+import { anyOrgGrants } from '@/lib/org-roles';
 import { shouldIgnoreEvent } from '@/lib/hotkeys';
 
 export interface UseKeyboardShortcutsOptions {
@@ -75,14 +74,13 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): void
 
 /**
  * Whether the user has the permission in at least one of their organizations (site admins
- * always do). No single organization is in scope for an app-wide shortcut, so this uses the
- * highest role across memberships rather than the session role; the API checks the row's org.
+ * always do). No single organization is in scope for an app-wide shortcut, so this asks every
+ * membership rather than the session role; the API checks the row's org.
  */
 function hasUserPermission(
   user: EnhancedUser,
   userOrganizations: UserOrganization[] | null | undefined,
   permission: 'CREATE_MEASUREMENTS'
 ): boolean {
-  const role = getHighestOrgRole(user, userOrganizations);
-  return role ? hasPermission(role, permission) : false;
+  return anyOrgGrants(user, userOrganizations, permission);
 }

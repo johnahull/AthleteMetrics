@@ -90,4 +90,27 @@ describe('Analytics role redirect', () => {
     render(<Analytics />);
     expect(mockSetLocation).toHaveBeenCalledWith('/coach-analytics');
   });
+
+  it('waits while memberships are loading, then redirects once they load (no loop)', () => {
+    mockUser = { ...baseUser, role: 'athlete' };
+    mockUserOrganizations = null;
+    const { rerender } = render(<Analytics />);
+    expect(mockSetLocation).not.toHaveBeenCalled();
+    mockUserOrganizations = coachInAAthleteInB;
+    rerender(<Analytics />);
+    expect(mockSetLocation).toHaveBeenCalledTimes(1);
+    expect(mockSetLocation).toHaveBeenCalledWith('/coach-analytics');
+    rerender(<Analytics />);
+    expect(mockSetLocation).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends a loaded user with zero memberships to athlete analytics, once', () => {
+    mockUser = { ...baseUser, role: 'coach' };
+    mockUserOrganizations = [];
+    const { rerender } = render(<Analytics />);
+    expect(mockSetLocation).toHaveBeenCalledTimes(1);
+    expect(mockSetLocation).toHaveBeenCalledWith('/athlete-analytics');
+    rerender(<Analytics />);
+    expect(mockSetLocation).toHaveBeenCalledTimes(1);
+  });
 });

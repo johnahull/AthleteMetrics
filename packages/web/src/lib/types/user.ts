@@ -17,14 +17,14 @@ export interface BaseUser {
 export interface UserOrganization {
   organizationId: string;
   organizationName: string;
-  role: 'org_admin' | 'coach' | 'athlete';
+  role: 'org_admin' | 'coach' | 'athlete' | 'parent';
   createdAt: string;
 }
 
 export interface EnhancedUser extends BaseUser {
   /**
    * @deprecated Never set: the API does not send it, so it is always undefined. Use
-   * getOrgRole / getHighestOrgRole (lib/org-roles) with useAuth().userOrganizations.
+   * getOrgRole / anyOrgGrants (lib/org-roles) with useAuth().userOrganizations.
    * Kept only until DeviceImportButton stops reading it (fixed in PR #589); then delete.
    */
   currentOrganization?: {
@@ -50,10 +50,4 @@ export interface ImpersonationStatus {
 // Type guards for role checking
 export const isSiteAdmin = (user: BaseUser | null): boolean => {
   return user?.isSiteAdmin === true;
-};
-
-export const hasOrgAccess = (user: EnhancedUser | null, organizationId: string): boolean => {
-  if (!user) return false;
-  if (isSiteAdmin(user)) return true;
-  return user.organizations?.some(org => org.organizationId === organizationId) || false;
 };

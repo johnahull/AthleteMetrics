@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getOrgRole, getHighestOrgRole } from '../org-roles';
+import { getOrgRole, anyOrgGrants } from '../org-roles';
 
 const member = { isSiteAdmin: false };
 const siteAdmin = { isSiteAdmin: true };
@@ -37,29 +37,35 @@ describe('getOrgRole', () => {
   });
 });
 
-describe('getHighestOrgRole', () => {
-  it('returns site_admin for a site admin', () => {
-    expect(getHighestOrgRole(siteAdmin, null)).toBe('site_admin');
-    expect(getHighestOrgRole(siteAdmin, coachInAAthleteInB)).toBe('site_admin');
+describe('anyOrgGrants', () => {
+  it('is true for a site admin, whatever the memberships', () => {
+    expect(anyOrgGrants(siteAdmin, null, 'CREATE_MEASUREMENTS')).toBe(true);
+    expect(anyOrgGrants(siteAdmin, [], 'CONFIGURE_SETTINGS')).toBe(true);
   });
 
-  it('returns the highest role across all memberships, in any order', () => {
-    expect(getHighestOrgRole(member, coachInAAthleteInB)).toBe('coach');
-    expect(getHighestOrgRole(member, [...coachInAAthleteInB].reverse())).toBe('coach');
-    expect(
-      getHighestOrgRole(member, [
-        { organizationId: 'org-a', role: 'coach' },
-        { organizationId: 'org-b', role: 'org_admin' },
-        { organizationId: 'org-c', role: 'athlete' },
-      ])
-    ).toBe('org_admin');
-    expect(getHighestOrgRole(member, [{ organizationId: 'org-b', role: 'athlete' }])).toBe('athlete');
+  it('is true when any membership grants it, in any order', () => {
+    expect(anyOrgGrants(member, coachInAAthleteInB, 'CREATE_MEASUREMENTS')).toBe(true);
+    expect(anyOrgGrants(member, [...coachInAAthleteInB].reverse(), 'CREATE_MEASUREMENTS')).toBe(true);
   });
 
-  it('returns undefined with no memberships (or not loaded yet) or no user, ignoring the session role', () => {
+  it('is false when no membership grants it', () => {
+    expect(anyOrgGrants(member, [{ organizationId: 'org-b', role: 'athlete' }], 'CREATE_MEASUREMENTS')).toBe(false);
+  });
+
+  it('ignores the session role and fails closed with no memberships, not loaded, or no user', () => {
     const sessionCoach = { isSiteAdmin: false, role: 'coach' as const };
-    expect(getHighestOrgRole(sessionCoach, null)).toBeUndefined();
-    expect(getHighestOrgRole(member, [])).toBeUndefined();
-    expect(getHighestOrgRole(null, coachInAAthleteInB)).toBeUndefined();
+    expect(anyOrgGrants(sessionCoach, null, 'CREATE_MEASUREMENTS')).toBe(false);
+    expect(anyOrgGrants(sessionCoach, [], 'CREATE_MEASUREMENTS')).toBe(false);
+    expect(anyOrgGrants(sessionCoach, [{ organizationId: 'org-b', role: 'athlete' }], 'CREATE_MEASUREMENTS')).toBe(false);
+    expect(anyOrgGrants(null, coachInAAthleteInB, 'CREATE_MEASUREMENTS')).toBe(false);
+  });
+
+  it('is not a role ranking: a coach+parent user has a parent-only permission', () => {
+    const coachAndParent = [
+      { organizationId: 'org-a', role: 'coach' as const },
+      { organizationId: 'org-b', role: 'parent' as const },
+    ];
+    expect(anyOrgGrants(member, coachAndParent, 'VIEW_LINKED_ATHLETES')).toBe(true);
+    expect(anyOrgGrants(member, coachInAAthleteInB, 'VIEW_LINKED_ATHLETES')).toBe(false);
   });
 });

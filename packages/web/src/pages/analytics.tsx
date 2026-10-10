@@ -62,6 +62,7 @@ export default function Analytics() {
   // Role-based routing: redirect by the role in the organization this page shows
   // (site admins: 'site_admin'), not the session role. Waits for memberships to load.
   const orgRole = getOrgRole(user, userOrganizations, effectiveOrganizationId);
+  const membershipsLoaded = Array.isArray(userOrganizations);
   useEffect(() => {
     // Coaches and org admins should use the coach analytics dashboard
     if (orgRole === 'site_admin' || orgRole === 'coach' || orgRole === 'org_admin') {
@@ -70,10 +71,11 @@ export default function Analytics() {
     }
 
     // Athletes should use the athlete analytics dashboard
-    if (orgRole === 'athlete') {
+    // Also when memberships have loaded and the user has no role in scope (none at all).
+    if (orgRole === 'athlete' || (membershipsLoaded && !orgRole)) {
       setLocation('/athlete-analytics');
     }
-  }, [orgRole, setLocation]);
+  }, [orgRole, membershipsLoaded, setLocation]);
   
   // State for edit/delete functionality
   const [editingMeasurement, setEditingMeasurement] = useState<any>(null);
