@@ -10,14 +10,17 @@ import { createAuthRateLimiters } from '../middleware/auth-rate-limiters';
 const MESSAGE = 'Too many authentication attempts, please try again later.';
 
 function buildApp(skip: () => boolean = () => false) {
-  const { loginLimiter, passwordResetLimiter } = createAuthRateLimiters({ skip });
+  const { loginLimiter, forgotPasswordLimiter, resetTokenLimiter } = createAuthRateLimiters({ skip });
   const app = express();
-  app.set('trust proxy', true);
+  app.set('trust proxy', 1); // same value as production (packages/api/index.ts)
   app.use(express.json());
   app.post('/login', loginLimiter, (req, res) => {
     res.status(req.body?.ok ? 200 : 401).json({ ok: !!req.body?.ok });
   });
-  app.post('/forgot-password', passwordResetLimiter, (_req, res) => {
+  app.post('/forgot-password', forgotPasswordLimiter, (_req, res) => {
+    res.status(200).json({ ok: true });
+  });
+  app.post('/reset-token', resetTokenLimiter, (_req, res) => {
     res.status(200).json({ ok: true });
   });
   return app;
@@ -63,6 +66,26 @@ describe('createAuthRateLimiters', () => {
     expect((await login(app, false)).status).toBe(401);
   });
 
+  it('reset-token endpoints allow 20 requests, block the 21st, and have their own bucket', async () => {
+    const app = buildApp();
+    for (let i = 0; i < 20; i++) {
+      const r = await request(app).post('/reset-token').set('X-Forwarded-For', '10.0.0.1');
+      expect(r.status).toBe(200);
+    }
+    const blocked = await request(app).post('/reset-token').set('X-Forwarded-For', '10.0.0.1');
+    expect(blocked.status).toBe(429);
+    expect(blocked.body).toEqual({ message: MESSAGE });
+    // forgot-password and login are unaffected
+    expect((await request(app).post('/forgot-password').set('X-Forwarded-For', '10.0.0.1')).status).toBe(200);
+    expect((await login(app, false)).status).toBe(401);
+  });
+
+  it('forgot-password requests do not consume the reset-token budget', async () => {
+    const app = buildApp();
+    for (let i = 0; i < 6; i++) await request(app).post('/forgot-password').set('X-Forwarded-For', '10.0.0.1');
+    expect((await request(app).post('/reset-token').set('X-Forwarded-For', '10.0.0.1')).status).toBe(200);
+  });
+
   it('login failures do not consume the password reset budget', async () => {
     const app = buildApp();
     for (let i = 0; i < 20; i++) await login(app, false);
@@ -80,8 +103,8 @@ describe('createAuthRateLimiters', () => {
   it('honours the injected skip function', async () => {
     const app = buildApp(() => true);
     for (let i = 0; i < 30; i++) expect((await login(app, false)).status).toBe(401);
-    for (let i = 0; i < 10; i++) {
-      const r = await request(app).post('/forgot-password');
+    for (let i = 0; i < 25; i++) {
+      const r = await request(app).post(i % 2 ? '/forgot-password' : '/reset-token');
       expect(r.status).toBe(200);
     }
   });

@@ -151,10 +151,14 @@ fetch('/api/endpoint', {
 - Strict-Transport-Security enabled in production
 
 ### Rate Limiting
-- Login (`POST /api/auth/login`): 20 failed attempts per 15 minutes per IP (successful logins are not counted). Separate per-account lockout after 5 failed attempts for 15 minutes
+- Login (`POST /api/auth/login`): 20 failed attempts per 15 minutes per IP (successful logins are not counted)
+- Per-account lockout: after 5 password attempts the account is locked for 15 minutes (HTTP 423). Keyed on the user ID (works for accounts without an email and for accounts sharing an email); the attempt is counted atomically in the database before the password is compared, so concurrent guesses cannot exceed the limit. Applies to `/api/auth/login` and `/api/enhanced-auth/login`. Wrong MFA codes and wrong backup codes count as failed attempts; a correct password that still needs an MFA code (or is stopped by an unverified email or deactivated organization) gives its attempt back, including undoing the lock if that attempt set it. The count resets only on a successful login or when the lock expires (there is no time decay). A successful password reset clears an active lock. 423 responses still count toward the per-IP failure budget of the login limiter.
+- Forgot password (`POST /api/auth/forgot-password`): 5 requests per 15 minutes per IP (all requests count), separate from login
+- Reset token endpoints (`validate-reset-token`, `reset-password`): 20 requests per 15 minutes per IP (all requests count), a bucket shared by those two endpoints only
+- `/api/enhanced-auth/{login,forgot-password,validate-reset-token,reset-password}` have their own separate limiter: 5 requests per 15 minutes per IP
+- Invitation acceptance has its own limiter (`routes/invitation-routes.ts`)
 - API endpoints: 100 requests per 15 minutes
 - File upload endpoints: 20 uploads per 15 minutes
-- Password reset (forgot-password, validate-reset-token, reset-password): 5 requests per 15 minutes per IP, separate from login
 
 ### Input Sanitization
 - All user inputs sanitized using DOMPurify

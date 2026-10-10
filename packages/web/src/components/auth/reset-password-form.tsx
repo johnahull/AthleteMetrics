@@ -7,6 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Eye, EyeOff, Lock, CheckCircle, AlertCircle, Shield } from "lucide-react";
 import { PasswordStrengthMeter } from "./password-strength-meter";
 
+const RATE_LIMITED_MESSAGE = 'Too many attempts. Please wait a few minutes and try again.';
+
 interface ResetPasswordFormProps {
   token: string;
 }
@@ -36,6 +38,11 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
         body: JSON.stringify({ token }),
         credentials: 'include'
       });
+
+      if (response.status === 429) {
+        setValidationError(RATE_LIMITED_MESSAGE);
+        return;
+      }
 
       const result = await response.json();
       
@@ -84,6 +91,11 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
         }),
         credentials: 'include'
       });
+
+      if (response.status === 429) {
+        setError(RATE_LIMITED_MESSAGE);
+        return;
+      }
 
       const result = await response.json();
 

@@ -20,7 +20,6 @@ import csrf from "csrf";
 import DOMPurify from "isomorphic-dompurify";
 import { storage } from "./storage";
 import { PermissionChecker } from "./permissions";
-import { shouldSkipRateLimiting } from "./utils/rate-limit-utils";
 import { isSiteAdmin } from "@shared/auth-utils";
 import { z } from "zod";
 import bcrypt from "bcrypt";
@@ -840,18 +839,6 @@ export async function registerRoutes(app: Express) {
   // Attaches a Map to req.cache for caching expensive operations within a request
   const { requestCacheMiddleware } = await import("./middleware/request-cache");
   app.use(requestCacheMiddleware);
-
-  // Rate limiting for authentication endpoints
-  const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    limit: 5, // Limit each IP to 5 requests per windowMs
-    message: {
-      error: "Too many authentication attempts, please try again in 15 minutes"
-    },
-    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-    skip: (req) => shouldSkipRateLimiting(req, 'auth')
-  });
 
   // Rate limiting for API endpoints (general usage)
   const apiLimiter = rateLimit({
