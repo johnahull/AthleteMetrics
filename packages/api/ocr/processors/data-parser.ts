@@ -199,7 +199,8 @@ export class DataParser {
       timePattern.lastIndex = 0;
       const match = timePattern.exec(line);
       
-      if (match && match[1]) {
+      // The patterns overlap ("4.52" matches both decimal patterns), so keep one row per value
+      if (match && match[1] && !measurements.some(m => m.value === match[1])) {
         const value = match[1];
         let metric = 'UNKNOWN';
         let confidence = 40; // Lower confidence for inferred measurements
