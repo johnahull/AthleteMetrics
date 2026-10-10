@@ -178,3 +178,85 @@ describe('DataParser fly-10 run-in neutrality (AM-FEAT-017)', () => {
     expect(JSON.stringify([ok, fast, high])).not.toContain('UNRESOLVED');
   });
 });
+
+// Issue #585: a value cut out of a bigger number, duplicate fly rows, and a "10" that is not a distance.
+describe('DataParser value and distance boundaries (#585)', () => {
+  const FLY = 'FLY10_TIME_UNRESOLVED';
+  const context = { firstName: 'John', lastName: 'Smith', confidence: 70 };
+
+  // Raw rows from one line, before parseAthleteData's per-athlete consolidation hides duplicates.
+  function rawRows(line: string) {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    return (new DataParser(config) as any).extractMeasurements(line, context) as Array<{ metric?: string; value: string }>;
+  }
+
+  it('does not cut a fly time out of a bigger number ("10 fly 11.05" is not 1.05)', () => {
+    expect(parse('John Smith 10 fly 11.05').find((d) => d.value === '1.05')).toBeUndefined();
+  });
+
+  it('does not read "1.055" as a 1.05 fly time', () => {
+    expect(parse('John Smith fly 10 1.055').find((d) => d.value === '1.05')).toBeUndefined();
+    expect(rawRows('fly 10 1.055').find((d) => d.value === '1.05')).toBeUndefined();
+  });
+
+  it('gives exactly one fly row for "fly 10 1.05" and for "10 yd fly 1.05"', () => {
+    expect(rawRows('fly 10 1.05').filter((d) => d.metric === FLY)).toEqual([
+      expect.objectContaining({ metric: FLY, value: '1.05' }),
+    ]);
+    expect(rawRows('10 yd fly 1.05').filter((d) => d.metric === FLY)).toEqual([
+      expect.objectContaining({ metric: FLY, value: '1.05' }),
+    ]);
+  });
+
+  it('does not treat a "10" inside another number as the fly distance', () => {
+    expect(rawRows('fly 10.5 1.05').filter((d) => d.metric === FLY)).toEqual([]);
+    expect(rawRows('fly 1,10 1.05').filter((d) => d.metric === FLY)).toEqual([]);
+    expect(parse('John Smith fly 10.5 1.05').find((d) => d.metric === FLY)).toBeUndefined();
+    expect(parse('John Smith fly 1,10 1.05').find((d) => d.metric === FLY)).toBeUndefined();
+  });
+
+  it('does not cut a 40 yd or 5-0-5 time out of a bigger number', () => {
+    expect(parse('John Smith 40 yd 14.52').find((d) => d.value === '4.52')).toBeUndefined();
+    expect(parse('John Smith 505 12.45').find((d) => d.value === '2.45')).toBeUndefined();
+  });
+
+  it('does not cut a 5-10-5, T-test or RSI value out of a bigger number', () => {
+    expect(rawRows('5-10-5 14.31').find((d) => d.value === '4.31')).toBeUndefined();
+    expect(rawRows('t test 110.20').find((d) => d.value === '10.20')).toBeUndefined();
+    expect(rawRows('rsi 12.15').find((d) => d.value === '2.15')).toBeUndefined();
+    expect(rawRows('fly 10 2.1.05').find((d) => d.value === '1.05')).toBeUndefined();
+  });
+
+  // A dot leader or ellipsis before the value is common in printed result sheets; it is not part of the number.
+  it('still reads a value after a dot leader', () => {
+    expect(parse('John Smith Fly 10........1.05').find((d) => d.metric === FLY)?.value).toBe('1.05');
+    expect(parse('Smith John 10 yd fly...1.08').find((d) => d.metric === FLY)?.value).toBe('1.08');
+    expect(parse('John Smith 40yd....4.52').find((d) => d.metric === 'DASH_40YD')?.value).toBe('4.52');
+    expect(parse('John Smith 5-10-5....4.31').find((d) => d.metric === 'AGILITY_5105')?.value).toBe('4.31');
+    expect(parse('John Smith T-test..10.25').find((d) => d.metric === 'T_TEST')?.value).toBe('10.25');
+    expect(parse('John Smith sprint....4.52').find((d) => d.metric === 'DASH_40YD')?.value).toBe('4.52');
+  });
+
+  it('applies the value and distance guards to the "ten" and "fly10" forms too', () => {
+    expect(rawRows('ten yard fly 11.05').find((d) => d.value === '1.05')).toBeUndefined();
+    expect(rawRows('fly10 11.05').find((d) => d.value === '1.05')).toBeUndefined();
+    expect(rawRows('fly 1.10 1.05').filter((d) => d.metric === FLY)).toEqual([]);
+    expect(rawRows('ten yard fly...1.05').filter((d) => d.metric === FLY)).toEqual([
+      expect.objectContaining({ value: '1.05' }),
+    ]);
+    expect(rawRows('fly10....1.05').filter((d) => d.metric === FLY)).toEqual([
+      expect.objectContaining({ value: '1.05' }),
+    ]);
+  });
+
+  it('still reads a value followed by a unit or a full stop', () => {
+    expect(parse('John Smith fly 10 1.05s').find((d) => d.metric === FLY)?.value).toBe('1.05');
+    expect(parse('John Smith fly 10 1.05.').find((d) => d.metric === FLY)?.value).toBe('1.05');
+  });
+
+  it('gives one inferred row when both generic time patterns read the same value', () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const rows = (new DataParser(config) as any).extractGenericTimes('sprint 4.52', context) as Array<{ value: string }>;
+    expect(rows.map((r) => r.value)).toEqual(['4.52']);
+  });
+});
