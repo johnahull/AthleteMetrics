@@ -22,7 +22,7 @@ import { backgroundSync } from "@/lib/background-sync";
 import { Footer } from "./footer";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  const { user, isLoading, logout } = useAuth();
+  const { user, userOrganizations, isLoading, logout } = useAuth();
   const [location, setLocation] = useLocation();
   const isMobile = useIsMobile();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -57,6 +57,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // Initialize keyboard shortcuts
   useKeyboardShortcuts({
     user,
+    userOrganizations,
     onMeasurement: () => setShowMeasurementModal(true),
     onHelp: () => setShowHelpDialog(true),
     onEscape: () => {

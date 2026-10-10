@@ -23,11 +23,10 @@ export function CoachAnalytics() {
   React.useEffect(() => {
     devLog.log('CoachAnalytics - User context:', {
       userId: user?.id,
-      currentOrganization: user?.currentOrganization,
-      organizationContext: user?.currentOrganization?.id,
+      organizationContext,
       userOrganizations
     });
-  }, [user, userOrganizations]);
+  }, [user, organizationContext, userOrganizations]);
 
 
   // Header actions for coach-specific navigation

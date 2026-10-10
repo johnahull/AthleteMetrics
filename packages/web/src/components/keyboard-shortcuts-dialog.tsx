@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { KEYBOARD_SHORTCUTS, getShortcutDisplay } from '@/lib/hotkeys';
 import { useAuth } from '@/lib/auth';
 import { hasPermission } from '@shared/role-types';
+import { getHighestOrgRole } from '@/lib/org-roles';
 import { Keyboard } from 'lucide-react';
 
 interface KeyboardShortcutsDialogProps {
@@ -15,7 +16,7 @@ interface KeyboardShortcutsDialogProps {
 }
 
 export function KeyboardShortcutsDialog({ open, onOpenChange }: KeyboardShortcutsDialogProps) {
-  const { user } = useAuth();
+  const { user, userOrganizations } = useAuth();
 
   // Detect if user is on Mac
   const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0;
@@ -27,23 +28,10 @@ export function KeyboardShortcutsDialog({ open, onOpenChange }: KeyboardShortcut
       return true;
     }
 
-    // Check if user has required permission
-    if (!user) {
-      return false;
-    }
-
-    // Site admins have all permissions
-    if (user.isSiteAdmin) {
-      return true;
-    }
-
-    // Check role-based permissions
-    const role = user.currentOrganization?.role || user.role;
-    if (!role) {
-      return false;
-    }
-
-    return hasPermission(role, shortcut.requiredPermission);
+    // No single organization is in scope here: list the shortcut if any membership grants
+    // it (site admins always), matching useKeyboardShortcuts. Never the session role.
+    const role = getHighestOrgRole(user, userOrganizations);
+    return role ? hasPermission(role, shortcut.requiredPermission) : false;
   });
 
   return (

@@ -76,9 +76,8 @@ export function AthleteAnalytics() {
     );
   }
 
-  // Get the organization ID from user context, organizationContext, or primaryOrganizationId
+  // Get the organization ID from organizationContext, or primaryOrganizationId
   const organizationId =
-    user.currentOrganization?.id ||
     organizationContext ||
     user.primaryOrganizationId;
 
