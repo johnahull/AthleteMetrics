@@ -43,6 +43,16 @@ function parseMediaUrl(raw: unknown): { ok: true; value: string | null | undefin
   return { ok: true, value: result.data };
 }
 
+/**
+ * Bulk write cap. Express' default JSON body limit (100 kB) still applies and answers 413:
+ * a plain item is ~170 bytes, more with notes/flyInDistance/mediaUrl, so 200 items fit
+ * only when items are small. Clients chunk to <= 200 items AND well under 100 kB.
+ */
+const MAX_BULK_EVENT_MEASUREMENTS = 200;
+
+/** replaceMeasurementId is optional; when sent it must be a non-empty string */
+const isValidReplaceId = (raw: unknown) => raw === undefined || (typeof raw === "string" && raw.length > 0 && raw.length <= 64);
+
 // Rate limiting for event measurements reads, per signed-in user like the mutation
 // limiter below: the entry panel refetches after every save, and a staff sharing one
 // gym network shares an IP.
@@ -187,6 +197,7 @@ export function registerEventMeasurementsRoutes(app: Express) {
         const measurements = await eventMeasurementsService.getEventMeasurements(eventId, {
           userId: effectiveUserId,
           metricCode: req.query.metricCode as string | undefined,
+          includeUnverified: hasManagementAccess,
         });
 
         // Same clip rule as the measurement list (managers and the owner pass the gate above)
@@ -257,12 +268,15 @@ export function registerEventMeasurementsRoutes(app: Express) {
           return res.status(403).json({ error: "Access denied" });
         }
 
-        const { userId, metric, value, date, notes, auxiliaryValue, flyInDistance } = req.body;
+        const { userId, metric, value, date, notes, auxiliaryValue, flyInDistance, replaceMeasurementId } = req.body;
 
         if (!userId || !metric || value === undefined || !date) {
           return res.status(400).json({
             error: "Missing required fields: userId, metric, value, date"
           });
+        }
+        if (!isValidReplaceId(replaceMeasurementId)) {
+          return res.status(400).json({ error: "replaceMeasurementId must be a measurement id" });
         }
 
         const mediaUrl = parseMediaUrl(req.body.mediaUrl);
@@ -281,12 +295,13 @@ export function registerEventMeasurementsRoutes(app: Express) {
             mediaUrl: mediaUrl.value,
             auxiliaryValue: auxiliaryValue === undefined || auxiliaryValue === null ? undefined : Number(auxiliaryValue),
             flyInDistance: parseFlyInInput(metric, flyInDistance),
+            replaceMeasurementId,
           },
           user.id,
           role
         );
 
-        return res.status(201).json(measurement);
+        return res.status(replaceMeasurementId ? 200 : 201).json(measurement);
       } catch (error: any) {
         console.error("Error creating event measurement:", error);
         return sendEventMeasurementError(res, error);
@@ -321,6 +336,11 @@ export function registerEventMeasurementsRoutes(app: Express) {
         if (!Array.isArray(measurements) || measurements.length === 0) {
           return res.status(400).json({ error: "measurements array is required" });
         }
+        if (measurements.length > MAX_BULK_EVENT_MEASUREMENTS) {
+          return res.status(400).json({
+            error: `At most ${MAX_BULK_EVENT_MEASUREMENTS} measurements per request; send the rest in another request`,
+          });
+        }
 
         // Validate each measurement has required fields
         const validationErrors: string[] = [];
@@ -330,6 +350,9 @@ export function registerEventMeasurementsRoutes(app: Express) {
           if (!m.metric) validationErrors.push(`Item ${index}: missing metric`);
           if (m.value === undefined) validationErrors.push(`Item ${index}: missing value`);
           if (!m.date) validationErrors.push(`Item ${index}: missing date`);
+          if (!isValidReplaceId(m.replaceMeasurementId)) {
+            validationErrors.push(`Item ${index}: replaceMeasurementId must be a measurement id`);
+          }
           const parsedMedia = parseMediaUrl(m.mediaUrl);
           if (parsedMedia.ok) {
             mediaUrls[index] = parsedMedia.value;
@@ -356,6 +379,7 @@ export function registerEventMeasurementsRoutes(app: Express) {
             mediaUrl: mediaUrls[index],
             auxiliaryValue: m.auxiliaryValue === undefined || m.auxiliaryValue === null ? undefined : Number(m.auxiliaryValue),
             flyInDistance: parseFlyInInput(m.metric, m.flyInDistance),
+            replaceMeasurementId: m.replaceMeasurementId,
           })),
           user.id,
           role

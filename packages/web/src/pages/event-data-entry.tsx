@@ -15,6 +15,7 @@ import {
   MovementQualitySaveError,
   type EventRegistrationWithUser,
   type CreateEventMeasurementInput,
+  type BulkMeasurementResult,
 } from "@/lib/events-api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ import { useAuth } from "@/lib/auth";
 import { canManageEvent } from "@/lib/event-permissions";
 import { getEventMetricDisplay } from "@/lib/event-metric-display";
 import { getCellState, type CellState } from "@/lib/event-grid-cell-state";
+import { chunkBulkItems } from "@/lib/event-grid-save";
 import {
   MovementQualityPanel,
   type MovementQualitySaveInput,
@@ -53,6 +55,7 @@ import {
   MoveHorizontal,
 } from "lucide-react";
 import { format } from "date-fns";
+import { EVENT_DATA_ENTRY_REGISTRATION_STATUSES } from "@shared/schema";
 import type { EventMetric, Measurement, SiteMetric } from "@shared/schema";
 import { toCalendarDate } from "@/utils/date-utils";
 
@@ -67,6 +70,10 @@ interface MeasurementCell {
   metricCode: string;
   value: string;
   originalValue?: number;
+  /** Newest saved row of this cell; a retype replaces it when it is the only one */
+  savedMeasurementId?: string;
+  /** Saved rows (trials) of this cell */
+  savedCount: number;
   isDirty: boolean;
   error?: string;
 }
@@ -95,6 +102,10 @@ interface AthleteRow {
 // Movement Quality scores are entered in a per-athlete panel, not in the numeric grid
 const MQ_BASE_CODES = new Set([...MQI_PATTERNS, ...MQI_TRANSITIONS].map((m) => m.code));
 const MQ_CODES = new Set([...MQ_BASE_CODES, MQI_TOTAL_CODE, MQI_TRANSITION_TOTAL_CODE]);
+
+// A dirty cell with a number, also one the server rejected last time (its error is cleared on send)
+const isSendable = (cell: MeasurementCell) =>
+  cell.isDirty && cell.value !== "" && !isNaN(Number(cell.value));
 
 // Stable empty list so consumers' memoized prefill does not re-run on every render
 const EMPTY_MEASUREMENTS: Measurement[] = [];
@@ -134,13 +145,11 @@ export default function EventDataEntry() {
   const bulkCreate = useCreateEventMeasurementsBulk();
   const saveMovementQuality = useSaveEventMovementQuality();
 
-  // Filter to only checked-in athletes
+  // Athletes the server accepts results for (same statuses as the recording sheet and device import)
   const checkedInAthletes = useMemo(() => {
     if (!registrations) return [];
-    return registrations.filter(
-      (r: EventRegistrationWithUser) =>
-        r.status === "checked_in" || r.status === "approved"
-    );
+    const statuses: readonly string[] = EVENT_DATA_ENTRY_REGISTRATION_STATUSES;
+    return registrations.filter((r: EventRegistrationWithUser) => statuses.includes(r.status));
   }, [registrations]);
 
   // Sort metrics by display order
@@ -177,11 +186,16 @@ export default function EventDataEntry() {
   useEffect(() => {
     if (!checkedInAthletes.length || !sortedMetrics.length) return;
 
-    // Build lookup of existing measurements
-    const measurementLookup = new Map<string, Measurement>();
+    // Rows come newest first (date, then createdAt): the first row per athlete+metric is the
+    // cell's value, the rest are earlier trials. Rows derived from other rows are not typed values:
+    // the server's rule, isCalculated unless the source list is empty (a paired-input row).
+    const measurementLookup = new Map<string, { latest: Measurement; count: number }>();
     existingMeasurements?.forEach((m: Measurement) => {
+      if (m.isCalculated && !(Array.isArray(m.calculatedFromMeasurementIds) && m.calculatedFromMeasurementIds.length === 0)) return;
       const key = `${m.userId}-${m.metric}`;
-      measurementLookup.set(key, m);
+      const entry = measurementLookup.get(key);
+      if (entry) entry.count++;
+      else measurementLookup.set(key, { latest: m, count: 1 });
     });
 
     // Build grid data
@@ -193,13 +207,16 @@ export default function EventDataEntry() {
 
       gridMetrics.forEach((metric: EventMetricWithDetails) => {
         const key = `${userId}-${metric.metricCode}`;
-        const existing = measurementLookup.get(key);
+        const saved = measurementLookup.get(key);
+        const existing = saved?.latest;
 
         measurements[metric.metricCode] = {
           userId,
           metricCode: metric.metricCode,
           value: existing?.value?.toString() || "",
           originalValue: existing?.value ? Number(existing.value) : undefined,
+          savedMeasurementId: existing?.id,
+          savedCount: saved?.count ?? 0,
           isDirty: false,
         };
       });
@@ -276,7 +293,7 @@ export default function EventDataEntry() {
     let count = 0;
     Object.values(gridData).forEach((row) => {
       Object.values(row.measurements).forEach((cell) => {
-        if (cell.isDirty && cell.value !== "" && !cell.error) {
+        if (isSendable(cell)) {
           count++;
         }
       });
@@ -338,12 +355,14 @@ export default function EventDataEntry() {
       return;
     }
 
-    // Collect all dirty cells with valid values
+    // Collect all dirty cells with valid values; cellsToSave[i] is the cell of measurementsToSave[i]
     const measurementsToSave: CreateEventMeasurementInput[] = [];
+    const cellsToSave: MeasurementCell[] = [];
 
     Object.values(gridData).forEach((row) => {
       Object.values(row.measurements).forEach((cell) => {
-        if (cell.isDirty && cell.value !== "" && !cell.error) {
+        if (isSendable(cell)) {
+          cellsToSave.push(cell);
           measurementsToSave.push({
             userId: cell.userId,
             metric: cell.metricCode,
@@ -351,6 +370,10 @@ export default function EventDataEntry() {
             date: event?.startDate
               ? new Date(event.startDate).toISOString()
               : new Date().toISOString(),
+            // One saved row: the retype corrects it. Several (trials): the retype is a new trial.
+            ...(cell.savedCount === 1 && cell.savedMeasurementId
+              ? { replaceMeasurementId: cell.savedMeasurementId }
+              : {}),
           });
         }
       });
@@ -364,36 +387,99 @@ export default function EventDataEntry() {
       return;
     }
 
+    // A server error on a cell is cleared when the cell is sent again
+    setGridData((prev) => {
+      const next = { ...prev };
+      cellsToSave.forEach((sent) => {
+        const row = next[sent.userId];
+        const current = row?.measurements[sent.metricCode];
+        if (!current?.error) return;
+        next[sent.userId] = {
+          ...row,
+          measurements: { ...row.measurements, [sent.metricCode]: { ...current, error: undefined } },
+        };
+      });
+      return next;
+    });
+
+    // Apply one request's per-item results to the cells it sent. A cell edited again while
+    // the request was in flight keeps its new value and stays dirty.
+    const applyResult = (offset: number, result: BulkMeasurementResult) => {
+      const patches = new Map<MeasurementCell, (current: MeasurementCell) => Partial<MeasurementCell>>();
+      const savedRows = [
+        ...result.created.map((row) => ({ row, replaced: false })),
+        ...result.replaced.map((row) => ({ row, replaced: true })),
+      ];
+      savedRows.forEach(({ row, replaced }) => {
+        const sent = cellsToSave[offset + row.index];
+        if (!sent) return;
+        patches.set(sent, (current) => ({
+          originalValue: Number(sent.value),
+          savedMeasurementId: row.id,
+          savedCount: replaced ? sent.savedCount : sent.savedCount + 1,
+          // Dirty against the value now saved, also when it was typed back to the old value meanwhile
+          isDirty: current.value !== sent.value,
+          ...(current.value === sent.value ? { error: undefined } : {}),
+        }));
+      });
+      result.errors.forEach(({ index, error }) => {
+        const sent = cellsToSave[offset + index];
+        if (sent) patches.set(sent, (current) => (current.value === sent.value ? { error } : {}));
+      });
+      setGridData((prev) => {
+        const next = { ...prev };
+        patches.forEach((patch, sent) => {
+          const row = next[sent.userId];
+          const current = row?.measurements[sent.metricCode];
+          if (!current) return;
+          next[sent.userId] = {
+            ...row,
+            measurements: { ...row.measurements, [sent.metricCode]: { ...current, ...patch(current) } },
+          };
+        });
+        return next;
+      });
+      return { saved: savedRows.length, failed: result.errors.length };
+    };
+
+    // Requests of <= 200 items and well under 100 kB, sent one after another; stop at the first
+    // request that fails as a whole. Saved cells are clean, so a retry cannot send them twice.
+    let savedCount = 0;
+    let failedCount = 0;
+    let failure: string | undefined;
     setIsSaving(true);
     try {
-      const result = await bulkCreate.mutateAsync({
-        eventId: eventId!,
-        measurements: measurementsToSave,
-      });
-
-      if (result.errors?.length > 0) {
-        toast({
-          variant: "destructive",
-          title: "Partial Save",
-          description: `Saved ${result.created.length} measurements. ${result.errors.length} errors occurred.`,
-        });
-      } else {
-        toast({
-          title: "Saved Successfully",
-          description: `${result.created.length} measurements saved.`,
-        });
+      let offset = 0;
+      for (const chunk of chunkBulkItems(measurementsToSave)) {
+        // No per-request refetch: the one in `finally` reloads the grid after the last request
+        const result = await bulkCreate.mutateAsync({ eventId: eventId!, measurements: chunk, invalidateMeasurements: false });
+        const counts = applyResult(offset, result);
+        savedCount += counts.saved;
+        failedCount += counts.failed;
+        offset += chunk.length;
       }
-
-      // Refetch measurements to update the grid
-      await refetchMeasurements();
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Save Failed",
-        description: error.message || "Failed to save measurements.",
-      });
+      failure = error?.message || "Failed to save measurements.";
     } finally {
       setIsSaving(false);
+      // Refetch whatever happened: earlier requests may have saved rows
+      await refetchMeasurements();
+    }
+
+    const total = measurementsToSave.length;
+    if (failure || failedCount > 0) {
+      toast({
+        variant: "destructive",
+        title: failure ? "Save Failed" : "Partial Save",
+        description: `Saved ${savedCount} of ${total} measurements. ${
+          failure ?? `${failedCount} could not be saved; see the highlighted cells.`
+        }`,
+      });
+    } else {
+      toast({
+        title: "Saved Successfully",
+        description: `${savedCount} measurements saved.`,
+      });
     }
   };
 
@@ -826,6 +912,9 @@ export default function EventDataEntry() {
                           const cell = row.measurements[metric.metricCode];
                           if (!cell) return <td key={metric.metricCode} className="p-1" />;
                           const errorId = `cell-error-${row.userId}-${metric.metricCode}`;
+                          const trialsId = `cell-trials-${row.userId}-${metric.metricCode}`;
+                          const hasTrials = cell.savedCount > 1;
+                          const describedBy = [cell.error && errorId, hasTrials && trialsId].filter(Boolean).join(" ");
 
                           return (
                             <td key={metric.metricCode} className="p-1">
@@ -840,13 +929,22 @@ export default function EventDataEntry() {
                                 aria-label={`${(displayByCode.get(metric.metricCode) ?? getEventMetricDisplay(metric)).label} for ${row.fullName}`}
                                 aria-required={metric.isRequired || undefined}
                                 aria-invalid={cell.error ? true : undefined}
-                                aria-describedby={cell.error ? errorId : undefined}
+                                aria-describedby={describedBy || undefined}
                                 className={`h-9 px-1 text-center ${CELL_STATE_CLASSES[getCellState(cell)]}`}
                                 placeholder="-"
                               />
                               {cell.error && (
                                 <div id={errorId} className="text-[11px] leading-tight text-red-500 text-center mt-1">
                                   {cell.error}
+                                </div>
+                              )}
+                              {hasTrials && (
+                                <div
+                                  id={trialsId}
+                                  title="Shows the newest trial. A new value is saved as another trial."
+                                  className="text-[11px] leading-tight text-muted-foreground text-center mt-1"
+                                >
+                                  {cell.savedCount} saved trials
                                 </div>
                               )}
                             </td>

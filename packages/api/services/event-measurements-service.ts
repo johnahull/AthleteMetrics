@@ -9,9 +9,17 @@
  * - Respects event freeze status
  */
 
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type { IStorage } from "../storage";
-import { measurements, siteMetrics, type Measurement, type Event } from "@shared/schema";
+import {
+  measurements,
+  siteMetrics,
+  eventRegistrations,
+  eventMetrics,
+  EVENT_DATA_ENTRY_REGISTRATION_STATUSES,
+  type Measurement,
+  type Event,
+} from "@shared/schema";
 import { MeasurementValueValidationError } from "@shared/measurement-value-validation";
 import { db as defaultDb } from "../db";
 import { MeasurementService } from "./measurement-service";
@@ -71,6 +79,8 @@ export interface EventMeasurementInput {
   auxiliaryValue?: number | null;
   /** Optional fly-in distance (FLY10_TIME) */
   flyInDistance?: number;
+  /** Update this saved row (same event, athlete and metric, not cross-row derived) instead of adding one */
+  replaceMeasurementId?: string;
 }
 
 export interface MovementQualityScoreInput {
@@ -83,9 +93,25 @@ export interface MovementQualityScoreInput {
 /** Organization membership roles that can be the subject of an event measurement */
 const EVENT_SUBJECT_ROLES = new Set(["athlete", "coach", "org_admin"]);
 
+/** `index` is the item's position in the request array, like errors[].index */
 export interface BulkCreateResult {
-  created: Measurement[];
+  created: Array<Measurement & { index: number }>;
+  /** Rows updated in place through replaceMeasurementId */
+  replaced: Array<Measurement & { index: number }>;
   errors: Array<{ index: number; error: string }>;
+}
+
+/** What a create/bulk batch may write to, loaded with one query per kind */
+interface EventWriteScope {
+  /** Athletes with a registration status in EVENT_DATA_ENTRY_REGISTRATION_STATUSES */
+  registered: Set<string>;
+  /** Metric codes configured on the event */
+  metrics: Set<string>;
+  /** Rows named by replaceMeasurementId */
+  replaceTargets: Map<
+    string,
+    Pick<Measurement, "eventId" | "userId" | "metric" | "isCalculated" | "calculatedFromMeasurementIds">
+  >;
 }
 
 type Db = typeof defaultDb;
@@ -148,6 +174,82 @@ export class EventMeasurementsService {
     }
   }
 
+  /** Load the write scope of a create/bulk batch: one query each for registrations, event metrics, replace targets */
+  private async loadWriteScope(eventId: string, items: EventMeasurementInput[]): Promise<EventWriteScope> {
+    const distinct = (values: unknown[]) => [...new Set(values.filter((v): v is string => typeof v === "string" && v !== ""))];
+    const userIds = distinct(items.map((m) => m.userId));
+    const metricCodes = distinct(items.map((m) => m.metric));
+    const replaceIds = distinct(items.map((m) => m.replaceMeasurementId));
+    const [registered, configured, targets] = await Promise.all([
+      userIds.length
+        ? this.db
+            .select({ userId: eventRegistrations.userId })
+            .from(eventRegistrations)
+            .where(
+              and(
+                eq(eventRegistrations.eventId, eventId),
+                inArray(eventRegistrations.userId, userIds),
+                inArray(eventRegistrations.status, [...EVENT_DATA_ENTRY_REGISTRATION_STATUSES])
+              )
+            )
+        : [],
+      metricCodes.length
+        ? this.db
+            .select({ code: eventMetrics.metricCode })
+            .from(eventMetrics)
+            .where(and(eq(eventMetrics.eventId, eventId), inArray(eventMetrics.metricCode, metricCodes)))
+        : [],
+      replaceIds.length
+        ? this.db
+            .select({
+              id: measurements.id,
+              eventId: measurements.eventId,
+              userId: measurements.userId,
+              metric: measurements.metric,
+              isCalculated: measurements.isCalculated,
+              calculatedFromMeasurementIds: measurements.calculatedFromMeasurementIds,
+            })
+            .from(measurements)
+            .where(inArray(measurements.id, replaceIds))
+        : [],
+    ]);
+    return {
+      registered: new Set(registered.map((r) => r.userId)),
+      metrics: new Set(configured.map((r) => r.code)),
+      replaceTargets: new Map(targets.map((t) => [t.id, t])),
+    };
+  }
+
+  private assertInWriteScope(event: Event, data: EventMeasurementInput, scope: EventWriteScope): void {
+    if (!scope.registered.has(data.userId)) {
+      throw new EventMeasurementInputError(
+        "Athlete is not registered for this event (registration must be approved, checked in or completed)"
+      );
+    }
+    if (!scope.metrics.has(data.metric)) {
+      throw new EventMeasurementInputError(`${data.metric} is not one of this event's metrics`);
+    }
+    if (data.replaceMeasurementId) {
+      const target = scope.replaceTargets.get(data.replaceMeasurementId);
+      // Paired-input rows (e.g. 1RM estimates) are calculated from their own inputs and store
+      // an empty source list; updateMeasurement recomputes them. Rows derived from other rows
+      // (non-empty source list) are owned by the derived-metric calculator.
+      const isCrossRowDerived =
+        !!target?.isCalculated && !(Array.isArray(target.calculatedFromMeasurementIds) && target.calculatedFromMeasurementIds.length === 0);
+      if (
+        !target ||
+        target.eventId !== event.id ||
+        target.userId !== data.userId ||
+        target.metric !== data.metric ||
+        isCrossRowDerived
+      ) {
+        throw new EventMeasurementInputError(
+          "replaceMeasurementId must name a saved measurement of this athlete and metric on this event that is not derived from other measurements"
+        );
+      }
+    }
+  }
+
   private async isMovementQualityScore(metric: string, dbOrTx: Db | DbTransaction = this.db): Promise<boolean> {
     return (await this.movementQualityCodes([metric], dbOrTx)).has(metric);
   }
@@ -181,11 +283,32 @@ export class EventMeasurementsService {
     submitterRole: string | undefined,
     tx?: DbTransaction,
     /** Already known by a caller that batch-checked the metrics */
-    knownIsMq?: boolean
+    knownIsMq?: boolean,
+    /** Create/bulk routes: registration, event-metric and replace checks (the MQ save has its own) */
+    scope?: EventWriteScope
   ): Promise<Measurement> {
     await this.assertAthleteInEventOrg(event, data.userId);
+    if (scope) this.assertInWriteScope(event, data, scope);
     const eventDate = eventCalendarDate(event);
     const isMq = knownIsMq ?? (await this.isMovementQualityScore(data.metric, tx));
+
+    if (data.replaceMeasurementId) {
+      // Through updateMeasurement: same validation, permission and derived-metric path as an edit
+      return this.measurementService.updateMeasurement(
+        data.replaceMeasurementId,
+        {
+          value: data.value,
+          date: isMq ? eventDate : data.date.toISOString().split("T")[0],
+          notes: data.notes,
+          mediaUrl: data.mediaUrl,
+          auxiliaryValue: data.auxiliaryValue ?? undefined,
+          flyInDistance: data.flyInDistance,
+        },
+        event.organizationId ?? undefined,
+        submitterRole,
+        { tx }
+      );
+    }
 
     return this.measurementService.createMeasurement(
       {
@@ -328,11 +451,14 @@ export class EventMeasurementsService {
       metricCode?: string;
       limit?: number;
       offset?: number;
+      /** Event managers see unverified rows too; others see verified rows only */
+      includeUnverified?: boolean;
     }
   ): Promise<Measurement[]> {
     return this.storage.getMeasurements({
       userId: options?.userId,
       eventId,
+      includeUnverified: options?.includeUnverified,
     });
   }
 
@@ -352,7 +478,8 @@ export class EventMeasurementsService {
       throw new EventMeasurementInputError('Invalid metric code');
     }
 
-    return this.writeEventMeasurement(event, data, createdBy, submitterRole);
+    const scope = await this.loadWriteScope(eventId, [data]);
+    return this.writeEventMeasurement(event, data, createdBy, submitterRole, undefined, undefined, scope);
   }
 
   /**
@@ -365,9 +492,12 @@ export class EventMeasurementsService {
     submitterRole?: string
   ): Promise<BulkCreateResult> {
     const event = await this.getWritableEvent(eventId);
+    const scope = await this.loadWriteScope(eventId, measurementsData);
 
-    const created: Measurement[] = [];
+    const created: BulkCreateResult["created"] = [];
+    const replaced: BulkCreateResult["replaced"] = [];
     const errors: Array<{ index: number; error: string }> = [];
+    const replaceIdsSeen = new Set<string>();
 
     for (let i = 0; i < measurementsData.length; i++) {
       try {
@@ -378,15 +508,23 @@ export class EventMeasurementsService {
           throw new Error('Invalid metric code');
         }
 
-        const measurement = await this.writeEventMeasurement(event, m, createdBy, submitterRole);
-        created.push(measurement);
+        if (m.replaceMeasurementId) {
+          // One replace per row per batch: a second one would silently overwrite the first
+          if (replaceIdsSeen.has(m.replaceMeasurementId)) {
+            throw new Error("replaceMeasurementId is sent more than once in this request");
+          }
+          replaceIdsSeen.add(m.replaceMeasurementId);
+        }
+
+        const measurement = await this.writeEventMeasurement(event, m, createdBy, submitterRole, undefined, undefined, scope);
+        (m.replaceMeasurementId ? replaced : created).push({ ...measurement, index: i });
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
         errors.push({ index: i, error: errorMessage });
       }
     }
 
-    return { created, errors };
+    return { created, replaced, errors };
   }
 
   /**
@@ -397,7 +535,8 @@ export class EventMeasurementsService {
     uniqueAthletes: number;
     metricsRecorded: string[];
   }> {
-    const measurements = await this.getEventMeasurements(eventId);
+    // Manager-only endpoint: count what managers see in the grid, unverified rows included
+    const measurements = await this.getEventMeasurements(eventId, { includeUnverified: true });
 
     const uniqueAthletes = new Set(measurements.map((m: any) => m.userId)).size;
     const metricsRecorded = [...new Set(measurements.map((m: any) => m.metric))];

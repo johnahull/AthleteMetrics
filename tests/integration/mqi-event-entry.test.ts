@@ -48,6 +48,7 @@ import {
   events,
 } from '@shared/schema';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
+import { allowEventEntry } from '../helpers/event-entry-fixture';
 
 const PASSWORD = 'TestCoach123!';
 const PATTERNS = [
@@ -99,7 +100,7 @@ async function mkUser(tag: string) {
   return u;
 }
 
-async function mkEvent(opts: { start: string; frozen?: boolean; org?: any } = { start: `${DATE}T10:00:00Z` }) {
+async function mkEvent(opts: { start: string; frozen?: boolean; org?: any; entry?: boolean } = { start: `${DATE}T10:00:00Z` }) {
   const [e] = await db
     .insert(events)
     .values({
@@ -111,6 +112,9 @@ async function mkEvent(opts: { start: string; frozen?: boolean; org?: any } = { 
     } as any)
     .returning();
   eventIds.push(e.id);
+  if (opts.entry !== false) {
+    await allowEventEntry(e.id, [athlete.id], [...PATTERNS, 'MQ_TRANS_DECEL_CUT', 'VERTICAL_JUMP']);
+  }
   return e;
 }
 
@@ -427,7 +431,7 @@ describe('MQI entry via event routes', () => {
     for (const code of [...PATTERNS, 'MQ_TRANS_GAS_BRAKE', 'MQI_TOTAL']) expect(codes).toContain(code);
     expect(list.body.find((m: any) => m.code === 'MQ_JUMP').category).toBe('Movement Quality');
 
-    const ev = await mkEvent({ start: '2026-03-21T10:00:00Z' });
+    const ev = await mkEvent({ start: '2026-03-21T10:00:00Z', entry: false });
     const add = await request(app)
       .post(`/api/events/${ev.id}/metrics`)
       .set('Cookie', coachACookie)

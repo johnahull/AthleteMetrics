@@ -174,6 +174,12 @@ test.describe('Eval report (AM-FEAT-019 P5)', () => {
     const { added } = await applied.json();
     for (const m of MEASURED) expect(added, `${m.metric} is part of the battery`).toContain(m.metric);
 
+    // Event measurements are only written for athletes registered on the event
+    const registered = await api.post(`${BASE_URL}/api/events/${created.eventId}/registrations/bulk-add`, {
+      data: { userIds: [measured.id], checkIn: true },
+    });
+    expect(registered.ok(), `register athlete: ${await registered.text()}`).toBeTruthy();
+
     const bulk = await api.post(`${BASE_URL}/api/events/${created.eventId}/measurements/bulk`, {
       data: { measurements: MEASURED.map((m) => ({ userId: measured.id, metric: m.metric, value: m.value, date: EVENT_DATE })) },
     });

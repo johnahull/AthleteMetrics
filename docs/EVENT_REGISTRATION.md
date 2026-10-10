@@ -27,3 +27,23 @@ An athlete ends up on an event roster (`event_registrations`, one row per event 
 Response: `{ added: string[], updated: string[], alreadyOnEvent: string[], rejected: [{ userId, reason }], overCapacity?: true }`.
 
 Code: `EventRegistrationService.addAthletesDirectly` (`packages/api/services/event-registration-service.ts`), route in `packages/api/routes/event-registration-routes.ts`, UI in `packages/web/src/components/events/AddAthletesModal.tsx`.
+
+## Who can have results entered
+
+`POST /api/events/:id/measurements` (one item) and `POST /api/events/:id/measurements/bulk` (`{ measurements: [...] }`) write results for an event. Besides the existing rules (manager of the event's organization, event not frozen, athlete a member of the event's organization), every item must meet these:
+
+- The athlete has a registration on the event in one of `EVENT_DATA_ENTRY_REGISTRATION_STATUSES` (`approved`, `checked_in`, `completed`; exported from `@shared/schema`, also used by device import). `pending`, `waitlisted`, `declined` and `cancelled` are refused, and so is an organization member without a registration.
+- The metric is one of the event's metrics (`event_metrics`).
+- A bulk request carries at most 200 items; more is a 400 and nothing is written. The request body is also limited to Express' default 100 kB JSON limit, which answers 413 before any check runs (a plain item is about 170 bytes; notes, `flyInDistance` and `mediaUrl` make it larger). Clients must chunk larger sheets into requests of at most 200 items AND well under 100 kB.
+
+A refused item is a 400 on the single route and a per-item entry `{ index, error }` in `errors` on the bulk route (the other items are still written). Registrations, event metrics and replace targets are each loaded with one query per request.
+
+Items are appended by default: several rows per athlete, metric and event are normal (trials). To overwrite a saved value instead, send `replaceMeasurementId` with the id of that row. The row must belong to the same event, athlete and metric and must not be derived from other measurements (a calculated row with a non-empty `calculated_from_measurement_ids`, e.g. a derived total); anything else is refused and nothing is inserted. Paired-input rows (e.g. a 1RM estimate from load and reps) are calculated from their own inputs, store an empty source list and can be replaced: the value is recomputed from the new inputs. A `replaceMeasurementId` may appear only once per bulk request; later items naming the same id are per-item errors. The row is updated in place through `MeasurementService.updateMeasurement` (same value validation, Movement Quality and clip permission checks, derived metric recalculation as an edit), so re-sending the same replace changes nothing. The single route answers 200 for a replace (201 for a create); the bulk response lists replaced rows under `replaced`, next to `created` and `errors`. Every entry of `created` and `replaced` carries `index`, its position in the request array (as `errors[].index` does). A replace keeps the row's `isVerified`, `verifiedBy` and `submittedBy`, and does not recompute the stored `age` column: a replace that changes the date can leave a stale `age`.
+
+Retries: a replace is idempotent, an append is not. If a bulk response is lost (timeout, dropped connection) after the server wrote the rows, re-sending the same request applies the replace items again (no change) but appends the plain items a second time, so a retry after a lost response can duplicate appended rows. The data entry grid sends a replace only when a cell has exactly one saved row, so only cells that were empty or held several trials can be duplicated this way.
+
+## Reading event results
+
+`GET /api/events/:id/measurements` returns the event's rows newest first (`date`, then `createdAt`, then `id`), each with `isCalculated` and `calculatedFromMeasurementIds` so a client can tell typed rows from derived ones (derived = `isCalculated` unless the list is an empty array). Event managers (coach, org admin of the event's organization, site admin) get unverified rows too; anyone else (an athlete reading their own results once they are published) gets verified rows only. `GET /api/events/:id/measurements/stats` is manager-only and counts unverified rows as well.
+
+Code: `EventMeasurementsService.createEventMeasurement` / `createEventMeasurementsBulk` (`packages/api/services/event-measurements-service.ts`), routes in `packages/api/routes/event-measurements-routes.ts`. Movement Quality scores saved through `PUT /api/events/:id/athletes/:userId/movement-quality` are not covered by these checks.

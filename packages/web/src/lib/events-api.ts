@@ -1303,18 +1303,18 @@ export interface CreateEventMeasurementInput {
   notes?: string;
   /** Optional https link (e.g. video clip). Empty string or null clears. */
   mediaUrl?: string | null;
+  /** Update this saved row (same event, athlete and metric) instead of appending a new one */
+  replaceMeasurementId?: string;
 }
 
 /**
- * Result from bulk measurement creation
+ * Result from bulk measurement creation. `index` is the item's position in the request array.
  */
 export interface BulkMeasurementResult {
-  success: boolean;
-  created: Measurement[];
-  errors: Array<{
-    index: number;
-    message: string;
-  }>;
+  created: Array<Measurement & { index: number }>;
+  /** Rows updated in place through replaceMeasurementId */
+  replaced: Array<Measurement & { index: number }>;
+  errors: Array<{ index: number; error: string }>;
 }
 
 /**
@@ -1506,9 +1506,13 @@ export function useCreateEventMeasurementsBulk() {
     }: {
       eventId: string;
       measurements: CreateEventMeasurementInput[];
+      /** false: the caller refetches the measurements itself (e.g. once after several requests) */
+      invalidateMeasurements?: boolean;
     }) => createEventMeasurementsBulk(eventId, measurements),
-    onSuccess: (_, { eventId }) => {
-      queryClient.invalidateQueries({ queryKey: ['events', eventId, 'measurements'] });
+    onSuccess: (_, { eventId, invalidateMeasurements = true }) => {
+      if (invalidateMeasurements) {
+        queryClient.invalidateQueries({ queryKey: ['events', eventId, 'measurements'] });
+      }
       queryClient.invalidateQueries({ queryKey: ['events', eventId, 'results'] });
     },
   });

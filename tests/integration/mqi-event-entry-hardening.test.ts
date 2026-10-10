@@ -58,6 +58,7 @@ import {
   siteMetrics,
 } from '@shared/schema';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
+import { allowEventEntry } from '../helpers/event-entry-fixture';
 
 const PASSWORD = 'TestCoach123!';
 const PATTERNS = [
@@ -128,6 +129,7 @@ async function mkEvent(opts: { start?: string; frozen?: boolean; published?: boo
     } as any)
     .returning();
   eventIds.push(e.id);
+  await allowEventEntry(e.id, [athlete.id, teamlessAthlete.id], [...PATTERNS, 'VERTICAL_JUMP', PAIRED]);
   return e;
 }
 
@@ -620,6 +622,7 @@ describe('PUT /api/events/:eventId/athletes/:userId/movement-quality', () => {
       roster.push(u);
     }
     await db.insert(userOrganizations).values(roster.map((u) => ({ userId: u.id, organizationId: orgA.id, role: 'athlete' })) as any);
+    await allowEventEntry(ev.id, roster.map((u) => u.id), []);
     const cookie = await login(coachSession.username);
 
     const statuses: number[] = [];
