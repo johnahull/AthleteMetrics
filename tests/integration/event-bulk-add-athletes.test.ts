@@ -18,7 +18,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest
 import request from 'supertest';
 import express, { type Express } from 'express';
 import bcrypt from 'bcrypt';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 
 vi.mock('../../packages/api/vite.js', () => ({
   setupVite: vi.fn().mockResolvedValue(undefined),
@@ -57,6 +57,7 @@ let orgAdminA: any;
 let coachA: any;
 let coachB: any;
 let athleteCaller: any;
+let siteAdmin: any;
 const eventIds: string[] = [];
 const cookies: Record<string, string> = {};
 
@@ -90,7 +91,7 @@ async function mkAthlete(org: any, extra: Record<string, unknown> = {}) {
   return u;
 }
 
-async function mkEvent(opts: { org?: any | null; status?: string; max?: number | null } = {}) {
+async function mkEvent(opts: { org?: any | null; status?: string; max?: number | null; frozen?: boolean } = {}) {
   const org = opts.org === undefined ? orgA : opts.org;
   const [e] = await db
     .insert(events)
@@ -100,6 +101,7 @@ async function mkEvent(opts: { org?: any | null; status?: string; max?: number |
       startDate: new Date('2026-06-10T10:00:00Z'),
       status: opts.status ?? 'published',
       maxRegistrations: opts.max ?? null,
+      isFrozen: opts.frozen ?? false,
       createdBy: coachA.id,
     } as any)
     .returning();
@@ -127,6 +129,7 @@ beforeAll(async () => {
   coachA = await mkUser('coachA');
   coachB = await mkUser('coachB');
   athleteCaller = await mkUser('callerathlete');
+  siteAdmin = await mkUser('siteadmin', { isSiteAdmin: true });
   await db.insert(userOrganizations).values([
     { userId: orgAdminA.id, organizationId: orgA.id, role: 'org_admin' },
     { userId: coachA.id, organizationId: orgA.id, role: 'coach' },
@@ -137,6 +140,7 @@ beforeAll(async () => {
   cookies.coachA = await login(coachA.username);
   cookies.coachB = await login(coachB.username);
   cookies.athlete = await login(athleteCaller.username);
+  cookies.siteAdmin = await login(siteAdmin.username);
 
   // Any email or push call during a direct add is a failure
   for (const proto of [EmailService.prototype, PushNotificationService.prototype]) {
@@ -216,10 +220,9 @@ describe('POST /api/events/:eventId/registrations/bulk-add', () => {
     const ev = await mkEvent();
     const a = await mkAthlete(orgA);
     const asAthlete = await bulkAdd(ev.id, { userIds: [a.id] }, cookies.athlete);
-    expect([403, 404]).toContain(asAthlete.status);
+    expect(asAthlete.status).toBe(403);
     const asOtherCoach = await bulkAdd(ev.id, { userIds: [a.id] }, cookies.coachB);
-    expect([403, 404]).toContain(asOtherCoach.status);
-    expect(asOtherCoach.status).toBe(asAthlete.status);
+    expect(asOtherCoach.status).toBe(403);
     expect(await regFor(ev.id, a.id)).toBeUndefined();
   });
 
@@ -229,12 +232,111 @@ describe('POST /api/events/:eventId/registrations/bulk-add', () => {
     expect(res.status).toBe(401);
   });
 
-  it('answers 404 for an unknown event and denies an event without an organization', async () => {
+  it('answers 404 for an unknown event and 403 for a coach on an event without an organization', async () => {
     const missing = await bulkAdd('00000000-0000-4000-8000-000000000000', { userIds: [athleteCaller.id] });
     expect(missing.status).toBe(404);
     const ev = await mkEvent({ org: null });
     const res = await bulkAdd(ev.id, { userIds: [athleteCaller.id] });
-    expect([403, 404]).toContain(res.status);
+    expect(res.status).toBe(403);
+  });
+
+  it('lets a site admin add to a normal event but answers 409 with a clear message for an event without an organization', async () => {
+    const a = await mkAthlete(orgA);
+    const ev = await mkEvent();
+    const ok = await bulkAdd(ev.id, { userIds: [a.id] }, cookies.siteAdmin);
+    expect(ok.status).toBe(200);
+    expect(ok.body.added).toEqual([a.id]);
+
+    const orgless = await mkEvent({ org: null });
+    const res = await bulkAdd(orgless.id, { userIds: [a.id] }, cookies.siteAdmin);
+    expect(res.status).toBe(409);
+    expect(res.body.message).toMatch(/organization/i);
+    expect(await regFor(orgless.id, a.id)).toBeUndefined();
+  });
+
+  it('refuses a frozen event with 409 and creates nothing', async () => {
+    const a = await mkAthlete(orgA);
+    const ev = await mkEvent({ frozen: true });
+    const res = await bulkAdd(ev.id, { userIds: [a.id] });
+    expect(res.status).toBe(409);
+    expect(res.body.message).toMatch(/frozen/i);
+    expect(await regFor(ev.id, a.id)).toBeUndefined();
+  });
+
+  it('does not overwrite approval history or admin notes of an existing approved registration', async () => {
+    const ev = await mkEvent();
+    const a = await mkAthlete(orgA);
+    const approvedAt = new Date('2026-02-02T00:00:00Z');
+    await db.insert(eventRegistrations).values({
+      eventId: ev.id, userId: a.id, userFullNameSnapshot: a.fullName, status: 'approved', registrationNumber: 1,
+      approvedAt, approvedBy: orgAdminA.id, adminNotes: 'VIP, keep',
+    } as any);
+    const res = await bulkAdd(ev.id, { userIds: [a.id] });
+    expect(res.body.updated).toEqual([a.id]);
+    const r = await regFor(ev.id, a.id);
+    expect(r.status).toBe('checked_in');
+    expect(r.approvedBy).toBe(orgAdminA.id);
+    expect(r.approvedAt?.getTime()).toBe(approvedAt.getTime());
+    expect(r.adminNotes).toBe('VIP, keep');
+    expect(r.checkedInBy).toBe(coachA.id);
+  });
+
+  it('checkIn:false repeat is idempotent: alreadyOnEvent, no rewrite, no extra audit row', async () => {
+    const ev = await mkEvent();
+    const a = await mkAthlete(orgA);
+    const first = await bulkAdd(ev.id, { userIds: [a.id], checkIn: false });
+    expect(first.body.added).toEqual([a.id]);
+    const before = await regFor(ev.id, a.id);
+    const second = await bulkAdd(ev.id, { userIds: [a.id], checkIn: false }, cookies.orgAdminA);
+    expect(second.status).toBe(200);
+    expect(second.body.updated).toEqual([]);
+    expect(second.body.alreadyOnEvent).toEqual([a.id]);
+    const after = await regFor(ev.id, a.id);
+    expect(after.updatedAt?.getTime()).toBe(before.updatedAt?.getTime());
+    expect(after.approvedBy).toBe(coachA.id);
+    const audits = await db.select().from(auditLogs).where(eq(auditLogs.resourceId, ev.id));
+    expect(audits).toHaveLength(1);
+  });
+
+  it('survives a concurrent self-registration for the same athlete (no 500, no constraint text)', async () => {
+    const ev = await mkEvent();
+    const a = await mkAthlete(orgA);
+    const other = await mkAthlete(orgA);
+    // A competing registration commits between the service's read and its insert
+    await db.execute(sql.raw(`
+      CREATE OR REPLACE FUNCTION evadd_race_${suffix}() RETURNS trigger AS $f$
+      BEGIN
+        IF pg_trigger_depth() = 1 AND NEW.user_id = '${a.id}' THEN
+          INSERT INTO event_registrations (event_id, user_id, user_full_name_snapshot, status, registration_number)
+          VALUES (NEW.event_id, NEW.user_id, 'racer', 'pending', 9999);
+        END IF;
+        RETURN NEW;
+      END $f$ LANGUAGE plpgsql;
+      CREATE TRIGGER evadd_race_${suffix} BEFORE INSERT ON event_registrations
+        FOR EACH ROW EXECUTE FUNCTION evadd_race_${suffix}();
+    `));
+    try {
+      const res = await bulkAdd(ev.id, { userIds: [a.id, other.id] });
+      expect(res.status).toBe(200);
+      expect(JSON.stringify(res.body)).not.toMatch(/constraint|duplicate key/i);
+      expect(res.body.added).toEqual([other.id]);
+      expect(res.body.updated).toEqual([a.id]);
+      expect((await regFor(ev.id, a.id)).status).toBe('checked_in');
+    } finally {
+      await db.execute(sql.raw(`DROP TRIGGER IF EXISTS evadd_race_${suffix} ON event_registrations; DROP FUNCTION IF EXISTS evadd_race_${suffix}();`));
+    }
+  });
+
+  it('does not count waitlisted registrations towards overCapacity', async () => {
+    const ev = await mkEvent({ max: 1 });
+    const a = await mkAthlete(orgA);
+    const w = await mkAthlete(orgA);
+    await db.insert(eventRegistrations).values({
+      eventId: ev.id, userId: w.id, userFullNameSnapshot: w.fullName, status: 'waitlisted', registrationNumber: 1, waitlistPosition: 1,
+    } as any);
+    const res = await bulkAdd(ev.id, { userIds: [a.id] });
+    expect(res.body.added).toEqual([a.id]);
+    expect(res.body.overCapacity).toBeUndefined();
   });
 
   it('rejects athletes of another organization while adding the valid ones in the same batch', async () => {

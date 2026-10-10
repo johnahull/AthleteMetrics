@@ -713,7 +713,9 @@ export default function EventDetail() {
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" onClick={() => setAddAthletesModalOpen(true)}>Add athletes</Button>
+                  {event.organizationId && event.status !== 'cancelled' && !event.isFrozen && (
+                    <Button variant="outline" onClick={() => setAddAthletesModalOpen(true)}>Add athletes</Button>
+                  )}
                   <Button onClick={handleInviteAthletes}>Invite Athletes</Button>
                 </div>
               </div>

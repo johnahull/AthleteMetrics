@@ -278,6 +278,10 @@ export function registerEventRegistrationRoutes(app: Express) {
         });
       }
 
+      if (!event.organizationId) {
+        return res.status(409).json({ message: "This event has no organization, so athletes cannot be added to it directly" });
+      }
+
       const parsed = bulkAddSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ message: "userIds must be 1 to 200 athlete ids and checkIn must be true or false" });
@@ -295,14 +299,14 @@ export function registerEventRegistrationRoutes(app: Express) {
       console.error("Bulk add athletes error:", error);
       const message = error instanceof Error ? error.message : "Failed to add athletes";
 
-      if (message.toLowerCase().includes('cancelled')) {
+      if (message.toLowerCase().includes('cancelled') || message.toLowerCase().includes('frozen') || message.toLowerCase().includes('try again')) {
         return res.status(409).json({ message });
       }
       if (message.toLowerCase().includes('not found')) {
         return res.status(404).json({ message });
       }
 
-      res.status(500).json({ message });
+      res.status(500).json({ message: "Failed to add athletes" });
     }
   });
 

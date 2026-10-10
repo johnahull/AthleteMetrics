@@ -23,12 +23,14 @@ beforeAll(() => {
   }
 });
 
-const mockAthletes = [
+let mockAthletes: Array<{ id: string; fullName: string; teamName?: string; isActive?: boolean }> = [
   { id: 'user-1', fullName: 'John Smith', teamName: 'Varsity' },
   { id: 'user-2', fullName: 'Maria Garcia', teamName: 'Varsity' },
   { id: 'user-3', fullName: 'Tyler Johnson', teamName: 'JV' },
   { id: 'user-4', fullName: 'Sarah Williams', teamName: 'Varsity' },
 ];
+
+const defaultAthletes = [...mockAthletes];
 
 let mockRegistrations: Array<{ id: string; userId: string; status: string }> = [];
 const mockMutateAsync = vi.fn();
@@ -79,6 +81,7 @@ describe('AddAthletesModal', () => {
     vi.clearAllMocks();
     mockRegistrations = [];
     mockIsPending = false;
+    mockAthletes = defaultAthletes;
     mockMutateAsync.mockResolvedValue({ added: [], updated: [], alreadyOnEvent: [], rejected: [] });
   });
 
@@ -204,5 +207,69 @@ describe('AddAthletesModal', () => {
     expect(screen.getByRole('checkbox', { name: 'John Smith' })).toBeDisabled();
     expect(screen.getByText('Pending approval')).toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: 'Maria Garcia' })).toBeEnabled();
+  });
+
+  it('does not list inactive athletes', async () => {
+    mockAthletes = [...defaultAthletes, { id: 'user-9', fullName: 'Dormant Dave', isActive: false }];
+    renderModal();
+    await screen.findByText('John Smith');
+    expect(screen.queryByText('Dormant Dave')).not.toBeInTheDocument();
+  });
+
+  it('caps "Select All" at 200 athletes and says so', async () => {
+    mockAthletes = Array.from({ length: 250 }, (_, i) => ({ id: `bulk-${i}`, fullName: `Athlete ${String(i).padStart(3, '0')}` }));
+    renderModal();
+    await screen.findByText('Athlete 000');
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('checkbox', { name: /select all eligible athletes/i }));
+    expect(screen.getByRole('button', { name: 'Add 200 athletes' })).toBeEnabled();
+    expect(screen.getByText(/up to 200 athletes at a time/i)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Add 200 athletes' }));
+    await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+    expect(mockMutateAsync.mock.calls[0][0].userIds).toHaveLength(200);
+  });
+
+  it('does not let individual ticks go past 200 either', async () => {
+    mockAthletes = Array.from({ length: 201 }, (_, i) => ({ id: `bulk-${i}`, fullName: `Athlete ${String(i).padStart(3, '0')}` }));
+    renderModal();
+    await screen.findByText('Athlete 000');
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('checkbox', { name: /select all eligible athletes/i }));
+    expect(screen.getByRole('checkbox', { name: 'Athlete 200' })).toBeDisabled();
+  });
+
+  it('does not say "Athletes added" when nothing was added', async () => {
+    mockMutateAsync.mockResolvedValue({ added: [], updated: [], alreadyOnEvent: ['user-1'], rejected: [] });
+    renderModal();
+    await screen.findByText('John Smith');
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('checkbox', { name: 'John Smith' }));
+    await user.click(screen.getByRole('button', { name: 'Add 1 athlete' }));
+    await waitFor(() => expect(mockToast).toHaveBeenCalledTimes(1));
+    expect(mockToast.mock.calls[0][0].title).toBe('No athletes added');
+  });
+
+  it('cannot be dismissed while saving', async () => {
+    mockIsPending = true;
+    const onClose = renderModal();
+    await screen.findByText('John Smith');
+    const user = userEvent.setup();
+    await user.keyboard('{Escape}');
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('clears a previous error when reopened', async () => {
+    mockMutateAsync.mockRejectedValue(new Error('boom'));
+    const props = { eventId: 'event-123', eventName: 'Spring Combine', organizationId: 'org-123', onClose: vi.fn() };
+    const { rerender } = render(<AddAthletesModal {...props} isOpen={true} />, { wrapper: createWrapper() });
+    await screen.findByText('John Smith');
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('checkbox', { name: 'John Smith' }));
+    await user.click(screen.getByRole('button', { name: 'Add 1 athlete' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('boom');
+    rerender(<AddAthletesModal {...props} isOpen={false} />);
+    rerender(<AddAthletesModal {...props} isOpen={true} />);
+    await screen.findByText('John Smith');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

@@ -280,6 +280,26 @@ describe('Event Detail Page Permissions', () => {
       expect(await screen.findByTestId('eval-reports-card')).toHaveTextContent('can-manage');
     });
 
+    it.each([
+      ['an event without an organization', { organizationId: null }],
+      ['a cancelled event', { status: 'cancelled' }],
+      ['a frozen event', { isFrozen: true }],
+    ] as Array<[string, Record<string, unknown>]>)('should hide the Add athletes button for %s', async (_label, patch) => {
+      const original = { ...mockEvent };
+      Object.assign(mockEvent, patch);
+      // Only a site admin can manage an event without an organization
+      if (patch.organizationId === null) mockUser = { ...mockUser!, isSiteAdmin: true };
+      try {
+        const user = userEvent.setup();
+        render(<EventDetail />, { wrapper: createWrapper() });
+        await user.click(await screen.findByTestId('tab-registrations'));
+        expect(screen.getByRole('button', { name: /invite athletes/i })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^add athletes$/i })).not.toBeInTheDocument();
+      } finally {
+        Object.assign(mockEvent, original);
+      }
+    });
+
     it('should show an Add athletes button next to Invite Athletes that opens the modal', async () => {
       const user = userEvent.setup();
       render(<EventDetail />, { wrapper: createWrapper() });

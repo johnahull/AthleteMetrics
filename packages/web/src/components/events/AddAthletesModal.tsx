@@ -5,7 +5,7 @@
  * Athletes are checked in by default (ready for data entry); turn the switch off to only approve them.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -46,6 +46,9 @@ const REGISTRATION_LABELS: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
+/** The API takes at most 200 ids per request */
+const MAX_BATCH = 200;
+
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 
 /** One plain sentence for the single toast the app can show at a time */
@@ -76,9 +79,14 @@ export function AddAthletesModal({ eventId, eventName, organizationId, isOpen, o
   const { data: registrations } = useEventRegistrations(eventId);
   const { data: athletesList, isLoading: athletesLoading } = useQuery(queries.athletes({ organizationId }));
 
+  // A fresh open starts without the previous attempt's error
+  useEffect(() => {
+    if (isOpen) setErrorMessage(null);
+  }, [isOpen]);
+
   const athletes = useMemo(() => {
     const list = Array.isArray(athletesList) ? athletesList : [];
-    return list.map((athlete: any) => {
+    return list.filter((athlete: any) => athlete.isActive !== false).map((athlete: any) => {
       const registration = (registrations as any[] | undefined)?.find((r) => r.userId === athlete.id);
       const registrationStatus: string | undefined = registration?.status;
       return {
@@ -107,7 +115,7 @@ export function AddAthletesModal({ eventId, eventName, organizationId, isOpen, o
     setSelectedUserIds((prev) =>
       allSelected
         ? prev.filter((id) => !selectable.some((a) => a.userId === id))
-        : Array.from(new Set([...prev, ...selectable.map((a) => a.userId)])),
+        : Array.from(new Set([...prev, ...selectable.map((a) => a.userId)])).slice(0, MAX_BATCH),
     );
 
   const handleClose = () => {
@@ -123,7 +131,10 @@ export function AddAthletesModal({ eventId, eventName, organizationId, isOpen, o
     setErrorMessage(null);
     try {
       const result = await addMutation.mutateAsync({ eventId, userIds: selectedUserIds, checkIn });
-      toast({ title: "Athletes added", description: describeAddResult(result) });
+      toast({
+        title: result.added.length + result.updated.length > 0 ? "Athletes added" : "No athletes added",
+        description: describeAddResult(result),
+      });
       handleClose();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to add athletes");
@@ -131,11 +142,12 @@ export function AddAthletesModal({ eventId, eventName, organizationId, isOpen, o
   };
 
   const count = selectedUserIds.length;
+  const atLimit = count >= MAX_BATCH;
   const isPending = addMutation.isPending;
   const buttonLabel = isPending ? "Adding..." : count === 0 ? "Add athletes" : `Add ${plural(count, "athlete")}`;
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && !isPending && handleClose()}>
       <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -170,6 +182,9 @@ export function AddAthletesModal({ eventId, eventName, organizationId, isOpen, o
               </label>
             </div>
           )}
+          {(atLimit || selectable.length > MAX_BATCH) && (
+            <p className="text-xs text-muted-foreground">You can add up to {MAX_BATCH} athletes at a time.</p>
+          )}
 
           <ScrollArea className="h-[240px]">
             {athletesLoading ? (
@@ -196,7 +211,7 @@ export function AddAthletesModal({ eventId, eventName, organizationId, isOpen, o
                         id={`add-athlete-${athlete.userId}`}
                         checked={selectedUserIds.includes(athlete.userId)}
                         onCheckedChange={() => toggle(athlete.userId)}
-                        disabled={!athlete.isSelectable}
+                        disabled={!athlete.isSelectable || (atLimit && !selectedUserIds.includes(athlete.userId))}
                         aria-label={athlete.fullName}
                       />
                       <div className="min-w-0">
@@ -225,7 +240,7 @@ export function AddAthletesModal({ eventId, eventName, organizationId, isOpen, o
           <p className="text-sm text-muted-foreground">Added athletes are not emailed or notified.</p>
 
           {errorMessage && (
-            <div role="alert" className="flex items-start gap-2 rounded-md bg-red-50 p-3 text-sm text-red-700 break-words min-w-0">
+            <div role="alert" className="flex items-start gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive break-words min-w-0">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
               <span className="min-w-0 break-words">{errorMessage}</span>
             </div>

@@ -431,17 +431,30 @@ export class EventRegistrationService {
     if (!event.organizationId) {
       throw new Error('Event has no organization');
     }
-    if (event.status === 'cancelled') {
-      throw new Error('Event is cancelled and cannot take new athletes');
-    }
     const organizationId = event.organizationId;
     const checkIn = options.checkIn ?? true;
     const targetStatus: RegistrationStatus = checkIn ? 'checked_in' : 'approved';
     const requested = Array.from(new Set(userIds));
 
     const result = await db.transaction(async (tx) => {
-      // Serialise concurrent adds so registration numbers stay unique
-      await tx.select({ id: eventsTable.id }).from(eventsTable).where(eq(eventsTable.id, eventId)).for('update');
+      // Serialise concurrent direct adds so they do not hand out the same registration numbers (the number has
+      // no unique constraint). Self-registration does not take this lock, so a racing registration for the same
+      // athlete is caught by the (event_id, user_id) unique constraint instead (see onConflictDoNothing below).
+      // Status and frozen flag are read under the lock so a concurrent cancel or freeze cannot slip past the check.
+      const [locked] = await tx
+        .select({ status: eventsTable.status, isFrozen: eventsTable.isFrozen })
+        .from(eventsTable)
+        .where(eq(eventsTable.id, eventId))
+        .for('update');
+      if (!locked) {
+        throw new Error('Event not found');
+      }
+      if (locked.status === 'cancelled') {
+        throw new Error('Event is cancelled and cannot take new athletes');
+      }
+      if (locked.isFrozen) {
+        throw new Error('Event is frozen and registrations cannot be modified');
+      }
 
       const members = await tx
         .select({ id: users.id, firstName: users.firstName, lastName: users.lastName, fullName: users.fullName })
@@ -483,39 +496,65 @@ export class EventRegistrationService {
           out.rejected.push({ userId, reason: 'not_in_organization' });
           continue;
         }
-        const reg = existingByUser.get(userId);
-        if (reg && (reg.status === 'checked_in' || reg.status === 'completed')) {
+        let reg = existingByUser.get(userId);
+        if (!reg) {
+          const [inserted] = await tx
+            .insert(eventRegistrations)
+            .values({
+              eventId,
+              userId,
+              userFullNameSnapshot: member.fullName || `${member.firstName} ${member.lastName}`,
+              organizationIdSnapshot: org?.id ?? organizationId,
+              organizationNameSnapshot: org?.name ?? null,
+              registrationNumber: nextNumber,
+              discoveryMethod: 'org_roster',
+              status: targetStatus,
+              waitlistPosition: null,
+              approvedAt: now,
+              approvedBy: addedBy.id,
+              checkedInAt: checkIn ? now : null,
+              checkedInBy: checkIn ? addedBy.id : null,
+              adminNotes: note,
+            })
+            .onConflictDoNothing({ target: [eventRegistrations.eventId, eventRegistrations.userId] })
+            .returning({ id: eventRegistrations.id });
+          if (inserted) {
+            nextNumber++;
+            out.added.push(userId);
+            continue;
+          }
+          // The athlete registered themselves after we read the roster: treat that row as an existing one
+          [reg] = await tx
+            .select()
+            .from(eventRegistrations)
+            .where(and(eq(eventRegistrations.eventId, eventId), eq(eventRegistrations.userId, userId)));
+          if (!reg) {
+            throw new Error('Registration changed while adding athletes, please try again');
+          }
+        }
+        if (reg.status === 'checked_in' || reg.status === 'completed' || reg.status === targetStatus) {
           out.alreadyOnEvent.push(userId);
           continue;
         }
-        const stateFields = {
-          status: targetStatus,
-          waitlistPosition: null,
-          approvedAt: now,
-          approvedBy: addedBy.id,
-          checkedInAt: checkIn ? now : null,
-          checkedInBy: checkIn ? addedBy.id : null,
-          declinedAt: null,
-          declinedBy: null,
-          declineReason: null,
-          adminNotes: note,
-        };
-        if (reg) {
-          await tx.update(eventRegistrations).set({ ...stateFields, updatedAt: now }).where(eq(eventRegistrations.id, reg.id));
-          out.updated.push(userId);
-        } else {
-          await tx.insert(eventRegistrations).values({
-            eventId,
-            userId,
-            userFullNameSnapshot: member.fullName || `${member.firstName} ${member.lastName}`,
-            organizationIdSnapshot: org?.id ?? organizationId,
-            organizationNameSnapshot: org?.name ?? null,
-            registrationNumber: nextNumber++,
-            discoveryMethod: 'org_roster',
-            ...stateFields,
-          });
-          out.added.push(userId);
-        }
+        // Keep the original approval and any admin notes; only the status-related fields change
+        const wasApproved = reg.status === 'approved';
+        await tx
+          .update(eventRegistrations)
+          .set({
+            status: targetStatus,
+            waitlistPosition: null,
+            approvedAt: wasApproved && reg.approvedAt ? reg.approvedAt : now,
+            approvedBy: wasApproved && reg.approvedBy ? reg.approvedBy : addedBy.id,
+            checkedInAt: checkIn ? now : null,
+            checkedInBy: checkIn ? addedBy.id : null,
+            declinedAt: null,
+            declinedBy: null,
+            declineReason: null,
+            adminNotes: reg.adminNotes || note,
+            updatedAt: now,
+          })
+          .where(eq(eventRegistrations.id, reg.id));
+        out.updated.push(userId);
       }
 
       if (event.maxRegistrations !== null && (out.added.length > 0 || out.updated.length > 0)) {
