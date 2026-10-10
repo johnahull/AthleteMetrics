@@ -28,7 +28,9 @@ import {
   UserPlus,
   CalendarPlus,
 } from "lucide-react";
-import { format, formatDistanceToNow, isFuture, isPast } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
+import { toCalendarDate, isCalendarDatePast, isCalendarDateFuture } from "@/utils/date-utils";
+import { buildEventICS } from "@/utils/event-calendar";
 
 export default function EventJoin() {
   const { code } = useParams();
@@ -49,30 +51,12 @@ export default function EventJoin() {
   // Registration mutation
   const registerMutation = useRegisterForEvent();
 
-  // Generate ICS file for calendar
+  // Generate ICS file for calendar (all-day entry on the event's calendar date)
   const generateICSFile = () => {
     if (!event) return;
 
-    const formatICSDate = (date: Date) => {
-      return date.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
-    };
-
-    const startDate = new Date(event.startDate);
-    const endDate = event.endDate ? new Date(event.endDate) : new Date(startDate.getTime() + 2 * 60 * 60 * 1000); // Default 2 hours
-
-    const icsContent = `BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//AthleteMetrics//Event//EN
-BEGIN:VEVENT
-UID:${event.id}@athletemetrics.app
-DTSTART:${formatICSDate(startDate)}
-DTEND:${formatICSDate(endDate)}
-SUMMARY:${event.name}
-LOCATION:${event.location || ""}
-DESCRIPTION:${event.description?.replace(/\n/g, "\\n") || ""}
-STATUS:CONFIRMED
-END:VEVENT
-END:VCALENDAR`;
+    const icsContent = buildEventICS(event);
+    if (!icsContent) return;
 
     const blob = new Blob([icsContent], { type: "text/calendar;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -123,8 +107,8 @@ END:VCALENDAR`;
   // Format date range
   const formatDateRange = () => {
     if (!event) return "";
-    const startDate = new Date(event.startDate);
-    const endDate = event.endDate ? new Date(event.endDate) : null;
+    const startDate = toCalendarDate(event.startDate)!;
+    const endDate = toCalendarDate(event.endDate);
 
     if (!endDate || format(startDate, "yyyy-MM-dd") === format(endDate, "yyyy-MM-dd")) {
       return format(startDate, "EEEE, MMMM d, yyyy");
@@ -141,8 +125,7 @@ END:VCALENDAR`;
     if (event.registrationOpensAt && new Date(event.registrationOpensAt) > now) return false;
     if (event.registrationClosesAt && new Date(event.registrationClosesAt) < now) return false;
 
-    const startDate = new Date(event.startDate);
-    if (isPast(startDate)) return false;
+    if (isCalendarDatePast(event.startDate)) return false;
 
     return true;
   };
@@ -273,7 +256,7 @@ END:VCALENDAR`;
   }
 
   // Event details view
-  const startDate = new Date(event.startDate);
+  const startDate = toCalendarDate(event.startDate)!;
   const registrationOpen = isRegistrationOpen();
   const spotsAvailable = hasCapacity();
   const spotsRemaining = event.maxRegistrations
@@ -303,7 +286,7 @@ END:VCALENDAR`;
             <div className="flex items-center gap-2 text-sm">
               <Calendar className="h-4 w-4 text-muted-foreground" />
               <span>{formatDateRange()}</span>
-              {isFuture(startDate) && (
+              {isCalendarDateFuture(event.startDate) && (
                 <span className="text-muted-foreground">
                   ({formatDistanceToNow(startDate)} from now)
                 </span>
@@ -359,7 +342,7 @@ END:VCALENDAR`;
               <Clock className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
               <p className="font-medium">Registration Closed</p>
               <p className="text-sm text-muted-foreground">
-                {isPast(startDate)
+                {isCalendarDatePast(event.startDate)
                   ? "This event has already started."
                   : "Registration is not currently open."}
               </p>

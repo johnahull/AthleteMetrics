@@ -6,6 +6,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Mail, ArrowLeft, CheckCircle, AlertCircle } from "lucide-react";
 
+const RATE_LIMITED_MESSAGE = 'Too many attempts. Please wait a few minutes and try again.';
+
 interface ForgotPasswordFormProps {
   onBack?: () => void;
 }
@@ -42,6 +44,11 @@ export function ForgotPasswordForm({ onBack }: ForgotPasswordFormProps) {
         body: JSON.stringify({ email }),
         credentials: 'include'
       });
+
+      if (response.status === 429) {
+        setError(RATE_LIMITED_MESSAGE);
+        return;
+      }
 
       const result = await response.json();
 
@@ -135,7 +142,7 @@ export function ForgotPasswordForm({ onBack }: ForgotPasswordFormProps) {
       
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
+          <div className="grid gap-y-2">
             <Label htmlFor="email">Email address</Label>
             <div className="relative">
               <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />

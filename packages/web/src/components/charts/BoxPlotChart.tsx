@@ -1523,7 +1523,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
     <div className="w-full h-full flex flex-col overflow-hidden">
       {/* Toggle control for athlete names - only show when swarm mode is enabled */}
       {showAllPoints && (
-        <div className="flex items-center space-x-2 mb-4 px-2 shrink-0">
+        <div className="flex items-center gap-x-2 mb-4 px-2 shrink-0">
           <Switch
             id="show-names"
             checked={localShowAthleteNames}

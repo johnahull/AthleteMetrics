@@ -18,6 +18,7 @@ interface BulkShareReportResult {
   shared: number;
   skipped: number;
   alreadyShared: number;
+  blockedUnder13?: number;
   results: Array<{
     athleteId: string;
     success: boolean;
@@ -47,6 +48,19 @@ interface ReportSharesResponse {
   shares: ReportShare[];
 }
 
+/** apiRequest throws `${status}: ${body}`; show the JSON body's `message` when there is one. */
+export function getShareErrorMessage(error: Error, fallback: string): string {
+  const raw = error.message || "";
+  const body = raw.replace(/^\d{3}:\s*/, "");
+  try {
+    const parsed = JSON.parse(body);
+    if (typeof parsed?.message === "string" && parsed.message) return parsed.message;
+  } catch {
+    // not JSON; fall through
+  }
+  return raw || fallback;
+}
+
 export function useShareReport() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -69,11 +83,25 @@ export function useShareReport() {
     onError: (error: Error) => {
       toast({
         title: "Error",
-        description: error.message || "Failed to share report",
+        description: getShareErrorMessage(error, "Failed to share report"),
         variant: "destructive",
       });
     },
   });
+}
+
+export function buildBulkShareDescription(
+  result: Pick<BulkShareReportResult, "shared" | "alreadyShared" | "skipped" | "blockedUnder13">,
+): string {
+  const { shared, alreadyShared, skipped, blockedUnder13 = 0 } = result;
+  const parts: string[] = [];
+  if (shared > 0) parts.push(`Report sent to ${shared} athlete${shared !== 1 ? 's' : ''}`);
+  if (alreadyShared > 0) parts.push(`${alreadyShared} already had access`);
+  if (blockedUnder13 > 0) {
+    parts.push(`${blockedUnder13} under 13 or without a date of birth skipped (send their PDF to a parent)`);
+  }
+  if (skipped > 0) parts.push(`${skipped} skipped due to errors`);
+  return parts.length > 0 ? parts.join(', ') : 'No report was sent';
 }
 
 export function useBulkShareReport() {
@@ -91,15 +119,7 @@ export function useBulkShareReport() {
     onSuccess: (data, { reportId }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/reports", reportId, "shares"] });
 
-      const { shared, alreadyShared, skipped } = data;
-
-      let description = `Report sent to ${shared} athlete${shared !== 1 ? 's' : ''}`;
-      if (alreadyShared > 0) {
-        description += `, ${alreadyShared} already had access`;
-      }
-      if (skipped > 0) {
-        description += `, ${skipped} skipped due to errors`;
-      }
+      const description = buildBulkShareDescription(data);
 
       toast({
         title: "Success",
@@ -109,7 +129,7 @@ export function useBulkShareReport() {
     onError: (error: Error) => {
       toast({
         title: "Error",
-        description: error.message || "Failed to share report",
+        description: getShareErrorMessage(error, "Failed to share report"),
         variant: "destructive",
       });
     },
@@ -140,13 +160,14 @@ interface BulkDistributeResult {
     sent: number;
     alreadySent: number;
     skipped: number;
+    blockedUnder13?: number;
   };
   results: Array<{
     reportId: string;
     reportName: string;
     athleteId: string;
     athleteName: string;
-    status: 'sent' | 'already_sent' | 'skipped';
+    status: 'sent' | 'already_sent' | 'skipped' | 'blocked_under_13';
     reason?: string;
   }>;
   skippedReports: Array<{
@@ -154,6 +175,22 @@ interface BulkDistributeResult {
     reportName: string;
     reason: string;
   }>;
+}
+
+export function buildBulkDistributeDescription(
+  summary: BulkDistributeResult["summary"],
+): string {
+  const { sent, alreadySent, skipped, blockedUnder13 = 0 } = summary;
+  const parts: string[] = [];
+  if (sent > 0) parts.push(`Sent ${sent} report${sent !== 1 ? 's' : ''}.`);
+  if (alreadySent > 0) parts.push(`${alreadySent} already sent.`);
+  if (blockedUnder13 > 0) {
+    parts.push(
+      `${blockedUnder13} athlete${blockedUnder13 !== 1 ? 's' : ''} under 13 or without a date of birth ${blockedUnder13 !== 1 ? 'were' : 'was'} skipped; send their PDF to a parent.`,
+    );
+  }
+  if (skipped > 0) parts.push(`${skipped} skipped.`);
+  return parts.length > 0 ? parts.join(' ') : 'No reports were sent.';
 }
 
 export function useBulkDistributeReports() {
@@ -172,15 +209,7 @@ export function useBulkDistributeReports() {
       // Invalidate reports list to refresh sentToAthlete status
       queryClient.invalidateQueries({ queryKey: ["/api/reports"] });
 
-      const { sent, alreadySent, skipped } = data.summary;
-
-      let description = `Sent ${sent} report${sent !== 1 ? 's' : ''} to athletes`;
-      if (alreadySent > 0) {
-        description += `, ${alreadySent} already sent`;
-      }
-      if (skipped > 0) {
-        description += `, ${skipped} skipped`;
-      }
+      const description = buildBulkDistributeDescription(data.summary);
 
       toast({
         title: "Success",
@@ -190,7 +219,7 @@ export function useBulkDistributeReports() {
     onError: (error: Error) => {
       toast({
         title: "Error",
-        description: error.message || "Failed to distribute reports",
+        description: getShareErrorMessage(error, "Failed to distribute reports"),
         variant: "destructive",
       });
     },

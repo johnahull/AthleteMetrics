@@ -33,7 +33,7 @@ import { eq, and, desc, asc, sql, inArray, isNull, type SQL } from "drizzle-orm"
 import { isSiteAdmin } from "../utils/auth-helpers";
 import { coppaService } from "../services/coppa-service";
 import { parentalConsents, parentAthleteLinks } from "@shared/schema/tables/coppa";
-import { COPPA_ACTIONS } from "@shared/coppa-utils";
+import { COPPA_ACTIONS, isUnder13OrUnknownDob } from "@shared/coppa-utils";
 import type { MetricExplanation } from "@shared/metric-explanations";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { jsPDF } from "jspdf";
@@ -45,7 +45,15 @@ import { requireRole } from "../permissions/middleware";
 import { emailService } from "../services/email-service";
 import { getPushNotificationService, type NotificationPayload } from "../services/push-notification-service";
 import { notificationPreferences } from "@shared/schema";
-import { hexToRgb, isSafeLogoUrl, fetchLogoBase64 } from "./report-branding-utils";
+import { hexToRgb, isSafeLogoUrl, fetchLogoBase64, sanitizeFilename } from "./report-branding-utils";
+import { renderEvalReportPdf } from "../utils/eval-report-pdf";
+import { canAccessEvalRow, hasInaccessibleEval } from "./eval-report-access";
+import { EVAL_REPORT_TYPE, frozenModelSchema } from "@shared/eval-report-config";
+import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
+import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
+import { formatEventReportTimeframe } from "../utils/calendar-date";
+
+const REPORT_NOT_FOUND = { message: "Report not found" };
 
 /** Organization branding fields used for PDF generation */
 type ReportOrg = Pick<
@@ -140,6 +148,10 @@ const bulkDistributeReportsSchema = z.object({
   message: z.string().max(1000, "Message cannot exceed 1000 characters").optional(),
 });
 
+// Share-to-athlete (account, email, push) is blocked for under-13 athletes and athletes with no valid
+// date of birth (AM-FEAT-019 P4). Links sent to a parent are not share-to-athlete and are unaffected.
+const UNDER_13_SHARE_BLOCKED_CODE = 'UNDER_13_SHARE_BLOCKED';
+
 // Maximum athletes that can be shared with in a single bulk request
 const MAX_BULK_SHARE = 100;
 
@@ -161,6 +173,7 @@ const reportLimiter = rateLimit({
   message: { message: "Too many report requests, please try again later." },
   standardHeaders: "draft-7",
   legacyHeaders: false,
+  skip: (req) => shouldSkipRateLimiting(req, 'general'),
   handler: (req, res) => {
     console.warn(`Rate limit exceeded for report endpoints - IP: ${req.ip}, User: ${req.session.user?.id || 'unauthenticated'}`);
     res.status(429).json({ message: "Too many report requests, please try again later." });
@@ -467,8 +480,20 @@ export function registerReportRoutes(app: Express) {
       }
 
       // Report type filter
-      if (reportType === 'team' || reportType === 'individual') {
+      if (reportType === 'team' || reportType === 'individual' || reportType === EVAL_REPORT_TYPE) {
         conditions.push(eq(reports.reportType, reportType));
+      }
+
+      // AM-FEAT-019: eval rows are listed only to coach / org_admin / site admin of the row's own org
+      if (!isSiteAdmin(user)) {
+        const writerOrgIds = userOrgs
+          .filter((org) => isMeasurementWriterRole(org.role))
+          .map((org) => org.organizationId);
+        conditions.push(
+          writerOrgIds.length > 0
+            ? sql`(${reports.reportType} <> ${EVAL_REPORT_TYPE} OR ${inArray(reports.organizationId, writerOrgIds)})`
+            : sql`${reports.reportType} <> ${EVAL_REPORT_TYPE}`
+        );
       }
 
       // Date range filters
@@ -625,7 +650,7 @@ export function registerReportRoutes(app: Express) {
       // Step 4: Enrich reports with sentToAthlete status and targetAthlete name
       const reportsWithSentStatus = reportsList.map((report) => {
         if (report.reportType !== 'individual') {
-          return report;
+          return stripEvalModel(report);
         }
 
         const config = report.config as IndividualReportConfig;
@@ -679,6 +704,9 @@ export function registerReportRoutes(app: Express) {
         return res.status(404).json({ message: "Report not found" });
       }
 
+      // AM-FEAT-019: eval reports need coach / org_admin / site admin of the report's own org; 404 otherwise
+      if (!(await canAccessEvalRow(user, report))) return res.status(404).json(REPORT_NOT_FOUND);
+
       // Validate organization access
       const hasAccess = await reportService["validateOrganizationAccess"](
         user.id,
@@ -719,6 +747,9 @@ export function registerReportRoutes(app: Express) {
         return res.status(404).json({ message: "Report not found" });
       }
 
+      // AM-FEAT-019: eval reports need coach / org_admin / site admin of the report's own org; 404 otherwise
+      if (!(await canAccessEvalRow(user, report))) return res.status(404).json(REPORT_NOT_FOUND);
+
       // Validate organization access
       const hasAccess = await reportService["validateOrganizationAccess"](
         user.id,
@@ -728,8 +759,11 @@ export function registerReportRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied to this report" });
       }
 
-      // Validate request body with Zod schema (partial for updates)
-      const validatedData = insertReportSchema.partial().parse(req.body);
+      // Validate request body with Zod schema (partial for updates).
+      // An eval keeps its frozen config and type: only name and description can change.
+      const validatedData = report.reportType === EVAL_REPORT_TYPE
+        ? evalReportUpdateSchema.parse(req.body)
+        : insertReportSchema.partial().parse(req.body);
 
       // Update report
       const [updated] = await db
@@ -782,6 +816,9 @@ export function registerReportRoutes(app: Express) {
           return res.status(404).json({ message: "Report not found" });
         }
 
+        // AM-FEAT-019: eval reports need coach / org_admin / site admin of the report's own org; 404 otherwise
+        if (!(await canAccessEvalRow(user, report))) return res.status(404).json(REPORT_NOT_FOUND);
+
         // Validate organization access
         const hasAccess = await reportService["validateOrganizationAccess"](
           user.id,
@@ -832,6 +869,9 @@ export function registerReportRoutes(app: Express) {
         if (!report) {
           return res.status(404).json({ message: "Report not found" });
         }
+
+        // AM-FEAT-019: eval reports need coach / org_admin / site admin of the report's own org; 404 otherwise
+        if (!(await canAccessEvalRow(user, report))) return res.status(404).json(REPORT_NOT_FOUND);
 
         // Validate organization access
         const hasAccess = await reportService["validateOrganizationAccess"](
@@ -905,6 +945,9 @@ export function registerReportRoutes(app: Express) {
           return res.status(404).json({ message: "Report not found" });
         }
 
+        // AM-FEAT-019: eval reports need coach / org_admin / site admin of the report's own org; 404 otherwise
+        if (!(await canAccessEvalRow(user, report))) return res.status(404).json(REPORT_NOT_FOUND);
+
         // Validate organization access
         const hasAccess = await reportService["validateOrganizationAccess"](
           user.id,
@@ -959,6 +1002,9 @@ export function registerReportRoutes(app: Express) {
         if (!report) {
           return res.status(404).json({ message: "Report not found" });
         }
+
+        // AM-FEAT-019: eval reports need coach / org_admin / site admin of the report's own org; 404 otherwise
+        if (!(await canAccessEvalRow(user, report))) return res.status(404).json(REPORT_NOT_FOUND);
 
         // Validate organization access
         const hasAccess = await reportService["validateOrganizationAccess"](
@@ -1015,6 +1061,9 @@ export function registerReportRoutes(app: Express) {
           return res.status(404).json({ message: "Report not found" });
         }
 
+        // AM-FEAT-019: eval reports need coach / org_admin / site admin of the report's own org; 404 otherwise
+        if (!(await canAccessEvalRow(user, report))) return res.status(404).json(REPORT_NOT_FOUND);
+
         // Validate organization access
         const hasAccess = await reportService["validateOrganizationAccess"](
           user.id,
@@ -1069,6 +1118,9 @@ export function registerReportRoutes(app: Express) {
           return res.status(404).json({ message: "Report not found" });
         }
 
+        // AM-FEAT-019: eval reports need coach / org_admin / site admin of the report's own org; 404 otherwise
+        if (!(await canAccessEvalRow(user, report))) return res.status(404).json(REPORT_NOT_FOUND);
+
         // Generate report based on type
         let reportData;
         if (report.reportType === 'team') {
@@ -1117,6 +1169,12 @@ export function registerReportRoutes(app: Express) {
         const reportId = req.params.id;
         const expirationDays = req.body.expirationDays || 30;
 
+        // AM-FEAT-019: only coach / org_admin / site admin of the eval's org may snapshot an eval (same 404 as its PDF)
+        const [target] = await db.select({ reportType: reports.reportType, organizationId: reports.organizationId }).from(reports).where(eq(reports.id, reportId)).limit(1);
+        if (!target || !(await canAccessEvalRow(user, target))) {
+          return res.status(404).json(REPORT_NOT_FOUND);
+        }
+
         const snapshot = await reportService.createSnapshot(
           reportId,
           user.id,
@@ -1163,6 +1221,9 @@ export function registerReportRoutes(app: Express) {
           return res.status(404).json({ message: "Report not found" });
         }
 
+        // AM-FEAT-019: eval reports need coach / org_admin / site admin of the report's own org; 404 otherwise
+        if (!(await canAccessEvalRow(user, report))) return res.status(404).json(REPORT_NOT_FOUND);
+
         const hasAccess = await reportService["validateOrganizationAccess"](
           user.id,
           report.organizationId
@@ -1204,6 +1265,16 @@ export function registerReportRoutes(app: Express) {
         }
 
         const snapshotId = req.params.snapshotId;
+
+        // AM-FEAT-019: revoking an eval's public link is a writer-only action
+        const [owner] = await db
+          .select({ reportType: reports.reportType, organizationId: reports.organizationId })
+          .from(reportSnapshots)
+          .innerJoin(reports, eq(reportSnapshots.reportId, reports.id))
+          .where(eq(reportSnapshots.id, snapshotId))
+          .limit(1);
+        // An unknown id and a hidden eval answer the same 404 (no existence oracle)
+        if (!owner || !(await canAccessEvalRow(user, owner))) return res.status(404).json(REPORT_NOT_FOUND);
 
         await reportService.revokeSnapshot(snapshotId, user.id);
 
@@ -1277,6 +1348,9 @@ export function registerReportRoutes(app: Express) {
         if (!report) {
           return res.status(404).json({ message: "Report not found" });
         }
+
+        // AM-FEAT-019: eval reports render from their frozen model, after their own org + role check
+        if (report.reportType === EVAL_REPORT_TYPE) return await sendEvalReportPdf(user, report, res);
 
         // Generate report data
         let reportData: unknown;
@@ -1361,6 +1435,11 @@ export function registerReportRoutes(app: Express) {
         // Fetch organization branding
         const org = await fetchOrgForBranding(report.organizationId);
 
+        // AM-FEAT-019: a corrupt frozen eval model is a server fault
+        if ((snapshot.snapshotData as any)?.reportType === EVAL_REPORT_TYPE && !isRenderableEvalModel((snapshot.snapshotData as any).model)) {
+          return sendEvalModelUnavailable(res, report.id);
+        }
+
         // Generate PDF from snapshot data
         const pdf = await generatePDF(report, snapshot.snapshotData, (format === 'visual' ? 'visual' : 'simplified'), org);
 
@@ -1415,6 +1494,9 @@ export function registerReportRoutes(app: Express) {
         if (!report) {
           return res.status(404).json({ message: "Report not found" });
         }
+
+        // AM-FEAT-019: eval reports render from their frozen model, after their own org + role check
+        if (report.reportType === EVAL_REPORT_TYPE) return await sendEvalReportPdf(user, report, res);
 
         // Generate report data
         let reportData: unknown;
@@ -1503,6 +1585,11 @@ export function registerReportRoutes(app: Express) {
         // Fetch organization branding
         const org = await fetchOrgForBranding(report.organizationId);
 
+        // AM-FEAT-019: a corrupt frozen eval model is a server fault
+        if ((snapshot.snapshotData as any)?.reportType === EVAL_REPORT_TYPE && !isRenderableEvalModel((snapshot.snapshotData as any).model)) {
+          return sendEvalModelUnavailable(res, report.id);
+        }
+
         // Generate PDF from snapshot data
         const pdf = await generatePDF(report, snapshot.snapshotData, (format === 'visual' ? 'visual' : 'simplified'), org, chartImages);
 
@@ -1542,6 +1629,12 @@ export function registerReportRoutes(app: Express) {
       const report = await storage.getReport(reportId);
       if (!report) {
         return res.status(404).json({ message: "Report not found" });
+      }
+
+      // AM-FEAT-019: eval reports have no AI insights; a non-writer must not learn that this id is an eval
+      if (!(await canAccessEvalRow(user, report))) return res.status(404).json(REPORT_NOT_FOUND);
+      if (report.reportType === EVAL_REPORT_TYPE) {
+        return res.status(400).json({ message: "Insights are not available for eval reports" });
       }
 
       // SECURITY: Verify user has access to this report's organization
@@ -1746,6 +1839,12 @@ export function registerReportRoutes(app: Express) {
         return res.status(404).json({ message: "Report not found" });
       }
 
+      // AM-FEAT-019: eval reports have no AI insights; a non-writer must not learn that this id is an eval
+      if (!(await canAccessEvalRow(user, report))) return res.status(404).json(REPORT_NOT_FOUND);
+      if (report.reportType === EVAL_REPORT_TYPE) {
+        return res.status(400).json({ message: "Insights are not available for eval reports" });
+      }
+
       // SECURITY: Verify user has access to this organization
       const hasAccess = await reportService["validateOrganizationAccess"](
         user.id,
@@ -1845,6 +1944,12 @@ export function registerReportRoutes(app: Express) {
           return res.status(404).json({ message: "Report not found" });
         }
 
+        // AM-FEAT-019: eval reports need coach / org_admin / site admin of the report's own org; 404 otherwise
+        if (!(await canAccessEvalRow(user, report))) return res.status(404).json(REPORT_NOT_FOUND);
+        if (report.reportType === EVAL_REPORT_TYPE && athleteId !== (report.config as { athleteId?: string })?.athleteId) {
+          return res.status(400).json({ message: "An eval report can only be shared with its own athlete" });
+        }
+
         // Validate organization access
         const hasAccess = await reportService["validateOrganizationAccess"](
           user.id,
@@ -1889,6 +1994,7 @@ export function registerReportRoutes(app: Express) {
             lastName: users.lastName,
             fullName: users.fullName,
             emails: users.emails,
+            birthDate: users.birthDate,
           })
           .from(users)
           .where(eq(users.id, athleteId))
@@ -1897,6 +2003,14 @@ export function registerReportRoutes(app: Express) {
 
         if (!athlete) {
           return res.status(400).json({ message: "Athlete not found" });
+        }
+
+        if (isUnder13OrUnknownDob(athlete.birthDate)) {
+          return res.status(403).json({
+            code: UNDER_13_SHARE_BLOCKED_CODE,
+            message:
+              "This athlete is under 13 or has no date of birth on file, so the report cannot be shared to their account. Send the PDF or a share link to their parent instead.",
+          });
         }
 
         // Attempt to create share
@@ -2056,6 +2170,7 @@ export function registerReportRoutes(app: Express) {
    *   shared: number,           // Successfully shared count
    *   skipped: number,          // Already shared count (duplicates)
    *   alreadyShared: number     // Same as skipped for backwards compatibility
+   *   blockedUnder13: number    // Athletes skipped because they are under 13 or have no date of birth
    * }
    *
    * @example
@@ -2093,6 +2208,12 @@ export function registerReportRoutes(app: Express) {
 
         if (!report) {
           return res.status(404).json({ message: "Report not found" });
+        }
+
+        // AM-FEAT-019: eval reports need coach / org_admin / site admin of the report's own org; 404 otherwise
+        if (!(await canAccessEvalRow(user, report))) return res.status(404).json(REPORT_NOT_FOUND);
+        if (report.reportType === EVAL_REPORT_TYPE) {
+          return res.status(400).json({ message: "Eval reports cannot be bulk shared" });
         }
 
         // Validate organization access
@@ -2161,6 +2282,7 @@ export function registerReportRoutes(app: Express) {
             lastName: users.lastName,
             fullName: users.fullName,
             emails: users.emails,
+            birthDate: users.birthDate,
           })
           .from(users)
           .where(inArray(users.id, targetAthleteIds));
@@ -2191,12 +2313,14 @@ export function registerReportRoutes(app: Express) {
         const results: Array<{
           athleteId: string;
           athleteName: string;
-          status: 'shared' | 'skipped' | 'already_shared' | 'failed';
+          status: 'shared' | 'skipped' | 'already_shared' | 'failed' | 'blocked_under_13';
           reason?: string;
         }> = [];
 
         let skipped = 0;
         let alreadyShared = 0;
+        let blockedUnder13 = 0;
+        const birthDateById = new Map(athletes.map((a) => [a.id, a.birthDate]));
 
         // Prepare list of shares to insert
         const sharesToInsert: Array<{
@@ -2230,6 +2354,18 @@ export function registerReportRoutes(app: Express) {
               reason: 'Not in organization',
             });
             skipped++;
+            continue;
+          }
+
+          // Under-13 or unknown date of birth: no share, no notification (athleteId is already org-validated)
+          if (isUnder13OrUnknownDob(birthDateById.get(athleteId))) {
+            results.push({
+              athleteId,
+              athleteName,
+              status: 'blocked_under_13',
+              reason: 'Under 13 or no date of birth',
+            });
+            blockedUnder13++;
             continue;
           }
 
@@ -2381,6 +2517,7 @@ export function registerReportRoutes(app: Express) {
           shared,
           skipped,
           alreadyShared,
+          blockedUnder13,
           results,
         });
       } catch (error) {
@@ -2433,6 +2570,7 @@ export function registerReportRoutes(app: Express) {
    *   distributed: number,      // Successfully distributed count
    *   skipped: number,          // Already distributed count (duplicates)
    *   failed: number            // Failed count (invalid athleteId, access denied, etc.)
+   *   blockedUnder13: number    // Under-13 or no-date-of-birth athletes skipped (summary.blockedUnder13)
    * }
    *
    * @example
@@ -2489,13 +2627,19 @@ export function registerReportRoutes(app: Express) {
         const skippedReports: Array<{ reportId: string; reportName: string; reason: string }> = [];
 
         for (const report of targetReports) {
-          // Only process individual reports
-          if (report.reportType !== 'individual') {
+          // Only process individual and eval reports (an eval is delivered only to its own config.athleteId)
+          if (report.reportType !== 'individual' && report.reportType !== EVAL_REPORT_TYPE) {
             skippedReports.push({
               reportId: report.id,
               reportName: report.name,
               reason: 'Not an individual report',
             });
+            continue;
+          }
+
+          // AM-FEAT-019: a non-writer must not learn that an eval exists
+          if (!(await canAccessEvalRow(user, report))) {
+            skippedReports.push({ reportId: report.id, reportName: '', reason: 'Report not found' });
             continue;
           }
 
@@ -2536,6 +2680,7 @@ export function registerReportRoutes(app: Express) {
             lastName: users.lastName,
             fullName: users.fullName,
             emails: users.emails,
+            birthDate: users.birthDate,
           })
           .from(users)
           .where(inArray(users.id, athleteIds));
@@ -2563,7 +2708,7 @@ export function registerReportRoutes(app: Express) {
           reportName: string;
           athleteId: string;
           athleteName: string;
-          status: 'sent' | 'already_sent' | 'skipped';
+          status: 'sent' | 'already_sent' | 'skipped' | 'blocked_under_13';
           reason?: string;
         }> = [];
         const sharesToInsert: Array<{
@@ -2601,6 +2746,19 @@ export function registerReportRoutes(app: Express) {
               athleteName,
               status: 'skipped',
               reason: 'Athlete not found',
+            });
+            continue;
+          }
+
+          // Under-13 or unknown date of birth (every report type, evals included): no share, no notification
+          if (isUnder13OrUnknownDob(athlete.birthDate)) {
+            results.push({
+              reportId,
+              reportName: reportInfo.reportName,
+              athleteId: reportInfo.athleteId,
+              athleteName,
+              status: 'blocked_under_13',
+              reason: 'Under 13 or no date of birth',
             });
             continue;
           }
@@ -2761,6 +2919,7 @@ export function registerReportRoutes(app: Express) {
 
         // Calculate summary
         const alreadySent = results.filter((r) => r.status === 'already_sent').length;
+        const blockedUnder13 = results.filter((r) => r.status === 'blocked_under_13').length;
         const skipped = results.filter((r) => r.status === 'skipped').length + skippedReports.length;
 
         res.status(200).json({
@@ -2768,6 +2927,7 @@ export function registerReportRoutes(app: Express) {
             sent,
             alreadySent,
             skipped,
+            blockedUnder13,
           },
           results,
           skippedReports,
@@ -2843,6 +3003,9 @@ export function registerReportRoutes(app: Express) {
             archived: 0
           });
         }
+
+        // AM-FEAT-019: an eval the caller may not touch refuses the whole request, with the same body as "not found"
+        if (await hasInaccessibleEval(user, targetReports)) return res.status(404).json(REPORT_NOT_FOUND);
 
         // Get unique organization IDs to validate access
         const orgIds = [...new Set(targetReports.map((r) => r.organizationId))];
@@ -2940,6 +3103,9 @@ export function registerReportRoutes(app: Express) {
           });
         }
 
+        // AM-FEAT-019: an eval the caller may not touch refuses the whole request, with the same body as "not found"
+        if (await hasInaccessibleEval(user, targetReports)) return res.status(404).json(REPORT_NOT_FOUND);
+
         // Get unique organization IDs to validate access
         const orgIds = [...new Set(targetReports.map((r) => r.organizationId))];
 
@@ -3010,6 +3176,9 @@ export function registerReportRoutes(app: Express) {
         if (targetReports.length === 0) {
           return res.status(404).json({ message: "No reports found" });
         }
+
+        // AM-FEAT-019: an eval the caller may not touch refuses the whole request, with the same body as "not found"
+        if (await hasInaccessibleEval(user, targetReports)) return res.status(404).json(REPORT_NOT_FOUND);
 
         // Get unique organization IDs to validate access
         const orgIds = [...new Set(targetReports.map((r) => r.organizationId))];
@@ -3085,12 +3254,15 @@ export function registerReportRoutes(app: Express) {
         )
         .orderBy(desc(reportShares.createdAt));
 
+      // AM-FEAT-019: an eval share is never listed to an under-13 / no-DOB athlete, even if a row exists
+      const visibleShares = await dropBlockedEvalShares(shares, user.id);
+
       // Format response
-      const formattedReports = shares.map((share) => ({
+      const formattedReports = visibleShares.map((share) => ({
         shareId: share.shareId,
         reportId: share.reportId,
         reportName: share.reportName,
-        reportType: share.reportType as 'team' | 'individual',
+        reportType: share.reportType as 'team' | 'individual' | 'eval',
         sharedBy: share.sharedById
           ? {
               id: share.sharedById,
@@ -3207,6 +3379,11 @@ export function registerReportRoutes(app: Express) {
           return res.status(404).json({ message: "Shared report not found" });
         }
 
+        // AM-FEAT-019: never return an eval's config/model to an under-13 / no-DOB athlete
+        if (share.reportType === EVAL_REPORT_TYPE && await evalShareBlocked(user.id)) {
+          return res.status(404).json({ message: "Shared report not found" });
+        }
+
         // Format response with nested report object (matches Report interface)
         const response = {
           shareId: share.shareId,
@@ -3216,7 +3393,7 @@ export function registerReportRoutes(app: Express) {
             createdBy: share.reportCreatedBy,
             name: share.reportName,
             description: share.reportDescription,
-            reportType: share.reportType as 'team' | 'individual',
+            reportType: share.reportType as 'team' | 'individual' | 'eval',
             config: share.reportConfig,
             coachingInsights: share.reportCoachingInsights,
             // These fields are required by IndividualReportView/TeamReportView
@@ -3420,6 +3597,10 @@ export function registerReportRoutes(app: Express) {
           return res.status(404).json({ message: "Share not found" });
         }
 
+        // AM-FEAT-019: unsharing an eval is writer-only (same 404 as every other eval route)
+        const [shared] = await db.select({ reportType: reports.reportType, organizationId: reports.organizationId }).from(reports).where(eq(reports.id, reportId)).limit(1);
+        if (shared && !(await canAccessEvalRow(user, shared))) return res.status(404).json(REPORT_NOT_FOUND);
+
         // Check permissions: must be coach who shared it or org_admin
         const userRoles = await storage.getUserRoles(user.id, share.organizationId);
 
@@ -3474,6 +3655,9 @@ export function registerReportRoutes(app: Express) {
         if (!report) {
           return res.status(404).json({ message: "Report not found" });
         }
+
+        // AM-FEAT-019: who an eval was shared with is writer-only
+        if (!(await canAccessEvalRow(user, report))) return res.status(404).json(REPORT_NOT_FOUND);
 
         // Validate organization access
         const hasAccess = await reportService["validateOrganizationAccess"](
@@ -3553,19 +3737,6 @@ async function fetchOrgForBranding(organizationId: string | undefined | null) {
   return db.select().from(organizations).where(eq(organizations.id, organizationId)).limit(1).then((rows) => rows[0]);
 }
 
-function sanitizeFilename(filename: string): string {
-  return filename
-    .normalize('NFKD') // Unicode normalization to prevent homograph attacks
-    .replace(/[\u0300-\u036f]/g, '') // Remove combining diacritical marks
-    .replace(/[\u200B-\u200D\uFEFF]/g, '') // Remove zero-width characters
-    .replace(/[\u202A-\u202E]/g, '') // Remove bidirectional text overrides (RTL attacks)
-    .replace(/[/\\?%*:|"<>\x00-\x1f]/g, '_') // Remove dangerous characters
-    .replace(/^\.+/, '_') // Prevent hidden files
-    .replace(/\.+$/, '') // Remove trailing dots (Windows security issue)
-    .substring(0, 200) // Limit length to prevent issues
-    .trim() || 'report'; // Fallback for empty names
-}
-
 /**
  * Add footer to all pages in the PDF
  */
@@ -3617,6 +3788,27 @@ function tierTint(colorName: string): [number, number, number] {
   ] as [number, number, number];
 }
 
+/** AM-FEAT-019: who may open a restricted eval snapshot: org writer, the athlete themself, or a parent linked to that athlete. */
+async function canOpenRestrictedEval(
+  sessionUser: { id: string; isSiteAdmin?: boolean; role?: string },
+  organizationId: string,
+  athleteId: string | undefined
+): Promise<boolean> {
+  if (isMeasurementWriterRole(await getOrgRole(sessionUser, organizationId))) return true;
+  if (!athleteId) return false;
+  if (sessionUser.id === athleteId) return true;
+  const [link] = await db
+    .select({ id: parentAthleteLinks.id })
+    .from(parentAthleteLinks)
+    .where(and(
+      eq(parentAthleteLinks.parentUserId, sessionUser.id),
+      eq(parentAthleteLinks.athleteUserId, athleteId),
+      eq(parentAthleteLinks.isActive, true),
+    ))
+    .limit(1);
+  return !!link;
+}
+
 /**
  * COPPA gate for public snapshot access, shared by the public snapshot-data
  * route and the public PDF-export routes so they cannot diverge.
@@ -3656,7 +3848,7 @@ async function enforcePublicSnapshotAccess(
   // Site admins may always access restricted snapshots.
   if (!sessionUser.isSiteAdmin) {
     const [reportRow] = await db
-      .select({ organizationId: reports.organizationId })
+      .select({ organizationId: reports.organizationId, reportType: reports.reportType, config: reports.config })
       .from(reports)
       .where(eq(reports.id, snapshot.reportId))
       .limit(1);
@@ -3670,6 +3862,18 @@ async function enforcePublicSnapshotAccess(
     }
 
     const orgId = reportRow.organizationId;
+
+    // AM-FEAT-019: an eval holds one athlete's data. Only a writer of the report's org, the athlete, or a parent
+    // actively linked to THAT athlete may open it; other members and parents of other athletes are refused.
+    if (reportRow.reportType === EVAL_REPORT_TYPE) {
+      if (await canOpenRestrictedEval(sessionUser, orgId, (reportRow.config as { athleteId?: string } | null)?.athleteId)) return true;
+      res.status(403).json({
+        code: 'minor_data_restricted',
+        message: 'This report contains data for minor athletes. Access is restricted.',
+      });
+      return false;
+    }
+
     const userOrgs = await storage.getUserOrganizations(sessionUser.id);
     const isMember = userOrgs.some((o) => o.organizationId === orgId);
 
@@ -3786,7 +3990,79 @@ function addTrendChartsToPdf(
   });
 }
 
+/**
+ * AM-FEAT-019: defence in depth for evals already shared to an athlete account. Blocked when the athlete is under
+ * 13 today or has no usable date of birth (the same isUnder13OrUnknownDob rule the /share, /share-bulk and
+ * /bulk-distribute guards apply to every report type). Age today decides: neither isMinor nor the age at the
+ * event date matters (isEvalSnapshotRestricted is a separate control for PUBLIC snapshots). Fails closed on error.
+ */
+async function evalShareBlocked(athleteId: string): Promise<boolean> {
+  try {
+    const [athlete] = await db.select({ birthDate: users.birthDate }).from(users).where(eq(users.id, athleteId)).limit(1);
+    return isUnder13OrUnknownDob(athlete?.birthDate);
+  } catch {
+    return true;
+  }
+}
+
+/** Remove eval shares the athlete may not be shown (see evalShareBlocked). Non-eval rows pass through. */
+async function dropBlockedEvalShares<T extends { reportType: string }>(shares: T[], athleteId: string): Promise<T[]> {
+  if (!shares.some((share) => share.reportType === EVAL_REPORT_TYPE)) return shares;
+  // The decision depends only on the athlete, so look them up once for all their eval shares
+  if (!(await evalShareBlocked(athleteId))) return shares;
+  return shares.filter((share) => share.reportType !== EVAL_REPORT_TYPE);
+}
+
+/** Drop the heavy frozen model from an eval row for list payloads (keeps eventId, athleteId, metrics, ...). */
+function stripEvalModel<T extends { reportType: string; config: unknown }>(report: T): T {
+  if (report.reportType !== EVAL_REPORT_TYPE) return report;
+  const { model, ...rest } = (report.config ?? {}) as Record<string, unknown> & { model?: { eventDate?: string } };
+  return { ...report, config: { ...rest, eventDate: model?.eventDate } };
+}
+
+/** PUT body for an eval: name and description are the only editable fields. */
+const evalReportUpdateSchema = z.object({
+  name: z.string().trim().min(1, "Report name is required").max(200).optional(),
+  description: z.string().max(1000).nullable().optional(),
+});
+
+/** Structural check of a frozen eval model (top-level keys; same schema the save route validates against). */
+function isRenderableEvalModel(model: unknown): boolean {
+  return frozenModelSchema.safeParse(model).success;
+}
+
+/** 500 for a missing or corrupt frozen model. Logs the report id only (no PII). */
+function sendEvalModelUnavailable(res: express.Response, reportId: string): void {
+  console.error(`[eval-report] Frozen model missing or corrupt for report ${reportId}`);
+  res.status(500).json({ message: "Report data is unavailable" });
+}
+
+/** AM-FEAT-019: PDF of a saved eval report. Coach / org_admin / site admin of the report's org only; 404 otherwise. */
+async function sendEvalReportPdf(user: { id: string; isSiteAdmin?: boolean; role?: string }, report: Report, res: express.Response): Promise<void> {
+  // Defense in depth: the callers' own guards already ran; the access rule itself lives in canAccessEvalRow
+  if (!(await canAccessEvalRow(user, report))) {
+    res.status(404).json(REPORT_NOT_FOUND);
+    return;
+  }
+  const model = (report.config as any)?.model;
+  // The frozen model is written by the save route; a missing or corrupt one is a server fault, not a 404
+  if (!isRenderableEvalModel(model)) {
+    sendEvalModelUnavailable(res, report.id);
+    return;
+  }
+  const pdf = await renderEvalReportPdf(model, await fetchOrgForBranding(report.organizationId));
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${sanitizeFilename(report.name)}.pdf"`);
+  res.send(Buffer.from(pdf.output("arraybuffer")));
+}
+
 async function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified', org?: ReportOrg, chartImages: Array<{ metricCode: string; dataUrl: string; title?: string }> = []): Promise<jsPDF> {
+  // AM-FEAT-019: a public eval snapshot carries its frozen model
+  if (reportData?.reportType === EVAL_REPORT_TYPE) {
+    if (!isRenderableEvalModel(reportData.model)) throw new Error('Eval report model is unavailable');
+    return renderEvalReportPdf(reportData.model, org);
+  }
+
   const doc = new jsPDF();
   const isVisual = format === 'visual';
 
@@ -4805,15 +5081,10 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
     const reportConfig = isIndividualReportConfig(report.config) || isTeamReportConfig(report.config)
       ? report.config
       : null;
-    let timeframe = "Current Season";
-    if (reportConfig?.timeframe) {
-      const { customStart: startDate, customEnd: endDate } = reportConfig.timeframe;
-      if (startDate && endDate) {
-        const start = new Date(startDate).toLocaleDateString();
-        const end = new Date(endDate).toLocaleDateString();
-        timeframe = `${start} to ${end}`;
-      }
-    }
+    const timeframe = formatEventReportTimeframe(
+      reportConfig?.timeframe?.customStart,
+      reportConfig?.timeframe?.customEnd
+    );
 
     // Build metrics array from report data
     const metrics: Array<{

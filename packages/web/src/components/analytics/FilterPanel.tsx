@@ -166,7 +166,7 @@ export function FilterPanel({
                   <label className="text-sm font-medium mb-2 block">Gender</label>
                   <div className="flex flex-wrap gap-2">
                     {['Male', 'Female', 'Not Specified'].map((gender) => (
-                      <label key={gender} className="flex items-center space-x-2 cursor-pointer">
+                      <label key={gender} className="flex items-center gap-x-2 cursor-pointer">
                         <Checkbox
                           checked={filters.genders?.includes(gender as any) || false}
                           onCheckedChange={(checked) => {
@@ -189,7 +189,7 @@ export function FilterPanel({
                     <label className="text-sm font-medium mb-2 block">{labels.teams}</label>
                     <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
                       {availableTeams.map((team) => (
-                        <label key={team.id} className="flex items-center space-x-2 cursor-pointer">
+                        <label key={team.id} className="flex items-center gap-x-2 cursor-pointer">
                           <Checkbox
                             checked={filters.teams?.includes(team.id) || false}
                             onCheckedChange={(checked) => {

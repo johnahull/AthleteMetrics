@@ -571,7 +571,7 @@ export default function UserManagement() {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-x-2">
                 <UserPlus className="h-5 w-5 text-primary" />
                 <CardTitle>Add New User</CardTitle>
               </div>
@@ -721,7 +721,7 @@ export default function UserManagement() {
                           </FormItem>
                         )}
                       />
-                      <div className="flex justify-end space-x-2">
+                      <div className="flex justify-end gap-x-2">
                         <Button
                           type="button"
                           variant="outline"
@@ -853,7 +853,7 @@ export default function UserManagement() {
                                 </FormItem>
                               )}
                             />
-                            <div className="flex justify-end space-x-2">
+                            <div className="flex justify-end gap-x-2">
                               <Button
                                 type="button"
                                 variant="outline"

@@ -130,6 +130,33 @@ describe('DataParser fly-10 run-in neutrality (AM-FEAT-017)', () => {
     expect(parse('Jane Doe tendon 1.50').find((d) => d.value === '1.50')).toBeUndefined();
   });
 
+  it('does not read a date or a name as a fly through the "time" / "ten" patterns', () => {
+    for (const line of ['John Smith time 10/05 2.45', 'John Smith 10/05 40 yd time 2.85', 'John Stenson 1.05', 'Jane Tennyson time 1.50']) {
+      const rows = parse(line);
+      expect(rows.filter((d) => d.metric === FLY), line).toEqual([]);
+    }
+  });
+
+  it('still reads real fly lines through the explicit patterns', () => {
+    for (const line of [
+      'John Smith 10 fly 1.05',
+      'John Smith fly 10 1.05',
+      'John Smith 10 yd fly 1.05',
+      'John Smith 10-yard fly 1.05',
+      'John Smith 10 yard fly time 1.05',
+      'John Smith ten yard fly 1.05',
+      'John Smith fly10 1.05',
+      'John Smith fly time 10 1.05',
+    ]) {
+      expect(parse(line).find((d) => d.value === '1.05')?.metric, line).toBe(FLY);
+    }
+  });
+
+  it('the generic fallback needs fly: value-first lines', () => {
+    expect(parse('John Smith 1.05 10 yd fly').find((d) => d.value === '1.05')?.metric).toBe(FLY);
+    expect(parse('John Smith 1.05 10 yd').find((d) => d.value === '1.05')).toBeUndefined();
+  });
+
   it('files a "10 fly" / "fly 10" line under the neutral token', () => {
     expect(parse('John Smith 10 fly 1.05').find((d) => d.value === '1.05')?.metric).toBe(FLY);
     expect(parse('John Smith fly 10 1.05').find((d) => d.value === '1.05')?.metric).toBe(FLY);
@@ -208,6 +235,18 @@ describe('DataParser value and distance boundaries (#585)', () => {
     expect(parse('John Smith 5-10-5....4.31').find((d) => d.metric === 'AGILITY_5105')?.value).toBe('4.31');
     expect(parse('John Smith T-test..10.25').find((d) => d.metric === 'T_TEST')?.value).toBe('10.25');
     expect(parse('John Smith sprint....4.52').find((d) => d.metric === 'DASH_40YD')?.value).toBe('4.52');
+  });
+
+  it('applies the value and distance guards to the "ten" and "fly10" forms too', () => {
+    expect(rawRows('ten yard fly 11.05').find((d) => d.value === '1.05')).toBeUndefined();
+    expect(rawRows('fly10 11.05').find((d) => d.value === '1.05')).toBeUndefined();
+    expect(rawRows('fly 1.10 1.05').filter((d) => d.metric === FLY)).toEqual([]);
+    expect(rawRows('ten yard fly...1.05').filter((d) => d.metric === FLY)).toEqual([
+      expect.objectContaining({ value: '1.05' }),
+    ]);
+    expect(rawRows('fly10....1.05').filter((d) => d.metric === FLY)).toEqual([
+      expect.objectContaining({ value: '1.05' }),
+    ]);
   });
 
   it('still reads a value followed by a unit or a full stop', () => {

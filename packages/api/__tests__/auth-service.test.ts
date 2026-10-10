@@ -9,6 +9,19 @@ import { AuthService } from "../services/auth-service";
 import type { User } from "@shared/schema";
 import { INVITATION_PENDING_PASSWORD } from "@shared/schema";
 import type { IStorage } from "../storage";
+import { AuthSecurity } from "../auth/security";
+
+// The lockout counter lives in the database; its behaviour is covered by
+// tests/integration/login-lockout-by-user-id.test.ts. Here AuthSecurity is a stub.
+vi.mock("../auth/security", () => ({
+  AuthSecurity: {
+    reserveLoginAttempt: vi.fn(),
+    releaseLoginAttempt: vi.fn(),
+    recordFailedLogin: vi.fn(),
+    recordSuccessfulLogin: vi.fn(),
+    verifyMFAToken: vi.fn(),
+  },
+}));
 
 describe("AuthService", () => {
   let service: AuthService;
@@ -70,6 +83,10 @@ describe("AuthService", () => {
   } as User;
 
   beforeEach(() => {
+    vi.mocked(AuthSecurity.reserveLoginAttempt).mockResolvedValue({ allowed: true });
+    vi.mocked(AuthSecurity.releaseLoginAttempt).mockResolvedValue(undefined);
+    vi.mocked(AuthSecurity.recordFailedLogin).mockResolvedValue(undefined);
+    vi.mocked(AuthSecurity.recordSuccessfulLogin).mockResolvedValue(undefined);
     // Reset mock storage before each test
     mockStorage = {
       getUserByUsername: vi.fn(),
@@ -245,6 +262,52 @@ describe("AuthService", () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("social login");
+    });
+  });
+
+  describe("login - account lockout", () => {
+    it("reserves the attempt by user id before comparing the password and rejects a locked account without comparing", async () => {
+      const lockUntil = new Date(Date.now() + 60_000);
+      vi.mocked(AuthSecurity.reserveLoginAttempt).mockResolvedValue({ allowed: false, lockUntil });
+      mockStorage.getUserByUsername = vi.fn().mockResolvedValue(mockActiveUser);
+      const compare = vi.spyOn(bcrypt, "compare");
+
+      const result = await service.login({ username: "activeuser", password: validPassword });
+
+      expect(AuthSecurity.reserveLoginAttempt).toHaveBeenCalledWith(mockActiveUser, "0.0.0.0", undefined);
+      expect(result).toMatchObject({ success: false, accountLocked: true, lockUntil });
+      expect(compare).not.toHaveBeenCalled();
+      compare.mockRestore();
+    });
+
+    it("does not reserve an attempt for unknown users, OAuth-only or invitation-pending accounts", async () => {
+      mockStorage.getUserByUsername = vi.fn().mockResolvedValue(undefined);
+      mockStorage.getUserByEmail = vi.fn().mockResolvedValue(undefined);
+      await service.login({ username: "ghost", password: "x" });
+      mockStorage.getUserByUsername = vi.fn().mockResolvedValue(mockOAuthUser);
+      await service.login({ username: "oauthuser", password: "x" });
+      mockStorage.getUserByUsername = vi.fn().mockResolvedValue(mockPendingInvitationUser);
+      await service.login({ username: "pendinguser", password: "x" });
+      expect(AuthSecurity.reserveLoginAttempt).not.toHaveBeenCalled();
+    });
+
+    it("records a failed login (no extra count) for a wrong password and resets on success", async () => {
+      mockStorage.getUserByUsername = vi.fn().mockResolvedValue(mockActiveUser);
+      mockStorage.getUserOrganizations = vi.fn().mockResolvedValue([]);
+      await service.login({ username: "activeuser", password: "nope" });
+      expect(AuthSecurity.recordFailedLogin).toHaveBeenCalledWith(mockActiveUser, "0.0.0.0", undefined);
+      expect(AuthSecurity.recordSuccessfulLogin).not.toHaveBeenCalled();
+
+      await service.login({ username: "activeuser", password: validPassword });
+      expect(AuthSecurity.recordSuccessfulLogin).toHaveBeenCalledWith("user-123", "0.0.0.0", undefined);
+    });
+
+    it("gives the attempt back when the password is right but an MFA code is still required", async () => {
+      mockStorage.getUserByUsername = vi.fn().mockResolvedValue({ ...mockActiveUser, mfaEnabled: true, mfaSecret: "S" });
+      const result = await service.login({ username: "activeuser", password: validPassword });
+      expect(result.requiresMFA).toBe(true);
+      expect(AuthSecurity.releaseLoginAttempt).toHaveBeenCalledTimes(1);
+      expect(AuthSecurity.recordFailedLogin).not.toHaveBeenCalled();
     });
   });
 

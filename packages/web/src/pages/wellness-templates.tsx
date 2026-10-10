@@ -67,8 +67,8 @@ export default function WellnessTemplates() {
       </div>
 
       {/* Tabs */}
-      <Tabs value={selectedTab} onValueChange={(value) => setSelectedTab(value as any)} className="space-y-6">
-        <TabsList>
+      <Tabs value={selectedTab} onValueChange={(value) => setSelectedTab(value as any)} className="flex flex-col gap-y-6 [&>[role=tabpanel]]:mt-0">
+        <TabsList className="self-start">
           <TabsTrigger value="dashboard" role="tab">
             Dashboard
           </TabsTrigger>

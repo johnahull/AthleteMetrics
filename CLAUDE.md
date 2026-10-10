@@ -622,6 +622,23 @@ AthleteMetrics supports Google and Apple OAuth authentication via Passport.js as
 
 **Documentation:** See `docs/OAUTH_AUTHENTICATION.md` for comprehensive setup guide, user flows, and future enhancements.
 
+### Eval Report (AM-FEAT-019)
+Coach-generated, family-facing PDF for one athlete at one evaluation event. Each generation is a saved `reports` row with `reportType = 'eval'` whose `config` holds the frozen `EvalReportModel`; snapshots, shares and public links reuse the existing report plumbing. Data is event-, athlete-, organization- and verified-only; derived metrics are recomputed from per-leg bests; age-group sets are single "Average" rows, so the comparison is above/below average and the PDF never prints tier names. No wellness data; MQI is a band word only.
+
+**Rule: eval reports are `reports` rows gated by `canAccessEvalRow` (`packages/api/routes/eval-report-access.ts`): coach / org admin / site admin of the report row's own organization, otherwise 404. Any new route that touches reports must gate eval rows.** Eval `config` is immutable (only name/description editable); athletes reach an eval only through an explicit share.
+
+**Key files:**
+- `packages/api/services/eval-report/` - pure domain logic (`tier-match`, `selection`, `derived`, `balance`, `metric-key-map`, `template-keys`, `model`, `copy`); `model-guard.ts` fails `tsc` on wellness-named fields
+- `packages/api/services/eval-report-service.ts` - loads inputs and assembles the model
+- `packages/api/routes/event-report-routes.ts` - preview / save / defaults; `packages/api/routes/eval-template-routes.ts` + `services/eval-template-service.ts` - templates and org settings
+- `packages/api/utils/eval-report-pdf.ts` - server-side jsPDF renderer (WinAnsi font only)
+- `packages/shared/eval-report-config.ts`, `packages/shared/eval-template-schemas.ts` - Zod schemas
+- `migrations/0153_add_eval_report_templates.sql` - number provisional; renumber at merge
+- Web: `packages/web/src/components/events/EvalReportDialog.tsx`, `EventEvalReportsCard.tsx`, `EvalTemplatePicker.tsx`, `SaveEvalTemplateDialog.tsx`, `components/reports/EvalReportView.tsx`
+- COPPA: `coppa-deletion-service.ts` (step 4c), `coppa-export-service.ts` (`evalReports`) and `profile-merge-service.ts` (step 8b) cover eval rows (test: `tests/integration/coppa-eval-reports.test.ts`); P4 (#560) adds the all-report-types under-13 share guard (`isUnder13OrUnknownDob` in `packages/shared/coppa-utils.ts`)
+
+**Docs:** `docs/EVAL_REPORT.md` (guide, API, testing, troubleshooting, release gate), `docs/adr/ADR-002-eval-report-v2.md` (decisions), `docs/EVAL_REPORT_FOLLOWUPS.md` (open items). The eval E2E (`tests/e2e/eval-report.spec.ts`) is run locally until the E2E suite is green (#490).
+
 ### Data Import/Export
 - CSV import with comprehensive validation and preview
 - Support for matching existing players or creating new ones
@@ -666,6 +683,7 @@ The application runs as a **single-process Node.js server** without clustering:
 ### Development Notes
 - **TDD is mandatory**: Write failing tests before writing production code — always. See the TDD policy section above.
 - All database operations use Drizzle ORM - no raw SQL
+- **Event dates are calendar dates stored as UTC midnight** (`events.start_date`/`end_date`). Show and compare them with `toCalendarDate()` / `isCalendarDatePast()` / `isCalendarDateFuture()` from `packages/web/src/utils/date-utils.ts` (web) or `timeZone: 'UTC'` (server); never `new Date(x)` + `format()` directly, which shows the previous day west of UTC.
 - Forms use React Hook Form with Zod schemas from `shared/schema.ts`
 - UI components are from shadcn/ui - check existing patterns before creating new ones
 - Authentication state is managed through React Context in `lib/auth.tsx`
@@ -709,6 +727,15 @@ The application runs as a **single-process Node.js server** without clustering:
 #### Rate Limiting Bypass (Development Only)
 - `BYPASS_ANALYTICS_RATE_LIMIT` - Set to "true" to bypass analytics rate limiting for site admins (default: false)
 - `BYPASS_GENERAL_RATE_LIMIT` - Set to "true" to bypass general API rate limiting (default: false)
+
+#### Auth Rate Limits
+- `POST /api/auth/login`: 20 **failed** attempts per 15 minutes per IP (`skipSuccessfulRequests`, so successful logins are not counted).
+- `POST /api/auth/forgot-password`: 5 requests per 15 minutes per IP, counting all requests (it sends email), in its own bucket.
+- `POST /api/auth/validate-reset-token` and `POST /api/auth/reset-password`: 20 requests per 15 minutes per IP, counting all requests, in a bucket shared by those two endpoints only (both answer 200 for a bad token, so failures cannot be told apart; tokens are high entropy, so this is a backstop that leaves room for page reloads).
+- The three limiters are built by `createAuthRateLimiters` in `packages/api/middleware/auth-rate-limiters.ts` and wired in `packages/api/routes/auth-routes.ts`.
+- **Per-account lockout** (separate from the IP limiters): 5 password attempts, then the account is locked for 15 minutes (HTTP 423). It is keyed on the user ID, not the email, so accounts without an email and accounts that share an email are handled correctly. The attempt is reserved atomically in the database BEFORE the password is compared (`AuthSecurity.reserveLoginAttempt`, `storage.registerLoginAttempt`), so concurrent guesses cannot exceed the limit. A correct password during the lock is rejected; a successful login resets the counter. It applies to both `/api/auth/login` and `/api/enhanced-auth/login`. Wrong MFA codes and wrong backup codes count as failed attempts; a correct password that still needs an MFA code (or is stopped by an unverified email or deactivated organization) gives its attempt back, including undoing the lock if that attempt set it. The count resets only on a successful login or when the lock expires (there is no time decay). A successful password reset clears an active lock. 423 responses still count toward the per-IP failure budget of the login limiter.
+- `/api/enhanced-auth/{login,forgot-password,validate-reset-token,reset-password}` keep their own separate limiter of 5 requests per 15 minutes per IP (`packages/api/routes/enhanced-auth.ts`); it is not shared with the `/api/auth/*` buckets above.
+- Invitation acceptance (`packages/api/routes/invitation-routes.ts`) has its own limiter.
 
 **Security Note**: Rate limiting bypasses are disabled by default and automatically disabled in production environments (NODE_ENV=production) regardless of environment variable settings. This provides an additional safeguard against accidental security vulnerabilities in production deployments.
 

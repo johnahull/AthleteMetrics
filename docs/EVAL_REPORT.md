@@ -1,0 +1,183 @@
+# Eval Report (AM-FEAT-019)
+
+A coach opens an evaluation event, picks an athlete, chooses metrics and sections (with age-group presets and defaults), previews, and downloads a branded PDF. Every generation is saved as a `reports` row (`reportType = 'eval'`). Eval batteries can be saved as templates and chosen on the New event form: picking a template fills the form's metrics list (required tests plus the optional ones the coach ticks), the coach adds or removes tests, and the final list is saved in one request (`POST /api/events/:eventId/metrics/bulk`) after the event is created. Tests the template lists but that cannot be added (missing, inactive, derived) are named in the picker. Switching template or choosing "No template" only removes the entries that came from the template, never tests added by hand.
+
+**Manage templates** (`/events/templates`, linked from the Events page header for coaches and admins when the Events module is on; pages `packages/web/src/pages/eval-templates.tsx` and `eval-template-edit.tsx`): lists the organization's templates and the default. A writer renames a template, edits its description, and adds, removes, reorders and marks tests required with the same metrics selector as the New event form (derived metrics are not offered). Tests that cannot be used for the organization (missing, inactive, not offered to its type) are listed under "Not available for this organization" and kept until removed (on save they go after the editable tests); derived leftovers are dropped on save, which counts as a change, so Save is enabled while any are left. Leaving the editor with unsaved changes asks first: links inside the app (Cancel, Back, the sidebar) open a "Leave without saving?" dialog, and closing or reloading the tab gets the browser's own prompt (the browser Back button is not intercepted). A failed load shows an error with Retry. Both pages show "The Events module is off" when the organization (the template's own, or the viewer's for the default) has the Events module turned off. Label overrides already on a template are kept but are not editable here, and the sport is shown, not editable. Organization templates can be deleted (confirm; events keep their tests). The default cannot be deleted: a site admin edits it (one confirm, because it changes the default for every organization); everyone else sees it read-only with **Duplicate as my template**, which creates "<name> (copy)" in their organization with only the tests available there and says which were left out. Access and resolution use the template's own organization.
+
+Design record and reasons: `docs/adr/ADR-002-eval-report-v2.md`. Open items: `docs/EVAL_REPORT_FOLLOWUPS.md`.
+
+Scope of this tree: P1, P2, P3a-d, P4 (#560) and P5.
+
+## What it does
+
+- Uses only the chosen event's **verified** measurements for that athlete in the event's organization. Best value per metric honors `lower_is_better`. The report date is the event's calendar date, and age is taken at that date.
+- Derived values (5-0-5 LSI, EUR, COD deficit, single-leg CMJ asymmetry) are recomputed from the event's per-leg bests, never read from stored totals.
+- Compares each metric with the athlete's age-group average (above or below), optionally with a college standard marker. When no set applies (males, ages under 11 or over 18, some metrics, missing gender or birth date) it shows value and unit with no gauge.
+- Fresh & Healthy panel: Load (coach pick), Balance (5-0-5 LSI wording), Movement (MQI band word). No survey data, no injury wording, no placement recommendation.
+- Presets (Middle school, High school, Senior) are chosen from graduation year, then age, else High school.
+
+## API
+
+All routes need a signed-in user. "Writer" means coach, org admin or site admin **in the organization of the event / report / template row** (not the session's primary role). Anyone else gets 404.
+
+### Event routes (`packages/api/routes/event-report-routes.ts`)
+
+| Method | Path | Who | Returns |
+|---|---|---|---|
+| POST | `/api/events/:eventId/athletes/:athleteId/eval-report/preview` | Writer of the event's org; athlete must have verified measurements in the event | `{ model }`; saves nothing |
+| POST | `/api/events/:eventId/athletes/:athleteId/eval-report` | Same | 201 `{ report, model }`; inserts a new `reports` row |
+| GET | `/api/events/:eventId/athletes/:athleteId/eval-report/defaults` | Same | `{ source: "saved", reportId, selection, load, coachNote, offered }` or `{ source: "computed", selection, load, coachNote, offered }` |
+
+Request body of preview and save (`evalReportRequestSchema`, `packages/shared/eval-report-config.ts`): `selection` (`preset`, `metricKeys`, `collegeGauge`, `metricCollegeGauge`, `sections`), `load` (`light` / `medium` / `heavy` / null), `coachNote` (max 2000 characters, null clears), `strengthsOverride`, `developmentAreasOverride`, `limiterOverride`. Errors: 400 invalid body or an override naming a metric not in the report; 404 not a writer, no such event, or athlete not measured in the event; 409 event has no organization (site admin only, others get 404); save returns 500 if the built config fails validation (a server fault).
+
+Preview and defaults use the STANDARD limiter (100 per 15 minutes); save uses the MUTATION limiter (20 per 15 minutes).
+
+### Saved report routes (`packages/api/routes/report-routes.ts`, existing routes with eval gates)
+
+| Method | Path | Eval behavior |
+|---|---|---|
+| GET | `/api/reports` | Eval rows listed only for orgs where the caller is a writer; model stripped from list rows |
+| GET | `/api/reports/:id` | Writer of the report's org, else 404 |
+| PUT | `/api/reports/:id` | Only `name` and `description`; `config` is immutable |
+| GET, POST | `/api/reports/:id/pdf` | Writer only; renders the frozen model |
+| POST | `/api/reports/:id/snapshots` | Writer only; creates a public snapshot (link). Off unless the coach asks |
+| POST | `/api/reports/:id/share` | Writer only; must name `config.athleteId`; 403 `UNDER_13_SHARE_BLOCKED` when the athlete is under 13 today or has a missing / unparseable / future birth date (P4 guard, all report types) |
+| POST | `/api/reports/bulk-distribute` | Eval included; under-13 / unknown-DOB athletes get status `blocked_under_13` and are counted in `blockedUnder13` (same for `/share-bulk`, which rejects eval with 400) |
+| POST | `/api/reports/:id/share-bulk` | 400 for eval |
+| POST | `/api/reports/:id/generate-insights`, PATCH `/api/reports/:id/insights` | 400 for eval |
+| GET | `/api/my/reports`, `/api/my/reports/:shareId` | The athlete sees an eval only if it was explicitly shared and `evalShareBlocked` (under 13 today or unknown DOB) does not apply |
+| GET | `/api/events/:eventId/reports` | Event report access check; filtered in SQL by organization and `config->>'eventId'`; eval rows have `config.model` dropped (event date kept) |
+
+Other report routes (delete, pin, archive, generate, snapshot list and delete, shares, bulk archive and delete) apply the same writer gate.
+
+### Template and settings routes (`packages/api/routes/eval-template-routes.ts`)
+
+| Method | Path | Who | Returns |
+|---|---|---|---|
+| GET | `/api/organizations/:orgId/eval-templates` | Writer of `:orgId` | Live templates of the org plus the global default |
+| POST | `/api/organizations/:orgId/eval-templates` | Writer of `:orgId` | 201 template (metrics stored as logical keys; 400 under the template rules below, 409 duplicate name) |
+| POST | `/api/events/:eventId/eval-templates` | Writer of the event's org | 201 template made from the event's metrics (400 if none). The template rules below apply as on create, so it is also a 400 when one of the event's metrics is now inactive or not offered to the organization's type (the error names it); remove that metric from the event or save the template by hand |
+| GET | `/api/eval-templates/:id` | Writer of the template's org (any writer for the global default) | Template |
+| GET | `/api/eval-templates/:id/resolved` | Same as the read above | `{ template: { id, name }, metrics: [{ metricKey, code, label, unit, category, isRequired, displayOrder, status, customLabel? }] }` in displayOrder; `status` is `available`, `missing` (no `site_metrics` row), `inactive`, `derived` (computed, never an event metric) or `unavailable` (`available_org_types` does not list the organization's type; the type comes from `?organizationId=` for the global default, which is required (400 when missing, except for a site admin, who may resolve the default with no organization: no type rule then) and which the caller must write in (else 404); an organization template always uses its own organization and ignores `?organizationId=`). One query |
+| PATCH | `/api/eval-templates/:id` | Writer of the template's org; site admin only for the global default (403) | Template; body `{ name?, sport?, description?, metrics? }` (`metrics` replaces the whole list; 400 under the template rules below). Writes an `eval_template_updated` audit row whose `changedFields` lists only the fields whose value really changed. A PATCH that changes nothing (`{}` or the stored values) returns the row unchanged: no write, no audit row, `updatedAt` untouched. Last write wins (no version check) |
+| POST | `/api/eval-templates/:id/archive` | Same | Template |
+| DELETE | `/api/eval-templates/:id` | Same; the global default cannot be deleted (409) | 204. Hard delete; writes an `eval_template_deleted` audit row whose `details` hold the name, `organizationId`, sport, description and the full `metrics` |
+| POST | `/api/events/:eventId/apply-eval-template` | Writer of the event's org | `{ added, skipped, alreadyPresent }`; body `{ templateId, includeOptional? }`. Missing, inactive and derived metrics are skipped (by key). The new-event form no longer calls it; it stays for API clients |
+| POST | `/api/events/:eventId/metrics/bulk` | Same as `POST /api/events/:eventId/metrics` (coach, org admin or site admin of the event's org), same mutation limiter, one hit per request | Body `{ metrics: [{ metricCode, isRequired?, displayOrder?, customLabel? }] }` (max 100; codes are letters, digits and underscores; labels have no control characters; unknown keys stripped). `{ added, alreadyPresent, skipped: [{ metricCode, reason: 'unknown' \| 'inactive' \| 'derived' \| 'unavailable' }] }`. **Atomic**: the insert (`ON CONFLICT DO NOTHING`) and its audit row share one transaction, all or nothing; a code a concurrent request inserted first is `alreadyPresent`. Derived, inactive, unknown and org-type-unavailable metrics are **skipped** here but **rejected with 400** by the single route. A frozen event is **409** here, **400** on the single route. The UI sends lists longer than 100 as sequential batches of 100 |
+| GET | `/api/organizations/:orgId/eval-report-settings` | Writer of `:orgId` | `{ organizationId, presets, lastSelection }` (synthetic default if none stored) |
+| PUT | `/api/organizations/:orgId/eval-report-settings` | Writer of `:orgId` | Upserted settings |
+
+**Template rules (create and PATCH, `validateMetrics` in `eval-template-service.ts`).**
+- Every key is stored in its canonical form: a code that has a logical key becomes that key (`FLY10_TIME` is stored as `FLY_10`); a code outside the key map is stored as it is. Two keys that resolve to the same code are a 400.
+- A derived metric is always a 400.
+- A missing, inactive or not-offered (organization type) metric is a 400 only when it is **new** in that save, compared by code with the template's stored list (on create every key is new). So an older template whose metric went stale can still be renamed and re-saved; a stale entry that is removed and added back later is new again. The organization type comes from the template's own organization, never from the query string; the global default has none, so it skips the type rule.
+- `CMJ_SL_LEFT` and `CMJ_SL_RIGHT` cannot both be required (both optional is fine): an event uses one side per athlete.
+- `name` has no control characters; `description` allows line breaks and tabs only. Labels already had this rule.
+- Audit rows are best effort: a failed audit insert is logged and never fails the change. `audit_logs` has no organization column, so the organization is in `details`. The CHECK constraints that allow these actions and the `eval_template` resource type are added by manual migration `0155_add_eval_template_audit_actions.sql`.
+
+**Edits never change existing events or reports.** Applying a template copies its tests into `event_metrics`; nothing stores a template id (no foreign key references `eval_battery_templates`). Editing or deleting a template only changes what later events start from (locked in by the "nothing stores a template id" integration test).
+
+Reads use the STANDARD limiter; writes use MUTATION (20 per 15 minutes).
+
+## Data model
+
+`reports` row (`packages/shared/schema/tables/reports.ts`), `reportType = 'eval'`, `config` validated by `evalReportConfigSchema`:
+
+```
+eventId, athleteId            ids (athleteId is not a foreign key)
+metrics                       metric codes shown
+selection                     what the coach chose (preset, metricKeys, collegeGauge, metricCollegeGauge, sections)
+load                          "light" | "medium" | "heavy" | null
+coachNote                     string | null (max 2000)
+strengthsOverride, developmentAreasOverride, limiterOverride   optional
+model                         the frozen EvalReportModel (athlete, eventDate, metrics, freshAndHealthy,
+                              strengths, developmentAreas, limiter, coachNote, selection)
+```
+
+`eval_battery_templates` (migration `migrations/0153_add_eval_report_templates.sql`; down: `..._down.sql`): `organization_id` null = global default; `sport`, `name`, `metrics` jsonb of `{ metricKey, isRequired, displayOrder, customLabel? }` using logical keys; `archived_at`. Names are unique per organization among live rows. The seed adds "Soccer eval (yards)" and skips codes missing from `site_metrics`. Migration `0154_strip_derived_from_eval_templates.sql` removes derived metrics (MOMENTUM) from every template's `metrics`; its down file puts MOMENTUM back on the global default.
+
+`org_eval_report_settings`: one row per organization (`organization_id` unique, cascade); `presets` jsonb (per-preset overrides), `last_selection` jsonb.
+
+Migration number 0153 is provisional (see `docs/MIGRATION_SYSTEM_REMEDIATION.md`).
+
+## Extending
+
+**Add a metric to the default template.** Edit migration data only for new databases; for existing ones a site admin edits it on the Manage templates page (or with the template PATCH route; the default is global). The metric needs a `site_metrics` code. Use the logical key if one exists, else the literal code.
+
+**Add a logical key.** (1) Add it to `EVAL_METRIC_CODES` in `packages/api/services/eval-report/metric-key-map.ts` if the report itself should know it (it then needs entries in `GROUPS` in `selection.ts` and `METRIC_LABELS` in `copy.ts`, which are typed on `EvalMetricKey`), or only to `TEMPLATE_METRIC_CODES` in `template-keys.ts` if it is a battery-only key. (2) Never spell a template-only key like the code it resolves to (`keyForCode` throws on collisions). (3) The code must be inserted by a `site_metrics` seed migration or `metric-key-map.test.ts` fails. (4) A metric that must not get a comparison goes in `NO_TIER_CODES` in `eval-report/tier-match.ts`. (5) To make a key a default headline metric, edit `HEADLINE_KEYS` in `selection.ts`.
+
+Measured metrics outside the key map are still offered, unchecked, with their code as an id (`OTHER_METRIC_LABELS` and `OTHER_GROUPS` give them labels and groups).
+
+## How the PDF is built
+
+`packages/api/utils/eval-report-pdf.ts`: `renderEvalReportPdf(model, org)` fetches the org logo (SSRF-safe helper from `report-branding-utils.ts`) and calls `buildEvalReportPdf`, which returns the jsPDF document and the position of every block (`kind`, `page`, `top`, `bottom`). It draws only the frozen model, with no database reads. Sections are measured then flowed down the A4 pages; gauge rows are never split, and only the headline and retest-trend sections may break between rows. Text goes through `winAnsi` (Helvetica is WinAnsi only; other characters print as `?`). The radar uses jsPDF primitives. Load and Balance wording is shared with the web view through `packages/shared/eval-report-copy.ts` (`LOAD_LABELS`, `BALANCE_LABELS`, `balanceText`, re-used by `services/eval-report/copy.ts` and `components/reports/EvalReportView.tsx`); both draw the college gauge only when the metric's `collegeGauge === true`. Template wording is in `packages/api/services/eval-report/copy.ts`.
+
+The PDF is served by `GET`/`POST /api/reports/:id/pdf` (`sendEvalReportPdf`) and, for snapshots, `generatePDF` dispatches on `reportData.reportType === 'eval'`.
+
+## Testing
+
+Commands below are the repo scripts with a path filter; they were not run while writing this guide. The unit paths are matched by the `include` patterns in `vitest.unit.config.ts` (`packages/api/**/__tests__/**`, `packages/shared/__tests__/**`), and the integration paths by `tests/integration/**` in `vitest.integration.config.ts`.
+
+```bash
+# Unit: domain modules, config schemas, PDF block positions, web helpers
+npm run test:unit -- packages/api/services/eval-report packages/api/services/__tests__/eval-report-service.test.ts \
+  packages/api/utils/__tests__/eval-report-pdf.test.ts packages/shared/__tests__/eval-report-config.test.ts \
+  packages/shared/__tests__/eval-template-schemas.test.ts
+
+# Integration (needs a Postgres in .env.local)
+npm run test:integration -- tests/integration/eval-report-routes.test.ts tests/integration/eval-report-access.test.ts \
+  tests/integration/eval-report-pdf.test.ts tests/integration/eval-templates.test.ts tests/integration/coppa-eval-reports.test.ts \
+  tests/migrations/0155-eval-template-audit-actions.test.ts
+
+# E2E (local; see below)
+npx playwright test tests/e2e/eval-report.spec.ts --config=playwright.testing.config.ts
+```
+
+Two database shapes matter for the integration tests:
+
+- **Push-only**: CI builds its database with `npm run db:push` and the default seed, **no manual migrations**. The eval integration tests create any missing `site_metrics`, benchmark and template rows themselves and delete only what they created. Tests must keep working on this shape.
+- **Fully migrated**: `db:push` (or `db:migrate`) plus `npm run db:migrate:manual`, which applies 0153 and the seeds. `docs/MIGRATION_SYSTEM_REMEDIATION.md` explains the dual system; replaying `db:migrate` on a fresh database fails, so use push plus manual migrations on a private Postgres.
+
+Use `tests/helpers/purge-test-rows.ts` in new integration tests.
+
+**E2E**: `tests/e2e/eval-report.spec.ts` and `tests/e2e/eval-templates-manage.spec.ts` create their data through the API and clean up. The CI E2E suite is red (issue #490), so run this spec locally against a database with the site metrics and the default "Soccer eval (yards)" template, and say so in the PR. Add it to CI only once the suite is green.
+
+Screenshots for UI changes go in `screenshots/` per `CLAUDE.md`.
+
+## Troubleshooting
+
+| Symptom | Cause |
+|---|---|
+| A metric is not offered in the dialog | The athlete has no **verified** measurement for it in this event and organization (other events and unverified rows are ignored). |
+| A metric shows value but no gauge | No age-group set matched: athlete is male, under 11 or over 18 at the event date, gender is not Male/Female, birth date or sport missing, sport does not match the set exactly, the metric is in `NO_TIER_CODES`, or no benchmark row exists for that metric and sex. |
+| No tier **names** anywhere | By design; age-group sets are single Average rows and the PDF never prints tier names. |
+| College gauge missing | Hidden under age 14 and in the Middle school preset unless turned on; also needs a D1 row whose name matches `/average/i` for the athlete's sex and sport. |
+| Balance line missing | Fewer than both 5-0-5 legs were tested, or the Fresh & Healthy section is off. It shows a neutral label (percentage only) when no LSI set exists for the athlete's sex. |
+| Movement missing | The event has no `MQI_TOTAL` (verified), or MQI is not among the selected metrics. |
+| 404 for a coach | The caller is not a coach / org admin / site admin **in the event's or report's organization**, the athlete has no verified measurements in the event, or the event does not exist. 404 is used on purpose. |
+| 409 on preview or save | The event has no organization (site admin sees 409, others 404). |
+| Share to athlete refused | Athlete is under 13 today or has a missing, unparseable or future birth date. Being flagged `isMinor` or under 13 at the event date does not block a share (it restricts the public link instead). Send the PDF to a parent. |
+| A name prints with `?` | Characters outside WinAnsi; embedded font not yet added. |
+| Template apply returns `skipped` | The key resolves to a code absent from `site_metrics`. |
+
+## Release gate
+
+Before a release that touches reports or eval, confirm **athletes (and other org members who are not coach, org admin or site admin of the report's organization) cannot read eval reports**. The P3c gates are the guarantee:
+
+- `canAccessEvalRow` (`packages/api/routes/eval-report-access.ts`, imported by `report-routes.ts`) on every report route that loads a report row, answering 404.
+- `GET /api/reports` list filter; `stripEvalModel` on list payloads.
+- `canOpenRestrictedEval` for restricted public snapshots (writer, the athlete, or a parent actively linked to that athlete).
+- `evalShareBlocked` and `dropBlockedEvalShares` for what an athlete is shown.
+- Run `tests/integration/eval-report-access.test.ts`.
+
+Any new route that touches reports must gate eval rows with `canAccessEvalRow`.
+
+### Rollout and rollback
+
+There is no feature flag (decision: the feature is additive, manual and writer-only). Roll out by enabling nothing special: generate a few reports on the Railway preview and a test organization first, compare the numbers and the PDF with the expected values, then release.
+
+Rolling back only part of the stack once eval reports exist is unsafe: the old report routes have no eval access gate, so any org member could read the saved rows. Safe order: deactivate eval snapshots (`report_snapshots.is_active = false`) and archive or delete `reports` rows with `report_type = 'eval'` first, then revert the code, and only then (if at all) run the 0153 down migration. Revert the stack as a whole, never P3c on its own.
+
+## COPPA retention (P3d)
+
+Eval rows name the athlete only in `config.athleteId` (no foreign key), so the user cascade never reaches them. `coppa-deletion-service.ts` step 4c deletes them (snapshots and shares cascade), `coppa-export-service.ts` includes them in the `evalReports` export section, and `profile-merge-service.ts` step 8b re-points `config.athleteId` on merge (`summary.evalReportsTransferred`). All three select by athlete id across organizations. Test: `tests/integration/coppa-eval-reports.test.ts`. Normal (non-COPPA) user deletion does not remove eval rows.

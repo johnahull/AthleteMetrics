@@ -595,7 +595,7 @@ export function LineChart({
                   const athleteColor = colors[athlete.color % colors.length];
 
                   return (
-                    <div key={athlete.id} className="flex items-center space-x-2">
+                    <div key={athlete.id} className="flex items-center gap-x-2">
                       <Checkbox
                         id={`athlete-${athlete.id}`}
                         checked={athleteToggles[athlete.id] || false}
@@ -617,7 +617,7 @@ export function LineChart({
               </div>
 
               {/* Group Average Toggle */}
-              <div className="flex items-center space-x-2 pt-2 border-t">
+              <div className="flex items-center gap-x-2 pt-2 border-t">
                 <Checkbox
                   id="group-average"
                   checked={showGroupAverage}

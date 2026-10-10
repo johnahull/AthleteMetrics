@@ -49,6 +49,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import type { EventMetric, Measurement } from "@shared/schema";
+import { toCalendarDate } from "@/utils/date-utils";
 
 // Extended metric type with details from site_metrics
 interface EventMetricWithDetails extends EventMetric {
@@ -600,7 +601,7 @@ export default function EventDataEntry() {
               )}
             </h1>
             <p className="text-muted-foreground">
-              {format(new Date(event.startDate), "MMM d, yyyy")}
+              {format(toCalendarDate(event.startDate)!, "MMM d, yyyy")}
               {event.location && ` • ${event.location}`}
             </p>
           </div>

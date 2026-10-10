@@ -3,7 +3,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 
 export interface ReportFilters {
   search: string;
-  reportType?: 'all' | 'individual' | 'team';
+  reportType?: 'all' | 'individual' | 'team' | 'eval';
   dateFrom?: string;
   dateTo?: string;
   metrics: string[];
@@ -38,7 +38,7 @@ const DEFAULT_FILTERS: ReportFilters = {
  */
 export function useReportFilters() {
   const [internalSearch, setInternalSearch] = useState('');
-  const [reportType, setReportType] = useState<'all' | 'individual' | 'team' | undefined>(undefined);
+  const [reportType, setReportType] = useState<'all' | 'individual' | 'team' | 'eval' | undefined>(undefined);
   const [dateFrom, setDateFrom] = useState<string | undefined>(undefined);
   const [dateTo, setDateTo] = useState<string | undefined>(undefined);
   const [metrics, setMetrics] = useState<string[]>([]);
@@ -61,7 +61,7 @@ export function useReportFilters() {
     }
 
     const reportTypeParam = params.get('reportType');
-    if (reportTypeParam === 'all' || reportTypeParam === 'individual' || reportTypeParam === 'team') {
+    if (reportTypeParam === 'all' || reportTypeParam === 'individual' || reportTypeParam === 'team' || reportTypeParam === 'eval') {
       setReportType(reportTypeParam);
     }
 

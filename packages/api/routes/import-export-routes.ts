@@ -14,6 +14,7 @@ import { sanitizeCSVValue } from "../utils/csv-utils";
 import { ocrService } from "../ocr/ocr-service";
 import { findBestAthleteMatch, type MatchingCriteria, type MatchResult } from "../athlete-matching";
 import { isSiteAdmin } from "@shared/auth-utils";
+import { OCR_REQUIRED_CHOICE_MESSAGES, type OcrRequiredChoice } from "@shared/ocr-types";
 import { METRIC_CONFIG } from "@shared/analytics-types";
 import { COMMON_METRICS, type ImportResult } from "@shared/import-types";
 import { globalAthleteService } from "../services/global-athlete-service";
@@ -255,8 +256,6 @@ const imageUpload = multer({
 });
 
 const OCR_505_NEUTRAL_METRIC = 'AGILITY_505_UNRESOLVED';
-const PROTOCOL_505_REQUIRED_MESSAGE = 'Choose meters or yards for 5-0-5 readings';
-const FLY10_RUN_IN_REQUIRED_MESSAGE = 'Choose the run-in distance for 10-yard fly readings';
 
 export function registerImportExportRoutes(app: Express) {
   // Photo OCR upload route (must come before generic import route)
@@ -343,7 +342,7 @@ export function registerImportExportRoutes(app: Express) {
       // whole photo BEFORE any athlete lookup/creation or measurement write, so a retry can never duplicate data.
       // ONE 422 lists every missing choice (each retry re-runs OCR): `code` stays the first missing one for older
       // clients, `required` names them all.
-      const required: Array<'protocol505' | 'flyRunIn'> = [];
+      const required: OcrRequiredChoice[] = [];
       if (!protocol505 && ocrResult.extractedData.some(d => d.metric === OCR_505_NEUTRAL_METRIC)) {
         required.push('protocol505');
       }
@@ -353,8 +352,8 @@ export function registerImportExportRoutes(app: Express) {
       if (required.length > 0) {
         return res.status(422).json(
           required[0] === 'protocol505'
-            ? { message: PROTOCOL_505_REQUIRED_MESSAGE, code: 'PROTOCOL_505_REQUIRED', required }
-            : { message: FLY10_RUN_IN_REQUIRED_MESSAGE, code: 'FLY10_RUN_IN_REQUIRED', required }
+            ? { message: OCR_REQUIRED_CHOICE_MESSAGES.protocol505, code: 'PROTOCOL_505_REQUIRED', required }
+            : { message: OCR_REQUIRED_CHOICE_MESSAGES.flyRunIn, code: 'FLY10_RUN_IN_REQUIRED', required }
         );
       }
 

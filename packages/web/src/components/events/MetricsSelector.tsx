@@ -3,7 +3,7 @@
  *
  * Unlike EventMetricsTab (which manages metrics for existing events via API),
  * MetricsSelector manages LOCAL state and passes selected metrics to the
- * form's onSubmit handler for post-creation API calls.
+ * form's onSubmit handler, which saves them in one request after the event exists.
  *
  * Used in EventForm Step 3 to allow users to pre-select metrics
  * before an event is created.
@@ -38,6 +38,12 @@ export interface SelectedMetric {
   isRequired: boolean;
   category?: string;
   units?: string;
+  /** Label to save on the event instead of the metric's own (from an eval template) */
+  customLabel?: string;
+  /** Set when the entry was filled in by an eval template; only those are replaced when the template changes */
+  fromTemplate?: boolean;
+  /** The template key the entry was stored under (template editor); absent for a test added by hand */
+  metricKey?: string;
 }
 
 interface MetricsSelectorProps {
@@ -58,8 +64,9 @@ export function MetricsSelector({
 
   // Filter out already-selected metrics from dropdown
   const selectedCodes = new Set(selectedMetrics.map((m) => m.code));
+  // A derived metric is computed from other tests: nothing to enter, so it is never hand-picked for an event
   const availableMetrics = (siteMetrics || []).filter(
-    (m: SiteMetric) => !selectedCodes.has(m.code)
+    (m: SiteMetric) => !selectedCodes.has(m.code) && !m.isDerived
   );
 
   // Handle adding a metric
@@ -171,7 +178,7 @@ export function MetricsSelector({
             <div
               key={metric.code}
               data-metric-row
-              className="flex items-center justify-between p-3 border rounded-lg bg-white hover:bg-gray-50 transition-colors"
+              className="flex flex-col gap-3 p-3 border rounded-lg bg-white hover:bg-gray-50 transition-colors sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="flex items-center gap-3">
                 {/* Order number */}
@@ -196,7 +203,7 @@ export function MetricsSelector({
               <div className="flex items-center gap-3">
                 {/* Required toggle */}
                 <div className="flex items-center gap-2">
-                  <Label htmlFor={`required-${metric.code}`} className="text-sm text-muted-foreground">
+                  <Label htmlFor={`required-${metric.code}`} className="py-3 text-sm text-muted-foreground sm:py-0">
                     Required
                   </Label>
                   <Switch
@@ -213,10 +220,10 @@ export function MetricsSelector({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-8 w-8 p-0"
+                    className="h-10 w-10 p-0 sm:h-8 sm:w-8"
                     onClick={() => handleMove(index, "up")}
                     disabled={index === 0}
-                    aria-label="Move up"
+                    aria-label={`Move ${metric.label} up`}
                   >
                     <ChevronUp className="h-4 w-4" />
                   </Button>
@@ -224,10 +231,10 @@ export function MetricsSelector({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-8 w-8 p-0"
+                    className="h-10 w-10 p-0 sm:h-8 sm:w-8"
                     onClick={() => handleMove(index, "down")}
                     disabled={index === selectedMetrics.length - 1}
-                    aria-label="Move down"
+                    aria-label={`Move ${metric.label} down`}
                   >
                     <ChevronDown className="h-4 w-4" />
                   </Button>
@@ -238,7 +245,7 @@ export function MetricsSelector({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                  className="h-10 w-10 p-0 sm:h-8 sm:w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
                   onClick={() => handleRemove(metric.code)}
                   aria-label="Remove"
                 >

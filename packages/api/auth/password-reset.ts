@@ -164,6 +164,9 @@ export class PasswordResetService {
       
       // Update password changed timestamp
       await storage.updatePasswordChangedAt(userId);
+
+      // A reset proves control of the account: clear any active login lock
+      await storage.resetLoginAttempts(userId);
       
       // Revoke all existing sessions for security
       await AuthSecurity.revokeAllSessions(userId);

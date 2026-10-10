@@ -85,7 +85,7 @@ export function RecentActivityTimeline({
       <CardContent className={compact ? 'pt-0' : ''}>
         <div
           data-testid="recent-activity-timeline"
-          className={`flex flex-col ${compact ? 'space-y-2' : 'space-y-4'}`}
+          className={`flex flex-col ${compact ? 'gap-y-2' : 'gap-y-4'}`}
         >
           {displayActivities.map((activity, index) => (
             <div key={activity.id}>

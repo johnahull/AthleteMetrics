@@ -213,7 +213,7 @@ export function MetricsSelector({
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Primary Metric Selection */}
-        <div className="space-y-2">
+        <div className="grid gap-y-2">
           <Label className="text-sm font-medium">Primary Metric *</Label>
           <Select value={metrics.primary} onValueChange={handlePrimaryMetricChange}>
             <SelectTrigger>
@@ -309,7 +309,7 @@ export function MetricsSelector({
 
 
         {/* Additional Metrics Selection */}
-        <div className="space-y-2">
+        <div className="grid gap-y-2">
           <Label className="text-sm font-medium">
             Add More Metrics ({metrics.additional.length}/{maxAdditional})
           </Label>
@@ -347,7 +347,7 @@ export function MetricsSelector({
                                    isExcluded;
 
                 return (
-                  <div key={metric} className="flex items-start space-x-2">
+                  <div key={metric} className="flex items-start gap-x-2">
                     <Checkbox
                       id={`metric-${metric}`}
                       checked={false}

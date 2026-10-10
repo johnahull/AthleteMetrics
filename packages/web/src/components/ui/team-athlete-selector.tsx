@@ -334,7 +334,7 @@ export function TeamAthleteSelector({
                 <div className="space-y-2">
                   <Skeleton className="h-4 w-20" />
                   {[1, 2, 3].map((i) => (
-                    <div key={i} className="flex items-center space-x-2 p-2">
+                    <div key={i} className="flex items-center gap-x-2 p-2">
                       <Skeleton className="h-4 w-4 rounded" />
                       <Skeleton className="h-4 w-4" />
                       <div className="flex-1 space-y-2">
@@ -347,7 +347,7 @@ export function TeamAthleteSelector({
                 <div className="space-y-2">
                   <Skeleton className="h-4 w-32" />
                   {[1, 2, 3, 4].map((i) => (
-                    <div key={i} className="flex items-center space-x-2 p-2">
+                    <div key={i} className="flex items-center gap-x-2 p-2">
                       <Skeleton className="h-4 w-4 rounded" />
                       <Skeleton className="h-4 w-4" />
                       <div className="flex-1 space-y-2">
@@ -376,7 +376,7 @@ export function TeamAthleteSelector({
                           <div
                             key={team.id}
                             className={cn(
-                              "flex items-center space-x-3 p-3 rounded-lg transition-all duration-200",
+                              "flex items-center gap-x-3 p-3 rounded-lg transition-all duration-200",
                               "hover:bg-accent hover:shadow-sm cursor-pointer border border-transparent",
                               (isSelected || isPartial) && "bg-primary/5 border-primary/20"
                             )}
@@ -437,7 +437,7 @@ export function TeamAthleteSelector({
                           <div
                             key={athlete.id}
                             className={cn(
-                              "flex items-center space-x-3 p-3 rounded-lg transition-all duration-200",
+                              "flex items-center gap-x-3 p-3 rounded-lg transition-all duration-200",
                               !isDisabled && "hover:bg-accent hover:shadow-sm cursor-pointer border border-transparent",
                               isSelected && !isDisabled && "bg-primary/5 border-primary/20",
                               isDisabled && "opacity-60 bg-muted/30 cursor-not-allowed"

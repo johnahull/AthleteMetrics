@@ -57,7 +57,7 @@ export function ReportsFilterBar({
 
   // Handle report type change
   const handleReportTypeChange = (value: string) => {
-    updateFilters({ reportType: value as 'all' | 'individual' | 'team' });
+    updateFilters({ reportType: value as 'all' | 'individual' | 'team' | 'eval' });
   };
 
   // Handle date range selection
@@ -123,6 +123,7 @@ export function ReportsFilterBar({
           <SelectContent>
             <SelectItem value="all">All Reports</SelectItem>
             <SelectItem value="individual">Individual</SelectItem>
+            <SelectItem value="eval">Eval report</SelectItem>
             <SelectItem value="team">{labels.team}</SelectItem>
           </SelectContent>
         </Select>
@@ -207,7 +208,7 @@ export function ReportsFilterBar({
               <ScrollArea className="h-64">
                 <div className="space-y-2">
                   {teams.map((team) => (
-                    <div key={team.id} className="flex items-center space-x-2">
+                    <div key={team.id} className="flex items-center gap-x-2">
                       <Checkbox
                         id={`team-${team.id}`}
                         checked={filters.teamIds?.includes(team.id) || false}
@@ -254,7 +255,7 @@ export function ReportsFilterBar({
               <ScrollArea className="h-64">
                 <div className="space-y-2">
                   {metrics.map((metric) => (
-                    <div key={metric.code} className="flex items-center space-x-2">
+                    <div key={metric.code} className="flex items-center gap-x-2">
                       <Checkbox
                         id={`metric-${metric.code}`}
                         checked={filters.metrics?.includes(metric.code) || false}

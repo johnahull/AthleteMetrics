@@ -821,9 +821,9 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
                         <RadioGroup
                           onValueChange={field.onChange}
                           defaultValue={field.value}
-                          className="flex flex-col space-y-1"
+                          className="flex flex-col gap-y-1"
                         >
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center gap-x-2">
                             <RadioGroupItem value="coach" id="role-coach" data-testid="radio-role-coach" />
                             <label
                               htmlFor="role-coach"
@@ -832,7 +832,7 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
                               Coach
                             </label>
                           </div>
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center gap-x-2">
                             <RadioGroupItem value="org_admin" id="role-org-admin" data-testid="radio-role-org-admin" />
                             <label
                               htmlFor="role-org-admin"
@@ -841,7 +841,7 @@ function UserManagementModal({ organizationId }: { organizationId: string }) {
                               Organization Admin
                             </label>
                           </div>
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center gap-x-2">
                             <RadioGroupItem value="athlete" id="role-athlete" data-testid="radio-role-athlete" />
                             <label
                               htmlFor="role-athlete"

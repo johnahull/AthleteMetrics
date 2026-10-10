@@ -9,7 +9,7 @@ interface SharedReport {
   shareId: string;
   reportId: string;
   reportName: string;
-  reportType: "team" | "individual";
+  reportType: "team" | "individual" | "eval";
   sharedBy: {
     id: string;
     firstName: string;

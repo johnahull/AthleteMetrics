@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, AlertCircle, ArrowLeft, Calendar, MapPin } from 'lucide-react';
 import { format } from 'date-fns';
+import { toCalendarDate } from "@/utils/date-utils";
 
 export default function EventResults() {
   const { eventId } = useParams();
@@ -88,7 +89,7 @@ export default function EventResults() {
         <div className="flex flex-wrap items-center gap-4 mt-2 text-sm text-gray-600">
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4" />
-            <span>{format(new Date(event.startDate), 'EEEE, MMMM d, yyyy')}</span>
+            <span>{format(toCalendarDate(event.startDate)!, 'EEEE, MMMM d, yyyy')}</span>
           </div>
           {event.location && (
             <div className="flex items-center gap-2">

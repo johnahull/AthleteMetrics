@@ -88,6 +88,13 @@ export type MetricWriteConfig = Pick<
   'validationMin' | 'validationMax' | 'decimalPrecision' | 'auxiliaryInputConfig' | 'isDerived' | 'unit'
 >;
 
+export interface LoginAttemptReservation {
+  /** false when the account is locked: the caller must not compare the password */
+  allowed: boolean;
+  attempts: number;
+  lockedUntil: Date | null;
+}
+
 export interface IStorage {
   // Authentication & Users
   authenticateUser(username: string, password: string): Promise<User | null>;
@@ -331,8 +338,8 @@ export interface IStorage {
   // Enhanced Authentication Methods
   findUserById(userId: string): Promise<User | null>;
   resetLoginAttempts(userId: string): Promise<void>;
-  incrementLoginAttempts(userId: string, attempts: number): Promise<void>;
-  lockAccount(userId: string, lockUntil: Date): Promise<void>;
+  registerLoginAttempt(userId: string, maxAttempts: number, lockoutMs: number): Promise<LoginAttemptReservation>;
+  releaseLoginAttempt(userId: string, maxAttempts: number): Promise<void>;
   updateLastLogin(userId: string): Promise<void>;
   createLoginSession(session: any): Promise<void>;
   findLoginSession(token: string): Promise<any>;
@@ -4175,15 +4182,55 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, userId));
   }
 
-  async incrementLoginAttempts(userId: string, attempts: number): Promise<void> {
-    await db.update(users)
-      .set({ loginAttempts: attempts })
-      .where(eq(users.id, userId));
+  /**
+   * Reserve one password attempt for a user, atomically, BEFORE the password is compared.
+   *
+   * One UPDATE: the row lock serialises concurrent callers and Postgres re-evaluates the WHERE clause
+   * against the latest committed row, so each caller sees the count and lock left by the previous one.
+   * - Not locked (locked_until is NULL or has passed): the attempt is reserved. An expired lock restarts the
+   *   count at 1; reaching `maxAttempts` sets locked_until. The attempt that reaches the limit is still
+   *   allowed (that is the 5th guess); every later caller is refused until the lock expires.
+   * - Locked: no row matches, nothing is changed, and the existing lock is returned with allowed = false.
+   */
+  async registerLoginAttempt(userId: string, maxAttempts: number, lockoutMs: number): Promise<LoginAttemptReservation> {
+    const now = new Date();
+    const lockUntil = new Date(now.getTime() + lockoutMs).toISOString();
+    const attemptsBefore = sql`CASE WHEN ${users.lockedUntil} IS NULL THEN COALESCE(${users.loginAttempts}, 0) ELSE 0 END`;
+
+    const [reserved] = await db.update(users)
+      .set({
+        loginAttempts: sql`${attemptsBefore} + 1`,
+        lockedUntil: sql`CASE WHEN ${attemptsBefore} + 1 >= ${maxAttempts} THEN ${lockUntil}::timestamp ELSE NULL END`,
+      })
+      .where(and(
+        eq(users.id, userId),
+        or(isNull(users.lockedUntil), lte(users.lockedUntil, now)),
+      ))
+      .returning({ loginAttempts: users.loginAttempts, lockedUntil: users.lockedUntil });
+
+    if (reserved) {
+      return { allowed: true, attempts: reserved.loginAttempts ?? 0, lockedUntil: reserved.lockedUntil };
+    }
+
+    const [current] = await db.select({ loginAttempts: users.loginAttempts, lockedUntil: users.lockedUntil })
+      .from(users).where(eq(users.id, userId));
+    return { allowed: false, attempts: current?.loginAttempts ?? 0, lockedUntil: current?.lockedUntil ?? null };
   }
 
-  async lockAccount(userId: string, lockUntil: Date): Promise<void> {
+  /**
+   * Give back one reserved attempt (the password was correct but the login did not complete for a reason
+   * that is not a wrong credential, e.g. an MFA code is still to come).
+   *
+   * If that attempt was the one that reached the limit and set the lock, the lock is undone too: requests
+   * refused while locked never increment, so the count equals maxAttempts only when the attempt being
+   * given back caused the lock. A lower count means no lock is set; a higher one is never produced.
+   */
+  async releaseLoginAttempt(userId: string, maxAttempts: number): Promise<void> {
     await db.update(users)
-      .set({ lockedUntil: lockUntil })
+      .set({
+        lockedUntil: sql`CASE WHEN COALESCE(${users.loginAttempts}, 0) <= ${maxAttempts} THEN NULL ELSE ${users.lockedUntil} END`,
+        loginAttempts: sql`GREATEST(COALESCE(${users.loginAttempts}, 0) - 1, 0)`,
+      })
       .where(eq(users.id, userId));
   }
 

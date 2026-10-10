@@ -232,7 +232,7 @@ export default function AdminPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
+          <div className="grid gap-y-2">
             <label className="text-sm font-medium">AI Model</label>
             <Select
               value={selectedModel}

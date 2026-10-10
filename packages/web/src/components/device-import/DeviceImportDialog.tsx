@@ -447,7 +447,7 @@ export function DeviceImportDialog({
 
   // ── Step: Parsing (transitional) ─────────────────────────────────────────────
   const renderParsing = () => (
-    <div className="flex flex-col items-center justify-center py-16 space-y-4">
+    <div className="flex flex-col items-center justify-center py-16 gap-y-4">
       <Loader2 className="h-12 w-12 animate-spin text-primary" />
       <p className="text-sm text-muted-foreground">Parsing and matching athletes...</p>
     </div>
@@ -642,7 +642,7 @@ export function DeviceImportDialog({
         </div>
 
         {/* Duplicate strategy */}
-        <div className="space-y-2">
+        <div className="grid gap-y-2">
           <Label className="text-sm font-medium">Duplicate Measurements</Label>
           <RadioGroup
             value={duplicateStrategy}

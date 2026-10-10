@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Calendar, MapPin, Clock } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import type { EventInvitationWithEvent } from "@/lib/events-api";
+import { toCalendarDate } from "@/utils/date-utils";
 
 // Event type display mapping
 const eventTypeLabels: Record<string, string> = {
@@ -36,8 +37,8 @@ export function InvitationCard({
   const event = invitation.event;
   if (!event) return null;
 
-  const startDate = new Date(event.startDate);
-  const endDate = event.endDate ? new Date(event.endDate) : null;
+  const startDate = toCalendarDate(event.startDate)!;
+  const endDate = toCalendarDate(event.endDate);
 
   const formatDateRange = () => {
     if (!endDate || format(startDate, "yyyy-MM-dd") === format(endDate, "yyyy-MM-dd")) {

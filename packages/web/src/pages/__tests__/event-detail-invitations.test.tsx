@@ -244,7 +244,9 @@ vi.mock('@/components/events', () => ({
   EventMetricsTab: () => <div data-testid="metrics-tab">Metrics Tab Content</div>,
   EventResultsTab: () => <div data-testid="results-tab">Results Tab Content</div>,
   EventReportsTab: () => <div data-testid="reports-tab">Reports Tab Content</div>,
+  EventEvalReportsCard: () => <div data-testid="eval-reports-card">Eval Reports Content</div>,
   CheckInTab: () => <div data-testid="checkin-tab">Check-In Tab Content</div>,
+  AddAthletesModal: () => null,
   InviteAthletesModal: ({ isOpen }: { isOpen: boolean }) => (
     isOpen ? <div data-testid="invite-modal">Invite Modal</div> : null
   ),

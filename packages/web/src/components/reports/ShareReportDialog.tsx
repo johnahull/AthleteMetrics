@@ -38,9 +38,11 @@ interface ShareReportDialogProps {
   reportId: string;
   open: boolean;
   onClose: () => void;
+  /** True when the report's athlete is under 13 or has no date of birth (cannot be shared to their account). */
+  athleteShareBlockedUnder13?: boolean;
 }
 
-export function ShareReportDialog({ reportId, open, onClose }: ShareReportDialogProps) {
+export function ShareReportDialog({ reportId, open, onClose, athleteShareBlockedUnder13 = false }: ShareReportDialogProps) {
   const [expirationDays, setExpirationDays] = useState("7");
   const [customExpiration, setCustomExpiration] = useState("");
   const [generatedUrl, setGeneratedUrl] = useState("");
@@ -102,11 +104,18 @@ export function ShareReportDialog({ reportId, open, onClose }: ShareReportDialog
         </DialogHeader>
 
         <div className="space-y-6">
+          {athleteShareBlockedUnder13 && (
+            <p className="text-sm rounded-lg border p-3 bg-muted" data-testid="under-13-link-note">
+              This athlete is under 13 or has no date of birth on file, so the report cannot be sent to their account.
+              The PDF or a share link sent to their parent is how this family receives the report.
+            </p>
+          )}
+
           {/* Create New Link */}
           <div className="space-y-4 border rounded-lg p-4">
             <h3 className="font-semibold">Create New Share Link</h3>
 
-            <div className="space-y-2">
+            <div className="grid gap-y-2">
               <Label htmlFor="expiration">Link Expiration</Label>
               <Select value={expirationDays} onValueChange={setExpirationDays}>
                 <SelectTrigger id="expiration">
@@ -122,7 +131,7 @@ export function ShareReportDialog({ reportId, open, onClose }: ShareReportDialog
             </div>
 
             {expirationDays === "custom" && (
-              <div className="space-y-2">
+              <div className="grid gap-y-2">
                 <Label htmlFor="customExpiration">Custom Expiration Date</Label>
                 <Input
                   id="customExpiration"
@@ -143,7 +152,7 @@ export function ShareReportDialog({ reportId, open, onClose }: ShareReportDialog
             </Button>
 
             {generatedUrl && (
-              <div className="space-y-2 mt-4 p-3 bg-accent rounded-lg">
+              <div className="grid gap-y-2 mt-4 p-3 bg-accent rounded-lg">
                 <Label>Generated Link</Label>
                 <div className="flex gap-2">
                   <Input value={generatedUrl} readOnly className="flex-1" />

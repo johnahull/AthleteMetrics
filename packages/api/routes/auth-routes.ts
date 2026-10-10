@@ -2,12 +2,12 @@
  * Authentication routes
  */
 
-import type { Express } from "express";
-import rateLimit from "express-rate-limit";
+import type { Express, Request } from "express";
 import { AuthService } from "../services/auth-service";
 import { coppaService } from "../services/coppa-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
+import { createAuthRateLimiters } from "../middleware/auth-rate-limiters";
 import { COPPA_ACTIONS } from "@shared/coppa-utils";
 import { storage } from "../storage";
 import { generateParentEmailToken } from "../services/coppa-email-token-store";
@@ -17,21 +17,21 @@ import { PasswordResetService } from "../auth/password-reset";
 
 const authService = new AuthService();
 
-// Rate limiting for authentication endpoints
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  limit: 5, // Limit each IP to 5 requests per windowMs
-  message: { message: "Too many authentication attempts, please try again later." },
-  standardHeaders: 'draft-7',
-  legacyHeaders: false,
-  skip: (req) => shouldSkipRateLimiting(req, 'auth'),
-});
+export interface AuthRoutesOptions {
+  /** Tests inject `() => false` to exercise the real limiters; production uses the localhost/test-env bypass. */
+  skipRateLimit?: (req: Request) => boolean;
+}
 
-export function registerAuthRoutes(app: Express) {
+export function registerAuthRoutes(app: Express, options: AuthRoutesOptions = {}) {
+  // Login counts only failed attempts; forgot-password and the two token endpoints each have their own bucket
+  const { loginLimiter, forgotPasswordLimiter, resetTokenLimiter } = createAuthRateLimiters({
+    skip: options.skipRateLimit ?? ((req) => shouldSkipRateLimiting(req, 'auth')),
+  });
+
   /**
    * User login
    */
-  app.post("/api/auth/login", authLimiter, async (req, res) => {
+  app.post("/api/auth/login", loginLimiter, async (req, res) => {
     try {
       const { username, password, mfaToken } = req.body;
 
@@ -337,7 +337,7 @@ export function registerAuthRoutes(app: Express) {
   // Mounted at /api/auth/* to match the web client. CSRF is skipped for these
   // unauthenticated requests. Responses never reveal whether an account exists.
 
-  app.post("/api/auth/forgot-password", authLimiter, async (req, res) => {
+  app.post("/api/auth/forgot-password", forgotPasswordLimiter, async (req, res) => {
     try {
       const { email } = req.body;
       if (!email || typeof email !== 'string') {
@@ -352,7 +352,7 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  app.post("/api/auth/validate-reset-token", authLimiter, async (req, res) => {
+  app.post("/api/auth/validate-reset-token", resetTokenLimiter, async (req, res) => {
     try {
       const { token } = req.body;
       if (!token || typeof token !== 'string') {
@@ -366,7 +366,7 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  app.post("/api/auth/reset-password", authLimiter, async (req, res) => {
+  app.post("/api/auth/reset-password", resetTokenLimiter, async (req, res) => {
     try {
       const { token, newPassword } = req.body;
       if (!token || !newPassword) {

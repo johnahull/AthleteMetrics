@@ -35,7 +35,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { EventStatusBadge, EventMetricsTab, EventResultsTab, EventReportsTab, CheckInTab, InviteAthletesModal } from "@/components/events";
+import { EventStatusBadge, EventMetricsTab, EventResultsTab, EventReportsTab, EventEvalReportsCard, CheckInTab, InviteAthletesModal, AddAthletesModal } from "@/components/events";
 import {
   ArrowLeft,
   Calendar,
@@ -52,8 +52,9 @@ import {
   Edit,
   ExternalLink,
 } from "lucide-react";
-import { format, formatDistanceToNow, isPast, isFuture } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import type { EventRegistration, EventInvitation } from "@shared/schema";
+import { toCalendarDate, isCalendarDatePast, isCalendarDateFuture } from "@/utils/date-utils";
 
 type TabValue = "overview" | "registrations" | "checkin" | "metrics" | "results" | "reports" | "settings";
 
@@ -73,6 +74,7 @@ export default function EventDetail() {
   const { toast } = useToast();
   const [selectedTab, setSelectedTab] = useState<TabValue>("overview");
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [addAthletesModalOpen, setAddAthletesModalOpen] = useState(false);
   const [declineDialog, setDeclineDialog] = useState<{ open: boolean; registrationId: string | null }>({ open: false, registrationId: null });
   const [declineReason, setDeclineReason] = useState("");
   const [cancelInvitationDialog, setCancelInvitationDialog] = useState<{ open: boolean; invitationId: string | null }>({ open: false, invitationId: null });
@@ -268,8 +270,8 @@ export default function EventDetail() {
   // Format date range
   const formatDateRange = () => {
     if (!event) return "";
-    const startDate = new Date(event.startDate);
-    const endDate = event.endDate ? new Date(event.endDate) : null;
+    const startDate = toCalendarDate(event.startDate)!;
+    const endDate = toCalendarDate(event.endDate);
 
     if (!endDate || format(startDate, "yyyy-MM-dd") === format(endDate, "yyyy-MM-dd")) {
       return format(startDate, "EEEE, MMMM d, yyyy");
@@ -280,11 +282,10 @@ export default function EventDetail() {
   // Time status
   const getTimeStatus = () => {
     if (!event) return null;
-    const startDate = new Date(event.startDate);
-    const endDate = event.endDate ? new Date(event.endDate) : startDate;
+    const startDate = toCalendarDate(event.startDate)!;
 
-    if (isPast(endDate)) return { label: "Completed", variant: "secondary" as const };
-    if (isFuture(startDate)) return { label: `In ${formatDistanceToNow(startDate)}`, variant: "default" as const };
+    if (isCalendarDatePast(event.endDate || event.startDate)) return { label: "Completed", variant: "secondary" as const };
+    if (isCalendarDateFuture(event.startDate)) return { label: `In ${formatDistanceToNow(startDate)}`, variant: "default" as const };
     return { label: "In Progress", variant: "default" as const };
   };
 
@@ -400,8 +401,8 @@ export default function EventDetail() {
       </div>
 
       {/* Tabs */}
-      <Tabs value={selectedTab} onValueChange={(v) => setSelectedTab(v as TabValue)} className="space-y-6">
-        <TabsList>
+      <Tabs value={selectedTab} onValueChange={(v) => setSelectedTab(v as TabValue)} className="flex flex-col gap-y-6 [&>[role=tabpanel]]:mt-0">
+        <TabsList className="self-start">
           <TabsTrigger value="overview" data-testid="tab-overview">
             Overview
           </TabsTrigger>
@@ -711,7 +712,12 @@ export default function EventDetail() {
                     {approvedCount + pendingCount + waitlistCount} total registrations
                   </CardDescription>
                 </div>
-                <Button onClick={handleInviteAthletes}>Invite Athletes</Button>
+                <div className="flex flex-wrap gap-2">
+                  {event.organizationId && event.status !== 'cancelled' && !event.isFrozen && (
+                    <Button variant="outline" onClick={() => setAddAthletesModalOpen(true)}>Add athletes</Button>
+                  )}
+                  <Button onClick={handleInviteAthletes}>Invite Athletes</Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -812,6 +818,7 @@ export default function EventDetail() {
             eventId={eventId!}
             organizationId={event.organizationId || undefined}
             isFrozen={event.isFrozen}
+            canSaveTemplate={canManageEvent}
           />
         </TabsContent>
         )}
@@ -832,7 +839,12 @@ export default function EventDetail() {
 
         {/* Reports Tab - Admin Only */}
         {canManageEvent && (
-        <TabsContent value="reports">
+        <TabsContent value="reports" className="space-y-6">
+          <EventEvalReportsCard
+            eventId={eventId!}
+            organizationId={event.organizationId || undefined}
+            canManage={canManageEvent}
+          />
           <EventReportsTab
             eventId={eventId!}
             eventName={event.name}
@@ -898,6 +910,15 @@ export default function EventDetail() {
         organizationId={event.organizationId || ""}
         isOpen={inviteModalOpen}
         onClose={() => setInviteModalOpen(false)}
+      />
+
+      {/* Add Athletes Modal (direct add, managers only: the Registrations tab is manager-only) */}
+      <AddAthletesModal
+        eventId={eventId!}
+        eventName={event.name}
+        organizationId={event.organizationId || ""}
+        isOpen={addAthletesModalOpen}
+        onClose={() => setAddAthletesModalOpen(false)}
       />
 
       {/* Decline Reason Dialog */}

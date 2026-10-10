@@ -35,12 +35,14 @@ export const MEASUREMENT_PATTERNS: Record<string, PatternConfig> = {
   // Run-in-neutral: the photo route resolves this to one of the five FLY10 codes from the user's choice.
   FLY10_TIME_UNRESOLVED: {
     patterns: [
-      // The value may not be cut out of a bigger number ("11.05", "1.055"), and the 10 must be a standalone
-      // distance, not part of another number ("10.5", "1,10"). See #585.
-      /(?:(?<![\d.,])10(?![.,]?\d)|ten).*?(?:yard|yd).*?(?:fly|time).*?(?<!\d|\d\.)(\d\.\d{2})(?!\d)/gi,
-      /(?:fly|time).*?(?:(?<![\d.,])10(?![.,]?\d)|ten).*?(?<!\d|\d\.)(\d\.\d{2})(?!\d)/gi,
-      /(?<![\d.,])10(?![.,]?\d).*?fly.*?(?<!\d|\d\.)(\d\.\d{2})(?!\d)/gi,
-      /fly.*?(?<![\d.,])10(?![.,]?\d).*?(?<!\d|\d\.)(\d\.\d{2})(?!\d)/gi,
+      // Every pattern requires the word "fly" ("time" alone is not enough) and a standalone 10 / ten: a date
+      // ("10/05"), part of a value ("2.10", "10.5", "1,10") or a name ("Stenson") must not read as a fly reading,
+      // because a fly reading makes the photo import ask for a run-in distance (422). The value may not be cut out
+      // of a bigger number ("11.05", "1.055"), but may follow a dot leader ("fly 10....1.05"). See #585.
+      /(?<![\d.,])(?:10|\bten\b)(?![.,]?\d).*?(?:yard|yd).*?\bfly\b.*?(?<!\d|\d\.)(\d\.\d{2})(?!\d)/gi,
+      /\bfly\b.*?(?<![\d.,])(?:10|\bten\b)(?![.,]?\d).*?(?<!\d|\d\.)(\d\.\d{2})(?!\d)/gi,
+      /(?<![\d.,])10(?![.,]?\d).*?\bfly\b.*?(?<!\d|\d\.)(\d\.\d{2})(?!\d)/gi,
+      /\bfly(?=10|\W).*?(?<![\d.,])10(?![.,]?\d).*?(?<!\d|\d\.)(\d\.\d{2})(?!\d)/gi,
     ],
     confidence: 80,
     validator: (value: string) => {

@@ -39,6 +39,7 @@ import { calculateTierDistributions } from "@shared/benchmark-utils";
 import type { MetricExplanation as MetricExplanationData } from "@shared/metric-explanations";
 import type { ReportTrends, TeamReportTrends, TeamReportDistributions } from "@shared/report-trends-types";
 import type { TeamReportConfig, AthleteRanking } from "@/types/report-types";
+import { EvalReportBody } from "@/components/reports/EvalReportView";
 
 export default function PublicReport() {
   const labels = useContextualLabels();
@@ -81,7 +82,7 @@ export default function PublicReport() {
   const { generatedAt } = snapshotData;
   // `reportType` is a TOP-LEVEL field on the stored snapshot (the verbatim return
   // of generateTeamReport / generateIndividualReport). It is NOT on reportConfig.
-  const reportType = snapshotData.reportType as 'team' | 'individual' | undefined;
+  const reportType = snapshotData.reportType as 'team' | 'individual' | 'eval' | undefined;
   const metricExplanations = (snapshotData.metricExplanations ?? {}) as Record<string, MetricExplanationData>;
   const metricLabels = (snapshotData.metricLabels ?? {}) as Record<string, string>;
   const metricUnits = (snapshotData.metricUnits ?? {}) as Record<string, string>;
@@ -153,6 +154,26 @@ export default function PublicReport() {
     } finally {
       setIsPdfDownloading(false);
     }
+  }
+
+  // AM-FEAT-019: an eval snapshot is {reportType: 'eval', model}; it has no generatedAt or team/individual payload
+  if (reportType === 'eval' && snapshotData.model) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="container mx-auto py-8 space-y-6">
+          <div className="flex justify-between items-center border-b pb-4">
+            <h1 className="text-2xl font-bold">AthleteMetrics — Eval Report</h1>
+            <div className="flex items-center gap-3">
+              <Button variant="outline" size="sm" onClick={handleDownloadPdf} disabled={isPdfDownloading}>
+                {isPdfDownloading ? 'Downloading…' : 'Download PDF'}
+              </Button>
+              <Badge variant="outline">AthleteMetrics</Badge>
+            </div>
+          </div>
+          <EvalReportBody model={snapshotData.model} />
+        </div>
+      </div>
+    );
   }
 
   return (

@@ -1,0 +1,325 @@
+/**
+ * API hooks for the eval report selection dialog and eval battery templates (AM-FEAT-019 P5).
+ * Server routes: event-report-routes.ts (preview, save, defaults) and eval-template-routes.ts.
+ */
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import type { z } from "zod";
+import type { EvalReportRequest, evalLoadSchema, evalPresetSchema } from "@shared/eval-report-config";
+import type { evalPresetOverrideSchema, evalSelectionSchema } from "@shared/eval-template-schemas";
+import type { EvalReportModelView, Report } from "@/types/report-types";
+
+export type EvalPreset = z.infer<typeof evalPresetSchema>;
+export type EvalLoad = z.infer<typeof evalLoadSchema>;
+export type EvalMetricGroup = "speed" | "power" | "change_of_direction" | "movement" | "other";
+
+export interface EvalOfferedMetric {
+  code: string;
+  /** Logical key; null for a measured metric outside the key map */
+  key: string | null;
+  label: string;
+  group: EvalMetricGroup;
+  checked: boolean;
+}
+
+/** Selection as stored on a saved eval row (the request's selection) or computed by the server (preset + metricKeys only) */
+export interface EvalDefaultsSelection {
+  preset: EvalPreset;
+  metricKeys?: string[];
+  collegeGauge?: boolean;
+  metricCollegeGauge?: Record<string, boolean>;
+  sections?: {
+    headline?: boolean;
+    freshAndHealthy?: boolean;
+    coachNote?: boolean;
+    noteFirst?: boolean;
+    strengths?: boolean;
+    retestTrend?: boolean;
+    radar?: boolean;
+  };
+}
+
+export interface EvalDefaults {
+  /** "saved" = the latest saved eval for this event and athlete wins over everything else */
+  source: "computed" | "saved";
+  reportId?: string;
+  selection: EvalDefaultsSelection;
+  load: EvalLoad | null;
+  coachNote: string | null;
+  offered: { headline: EvalOfferedMetric[]; available: EvalOfferedMetric[] };
+}
+
+/** What the org remembers (eval-report-settings): flat, without radar or per-metric college switches */
+export type OrgEvalSelection = z.infer<typeof evalSelectionSchema>;
+
+export type OrgPresetOverride = z.infer<typeof evalPresetOverrideSchema>;
+
+export interface EvalReportSettings {
+  presets: Partial<Record<EvalPreset, OrgPresetOverride>>;
+  lastSelection: OrgEvalSelection | null;
+}
+
+export interface EvalTemplateMetric {
+  metricKey: string;
+  isRequired: boolean;
+  displayOrder: number;
+  customLabel?: string;
+}
+
+export interface EvalTemplate {
+  id: string;
+  /** Null for the global default ("Soccer eval (yards)") */
+  organizationId: string | null;
+  name: string;
+  sport: string;
+  description?: string | null;
+  metrics: EvalTemplateMetric[];
+}
+
+/**
+ * 'derived' = computed, never entered, so it can not be an event metric; 'missing'/'inactive' = not usable yet;
+ * 'unavailable' = not offered to the organization's type
+ */
+export type ResolvedEvalMetricStatus = "available" | "missing" | "inactive" | "derived" | "unavailable";
+
+export interface ResolvedEvalTemplateMetric {
+  metricKey: string;
+  code: string;
+  /** site_metrics label, null when the metric does not exist */
+  label: string | null;
+  unit: string | null;
+  category: string | null;
+  customLabel?: string;
+  isRequired: boolean;
+  displayOrder: number;
+  status: ResolvedEvalMetricStatus;
+}
+
+export interface ResolvedEvalTemplate {
+  template: { id: string; name: string };
+  metrics: ResolvedEvalTemplateMetric[];
+}
+
+const MAX_PLAIN_ERROR_LENGTH = 300;
+
+/** apiRequest throws "400: {json body}"; show the server's own message when there is one */
+export function apiErrorMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof Error)) return fallback;
+  const match = /^\d{3}: ([\s\S]*)$/.exec(error.message);
+  const body = (match ? match[1] : error.message).trim();
+  try {
+    const parsed = JSON.parse(body) as { message?: string; error?: string };
+    return parsed.message || parsed.error || fallback;
+  } catch {
+    // An HTML error page or a huge body is not something to show a coach
+    return body && !body.startsWith("<") && body.length <= MAX_PLAIN_ERROR_LENGTH ? body : fallback;
+  }
+}
+
+const evalPath = (eventId: string, athleteId: string) => `/api/events/${eventId}/athletes/${athleteId}/eval-report`;
+
+export const evalReportKeys = {
+  defaults: (eventId: string, athleteId: string) => ["eval-report", eventId, athleteId, "defaults"] as const,
+  model: (eventId: string, athleteId: string, tag: string, body: unknown) =>
+    ["eval-report", eventId, athleteId, "model", tag, body] as const,
+  settings: (orgId: string) => ["eval-report-settings", orgId] as const,
+  templates: (orgId: string) => ["eval-templates", orgId] as const,
+  template: (templateId: string) => ["eval-template", templateId] as const,
+  resolvedTemplate: (templateId: string, orgId?: string) => ["eval-template-resolved", templateId, orgId ?? ""] as const,
+};
+
+export function useEvalReportDefaults(eventId: string, athleteId: string, enabled: boolean) {
+  return useQuery<EvalDefaults>({
+    queryKey: evalReportKeys.defaults(eventId, athleteId),
+    queryFn: async () => (await apiRequest("GET", `${evalPath(eventId, athleteId)}/defaults`)).json(),
+    enabled,
+    // The selection screen must always reflect the latest saved report
+    staleTime: 0,
+    gcTime: 0,
+  });
+}
+
+/** A read-only preview fetched as a query (used to learn age, college availability and suggestions on open) */
+export function useEvalReportModelQuery(
+  eventId: string,
+  athleteId: string,
+  tag: string,
+  body: EvalReportRequest,
+  enabled: boolean
+) {
+  return useQuery<EvalReportModelView>({
+    queryKey: evalReportKeys.model(eventId, athleteId, tag, body),
+    queryFn: async () => (await apiRequest("POST", `${evalPath(eventId, athleteId)}/preview`, body)).json().then((r) => r.model),
+    enabled,
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+  });
+}
+
+/** Preview: builds the model, saves nothing */
+export function usePreviewEvalReport(eventId: string, athleteId: string) {
+  return useMutation<EvalReportModelView, Error, EvalReportRequest>({
+    mutationFn: async (body) => (await apiRequest("POST", `${evalPath(eventId, athleteId)}/preview`, body)).json().then((r) => r.model),
+  });
+}
+
+/** Generate: saves a new eval report row (every generation is a new row) */
+export function useGenerateEvalReport(eventId: string, athleteId: string) {
+  const queryClient = useQueryClient();
+  return useMutation<{ report: Report; model: EvalReportModelView }, Error, EvalReportRequest>({
+    mutationFn: async (body) => (await apiRequest("POST", evalPath(eventId, athleteId), body)).json(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["events", eventId, "reports"] });
+      queryClient.invalidateQueries({ queryKey: ["reports"] });
+      // Only the defaults change (the next open starts from this report); no refetch while the success screen shows
+      queryClient.invalidateQueries({ queryKey: evalReportKeys.defaults(eventId, athleteId), refetchType: "none" });
+    },
+  });
+}
+
+/** GET /api/reports/:id/pdf as a blob, with the server's filename when it sends one */
+export async function downloadEvalReportPdf(reportId: string): Promise<{ blob: Blob; filename: string }> {
+  const response = await fetch(`/api/reports/${reportId}/pdf`, { credentials: "include" });
+  if (!response.ok) {
+    let message = "Failed to download PDF";
+    try {
+      const body = await response.json();
+      message = body?.message || body?.error || message;
+    } catch {
+      // keep the generic message
+    }
+    throw new Error(message);
+  }
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
+  let filename = "Eval_Report.pdf";
+  if (match) {
+    try {
+      filename = decodeURIComponent(match[1]);
+    } catch {
+      filename = match[1]; // not valid percent-encoding: use it as sent
+    }
+  }
+  return { blob: await response.blob(), filename };
+}
+
+/** Hand the blob to the browser as a file download */
+export function saveBlobAs(blob: Blob, filename: string) {
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
+}
+
+export function useEvalReportSettings(orgId: string | undefined, enabled: boolean) {
+  return useQuery<EvalReportSettings>({
+    queryKey: evalReportKeys.settings(orgId ?? ""),
+    queryFn: async () => (await apiRequest("GET", `/api/organizations/${orgId}/eval-report-settings`)).json(),
+    enabled: enabled && !!orgId,
+    staleTime: 0,
+    retry: false,
+  });
+}
+
+export function usePutEvalReportSettings(orgId: string) {
+  const queryClient = useQueryClient();
+  return useMutation<EvalReportSettings, Error, Partial<EvalReportSettings>>({
+    mutationFn: async (body) => (await apiRequest("PUT", `/api/organizations/${orgId}/eval-report-settings`, body)).json(),
+    onSuccess: (data) => queryClient.setQueryData(evalReportKeys.settings(orgId), data),
+  });
+}
+
+export function useEvalTemplates(orgId: string | undefined) {
+  return useQuery<EvalTemplate[]>({
+    queryKey: evalReportKeys.templates(orgId ?? ""),
+    queryFn: async () => (await apiRequest("GET", `/api/organizations/${orgId}/eval-templates`)).json(),
+    enabled: !!orgId,
+    retry: false,
+  });
+}
+
+const resolvedTemplateQuery = (templateId: string, orgId?: string) => ({
+  queryKey: evalReportKeys.resolvedTemplate(templateId, orgId),
+  queryFn: async (): Promise<ResolvedEvalTemplate> =>
+    (await apiRequest("GET", `/api/eval-templates/${templateId}/resolved${orgId ? `?organizationId=${encodeURIComponent(orgId)}` : ""}`)).json(),
+  retry: false,
+});
+
+/** A template's tests resolved against the metric catalog (what the new-event form lists); `orgId` = the event's organization */
+export function useResolvedEvalTemplate(templateId: string | undefined, orgId?: string) {
+  return useQuery<ResolvedEvalTemplate>({ ...resolvedTemplateQuery(templateId ?? "", orgId), enabled: !!templateId });
+}
+
+/** Imperative twin of useResolvedEvalTemplate, sharing its cache: for the moment a template is picked */
+export function useFetchResolvedEvalTemplate() {
+  const queryClient = useQueryClient();
+  return (templateId: string, orgId?: string) => queryClient.fetchQuery(resolvedTemplateQuery(templateId, orgId));
+}
+
+/** Save the event's current metric set as an org template */
+export function useSaveEventAsTemplate(eventId: string, orgId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation<EvalTemplate, Error, { name: string }>({
+    mutationFn: async (body) => (await apiRequest("POST", `/api/events/${eventId}/eval-templates`, body)).json(),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: evalReportKeys.templates(orgId ?? "") }),
+  });
+}
+
+export function useEvalTemplate(templateId: string | undefined) {
+  return useQuery<EvalTemplate>({
+    queryKey: evalReportKeys.template(templateId ?? ""),
+    queryFn: async () => (await apiRequest("GET", `/api/eval-templates/${templateId}`)).json(),
+    enabled: !!templateId,
+    retry: false,
+  });
+}
+
+export type EvalTemplatePatch = Partial<Pick<EvalTemplate, "name" | "description" | "metrics">>;
+
+/**
+ * After a change: every organization's template list (the default is in all of them) and everything cached for
+ * this template (its read and its resolved tests for any organization).
+ */
+function refreshTemplate(queryClient: ReturnType<typeof useQueryClient>, templateId: string) {
+  queryClient.invalidateQueries({ queryKey: ["eval-templates"] });
+  queryClient.invalidateQueries({ queryKey: evalReportKeys.template(templateId) });
+  queryClient.invalidateQueries({ queryKey: ["eval-template-resolved", templateId] });
+}
+
+/** PATCH a template; last write wins (the API has no version check) */
+export function useUpdateEvalTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation<EvalTemplate, Error, { id: string; patch: EvalTemplatePatch }>({
+    mutationFn: async ({ id, patch }) => (await apiRequest("PATCH", `/api/eval-templates/${id}`, patch)).json(),
+    onSuccess: (_data, { id }) => refreshTemplate(queryClient, id),
+  });
+}
+
+/** Hard delete of an organization template; events created from it keep their tests */
+export function useDeleteEvalTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, string>({
+    mutationFn: async (id) => {
+      await apiRequest("DELETE", `/api/eval-templates/${id}`);
+    },
+    onSuccess: (_data, id) => {
+      queryClient.removeQueries({ queryKey: evalReportKeys.template(id) });
+      queryClient.removeQueries({ queryKey: ["eval-template-resolved", id] });
+      queryClient.invalidateQueries({ queryKey: ["eval-templates"] });
+    },
+  });
+}
+
+/** A new template in `orgId` (used to duplicate one) */
+export function useCreateEvalTemplate(orgId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation<EvalTemplate, Error, Pick<EvalTemplate, "name" | "sport" | "metrics"> & { description?: string }>({
+    mutationFn: async (body) => (await apiRequest("POST", `/api/organizations/${orgId}/eval-templates`, body)).json(),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["eval-templates"] }),
+  });
+}

@@ -675,7 +675,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             </h4>
             <div className="grid grid-cols-2 gap-3 text-xs" role="list">
               {quadrantLegend.map((item, index) => (
-                <div key={index} className="flex items-center space-x-2" role="listitem">
+                <div key={index} className="flex items-center gap-x-2" role="listitem">
                   <div
                     className="w-4 h-4 rounded border-2 shrink-0"
                     style={{

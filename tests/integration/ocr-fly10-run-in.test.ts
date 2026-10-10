@@ -31,7 +31,7 @@ import { purgeTestRows } from '../helpers/purge-test-rows';
 const PASSWORD = 'TestPass123!';
 const NEUTRAL = 'FLY10_TIME_UNRESOLVED';
 const NEUTRAL_505 = 'AGILITY_505_UNRESOLVED';
-const RUN_IN_MSG = 'Choose the run-in distance for 10-yard fly readings';
+const RUN_IN_MSG = 'Choose the run-in distance for 10-yard fly readings'; // literal on purpose: the wire contract
 const CODE_BY_YD: Record<number, string> = { 5: 'FLY10_TIME_RI5', 10: 'FLY10_TIME_RI10', 15: 'FLY10_TIME_RI15', 20: 'FLY10_TIME', 30: 'FLY10_TIME_RI30' };
 
 describe('POST /api/import/photo fly-10 run-in', () => {

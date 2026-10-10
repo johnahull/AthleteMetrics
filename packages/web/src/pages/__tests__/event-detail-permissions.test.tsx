@@ -9,6 +9,7 @@
 
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import EventDetail from '../event-detail';
 
@@ -88,8 +89,12 @@ vi.mock('@/components/events', () => ({
   EventMetricsTab: () => <div data-testid="metrics-tab">Metrics Content</div>,
   EventResultsTab: () => <div data-testid="results-tab">Results Content</div>,
   EventReportsTab: () => <div data-testid="reports-tab">Reports Content</div>,
+  EventEvalReportsCard: ({ canManage }: { canManage: boolean }) => (
+    <div data-testid="eval-reports-card">{canManage ? 'can-manage' : 'read-only'}</div>
+  ),
   CheckInTab: () => <div data-testid="checkin-tab">Check-In Content</div>,
   InviteAthletesModal: () => null,
+  AddAthletesModal: ({ isOpen }: { isOpen: boolean }) => (isOpen ? <div data-testid="add-athletes-modal">Add Modal</div> : null),
 }));
 
 // Mock user with different roles
@@ -167,6 +172,14 @@ describe('Event Detail Page Permissions', () => {
       expect(screen.queryByTestId('tab-results')).not.toBeInTheDocument();
       expect(screen.queryByTestId('tab-reports')).not.toBeInTheDocument();
       expect(screen.queryByTestId('tab-settings')).not.toBeInTheDocument();
+    });
+
+    it('should NOT show the Add athletes button for athletes', async () => {
+      render(<EventDetail />, { wrapper: createWrapper() });
+      await waitFor(() => {
+        expect(screen.getByTestId('tab-overview')).toBeInTheDocument();
+      });
+      expect(screen.queryByRole('button', { name: /add athletes/i })).not.toBeInTheDocument();
     });
 
     it('should NOT show Edit Event button for athletes', async () => {
@@ -254,6 +267,46 @@ describe('Event Detail Page Permissions', () => {
       expect(screen.getByTestId('tab-results')).toBeInTheDocument();
       expect(screen.getByTestId('tab-reports')).toBeInTheDocument();
       expect(screen.getByTestId('tab-settings')).toBeInTheDocument();
+    });
+
+    it('should offer eval reports in the Reports tab for coaches (AM-FEAT-019 P5)', async () => {
+      render(<EventDetail />, { wrapper: createWrapper() });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('tab-reports')).toBeInTheDocument();
+      });
+      await userEvent.click(screen.getByTestId('tab-reports'));
+
+      expect(await screen.findByTestId('eval-reports-card')).toHaveTextContent('can-manage');
+    });
+
+    it.each([
+      ['an event without an organization', { organizationId: null }],
+      ['a cancelled event', { status: 'cancelled' }],
+      ['a frozen event', { isFrozen: true }],
+    ] as Array<[string, Record<string, unknown>]>)('should hide the Add athletes button for %s', async (_label, patch) => {
+      const original = { ...mockEvent };
+      Object.assign(mockEvent, patch);
+      // Only a site admin can manage an event without an organization
+      if (patch.organizationId === null) mockUser = { ...mockUser!, isSiteAdmin: true };
+      try {
+        const user = userEvent.setup();
+        render(<EventDetail />, { wrapper: createWrapper() });
+        await user.click(await screen.findByTestId('tab-registrations'));
+        expect(screen.getByRole('button', { name: /invite athletes/i })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^add athletes$/i })).not.toBeInTheDocument();
+      } finally {
+        Object.assign(mockEvent, original);
+      }
+    });
+
+    it('should show an Add athletes button next to Invite Athletes that opens the modal', async () => {
+      const user = userEvent.setup();
+      render(<EventDetail />, { wrapper: createWrapper() });
+      await user.click(await screen.findByTestId('tab-registrations'));
+      expect(screen.getByRole('button', { name: /invite athletes/i })).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /^add athletes$/i }));
+      expect(screen.getByTestId('add-athletes-modal')).toBeInTheDocument();
     });
 
     it('should show Edit Event button for coaches', async () => {
