@@ -15,4 +15,5 @@ export { SaveEvalTemplateDialog } from "./SaveEvalTemplateDialog";
 export { MetricsSelector, type SelectedMetric } from "./MetricsSelector";
 export { CheckInTab } from "./CheckInTab";
 export { InviteAthletesModal } from "./InviteAthletesModal";
+export { AddAthletesModal } from "./AddAthletesModal";
 export { InvitationCard } from "./InvitationCard";

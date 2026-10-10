@@ -76,10 +76,28 @@ export interface EvalTemplate {
   metrics: EvalTemplateMetric[];
 }
 
-export interface ApplyEvalTemplateResult {
-  added: string[];
-  skipped: string[];
-  alreadyPresent: string[];
+/**
+ * 'derived' = computed, never entered, so it can not be an event metric; 'missing'/'inactive' = not usable yet;
+ * 'unavailable' = not offered to the organization's type
+ */
+export type ResolvedEvalMetricStatus = "available" | "missing" | "inactive" | "derived" | "unavailable";
+
+export interface ResolvedEvalTemplateMetric {
+  metricKey: string;
+  code: string;
+  /** site_metrics label, null when the metric does not exist */
+  label: string | null;
+  unit: string | null;
+  category: string | null;
+  customLabel?: string;
+  isRequired: boolean;
+  displayOrder: number;
+  status: ResolvedEvalMetricStatus;
+}
+
+export interface ResolvedEvalTemplate {
+  template: { id: string; name: string };
+  metrics: ResolvedEvalTemplateMetric[];
 }
 
 const MAX_PLAIN_ERROR_LENGTH = 300;
@@ -106,6 +124,8 @@ export const evalReportKeys = {
     ["eval-report", eventId, athleteId, "model", tag, body] as const,
   settings: (orgId: string) => ["eval-report-settings", orgId] as const,
   templates: (orgId: string) => ["eval-templates", orgId] as const,
+  template: (templateId: string) => ["eval-template", templateId] as const,
+  resolvedTemplate: (templateId: string, orgId?: string) => ["eval-template-resolved", templateId, orgId ?? ""] as const,
 };
 
 export function useEvalReportDefaults(eventId: string, athleteId: string, enabled: boolean) {
@@ -223,6 +243,24 @@ export function useEvalTemplates(orgId: string | undefined) {
   });
 }
 
+const resolvedTemplateQuery = (templateId: string, orgId?: string) => ({
+  queryKey: evalReportKeys.resolvedTemplate(templateId, orgId),
+  queryFn: async (): Promise<ResolvedEvalTemplate> =>
+    (await apiRequest("GET", `/api/eval-templates/${templateId}/resolved${orgId ? `?organizationId=${encodeURIComponent(orgId)}` : ""}`)).json(),
+  retry: false,
+});
+
+/** A template's tests resolved against the metric catalog (what the new-event form lists); `orgId` = the event's organization */
+export function useResolvedEvalTemplate(templateId: string | undefined, orgId?: string) {
+  return useQuery<ResolvedEvalTemplate>({ ...resolvedTemplateQuery(templateId ?? "", orgId), enabled: !!templateId });
+}
+
+/** Imperative twin of useResolvedEvalTemplate, sharing its cache: for the moment a template is picked */
+export function useFetchResolvedEvalTemplate() {
+  const queryClient = useQueryClient();
+  return (templateId: string, orgId?: string) => queryClient.fetchQuery(resolvedTemplateQuery(templateId, orgId));
+}
+
 /** Save the event's current metric set as an org template */
 export function useSaveEventAsTemplate(eventId: string, orgId: string | undefined) {
   const queryClient = useQueryClient();
@@ -232,9 +270,56 @@ export function useSaveEventAsTemplate(eventId: string, orgId: string | undefine
   });
 }
 
-export async function applyEvalTemplate(
-  eventId: string,
-  body: { templateId: string; includeOptional?: string[] }
-): Promise<ApplyEvalTemplateResult> {
-  return (await apiRequest("POST", `/api/events/${eventId}/apply-eval-template`, body)).json();
+export function useEvalTemplate(templateId: string | undefined) {
+  return useQuery<EvalTemplate>({
+    queryKey: evalReportKeys.template(templateId ?? ""),
+    queryFn: async () => (await apiRequest("GET", `/api/eval-templates/${templateId}`)).json(),
+    enabled: !!templateId,
+    retry: false,
+  });
+}
+
+export type EvalTemplatePatch = Partial<Pick<EvalTemplate, "name" | "description" | "metrics">>;
+
+/**
+ * After a change: every organization's template list (the default is in all of them) and everything cached for
+ * this template (its read and its resolved tests for any organization).
+ */
+function refreshTemplate(queryClient: ReturnType<typeof useQueryClient>, templateId: string) {
+  queryClient.invalidateQueries({ queryKey: ["eval-templates"] });
+  queryClient.invalidateQueries({ queryKey: evalReportKeys.template(templateId) });
+  queryClient.invalidateQueries({ queryKey: ["eval-template-resolved", templateId] });
+}
+
+/** PATCH a template; last write wins (the API has no version check) */
+export function useUpdateEvalTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation<EvalTemplate, Error, { id: string; patch: EvalTemplatePatch }>({
+    mutationFn: async ({ id, patch }) => (await apiRequest("PATCH", `/api/eval-templates/${id}`, patch)).json(),
+    onSuccess: (_data, { id }) => refreshTemplate(queryClient, id),
+  });
+}
+
+/** Hard delete of an organization template; events created from it keep their tests */
+export function useDeleteEvalTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, string>({
+    mutationFn: async (id) => {
+      await apiRequest("DELETE", `/api/eval-templates/${id}`);
+    },
+    onSuccess: (_data, id) => {
+      queryClient.removeQueries({ queryKey: evalReportKeys.template(id) });
+      queryClient.removeQueries({ queryKey: ["eval-template-resolved", id] });
+      queryClient.invalidateQueries({ queryKey: ["eval-templates"] });
+    },
+  });
+}
+
+/** A new template in `orgId` (used to duplicate one) */
+export function useCreateEvalTemplate(orgId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation<EvalTemplate, Error, Pick<EvalTemplate, "name" | "sport" | "metrics"> & { description?: string }>({
+    mutationFn: async (body) => (await apiRequest("POST", `/api/organizations/${orgId}/eval-templates`, body)).json(),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["eval-templates"] }),
+  });
 }

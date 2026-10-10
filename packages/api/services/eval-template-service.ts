@@ -5,15 +5,17 @@
  * event.organizationId) or the URL organization, never from the session's primary organization.
  * Every "not yours" case returns null so the route answers 404 (no probing of other orgs' ids).
  */
-import { and, asc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, eq, isNull, or } from "drizzle-orm";
 import { db } from "../db";
 import { storage } from "../storage";
-import { evalBatteryTemplates, eventMetrics, orgEvalReportSettings, organizations, siteMetrics } from "@shared/schema";
+import { auditLogs, evalBatteryTemplates, eventMetrics, orgEvalReportSettings, organizations } from "@shared/schema";
 import type { EvalBatteryTemplate, OrgEvalReportSettings, UserOrganization } from "@shared/schema";
 import type { EvalTemplateMetric, EvalReportSettingsInput } from "@shared/eval-template-schemas";
 import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
 import { isSiteAdmin } from "../permissions/helpers";
-import { EventMetricsService, EventMetricsFrozenError } from "./event-metrics-service";
+import { EventMetricsFrozenError } from "./event-metrics-service";
+import { bulkAddEventMetrics } from "./event-metrics-bulk";
+import { fetchEligibilityRows, ineligibleReason, type IneligibleReason } from "./event-metric-eligibility";
 import { keyForCode, resolveTemplateKey } from "./eval-report/template-keys";
 
 export type Actor = { id: string; isSiteAdmin?: boolean; role?: string };
@@ -81,16 +83,63 @@ export async function organizationExists(organizationId: string): Promise<boolea
   return !!row;
 }
 
-/** Every key must resolve to an existing site_metrics code, and no two keys may resolve to the same code. */
-async function validateMetrics(metrics: EvalTemplateMetric[]): Promise<void> {
-  const codes = metrics.map((m) => resolveTemplateKey(m.metricKey));
+const SINGLE_LEG_CMJ = ["CMJ_SL_LEFT", "CMJ_SL_RIGHT"];
+
+const REJECTED: Record<IneligibleReason, string> = {
+  unknown: "Unknown metrics",
+  derived: "Calculated metrics cannot be template tests",
+  inactive: "Inactive metrics",
+  unavailable: "Metrics not offered to this organization's type",
+};
+
+/** The stored form of a key: the logical key when the code has one (FLY10_TIME -> FLY_10), else the literal code. */
+function normalizeKey(metricKey: string): string {
+  try {
+    return keyForCode(resolveTemplateKey(metricKey));
+  } catch (e) {
+    throw new TemplateValidationError((e as Error).message);
+  }
+}
+
+/**
+ * Normalizes every key to its stored form and checks the list; returns the list to store.
+ * - No two keys may resolve to the same code.
+ * - A derived metric is always rejected.
+ * - A missing, inactive or (with `orgType`) not-offered metric is rejected only when it is NEW, i.e. its code is not
+ *   among `previous` (the template's stored entries), so an older template whose metric went stale can still be saved.
+ * - The two single-leg CMJ sides can not both be required (an event uses one side per athlete).
+ */
+async function validateMetrics(metrics: EvalTemplateMetric[], orgType: string | null, previous: EvalTemplateMetric[] = []): Promise<EvalTemplateMetric[]> {
+  const normalized = metrics.map((m) => ({ ...m, metricKey: normalizeKey(m.metricKey) }));
+  const codes = normalized.map((m) => resolveTemplateKey(m.metricKey));
   const duplicated = codes.filter((c, i) => codes.indexOf(c) !== i);
   if (duplicated.length > 0) {
     throw new TemplateValidationError(`Metrics resolve to the same code: ${[...new Set(duplicated)].join(", ")}`);
   }
-  const known = new Set((await db.select({ code: siteMetrics.code }).from(siteMetrics).where(inArray(siteMetrics.code, codes))).map((r) => r.code));
-  const unknown = metrics.filter((_, i) => !known.has(codes[i])).map((m) => m.metricKey);
-  if (unknown.length > 0) throw new TemplateValidationError(`Unknown metrics: ${unknown.join(", ")}`);
+  const previousCodes = new Set(previous.map((m) => resolveTemplateKey(m.metricKey)));
+  const byCode = await fetchEligibilityRows(codes);
+  const rejected = new Map<IneligibleReason, string[]>();
+  metrics.forEach((m, i) => {
+    const reason = ineligibleReason(byCode.get(codes[i]), orgType);
+    if (reason === null || (reason !== "derived" && previousCodes.has(codes[i]))) return;
+    rejected.set(reason, [...(rejected.get(reason) ?? []), m.metricKey]);
+  });
+  if (rejected.size > 0) {
+    throw new TemplateValidationError([...rejected].map(([reason, keys]) => `${REJECTED[reason]}: ${keys.join(", ")}`).join("; "));
+  }
+  if (SINGLE_LEG_CMJ.every((k) => normalized.some((m) => m.metricKey === k && m.isRequired))) {
+    throw new TemplateValidationError("Only one single-leg CMJ side can be required; make one optional");
+  }
+  return normalized;
+}
+
+/** Audit rows are best effort: a failed write is logged, never fails the change it describes. */
+async function writeTemplateAudit(userId: string, action: "eval_template_updated" | "eval_template_deleted", templateId: string, details: Record<string, unknown>) {
+  try {
+    await db.insert(auditLogs).values({ userId, action, resourceType: "eval_template", resourceId: templateId, details: JSON.stringify(details) });
+  } catch (e) {
+    console.error(`Failed to write ${action} audit log for template ${templateId}:`, e);
+  }
 }
 
 async function insertTemplate(values: typeof evalBatteryTemplates.$inferInsert): Promise<EvalBatteryTemplate> {
@@ -108,9 +157,10 @@ export async function createTemplate(
   userId: string,
   input: { name: string; sport: string; description?: string; metrics: EvalTemplateMetric[] }
 ) {
-  await validateMetrics(input.metrics);
+  // Every key of a new template is new: the organization's type applies to all of them
+  const metrics = await validateMetrics(input.metrics, await orgTypeOf(organizationId));
   // Explicit fields only: nothing else from the request body reaches the row
-  const { name, sport, description, metrics } = input;
+  const { name, sport, description } = input;
   return insertTemplate({ name, sport, description, metrics, organizationId, createdBy: userId });
 }
 
@@ -143,26 +193,48 @@ async function throwNotFoundOrArchived(id: string): Promise<never> {
   throw new TemplateNotFoundError();
 }
 
+const metricsKey = (list: EvalTemplateMetric[]) => JSON.stringify(list.map((m) => [m.metricKey, m.isRequired, m.displayOrder, m.customLabel ?? null]));
+const sameMetrics = (a: EvalTemplateMetric[], b: EvalTemplateMetric[]) => metricsKey(a) === metricsKey(b);
+
+/**
+ * Partial update of `template` (the row the route authorized). The organization type comes from the template's own
+ * organization (none for the global default); the eligibility rule compares with the template's stored metrics.
+ * Last write wins: there is no version check, so of two concurrent saves the later one is kept.
+ */
 export async function updateTemplate(
-  id: string,
-  patch: { name?: string; sport?: string; description?: string | null; metrics?: EvalTemplateMetric[] }
+  template: EvalBatteryTemplate,
+  patch: { name?: string; sport?: string; description?: string | null; metrics?: EvalTemplateMetric[] },
+  userId: string
 ) {
-  if (patch.metrics) await validateMetrics(patch.metrics);
-  const { name, sport, description, metrics } = patch;
+  const validated = patch.metrics ? await validateMetrics(patch.metrics, await orgTypeOf(template.organizationId), template.metrics) : undefined;
+  // Only what really changes is written and audited; a PATCH that changes nothing returns the row as it is
+  // (no audit row, updatedAt untouched).
+  const name = patch.name !== undefined && patch.name !== template.name ? patch.name : undefined;
+  const sport = patch.sport !== undefined && patch.sport !== template.sport ? patch.sport : undefined;
+  const description = patch.description !== undefined && patch.description !== template.description ? patch.description : undefined;
+  const metrics = validated && !sameMetrics(validated, template.metrics) ? validated : undefined;
+  const changes = { name, sport, description, metrics };
+  const changedFields = (["name", "sport", "description", "metrics"] as const).filter((f) => changes[f] !== undefined);
+  if (changedFields.length === 0) {
+    if (template.archivedAt) return await throwNotFoundOrArchived(template.id);
+    return template;
+  }
+  let row: EvalBatteryTemplate | undefined;
   try {
     // Drizzle's .set() skips undefined fields, which is what makes this a partial update
     // (null, by contrast, is written, so description: null clears it).
-    const [row] = await db
+    [row] = await db
       .update(evalBatteryTemplates)
       .set({ name, sport, description, metrics, updatedAt: new Date() })
-      .where(and(eq(evalBatteryTemplates.id, id), isNull(evalBatteryTemplates.archivedAt)))
+      .where(and(eq(evalBatteryTemplates.id, template.id), isNull(evalBatteryTemplates.archivedAt)))
       .returning();
-    if (!row) return await throwNotFoundOrArchived(id);
-    return row;
   } catch (e) {
     if (isUniqueViolation(e)) throw new TemplateConflictError("A template with this name already exists");
     throw e;
   }
+  if (!row) return await throwNotFoundOrArchived(template.id);
+  await writeTemplateAudit(userId, "eval_template_updated", row.id, { name: row.name, organizationId: row.organizationId, changedFields, metricCount: row.metrics.length });
+  return row;
 }
 
 export async function archiveTemplate(id: string) {
@@ -175,19 +247,77 @@ export async function archiveTemplate(id: string) {
   return row;
 }
 
-export async function deleteTemplate(id: string) {
-  await db.delete(evalBatteryTemplates).where(eq(evalBatteryTemplates.id, id));
+/** Hard delete. Events keep their copied tests (nothing stores a template id); the audit row keeps the full template. */
+export async function deleteTemplate(id: string, userId: string) {
+  const [row] = await db.delete(evalBatteryTemplates).where(eq(evalBatteryTemplates.id, id)).returning();
+  if (!row) return;
+  await writeTemplateAudit(userId, "eval_template_deleted", row.id, {
+    name: row.name,
+    organizationId: row.organizationId,
+    sport: row.sport,
+    description: row.description,
+    metrics: row.metrics,
+  });
 }
 
-const SINGLE_LEG_CMJ = ["CMJ_SL_LEFT", "CMJ_SL_RIGHT"];
+/**
+ * 'derived': the metric is computed, never entered, so it can not be an event metric.
+ * 'inactive': switched off by a site admin. 'missing': no site_metrics row for the key's code.
+ * 'unavailable': the metric is not offered to the organization's type.
+ */
+export type ResolvedMetricStatus = "available" | "missing" | "inactive" | "derived" | "unavailable";
+
+export interface ResolvedTemplateMetric {
+  metricKey: string;
+  code: string;
+  /** site_metrics label, null when the metric is missing */
+  label: string | null;
+  unit: string | null;
+  category: string | null;
+  customLabel?: string;
+  isRequired: boolean;
+  displayOrder: number;
+  status: ResolvedMetricStatus;
+}
+
+/** The organization's type (for the availability rule), or null when there is none or the org is unknown */
+export async function orgTypeOf(organizationId: string | null | undefined): Promise<string | null> {
+  if (!organizationId) return null;
+  const [row] = await db.select({ orgType: organizations.orgType }).from(organizations).where(eq(organizations.id, organizationId));
+  return row?.orgType ?? null;
+}
+
+/**
+ * Every entry of the template resolved to its site_metrics code and status, in displayOrder (ONE query).
+ * With `orgType`, a metric not offered to that organization type is 'unavailable'.
+ */
+export async function resolveTemplateMetrics(template: Pick<EvalBatteryTemplate, "metrics">, orgType: string | null = null): Promise<ResolvedTemplateMetric[]> {
+  const entries = [...template.metrics].sort((a, b) => a.displayOrder - b.displayOrder).map((m) => ({ ...m, code: resolveTemplateKey(m.metricKey) }));
+  const byCode = await fetchEligibilityRows(entries.map((m) => m.code));
+  return entries.map((m) => {
+    const row = byCode.get(m.code);
+    const reason = ineligibleReason(row, orgType);
+    return {
+      metricKey: m.metricKey,
+      code: m.code,
+      label: row?.label ?? null,
+      unit: row?.unit ?? null,
+      category: row?.category ?? null,
+      ...(m.customLabel ? { customLabel: m.customLabel } : {}),
+      isRequired: m.isRequired,
+      displayOrder: m.displayOrder,
+      status: reason === null ? "available" : reason === "unknown" ? "missing" : reason,
+    };
+  });
+}
 
 /**
  * Pre-load the event's metrics from a template: the required ones, plus the optional ones named in
- * `includeOptional` (at most one single-leg CMJ). Keys whose site_metrics code does not exist or is inactive are skipped
- * and returned in `skipped`; metrics already on the event are left alone (`alreadyPresent`). The write goes
- * through EventMetricsService.bulkAddMetrics (frozen check and audit log).
+ * `includeOptional` (at most one single-leg CMJ). Keys whose metric is missing, inactive, derived or not offered
+ * to the event's organization type are skipped and returned in `skipped`; metrics already on the event are left
+ * alone (`alreadyPresent`). The write is the atomic bulkAddEventMetrics (frozen check, insert and audit log in one transaction).
  */
-export async function applyTemplateToEvent(eventId: string, userId: string, template: EvalBatteryTemplate, includeOptional: string[] = []) {
+export async function applyTemplateToEvent(eventId: string, userId: string, template: EvalBatteryTemplate, organizationId: string | null, includeOptional: string[] = []) {
   const optionalKeys = new Set(template.metrics.filter((m) => !m.isRequired).map((m) => m.metricKey));
   const notOptional = includeOptional.filter((k) => !optionalKeys.has(k));
   if (notOptional.length > 0) throw new TemplateValidationError(`Not optional metrics of this template: ${notOptional.join(", ")}`);
@@ -195,36 +325,22 @@ export async function applyTemplateToEvent(eventId: string, userId: string, temp
     throw new TemplateValidationError("Use one single-leg CMJ per athlete, not both");
   }
 
-  const chosen = template.metrics
-    .filter((m) => m.isRequired || includeOptional.includes(m.metricKey))
-    .map((m) => ({ ...m, code: resolveTemplateKey(m.metricKey) }));
+  const chosen = (await resolveTemplateMetrics(template, await orgTypeOf(organizationId))).filter((m) => m.isRequired || includeOptional.includes(m.metricKey));
   if (chosen.length === 0) return { added: [], skipped: [], alreadyPresent: [] };
-  const known = new Set(
-    (await db.select({ code: siteMetrics.code }).from(siteMetrics).where(and(inArray(siteMetrics.code, chosen.map((m) => m.code)), eq(siteMetrics.isActive, true)))).map((r) => r.code)
-  );
-  const present = new Set(
-    (await db.select({ code: eventMetrics.metricCode }).from(eventMetrics).where(eq(eventMetrics.eventId, eventId))).map((r) => r.code)
-  );
 
-  const skipped = chosen.filter((m) => !known.has(m.code)).map((m) => m.metricKey);
-  const alreadyPresent = chosen.filter((m) => known.has(m.code) && present.has(m.code)).map((m) => m.code);
-  const toAdd = chosen.filter((m) => known.has(m.code) && !present.has(m.code));
-  let inserted: Set<string>;
+  const usable = chosen.filter((m) => m.status === "available");
+  const skipped = chosen.filter((m) => m.status !== "available").map((m) => m.metricKey);
   try {
-    const rows = await new EventMetricsService(storage).bulkAddMetrics(
+    const result = await bulkAddEventMetrics(
       eventId,
       userId,
-      toAdd.map((m) => ({ metricCode: m.code, displayOrder: m.displayOrder, isRequired: m.isRequired, customLabel: m.customLabel })),
-      { skipExisting: true }
+      usable.map((m) => ({ metricCode: m.code, displayOrder: m.displayOrder, isRequired: m.isRequired, customLabel: m.customLabel }))
     );
-    inserted = new Set(rows.map((r) => r.metricCode));
+    return { added: result.added, skipped, alreadyPresent: result.alreadyPresent };
   } catch (e) {
     if (e instanceof EventMetricsFrozenError) throw new EventFrozenError(e.message);
     throw e;
   }
-  // `added` is what the insert confirmed; a code a concurrent request added in between was skipped by it
-  const raced = toAdd.filter((m) => !inserted.has(m.code)).map((m) => m.code);
-  return { added: toAdd.filter((m) => inserted.has(m.code)).map((m) => m.code), skipped, alreadyPresent: [...alreadyPresent, ...raced] };
 }
 
 /** What GET returns: a stored row, or the synthetic default when none exists yet (no timestamps or author). */

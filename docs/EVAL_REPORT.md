@@ -1,6 +1,8 @@
 # Eval Report (AM-FEAT-019)
 
-A coach opens an evaluation event, picks an athlete, chooses metrics and sections (with age-group presets and defaults), previews, and downloads a branded PDF. Every generation is saved as a `reports` row (`reportType = 'eval'`). Eval batteries can be saved as templates and applied to a new event.
+A coach opens an evaluation event, picks an athlete, chooses metrics and sections (with age-group presets and defaults), previews, and downloads a branded PDF. Every generation is saved as a `reports` row (`reportType = 'eval'`). Eval batteries can be saved as templates and chosen on the New event form: picking a template fills the form's metrics list (required tests plus the optional ones the coach ticks), the coach adds or removes tests, and the final list is saved in one request (`POST /api/events/:eventId/metrics/bulk`) after the event is created. Tests the template lists but that cannot be added (missing, inactive, derived) are named in the picker. Switching template or choosing "No template" only removes the entries that came from the template, never tests added by hand.
+
+**Manage templates** (`/events/templates`, linked from the Events page header for coaches and admins when the Events module is on; pages `packages/web/src/pages/eval-templates.tsx` and `eval-template-edit.tsx`): lists the organization's templates and the default. A writer renames a template, edits its description, and adds, removes, reorders and marks tests required with the same metrics selector as the New event form (derived metrics are not offered). Tests that cannot be used for the organization (missing, inactive, not offered to its type) are listed under "Not available for this organization" and kept until removed (on save they go after the editable tests); derived leftovers are dropped on save, which counts as a change, so Save is enabled while any are left. Leaving the editor with unsaved changes asks first: links inside the app (Cancel, Back, the sidebar) open a "Leave without saving?" dialog, and closing or reloading the tab gets the browser's own prompt (the browser Back button is not intercepted). A failed load shows an error with Retry. Both pages show "The Events module is off" when the organization (the template's own, or the viewer's for the default) has the Events module turned off. Label overrides already on a template are kept but are not editable here, and the sport is shown, not editable. Organization templates can be deleted (confirm; events keep their tests). The default cannot be deleted: a site admin edits it (one confirm, because it changes the default for every organization); everyone else sees it read-only with **Duplicate as my template**, which creates "<name> (copy)" in their organization with only the tests available there and says which were left out. Access and resolution use the template's own organization.
 
 Design record and reasons: `docs/adr/ADR-002-eval-report-v2.md`. Open items: `docs/EVAL_REPORT_FOLLOWUPS.md`.
 
@@ -53,15 +55,27 @@ Other report routes (delete, pin, archive, generate, snapshot list and delete, s
 | Method | Path | Who | Returns |
 |---|---|---|---|
 | GET | `/api/organizations/:orgId/eval-templates` | Writer of `:orgId` | Live templates of the org plus the global default |
-| POST | `/api/organizations/:orgId/eval-templates` | Writer of `:orgId` | 201 template (metrics as logical keys; 400 unknown metrics, 409 duplicate name) |
-| POST | `/api/events/:eventId/eval-templates` | Writer of the event's org | 201 template made from the event's metrics (400 if none) |
+| POST | `/api/organizations/:orgId/eval-templates` | Writer of `:orgId` | 201 template (metrics stored as logical keys; 400 under the template rules below, 409 duplicate name) |
+| POST | `/api/events/:eventId/eval-templates` | Writer of the event's org | 201 template made from the event's metrics (400 if none). The template rules below apply as on create, so it is also a 400 when one of the event's metrics is now inactive or not offered to the organization's type (the error names it); remove that metric from the event or save the template by hand |
 | GET | `/api/eval-templates/:id` | Writer of the template's org (any writer for the global default) | Template |
-| PATCH | `/api/eval-templates/:id` | Writer of the template's org; site admin only for the global default (403) | Template |
+| GET | `/api/eval-templates/:id/resolved` | Same as the read above | `{ template: { id, name }, metrics: [{ metricKey, code, label, unit, category, isRequired, displayOrder, status, customLabel? }] }` in displayOrder; `status` is `available`, `missing` (no `site_metrics` row), `inactive`, `derived` (computed, never an event metric) or `unavailable` (`available_org_types` does not list the organization's type; the type comes from `?organizationId=` for the global default, which is required (400 when missing, except for a site admin, who may resolve the default with no organization: no type rule then) and which the caller must write in (else 404); an organization template always uses its own organization and ignores `?organizationId=`). One query |
+| PATCH | `/api/eval-templates/:id` | Writer of the template's org; site admin only for the global default (403) | Template; body `{ name?, sport?, description?, metrics? }` (`metrics` replaces the whole list; 400 under the template rules below). Writes an `eval_template_updated` audit row whose `changedFields` lists only the fields whose value really changed. A PATCH that changes nothing (`{}` or the stored values) returns the row unchanged: no write, no audit row, `updatedAt` untouched. Last write wins (no version check) |
 | POST | `/api/eval-templates/:id/archive` | Same | Template |
-| DELETE | `/api/eval-templates/:id` | Same; the global default cannot be deleted (409) | 204 |
-| POST | `/api/events/:eventId/apply-eval-template` | Writer of the event's org | `{ added, skipped, alreadyPresent }`; body `{ templateId, includeOptional? }` |
+| DELETE | `/api/eval-templates/:id` | Same; the global default cannot be deleted (409) | 204. Hard delete; writes an `eval_template_deleted` audit row whose `details` hold the name, `organizationId`, sport, description and the full `metrics` |
+| POST | `/api/events/:eventId/apply-eval-template` | Writer of the event's org | `{ added, skipped, alreadyPresent }`; body `{ templateId, includeOptional? }`. Missing, inactive and derived metrics are skipped (by key). The new-event form no longer calls it; it stays for API clients |
+| POST | `/api/events/:eventId/metrics/bulk` | Same as `POST /api/events/:eventId/metrics` (coach, org admin or site admin of the event's org), same mutation limiter, one hit per request | Body `{ metrics: [{ metricCode, isRequired?, displayOrder?, customLabel? }] }` (max 100; codes are letters, digits and underscores; labels have no control characters; unknown keys stripped). `{ added, alreadyPresent, skipped: [{ metricCode, reason: 'unknown' \| 'inactive' \| 'derived' \| 'unavailable' }] }`. **Atomic**: the insert (`ON CONFLICT DO NOTHING`) and its audit row share one transaction, all or nothing; a code a concurrent request inserted first is `alreadyPresent`. Derived, inactive, unknown and org-type-unavailable metrics are **skipped** here but **rejected with 400** by the single route. A frozen event is **409** here, **400** on the single route. The UI sends lists longer than 100 as sequential batches of 100 |
 | GET | `/api/organizations/:orgId/eval-report-settings` | Writer of `:orgId` | `{ organizationId, presets, lastSelection }` (synthetic default if none stored) |
 | PUT | `/api/organizations/:orgId/eval-report-settings` | Writer of `:orgId` | Upserted settings |
+
+**Template rules (create and PATCH, `validateMetrics` in `eval-template-service.ts`).**
+- Every key is stored in its canonical form: a code that has a logical key becomes that key (`FLY10_TIME` is stored as `FLY_10`); a code outside the key map is stored as it is. Two keys that resolve to the same code are a 400.
+- A derived metric is always a 400.
+- A missing, inactive or not-offered (organization type) metric is a 400 only when it is **new** in that save, compared by code with the template's stored list (on create every key is new). So an older template whose metric went stale can still be renamed and re-saved; a stale entry that is removed and added back later is new again. The organization type comes from the template's own organization, never from the query string; the global default has none, so it skips the type rule.
+- `CMJ_SL_LEFT` and `CMJ_SL_RIGHT` cannot both be required (both optional is fine): an event uses one side per athlete.
+- `name` has no control characters; `description` allows line breaks and tabs only. Labels already had this rule.
+- Audit rows are best effort: a failed audit insert is logged and never fails the change. `audit_logs` has no organization column, so the organization is in `details`. The CHECK constraints that allow these actions and the `eval_template` resource type are added by manual migration `0155_add_eval_template_audit_actions.sql`.
+
+**Edits never change existing events or reports.** Applying a template copies its tests into `event_metrics`; nothing stores a template id (no foreign key references `eval_battery_templates`). Editing or deleting a template only changes what later events start from (locked in by the "nothing stores a template id" integration test).
 
 Reads use the STANDARD limiter; writes use MUTATION (20 per 15 minutes).
 
@@ -80,7 +94,7 @@ model                         the frozen EvalReportModel (athlete, eventDate, me
                               strengths, developmentAreas, limiter, coachNote, selection)
 ```
 
-`eval_battery_templates` (migration `migrations/0153_add_eval_report_templates.sql`; down: `..._down.sql`): `organization_id` null = global default; `sport`, `name`, `metrics` jsonb of `{ metricKey, isRequired, displayOrder, customLabel? }` using logical keys; `archived_at`. Names are unique per organization among live rows. The seed adds "Soccer eval (yards)" and skips codes missing from `site_metrics`.
+`eval_battery_templates` (migration `migrations/0153_add_eval_report_templates.sql`; down: `..._down.sql`): `organization_id` null = global default; `sport`, `name`, `metrics` jsonb of `{ metricKey, isRequired, displayOrder, customLabel? }` using logical keys; `archived_at`. Names are unique per organization among live rows. The seed adds "Soccer eval (yards)" and skips codes missing from `site_metrics`. Migration `0154_strip_derived_from_eval_templates.sql` removes derived metrics (MOMENTUM) from every template's `metrics`; its down file puts MOMENTUM back on the global default.
 
 `org_eval_report_settings`: one row per organization (`organization_id` unique, cascade); `presets` jsonb (per-preset overrides), `last_selection` jsonb.
 
@@ -88,7 +102,7 @@ Migration number 0153 is provisional (see `docs/MIGRATION_SYSTEM_REMEDIATION.md`
 
 ## Extending
 
-**Add a metric to the default template.** Edit migration data only for new databases; for existing ones use the template PATCH route as a site admin (the default is global). The metric needs a `site_metrics` code. Use the logical key if one exists, else the literal code.
+**Add a metric to the default template.** Edit migration data only for new databases; for existing ones a site admin edits it on the Manage templates page (or with the template PATCH route; the default is global). The metric needs a `site_metrics` code. Use the logical key if one exists, else the literal code.
 
 **Add a logical key.** (1) Add it to `EVAL_METRIC_CODES` in `packages/api/services/eval-report/metric-key-map.ts` if the report itself should know it (it then needs entries in `GROUPS` in `selection.ts` and `METRIC_LABELS` in `copy.ts`, which are typed on `EvalMetricKey`), or only to `TEMPLATE_METRIC_CODES` in `template-keys.ts` if it is a battery-only key. (2) Never spell a template-only key like the code it resolves to (`keyForCode` throws on collisions). (3) The code must be inserted by a `site_metrics` seed migration or `metric-key-map.test.ts` fails. (4) A metric that must not get a comparison goes in `NO_TIER_CODES` in `eval-report/tier-match.ts`. (5) To make a key a default headline metric, edit `HEADLINE_KEYS` in `selection.ts`.
 
@@ -112,7 +126,8 @@ npm run test:unit -- packages/api/services/eval-report packages/api/services/__t
 
 # Integration (needs a Postgres in .env.local)
 npm run test:integration -- tests/integration/eval-report-routes.test.ts tests/integration/eval-report-access.test.ts \
-  tests/integration/eval-report-pdf.test.ts tests/integration/eval-templates.test.ts tests/integration/coppa-eval-reports.test.ts
+  tests/integration/eval-report-pdf.test.ts tests/integration/eval-templates.test.ts tests/integration/coppa-eval-reports.test.ts \
+  tests/migrations/0155-eval-template-audit-actions.test.ts
 
 # E2E (local; see below)
 npx playwright test tests/e2e/eval-report.spec.ts --config=playwright.testing.config.ts
@@ -125,7 +140,7 @@ Two database shapes matter for the integration tests:
 
 Use `tests/helpers/purge-test-rows.ts` in new integration tests.
 
-**E2E**: `tests/e2e/eval-report.spec.ts` creates its data through the API and cleans up. The CI E2E suite is red (issue #490), so run this spec locally against a database with the site metrics and the default "Soccer eval (yards)" template, and say so in the PR. Add it to CI only once the suite is green.
+**E2E**: `tests/e2e/eval-report.spec.ts` and `tests/e2e/eval-templates-manage.spec.ts` create their data through the API and clean up. The CI E2E suite is red (issue #490), so run this spec locally against a database with the site metrics and the default "Soccer eval (yards)" template, and say so in the PR. Add it to CI only once the suite is green.
 
 Screenshots for UI changes go in `screenshots/` per `CLAUDE.md`.
 

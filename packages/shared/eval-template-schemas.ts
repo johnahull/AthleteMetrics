@@ -8,12 +8,16 @@ import { z } from "zod";
 export const EVAL_PRESETS = ["middle_school", "high_school", "senior"] as const;
 
 const metricKey = z.string().trim().min(1).max(50);
+/** No control characters at all (labels, names) */
+const NO_CONTROL_CHARS = /^[^\p{Cc}]*$/u;
+/** Line breaks and tabs only (free text) */
+const NO_CONTROL_CHARS_EXCEPT_WHITESPACE = /^(?:[\t\n\r]|[^\p{Cc}])*$/u;
 
 export const evalTemplateMetricSchema = z.object({
   metricKey,
   isRequired: z.boolean().default(false),
   displayOrder: z.number().int().min(0).max(9999),
-  customLabel: z.string().trim().min(1).max(100).optional(),
+  customLabel: z.string().trim().min(1).max(100).regex(NO_CONTROL_CHARS, "Label must not contain control characters").optional(),
 });
 
 export const evalTemplateMetricsSchema = z
@@ -23,9 +27,9 @@ export const evalTemplateMetricsSchema = z
   .refine((list) => new Set(list.map((m) => m.metricKey)).size === list.length, { message: "Duplicate metricKey" });
 
 const templateFields = {
-  name: z.string().trim().min(1).max(200),
+  name: z.string().trim().min(1).max(200).regex(NO_CONTROL_CHARS, "Name must not contain control characters"),
   sport: z.string().trim().min(1).max(50),
-  description: z.string().trim().max(2000).optional(),
+  description: z.string().trim().max(2000).regex(NO_CONTROL_CHARS_EXCEPT_WHITESPACE, "Description must not contain control characters").optional(),
 };
 
 export const createEvalTemplateSchema = z.object({ ...templateFields, metrics: evalTemplateMetricsSchema });

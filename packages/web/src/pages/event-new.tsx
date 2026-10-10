@@ -3,24 +3,42 @@
  * Uses the EventForm multi-step wizard
  */
 
+import { useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
-import { useCreateEvent, addEventMetric } from "@/lib/events-api";
+import { useCreateEvent, addEventMetricsBulk, type BulkAddEventMetricsResult } from "@/lib/events-api";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { EventForm, type EventFormData } from "@/components/events";
-import { applyEvalTemplate, apiErrorMessage } from "@/hooks/use-eval-report";
-import { describeTemplateResult, templateFailureTitle } from "@/lib/eval-template-labels";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import type { EventStatus } from "@shared/schema";
+
+/** The server accepts at most this many metrics per request; longer lists go in sequential batches */
+const METRICS_BATCH_SIZE = 100;
+
+const SKIP_REASON_TEXT: Record<BulkAddEventMetricsResult["skipped"][number]["reason"], string> = {
+  derived: "calculated automatically",
+  inactive: "not available",
+  unknown: "not available",
+  unavailable: "not available",
+};
+
+/** "Not added: Momentum (calculated automatically), Old test (not available)." */
+function describeSkipped(skipped: BulkAddEventMetricsResult["skipped"], labelFor: (code: string) => string): string {
+  if (skipped.length === 0) return "";
+  return ` Not added: ${skipped.map((s) => `${labelFor(s.metricCode)} (${SKIP_REASON_TEXT[s.reason]})`).join(", ")}.`;
+}
 
 export default function EventNew() {
   const [, navigate] = useLocation();
   const { organizationContext, userOrganizations, user } = useAuth();
   const { toast } = useToast();
   const createMutation = useCreateEvent();
+  // True from the first click until the whole sequence (create event, then save its metrics) is over
+  const [submitting, setSubmitting] = useState(false);
+  const inFlight = useRef(false);
 
   // Get effective organization ID
   const getEffectiveOrganizationId = () => {
@@ -49,9 +67,12 @@ export default function EventNew() {
   }
 
   const handleSubmit = async (data: EventFormData, isDraft: boolean) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setSubmitting(true);
     try {
-      // Extract selectedMetrics and the optional eval template from form data
-      const { selectedMetrics, evalTemplate, ...formData } = data;
+      // Extract selectedMetrics (saved after the event exists) from the event fields
+      const { selectedMetrics, ...formData } = data;
 
       const status: EventStatus = isDraft ? "draft" : "published";
       const eventData = {
@@ -69,53 +90,43 @@ export default function EventNew() {
       // Create the event first
       const event = await createMutation.mutateAsync(eventData);
 
-      // Then add the selected metrics (if any) in order
+      // Then save the final metrics list (typed by hand and/or filled by a template) in ONE request, in list order
+      let added = 0;
+      const skipped: BulkAddEventMetricsResult["skipped"] = [];
       if (selectedMetrics && selectedMetrics.length > 0) {
-        for (let i = 0; i < selectedMetrics.length; i++) {
-          const metric = selectedMetrics[i];
+        const payload = selectedMetrics.map((metric, index) => ({
+          metricCode: metric.code,
+          isRequired: metric.isRequired,
+          displayOrder: index,
+          ...(metric.customLabel ? { customLabel: metric.customLabel } : {}),
+        }));
+        for (let start = 0; start < payload.length; start += METRICS_BATCH_SIZE) {
           try {
-            await addEventMetric(event.id, {
-              metricCode: metric.code,
-              displayOrder: i,
-              isRequired: metric.isRequired,
+            const result = await addEventMetricsBulk(event.id, payload.slice(start, start + METRICS_BATCH_SIZE));
+            added += result.added.length;
+            skipped.push(...result.skipped);
+          } catch (metricsError) {
+            // The event exists: say so and why its tests were not (all) added, in the one toast, and go to the event
+            const message = metricsError instanceof Error ? metricsError.message : "The tests could not be added.";
+            toast({
+              variant: "destructive",
+              title: `${isDraft ? "Draft saved" : "Event created"}, ${added > 0 ? "some tests" : "tests"} not added`,
+              description: added > 0 ? `${added} ${added === 1 ? "test was" : "tests were"} added. ${message}` : message,
             });
-          } catch (metricError) {
-            console.error(`Failed to add metric ${metric.code}:`, metricError);
-            // Continue adding other metrics even if one fails
+            navigate(`/events/${event.id}`);
+            return;
           }
         }
       }
-
-      // Then apply the chosen eval template (required tests, plus any optional ones that were ticked)
-      let templateNote = "";
-      if (evalTemplate) {
-        try {
-          const applied = describeTemplateResult(
-            await applyEvalTemplate(event.id, {
-              templateId: evalTemplate.templateId,
-              includeOptional: evalTemplate.includeOptional,
-            })
-          );
-          templateNote = ` ${applied.title}: ${applied.description}`;
-        } catch (templateError) {
-          // One toast at a time: report the event as saved, and why the template was not applied
-          toast({
-            variant: "destructive",
-            title: templateFailureTitle(isDraft),
-            description: apiErrorMessage(templateError, "The template could not be applied."),
-          });
-          navigate(`/events/${event.id}`);
-          return;
-        }
-      }
+      const skippedNote = describeSkipped(skipped, (code) => selectedMetrics?.find((m) => m.code === code)?.label ?? code);
 
       toast({
         title: isDraft ? "Draft Saved" : "Event Created",
         description: `${
           isDraft
             ? "Your event has been saved as a draft."
-            : `Your event has been ${selectedMetrics?.length ? `created with ${selectedMetrics.length} metrics` : "published"}.`
-        }${templateNote}`,
+            : `Your event has been ${added ? `created with ${added} ${added === 1 ? "metric" : "metrics"}` : "published"}.`
+        }${skippedNote}`,
       });
 
       // Navigate to the event detail page
@@ -126,6 +137,9 @@ export default function EventNew() {
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to create event",
       });
+    } finally {
+      inFlight.current = false;
+      setSubmitting(false);
     }
   };
 
@@ -153,7 +167,7 @@ export default function EventNew() {
       <EventForm
         onSubmit={handleSubmit}
         onCancel={handleCancel}
-        isSubmitting={createMutation.isPending}
+        isSubmitting={createMutation.isPending || submitting}
         organizationId={effectiveOrganizationId}
       />
     </div>

@@ -35,7 +35,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { EventStatusBadge, EventMetricsTab, EventResultsTab, EventReportsTab, EventEvalReportsCard, CheckInTab, InviteAthletesModal } from "@/components/events";
+import { EventStatusBadge, EventMetricsTab, EventResultsTab, EventReportsTab, EventEvalReportsCard, CheckInTab, InviteAthletesModal, AddAthletesModal } from "@/components/events";
 import {
   ArrowLeft,
   Calendar,
@@ -74,6 +74,7 @@ export default function EventDetail() {
   const { toast } = useToast();
   const [selectedTab, setSelectedTab] = useState<TabValue>("overview");
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [addAthletesModalOpen, setAddAthletesModalOpen] = useState(false);
   const [declineDialog, setDeclineDialog] = useState<{ open: boolean; registrationId: string | null }>({ open: false, registrationId: null });
   const [declineReason, setDeclineReason] = useState("");
   const [cancelInvitationDialog, setCancelInvitationDialog] = useState<{ open: boolean; invitationId: string | null }>({ open: false, invitationId: null });
@@ -711,7 +712,12 @@ export default function EventDetail() {
                     {approvedCount + pendingCount + waitlistCount} total registrations
                   </CardDescription>
                 </div>
-                <Button onClick={handleInviteAthletes}>Invite Athletes</Button>
+                <div className="flex flex-wrap gap-2">
+                  {event.organizationId && event.status !== 'cancelled' && !event.isFrozen && (
+                    <Button variant="outline" onClick={() => setAddAthletesModalOpen(true)}>Add athletes</Button>
+                  )}
+                  <Button onClick={handleInviteAthletes}>Invite Athletes</Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -904,6 +910,15 @@ export default function EventDetail() {
         organizationId={event.organizationId || ""}
         isOpen={inviteModalOpen}
         onClose={() => setInviteModalOpen(false)}
+      />
+
+      {/* Add Athletes Modal (direct add, managers only: the Registrations tab is manager-only) */}
+      <AddAthletesModal
+        eventId={eventId!}
+        eventName={event.name}
+        organizationId={event.organizationId || ""}
+        isOpen={addAthletesModalOpen}
+        onClose={() => setAddAthletesModalOpen(false)}
       />
 
       {/* Decline Reason Dialog */}

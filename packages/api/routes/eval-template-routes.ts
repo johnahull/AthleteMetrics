@@ -17,6 +17,7 @@ import {
 } from "@shared/eval-template-schemas";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import type { SessionUser } from "../utils/auth-helpers";
+import { isSiteAdmin } from "../permissions/helpers";
 import * as svc from "../services/eval-template-service";
 
 const limiter = (limit: number, message: string) =>
@@ -88,6 +89,30 @@ export function registerEvalTemplateRoutes(app: Express) {
     }
   });
 
+  /**
+   * The template's tests resolved against site_metrics, for the new-event form. Same visibility as the plain read.
+   * `?organizationId=` names the organization the event is for. It applies only to the global default, which has no organization
+   * of its own to take the organization-type availability rule from (missing = 400); the caller must write in it, else 404.
+   * An organization template always uses its own organization and ignores the parameter.
+   * A site admin may resolve the default with no organization (editing it for every organization): no type rule then.
+   */
+  app.get("/api/eval-templates/:id/resolved", requireAuth, readLimiter, async (req, res) => {
+    try {
+      const template = await svc.getVisibleTemplate(userOf(req), req.params.id);
+      if (!template) return res.status(404).json(NOT_FOUND);
+      // Only the global default takes its organization from the request; an organization template uses its own
+      const asked = !template.organizationId && typeof req.query.organizationId === "string" ? req.query.organizationId : null;
+      if (!template.organizationId && !asked && !isSiteAdmin(userOf(req))) {
+        return res.status(400).json({ error: "organizationId is required to resolve the default template" });
+      }
+      if (asked && !(await svc.isOrgWriter(userOf(req), asked))) return res.status(404).json(NOT_FOUND);
+      const orgType = await svc.orgTypeOf(asked ?? template.organizationId);
+      return res.json({ template: { id: template.id, name: template.name }, metrics: await svc.resolveTemplateMetrics(template, orgType) });
+    } catch (e) {
+      return handleError(res, e);
+    }
+  });
+
   /** Resolve the template for a change; 404 if not visible, 403 if visible but not editable (global default). */
   async function editableTemplate(req: Request, res: Response) {
     const template = await svc.getVisibleTemplate(userOf(req), req.params.id);
@@ -108,7 +133,7 @@ export function registerEvalTemplateRoutes(app: Express) {
       if (!template) return;
       const parsed = updateEvalTemplateSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid template", details: parsed.error.flatten() });
-      return res.json(await svc.updateTemplate(template.id, parsed.data));
+      return res.json(await svc.updateTemplate(template, parsed.data, userOf(req).id));
     } catch (e) {
       return handleError(res, e);
     }
@@ -129,7 +154,7 @@ export function registerEvalTemplateRoutes(app: Express) {
       const template = await editableTemplate(req, res);
       if (!template) return;
       if (!template.organizationId) return res.status(409).json({ error: "The default template cannot be deleted; archive it instead" });
-      await svc.deleteTemplate(template.id);
+      await svc.deleteTemplate(template.id, userOf(req).id);
       return res.status(204).end();
     } catch (e) {
       return handleError(res, e);
@@ -148,7 +173,7 @@ export function registerEvalTemplateRoutes(app: Express) {
       if (!template || template.archivedAt || (template.organizationId && template.organizationId !== event.organizationId)) {
         return res.status(404).json(NOT_FOUND);
       }
-      return res.json(await svc.applyTemplateToEvent(event.id, userOf(req).id, template, parsed.data.includeOptional));
+      return res.json(await svc.applyTemplateToEvent(event.id, userOf(req).id, template, event.organizationId, parsed.data.includeOptional));
     } catch (e) {
       return handleError(res, e);
     }

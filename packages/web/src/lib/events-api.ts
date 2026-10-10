@@ -268,6 +268,35 @@ export async function fetchEventRegistrations(eventId: string): Promise<EventReg
   return response.json();
 }
 
+export interface AddEventAthletesResult {
+  added: string[];
+  updated: string[];
+  alreadyOnEvent: string[];
+  rejected: Array<{ userId: string; reason: string }>;
+  overCapacity?: boolean;
+}
+
+/**
+ * Add organization athletes to an event directly (silent: no invitation, no notification)
+ */
+export async function addEventAthletes(
+  eventId: string,
+  data: { userIds: string[]; checkIn?: boolean }
+): Promise<AddEventAthletesResult> {
+  const response = await fetch(`/api/events/${eventId}/registrations/bulk-add`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const message = await getErrorMessage(response, 'Failed to add athletes');
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
 /**
  * Approve a registration
  */
@@ -454,6 +483,35 @@ export async function addEventMetric(
 
   if (!response.ok) {
     const message = await getErrorMessage(response, 'Failed to add metric');
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+export interface BulkAddEventMetricsResult {
+  /** Codes this request inserted */
+  added: string[];
+  alreadyPresent: string[];
+  /** Codes that can not be event metrics: no such metric, switched off, computed from other tests, or not offered to the organization's type */
+  skipped: Array<{ metricCode: string; reason: 'unknown' | 'inactive' | 'derived' | 'unavailable' }>;
+}
+
+/**
+ * Add a whole metric list to an event in ONE request (one rate-limit hit, however many metrics)
+ */
+export async function addEventMetricsBulk(
+  eventId: string,
+  metrics: Array<{ metricCode: string; displayOrder?: number; isRequired?: boolean; customLabel?: string }>
+): Promise<BulkAddEventMetricsResult> {
+  const response = await fetch(`/api/events/${eventId}/metrics/bulk`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ metrics }),
+  });
+
+  if (!response.ok) {
+    const message = await getErrorMessage(response, 'Failed to add metrics');
     throw new Error(message);
   }
 
@@ -844,6 +902,23 @@ export function useEventRegistrations(eventId: string | undefined) {
     queryFn: () => fetchEventRegistrations(eventId!),
     enabled: !!eventId,
     staleTime: STALE_TIME.REALTIME,
+  });
+}
+
+/**
+ * Hook to add athletes to an event directly
+ */
+export function useAddEventAthletes() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ eventId, userIds, checkIn }: { eventId: string; userIds: string[]; checkIn?: boolean }) =>
+      addEventAthletes(eventId, { userIds, checkIn }),
+    onSuccess: (_, { eventId }) => {
+      queryClient.invalidateQueries({ queryKey: ['events', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['events', eventId, 'registrations'] });
+      queryClient.invalidateQueries({ queryKey: ['events', 'my-registrations'] });
+    },
   });
 }
 

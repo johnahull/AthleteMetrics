@@ -65,4 +65,13 @@ describe('updateEvalTemplateSchema', () => {
     expect(updateEvalTemplateSchema.parse({}).description).toBeUndefined();
     expect(updateEvalTemplateSchema.safeParse({ description: 'x'.repeat(2001) }).success).toBe(false);
   });
+
+  it('rejects control characters in the name; the description may hold line breaks and tabs only', () => {
+    expect(updateEvalTemplateSchema.safeParse({ name: 'Fall\u0000eval' }).success).toBe(false);
+    expect(updateEvalTemplateSchema.safeParse({ name: 'Fall\neval' }).success).toBe(false);
+    expect(createEvalTemplateSchema.safeParse({ name: 'Bad\u0007', sport: 'SOCCER', metrics: [metric('A')] }).success).toBe(false);
+    expect(updateEvalTemplateSchema.safeParse({ description: 'Line one\nLine two\r\n\tindented' }).success).toBe(true);
+    expect(updateEvalTemplateSchema.safeParse({ description: 'Bell\u0007' }).success).toBe(false);
+    expect(updateEvalTemplateSchema.safeParse({ description: 'Esc\u001b[0m' }).success).toBe(false);
+  });
 });

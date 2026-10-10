@@ -68,3 +68,11 @@ After an evaluation event a coach needs a family-facing report: only that event'
 ## Known limitations / follow-ups
 
 See `docs/EVAL_REPORT_FOLLOWUPS.md` for the prioritized list. Highlights: embedded Unicode font; merge-time renumbering of 0153; male benchmarks (AM-FEAT-020) and tier ladders for age-group sets; the eval Playwright spec is not in CI because the E2E suite is red (#490).
+
+## Addendum (2026-10): managing templates
+
+- **The server normalizes template keys.** Create and PATCH store every key as its logical key when the code has one (`FLY10_TIME` becomes `FLY_10`), using `keyForCode(resolveTemplateKey(key))`. The web knows metrics only by code, so the editor can send a code for a newly added test and the stored form stays canonical (labels, the single-leg rule and code renames keep working). Moving `TEMPLATE_METRIC_CODES` into `packages/shared` would have given the client the map too, but is a larger refactor for the same result.
+- **Eligibility is checked against what is new.** Derived metrics are always rejected; missing, inactive and not-offered metrics only when new in that save. Rejecting them always would block every edit of an older template after a site admin switches a metric off or narrows its organization types.
+- **Templates are copied, not linked.** Applying a template copies its tests into the event; nothing stores a template id. So edits and deletes never change existing events or reports.
+- **The UI deletes instead of archiving.** Since nothing references a template, a hard delete is safe; the audit row keeps the full template. Archive stays an API-only route with no restore: a restore route and an archived list would need name-collision handling against the live-name unique index, and are out of scope.
+- **Last write wins.** Two people saving the same template at once keep the later save; there is no version check.
