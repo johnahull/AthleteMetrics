@@ -36,6 +36,14 @@ vi.mock('@/lib/auth', () => ({
 
 // Stable references, like React Query returns between renders
 const EVENT = { id: 'ev-1', organizationId: 'org-1', name: 'Spring Screen', startDate: '2026-03-10T00:00:00.000Z', isFrozen: false };
+const FROZEN_EVENT = { ...EVENT, isFrozen: true };
+let eventState: typeof EVENT;
+const downloadRecordingSheet = vi.fn();
+
+vi.mock('@/lib/recording-sheet', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/recording-sheet')>()),
+  downloadRecordingSheet: (...args: unknown[]) => downloadRecordingSheet(...args),
+}));
 const REGISTRATIONS = [
   { id: 'r1', userId: 'ath-1', status: 'checked_in', userFullName: 'Jordan Lee' },
   { id: 'r2', userId: 'ath-2', status: 'checked_in', userFullName: 'Sam Park' },
@@ -49,7 +57,7 @@ vi.mock('@/lib/events-api', async () => {
   }
   return {
     MovementQualitySaveError,
-    useEvent: () => ({ data: EVENT, isLoading: false }),
+    useEvent: () => ({ data: eventState, isLoading: false }),
     useEventRegistrations: () => ({ data: registrationsState, isLoading: false, refetch: vi.fn() }),
     useEventMetrics: () => ({ data: eventMetricsState, isLoading: false }),
     useEventMeasurements: () => ({
@@ -112,6 +120,8 @@ beforeEach(() => {
   mutateBulk.mockReset();
   refetchMeasurements.mockReset();
   toast.mockReset();
+  downloadRecordingSheet.mockReset();
+  eventState = EVENT;
   measurementsState = { data: [], isError: false };
   registrationsState = REGISTRATIONS;
   authState = COACH_AUTH;
@@ -606,6 +616,202 @@ describe('EventDataEntry', () => {
       expect(screen.getByRole('rowheader', { name: /Jordan Lee/ })).toHaveTextContent(/completed/i);
       expect(screen.getByRole('rowheader', { name: /Sam Park/ })).toBeInTheDocument();
       expect(screen.queryByText('Pat Doe')).toBeNull();
+    });
+  });
+
+  describe('recording sheet', () => {
+    const saved = (id: string, userId: string, metricCode: string, value: number): Measurement =>
+      ({ id, userId, metric: metricCode, value: String(value), notes: null, mediaUrl: null, isCalculated: false, calculatedFromMeasurementIds: null }) as any;
+    const HEADER = 'Athlete ID (do not edit),Athlete,Vertical Jump (in) [VERTICAL_JUMP],10-Yard Fly (s) [FLY10_TIME]';
+    const csvFile = (lines: string[], eventId = 'ev-1') =>
+      new File([['Event,Spring Screen', 'Date,2026-03-10', `Event ID,${eventId}`, HEADER, ...lines].join('\n')], 'sheet.csv', { type: 'text/csv' });
+    const upload = async (user: ReturnType<typeof userEvent.setup>, file: File) => {
+      await user.upload(screen.getByLabelText('Recording sheet file'), file);
+      return screen.findByRole('region', { name: /^Sheet/ });
+    };
+    const cell = (name: string, label: string) => screen.getByRole('textbox', { name: `${label} for ${name}` });
+    const saveButton = () => screen.getByRole('button', { name: /^save/i });
+
+    beforeEach(() => {
+      eventMetricsState = [
+        metric('VERTICAL_JUMP'),
+        metric('FLY10_TIME', { displayOrder: 2 }),
+        metric('MOMENTUM', { displayOrder: 3, metricDetails: { label: 'Momentum', unit: 'kg·m/s', category: 'speed', isDerived: true } }),
+      ];
+    });
+
+    it('downloads a CSV or Excel sheet of the grid athletes and typed metrics only', async () => {
+      const user = userEvent.setup();
+      render(<EventDataEntry />);
+      await user.click(screen.getByRole('button', { name: /download sheet/i }));
+      await user.click(await screen.findByRole('menuitem', { name: /csv/i }));
+      expect(downloadRecordingSheet).toHaveBeenCalledWith(
+        {
+          eventId: 'ev-1',
+          eventName: 'Spring Screen',
+          eventDate: '2026-03-10',
+          metrics: [
+            { code: 'VERTICAL_JUMP', label: 'Vertical Jump', unit: 'in' },
+            { code: 'FLY10_TIME', label: '10-Yard Fly', unit: 's' },
+          ],
+          athletes: [
+            { userId: 'ath-1', name: 'Jordan Lee' },
+            { userId: 'ath-2', name: 'Sam Park' },
+          ],
+        },
+        'csv',
+      );
+      await user.click(screen.getByRole('button', { name: /download sheet/i }));
+      await user.click(await screen.findByRole('menuitem', { name: /excel/i }));
+      expect(downloadRecordingSheet).toHaveBeenLastCalledWith(expect.anything(), 'xlsx');
+    });
+
+    it('disables download and upload for a frozen event and says why', () => {
+      eventState = FROZEN_EVENT;
+      render(<EventDataEntry />);
+      expect(screen.getByRole('button', { name: /download sheet/i })).toBeDisabled();
+      expect(screen.getByRole('button', { name: /upload filled sheet/i })).toBeDisabled();
+      expect(screen.getByRole('button', { name: /upload filled sheet/i })).toHaveAccessibleDescription(/frozen/i);
+    });
+
+    it('blocks upload while the grid has unsaved edits', async () => {
+      const user = userEvent.setup();
+      render(<EventDataEntry />);
+      await user.type(cell('Jordan Lee', 'Vertical Jump'), '30');
+      expect(screen.getByRole('button', { name: /upload filled sheet/i })).toBeDisabled();
+      expect(screen.getByRole('button', { name: /upload filled sheet/i })).toHaveAccessibleDescription(/unsaved changes/i);
+    });
+
+    it('loads file values as unsaved cells, flags conflicts, lists rejected rows and moves focus to the summary', async () => {
+      const user = userEvent.setup();
+      measurementsState.data = [saved('m1', 'ath-1', 'FLY10_TIME', 1.65)];
+      render(<EventDataEntry />);
+      const summary = await upload(user, csvFile([
+        'ath-1,Jordan Lee,30.5,1.70',
+        'ath-2,Sam Park,,-',
+        'ath-9,Pat Doe,29,',
+        'ath-2,Sam Park,1,200,',
+      ]));
+
+      expect(cell('Jordan Lee', 'Vertical Jump')).toHaveValue('30.5');
+      expect(cell('Jordan Lee', 'Vertical Jump')).toHaveAttribute('data-state', 'imported');
+      expect(cell('Jordan Lee', '10-Yard Fly')).toHaveValue('1.65');
+      expect(cell('Jordan Lee', '10-Yard Fly')).toHaveAttribute('data-state', 'conflict');
+      expect(screen.getByRole('button', { name: 'Conflict for 10-Yard Fly for Jordan Lee: saved 1.65, file 1.70' })).toBeInTheDocument();
+
+      expect(within(summary).getByRole('status')).toHaveTextContent(/1 value loaded.*1 conflict/);
+      const alert = within(summary).getByRole('alert');
+      expect(alert).toHaveTextContent(/Row 7: Pat Doe is not on this event/);
+      expect(alert).toHaveTextContent(/Row 6: Sam Park appears more than once \(rows 6, 8\)/);
+      expect(alert).toHaveTextContent(/Row 8: Sam Park appears more than once/);
+      expect(within(summary).getByRole('heading', { name: /sheet\.csv/ })).toHaveFocus();
+      expect(saveButton()).toBeDisabled();
+      expect(screen.getByText(/1 conflict to resolve/i)).toBeInTheDocument();
+    });
+
+    it('rejects a sheet of another event and leaves the grid untouched', async () => {
+      const user = userEvent.setup();
+      render(<EventDataEntry />);
+      const summary = await upload(user, csvFile(['ath-1,Jordan Lee,30,'], 'ev-2'));
+      expect(within(summary).getByRole('alert')).toHaveTextContent(/different event/i);
+      expect(cell('Jordan Lee', 'Vertical Jump')).toHaveValue('');
+    });
+
+    it('lists invalid values and ignored columns', async () => {
+      const user = userEvent.setup();
+      render(<EventDataEntry />);
+      const file = new File([`${HEADER},Momentum [MOMENTUM]\nath-1,Jordan Lee,"1,5",DNF,500`], 'sheet.csv');
+      const summary = await upload(user, file);
+      expect(within(summary).getByRole('alert')).toHaveTextContent(/Row 2, Jordan Lee, Vertical Jump: "1,5": Use a dot/);
+      expect(within(summary).getByRole('alert')).toHaveTextContent(/10-Yard Fly: "DNF"/);
+      expect(summary).toHaveTextContent(/Column "Momentum \[MOMENTUM\]" was ignored: Momentum is calculated/);
+    });
+
+    it('"Use file value" replaces the single saved row; imported values are appended', async () => {
+      const user = userEvent.setup();
+      measurementsState.data = [saved('m1', 'ath-1', 'FLY10_TIME', 1.65)];
+      mutateBulk.mockResolvedValue({ created: [], replaced: [], errors: [] });
+      render(<EventDataEntry />);
+      await upload(user, csvFile(['ath-1,Jordan Lee,30.5,1.70']));
+
+      await user.click(screen.getByRole('button', { name: /^Conflict for 10-Yard Fly for Jordan Lee/ }));
+      await user.click(await screen.findByRole('button', { name: 'Use file value' }));
+      expect(cell('Jordan Lee', '10-Yard Fly')).toHaveValue('1.70');
+      expect(cell('Jordan Lee', '10-Yard Fly')).toHaveFocus();
+      expect(saveButton()).toBeEnabled();
+
+      await user.click(saveButton());
+      await waitFor(() => expect(mutateBulk).toHaveBeenCalledTimes(1));
+      expect(mutateBulk.mock.calls[0][0].measurements).toEqual([
+        { userId: 'ath-1', metric: 'VERTICAL_JUMP', value: 30.5, date: '2026-03-10T00:00:00.000Z' },
+        { userId: 'ath-1', metric: 'FLY10_TIME', value: 1.7, date: '2026-03-10T00:00:00.000Z', replaceMeasurementId: 'm1' },
+      ]);
+    });
+
+    it('"Use file value" on a cell with several trials adds a new trial', async () => {
+      const user = userEvent.setup();
+      measurementsState.data = [saved('t2', 'ath-1', 'FLY10_TIME', 1.65), saved('t1', 'ath-1', 'FLY10_TIME', 1.7)];
+      mutateBulk.mockResolvedValue({ created: [], replaced: [], errors: [] });
+      render(<EventDataEntry />);
+      const summary = await upload(user, csvFile(['ath-1,Jordan Lee,,1.60']));
+      await user.click(within(summary).getByRole('button', { name: 'Use all file values' }));
+      await user.click(saveButton());
+      await waitFor(() => expect(mutateBulk).toHaveBeenCalledTimes(1));
+      expect(mutateBulk.mock.calls[0][0].measurements).toEqual([
+        { userId: 'ath-1', metric: 'FLY10_TIME', value: 1.6, date: '2026-03-10T00:00:00.000Z' },
+      ]);
+    });
+
+    it('"Keep all saved" resolves every conflict and leaves only imported values to save', async () => {
+      const user = userEvent.setup();
+      measurementsState.data = [saved('m1', 'ath-1', 'FLY10_TIME', 1.65), saved('m2', 'ath-2', 'FLY10_TIME', 1.8)];
+      render(<EventDataEntry />);
+      const summary = await upload(user, csvFile(['ath-1,Jordan Lee,30,1.70', 'ath-2,Sam Park,,1.75']));
+      expect(screen.getByText(/2 conflicts to resolve/i)).toBeInTheDocument();
+      await user.click(within(summary).getByRole('button', { name: 'Keep all saved' }));
+      expect(cell('Jordan Lee', '10-Yard Fly')).toHaveAttribute('data-state', 'saved');
+      expect(cell('Sam Park', '10-Yard Fly')).toHaveValue('1.8');
+      expect(screen.getByRole('button', { name: /save \(1\)/i })).toBeEnabled();
+    });
+
+    it('keeps a pending import when measurements are refetched', async () => {
+      const user = userEvent.setup();
+      measurementsState.data = [saved('m1', 'ath-1', 'FLY10_TIME', 1.65)];
+      const { rerender } = render(<EventDataEntry />);
+      await upload(user, csvFile(['ath-1,Jordan Lee,30,1.70']));
+      measurementsState = { ...measurementsState, data: [...measurementsState.data] };
+      rerender(<EventDataEntry />);
+      expect(cell('Jordan Lee', 'Vertical Jump')).toHaveAttribute('data-state', 'imported');
+      expect(cell('Jordan Lee', '10-Yard Fly')).toHaveAttribute('data-state', 'conflict');
+    });
+
+    it('"Discard file values" puts the grid back to its saved values', async () => {
+      const user = userEvent.setup();
+      measurementsState.data = [saved('m1', 'ath-1', 'FLY10_TIME', 1.65)];
+      render(<EventDataEntry />);
+      const summary = await upload(user, csvFile(['ath-1,Jordan Lee,30,1.70']));
+      await user.click(within(summary).getByRole('button', { name: 'Discard file values' }));
+      expect(cell('Jordan Lee', 'Vertical Jump')).toHaveValue('');
+      expect(cell('Jordan Lee', '10-Yard Fly')).toHaveAttribute('data-state', 'saved');
+      expect(screen.queryByRole('region', { name: /^Sheet/ })).toBeNull();
+      expect(screen.getByRole('button', { name: /upload filled sheet/i })).toBeEnabled();
+    });
+
+    it('loads a filled XLSX sheet', async () => {
+      const user = userEvent.setup();
+      const { recordingSheetToXlsx } = await vi.importActual<typeof import('@/lib/recording-sheet')>('@/lib/recording-sheet');
+      const ExcelJS = (await import('exceljs')).default;
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load((await recordingSheetToXlsx({
+        eventId: 'ev-1', eventName: 'Spring Screen', eventDate: '2026-03-10',
+        metrics: [{ code: 'VERTICAL_JUMP', label: 'Vertical Jump', unit: 'in' }],
+        athletes: [{ userId: 'ath-2', name: 'Sam Park' }],
+      })) as unknown as ArrayBuffer);
+      wb.worksheets[0].getCell('C5').value = 28.5;
+      const file = new File([(await wb.xlsx.writeBuffer()) as ArrayBuffer], 'sheet.xlsx');
+      render(<EventDataEntry />);
+      await upload(user, file);
+      expect(cell('Sam Park', 'Vertical Jump')).toHaveValue('28.5');
     });
   });
 

@@ -1,0 +1,271 @@
+import { describe, it, expect } from 'vitest';
+import ExcelJS from 'exceljs';
+import Papa from 'papaparse';
+import {
+  ATHLETE_ID_HEADER,
+  buildRecordingSheet,
+  parseCsvSheet,
+  parseXlsxSheet,
+  recordingSheetToCsv,
+  recordingSheetToXlsx,
+  type SheetCell,
+  type SheetMetric,
+} from '../recording-sheet';
+import {
+  applyImportPlan,
+  discardImport,
+  planSheetImport,
+  resolveConflict,
+  type SheetImportAthlete,
+} from '../recording-sheet-import';
+
+const METRICS: SheetMetric[] = [
+  { code: 'VERTICAL_JUMP', label: 'Vertical Jump', unit: 'in' },
+  { code: 'FLY10_TIME', label: '10-Yard Fly', unit: 's' },
+];
+const HEADER = [ATHLETE_ID_HEADER, 'Athlete', 'Vertical Jump (in) [VERTICAL_JUMP]', '10-Yard Fly (s) [FLY10_TIME]'];
+const TOP = [['Event', 'Spring Screen'], ['Date', '2026-03-10'], ['Event ID', 'ev-1']];
+
+const athletes = (saved: Record<string, Record<string, number>> = {}): SheetImportAthlete[] => [
+  { userId: 'ath-1', name: 'Jordan Lee', saved: saved['ath-1'] ?? {} },
+  { userId: 'ath-2', name: 'Sam Park', saved: saved['ath-2'] ?? {} },
+];
+
+const plan = (rows: SheetCell[][], opts: Partial<Parameters<typeof planSheetImport>[0]> = {}) =>
+  planSheetImport({
+    rows,
+    format: 'csv',
+    eventId: 'ev-1',
+    athletes: athletes(),
+    metrics: METRICS,
+    ignoredMetrics: [],
+    ...opts,
+  });
+
+describe('planSheetImport', () => {
+  it('imports values into empty cells and skips blank and "-" cells', () => {
+    const result = plan([...TOP, HEADER, ['ath-1', 'Jordan Lee', ' 30.5 ', '-'], ['ath-2', 'Sam Park', '', '1.62']]);
+    expect(result.fileError).toBeUndefined();
+    expect(result.rejections).toEqual([]);
+    expect(result.cells).toEqual([
+      { userId: 'ath-1', metricCode: 'VERTICAL_JUMP', value: '30.5', kind: 'imported' },
+      { userId: 'ath-2', metricCode: 'FLY10_TIME', value: '1.62', kind: 'imported' },
+    ]);
+  });
+
+  it('flags a value that differs from the saved one as a conflict; an equal number is unchanged', () => {
+    const result = plan([HEADER, ['ath-1', 'Jordan Lee', '30.50', '1.70']], {
+      athletes: athletes({ 'ath-1': { VERTICAL_JUMP: 30.5, FLY10_TIME: 1.65 } }),
+    });
+    expect(result.cells).toEqual([
+      { userId: 'ath-1', metricCode: 'VERTICAL_JUMP', value: '30.50', kind: 'unchanged', savedValue: 30.5 },
+      { userId: 'ath-1', metricCode: 'FLY10_TIME', value: '1.70', kind: 'conflict', savedValue: 1.65 },
+    ]);
+  });
+
+  it('matches columns by [CODE] even when the label was edited, then by exact label', () => {
+    const result = plan([
+      [ATHLETE_ID_HEADER, 'Athlete', 'my jump [VERTICAL_JUMP]', '10-yard fly'],
+      ['ath-1', 'Jordan Lee', '30', '1.6'],
+    ]);
+    expect(result.cells.map((c) => c.metricCode)).toEqual(['VERTICAL_JUMP', 'FLY10_TIME']);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('matches a "Label (unit)" header without the code', () => {
+    const result = plan([[ATHLETE_ID_HEADER, 'Athlete', 'Vertical Jump (in)'], ['ath-1', 'Jordan Lee', '30']]);
+    expect(result.cells).toHaveLength(1);
+  });
+
+  it('ignores unknown columns and columns of metrics that are not typed, with a warning', () => {
+    const result = plan(
+      [
+        [ATHLETE_ID_HEADER, 'Athlete', 'Notes', 'Momentum [MOMENTUM]', 'Jump [MQ_JUMP]', 'Vertical Jump [VERTICAL_JUMP]'],
+        ['ath-1', 'Jordan Lee', 'fast', '500', '2', '30'],
+      ],
+      {
+        ignoredMetrics: [
+          { code: 'MOMENTUM', label: 'Momentum', reason: 'calculated from other metrics' },
+          { code: 'MQ_JUMP', label: 'Jump', reason: 'entered in the Movement Quality panel' },
+        ],
+      },
+    );
+    expect(result.cells).toEqual([{ userId: 'ath-1', metricCode: 'VERTICAL_JUMP', value: '30', kind: 'imported' }]);
+    expect(result.warnings).toEqual([
+      'Column "Notes" is not a metric of this event and was ignored.',
+      'Column "Momentum [MOMENTUM]" was ignored: Momentum is calculated from other metrics.',
+      'Column "Jump [MQ_JUMP]" was ignored: Jump is entered in the Movement Quality panel.',
+    ]);
+  });
+
+  it('ignores a second column for the same metric', () => {
+    const result = plan([
+      [ATHLETE_ID_HEADER, 'Athlete', 'Vertical Jump [VERTICAL_JUMP]', 'Again [VERTICAL_JUMP]'],
+      ['ath-1', 'Jordan Lee', '30', '31'],
+    ]);
+    expect(result.cells.map((c) => c.value)).toEqual(['30']);
+    expect(result.warnings[0]).toMatch(/Again \[VERTICAL_JUMP\].*ignored/);
+  });
+
+  it('rejects the whole file when its event id is another event', () => {
+    const result = plan([['Event ID', 'ev-2'], HEADER, ['ath-1', 'Jordan Lee', '30', '']]);
+    expect(result.fileError).toMatch(/different event/i);
+    expect(result.cells).toEqual([]);
+  });
+
+  it('accepts a file without an event id row', () => {
+    expect(plan([HEADER, ['ath-1', 'Jordan Lee', '30', '']]).cells).toHaveLength(1);
+  });
+
+  it('rejects a file without the athlete id or athlete name column', () => {
+    expect(plan([['Athlete', 'Vertical Jump [VERTICAL_JUMP]']]).fileError).toMatch(/Athlete ID/);
+    expect(plan([[ATHLETE_ID_HEADER, 'Vertical Jump [VERTICAL_JUMP]']]).fileError).toMatch(/"Athlete" column/);
+  });
+
+  it('rejects a file with more than 1000 rows', () => {
+    const rows = [HEADER, ...Array.from({ length: 1001 }, () => ['ath-1', 'Jordan Lee', '', ''])];
+    expect(plan(rows).fileError).toMatch(/1000 rows/);
+  });
+
+  it('rejects rows with a missing or unknown athlete id, and names that do not match the id', () => {
+    const result = plan([
+      HEADER,
+      ['', 'Jordan Lee', '30', ''],
+      ['ath-9', 'Pat Doe', '30', ''],
+      ['ath-2', 'Jordan Lee', '30', ''],
+      ['ath-1', ' jordan  LEE ', '30', ''],
+    ]);
+    expect(result.rejections).toEqual([
+      { row: 2, message: expect.stringMatching(/no athlete id/i) },
+      { row: 3, message: expect.stringMatching(/Pat Doe.*not on this event/) },
+      { row: 4, message: expect.stringMatching(/"Jordan Lee" does not match.*Sam Park/) },
+    ]);
+    expect(result.cells).toEqual([{ userId: 'ath-1', metricCode: 'VERTICAL_JUMP', value: '30', kind: 'imported' }]);
+  });
+
+  it('rejects every row of an athlete that appears more than once', () => {
+    const result = plan([HEADER, ['ath-1', 'Jordan Lee', '30', ''], ['ath-2', 'Sam Park', '28', ''], ['ath-1', 'Jordan Lee', '', '1.6']]);
+    expect(result.rejections).toEqual([
+      { row: 2, message: expect.stringMatching(/more than once \(rows 2, 4\)/) },
+      { row: 4, message: expect.stringMatching(/more than once \(rows 2, 4\)/) },
+    ]);
+    expect(result.cells.map((c) => c.userId)).toEqual(['ath-2']);
+  });
+
+  it('strips one leading apostrophe (CSV formula escape) from names, ids and the event id', () => {
+    const result = plan([['Event ID', "'ev-1"], HEADER, ["'ath-1", "'Jordan Lee", '30', '']], {
+      athletes: [{ userId: 'ath-1', name: 'Jordan Lee', saved: {} }],
+    });
+    expect(result.rejections).toEqual([]);
+    expect(result.cells).toHaveLength(1);
+  });
+
+  it('does not strip the apostrophe from XLSX names', () => {
+    const result = plan([HEADER, ['ath-1', "'Jordan Lee", '30', '']], { format: 'xlsx' });
+    expect(result.rejections).toHaveLength(1);
+  });
+
+  it('reports invalid values per cell: comma decimals, text, zero, negatives, date cells', () => {
+    const result = plan([
+      HEADER,
+      ['ath-1', 'Jordan Lee', '1,200', 'DNF'],
+      ['ath-2', 'Sam Park', '0', { error: 'Dates are not accepted' }],
+    ]);
+    expect(result.cells).toEqual([]);
+    expect(result.cellErrors).toEqual([
+      { row: 2, userId: 'ath-1', metricCode: 'VERTICAL_JUMP', raw: '1,200', message: expect.stringMatching(/dot for decimals/i) },
+      { row: 2, userId: 'ath-1', metricCode: 'FLY10_TIME', raw: 'DNF', message: 'Value must be a finite number' },
+      { row: 3, userId: 'ath-2', metricCode: 'VERTICAL_JUMP', raw: '0', message: 'Value must be positive' },
+      { row: 3, userId: 'ath-2', metricCode: 'FLY10_TIME', raw: '', message: 'Dates are not accepted' },
+    ]);
+  });
+
+  it('skips blank rows and does not change its inputs', () => {
+    const rows = [HEADER, [], ['', '', ''], ['ath-1', 'Jordan Lee', '30', '']];
+    const before = JSON.stringify(rows);
+    expect(plan(rows).cells).toHaveLength(1);
+    expect(JSON.stringify(rows)).toBe(before);
+  });
+});
+
+describe('round trip: generate, fill, read back, plan', () => {
+  const sheet = buildRecordingSheet({
+    event: { id: 'ev-1', name: '=Spring', startDate: '2026-03-10T00:00:00.000Z' },
+    metrics: [
+      { metricCode: 'VERTICAL_JUMP', metricDetails: { label: 'Vertical Jump', unit: 'in', category: null } },
+      { metricCode: 'FLY10_TIME', metricDetails: { label: '10-Yard Fly', unit: 's', category: null } },
+    ],
+    athletes: [
+      { userId: 'ath-1', name: 'Jordan Lee' },
+      { userId: 'ath-2', name: '-Sam Park' },
+    ],
+  });
+  const saved = [
+    { userId: 'ath-1', name: 'Jordan Lee', saved: { FLY10_TIME: 1.65 } },
+    { userId: 'ath-2', name: '-Sam Park', saved: {} },
+  ];
+  const expected = [
+    { userId: 'ath-1', metricCode: 'VERTICAL_JUMP', value: '30.5', kind: 'imported' },
+    { userId: 'ath-1', metricCode: 'FLY10_TIME', value: '1.7', kind: 'conflict', savedValue: 1.65 },
+    { userId: 'ath-2', metricCode: 'FLY10_TIME', value: '1.62', kind: 'imported' },
+  ];
+
+  it('CSV', () => {
+    const rows = parseCsvSheet(recordingSheetToCsv(sheet)) as string[][];
+    rows[4][2] = '30.5';
+    rows[4][3] = '1.7';
+    rows[5][3] = '1.62';
+    const filled = parseCsvSheet(Papa.unparse(rows));
+    const result = planSheetImport({ rows: filled, format: 'csv', eventId: 'ev-1', athletes: saved, metrics: sheet.metrics, ignoredMetrics: [] });
+    expect(result).toMatchObject({ rejections: [], cellErrors: [], warnings: [], cells: expected });
+  });
+
+  it('XLSX', async () => {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load((await recordingSheetToXlsx(sheet)) as unknown as ArrayBuffer);
+    const ws = wb.worksheets[0];
+    ws.getCell('C5').value = 30.5;
+    ws.getCell('D5').value = { formula: '1.6+0.1', result: 1.7 } as ExcelJS.CellFormulaValue;
+    ws.getCell('D6').value = '1.62';
+    const rows = await parseXlsxSheet((await wb.xlsx.writeBuffer()) as ArrayBuffer);
+    const result = planSheetImport({ rows, format: 'xlsx', eventId: 'ev-1', athletes: saved, metrics: sheet.metrics, ignoredMetrics: [] });
+    expect(result).toMatchObject({ rejections: [], cellErrors: [], warnings: [], cells: expected });
+  });
+});
+
+describe('applyImportPlan / resolveConflict / discardImport', () => {
+  const cell = (extra: Record<string, unknown> = {}) => ({ value: '', isDirty: false, savedCount: 0, ...extra });
+  const grid = () => ({
+    'ath-1': { userId: 'ath-1', measurements: { VERTICAL_JUMP: cell(), FLY10_TIME: cell({ value: '1.65', originalValue: 1.65, savedCount: 1 }) } },
+  });
+  const importPlan = planSheetImport({
+    rows: [HEADER, ['ath-1', 'Jordan Lee', '30', '1.70']],
+    format: 'csv',
+    eventId: 'ev-1',
+    athletes: athletes({ 'ath-1': { FLY10_TIME: 1.65 } }),
+    metrics: METRICS,
+    ignoredMetrics: [],
+  });
+
+  it('fills imported cells as unsaved and keeps the saved value of a conflict cell', () => {
+    const before = grid();
+    const next = applyImportPlan(before, importPlan);
+    expect(next['ath-1'].measurements.VERTICAL_JUMP).toMatchObject({ value: '30', isDirty: true, fromImport: true });
+    expect(next['ath-1'].measurements.FLY10_TIME).toMatchObject({ value: '1.65', isDirty: false, importedValue: '1.70' });
+    expect(before['ath-1'].measurements.VERTICAL_JUMP.value).toBe('');
+  });
+
+  it('keeps the saved value or uses the file value', () => {
+    const conflict = applyImportPlan(grid(), importPlan)['ath-1'].measurements.FLY10_TIME;
+    expect(resolveConflict(conflict, 'saved')).toMatchObject({ value: '1.65', isDirty: false, importedValue: undefined });
+    expect(resolveConflict(conflict, 'file')).toMatchObject({ value: '1.70', isDirty: true, fromImport: true, importedValue: undefined });
+  });
+
+  it('discards file values back to the saved state, leaving typed edits alone', () => {
+    const next = applyImportPlan(grid(), importPlan);
+    expect(discardImport(next['ath-1'].measurements.VERTICAL_JUMP)).toMatchObject({ value: '', isDirty: false, fromImport: false });
+    expect(discardImport(next['ath-1'].measurements.FLY10_TIME)).toMatchObject({ value: '1.65', importedValue: undefined });
+    const typed = cell({ value: '5', isDirty: true });
+    expect(discardImport(typed)).toBe(typed);
+  });
+});
