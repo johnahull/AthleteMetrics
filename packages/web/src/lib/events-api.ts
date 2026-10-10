@@ -1303,18 +1303,18 @@ export interface CreateEventMeasurementInput {
   notes?: string;
   /** Optional https link (e.g. video clip). Empty string or null clears. */
   mediaUrl?: string | null;
+  /** Update this saved row (same event, athlete and metric) instead of appending a new one */
+  replaceMeasurementId?: string;
 }
 
 /**
- * Result from bulk measurement creation
+ * Result from bulk measurement creation. `index` is the item's position in the request array.
  */
 export interface BulkMeasurementResult {
-  success: boolean;
-  created: Measurement[];
-  errors: Array<{
-    index: number;
-    message: string;
-  }>;
+  created: Array<Measurement & { index: number }>;
+  /** Rows updated in place through replaceMeasurementId */
+  replaced: Array<Measurement & { index: number }>;
+  errors: Array<{ index: number; error: string }>;
 }
 
 /**
