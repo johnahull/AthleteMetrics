@@ -756,7 +756,7 @@ export default function EventDataEntry() {
                         Athlete
                       </th>
                       {gridMetrics.map((metric: EventMetricWithDetails) => {
-                        const display = displayByCode.get(metric.metricCode)!;
+                        const display = displayByCode.get(metric.metricCode) ?? getEventMetricDisplay(metric);
                         return (
                           <th
                             key={metric.metricCode}
@@ -837,7 +837,7 @@ export default function EventDataEntry() {
                                   handleCellChange(row.userId, metric.metricCode, e.target.value)
                                 }
                                 disabled={event.isFrozen}
-                                aria-label={`${displayByCode.get(metric.metricCode)!.label} for ${row.fullName}`}
+                                aria-label={`${(displayByCode.get(metric.metricCode) ?? getEventMetricDisplay(metric)).label} for ${row.fullName}`}
                                 aria-required={metric.isRequired || undefined}
                                 aria-invalid={cell.error ? true : undefined}
                                 aria-describedby={cell.error ? errorId : undefined}

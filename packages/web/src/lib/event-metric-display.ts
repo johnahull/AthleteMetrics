@@ -25,7 +25,7 @@ export function getEventMetricDisplay(metric: EventMetricWithSiteDetails): Event
   return {
     code: metric.metricCode,
     label: metric.customLabel?.trim() || details?.label || metric.metricCode,
-    unit: details?.unit || undefined,
+    unit: details?.unit?.trim() || undefined,
     category: details?.category || undefined,
   };
 }

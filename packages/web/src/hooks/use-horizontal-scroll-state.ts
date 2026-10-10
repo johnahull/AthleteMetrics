@@ -29,6 +29,7 @@ export function useHorizontalScrollState() {
     const update = () => {
       const maxScroll = node.scrollWidth - node.clientWidth;
       const next = {
+        // > 1, not > 0: a 1px fractional-rounding overflow is not worth showing the hint for
         hasOverflow: maxScroll > 1,
         canScrollLeft: node.scrollLeft > 1,
         canScrollRight: node.scrollLeft < maxScroll - 1,
@@ -49,6 +50,7 @@ export function useHorizontalScrollState() {
     if (typeof ResizeObserver !== "undefined") {
       observer = new ResizeObserver(update);
       observer.observe(node);
+      // The scroller's first element child must be the table (TooltipProvider renders no DOM element)
       if (node.firstElementChild) observer.observe(node.firstElementChild);
     }
 
