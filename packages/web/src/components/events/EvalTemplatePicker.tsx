@@ -4,11 +4,14 @@
  * Renders nothing when the templates cannot be read (a non-writer) or there are none.
  */
 
+import { useRef, type Dispatch, type SetStateAction } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useEvalTemplates } from "@/hooks/use-eval-report";
-import { SINGLE_LEG_CMJ_KEYS, templateMetricLabel } from "@/lib/eval-template-labels";
+import { useEvalTemplates, useFetchResolvedEvalTemplate, useResolvedEvalTemplate } from "@/hooks/use-eval-report";
+import { SINGLE_LEG_CMJ_KEYS, templateKeyLabel, templateMetricLabel } from "@/lib/eval-template-labels";
+import { clearTemplateEntries, replaceTemplateEntries, setOptionalEntry, unavailableTests } from "@/lib/eval-template-selection";
+import type { SelectedMetric } from "./MetricsSelector";
 
 export interface EvalTemplateChoice {
   templateId: string;
@@ -20,22 +23,52 @@ interface EvalTemplatePickerProps {
   organizationId: string | undefined;
   value: EvalTemplateChoice | null;
   onChange: (value: EvalTemplateChoice | null) => void;
+  /** Updates the form's metrics list, which the picker fills */
+  onSelectedMetricsChange: Dispatch<SetStateAction<SelectedMetric[]>>;
 }
 
 const NONE = "none";
 
-export function EvalTemplatePicker({ organizationId, value, onChange }: EvalTemplatePickerProps) {
+export function EvalTemplatePicker({ organizationId, value, onChange, onSelectedMetricsChange }: EvalTemplatePickerProps) {
   const { data: templates, isError } = useEvalTemplates(organizationId);
+  const { data: resolvedTemplate, isError: resolveFailed, isLoading: resolving } = useResolvedEvalTemplate(value?.templateId);
+  const fetchResolved = useFetchResolvedEvalTemplate();
+  // The template picked last: a slow answer for an earlier pick must not fill the list
+  const latestPick = useRef<string | null>(value?.templateId ?? null);
   if (isError || !templates || templates.length === 0) return null;
 
   const selected = templates.find((t) => t.id === value?.templateId);
-  const optional = selected?.metrics.filter((m) => !m.isRequired) ?? [];
+  const resolved = value && resolvedTemplate?.template.id === value.templateId ? resolvedTemplate.metrics : undefined;
+  // Once resolved, only tests that can really be added are offered; until then the ticks wait
+  const unavailableKeys = new Set(resolved?.filter((m) => m.status !== "available").map((m) => m.metricKey));
+  const optional = selected?.metrics.filter((m) => !m.isRequired && !unavailableKeys.has(m.metricKey)) ?? [];
   const hasSingleLegPair = SINGLE_LEG_CMJ_KEYS.every((k) => optional.some((m) => m.metricKey === k));
+  const unavailable = resolved ? unavailableTests(resolved) : null;
+
+  const chooseTemplate = async (id: string) => {
+    latestPick.current = id === NONE ? null : id;
+    if (id === NONE) {
+      onChange(null);
+      onSelectedMetricsChange(clearTemplateEntries);
+      return;
+    }
+    onChange({ templateId: id, includeOptional: [] });
+    // Drop the previous template's tests right away; the new ones arrive when the template is resolved
+    onSelectedMetricsChange(clearTemplateEntries);
+    try {
+      const answer = await fetchResolved(id);
+      if (latestPick.current !== id) return;
+      onSelectedMetricsChange((list) => replaceTemplateEntries(list, answer.metrics, []));
+    } catch {
+      // The query reports the failure below; nothing is added
+    }
+  };
 
   const toggleOptional = (key: string, checked: boolean) => {
-    if (!value) return;
+    if (!value || !resolved) return;
     const next = checked ? [...value.includeOptional, key] : value.includeOptional.filter((k) => k !== key);
     onChange({ templateId: value.templateId, includeOptional: next });
+    onSelectedMetricsChange((list) => setOptionalEntry(list, resolved, key, checked));
   };
 
   return (
@@ -44,7 +77,7 @@ export function EvalTemplatePicker({ organizationId, value, onChange }: EvalTemp
         <Label htmlFor="eval-template-select">Start from template (optional)</Label>
         <Select
           value={value?.templateId ?? NONE}
-          onValueChange={(id) => onChange(id === NONE ? null : { templateId: id, includeOptional: [] })}
+          onValueChange={chooseTemplate}
         >
           <SelectTrigger id="eval-template-select">
             <SelectValue />
@@ -58,7 +91,22 @@ export function EvalTemplatePicker({ organizationId, value, onChange }: EvalTemp
             ))}
           </SelectContent>
         </Select>
-        <p className="text-xs text-muted-foreground">Adds the template's required tests to the event after it is created.</p>
+        <p className="text-xs text-muted-foreground">Fills the tests below. Add or remove tests before you create the event.</p>
+        {value && resolveFailed && (
+          <p role="alert" className="text-xs text-destructive">
+            Could not load this template's tests. Nothing was added; pick the template again or add tests by hand.
+          </p>
+        )}
+        {unavailable && unavailable.notAvailableYet.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            Not available yet: {unavailable.notAvailableYet.map((m) => templateMetricLabel(m)).join(", ")}
+          </p>
+        )}
+        {unavailable && unavailable.calculated.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            Calculated automatically, nothing to enter: {unavailable.calculated.map((m) => templateKeyLabel(m.metricKey, m.customLabel)).join(", ")}
+          </p>
+        )}
       </div>
 
       {value && optional.length > 0 && (
@@ -70,6 +118,7 @@ export function EvalTemplatePicker({ organizationId, value, onChange }: EvalTemp
                 <Checkbox
                   id={`eval-optional-${m.metricKey}`}
                   checked={value.includeOptional.includes(m.metricKey)}
+                  disabled={resolving || !resolved}
                   onCheckedChange={(c) => toggleOptional(m.metricKey, c === true)}
                 />
                 <Label htmlFor={`eval-optional-${m.metricKey}`} className="cursor-pointer font-normal">

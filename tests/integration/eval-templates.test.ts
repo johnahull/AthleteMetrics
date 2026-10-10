@@ -48,6 +48,9 @@ describe('eval templates and org eval report settings', () => {
   let tplB: string;
   let createdGlobalId: string | null = null;
   const createdSiteMetricCodes: string[] = [];
+  const SUFFIX = Math.random().toString(36).slice(2, 8).toUpperCase();
+  const DERIVED_CODE = `ZZ_DERIVED_${SUFFIX}`;
+  const INACTIVE_CODE = `ZZ_INACTIVE_${SUFFIX}`;
 
   const as = (who: Who) => ({
     get: (url: string) => request(app).get(url).set('Cookie', cookies[who]),
@@ -128,6 +131,12 @@ describe('eval templates and org eval report settings', () => {
         .onConflictDoNothing()
         .returning({ code: siteMetrics.code });
       if (inserted.length > 0) createdSiteMetricCodes.push(code);
+    }
+
+    // A derived and an inactive metric, for the resolved statuses (literal codes: a key outside the key map is a code)
+    for (const [code, extra] of [[DERIVED_CODE, { isDerived: true }], [INACTIVE_CODE, { isActive: false }]] as const) {
+      await db.insert(siteMetrics).values({ code, label: `Label ${code}`, category: 'power', unit: 'kg', metricType: 'tracking', ...extra } as any);
+      createdSiteMetricCodes.push(code);
     }
 
     [{ id: eventA }, { id: eventB }] = await db
@@ -472,6 +481,84 @@ describe('eval templates and org eval report settings', () => {
       const res = await as('coachA').post(`/api/events/${ev}/apply-eval-template`).send({ templateId: globalId });
       expect(res.status).toBe(409);
       expect(await codesOf(ev)).toEqual([]);
+    });
+  });
+
+  describe('GET /api/eval-templates/:id/resolved', () => {
+    let tplId: string;
+    beforeAll(async () => {
+      // Stored out of order on purpose: the answer is in displayOrder
+      [{ id: tplId }] = await db.insert(evalBatteryTemplates).values({
+        organizationId: orgA, sport: 'SOCCER', name: `${PREFIX}-resolved`,
+        metrics: [
+          { metricKey: DERIVED_CODE, isRequired: false, displayOrder: 5 },
+          { metricKey: 'ZZ_NO_SUCH_CODE', isRequired: true, displayOrder: 4 },
+          { metricKey: 'FLY_10', isRequired: true, displayOrder: 2 },
+          { metricKey: INACTIVE_CODE, isRequired: false, displayOrder: 3 },
+          { metricKey: 'DASH_10', isRequired: true, displayOrder: 1 },
+        ],
+      } as any).returning({ id: evalBatteryTemplates.id });
+    });
+
+    it('returns the template, every entry resolved to its code with a status, in displayOrder', async () => {
+      const res = await as('coachA').get(`/api/eval-templates/${tplId}/resolved`);
+      expect(res.status).toBe(200);
+      expect(res.body.template).toEqual({ id: tplId, name: `${PREFIX}-resolved` });
+      expect(res.body.metrics.map((m: any) => [m.metricKey, m.code, m.status, m.isRequired, m.displayOrder])).toEqual([
+        ['DASH_10', 'DASH_10YD', 'available', true, 1],
+        ['FLY_10', 'FLY10_TIME', 'available', true, 2],
+        [INACTIVE_CODE, INACTIVE_CODE, 'inactive', false, 3],
+        ['ZZ_NO_SUCH_CODE', 'ZZ_NO_SUCH_CODE', 'missing', true, 4],
+        [DERIVED_CODE, DERIVED_CODE, 'derived', false, 5],
+      ]);
+    });
+
+    it('carries the site metric label, unit and category when the metric exists, nulls when it does not', async () => {
+      const res = await as('coachA').get(`/api/eval-templates/${tplId}/resolved`);
+      const byKey = Object.fromEntries(res.body.metrics.map((m: any) => [m.metricKey, m]));
+      expect(byKey.DASH_10).toMatchObject({ label: expect.any(String), unit: 's', category: expect.any(String) });
+      expect(byKey[DERIVED_CODE]).toMatchObject({ label: `Label ${DERIVED_CODE}`, unit: 'kg', category: 'power' });
+      expect(byKey.ZZ_NO_SUCH_CODE).toMatchObject({ label: null, unit: null, category: null });
+    });
+
+    it('is readable by org_admin and by a site admin; the global default by a writer of any org', async () => {
+      expect((await as('adminA').get(`/api/eval-templates/${tplId}/resolved`)).status).toBe(200);
+      expect((await as('siteAdmin').get(`/api/eval-templates/${tplId}/resolved`)).status).toBe(200);
+      const g = await as('coachB').get(`/api/eval-templates/${globalId}/resolved`);
+      expect(g.status).toBe(200);
+      expect(g.body.template.id).toBe(globalId);
+    });
+
+    it('answers 404 to an athlete (even for the global default), another org\'s coach and an unknown id', async () => {
+      expect((await as('athleteA').get(`/api/eval-templates/${tplId}/resolved`)).status).toBe(404);
+      expect((await as('athleteA').get(`/api/eval-templates/${globalId}/resolved`)).status).toBe(404);
+      expect((await as('coachB').get(`/api/eval-templates/${tplId}/resolved`)).status).toBe(404);
+      expect((await as('coachA').get(`/api/eval-templates/${tplB}/resolved`)).status).toBe(404);
+      expect((await as('coachA').get(`/api/eval-templates/no-such-template/resolved`)).status).toBe(404);
+    });
+
+    it('requires login', async () => {
+      expect((await request(app).get(`/api/eval-templates/${tplId}/resolved`)).status).toBe(401);
+    });
+  });
+
+  describe('apply template: derived metrics', () => {
+    it('skips a derived metric (reported by key) and adds the rest', async () => {
+      const [t] = await db.insert(evalBatteryTemplates).values({
+        organizationId: orgB, sport: 'SOCCER', name: `${PREFIX}-with-derived`,
+        metrics: [
+          { metricKey: 'DASH_10', isRequired: true, displayOrder: 1 },
+          { metricKey: DERIVED_CODE, isRequired: false, displayOrder: 2 },
+          { metricKey: INACTIVE_CODE, isRequired: true, displayOrder: 3 },
+        ],
+      } as any).returning({ id: evalBatteryTemplates.id });
+      const [ev] = await db.insert(events).values({ organizationId: orgB, name: `${PREFIX}-ev-derived`, startDate: new Date('2026-03-01T10:00:00Z') } as any).returning({ id: events.id });
+      const res = await as('coachB').post(`/api/events/${ev.id}/apply-eval-template`).send({ templateId: t.id, includeOptional: [DERIVED_CODE] });
+      expect(res.status).toBe(200);
+      expect(res.body.added).toEqual(['DASH_10YD']);
+      expect(res.body.skipped.sort()).toEqual([DERIVED_CODE, INACTIVE_CODE].sort());
+      const rows = await db.select().from(eventMetrics).where(eq(eventMetrics.eventId, ev.id));
+      expect(rows.map((r) => r.metricCode)).toEqual(['DASH_10YD']);
     });
   });
 

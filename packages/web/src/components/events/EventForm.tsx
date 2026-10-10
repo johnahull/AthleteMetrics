@@ -49,9 +49,8 @@ type EventFormValues = z.infer<typeof eventFormSchema>;
 
 // Extended form data that includes selected metrics
 export interface EventFormData extends EventFormValues {
+  /** The final list, including the tests an eval template filled in; saved in one request after the event exists */
   selectedMetrics: SelectedMetric[];
-  /** Eval battery template to apply once the event exists (create mode only) */
-  evalTemplate?: EvalTemplateChoice | null;
 }
 
 interface EventFormProps {
@@ -136,7 +135,6 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, organ
       const formData: EventFormData = {
         ...data,
         selectedMetrics,
-        evalTemplate,
       };
       onSubmit(formData, isDraft);
     })();
@@ -442,7 +440,12 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, organ
             </CardHeader>
             <CardContent className="space-y-6">
               {!isEditMode && (
-                <EvalTemplatePicker organizationId={organizationId} value={evalTemplate} onChange={setEvalTemplate} />
+                <EvalTemplatePicker
+                  organizationId={organizationId}
+                  value={evalTemplate}
+                  onChange={setEvalTemplate}
+                  onSelectedMetricsChange={setSelectedMetrics}
+                />
               )}
               <MetricsSelector
                 selectedMetrics={selectedMetrics}

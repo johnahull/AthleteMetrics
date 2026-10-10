@@ -88,6 +88,17 @@ export function registerEvalTemplateRoutes(app: Express) {
     }
   });
 
+  /** The template's tests resolved against site_metrics, for the new-event form. Same visibility as the plain read. */
+  app.get("/api/eval-templates/:id/resolved", requireAuth, readLimiter, async (req, res) => {
+    try {
+      const template = await svc.getVisibleTemplate(userOf(req), req.params.id);
+      if (!template) return res.status(404).json(NOT_FOUND);
+      return res.json({ template: { id: template.id, name: template.name }, metrics: await svc.resolveTemplateMetrics(template) });
+    } catch (e) {
+      return handleError(res, e);
+    }
+  });
+
   /** Resolve the template for a change; 404 if not visible, 403 if visible but not editable (global default). */
   async function editableTemplate(req: Request, res: Response) {
     const template = await svc.getVisibleTemplate(userOf(req), req.params.id);

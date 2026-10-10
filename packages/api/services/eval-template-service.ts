@@ -182,10 +182,55 @@ export async function deleteTemplate(id: string) {
 const SINGLE_LEG_CMJ = ["CMJ_SL_LEFT", "CMJ_SL_RIGHT"];
 
 /**
+ * 'derived': the metric is computed, never entered, so it can not be an event metric.
+ * 'inactive': switched off by a site admin. 'missing': no site_metrics row for the key's code.
+ */
+export type ResolvedMetricStatus = "available" | "missing" | "inactive" | "derived";
+
+export interface ResolvedTemplateMetric {
+  metricKey: string;
+  code: string;
+  /** site_metrics label, null when the metric is missing */
+  label: string | null;
+  unit: string | null;
+  category: string | null;
+  customLabel?: string;
+  isRequired: boolean;
+  displayOrder: number;
+  status: ResolvedMetricStatus;
+}
+
+/** Every entry of the template resolved to its site_metrics code and status, in displayOrder (ONE query). */
+export async function resolveTemplateMetrics(template: Pick<EvalBatteryTemplate, "metrics">): Promise<ResolvedTemplateMetric[]> {
+  const entries = [...template.metrics].sort((a, b) => a.displayOrder - b.displayOrder).map((m) => ({ ...m, code: resolveTemplateKey(m.metricKey) }));
+  if (entries.length === 0) return [];
+  const rows = await db
+    .select({ code: siteMetrics.code, label: siteMetrics.label, unit: siteMetrics.unit, category: siteMetrics.category, isActive: siteMetrics.isActive, isDerived: siteMetrics.isDerived })
+    .from(siteMetrics)
+    .where(inArray(siteMetrics.code, entries.map((m) => m.code)));
+  const byCode = new Map(rows.map((r) => [r.code, r]));
+  return entries.map((m) => {
+    const row = byCode.get(m.code);
+    const status: ResolvedMetricStatus = !row ? "missing" : row.isDerived ? "derived" : !row.isActive ? "inactive" : "available";
+    return {
+      metricKey: m.metricKey,
+      code: m.code,
+      label: row?.label ?? null,
+      unit: row?.unit ?? null,
+      category: row?.category ?? null,
+      ...(m.customLabel ? { customLabel: m.customLabel } : {}),
+      isRequired: m.isRequired,
+      displayOrder: m.displayOrder,
+      status,
+    };
+  });
+}
+
+/**
  * Pre-load the event's metrics from a template: the required ones, plus the optional ones named in
- * `includeOptional` (at most one single-leg CMJ). Keys whose site_metrics code does not exist or is inactive are skipped
- * and returned in `skipped`; metrics already on the event are left alone (`alreadyPresent`). The write goes
- * through EventMetricsService.bulkAddMetrics (frozen check and audit log).
+ * `includeOptional` (at most one single-leg CMJ). Keys whose site_metrics code does not exist, is inactive or is
+ * derived are skipped and returned in `skipped`; metrics already on the event are left alone (`alreadyPresent`).
+ * The write goes through EventMetricsService.bulkAddMetrics (frozen check and audit log).
  */
 export async function applyTemplateToEvent(eventId: string, userId: string, template: EvalBatteryTemplate, includeOptional: string[] = []) {
   const optionalKeys = new Set(template.metrics.filter((m) => !m.isRequired).map((m) => m.metricKey));
@@ -195,20 +240,16 @@ export async function applyTemplateToEvent(eventId: string, userId: string, temp
     throw new TemplateValidationError("Use one single-leg CMJ per athlete, not both");
   }
 
-  const chosen = template.metrics
-    .filter((m) => m.isRequired || includeOptional.includes(m.metricKey))
-    .map((m) => ({ ...m, code: resolveTemplateKey(m.metricKey) }));
+  const chosen = (await resolveTemplateMetrics(template)).filter((m) => m.isRequired || includeOptional.includes(m.metricKey));
   if (chosen.length === 0) return { added: [], skipped: [], alreadyPresent: [] };
-  const known = new Set(
-    (await db.select({ code: siteMetrics.code }).from(siteMetrics).where(and(inArray(siteMetrics.code, chosen.map((m) => m.code)), eq(siteMetrics.isActive, true)))).map((r) => r.code)
-  );
   const present = new Set(
     (await db.select({ code: eventMetrics.metricCode }).from(eventMetrics).where(eq(eventMetrics.eventId, eventId))).map((r) => r.code)
   );
 
-  const skipped = chosen.filter((m) => !known.has(m.code)).map((m) => m.metricKey);
-  const alreadyPresent = chosen.filter((m) => known.has(m.code) && present.has(m.code)).map((m) => m.code);
-  const toAdd = chosen.filter((m) => known.has(m.code) && !present.has(m.code));
+  const usable = chosen.filter((m) => m.status === "available");
+  const skipped = chosen.filter((m) => m.status !== "available").map((m) => m.metricKey);
+  const alreadyPresent = usable.filter((m) => present.has(m.code)).map((m) => m.code);
+  const toAdd = usable.filter((m) => !present.has(m.code));
   let inserted: Set<string>;
   try {
     const rows = await new EventMetricsService(storage).bulkAddMetrics(

@@ -76,10 +76,25 @@ export interface EvalTemplate {
   metrics: EvalTemplateMetric[];
 }
 
-export interface ApplyEvalTemplateResult {
-  added: string[];
-  skipped: string[];
-  alreadyPresent: string[];
+/** 'derived' = computed, never entered, so it can not be an event metric; 'missing'/'inactive' = not usable yet */
+export type ResolvedEvalMetricStatus = "available" | "missing" | "inactive" | "derived";
+
+export interface ResolvedEvalTemplateMetric {
+  metricKey: string;
+  code: string;
+  /** site_metrics label, null when the metric does not exist */
+  label: string | null;
+  unit: string | null;
+  category: string | null;
+  customLabel?: string;
+  isRequired: boolean;
+  displayOrder: number;
+  status: ResolvedEvalMetricStatus;
+}
+
+export interface ResolvedEvalTemplate {
+  template: { id: string; name: string };
+  metrics: ResolvedEvalTemplateMetric[];
 }
 
 const MAX_PLAIN_ERROR_LENGTH = 300;
@@ -106,6 +121,7 @@ export const evalReportKeys = {
     ["eval-report", eventId, athleteId, "model", tag, body] as const,
   settings: (orgId: string) => ["eval-report-settings", orgId] as const,
   templates: (orgId: string) => ["eval-templates", orgId] as const,
+  resolvedTemplate: (templateId: string) => ["eval-template-resolved", templateId] as const,
 };
 
 export function useEvalReportDefaults(eventId: string, athleteId: string, enabled: boolean) {
@@ -223,6 +239,23 @@ export function useEvalTemplates(orgId: string | undefined) {
   });
 }
 
+const resolvedTemplateQuery = (templateId: string) => ({
+  queryKey: evalReportKeys.resolvedTemplate(templateId),
+  queryFn: async (): Promise<ResolvedEvalTemplate> => (await apiRequest("GET", `/api/eval-templates/${templateId}/resolved`)).json(),
+  retry: false,
+});
+
+/** A template's tests resolved against the metric catalog (what the new-event form lists) */
+export function useResolvedEvalTemplate(templateId: string | undefined) {
+  return useQuery<ResolvedEvalTemplate>({ ...resolvedTemplateQuery(templateId ?? ""), enabled: !!templateId });
+}
+
+/** Imperative twin of useResolvedEvalTemplate, sharing its cache: for the moment a template is picked */
+export function useFetchResolvedEvalTemplate() {
+  const queryClient = useQueryClient();
+  return (templateId: string) => queryClient.fetchQuery(resolvedTemplateQuery(templateId));
+}
+
 /** Save the event's current metric set as an org template */
 export function useSaveEventAsTemplate(eventId: string, orgId: string | undefined) {
   const queryClient = useQueryClient();
@@ -230,11 +263,4 @@ export function useSaveEventAsTemplate(eventId: string, orgId: string | undefine
     mutationFn: async (body) => (await apiRequest("POST", `/api/events/${eventId}/eval-templates`, body)).json(),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: evalReportKeys.templates(orgId ?? "") }),
   });
-}
-
-export async function applyEvalTemplate(
-  eventId: string,
-  body: { templateId: string; includeOptional?: string[] }
-): Promise<ApplyEvalTemplateResult> {
-  return (await apiRequest("POST", `/api/events/${eventId}/apply-eval-template`, body)).json();
 }

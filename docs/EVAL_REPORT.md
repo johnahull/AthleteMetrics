@@ -1,6 +1,6 @@
 # Eval Report (AM-FEAT-019)
 
-A coach opens an evaluation event, picks an athlete, chooses metrics and sections (with age-group presets and defaults), previews, and downloads a branded PDF. Every generation is saved as a `reports` row (`reportType = 'eval'`). Eval batteries can be saved as templates and applied to a new event.
+A coach opens an evaluation event, picks an athlete, chooses metrics and sections (with age-group presets and defaults), previews, and downloads a branded PDF. Every generation is saved as a `reports` row (`reportType = 'eval'`). Eval batteries can be saved as templates and chosen on the New event form: picking a template fills the form's metrics list (required tests plus the optional ones the coach ticks), the coach adds or removes tests, and the final list is saved in one request (`POST /api/events/:eventId/metrics/bulk`) after the event is created. Tests the template lists but that cannot be added (missing, inactive, derived) are named in the picker. Switching template or choosing "No template" only removes the entries that came from the template, never tests added by hand.
 
 Design record and reasons: `docs/adr/ADR-002-eval-report-v2.md`. Open items: `docs/EVAL_REPORT_FOLLOWUPS.md`.
 
@@ -56,10 +56,12 @@ Other report routes (delete, pin, archive, generate, snapshot list and delete, s
 | POST | `/api/organizations/:orgId/eval-templates` | Writer of `:orgId` | 201 template (metrics as logical keys; 400 unknown metrics, 409 duplicate name) |
 | POST | `/api/events/:eventId/eval-templates` | Writer of the event's org | 201 template made from the event's metrics (400 if none) |
 | GET | `/api/eval-templates/:id` | Writer of the template's org (any writer for the global default) | Template |
+| GET | `/api/eval-templates/:id/resolved` | Same as the read above | `{ template: { id, name }, metrics: [{ metricKey, code, label, unit, category, isRequired, displayOrder, status, customLabel? }] }` in displayOrder; `status` is `available`, `missing` (no `site_metrics` row), `inactive` or `derived` (computed, never an event metric). One query |
 | PATCH | `/api/eval-templates/:id` | Writer of the template's org; site admin only for the global default (403) | Template |
 | POST | `/api/eval-templates/:id/archive` | Same | Template |
 | DELETE | `/api/eval-templates/:id` | Same; the global default cannot be deleted (409) | 204 |
-| POST | `/api/events/:eventId/apply-eval-template` | Writer of the event's org | `{ added, skipped, alreadyPresent }`; body `{ templateId, includeOptional? }` |
+| POST | `/api/events/:eventId/apply-eval-template` | Writer of the event's org | `{ added, skipped, alreadyPresent }`; body `{ templateId, includeOptional? }`. Missing, inactive and derived metrics are skipped (by key). The new-event form no longer calls it; it stays for API clients |
+| POST | `/api/events/:eventId/metrics/bulk` | Same as `POST /api/events/:eventId/metrics` (coach, org admin or site admin of the event's org), same mutation limiter, one hit per request | Body `{ metrics: [{ metricCode, isRequired?, displayOrder?, customLabel? }] }` (max 100, unknown keys stripped). `{ added, alreadyPresent, skipped: [{ metricCode, reason: 'unknown' \| 'inactive' \| 'derived' }] }`; frozen event 409, bad body 400. Existing metrics are left alone |
 | GET | `/api/organizations/:orgId/eval-report-settings` | Writer of `:orgId` | `{ organizationId, presets, lastSelection }` (synthetic default if none stored) |
 | PUT | `/api/organizations/:orgId/eval-report-settings` | Writer of `:orgId` | Upserted settings |
 
@@ -80,7 +82,7 @@ model                         the frozen EvalReportModel (athlete, eventDate, me
                               strengths, developmentAreas, limiter, coachNote, selection)
 ```
 
-`eval_battery_templates` (migration `migrations/0153_add_eval_report_templates.sql`; down: `..._down.sql`): `organization_id` null = global default; `sport`, `name`, `metrics` jsonb of `{ metricKey, isRequired, displayOrder, customLabel? }` using logical keys; `archived_at`. Names are unique per organization among live rows. The seed adds "Soccer eval (yards)" and skips codes missing from `site_metrics`.
+`eval_battery_templates` (migration `migrations/0153_add_eval_report_templates.sql`; down: `..._down.sql`): `organization_id` null = global default; `sport`, `name`, `metrics` jsonb of `{ metricKey, isRequired, displayOrder, customLabel? }` using logical keys; `archived_at`. Names are unique per organization among live rows. The seed adds "Soccer eval (yards)" and skips codes missing from `site_metrics`. Migration `0154_strip_derived_from_eval_templates.sql` removes derived metrics (MOMENTUM) from every template's `metrics`; its down file puts MOMENTUM back on the global default.
 
 `org_eval_report_settings`: one row per organization (`organization_id` unique, cascade); `presets` jsonb (per-preset overrides), `last_selection` jsonb.
 

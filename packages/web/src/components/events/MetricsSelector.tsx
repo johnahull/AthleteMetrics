@@ -3,7 +3,7 @@
  *
  * Unlike EventMetricsTab (which manages metrics for existing events via API),
  * MetricsSelector manages LOCAL state and passes selected metrics to the
- * form's onSubmit handler for post-creation API calls.
+ * form's onSubmit handler, which saves them in one request after the event exists.
  *
  * Used in EventForm Step 3 to allow users to pre-select metrics
  * before an event is created.
@@ -38,6 +38,10 @@ export interface SelectedMetric {
   isRequired: boolean;
   category?: string;
   units?: string;
+  /** Label to save on the event instead of the metric's own (from an eval template) */
+  customLabel?: string;
+  /** Set when the entry was filled in by an eval template; only those are replaced when the template changes */
+  fromTemplate?: boolean;
 }
 
 interface MetricsSelectorProps {
@@ -171,7 +175,7 @@ export function MetricsSelector({
             <div
               key={metric.code}
               data-metric-row
-              className="flex items-center justify-between p-3 border rounded-lg bg-white hover:bg-gray-50 transition-colors"
+              className="flex flex-col gap-3 p-3 border rounded-lg bg-white hover:bg-gray-50 transition-colors sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="flex items-center gap-3">
                 {/* Order number */}

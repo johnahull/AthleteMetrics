@@ -460,6 +460,35 @@ export async function addEventMetric(
   return response.json();
 }
 
+export interface BulkAddEventMetricsResult {
+  /** Codes this request inserted */
+  added: string[];
+  alreadyPresent: string[];
+  /** Codes that can not be event metrics: no such metric, switched off, or computed from other tests */
+  skipped: Array<{ metricCode: string; reason: 'unknown' | 'inactive' | 'derived' }>;
+}
+
+/**
+ * Add a whole metric list to an event in ONE request (one rate-limit hit, however many metrics)
+ */
+export async function addEventMetricsBulk(
+  eventId: string,
+  metrics: Array<{ metricCode: string; displayOrder?: number; isRequired?: boolean; customLabel?: string }>
+): Promise<BulkAddEventMetricsResult> {
+  const response = await fetch(`/api/events/${eventId}/metrics/bulk`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ metrics }),
+  });
+
+  if (!response.ok) {
+    const message = await getErrorMessage(response, 'Failed to add metrics');
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
 /**
  * Remove a metric from an event
  */

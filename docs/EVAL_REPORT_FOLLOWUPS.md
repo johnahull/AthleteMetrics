@@ -61,3 +61,5 @@ Prioritized open items after P1-P6. Size: S under half a day, M 1-2 days, L more
 - Under-13 share guard for all report types (P4, #560) and the share-to-athlete rule decision (under 13 only, 2026-10-09).
 - Snapshot-flag leak and the EOL rewrite (reported fixed by the coordinator; not re-verified here).
 - Shared Load/Balance copy between PDF and web (`packages/shared/eval-report-copy.ts`); `GET /api/events/:eventId/reports` filters in SQL and drops the eval model.
+
+- New-event template flow (this change): migration **0154** (`0154_strip_derived_from_eval_templates.sql` and `_down.sql`) strips derived metrics such as MOMENTUM from eval templates. If 0154 is taken at merge, renumber both SQL files, the `DELETE FROM manual_migrations` line in the down file, the NOTICE text and `tests/migrations/0154-strip-derived-from-eval-templates.test.ts`.

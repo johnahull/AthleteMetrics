@@ -7,7 +7,9 @@
 
 import type { Express, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
-import { EventMetricsService, type AddMetricOptions, type UpdateMetricOptions } from "../services/event-metrics-service";
+import { z } from "zod";
+import { EventMetricsService, EventMetricsFrozenError, type AddMetricOptions, type UpdateMetricOptions } from "../services/event-metrics-service";
+import { bulkAddEventMetrics } from "../services/event-metrics-bulk";
 import { requireAuth } from "../middleware";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { storage } from "../storage";
@@ -29,6 +31,19 @@ const eventMetricsMutationLimiter = rateLimit({
   message: { message: "Too many event metrics modification attempts, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+});
+
+const bulkAddSchema = z.object({
+  metrics: z
+    .array(
+      z.object({
+        metricCode: z.string().trim().min(1).max(50),
+        isRequired: z.boolean().optional(),
+        displayOrder: z.number().int().min(0).max(9999).optional(),
+        customLabel: z.string().trim().min(1).max(100).optional(),
+      })
+    )
+    .max(100),
 });
 
 /**
@@ -156,6 +171,50 @@ export function registerEventMetricsRoutes(app: Express) {
         return res.status(500).json({
           error: error instanceof Error ? error.message : "Failed to add metric to event"
         });
+      }
+    }
+  );
+
+  /**
+   * Add a whole list of metrics to an event in one request (one limiter hit).
+   * Derived, inactive and unknown codes are skipped and reported, not errors.
+   * POST /api/events/:eventId/metrics/bulk
+   */
+  app.post(
+    "/api/events/:eventId/metrics/bulk",
+    requireAuth,
+    eventMetricsMutationLimiter,
+    async (req: Request, res: Response) => {
+      try {
+        const { eventId } = req.params;
+
+        const event = await storage.getEvent(eventId);
+        if (!event) {
+          return res.status(404).json({ error: "Event not found" });
+        }
+
+        const user = req.user as SessionUser;
+        if (!event.organizationId) {
+          return res.status(400).json({ error: "Event has no organization" });
+        }
+
+        const hasAccess = await canManageOrgEvents(user, event.organizationId);
+        if (!hasAccess) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+
+        const parsed = bulkAddSchema.safeParse(req.body);
+        if (!parsed.success) {
+          return res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+        }
+
+        return res.json(await bulkAddEventMetrics(eventId, user.id, parsed.data.metrics));
+      } catch (error) {
+        if (error instanceof EventMetricsFrozenError) {
+          return res.status(409).json({ error: error.message });
+        }
+        console.error("Error bulk adding metrics to event:", error);
+        return res.status(500).json({ error: "Failed to add metrics to event" });
       }
     }
   );

@@ -1,8 +1,8 @@
 /**
- * Plain labels for eval battery template keys, and the wording of the "apply template" result (AM-FEAT-019 P5).
+ * Plain labels for eval battery template keys (AM-FEAT-019 P5).
  * The keys are the API's logical keys (packages/api/services/eval-report/template-keys.ts).
  */
-import type { ApplyEvalTemplateResult, EvalTemplateMetric } from "@/hooks/use-eval-report";
+import type { EvalTemplateMetric } from "@/hooks/use-eval-report";
 
 export const TEMPLATE_KEY_LABELS: Record<string, string> = {
   DASH_10: "10-yard dash",
@@ -62,21 +62,4 @@ export function templateKeyLabel(key: string, customLabel?: string): string {
 
 export function templateMetricLabel(metric: EvalTemplateMetric): string {
   return templateKeyLabel(metric.metricKey, metric.customLabel);
-}
-
-/** Toast wording for the result of applying a template to a new event */
-export function describeTemplateResult(result: ApplyEvalTemplateResult): { title: string; description: string } {
-  const added = result.added.length;
-  const parts = [`${added} ${added === 1 ? "metric" : "metrics"} added`];
-  if (result.alreadyPresent.length > 0) parts.push(`${result.alreadyPresent.length} already on the event`);
-  let description = `${parts.join(", ")}.`;
-  if (result.skipped.length > 0) {
-    description += ` Not available yet: ${result.skipped.map((key) => templateKeyLabel(key)).join(", ")}.`;
-  }
-  return { title: "Template applied", description };
-}
-
-/** Toast title when the event was created but its template could not be applied */
-export function templateFailureTitle(isDraft: boolean): string {
-  return isDraft ? "Draft saved, template not applied" : "Event created, template not applied";
 }
