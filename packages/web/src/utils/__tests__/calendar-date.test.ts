@@ -158,4 +158,11 @@ describe('buildEventICS RFC 5545 compliance', () => {
     expect(lines.some((l) => l.startsWith(' '))).toBe(true);
     expect(ics).not.toContain('�');
   });
+
+  it('omits LOCATION and DESCRIPTION lines when empty (optional in RFC 5545)', () => {
+    const ics = buildEventICS({ ...base, location: '', description: null }, FIXED_NOW);
+    expect(ics).not.toContain('LOCATION');
+    expect(ics).not.toContain('DESCRIPTION');
+    expect(ics).toContain('SUMMARY:');
+  });
 });

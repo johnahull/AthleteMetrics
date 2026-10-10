@@ -24,14 +24,14 @@ function foldIcsLine(line: string): string {
   const parts: string[] = [];
   let current = '';
   let octets = 0;
-  let limit = 75; // continuation lines start with a space, which counts toward their 75
+  // Continuation lines start with a space; that cost is accounted for by resetting octets to 1.
+  const limit = 75;
   for (const ch of line) {
     const size = encoder.encode(ch).length;
     if (octets + size > limit) {
       parts.push(current);
       current = ' ';
       octets = 1;
-      limit = 75;
     }
     current += ch;
     octets += size;
@@ -62,8 +62,8 @@ export function buildEventICS(event: IcsEventInput, now: Date = new Date()): str
     `DTSTART;VALUE=DATE:${range.start}`,
     `DTEND;VALUE=DATE:${range.endExclusive}`,
     `SUMMARY:${escapeIcsText(event.name)}`,
-    `LOCATION:${escapeIcsText(event.location || '')}`,
-    `DESCRIPTION:${escapeIcsText(event.description || '')}`,
+    ...(event.location ? [`LOCATION:${escapeIcsText(event.location)}`] : []),
+    ...(event.description ? [`DESCRIPTION:${escapeIcsText(event.description)}`] : []),
     'STATUS:CONFIRMED',
     'END:VEVENT',
     'END:VCALENDAR',
