@@ -728,6 +728,10 @@ The application runs as a **single-process Node.js server** without clustering:
 - `BYPASS_ANALYTICS_RATE_LIMIT` - Set to "true" to bypass analytics rate limiting for site admins (default: false)
 - `BYPASS_GENERAL_RATE_LIMIT` - Set to "true" to bypass general API rate limiting (default: false)
 
+#### Auth Rate Limits
+- `POST /api/auth/login`: 20 **failed** attempts per 15 minutes per IP (`skipSuccessfulRequests`, so successful logins are not counted). Per-account lockout (5 failures, 15 min, `packages/api/auth/security.ts`) is separate and unchanged.
+- Password reset endpoints (`forgot-password`, `validate-reset-token`, `reset-password`): 5 requests per 15 minutes per IP, counting all requests, in their own bucket. Built by `createAuthRateLimiters` in `packages/api/middleware/auth-rate-limiters.ts`.
+
 **Security Note**: Rate limiting bypasses are disabled by default and automatically disabled in production environments (NODE_ENV=production) regardless of environment variable settings. This provides an additional safeguard against accidental security vulnerabilities in production deployments.
 
 ### Railway Configuration
