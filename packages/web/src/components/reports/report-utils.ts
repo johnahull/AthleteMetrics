@@ -14,6 +14,7 @@
  */
 
 import { format } from 'date-fns';
+import { toCalendarDate } from '@/utils/date-utils';
 import type { TimeframeConfig, AthleteRanking } from '@/types/report-types';
 
 // ============================================================================
@@ -98,13 +99,12 @@ function resolveFallbackLabel(metric: string): string {
  */
 export function formatDateRange(timeframe: TimeframeConfig): string {
   if (timeframe.type === 'custom') {
-    const start = timeframe.customStart
-      ? format(new Date(timeframe.customStart), 'MMM d, yyyy')
-      : '';
-    const end = timeframe.customEnd
-      ? format(new Date(timeframe.customEnd), 'MMM d, yyyy')
-      : '';
-    return `${start} - ${end}`;
+    // customStart/customEnd are calendar dates (YYYY-MM-DD), not instants
+    const fmt = (value?: string) => {
+      const day = toCalendarDate(value);
+      return day ? format(day, 'MMM d, yyyy') : '';
+    };
+    return `${fmt(timeframe.customStart)} - ${fmt(timeframe.customEnd)}`;
   }
 
   switch (timeframe.preset) {

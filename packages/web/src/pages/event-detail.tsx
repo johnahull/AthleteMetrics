@@ -52,8 +52,9 @@ import {
   Edit,
   ExternalLink,
 } from "lucide-react";
-import { format, formatDistanceToNow, isPast, isFuture } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import type { EventRegistration, EventInvitation } from "@shared/schema";
+import { toCalendarDate, isCalendarDatePast, isCalendarDateFuture } from "@/utils/date-utils";
 
 type TabValue = "overview" | "registrations" | "checkin" | "metrics" | "results" | "reports" | "settings";
 
@@ -268,8 +269,8 @@ export default function EventDetail() {
   // Format date range
   const formatDateRange = () => {
     if (!event) return "";
-    const startDate = new Date(event.startDate);
-    const endDate = event.endDate ? new Date(event.endDate) : null;
+    const startDate = toCalendarDate(event.startDate)!;
+    const endDate = toCalendarDate(event.endDate);
 
     if (!endDate || format(startDate, "yyyy-MM-dd") === format(endDate, "yyyy-MM-dd")) {
       return format(startDate, "EEEE, MMMM d, yyyy");
@@ -280,11 +281,10 @@ export default function EventDetail() {
   // Time status
   const getTimeStatus = () => {
     if (!event) return null;
-    const startDate = new Date(event.startDate);
-    const endDate = event.endDate ? new Date(event.endDate) : startDate;
+    const startDate = toCalendarDate(event.startDate)!;
 
-    if (isPast(endDate)) return { label: "Completed", variant: "secondary" as const };
-    if (isFuture(startDate)) return { label: `In ${formatDistanceToNow(startDate)}`, variant: "default" as const };
+    if (isCalendarDatePast(event.endDate || event.startDate)) return { label: "Completed", variant: "secondary" as const };
+    if (isCalendarDateFuture(event.startDate)) return { label: `In ${formatDistanceToNow(startDate)}`, variant: "default" as const };
     return { label: "In Progress", variant: "default" as const };
   };
 

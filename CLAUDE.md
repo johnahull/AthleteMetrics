@@ -683,6 +683,7 @@ The application runs as a **single-process Node.js server** without clustering:
 ### Development Notes
 - **TDD is mandatory**: Write failing tests before writing production code — always. See the TDD policy section above.
 - All database operations use Drizzle ORM - no raw SQL
+- **Event dates are calendar dates stored as UTC midnight** (`events.start_date`/`end_date`). Show and compare them with `toCalendarDate()` / `isCalendarDatePast()` / `isCalendarDateFuture()` from `packages/web/src/utils/date-utils.ts` (web) or `timeZone: 'UTC'` (server); never `new Date(x)` + `format()` directly, which shows the previous day west of UTC.
 - Forms use React Hook Form with Zod schemas from `shared/schema.ts`
 - UI components are from shadcn/ui - check existing patterns before creating new ones
 - Authentication state is managed through React Context in `lib/auth.tsx`
