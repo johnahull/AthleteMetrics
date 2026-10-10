@@ -22,6 +22,13 @@ export class EventRegistrationConflictError extends Error {
     this.name = 'EventRegistrationConflictError';
   }
 }
+/** Thrown by addAthletesDirectly when the event does not exist (or vanished mid-request); routes answer 404. */
+export class EventNotFoundError extends Error {
+  constructor(message = 'Event not found') {
+    super(message);
+    this.name = 'EventNotFoundError';
+  }
+}
 export class EventCancelledError extends EventRegistrationConflictError {
   constructor(message = 'Event is cancelled and cannot take new athletes') {
     super(message);
@@ -452,7 +459,7 @@ export class EventRegistrationService {
   ): Promise<DirectAddResult> {
     const event = await this.storage.getEvent(eventId);
     if (!event) {
-      throw new Error('Event not found');
+      throw new EventNotFoundError();
     }
     if (!event.organizationId) {
       throw new Error('Event has no organization');
@@ -468,12 +475,12 @@ export class EventRegistrationService {
       // athlete is caught by the (event_id, user_id) unique constraint instead (see onConflictDoNothing below).
       // Status and frozen flag are read under the lock so a concurrent cancel or freeze cannot slip past the check.
       const [locked] = await tx
-        .select({ status: eventsTable.status, isFrozen: eventsTable.isFrozen })
+        .select({ status: eventsTable.status, isFrozen: eventsTable.isFrozen, maxRegistrations: eventsTable.maxRegistrations })
         .from(eventsTable)
         .where(eq(eventsTable.id, eventId))
         .for('update');
       if (!locked) {
-        throw new Error('Event not found');
+        throw new EventNotFoundError();
       }
       if (locked.status === 'cancelled') {
         throw new EventCancelledError();
@@ -582,12 +589,12 @@ export class EventRegistrationService {
         out.updated.push(userId);
       }
 
-      if (event.maxRegistrations !== null && (out.added.length > 0 || out.updated.length > 0)) {
+      if (locked.maxRegistrations !== null && (out.added.length > 0 || out.updated.length > 0)) {
         const [{ count }] = await tx
           .select({ count: sql<number>`count(*)` })
           .from(eventRegistrations)
           .where(and(eq(eventRegistrations.eventId, eventId), notInArray(eventRegistrations.status, ['cancelled', 'declined', 'waitlisted'])));
-        if (Number(count) > event.maxRegistrations) {
+        if (Number(count) > locked.maxRegistrations) {
           out.overCapacity = true;
         }
       }

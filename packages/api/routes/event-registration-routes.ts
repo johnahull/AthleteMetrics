@@ -17,7 +17,7 @@
 
 import type { Express, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
-import { EventRegistrationService, EventRegistrationConflictError, type RegisterOptions, type RegistrationFilters, type IRegistrationStorage } from "../services/event-registration-service";
+import { EventRegistrationService, EventRegistrationConflictError, EventNotFoundError, type RegisterOptions, type RegistrationFilters, type IRegistrationStorage } from "../services/event-registration-service";
 import { requireAuth } from "../middleware";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { storage } from "../storage";
@@ -302,7 +302,7 @@ export function registerEventRegistrationRoutes(app: Express) {
       if (error instanceof EventRegistrationConflictError) {
         return res.status(409).json({ message });
       }
-      if (message.toLowerCase().includes('not found')) {
+      if (error instanceof EventNotFoundError) {
         return res.status(404).json({ message });
       }
 

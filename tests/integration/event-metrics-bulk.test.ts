@@ -154,6 +154,15 @@ describe('POST /api/events/:eventId/metrics/bulk', () => {
     expect((await request(app).post(`/api/events/${ev}/metrics/bulk`).send({ metrics: [item(code(5))] })).status).toBe(401);
   });
 
+  it('answers 403 to non-admins and 400 to a site admin for an event with no organization (no probing)', async () => {
+    const orgless = (await db.insert(events).values({ name: `${PREFIX}-orgless`, startDate: new Date('2026-03-01T10:00:00Z') } as any).returning({ id: events.id }))[0].id;
+    for (const who of ['coachA', 'adminA', 'athleteA'] as const) {
+      expect((await as(who).post(`/api/events/${orgless}/metrics/bulk`).send({ metrics: [item(code(0))] })).status, who).toBe(403);
+    }
+    expect((await as('siteAdmin').post(`/api/events/${orgless}/metrics/bulk`).send({ metrics: [item(code(0))] })).status).toBe(400);
+    expect(await codesOf(orgless)).toEqual([]);
+  });
+
   it('answers 404 for an unknown event', async () => {
     const res = await as('coachA').post(`/api/events/no-such-event/metrics/bulk`).send({ metrics: [item(code(0))] });
     expect(res.status).toBe(404);

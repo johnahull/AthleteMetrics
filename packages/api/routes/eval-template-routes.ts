@@ -90,14 +90,17 @@ export function registerEvalTemplateRoutes(app: Express) {
 
   /**
    * The template's tests resolved against site_metrics, for the new-event form. Same visibility as the plain read.
-   * `?organizationId=` names the organization the event is for (needed for the global default to apply the
-   * organization-type availability rule); the caller must write in it, else 404.
+   * `?organizationId=` names the organization the event is for (required for the global default, which has no organization of its own
+   * to apply the organization-type availability rule from; missing = 400); the caller must write in it, else 404.
    */
   app.get("/api/eval-templates/:id/resolved", requireAuth, readLimiter, async (req, res) => {
     try {
       const template = await svc.getVisibleTemplate(userOf(req), req.params.id);
       if (!template) return res.status(404).json(NOT_FOUND);
       const asked = typeof req.query.organizationId === "string" ? req.query.organizationId : null;
+      if (!template.organizationId && !asked) {
+        return res.status(400).json({ error: "organizationId is required to resolve the default template" });
+      }
       if (asked && !(await svc.isOrgWriter(userOf(req), asked))) return res.status(404).json(NOT_FOUND);
       const orgType = await svc.orgTypeOf(asked ?? template.organizationId);
       return res.json({ template: { id: template.id, name: template.name }, metrics: await svc.resolveTemplateMetrics(template, orgType) });

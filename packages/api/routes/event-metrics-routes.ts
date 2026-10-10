@@ -62,9 +62,14 @@ const bulkAddSchema = z.object({
 /**
  * Check if user has permission to manage events for an organization
  */
-async function canManageOrgEvents(user: SessionUser, organizationId: string): Promise<boolean> {
+async function canManageOrgEvents(user: SessionUser, organizationId: string | null): Promise<boolean> {
   if (isSiteAdmin(user)) {
     return true;
+  }
+
+  // An event with no organization can be managed by site admins only
+  if (!organizationId) {
+    return false;
   }
 
   // Check if user has org_admin or coach role in this organization
@@ -219,13 +224,13 @@ export function registerEventMetricsRoutes(app: Express) {
         }
 
         const user = req.user as SessionUser;
-        if (!event.organizationId) {
-          return res.status(400).json({ error: "Event has no organization" });
-        }
-
+        // Permission first: a caller who may not manage the event must not learn whether it has an organization
         const hasAccess = await canManageOrgEvents(user, event.organizationId);
         if (!hasAccess) {
           return res.status(403).json({ error: "Access denied" });
+        }
+        if (!event.organizationId) {
+          return res.status(400).json({ error: "Event has no organization" });
         }
 
         const parsed = bulkAddSchema.safeParse(req.body);

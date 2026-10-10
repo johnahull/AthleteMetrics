@@ -536,7 +536,8 @@ describe('eval templates and org eval report settings', () => {
         const withOrg = await as('coachA').get(`/api/eval-templates/${globalId}/resolved?organizationId=${orgA}`);
         expect(withOrg.body.metrics.find((m: any) => m.metricKey === COLLEGE_CODE).status).toBe('unavailable');
         const without = await as('coachA').get(`/api/eval-templates/${globalId}/resolved`);
-        expect(without.body.metrics.find((m: any) => m.metricKey === COLLEGE_CODE).status).toBe('available');
+        expect(without.status).toBe(400);
+        expect(without.body.error).toMatch(/organizationId is required/);
         expect((await as('coachA').get(`/api/eval-templates/${globalId}/resolved?organizationId=${orgB}`)).status).toBe(404);
       } finally {
         await db.update(evalBatteryTemplates).set({ metrics: g.metrics as any }).where(eq(evalBatteryTemplates.id, globalId));
@@ -546,14 +547,14 @@ describe('eval templates and org eval report settings', () => {
     it('is readable by org_admin and by a site admin; the global default by a writer of any org', async () => {
       expect((await as('adminA').get(`/api/eval-templates/${tplId}/resolved`)).status).toBe(200);
       expect((await as('siteAdmin').get(`/api/eval-templates/${tplId}/resolved`)).status).toBe(200);
-      const g = await as('coachB').get(`/api/eval-templates/${globalId}/resolved`);
+      const g = await as('coachB').get(`/api/eval-templates/${globalId}/resolved?organizationId=${orgB}`);
       expect(g.status).toBe(200);
       expect(g.body.template.id).toBe(globalId);
     });
 
     it('answers 404 to an athlete (even for the global default), another org\'s coach and an unknown id', async () => {
       expect((await as('athleteA').get(`/api/eval-templates/${tplId}/resolved`)).status).toBe(404);
-      expect((await as('athleteA').get(`/api/eval-templates/${globalId}/resolved`)).status).toBe(404);
+      expect((await as('athleteA').get(`/api/eval-templates/${globalId}/resolved?organizationId=${orgA}`)).status).toBe(404);
       expect((await as('coachB').get(`/api/eval-templates/${tplId}/resolved`)).status).toBe(404);
       expect((await as('coachA').get(`/api/eval-templates/${tplB}/resolved`)).status).toBe(404);
       expect((await as('coachA').get(`/api/eval-templates/no-such-template/resolved`)).status).toBe(404);

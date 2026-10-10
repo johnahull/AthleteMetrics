@@ -41,6 +41,8 @@ vi.mock('../../packages/api/services/measurement-notification-service', () => ({
 import { registerRoutes } from '../../packages/api/routes';
 import { db } from '../../packages/api/db';
 import { EmailService } from '../../packages/api/services/email-service';
+import { EventRegistrationService, EventNotFoundError } from '../../packages/api/services/event-registration-service';
+import { storage } from '../../packages/api/storage';
 import { PushNotificationService } from '../../packages/api/services/push-notification-service';
 import { organizations, users, userOrganizations, events, eventRegistrations, auditLogs } from '@shared/schema';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
@@ -490,6 +492,23 @@ describe('POST /api/events/:eventId/registrations/bulk-add', () => {
     const roomy = await mkEvent({ max: 5 });
     const ok = await bulkAdd(roomy.id, { userIds: [a.id] });
     expect(ok.body.overCapacity).toBeUndefined();
+  });
+
+  it('judges capacity by the limit read under the lock, not the one read before the transaction', async () => {
+    const ev = await mkEvent({ max: 1 });
+    const a = await mkAthlete(orgA);
+    const b = await mkAthlete(orgA);
+    const real = await storage.getEvent(ev.id);
+    const stale = vi.spyOn(storage, 'getEvent').mockResolvedValueOnce({ ...real!, maxRegistrations: null } as any);
+    const result = await new EventRegistrationService(storage as any).addAthletesDirectly(ev.id, [a.id, b.id], { id: a.id, name: 'Coach' });
+    stale.mockRestore();
+    expect(result.overCapacity).toBe(true);
+  });
+
+  it('throws EventNotFoundError (answered 404) for an event that does not exist', async () => {
+    await expect(
+      new EventRegistrationService(storage as any).addAthletesDirectly('00000000-0000-4000-8000-000000000000', [], { id: 'x', name: 'Coach' })
+    ).rejects.toBeInstanceOf(EventNotFoundError);
   });
 
   it('validates the body: more than 200 ids, empty, malformed, non-uuid, bad checkIn', async () => {
