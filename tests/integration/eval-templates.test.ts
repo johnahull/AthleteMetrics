@@ -6,6 +6,9 @@ process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret-key-for-integration-tests-only';
 process.env.BYPASS_GENERAL_RATE_LIMIT = 'true';
 
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import express, { type Express } from 'express';
@@ -31,6 +34,7 @@ vi.mock('express-rate-limit', async (importOriginal) => {
 import { registerRoutes } from '../../packages/api/routes';
 import { canEditTemplate } from '../../packages/api/services/eval-template-service';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PASSWORD = 'EvalTemplates123!';
 const PREFIX = `evaltpl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
@@ -458,6 +462,43 @@ describe('eval templates and org eval report settings', () => {
       expect(res.status).toBe(200);
       expect(res.body.added.sort()).toEqual([...existing].sort());
       expect(await codesOf(ev)).toEqual([...existing].sort());
+    });
+
+    it('after migration 0156 the global default adds RSI_105 as a required test and no single-leg CMJ', async () => {
+      // CI's DB (db:push + default seed) has RSI but none of the 0156 codes; on a migrated DB 0156 already ran (re-run here).
+      const [before] = await db.select().from(evalBatteryTemplates).where(eq(evalBatteryTemplates.id, globalId));
+      const NEW_CODES = ['RSI_105', 'JUMP_CMJ_SL_L', 'JUMP_CMJ_SL_R'];
+      const existedBefore = new Set(
+        (await db.select({ code: siteMetrics.code }).from(siteMetrics).where(inArray(siteMetrics.code, NEW_CODES))).map((r) => r.code),
+      );
+      // Start from a template without the three entries and with their seed slots (6, 28, 29) free, so 0156 must add them
+      const OURS = ['RSI_BILATERAL', 'RSI_105', 'CMJ_SL_LEFT', 'JUMP_CMJ_SL_L', 'CMJ_SL_RIGHT', 'JUMP_CMJ_SL_R'];
+      const stripped = (before.metrics as Array<{ metricKey: string; displayOrder: number }>)
+        .filter((m) => !OURS.includes(m.metricKey) && ![6, 28, 29].includes(m.displayOrder));
+      try {
+        await db.update(evalBatteryTemplates).set({ metrics: stripped as any }).where(eq(evalBatteryTemplates.id, globalId));
+        await db.execute(sql.raw(fs.readFileSync(path.resolve(__dirname, '../../migrations/0156_add_rsi_105_and_single_leg_cmj_metrics.sql'), 'utf-8')));
+        // 0156 creates all three codes on CI's DB: remove every one we created in afterAll
+        for (const code of NEW_CODES) if (!existedBefore.has(code)) createdSiteMetricCodes.push(code);
+        const [global] = await db.select().from(evalBatteryTemplates).where(eq(evalBatteryTemplates.id, globalId));
+        expect(global.metrics).toEqual([
+          ...stripped,
+          { metricKey: 'RSI_BILATERAL', isRequired: true, displayOrder: 6 },
+          { metricKey: 'CMJ_SL_LEFT', isRequired: false, displayOrder: 28 },
+          { metricKey: 'CMJ_SL_RIGHT', isRequired: false, displayOrder: 29 },
+        ]);
+
+        const ev = await newEvent(orgA);
+        const res = await as('adminA').post(`/api/events/${ev}/apply-eval-template`).send({ templateId: globalId });
+        expect(res.status).toBe(200);
+        expect(res.body.added).toContain('RSI_105');
+        expect(res.body.added).not.toContain('JUMP_CMJ_SL_L');
+        expect(res.body.added).not.toContain('JUMP_CMJ_SL_R');
+        const [rsi] = await db.select().from(eventMetrics).where(and(eq(eventMetrics.eventId, ev), eq(eventMetrics.metricCode, 'RSI_105')));
+        expect(rsi.isRequired).toBe(true);
+      } finally {
+        await db.update(evalBatteryTemplates).set({ metrics: before.metrics as any, updatedAt: before.updatedAt }).where(eq(evalBatteryTemplates.id, globalId));
+      }
     });
 
     it('answers 200 with an empty result when every metric is optional and none is chosen', async () => {

@@ -112,6 +112,7 @@ describe('eval report routes', () => {
       ['AGILITY_505_YD_L', 'agility', 's', 'lower_is_better'],
       ['AGILITY_505_YD_R', 'agility', 's', 'lower_is_better'],
       ['AGILITY_505_YD_LSI', 'agility', '%', 'higher_is_better'],
+      ['RSI_105', 'power', '', 'higher_is_better'],
     ];
     for (const [code, category, unit, metricType] of neededMetrics) {
       const inserted = await db
@@ -138,6 +139,7 @@ describe('eval report routes', () => {
     await mkUser('gone', { gender: 'Female', birthDate: '2011-03-01', sports: [SPORT], isActive: false });
     await mkUser('stranger');
     await mkUser('unverifiedOnly', { gender: 'Female', birthDate: '2011-03-01', sports: [SPORT] });
+    await mkUser('rsiOnly', { gender: 'Female', birthDate: '2011-03-01', sports: [SPORT] });
     u.siteAdmin = { id: `site-admin-${suffix}`, isSiteAdmin: true };
 
     await db.insert(userOrganizations).values([
@@ -155,6 +157,7 @@ describe('eval report routes', () => {
       { userId: u.registered.id, organizationId: orgA, role: 'athlete' },
       { userId: u.stranger.id, organizationId: orgA, role: 'athlete' },
       { userId: u.unverifiedOnly.id, organizationId: orgA, role: 'athlete' },
+      { userId: u.rsiOnly.id, organizationId: orgA, role: 'athlete' },
     ] as any);
 
     const mkEvent = async (organizationId: string | null, name: string, startDate = '2026-05-01T10:00:00Z', extra = {}) => {
@@ -189,6 +192,9 @@ describe('eval report routes', () => {
       avg('dash-d1', 'DASH_10YD', '1.870', 'lte', { level: 'D1', tierName: 'D1 Average', ageMin: null, ageMax: null }),
       avg('top-jv', 'TOP_SPEED', '14.000', 'gte', {}),
       avg('broad-jv', 'JUMP_BROAD', '57.100', 'gte', {}),
+      // RSI_105 is in NO_TIER_CODES: a matching age-group row must still give no comparison
+      avg('rsi105-jv', 'RSI_105', '1.500', 'gte', {}),
+      avg('rsi105-d1', 'RSI_105', '2.000', 'gte', { level: 'D1', tierName: 'D1 Average', ageMin: null, ageMax: null }),
       bench('lsi-normal', { metricCode: 'AGILITY_505_YD_LSI', comparisonOperator: 'range', minValue: '95', maxValue: '100', tierGroupId: lsiGroup, tierOrder: 1, tierName: 'Normal', sport: null }),
       bench('lsi-monitor', { metricCode: 'AGILITY_505_YD_LSI', comparisonOperator: 'range', minValue: '90', maxValue: '94.999', tierGroupId: lsiGroup, tierOrder: 2, tierName: 'Monitor', sport: null }),
       bench('lsi-low', { metricCode: 'AGILITY_505_YD_LSI', comparisonOperator: 'range', minValue: '0', maxValue: '89.999', tierGroupId: lsiGroup, tierOrder: 3, tierName: 'Low', sport: null }),
@@ -207,6 +213,7 @@ describe('eval report routes', () => {
     await measure(u.noSport.id, 'AGILITY_505_YD_R', 3.0);
     await measure(u.gone.id, 'DASH_10YD', 2.0);
     await measure(u.unverifiedOnly.id, 'DASH_10YD', 2.0, { isVerified: false });
+    await measure(u.rsiOnly.id, 'RSI_105', 1.8, { units: '' });
     // The athlete in a second organization, and earlier / later events
     await measure(u.athlete.id, 'DASH_10YD', 2.2, { eventId: eventB, organizationId: orgB });
     await measure(u.athlete.id, 'DASH_10YD', 2.1, { eventId: eventPrior });
@@ -365,6 +372,13 @@ describe('eval report routes', () => {
     expect(byCode.TOP_SPEED).toMatchObject({ key: null, label: 'Top speed', unit: 'mph' });
     expect(byCode.TOP_SPEED.comparison).toMatchObject({ kind: 'average', status: 'at_or_better' });
     expect(byCode.JUMP_BROAD.comparison).toMatchObject({ kind: 'average', status: 'at_or_better' });
+  });
+
+  it('shows RSI_105 (RSI_BILATERAL) with its value and no age-group or college comparison', async () => {
+    const res = await preview('coachA', eventA, u.rsiOnly.id, { selection: { metricKeys: ['RSI_BILATERAL'] } });
+    expect(res.status).toBe(200);
+    const [rsi] = res.body.model.metrics;
+    expect(rsi).toMatchObject({ key: 'RSI_BILATERAL', code: 'RSI_105', value: 1.8, comparison: null, collegeStandard: null });
   });
 
   it('judges the balance for a female athlete with no sport, without risk or injury wording', async () => {

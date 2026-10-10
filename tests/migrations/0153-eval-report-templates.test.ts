@@ -38,11 +38,10 @@ describe('Migration 0153: static analysis', () => {
       expect(resolveTemplateKey(key), key).toBe(code);
     }
     const codes = rows.map((r) => r[2]);
-    // No guessed codes: every seeded code is created by some other migration, except these, which are
-    // allowed because they are named codes that will exist later (RSI_105 from the spec, JUMP_CMJ_SL_L/R
-    // single-leg CMJ, MOMENTUM from AM-FEAT-018) or are canonical codes created outside migrations
-    // (HEIGHT_IN, WEIGHT_LBS exist on staging and production, created outside migrations).
-    const ALLOWED_WITHOUT_MIGRATION = ['RSI_105', 'JUMP_CMJ_SL_L', 'JUMP_CMJ_SL_R', 'MOMENTUM', 'HEIGHT_IN', 'WEIGHT_LBS'];
+    // No guessed codes: every seeded code is created by some other migration (RSI_105 and JUMP_CMJ_SL_L/R by 0156),
+    // except these, which are allowed because they were named codes that would exist later (MOMENTUM from AM-FEAT-018)
+    // or are canonical codes created outside migrations (HEIGHT_IN, WEIGHT_LBS exist on staging and production).
+    const ALLOWED_WITHOUT_MIGRATION = ['MOMENTUM', 'HEIGHT_IN', 'WEIGHT_LBS'];
     const otherMigrations = fs
       .readdirSync(path.resolve(__dirname, '../../migrations'))
       .filter((f) => f.endsWith('.sql') && !f.startsWith('0153_'))
@@ -102,8 +101,9 @@ describe.skipIf(!isDisposableTestDb)('Migration 0153: against a disposable DB (r
   // CI builds its DB with db:push and the default seed only, so most codes the seed names do not exist there.
   // Create the missing ones inside the rolled-back transaction so the checks do not depend on manual migrations.
   const SEED_CODES = [...new Set([...UP.matchAll(/^\s*\('([A-Z0-9_]+)',\s*'([A-Z0-9_]+)',\s*(?:true|false),\s*\d+\)/gm)].map((r) => r[2]))];
-  // RSI_105 is created by no migration (the spec names it for later), so it stays absent as on a migrated DB.
+  // RSI_105 stays absent, as it is when 0153 runs (0156 creates it later), so the seed skips it.
   const ensureSeedCodes = async (tx: any) => {
+    await tx`DELETE FROM site_metrics WHERE code = 'RSI_105'`;
     for (const code of SEED_CODES.filter((c) => c !== 'RSI_105')) {
       await tx`INSERT INTO site_metrics (code, label, category, unit, metric_type) VALUES (${code}, ${code}, 'speed', 's', 'lower_is_better') ON CONFLICT (code) DO NOTHING`;
     }
