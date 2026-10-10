@@ -53,17 +53,27 @@ Other report routes (delete, pin, archive, generate, snapshot list and delete, s
 | Method | Path | Who | Returns |
 |---|---|---|---|
 | GET | `/api/organizations/:orgId/eval-templates` | Writer of `:orgId` | Live templates of the org plus the global default |
-| POST | `/api/organizations/:orgId/eval-templates` | Writer of `:orgId` | 201 template (metrics as logical keys; 400 unknown metrics, 409 duplicate name) |
+| POST | `/api/organizations/:orgId/eval-templates` | Writer of `:orgId` | 201 template (metrics stored as logical keys; 400 under the template rules below, 409 duplicate name) |
 | POST | `/api/events/:eventId/eval-templates` | Writer of the event's org | 201 template made from the event's metrics (400 if none) |
 | GET | `/api/eval-templates/:id` | Writer of the template's org (any writer for the global default) | Template |
-| GET | `/api/eval-templates/:id/resolved` | Same as the read above | `{ template: { id, name }, metrics: [{ metricKey, code, label, unit, category, isRequired, displayOrder, status, customLabel? }] }` in displayOrder; `status` is `available`, `missing` (no `site_metrics` row), `inactive`, `derived` (computed, never an event metric) or `unavailable` (`available_org_types` does not list the organization's type; the type comes from `?organizationId=` for the global default, which is required (400 when missing) and which the caller must write in (else 404); an organization template uses its own organization). One query |
-| PATCH | `/api/eval-templates/:id` | Writer of the template's org; site admin only for the global default (403) | Template |
+| GET | `/api/eval-templates/:id/resolved` | Same as the read above | `{ template: { id, name }, metrics: [{ metricKey, code, label, unit, category, isRequired, displayOrder, status, customLabel? }] }` in displayOrder; `status` is `available`, `missing` (no `site_metrics` row), `inactive`, `derived` (computed, never an event metric) or `unavailable` (`available_org_types` does not list the organization's type; the type comes from `?organizationId=` for the global default, which is required (400 when missing, except for a site admin, who may resolve the default with no organization: no type rule then) and which the caller must write in (else 404); an organization template uses its own organization). One query |
+| PATCH | `/api/eval-templates/:id` | Writer of the template's org; site admin only for the global default (403) | Template; body `{ name?, sport?, description?, metrics? }` (`metrics` replaces the whole list; 400 under the template rules below). Writes an `eval_template_updated` audit row. Last write wins (no version check) |
 | POST | `/api/eval-templates/:id/archive` | Same | Template |
-| DELETE | `/api/eval-templates/:id` | Same; the global default cannot be deleted (409) | 204 |
+| DELETE | `/api/eval-templates/:id` | Same; the global default cannot be deleted (409) | 204. Hard delete; writes an `eval_template_deleted` audit row whose `details` hold the name, `organizationId`, sport, description and the full `metrics` |
 | POST | `/api/events/:eventId/apply-eval-template` | Writer of the event's org | `{ added, skipped, alreadyPresent }`; body `{ templateId, includeOptional? }`. Missing, inactive and derived metrics are skipped (by key). The new-event form no longer calls it; it stays for API clients |
 | POST | `/api/events/:eventId/metrics/bulk` | Same as `POST /api/events/:eventId/metrics` (coach, org admin or site admin of the event's org), same mutation limiter, one hit per request | Body `{ metrics: [{ metricCode, isRequired?, displayOrder?, customLabel? }] }` (max 100; codes are letters, digits and underscores; labels have no control characters; unknown keys stripped). `{ added, alreadyPresent, skipped: [{ metricCode, reason: 'unknown' \| 'inactive' \| 'derived' \| 'unavailable' }] }`. **Atomic**: the insert (`ON CONFLICT DO NOTHING`) and its audit row share one transaction, all or nothing; a code a concurrent request inserted first is `alreadyPresent`. Derived, inactive, unknown and org-type-unavailable metrics are **skipped** here but **rejected with 400** by the single route. A frozen event is **409** here, **400** on the single route. The UI sends lists longer than 100 as sequential batches of 100 |
 | GET | `/api/organizations/:orgId/eval-report-settings` | Writer of `:orgId` | `{ organizationId, presets, lastSelection }` (synthetic default if none stored) |
 | PUT | `/api/organizations/:orgId/eval-report-settings` | Writer of `:orgId` | Upserted settings |
+
+**Template rules (create and PATCH, `validateMetrics` in `eval-template-service.ts`).**
+- Every key is stored in its canonical form: a code that has a logical key becomes that key (`FLY10_TIME` is stored as `FLY_10`); a code outside the key map is stored as it is. Two keys that resolve to the same code are a 400.
+- A derived metric is always a 400.
+- A missing, inactive or not-offered (organization type) metric is a 400 only when it is **new** in that save, compared by code with the template's stored list (on create every key is new). So an older template whose metric went stale can still be renamed and re-saved; a stale entry that is removed and added back later is new again. The organization type comes from the template's own organization, never from the query string; the global default has none, so it skips the type rule.
+- `CMJ_SL_LEFT` and `CMJ_SL_RIGHT` cannot both be required (both optional is fine): an event uses one side per athlete.
+- `name` has no control characters; `description` allows line breaks and tabs only. Labels already had this rule.
+- Audit rows are best effort: a failed audit insert is logged and never fails the change. `audit_logs` has no organization column, so the organization is in `details`. The CHECK constraints that allow these actions and the `eval_template` resource type are added by manual migration `0155_add_eval_template_audit_actions.sql`.
+
+**Edits never change existing events or reports.** Applying a template copies its tests into `event_metrics`; nothing stores a template id (no foreign key references `eval_battery_templates`). Editing or deleting a template only changes what later events start from (locked in by the "nothing stores a template id" integration test).
 
 Reads use the STANDARD limiter; writes use MUTATION (20 per 15 minutes).
 
@@ -114,7 +124,8 @@ npm run test:unit -- packages/api/services/eval-report packages/api/services/__t
 
 # Integration (needs a Postgres in .env.local)
 npm run test:integration -- tests/integration/eval-report-routes.test.ts tests/integration/eval-report-access.test.ts \
-  tests/integration/eval-report-pdf.test.ts tests/integration/eval-templates.test.ts tests/integration/coppa-eval-reports.test.ts
+  tests/integration/eval-report-pdf.test.ts tests/integration/eval-templates.test.ts tests/integration/coppa-eval-reports.test.ts \
+  tests/migrations/0155-eval-template-audit-actions.test.ts
 
 # E2E (local; see below)
 npx playwright test tests/e2e/eval-report.spec.ts --config=playwright.testing.config.ts

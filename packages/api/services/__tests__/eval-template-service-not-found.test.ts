@@ -23,7 +23,7 @@ import { updateTemplate, archiveTemplate, TemplateNotFoundError } from '../eval-
 
 describe('eval template service: vanished row', () => {
   it('updateTemplate throws TemplateNotFoundError', async () => {
-    await expect(updateTemplate('gone', { name: 'x' })).rejects.toBeInstanceOf(TemplateNotFoundError);
+    await expect(updateTemplate({ id: 'gone', organizationId: null, metrics: [] }, { name: 'x' }, 'u')).rejects.toBeInstanceOf(TemplateNotFoundError);
   });
 
   it('archiveTemplate throws TemplateNotFoundError', async () => {

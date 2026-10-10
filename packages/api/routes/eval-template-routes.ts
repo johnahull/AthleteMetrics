@@ -17,6 +17,7 @@ import {
 } from "@shared/eval-template-schemas";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import type { SessionUser } from "../utils/auth-helpers";
+import { isSiteAdmin } from "../permissions/helpers";
 import * as svc from "../services/eval-template-service";
 
 const limiter = (limit: number, message: string) =>
@@ -92,13 +93,14 @@ export function registerEvalTemplateRoutes(app: Express) {
    * The template's tests resolved against site_metrics, for the new-event form. Same visibility as the plain read.
    * `?organizationId=` names the organization the event is for (required for the global default, which has no organization of its own
    * to apply the organization-type availability rule from; missing = 400); the caller must write in it, else 404.
+   * A site admin may resolve the default with no organization (editing it for every organization): no type rule then.
    */
   app.get("/api/eval-templates/:id/resolved", requireAuth, readLimiter, async (req, res) => {
     try {
       const template = await svc.getVisibleTemplate(userOf(req), req.params.id);
       if (!template) return res.status(404).json(NOT_FOUND);
       const asked = typeof req.query.organizationId === "string" ? req.query.organizationId : null;
-      if (!template.organizationId && !asked) {
+      if (!template.organizationId && !asked && !isSiteAdmin(userOf(req))) {
         return res.status(400).json({ error: "organizationId is required to resolve the default template" });
       }
       if (asked && !(await svc.isOrgWriter(userOf(req), asked))) return res.status(404).json(NOT_FOUND);
@@ -129,7 +131,7 @@ export function registerEvalTemplateRoutes(app: Express) {
       if (!template) return;
       const parsed = updateEvalTemplateSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid template", details: parsed.error.flatten() });
-      return res.json(await svc.updateTemplate(template.id, parsed.data));
+      return res.json(await svc.updateTemplate(template, parsed.data, userOf(req).id));
     } catch (e) {
       return handleError(res, e);
     }
@@ -150,7 +152,7 @@ export function registerEvalTemplateRoutes(app: Express) {
       const template = await editableTemplate(req, res);
       if (!template) return;
       if (!template.organizationId) return res.status(409).json({ error: "The default template cannot be deleted; archive it instead" });
-      await svc.deleteTemplate(template.id);
+      await svc.deleteTemplate(template.id, userOf(req).id);
       return res.status(204).end();
     } catch (e) {
       return handleError(res, e);

@@ -10,6 +10,8 @@
 > gap there until that feature lands (AM-FEAT-015 uses 0146-0149).
 > 0153 is provisional for AM-FEAT-019 (eval report templates; 0151 is taken by both the yard-benchmark
 > description rewrite and the unmerged AM-FEAT-018 momentum branch): take the next free number at merge.
+> 0154 (strip derived metrics from eval templates) and 0155 (eval template audit actions) belong to the same
+> AM-FEAT-019 branch and follow 0153 if it is renumbered.
 
 ## Current State (2025-10-30)
 

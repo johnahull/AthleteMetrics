@@ -134,8 +134,9 @@ describe('eval templates and org eval report settings', () => {
       if (inserted.length > 0) createdSiteMetricCodes.push(code);
     }
 
-    // A derived and an inactive metric, for the resolved statuses (literal codes: a key outside the key map is a code)
-    for (const [code, extra] of [[DERIVED_CODE, { isDerived: true }], [INACTIVE_CODE, { isActive: false }], [COLLEGE_CODE, { availableOrgTypes: ['college'] }]] as const) {
+    // A derived and an inactive metric, for the resolved statuses (literal codes: a key outside the key map is a code).
+    // The derived row carries a formula so a fully migrated DB (chk_derived_metrics_valid) accepts it too.
+    for (const [code, extra] of [[DERIVED_CODE, { isDerived: true, formula: 'FLY10_TIME * 1', dependentMetrics: ['FLY10_TIME'], calculationConfig: {} }], [INACTIVE_CODE, { isActive: false }], [COLLEGE_CODE, { availableOrgTypes: ['college'] }]] as const) {
       await db.insert(siteMetrics).values({ code, label: `Label ${code}`, category: 'power', unit: 'kg', metricType: 'tracking', ...extra } as any);
       createdSiteMetricCodes.push(code);
     }
@@ -539,6 +540,10 @@ describe('eval templates and org eval report settings', () => {
         expect(without.status).toBe(400);
         expect(without.body.error).toMatch(/organizationId is required/);
         expect((await as('coachA').get(`/api/eval-templates/${globalId}/resolved?organizationId=${orgB}`)).status).toBe(404);
+        // A site admin editing the default resolves it with no organization: no organization-type rule applies
+        const admin = await as('siteAdmin').get(`/api/eval-templates/${globalId}/resolved`);
+        expect(admin.status).toBe(200);
+        expect(admin.body.metrics.find((m: any) => m.metricKey === COLLEGE_CODE).status).toBe('available');
       } finally {
         await db.update(evalBatteryTemplates).set({ metrics: g.metrics as any }).where(eq(evalBatteryTemplates.id, globalId));
       }
@@ -615,6 +620,228 @@ describe('eval templates and org eval report settings', () => {
     it('rejects an invalid preset name and an athlete\'s write', async () => {
       expect((await as('coachA').put(`/api/organizations/${orgA}/eval-report-settings`).send({ presets: { college: {} } })).status).toBe(400);
       expect((await as('athleteA').put(`/api/organizations/${orgA}/eval-report-settings`).send({ presets: {} })).status).toBe(404);
+    });
+  });
+
+  describe('managing templates: eligibility, normalisation, audit, frozen copies', () => {
+    let orgCollege: string;
+    const GONE_CODE = `ZZ_GONE_${SUFFIX}`;
+    const post = (who: Who, organizationId: string, body: Record<string, unknown>) => as(who).post(`/api/organizations/${organizationId}/eval-templates`).send({ sport: 'SOCCER', ...body });
+    const rowOf = async (id: string) => (await db.select().from(evalBatteryTemplates).where(eq(evalBatteryTemplates.id, id)))[0];
+    const insertTpl = async (organizationId: string, name: string, list: unknown[]) =>
+      (await db.insert(evalBatteryTemplates).values({ organizationId, sport: 'SOCCER', name: `${PREFIX}-${name}`, metrics: list } as any).returning({ id: evalBatteryTemplates.id }))[0].id;
+    const auditFor = (id: string, action: string) => db.select().from(auditLogs).where(and(eq(auditLogs.resourceId, id), eq(auditLogs.action, action)));
+
+    beforeAll(async () => {
+      [{ id: orgCollege }] = await db.insert(organizations).values({ name: `${PREFIX}-college`, orgType: 'college' } as any).returning({ id: organizations.id });
+      await db.insert(siteMetrics).values({ code: GONE_CODE, label: GONE_CODE, category: 'power', unit: 'in', metricType: 'higher_is_better' } as any);
+      createdSiteMetricCodes.push(GONE_CODE);
+    });
+
+    it('rejects a derived metric on create and on update, naming it, and writes nothing', async () => {
+      const bad = [metrics[0], { metricKey: DERIVED_CODE, isRequired: false, displayOrder: 2 }];
+      const res = await post('coachA', orgA, { name: `${PREFIX}-derived`, metrics: bad });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain(DERIVED_CODE);
+      const id = (await post('coachA', orgA, { name: `${PREFIX}-derived-ok`, metrics: [metrics[0]] })).body.id;
+      const upd = await as('coachA').patch(`/api/eval-templates/${id}`).send({ metrics: bad });
+      expect(upd.status).toBe(400);
+      expect(upd.body.error).toContain(DERIVED_CODE);
+      expect((await rowOf(id)).metrics).toHaveLength(1);
+    });
+
+    it('rejects a derived metric even when the template already holds it', async () => {
+      const id = await insertTpl(orgA, 'had-derived', [metrics[0], { metricKey: DERIVED_CODE, isRequired: false, displayOrder: 2 }]);
+      const keep = await as('coachA').patch(`/api/eval-templates/${id}`).send({ metrics: [metrics[0], { metricKey: DERIVED_CODE, isRequired: false, displayOrder: 2 }] });
+      expect(keep.status).toBe(400);
+      // ... but the template can still be renamed, and saved without it
+      expect((await as('coachA').patch(`/api/eval-templates/${id}`).send({ name: `${PREFIX}-had-derived-2` })).status).toBe(200);
+      expect((await as('coachA').patch(`/api/eval-templates/${id}`).send({ metrics: [metrics[0]] })).status).toBe(200);
+    });
+
+    it('rejects a NEW inactive or org-type-excluded metric, but keeps ones the template already holds', async () => {
+      for (const code of [INACTIVE_CODE, COLLEGE_CODE]) {
+        const res = await post('coachA', orgA, { name: `${PREFIX}-new-${code}`, metrics: [metrics[0], { metricKey: code, isRequired: false, displayOrder: 2 }] });
+        expect(res.status, code).toBe(400);
+        expect(res.body.error).toContain(code);
+      }
+      const id = await insertTpl(orgA, 'has-ineligible', [metrics[0], { metricKey: INACTIVE_CODE, isRequired: false, displayOrder: 2 }, { metricKey: COLLEGE_CODE, isRequired: false, displayOrder: 3 }]);
+      const held = [
+        { metricKey: COLLEGE_CODE, isRequired: true, displayOrder: 1 },
+        { metricKey: INACTIVE_CODE, isRequired: false, displayOrder: 2 },
+        { ...metrics[0], displayOrder: 3 },
+      ];
+      const reordered = await as('coachA').patch(`/api/eval-templates/${id}`).send({ name: `${PREFIX}-has-ineligible-2`, metrics: held });
+      expect(reordered.status).toBe(200);
+      expect(reordered.body.metrics.map((m: any) => m.metricKey)).toEqual([COLLEGE_CODE, INACTIVE_CODE, 'DASH_10']);
+      // Removing one and adding it back in a later save is a NEW key
+      expect((await as('coachA').patch(`/api/eval-templates/${id}`).send({ metrics: [held[0], held[2]] })).status).toBe(200);
+      expect((await as('coachA').patch(`/api/eval-templates/${id}`).send({ metrics: held })).status).toBe(400);
+    });
+
+    it('PATCH of a template holding a stale ZZ_NO_SUCH_CODE row: rename and re-save work, adding another unknown does not', async () => {
+      const id = await insertTpl(orgA, 'stale-patch', staleMetrics);
+      expect((await as('coachA').patch(`/api/eval-templates/${id}`).send({ name: `${PREFIX}-stale-patch-2` })).status).toBe(200);
+      const resaved = await as('coachA').patch(`/api/eval-templates/${id}`).send({ metrics: [{ ...staleMetrics[1], displayOrder: 1 }, { ...staleMetrics[0], displayOrder: 2 }] });
+      expect(resaved.status).toBe(200);
+      const more = await as('coachA').patch(`/api/eval-templates/${id}`).send({ metrics: [...staleMetrics, { metricKey: 'ZZ_ALSO_MISSING', isRequired: false, displayOrder: 3 }] });
+      expect(more.status).toBe(400);
+      expect(more.body.error).toContain('ZZ_ALSO_MISSING');
+      expect(more.body.error).not.toContain('ZZ_NO_SUCH_CODE');
+    });
+
+    it('a metric deleted from the catalogue after the template was saved does not block later saves', async () => {
+      const id = (await post('coachA', orgA, { name: `${PREFIX}-gone`, metrics: [metrics[0], { metricKey: GONE_CODE, isRequired: false, displayOrder: 2 }] })).body.id;
+      expect(id).toBeDefined();
+      await db.delete(siteMetrics).where(eq(siteMetrics.code, GONE_CODE));
+      const res = await as('coachA').patch(`/api/eval-templates/${id}`).send({ name: `${PREFIX}-gone-2`, metrics: [metrics[0], { metricKey: GONE_CODE, isRequired: true, displayOrder: 2 }] });
+      expect(res.status).toBe(200);
+      const resolved = await as('coachA').get(`/api/eval-templates/${id}/resolved`);
+      expect(resolved.body.metrics.find((m: any) => m.metricKey === GONE_CODE).status).toBe('missing');
+    });
+
+    it('takes the org type from the template row, never from ?organizationId= on a write', async () => {
+      const id = (await post('coachA', orgA, { name: `${PREFIX}-rowtype`, metrics: [metrics[0]] })).body.id;
+      const addCollege = { metrics: [metrics[0], { metricKey: COLLEGE_CODE, isRequired: false, displayOrder: 2 }] };
+      const viaQuery = await as('siteAdmin').patch(`/api/eval-templates/${id}?organizationId=${orgCollege}`).send(addCollege);
+      expect(viaQuery.status).toBe(400);
+      expect(viaQuery.body.error).toContain(COLLEGE_CODE);
+      // In a college organization the same metric is fine
+      const collegeTpl = (await post('siteAdmin', orgCollege, { name: `${PREFIX}-college-tpl`, metrics: [metrics[0]] })).body.id;
+      expect((await as('siteAdmin').patch(`/api/eval-templates/${collegeTpl}?organizationId=${orgA}`).send(addCollege)).status).toBe(200);
+    });
+
+    it('the default template has no org type to check, so a site admin may add an org-type-restricted metric to it', async () => {
+      const [g] = await db.select().from(evalBatteryTemplates).where(eq(evalBatteryTemplates.id, globalId));
+      try {
+        const next = [...g.metrics, { metricKey: COLLEGE_CODE, isRequired: false, displayOrder: 99 }];
+        const res = await as('siteAdmin').patch(`/api/eval-templates/${globalId}`).send({ metrics: next });
+        expect(res.status).toBe(200);
+        // ... but never a derived or inactive one
+        expect((await as('siteAdmin').patch(`/api/eval-templates/${globalId}`).send({ metrics: [...g.metrics, { metricKey: INACTIVE_CODE, isRequired: false, displayOrder: 99 }] })).status).toBe(400);
+      } finally {
+        await db.update(evalBatteryTemplates).set({ metrics: g.metrics as any, name: g.name, description: g.description }).where(eq(evalBatteryTemplates.id, globalId));
+      }
+    });
+
+    it('duplicating the default into an org whose type excludes one of its keys: only the available ones go through', async () => {
+      const [g] = await db.select().from(evalBatteryTemplates).where(eq(evalBatteryTemplates.id, globalId));
+      await db.update(evalBatteryTemplates).set({ metrics: [...g.metrics, { metricKey: COLLEGE_CODE, isRequired: false, displayOrder: 99 }] as any }).where(eq(evalBatteryTemplates.id, globalId));
+      try {
+        const resolved = await as('coachA').get(`/api/eval-templates/${globalId}/resolved?organizationId=${orgA}`);
+        const all = resolved.body.metrics.map((m: any) => ({ metricKey: m.metricKey, isRequired: m.isRequired, displayOrder: m.displayOrder, ...(m.customLabel ? { customLabel: m.customLabel } : {}) }));
+        expect((await post('coachA', orgA, { name: `${PREFIX}-copy-all`, metrics: all })).status).toBe(400);
+        const available = resolved.body.metrics.filter((m: any) => m.status === 'available');
+        const keep = all.filter((m: any) => available.some((a: any) => a.metricKey === m.metricKey));
+        expect(keep.some((m: any) => m.metricKey === COLLEGE_CODE)).toBe(false);
+        const copy = await post('coachA', orgA, { name: `${g.name} (copy) ${PREFIX}`, metrics: keep });
+        expect(copy.status).toBe(201);
+        expect(copy.body.organizationId).toBe(orgA);
+        expect(copy.body.metrics.map((m: any) => m.metricKey)).toEqual(keep.map((m: any) => m.metricKey));
+      } finally {
+        await db.update(evalBatteryTemplates).set({ metrics: g.metrics as any }).where(eq(evalBatteryTemplates.id, globalId));
+      }
+    });
+
+    it('normalises a code to its logical key on create and update; resolveTemplateKey gives the code back', async () => {
+      const created = await post('coachA', orgA, { name: `${PREFIX}-norm`, metrics: [{ metricKey: 'FLY10_TIME', isRequired: true, displayOrder: 1 }, { metricKey: 'DASH_10', isRequired: true, displayOrder: 2 }] });
+      expect(created.status).toBe(201);
+      expect(created.body.metrics.map((m: any) => m.metricKey)).toEqual(['FLY_10', 'DASH_10']);
+      // A template stored with the raw code (an older save) re-saves as the logical key, and the code is not "new"
+      const id = await insertTpl(orgA, 'raw-code', [{ metricKey: 'FLY10_TIME', isRequired: true, displayOrder: 1 }, { metricKey: INACTIVE_CODE, isRequired: false, displayOrder: 2 }]);
+      const upd = await as('coachA').patch(`/api/eval-templates/${id}`).send({ metrics: [{ metricKey: 'FLY10_TIME', isRequired: false, displayOrder: 1 }, { metricKey: INACTIVE_CODE, isRequired: false, displayOrder: 2 }] });
+      expect(upd.status).toBe(200);
+      const stored = (await rowOf(id)).metrics;
+      expect(stored.map((m) => m.metricKey)).toEqual(['FLY_10', INACTIVE_CODE]);
+      expect(resolveTemplateKey(stored[0].metricKey)).toBe('FLY10_TIME');
+      // A literal custom code outside the key map is stored as it is
+      expect(stored[1].metricKey).toBe(INACTIVE_CODE);
+    });
+
+    it('rejects both single-leg CMJ sides marked required; both optional is fine', async () => {
+      const both = (req: boolean) => [{ metricKey: 'CMJ_SL_LEFT', isRequired: req, displayOrder: 1 }, { metricKey: 'JUMP_CMJ_SL_R', isRequired: req, displayOrder: 2 }];
+      const res = await post('coachA', orgA, { name: `${PREFIX}-sl-req`, metrics: both(true) });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/single-leg/i);
+      const ok = await post('coachA', orgA, { name: `${PREFIX}-sl-opt`, metrics: both(false) });
+      expect(ok.status).toBe(201);
+      expect((await as('coachA').patch(`/api/eval-templates/${ok.body.id}`).send({ metrics: both(true) })).status).toBe(400);
+      const one = [{ ...both(true)[0] }, { ...both(false)[1] }];
+      expect((await as('coachA').patch(`/api/eval-templates/${ok.body.id}`).send({ metrics: one })).status).toBe(200);
+    });
+
+    it('rejects control characters in the name and description', async () => {
+      expect((await post('coachA', orgA, { name: `${PREFIX}-ctl\u0007`, metrics: [metrics[0]] })).status).toBe(400);
+      const id = (await post('coachA', orgA, { name: `${PREFIX}-ctl`, metrics: [metrics[0]], description: 'Two\nlines' })).body.id;
+      expect((await as('coachA').patch(`/api/eval-templates/${id}`).send({ description: 'bad\u0000' })).status).toBe(400);
+      expect((await rowOf(id)).description).toBe('Two\nlines');
+    });
+
+    it('authorization: a coach of another org and an athlete get 404 (no probing), a coach editing the default 403', async () => {
+      const id = (await post('coachA', orgA, { name: `${PREFIX}-authz`, metrics: [metrics[0]] })).body.id;
+      for (const who of ['coachB', 'athleteA'] as const) {
+        expect((await as(who).patch(`/api/eval-templates/${id}`).send({ name: 'x' })).status, who).toBe(404);
+        expect((await as(who).delete(`/api/eval-templates/${id}`)).status, who).toBe(404);
+      }
+      expect((await as('coachA').patch(`/api/eval-templates/${globalId}`).send({ name: 'x' })).status).toBe(403);
+      expect((await as('coachA').delete(`/api/eval-templates/${globalId}`)).status).toBe(403);
+      expect((await rowOf(id)).name).toBe(`${PREFIX}-authz`);
+    });
+
+    it('writes an eval_template_updated audit row on update', async () => {
+      const id = (await post('coachA', orgA, { name: `${PREFIX}-audit-u`, metrics: [metrics[0]] })).body.id;
+      expect((await as('adminA').patch(`/api/eval-templates/${id}`).send({ name: `${PREFIX}-audit-u2`, metrics: [metrics[0], metrics[1]] })).status).toBe(200);
+      const rows = await auditFor(id, 'eval_template_updated');
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ userId: u.adminA.id, resourceType: 'eval_template' });
+      expect(JSON.parse(rows[0].details!)).toMatchObject({ name: `${PREFIX}-audit-u2`, organizationId: orgA, changedFields: ['name', 'metrics'], metricCount: 2 });
+    });
+
+    it('writes an eval_template_deleted audit row with the full metrics snapshot and the organization', async () => {
+      const list = [metrics[0], { ...metrics[2], displayOrder: 2 }];
+      const id = (await post('coachA', orgA, { name: `${PREFIX}-audit-d`, metrics: list, description: 'gone soon' })).body.id;
+      expect((await as('coachA').delete(`/api/eval-templates/${id}`)).status).toBe(204);
+      const rows = await auditFor(id, 'eval_template_deleted');
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ userId: u.coachA.id, resourceType: 'eval_template' });
+      expect(JSON.parse(rows[0].details!)).toEqual({ name: `${PREFIX}-audit-d`, organizationId: orgA, sport: 'SOCCER', description: 'gone soon', metrics: list });
+    });
+
+    it('a failed audit write does not fail the change (it is logged)', async () => {
+      const id = (await post('coachA', orgA, { name: `${PREFIX}-audit-fail`, metrics: [metrics[0]] })).body.id;
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+      // NOT VALID: existing rows are not checked, only new inserts
+      await db.execute(sql`ALTER TABLE audit_logs ADD CONSTRAINT zz_eval_tpl_audit_block CHECK (action NOT LIKE 'eval_template_%') NOT VALID`);
+      try {
+        expect((await as('coachA').patch(`/api/eval-templates/${id}`).send({ name: `${PREFIX}-audit-fail2` })).status).toBe(200);
+        expect((await as('coachA').delete(`/api/eval-templates/${id}`)).status).toBe(204);
+        expect(errors).toHaveBeenCalled();
+      } finally {
+        await db.execute(sql`ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS zz_eval_tpl_audit_block`);
+        errors.mockRestore();
+      }
+      expect(await rowOf(id)).toBeUndefined();
+    });
+
+    it('nothing stores a template id: editing or deleting a template leaves events created from it unchanged', async () => {
+      const fks = await db.execute(sql`SELECT conname FROM pg_constraint WHERE contype = 'f' AND confrelid = 'eval_battery_templates'::regclass`);
+      expect((fks as any).rows ?? fks).toHaveLength(0);
+
+      const id = (await post('coachB', orgB, { name: `${PREFIX}-frozen`, metrics })).body.id;
+      const [ev] = await db.insert(events).values({ organizationId: orgB, name: `${PREFIX}-ev-frozen`, startDate: new Date('2026-03-01T10:00:00Z') } as any).returning({ id: events.id });
+      expect((await as('coachB').post(`/api/events/${ev.id}/apply-eval-template`).send({ templateId: id, includeOptional: ['CMJ_HOH'] })).status).toBe(200);
+      const snapshot = async () =>
+        (await db.select().from(eventMetrics).where(eq(eventMetrics.eventId, ev.id)))
+          .map((r) => ({ code: r.metricCode, order: r.displayOrder, required: r.isRequired, label: r.customLabel }))
+          .sort((a, b) => a.code.localeCompare(b.code));
+      const before = await snapshot();
+      expect(before).toHaveLength(3);
+
+      const changed = [{ metricKey: 'RSI_LEFT', isRequired: true, displayOrder: 1 }, { metricKey: 'CMJ_HOH', isRequired: true, displayOrder: 2, customLabel: 'Renamed' }];
+      expect((await as('coachB').patch(`/api/eval-templates/${id}`).send({ name: `${PREFIX}-frozen-2`, metrics: changed })).status).toBe(200);
+      expect(await snapshot()).toEqual(before);
+      expect((await as('coachB').delete(`/api/eval-templates/${id}`)).status).toBe(204);
+      expect(await snapshot()).toEqual(before);
     });
   });
 

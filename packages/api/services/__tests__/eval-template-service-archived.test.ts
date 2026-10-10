@@ -19,7 +19,7 @@ import { updateTemplate, archiveTemplate, TemplateArchivedError } from '../eval-
 
 describe('eval template service: archived template', () => {
   it('updateTemplate throws TemplateArchivedError', async () => {
-    await expect(updateTemplate('t', { name: 'x' })).rejects.toBeInstanceOf(TemplateArchivedError);
+    await expect(updateTemplate({ id: 't', organizationId: null, metrics: [] }, { name: 'x' }, 'u')).rejects.toBeInstanceOf(TemplateArchivedError);
   });
   it('archiveTemplate throws TemplateArchivedError', async () => {
     await expect(archiveTemplate('t')).rejects.toBeInstanceOf(TemplateArchivedError);
