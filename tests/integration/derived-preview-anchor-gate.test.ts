@@ -30,13 +30,18 @@ vi.mock('../../packages/api/services/measurement-notification-service', () => ({
 
 import { registerRoutes } from '../../packages/api/routes';
 import { db } from '../../packages/api/db';
-import { measurements, organizations, teams, userOrganizations, userTeams, users } from '@shared/schema';
+import { measurements, organizations, siteMetrics, teams, userOrganizations, userTeams, users } from '@shared/schema';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 
 const DERIVED = 'TST_PV_MOMENTUM';
 const WEIGHT = 'TST_PV_WT';
 const FLY = 'FLY10_TIME';
 const PASSWORD = 'TestPass123!';
+const STRATEGY_METRICS: Array<[string, number, Record<string, string>]> = [
+  ['TST_PV_SAME', 912, { dateMatchStrategy: 'same_date', missingSourceBehavior: 'skip' }],
+  ['TST_PV_BEFORE', 913, { dateMatchStrategy: 'latest_before', missingSourceBehavior: 'skip' }],
+  ['TST_PV_EVENT', 914, { dateMatchStrategy: 'same_date', missingSourceBehavior: 'skip', sourceSelection: 'latest_event' }],
+];
 
 let app: Express;
 let orgId: string;
@@ -47,10 +52,10 @@ let coachCookie: string;
 let nextIp = 1;
 const ip = () => `10.5.79.${nextIp++}`;
 
-const preview = (date: string, cookie = coachCookie) =>
+const preview = (date: string, cookie = coachCookie, metricCode = DERIVED) =>
   request(app)
     .get('/api/measurements/calculate-preview')
-    .query({ athleteId, metricCode: DERIVED, date })
+    .query({ athleteId, metricCode, date })
     .set('X-Forwarded-For', ip())
     .set('Cookie', cookie);
 
@@ -126,6 +131,21 @@ beforeAll(async () => {
       is_derived = true, is_active = true, formula = EXCLUDED.formula,
       dependent_metrics = EXCLUDED.dependent_metrics, calculation_config = EXCLUDED.calculation_config
   `);
+  // One weight-only derived metric per date-match strategy (scope tests)
+  for (const [code, order, config] of STRATEGY_METRICS) {
+    await db.execute(sql`
+      INSERT INTO site_metrics (
+        code, label, category, unit, metric_type, is_system_default, is_active, display_order, decimal_precision,
+        is_derived, formula, dependent_metrics, calculation_config
+      ) VALUES (
+        ${code}, ${`Test preview ${code}`}, 'Power', 'lb', 'tracking', false, true, ${order}, 1,
+        true, ${`${WEIGHT.toLowerCase()} * 2`}, ARRAY[${WEIGHT}], ${JSON.stringify(config)}::jsonb
+      )
+      ON CONFLICT (code) DO UPDATE SET
+        is_derived = true, is_active = true, formula = EXCLUDED.formula,
+        dependent_metrics = EXCLUDED.dependent_metrics, calculation_config = EXCLUDED.calculation_config
+    `);
+  }
   app = express();
   app.set('trust proxy', 1);
   app.use(express.json());
@@ -135,6 +155,9 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await db.execute(sql`DELETE FROM site_metrics WHERE code IN (${DERIVED}, ${WEIGHT})`);
+  for (const [code] of STRATEGY_METRICS) {
+    await db.execute(sql`DELETE FROM site_metrics WHERE code = ${code}`);
+  }
 });
 
 beforeEach(async () => {
@@ -178,13 +201,21 @@ describe('GET /api/measurements/calculate-preview: anchorMetric gate (#579)', ()
   });
 
   it('returns the value on a date with a verified anchor', async () => {
-    await insert(FLY, '1.30', '2026-03-10', true);
-    await insert(WEIGHT, '150', '2026-03-01', true);
+    const flyId = await insert(FLY, '1.30', '2026-03-10', true);
+    const weightId = await insert(WEIGHT, '150', '2026-03-01', true);
+    const [flyMetric] = await db.select().from(siteMetrics).where(eq(siteMetrics.code, FLY));
 
     const res = await preview('2026-03-10');
 
     expect(res.status).toBe(200);
     expect(res.body.calculatedValue).toBeCloseTo((150 * 0.45359237 * 9.144) / 1.3, 6);
+    // Labels come from site_metrics, units from the rows, in dependent-metric order
+    expect(res.body.sourceMetrics).toEqual([
+      { code: FLY, label: flyMetric.label, value: 1.3, unit: 's', measurementId: flyId },
+      { code: WEIGHT, label: 'Test preview body weight', value: 150, unit: 'lb', measurementId: weightId },
+    ]);
+    expect(res.body.sourceMeasurementIds).toEqual([flyId, weightId]);
+    expect(res.body.formula).toBe(`${WEIGHT.toLowerCase()} * 0.45359237 * 9.144 / fly10_time`);
   });
 
   it('returns no value when the anchor on that date is unverified', async () => {
@@ -328,5 +359,46 @@ describe('GET /api/measurements/calculate-preview: visibility scope', () => {
     expect(res.status).toBe(200);
     expect(res.body.calculatedValue).toBeNull();
     expect(res.body.missingMetrics).toEqual([FLY]);
+  });
+
+  it('a coach in org A and org B sees both organizations, but not a third org or personal rows', async () => {
+    const aFly = await insert(FLY, '1.30', D, true);
+    const bWeight = await insert(WEIGHT, '200', '2026-03-09', true, { organizationId: orgBId });
+    // Same-date rows with higher values: an unscoped 'closest' lookup picks one of these
+    const cWeight = await insert(WEIGHT, '250', D, true, { organizationId: orgCId });
+    const personalWeight = await insert(WEIGHT, '260', D, true, { organizationId: null });
+    const coachAB = await makeUser('coachab');
+    extraUserIds.push(coachAB.id);
+    await db.insert(userOrganizations).values([
+      { userId: coachAB.id, organizationId: orgId, role: 'coach' },
+      { userId: coachAB.id, organizationId: orgBId, role: 'coach' },
+    ] as any);
+
+    const res = await preview(D, await loginAs(coachAB.username));
+
+    expect(res.status).toBe(200);
+    expect([...res.body.sourceMeasurementIds].sort()).toEqual([aFly, bWeight].sort());
+    expect(res.body.calculatedValue).toBeCloseTo(momentum(200, 1.3), 6);
+    const text = JSON.stringify(res.body);
+    expect(text).not.toContain(cWeight);
+    expect(text).not.toContain(personalWeight);
+  });
+
+  // Each strategy builds its own query; the org-B row is the one an unscoped lookup picks
+  it.each([
+    ['same_date', 'TST_PV_SAME', '2026-03-10'],
+    ['latest_before', 'TST_PV_BEFORE', '2026-03-09'],
+    ['latest_event', 'TST_PV_EVENT', '2026-03-10'],
+  ])('%s: rows in an organization the caller cannot see are not used', async (_strategy, code, bDate) => {
+    const aWeight = await insert(WEIGHT, '150', code === 'TST_PV_BEFORE' ? '2026-03-05' : D, true);
+    // Inserted last (newest) and with the higher value, in org B
+    const bWeight = await insert(WEIGHT, '200', bDate, true, { organizationId: orgBId });
+
+    const res = await preview(D, coachCookie, code);
+
+    expect(res.status).toBe(200);
+    expect(res.body.sourceMeasurementIds).toEqual([aWeight]);
+    expect(res.body.calculatedValue).toBe(300);
+    expect(JSON.stringify(res.body)).not.toContain(bWeight);
   });
 });
