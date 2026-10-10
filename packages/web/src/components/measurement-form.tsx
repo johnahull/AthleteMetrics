@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useId } from "react";
 import { useForm, FormProvider, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -227,7 +227,7 @@ export default function MeasurementForm() {
   // Until the preview answers, Save could post a leftover value as a direct row
   const isPreviewPending =
     !!selectedMetric?.isDerived && !overrideCalculated && isPreviewFetching && !usesCalculatedValue;
-  const autoCalculatedMessageId = "derived-auto-calculated-message";
+  const autoCalculatedMessageId = useId();
 
   // Watch for date changes and refetch active teams
   useEffect(() => {

@@ -28,7 +28,7 @@ import { getAuthorizationError, AUTH_ERRORS } from "../helpers/auth-errors";
 import { z } from "zod";
 import { ZodError } from "zod";
 import { db } from "../db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { PAGINATION } from "../constants/pagination";
 import { storage } from "../storage";
@@ -426,15 +426,21 @@ export function registerMeasurementRoutes(app: Express) {
       const sourceMetrics: Array<{ code: string; label: string; value: number; unit: string; measurementId: string }> = [];
       const sourceMeasurementIds: string[] = [];
 
+      // Labels and units for all source metrics in one query
+      const sourceCodes = [...sourceMeasurementsMap.keys()];
+      const sourceMetricRows = sourceCodes.length > 0
+        ? await db
+            .select({ code: siteMetrics.code, label: siteMetrics.label, unit: siteMetrics.unit })
+            .from(siteMetrics)
+            .where(inArray(siteMetrics.code, sourceCodes))
+        : [];
+      const sourceMetricByCode = new Map(sourceMetricRows.map(m => [m.code, m]));
+
       for (const [code, measurement] of sourceMeasurementsMap.entries()) {
         sourceValues[code.toLowerCase()] = parseFloat(measurement.value);
         sourceMeasurementIds.push(measurement.id);
 
-        // Get label and unit from siteMetrics
-        const [sourceMetric] = await db
-          .select()
-          .from(siteMetrics)
-          .where(eq(siteMetrics.code, code));
+        const sourceMetric = sourceMetricByCode.get(code);
 
         sourceMetrics.push({
           code,
