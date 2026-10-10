@@ -104,6 +104,15 @@ describe('Analytics role redirect', () => {
     expect(mockSetLocation).toHaveBeenCalledTimes(1);
   });
 
+  it('leaves a parent on /analytics (no redirect, as before: only exact athlete/coach/org_admin matched)', () => {
+    mockUser = { ...baseUser, role: 'parent' as EnhancedUser['role'] };
+    mockUserOrganizations = [membership('parent', 'org-a')];
+    mockOrganizationContext = 'org-a';
+    const { rerender } = render(<Analytics />);
+    rerender(<Analytics />);
+    expect(mockSetLocation).not.toHaveBeenCalled();
+  });
+
   it('sends a loaded user with zero memberships to athlete analytics, once', () => {
     mockUser = { ...baseUser, role: 'coach' };
     mockUserOrganizations = [];

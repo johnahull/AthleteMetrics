@@ -10,7 +10,11 @@ import { shouldIgnoreEvent } from '@/lib/hotkeys';
 
 export interface UseKeyboardShortcutsOptions {
   user: EnhancedUser | null;
-  /** The user's memberships (useAuth().userOrganizations); they decide CREATE_MEASUREMENTS */
+  /**
+   * The user's memberships (useAuth().userOrganizations); they decide CREATE_MEASUREMENTS.
+   * Optional, but omitting it (or passing null) fails closed: no org-gated shortcut fires
+   * (site admins excepted).
+   */
   userOrganizations?: UserOrganization[] | null;
   onMeasurement?: () => void;
   onHelp?: () => void;
