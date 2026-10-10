@@ -469,19 +469,21 @@ export class EventRegistrationService {
     const targetStatus: RegistrationStatus = checkIn ? 'checked_in' : 'approved';
     const requested = Array.from(new Set(userIds));
 
+    let eventName = event.name;
     const result = await db.transaction(async (tx) => {
       // Serialise concurrent direct adds so they do not hand out the same registration numbers (the number has
       // no unique constraint). Self-registration does not take this lock, so a racing registration for the same
       // athlete is caught by the (event_id, user_id) unique constraint instead (see onConflictDoNothing below).
       // Status and frozen flag are read under the lock so a concurrent cancel or freeze cannot slip past the check.
       const [locked] = await tx
-        .select({ status: eventsTable.status, isFrozen: eventsTable.isFrozen, maxRegistrations: eventsTable.maxRegistrations })
+        .select({ name: eventsTable.name, status: eventsTable.status, isFrozen: eventsTable.isFrozen, maxRegistrations: eventsTable.maxRegistrations })
         .from(eventsTable)
         .where(eq(eventsTable.id, eventId))
         .for('update');
       if (!locked) {
         throw new EventNotFoundError();
       }
+      eventName = locked.name;
       if (locked.status === 'cancelled') {
         throw new EventCancelledError();
       }
@@ -611,7 +613,7 @@ export class EventRegistrationService {
           resourceType: 'event',
           resourceId: eventId,
           details: JSON.stringify({
-            eventName: event.name,
+            eventName,
             discoveryMethod: 'org_roster',
             directAdd: true,
             status: targetStatus,

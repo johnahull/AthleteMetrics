@@ -202,7 +202,7 @@ const sameMetrics = (a: EvalTemplateMetric[], b: EvalTemplateMetric[]) => metric
  * Last write wins: there is no version check, so of two concurrent saves the later one is kept.
  */
 export async function updateTemplate(
-  template: Pick<EvalBatteryTemplate, "id" | "organizationId" | "metrics"> & Partial<Pick<EvalBatteryTemplate, "name" | "sport" | "description" | "archivedAt">>,
+  template: EvalBatteryTemplate,
   patch: { name?: string; sport?: string; description?: string | null; metrics?: EvalTemplateMetric[] },
   userId: string
 ) {
@@ -217,7 +217,7 @@ export async function updateTemplate(
   const changedFields = (["name", "sport", "description", "metrics"] as const).filter((f) => changes[f] !== undefined);
   if (changedFields.length === 0) {
     if (template.archivedAt) return await throwNotFoundOrArchived(template.id);
-    return template as EvalBatteryTemplate;
+    return template;
   }
   let row: EvalBatteryTemplate | undefined;
   try {

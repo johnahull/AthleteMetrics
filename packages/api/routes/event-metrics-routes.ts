@@ -10,6 +10,7 @@ import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { EventMetricsService, EventMetricsFrozenError, type AddMetricOptions, type UpdateMetricOptions } from "../services/event-metrics-service";
 import { bulkAddEventMetrics } from "../services/event-metrics-bulk";
+import { EventNotFoundError } from "../services/event-registration-service";
 import { fetchEligibilityRows, ineligibleReason, INELIGIBLE_MESSAGE } from "../services/event-metric-eligibility";
 import { orgTypeOf } from "../services/eval-template-service";
 import { requireAuth } from "../middleware";
@@ -242,6 +243,9 @@ export function registerEventMetricsRoutes(app: Express) {
       } catch (error) {
         if (error instanceof EventMetricsFrozenError) {
           return res.status(409).json({ error: error.message });
+        }
+        if (error instanceof EventNotFoundError) {
+          return res.status(404).json({ error: "Event not found" });
         }
         console.error("Error bulk adding metrics to event:", error);
         return res.status(500).json({ error: "Failed to add metrics to event" });

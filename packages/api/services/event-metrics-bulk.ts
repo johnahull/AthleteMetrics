@@ -8,6 +8,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { auditLogs, eventMetrics, events, organizations } from "@shared/schema";
 import { EventMetricsFrozenError } from "./event-metrics-service";
+import { EventNotFoundError } from "./event-registration-service";
 import { fetchEligibilityRows, ineligibleReason, type IneligibleReason } from "./event-metric-eligibility";
 
 export interface BulkAddItem {
@@ -40,7 +41,7 @@ export async function bulkAddEventMetrics(eventId: string, userId: string, reque
       .from(events)
       .leftJoin(organizations, eq(organizations.id, events.organizationId))
       .where(eq(events.id, eventId));
-    if (!event) throw new Error("Event not found");
+    if (!event) throw new EventNotFoundError();
     if (event.isFrozen) throw new EventMetricsFrozenError();
 
     const rows = await fetchEligibilityRows(items.map((m) => m.metricCode), tx);
@@ -59,7 +60,7 @@ export async function bulkAddEventMetrics(eventId: string, userId: string, reque
             toAdd.map((m, i) => ({
               eventId,
               metricCode: m.metricCode,
-              displayOrder: m.displayOrder ?? 999 + i,
+              displayOrder: m.displayOrder ?? (999 + i),
               isRequired: m.isRequired ?? false,
               customLabel: m.customLabel ?? null,
             }))

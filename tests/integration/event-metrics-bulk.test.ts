@@ -36,6 +36,7 @@ vi.mock('express-rate-limit', async (importOriginal) => {
 
 import { registerRoutes } from '../../packages/api/routes';
 import { bulkAddEventMetrics } from '../../packages/api/services/event-metrics-bulk';
+import { EventNotFoundError } from '../../packages/api/services/event-registration-service';
 
 const PASSWORD = 'BulkMetrics123!';
 const PREFIX = `bulkmet-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -360,5 +361,9 @@ describe('POST /api/events/:eventId/metrics/bulk', () => {
       const ev = await newEvent(orgA, { isFrozen: true });
       expect((await post(ev, { metricCode: code(0) })).status).toBe(400);
     });
+  });
+
+  it('bulkAddEventMetrics rejects an event that does not exist with the typed EventNotFoundError', async () => {
+    await expect(bulkAddEventMetrics('00000000-0000-4000-8000-000000000000', u.siteAdmin.id, [item(code(0))])).rejects.toBeInstanceOf(EventNotFoundError);
   });
 });

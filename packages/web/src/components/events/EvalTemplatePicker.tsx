@@ -83,7 +83,8 @@ export function EvalTemplatePicker({ organizationId, value, onChange, onSelected
   const toggleOptional = (key: string, checked: boolean) => {
     if (!value || !resolved) return;
     // One single-leg jump side per athlete: ticking one unticks the other
-    const other = checked ? SINGLE_LEG_CMJ_KEYS.find((k) => k !== key && (SINGLE_LEG_CMJ_KEYS as readonly string[]).includes(key) && value.includeOptional.includes(k)) : undefined;
+    const isSingleLeg = (SINGLE_LEG_CMJ_KEYS as readonly string[]).includes(key);
+    const other = checked && isSingleLeg ? SINGLE_LEG_CMJ_KEYS.find((k) => k !== key && value.includeOptional.includes(k)) : undefined;
     const kept = value.includeOptional.filter((k) => k !== key && k !== other);
     onChange({ templateId: value.templateId, includeOptional: checked ? [...kept, key] : kept });
     onSelectedMetricsChange((list) => {
