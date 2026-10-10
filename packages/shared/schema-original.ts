@@ -1700,7 +1700,16 @@ function addAnchorMetricIssue(
   }
 }
 
-export const insertSiteMetricSchema = createInsertSchema(siteMetrics).omit({
+// Shape of a derived metric's calculationConfig; the metric form dialog extends it.
+export const derivedCalculationConfigSchema = z.object({
+  dateMatchStrategy: z.enum(['same_date', 'latest_before', 'closest']),
+  maxDateDifference: z.number().int().positive().optional(),
+  missingSourceBehavior: z.enum(['skip', 'error']),
+  sourceSelection: z.enum(['latest_event']).optional(),
+  anchorMetric: z.string().max(50).optional(),
+});
+
+export const insertSiteMetricSchema =createInsertSchema(siteMetrics).omit({
   id: true,
   createdAt: true,
   createdBy: true, // Set by backend from session
@@ -1733,13 +1742,7 @@ export const insertSiteMetricSchema = createInsertSchema(siteMetrics).omit({
   isDerived: z.boolean().default(false),
   formula: z.string().max(1000, "Formula must be 1000 characters or less").optional(),
   dependentMetrics: z.array(z.string()).optional(),
-  calculationConfig: z.object({
-    dateMatchStrategy: z.enum(['same_date', 'latest_before', 'closest']),
-    maxDateDifference: z.number().int().positive().optional(),
-    missingSourceBehavior: z.enum(['skip', 'error']),
-    sourceSelection: z.enum(['latest_event']).optional(),
-    anchorMetric: z.string().max(50).optional(),
-  }).optional(),
+  calculationConfig: derivedCalculationConfigSchema.optional(),
 }).superRefine((data, ctx) => {
   addAnchorMetricIssue(data, ctx);
   // Cross-field validation: If isDerived is true, formula is required
@@ -1792,13 +1795,7 @@ export const updateSiteMetricSchema = z.object({
   isDerived: z.boolean().optional(),
   formula: z.string().max(1000, "Formula must be 1000 characters or less").optional(),
   dependentMetrics: z.array(z.string()).nullable().optional(),
-  calculationConfig: z.object({
-    dateMatchStrategy: z.enum(['same_date', 'latest_before', 'closest']),
-    maxDateDifference: z.number().int().positive().optional(),
-    missingSourceBehavior: z.enum(['skip', 'error']),
-    sourceSelection: z.enum(['latest_event']).optional(),
-    anchorMetric: z.string().max(50).optional(),
-  }).nullable().optional(),
+  calculationConfig: derivedCalculationConfigSchema.nullable().optional(),
 }).superRefine((data, ctx) => {
   addAnchorMetricIssue(data, ctx);
   // Cross-field validation: If isDerived is being set to true, formula should be provided

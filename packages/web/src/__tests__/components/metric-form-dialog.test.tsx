@@ -35,6 +35,7 @@ const metric = {
     dateMatchStrategy: "closest",
     maxDateDifference: 45,
     missingSourceBehavior: "skip",
+    sourceSelection: "latest_event",
     anchorMetric: "FLY10_TIME",
   },
 } as any;
@@ -48,7 +49,7 @@ describe("MetricFormDialog: anchorMetric", () => {
     }) as any;
   });
 
-  it("submits calculationConfig.anchorMetric unchanged when editing a derived metric", async () => {
+  it("submits calculationConfig.sourceSelection and anchorMetric unchanged when editing a derived metric", async () => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={qc}>
@@ -64,6 +65,7 @@ describe("MetricFormDialog: anchorMetric", () => {
       dateMatchStrategy: "closest",
       maxDateDifference: 45,
       missingSourceBehavior: "skip",
+      sourceSelection: "latest_event",
       anchorMetric: "FLY10_TIME",
     });
   });
