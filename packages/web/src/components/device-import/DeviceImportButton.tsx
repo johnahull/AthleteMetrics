@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/tooltip';
 import { DeviceImportDialog } from './DeviceImportDialog';
 import { useAuth } from '@/lib/auth';
+import { canManageEvent } from '@/lib/event-permissions';
 import { Upload } from 'lucide-react';
 
 interface DeviceImportButtonProps {
@@ -39,14 +40,11 @@ export function DeviceImportButton({
   variant = 'outline',
   className,
 }: DeviceImportButtonProps) {
-  const { user } = useAuth();
+  const { user, userOrganizations } = useAuth();
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  // Only coaches and admins may import
-  const canImport =
-    user?.isSiteAdmin ||
-    user?.currentOrganization?.role === 'org_admin' ||
-    user?.currentOrganization?.role === 'coach';
+  // Only site admins and org_admins/coaches of the event's organization may import
+  const canImport = canManageEvent(user, userOrganizations, { organizationId });
 
   if (!canImport) return null;
 
