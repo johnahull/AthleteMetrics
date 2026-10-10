@@ -109,6 +109,21 @@ export const RATE_LIMITS = {
    * @default 20 requests per 15-minute window
    */
   WELLNESS_SCHEDULE_CREATION: 20,
+
+  /**
+   * Failed login attempts per IP (successful logins are not counted)
+   * Deliberately generous so a team behind one venue Wi-Fi is not locked out together;
+   * per-account lockout (MAX_LOGIN_ATTEMPTS in auth/security.ts) is the tight control
+   * @default 20 failed requests per 15-minute window per IP
+   */
+  LOGIN_FAILURES_PER_IP: 20,
+
+  /**
+   * Password reset endpoints (forgot-password, validate-reset-token, reset-password)
+   * Counts ALL requests: these send emails and validate tokens, so they stay strict
+   * @default 5 requests per 15-minute window per IP
+   */
+  PASSWORD_RESET_PER_IP: 5,
 } as const;
 
 /**

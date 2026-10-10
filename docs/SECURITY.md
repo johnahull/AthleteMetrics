@@ -151,10 +151,10 @@ fetch('/api/endpoint', {
 - Strict-Transport-Security enabled in production
 
 ### Rate Limiting
-- Authentication endpoints: 5 attempts per 15 minutes
+- Login (`POST /api/auth/login`): 20 failed attempts per 15 minutes per IP (successful logins are not counted). Separate per-account lockout after 5 failed attempts for 15 minutes
 - API endpoints: 100 requests per 15 minutes
 - File upload endpoints: 20 uploads per 15 minutes
-- Password reset: 3 requests per hour
+- Password reset (forgot-password, validate-reset-token, reset-password): 5 requests per 15 minutes per IP, separate from login
 
 ### Input Sanitization
 - All user inputs sanitized using DOMPurify
