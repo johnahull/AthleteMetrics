@@ -233,9 +233,13 @@
   background: hsl(var(--muted-foreground));
 }
 
-/* Force scrollbar to always be visible for horizontal scroll containers */
+/* Force scrollbar to always be visible for horizontal scroll containers.
+   The theme tokens are already full hsl() colours, so they must not be wrapped in hsl() again
+   (that made the track and thumb invalid, i.e. invisible). Chrome 121+ and Firefox use the
+   standard properties; the ::-webkit rules are the fallback for older WebKit. */
 .scrollbar-always-visible {
-  scrollbar-width: auto; /* Firefox - ensures standard scrollbar */
+  scrollbar-width: auto;
+  scrollbar-color: var(--muted-foreground) var(--muted);
 }
 
 .scrollbar-always-visible::-webkit-scrollbar {
@@ -243,18 +247,18 @@
 }
 
 .scrollbar-always-visible::-webkit-scrollbar-track {
-  background: hsl(var(--muted));
+  background: var(--muted);
   border-radius: 5px;
 }
 
 .scrollbar-always-visible::-webkit-scrollbar-thumb {
-  background: hsl(var(--border));
+  background: var(--muted-foreground);
   border-radius: 5px;
-  border: 2px solid hsl(var(--muted));
+  border: 2px solid var(--muted);
 }
 
 .scrollbar-always-visible::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground));
+  background: var(--foreground);
 }
 
 /* Loading animations */

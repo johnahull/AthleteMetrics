@@ -1,7 +1,7 @@
 /**
  * EventDataEntry page: numeric grid + Movement Quality panel (AM-FEAT-015)
  */
-import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Measurement } from '@shared/schema';
@@ -62,6 +62,7 @@ vi.mock('@/lib/events-api', async () => {
 });
 
 import EventDataEntry from '../event-data-entry';
+import { getCellState } from '@/lib/event-grid-cell-state';
 import { MovementQualitySaveError } from '@/lib/events-api';
 
 beforeAll(() => {
@@ -74,13 +75,21 @@ beforeAll(() => {
 
 const PATTERNS = ['MQ_LIN_ACCEL', 'MQ_MAX_VELO', 'MQ_DECEL', 'MQ_SHUFFLE', 'MQ_LATRUN', 'MQ_HIPTURN', 'MQ_BACKPEDAL', 'MQ_JUMP'];
 
+// Site metric details as the server attaches them (GET /api/events/:id/metrics?includeDetails=true)
+const SITE_METRICS: Record<string, { label: string; unit: string | null; category: string | null }> = {
+  VERTICAL_JUMP: { label: 'Vertical Jump', unit: 'in', category: 'power' },
+  FLY10_TIME: { label: '10-Yard Fly', unit: 's', category: 'speed' },
+  MQI_TOTAL: { label: 'Movement Quality Index (MQI)', unit: 'score', category: 'Movement Quality' },
+};
+
 const metric = (metricCode: string, extra: Record<string, unknown> = {}) => ({
   id: `em-${metricCode}`,
   eventId: 'ev-1',
   metricCode,
   displayOrder: 1,
   isRequired: false,
-  label: metricCode,
+  customLabel: null,
+  metricDetails: SITE_METRICS[metricCode] ?? { label: metricCode, unit: 'score', category: 'Movement Quality' },
   ...extra,
 });
 
@@ -238,5 +247,135 @@ describe('EventDataEntry', () => {
     render(<EventDataEntry />);
     expect(screen.getByText(/MQI total is calculated from the 8 Movement Quality pattern scores/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Movement Quality for/ })).toBeNull();
+  });
+
+  describe('grid headers and labels', () => {
+    // Regression: the page read flat label/units fields the server never sends, so every
+    // header showed the raw code (VERTICAL_JUMP) and no unit.
+    it('shows the readable site metric label and unit in the column header, not the code', () => {
+      render(<EventDataEntry />);
+      const header = screen.getByRole('columnheader', { name: /Vertical Jump/ });
+      expect(header).toHaveTextContent('Vertical Jump');
+      expect(header).toHaveTextContent('(in)');
+      expect(within(header).queryByText('VERTICAL_JUMP')).toBeNull();
+    });
+
+    it('shows the metric code in a tooltip on the header label', async () => {
+      const user = userEvent.setup();
+      render(<EventDataEntry />);
+      await user.hover(within(screen.getByRole('columnheader', { name: /Vertical Jump/ })).getByText('Vertical Jump'));
+      expect(await screen.findByRole('tooltip')).toHaveTextContent('VERTICAL_JUMP');
+    });
+
+    it('gives the header label a title with the full label and code (keyboard/touch/hover friendly)', () => {
+      render(<EventDataEntry />);
+      const header = screen.getByRole('columnheader', { name: /Vertical Jump/ });
+      expect(within(header).getByText('Vertical Jump')).toHaveAttribute('title', 'Vertical Jump (VERTICAL_JUMP)');
+    });
+
+    it('prefers the event custom label and falls back to the code without site details', () => {
+      eventMetricsState = [
+        metric('VERTICAL_JUMP', { customLabel: 'CMJ no arms' }),
+        metric('FLY10_TIME', { metricDetails: null, displayOrder: 2 }),
+      ];
+      render(<EventDataEntry />);
+      expect(screen.getByRole('columnheader', { name: /CMJ no arms/ })).toHaveTextContent('(in)');
+      expect(screen.getByRole('columnheader', { name: /FLY10_TIME/ })).not.toHaveTextContent('(');
+    });
+
+    it('marks the required star for screen readers', () => {
+      eventMetricsState = [metric('VERTICAL_JUMP', { isRequired: true })];
+      render(<EventDataEntry />);
+      expect(screen.getByRole('columnheader', { name: /Vertical Jump.*\(required\)/ })).toBeInTheDocument();
+    });
+
+    it('keeps the required star outside the line-clamped label so long labels cannot clip it', () => {
+      eventMetricsState = [metric('VERTICAL_JUMP', { isRequired: true, customLabel: 'A very long custom label that will certainly wrap past two lines' })];
+      render(<EventDataEntry />);
+      const header = screen.getByRole('columnheader', { name: /very long custom label/ });
+      const clamped = header.querySelector('.line-clamp-3') as HTMLElement;
+      const star = within(header).getByText('*');
+      expect(clamped).toHaveTextContent('A very long custom label');
+      expect(clamped.contains(star)).toBe(false);
+    });
+
+    it('uses column headers for metrics and a row header per athlete', () => {
+      render(<EventDataEntry />);
+      expect(screen.getByRole('columnheader', { name: 'Athlete' })).toHaveAttribute('scope', 'col');
+      expect(screen.getByRole('columnheader', { name: /Movement Quality/ })).toHaveAttribute('scope', 'col');
+      expect(screen.getByRole('columnheader', { name: /Vertical Jump/ })).toHaveAttribute('scope', 'col');
+      const rowHeader = screen.getByRole('rowheader', { name: /Jordan Lee/ });
+      expect(rowHeader).toHaveAttribute('scope', 'row');
+    });
+
+    it('pins the athlete column (sticky header and row header cells)', () => {
+      render(<EventDataEntry />);
+      expect(screen.getByRole('columnheader', { name: 'Athlete' })).toHaveClass('sticky', 'left-0');
+      expect(screen.getByRole('rowheader', { name: /Sam Park/ })).toHaveClass('sticky', 'left-0');
+    });
+
+    it('names each input by metric and athlete, with required and invalid states', async () => {
+      const user = userEvent.setup();
+      eventMetricsState = [metric('VERTICAL_JUMP', { isRequired: true }), metric('FLY10_TIME', { displayOrder: 2 })];
+      render(<EventDataEntry />);
+
+      const vj = screen.getByRole('textbox', { name: 'Vertical Jump for Jordan Lee' });
+      expect(vj).toHaveAttribute('aria-required', 'true');
+      expect(vj).not.toHaveAttribute('aria-invalid');
+      expect(screen.getByRole('textbox', { name: '10-Yard Fly for Sam Park' })).not.toHaveAttribute('aria-required');
+
+      await user.type(vj, 'abc');
+      expect(vj).toHaveAttribute('aria-invalid', 'true');
+      expect(vj).toHaveAccessibleDescription('Must be a number');
+    });
+  });
+
+  describe('sideways scroll hint', () => {
+    const restore: Array<() => void> = [];
+    const stubWidth = (prop: 'scrollWidth' | 'clientWidth', value: number) => {
+      const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, prop);
+      Object.defineProperty(HTMLElement.prototype, prop, { configurable: true, get: () => value });
+      restore.push(() => (original ? Object.defineProperty(HTMLElement.prototype, prop, original) : delete (HTMLElement.prototype as any)[prop]));
+    };
+
+    afterEach(() => {
+      restore.splice(0).forEach((undo) => undo());
+    });
+
+    it('tells the user how many metric columns there are when the grid overflows', () => {
+      stubWidth('scrollWidth', 1500);
+      stubWidth('clientWidth', 400);
+      render(<EventDataEntry />);
+      // VERTICAL_JUMP + the Movement Quality column
+      expect(screen.getByText(/2 metric columns/i)).toHaveTextContent(/scroll sideways/i);
+    });
+
+    it('says "1 metric column" in the singular', () => {
+      stubWidth('scrollWidth', 1500);
+      stubWidth('clientWidth', 400);
+      eventMetricsState = [metric('FLY10_TIME')];
+      render(<EventDataEntry />);
+      expect(screen.getByText(/1 metric column\b(?!s)/)).toHaveTextContent(/scroll sideways/i);
+    });
+
+    it('shows no hint when every column fits', () => {
+      stubWidth('scrollWidth', 400);
+      stubWidth('clientWidth', 400);
+      render(<EventDataEntry />);
+      expect(screen.queryByText(/scroll sideways/i)).toBeNull();
+    });
+  });
+});
+
+describe('getCellState', () => {
+  it.each([
+    ['error wins over dirty', { error: 'Must be a number', isDirty: true, originalValue: 3 }, 'error'],
+    ['unsaved edit', { isDirty: true, originalValue: 3 }, 'dirty'],
+    ['new unsaved value', { isDirty: true }, 'dirty'],
+    ['saved value', { isDirty: false, originalValue: 28.5 }, 'saved'],
+    ['saved zero', { isDirty: false, originalValue: 0 }, 'saved'],
+    ['empty', { isDirty: false }, 'empty'],
+  ] as const)('%s', (_name, cell, expected) => {
+    expect(getCellState(cell)).toBe(expected);
   });
 });
