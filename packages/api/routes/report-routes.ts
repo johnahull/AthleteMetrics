@@ -51,7 +51,7 @@ import { canAccessEvalRow, hasInaccessibleEval } from "./eval-report-access";
 import { EVAL_REPORT_TYPE, frozenModelSchema } from "@shared/eval-report-config";
 import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
-import { formatCalendarDate } from "../utils/calendar-date";
+import { formatEventReportTimeframe } from "../utils/calendar-date";
 
 const REPORT_NOT_FOUND = { message: "Report not found" };
 
@@ -5081,15 +5081,10 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
     const reportConfig = isIndividualReportConfig(report.config) || isTeamReportConfig(report.config)
       ? report.config
       : null;
-    let timeframe = "Current Season";
-    if (reportConfig?.timeframe) {
-      const { customStart: startDate, customEnd: endDate } = reportConfig.timeframe;
-      if (startDate && endDate) {
-        const start = formatCalendarDate(startDate);
-        const end = formatCalendarDate(endDate);
-        timeframe = `${start} to ${end}`;
-      }
-    }
+    const timeframe = formatEventReportTimeframe(
+      reportConfig?.timeframe?.customStart,
+      reportConfig?.timeframe?.customEnd
+    );
 
     // Build metrics array from report data
     const metrics: Array<{

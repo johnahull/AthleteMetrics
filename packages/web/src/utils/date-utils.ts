@@ -422,18 +422,24 @@ export function getDateKey(date: Date | string | number | null | undefined): str
  * @returns Date at local midnight, or null for nullish/invalid input
  */
 export function toCalendarDate(input: string | Date | number | null | undefined): Date | null {
+  const d = parseStoredCalendarInstant(input);
+  if (!d) return null;
+  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
+/**
+ * Parse a stored event date into the instant whose UTC fields hold the
+ * calendar day. Offset-less date-times ("2026-10-13T00:00:00" or the raw pg
+ * form "2026-10-13 00:00:00") are treated as UTC instead of local time.
+ */
+function parseStoredCalendarInstant(input: string | Date | number | null | undefined): Date | null {
   let value = input;
   if (typeof value === 'string') {
     const trimmed = value.trim();
-    // ISO date-time without offset/Z: interpret as UTC rather than local
-    value = /^\d{4}-\d{2}-\d{2}T[\d:.]+$/.test(trimmed) ? `${trimmed}Z` : trimmed;
+    value = /^\d{4}-\d{2}-\d{2}[T ][\d:.]+$/.test(trimmed) ? `${trimmed.replace(' ', 'T')}Z` : trimmed;
   }
   const result = safeParseDate(value);
-  if (!result.success || !result.date) {
-    return null;
-  }
-  const d = result.date;
-  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  return result.success && result.date ? result.date : null;
 }
 
 /** True once the event's calendar day has ended in the viewer's local time. */
@@ -462,10 +468,10 @@ export function getAllDayCalendarRange(
   startDate: string | Date | number | null | undefined,
   endDate: string | Date | number | null | undefined
 ): { start: string; endExclusive: string } | null {
-  const start = safeParseDate(startDate);
-  if (!start.success || !start.date) return null;
-  const end = safeParseDate(endDate);
-  const lastDay = end.success && end.date && end.date.getTime() >= start.date.getTime() ? end.date : start.date;
+  const startInstant = parseStoredCalendarInstant(startDate);
+  if (!startInstant) return null;
+  const endInstant = parseStoredCalendarInstant(endDate);
+  const lastDay = endInstant && endInstant.getTime() >= startInstant.getTime() ? endInstant : startInstant;
   const next = new Date(Date.UTC(lastDay.getUTCFullYear(), lastDay.getUTCMonth(), lastDay.getUTCDate() + 1));
-  return { start: toYmd(start.date), endExclusive: toYmd(next) };
+  return { start: toYmd(startInstant), endExclusive: toYmd(next) };
 }

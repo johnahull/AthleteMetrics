@@ -5,7 +5,7 @@
 process.env.TZ = 'America/Chicago';
 
 import { describe, it, expect } from 'vitest';
-import { formatCalendarDate } from '../calendar-date';
+import { formatCalendarDate, formatEventReportTimeframe } from '../calendar-date';
 import { EmailService } from '../../services/email-service';
 
 describe('server timezone (America/Chicago)', () => {
@@ -20,7 +20,14 @@ describe('server timezone (America/Chicago)', () => {
     expect(formatCalendarDate('2026-10-13T00:00:00.000Z')).toBe('10/13/2026');
   });
 
-  it('event invitation email shows the stored day', () => {
+  it('event-report timeframe text (buildReportDataForAI) prints the stored days', () => {
+    expect(formatEventReportTimeframe('2026-10-13', '2026-10-15')).toBe('10/13/2026 to 10/15/2026');
+    expect(formatEventReportTimeframe(undefined, '2026-10-15')).toBe('Current Season');
+  });
+
+  // Regression guard only: email-service already formatted with timeZone 'UTC',
+  // so this passes on the pre-fix code too.
+  it('regression guard: event invitation email shows the stored day', () => {
     const svc = new EmailService() as any;
     const html: string = svc.generateEventInvitationTemplate({
       to: 'a@example.com', eventName: 'Lucy Ortiz test',

@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Calendar, Users, Clock, BarChart3 } from "lucide-react";
 import { EventCard } from "@/components/events";
 import type { EventWithCounts } from "@/lib/events-api";
-import { toCalendarDate, isCalendarDatePast } from "@/utils/date-utils";
+import { isCalendarDatePast } from "@/utils/date-utils";
 
 type TabValue = "overview" | "upcoming" | "past" | "drafts";
 

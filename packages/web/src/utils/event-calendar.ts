@@ -9,24 +9,64 @@ export interface IcsEventInput {
   description?: string | null;
 }
 
+/** RFC 5545 section 3.3.11 TEXT escaping. */
+function escapeIcsText(text: string): string {
+  return text
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\r\n|\r|\n/g, '\\n');
+}
+
+/** RFC 5545 section 3.1: fold content lines longer than 75 octets (UTF-8), never inside a character. */
+function foldIcsLine(line: string): string {
+  const encoder = new TextEncoder();
+  const parts: string[] = [];
+  let current = '';
+  let octets = 0;
+  let limit = 75; // continuation lines start with a space, which counts toward their 75
+  for (const ch of line) {
+    const size = encoder.encode(ch).length;
+    if (octets + size > limit) {
+      parts.push(current);
+      current = ' ';
+      octets = 1;
+      limit = 75;
+    }
+    current += ch;
+    octets += size;
+  }
+  parts.push(current);
+  return parts.join('\r\n');
+}
+
+function formatUtcStamp(d: Date): string {
+  return d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+}
+
 /**
  * Build an ICS file for an event. Event dates are calendar dates (UTC
  * midnight), so the entry is ALL-DAY (DTSTART;VALUE=DATE, exclusive DTEND).
+ * @param now injectable clock for DTSTAMP (defaults to the current time)
  */
-export function buildEventICS(event: IcsEventInput): string {
+export function buildEventICS(event: IcsEventInput, now: Date = new Date()): string {
   const range = getAllDayCalendarRange(event.startDate, event.endDate);
   if (!range) return '';
-  return `BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//AthleteMetrics//Event//EN
-BEGIN:VEVENT
-UID:${event.id}@athletemetrics.app
-DTSTART;VALUE=DATE:${range.start}
-DTEND;VALUE=DATE:${range.endExclusive}
-SUMMARY:${event.name}
-LOCATION:${event.location || ""}
-DESCRIPTION:${event.description?.replace(/\n/g, "\\n") || ""}
-STATUS:CONFIRMED
-END:VEVENT
-END:VCALENDAR`;
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//AthleteMetrics//Event//EN',
+    'BEGIN:VEVENT',
+    `UID:${event.id}@athletemetrics.app`,
+    `DTSTAMP:${formatUtcStamp(now)}`,
+    `DTSTART;VALUE=DATE:${range.start}`,
+    `DTEND;VALUE=DATE:${range.endExclusive}`,
+    `SUMMARY:${escapeIcsText(event.name)}`,
+    `LOCATION:${escapeIcsText(event.location || '')}`,
+    `DESCRIPTION:${escapeIcsText(event.description || '')}`,
+    'STATUS:CONFIRMED',
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ];
+  return lines.map(foldIcsLine).join('\r\n') + '\r\n';
 }
