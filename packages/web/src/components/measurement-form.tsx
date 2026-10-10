@@ -221,6 +221,10 @@ export default function MeasurementForm() {
     staleTime: 0, // Always refetch for real-time preview
   });
 
+  // A derived value the calculator computes from the source measurements: nothing to post
+  const usesCalculatedValue =
+    !!selectedMetric?.isDerived && !overrideCalculated && calculationPreview?.calculatedValue != null;
+
   // Watch for date changes and refetch active teams
   useEffect(() => {
     if (selectedAthlete && date) {
@@ -248,29 +252,17 @@ export default function MeasurementForm() {
       return;
     }
 
+    // The calculator already stores the calculated value; a posted copy would be saved
+    // as a direct entry and block recalculation (#579). Only an override posts a row.
+    if (usesCalculatedValue) {
+      return;
+    }
+
     // Prepare measurement data
-    let measurementData: any = {
+    const measurementData: any = {
       ...data,
       userId: selectedAthlete.id,
     };
-
-    // For derived metrics without override, use calculated value and add metadata
-    if (selectedMetric?.isDerived && !overrideCalculated && calculationPreview?.calculatedValue !== null && calculationPreview !== undefined) {
-      measurementData = {
-        ...measurementData,
-        value: calculationPreview.calculatedValue,
-        isCalculated: true,
-        calculatedFromMeasurementIds: calculationPreview.sourceMeasurementIds || [],
-        calculationMetadata: {
-          formula: calculationPreview.formula || '',
-          sourceValues: (calculationPreview.sourceMetrics || []).reduce((acc, sm) => {
-            acc[sm.code.toLowerCase()] = sm.value;
-            return acc;
-          }, {} as Record<string, number>),
-          calculatedAt: new Date().toISOString(),
-        },
-      };
-    }
 
     // CODE QUALITY FIX: Remove production console.log
     // console.log("Submitting measurement data:", measurementData);
@@ -417,6 +409,12 @@ export default function MeasurementForm() {
                 {calculationPreview.sourceMetrics && calculationPreview.sourceMetrics.length > 0 && (
                   <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
                     Based on: {calculationPreview.sourceMetrics.map(m => `${m.label}: ${m.value} ${m.unit}`).join(', ')}
+                  </p>
+                )}
+                {!overrideCalculated && (
+                  <p className="text-sm text-blue-700 dark:text-blue-300 mt-2" data-testid="derived-auto-calculated">
+                    This value is calculated automatically from the source measurements, so there is nothing to save.
+                    To record a directly measured value instead, check the box below.
                   </p>
                 )}
                 <div className="flex items-center gap-2 mt-3">
@@ -811,7 +809,7 @@ export default function MeasurementForm() {
           </Button>
           <Button
             type="submit"
-            disabled={createMeasurementMutation.isPending || !selectedAthlete}
+            disabled={createMeasurementMutation.isPending || !selectedAthlete || usesCalculatedValue}
             data-testid="submit-measurement"
           >
             <Save className="h-4 w-4 mr-2" />
