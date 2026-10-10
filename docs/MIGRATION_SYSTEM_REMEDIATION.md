@@ -12,6 +12,7 @@
 > description rewrite and the unmerged AM-FEAT-018 momentum branch): take the next free number at merge.
 > 0154 (strip derived metrics from eval templates) and 0155 (eval template audit actions) belong to the same
 > AM-FEAT-019 branch and follow 0153 if it is renumbered.
+> 0156 (RSI_105 and single-leg CMJ metrics, eval template top-up) is an AM-FEAT-019 follow-up.
 
 ## Current State (2025-10-30)
 
