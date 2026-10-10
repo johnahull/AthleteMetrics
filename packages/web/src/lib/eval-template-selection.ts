@@ -6,7 +6,7 @@
 import type { ResolvedEvalTemplateMetric } from "@/hooks/use-eval-report";
 import type { SelectedMetric } from "@/components/events/MetricsSelector";
 
-function toSelected(m: ResolvedEvalTemplateMetric): SelectedMetric {
+export function toSelected(m: ResolvedEvalTemplateMetric): SelectedMetric {
   return {
     code: m.code,
     label: m.customLabel ?? m.label ?? m.code,

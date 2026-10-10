@@ -2,6 +2,8 @@
 
 A coach opens an evaluation event, picks an athlete, chooses metrics and sections (with age-group presets and defaults), previews, and downloads a branded PDF. Every generation is saved as a `reports` row (`reportType = 'eval'`). Eval batteries can be saved as templates and chosen on the New event form: picking a template fills the form's metrics list (required tests plus the optional ones the coach ticks), the coach adds or removes tests, and the final list is saved in one request (`POST /api/events/:eventId/metrics/bulk`) after the event is created. Tests the template lists but that cannot be added (missing, inactive, derived) are named in the picker. Switching template or choosing "No template" only removes the entries that came from the template, never tests added by hand.
 
+**Manage templates** (`/events/templates`, linked from the Events page header for coaches and admins when the Events module is on; pages `packages/web/src/pages/eval-templates.tsx` and `eval-template-edit.tsx`): lists the organization's templates and the default. A writer renames a template, edits its description, and adds, removes, reorders and marks tests required with the same metrics selector as the New event form (derived metrics are not offered). Tests that cannot be used for the organization (missing, inactive, not offered to its type) are listed under "Not available for this organization" and kept until removed; derived leftovers are dropped on save. Label overrides already on a template are kept but are not editable here, and the sport is shown, not editable. Organization templates can be deleted (confirm; events keep their tests). The default cannot be deleted: a site admin edits it (one confirm, because it changes the default for every organization); everyone else sees it read-only with **Duplicate as my template**, which creates "<name> (copy)" in their organization with only the tests available there and says which were left out. Access and resolution use the template's own organization.
+
 Design record and reasons: `docs/adr/ADR-002-eval-report-v2.md`. Open items: `docs/EVAL_REPORT_FOLLOWUPS.md`.
 
 Scope of this tree: P1, P2, P3a-d, P4 (#560) and P5.
@@ -100,7 +102,7 @@ Migration number 0153 is provisional (see `docs/MIGRATION_SYSTEM_REMEDIATION.md`
 
 ## Extending
 
-**Add a metric to the default template.** Edit migration data only for new databases; for existing ones use the template PATCH route as a site admin (the default is global). The metric needs a `site_metrics` code. Use the logical key if one exists, else the literal code.
+**Add a metric to the default template.** Edit migration data only for new databases; for existing ones a site admin edits it on the Manage templates page (or with the template PATCH route; the default is global). The metric needs a `site_metrics` code. Use the logical key if one exists, else the literal code.
 
 **Add a logical key.** (1) Add it to `EVAL_METRIC_CODES` in `packages/api/services/eval-report/metric-key-map.ts` if the report itself should know it (it then needs entries in `GROUPS` in `selection.ts` and `METRIC_LABELS` in `copy.ts`, which are typed on `EvalMetricKey`), or only to `TEMPLATE_METRIC_CODES` in `template-keys.ts` if it is a battery-only key. (2) Never spell a template-only key like the code it resolves to (`keyForCode` throws on collisions). (3) The code must be inserted by a `site_metrics` seed migration or `metric-key-map.test.ts` fails. (4) A metric that must not get a comparison goes in `NO_TIER_CODES` in `eval-report/tier-match.ts`. (5) To make a key a default headline metric, edit `HEADLINE_KEYS` in `selection.ts`.
 
@@ -138,7 +140,7 @@ Two database shapes matter for the integration tests:
 
 Use `tests/helpers/purge-test-rows.ts` in new integration tests.
 
-**E2E**: `tests/e2e/eval-report.spec.ts` creates its data through the API and cleans up. The CI E2E suite is red (issue #490), so run this spec locally against a database with the site metrics and the default "Soccer eval (yards)" template, and say so in the PR. Add it to CI only once the suite is green.
+**E2E**: `tests/e2e/eval-report.spec.ts` and `tests/e2e/eval-templates-manage.spec.ts` create their data through the API and clean up. The CI E2E suite is red (issue #490), so run this spec locally against a database with the site metrics and the default "Soccer eval (yards)" template, and say so in the PR. Add it to CI only once the suite is green.
 
 Screenshots for UI changes go in `screenshots/` per `CLAUDE.md`.
 

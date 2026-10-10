@@ -42,6 +42,8 @@ export interface SelectedMetric {
   customLabel?: string;
   /** Set when the entry was filled in by an eval template; only those are replaced when the template changes */
   fromTemplate?: boolean;
+  /** The template key the entry was stored under (template editor); absent for a test added by hand */
+  metricKey?: string;
 }
 
 interface MetricsSelectorProps {
@@ -201,7 +203,7 @@ export function MetricsSelector({
               <div className="flex items-center gap-3">
                 {/* Required toggle */}
                 <div className="flex items-center gap-2">
-                  <Label htmlFor={`required-${metric.code}`} className="text-sm text-muted-foreground">
+                  <Label htmlFor={`required-${metric.code}`} className="py-3 text-sm text-muted-foreground sm:py-0">
                     Required
                   </Label>
                   <Switch
@@ -218,7 +220,7 @@ export function MetricsSelector({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-8 w-8 p-0"
+                    className="h-10 w-10 p-0 sm:h-8 sm:w-8"
                     onClick={() => handleMove(index, "up")}
                     disabled={index === 0}
                     aria-label="Move up"
@@ -229,7 +231,7 @@ export function MetricsSelector({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-8 w-8 p-0"
+                    className="h-10 w-10 p-0 sm:h-8 sm:w-8"
                     onClick={() => handleMove(index, "down")}
                     disabled={index === selectedMetrics.length - 1}
                     aria-label="Move down"
@@ -243,7 +245,7 @@ export function MetricsSelector({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                  className="h-10 w-10 p-0 sm:h-8 sm:w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
                   onClick={() => handleRemove(metric.code)}
                   aria-label="Remove"
                 >

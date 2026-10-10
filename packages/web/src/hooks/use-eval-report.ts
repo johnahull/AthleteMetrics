@@ -124,6 +124,7 @@ export const evalReportKeys = {
     ["eval-report", eventId, athleteId, "model", tag, body] as const,
   settings: (orgId: string) => ["eval-report-settings", orgId] as const,
   templates: (orgId: string) => ["eval-templates", orgId] as const,
+  template: (templateId: string) => ["eval-template", templateId] as const,
   resolvedTemplate: (templateId: string, orgId?: string) => ["eval-template-resolved", templateId, orgId ?? ""] as const,
 };
 
@@ -266,5 +267,59 @@ export function useSaveEventAsTemplate(eventId: string, orgId: string | undefine
   return useMutation<EvalTemplate, Error, { name: string }>({
     mutationFn: async (body) => (await apiRequest("POST", `/api/events/${eventId}/eval-templates`, body)).json(),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: evalReportKeys.templates(orgId ?? "") }),
+  });
+}
+
+export function useEvalTemplate(templateId: string | undefined) {
+  return useQuery<EvalTemplate>({
+    queryKey: evalReportKeys.template(templateId ?? ""),
+    queryFn: async () => (await apiRequest("GET", `/api/eval-templates/${templateId}`)).json(),
+    enabled: !!templateId,
+    retry: false,
+  });
+}
+
+export type EvalTemplatePatch = Partial<Pick<EvalTemplate, "name" | "description" | "metrics">>;
+
+/**
+ * After a change: every organization's template list (the default is in all of them) and everything cached for
+ * this template (its read and its resolved tests for any organization).
+ */
+function refreshTemplate(queryClient: ReturnType<typeof useQueryClient>, templateId: string) {
+  queryClient.invalidateQueries({ queryKey: ["eval-templates"] });
+  queryClient.invalidateQueries({ queryKey: evalReportKeys.template(templateId) });
+  queryClient.invalidateQueries({ queryKey: ["eval-template-resolved", templateId] });
+}
+
+/** PATCH a template; last write wins (the API has no version check) */
+export function useUpdateEvalTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation<EvalTemplate, Error, { id: string; patch: EvalTemplatePatch }>({
+    mutationFn: async ({ id, patch }) => (await apiRequest("PATCH", `/api/eval-templates/${id}`, patch)).json(),
+    onSuccess: (_data, { id }) => refreshTemplate(queryClient, id),
+  });
+}
+
+/** Hard delete of an organization template; events created from it keep their tests */
+export function useDeleteEvalTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, string>({
+    mutationFn: async (id) => {
+      await apiRequest("DELETE", `/api/eval-templates/${id}`);
+    },
+    onSuccess: (_data, id) => {
+      queryClient.removeQueries({ queryKey: evalReportKeys.template(id) });
+      queryClient.removeQueries({ queryKey: ["eval-template-resolved", id] });
+      queryClient.invalidateQueries({ queryKey: ["eval-templates"] });
+    },
+  });
+}
+
+/** A new template in `orgId` (used to duplicate one) */
+export function useCreateEvalTemplate(orgId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation<EvalTemplate, Error, Pick<EvalTemplate, "name" | "sport" | "metrics"> & { description?: string }>({
+    mutationFn: async (body) => (await apiRequest("POST", `/api/organizations/${orgId}/eval-templates`, body)).json(),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["eval-templates"] }),
   });
 }

@@ -79,12 +79,19 @@ const mockEvents = [
 // Mock hooks
 const mockUseEvents = vi.fn();
 
+const defaultAuth = {
+  organizationContext: 'org-123',
+  userOrganizations: [{ organizationId: 'org-123', organizationName: 'Test Org' }],
+  user: { id: 'user-123', role: 'coach' },
+};
+const mockAuth = { current: defaultAuth as any };
 vi.mock('@/lib/auth', () => ({
-  useAuth: () => ({
-    organizationContext: 'org-123',
-    userOrganizations: [{ organizationId: 'org-123', organizationName: 'Test Org' }],
-    user: { id: 'user-123', role: 'coach' },
-  }),
+  useAuth: () => mockAuth.current,
+}));
+
+const mockUseOrganization = vi.fn();
+vi.mock('@/lib/organization-api', () => ({
+  useOrganization: (...args: unknown[]) => mockUseOrganization(...args),
 }));
 
 vi.mock('@/lib/events-api', () => ({
@@ -120,6 +127,8 @@ function createWrapper() {
 describe('Events List Page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockAuth.current = defaultAuth;
+    mockUseOrganization.mockReturnValue({ data: { id: 'org-123', eventsEnabled: true } });
     mockUseEvents.mockReturnValue({
       data: mockEvents,
       isLoading: false,
@@ -138,6 +147,30 @@ describe('Events List Page', () => {
 
       expect(screen.getByTestId('create-event-button')).toBeInTheDocument();
       expect(screen.getByText('Create Event')).toBeInTheDocument();
+    });
+  });
+
+  describe('Manage templates button', () => {
+    const coachOf = (role: string) => ({ ...defaultAuth, userOrganizations: [{ organizationId: 'org-123', organizationName: 'Test Org', role }] });
+
+    it('links writers to the template list when the Events module is on', () => {
+      mockAuth.current = coachOf('coach');
+      render(<Events />, { wrapper: createWrapper() });
+      expect(mockUseOrganization).toHaveBeenCalledWith('org-123');
+      expect(screen.getByRole('link', { name: 'Manage templates' })).toHaveAttribute('href', '/events/templates');
+    });
+
+    it('is hidden from a non-writer', () => {
+      mockAuth.current = coachOf('athlete');
+      render(<Events />, { wrapper: createWrapper() });
+      expect(screen.queryByRole('link', { name: 'Manage templates' })).not.toBeInTheDocument();
+    });
+
+    it('is hidden when the Events module is off for the organization', () => {
+      mockAuth.current = coachOf('org_admin');
+      mockUseOrganization.mockReturnValue({ data: { id: 'org-123', eventsEnabled: false } });
+      render(<Events />, { wrapper: createWrapper() });
+      expect(screen.queryByRole('link', { name: 'Manage templates' })).not.toBeInTheDocument();
     });
   });
 

@@ -126,6 +126,8 @@ const NotificationSettings = React.lazy(() => import("./pages/notification-setti
 
 // Lazy load event pages
 const Events = React.lazy(() => import("./pages/events"));
+const EvalTemplates = React.lazy(() => import("./pages/eval-templates"));
+const EvalTemplateEdit = React.lazy(() => import("./pages/eval-template-edit"));
 const MyEvents = React.lazy(() => import("./pages/my-events"));
 const EventNew = React.lazy(() => import("./pages/event-new"));
 const EventEdit = React.lazy(() => import("./pages/event-edit"));
@@ -531,6 +533,17 @@ function Router() {
       <Route path="/events/new">
         <RouteWrapper loadingText="Loading Event Form...">
           <EventNew />
+        </RouteWrapper>
+      </Route>
+      {/* Eval templates: before /events/:eventId, which would otherwise match "templates" as an event id */}
+      <Route path="/events/templates/:templateId">
+        <RouteWrapper loadingText="Loading Template...">
+          <EvalTemplateEdit />
+        </RouteWrapper>
+      </Route>
+      <Route path="/events/templates">
+        <RouteWrapper loadingText="Loading Templates...">
+          <EvalTemplates />
         </RouteWrapper>
       </Route>
       <Route path="/events/:eventId/data-entry">

@@ -4,13 +4,16 @@
  */
 
 import { useState } from "react";
+import { Link } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { useEvents } from "@/lib/events-api";
+import { useOrganization } from "@/lib/organization-api";
+import { canManageEvent } from "@/lib/event-permissions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Calendar, Users, Clock, BarChart3 } from "lucide-react";
+import { Plus, Calendar, Users, Clock, BarChart3, ClipboardList } from "lucide-react";
 import { EventCard } from "@/components/events";
 import type { EventWithCounts } from "@/lib/events-api";
 import { isFuture, isPast } from "date-fns";
@@ -35,6 +38,10 @@ export default function Events() {
 
   // Fetch events
   const { data: events, isLoading } = useEvents(effectiveOrganizationId || undefined);
+  const { data: organization } = useOrganization(effectiveOrganizationId || undefined);
+  // Eval templates are part of the Events module and are managed by its writers
+  const showManageTemplates =
+    !!organization?.eventsEnabled && canManageEvent(user, userOrganizations, { organizationId: effectiveOrganizationId });
 
   // Filter events by status
   const upcomingEvents = events?.filter(
@@ -78,12 +85,22 @@ export default function Events() {
   return (
     <div className="p-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
         <h1 className="text-2xl font-semibold text-gray-900">Events</h1>
-        <Button onClick={handleCreateEvent} data-testid="create-event-button">
-          <Plus className="h-4 w-4 mr-2" />
-          Create Event
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {showManageTemplates && (
+            <Button asChild variant="outline" data-testid="manage-templates-button">
+              <Link href="/events/templates">
+                <ClipboardList className="h-4 w-4 mr-2" aria-hidden="true" />
+                Manage templates
+              </Link>
+            </Button>
+          )}
+          <Button onClick={handleCreateEvent} data-testid="create-event-button">
+            <Plus className="h-4 w-4 mr-2" />
+            Create Event
+          </Button>
+        </div>
       </div>
 
       {/* Tabs */}
