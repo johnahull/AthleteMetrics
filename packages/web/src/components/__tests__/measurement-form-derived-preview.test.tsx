@@ -27,6 +27,7 @@ vi.mock('@/components/ui/athlete-selector', () => ({
 vi.mock('@/hooks/use-available-metrics', () => ({
   useAvailableMetrics: () => ({
     metrics: [
+      { code: 'FLY10_TIME', label: '10-Yard Fly', unit: 's', metricType: 'lower_is_better', lowerIsBetter: true },
       { code: 'MOMENTUM', label: 'Momentum', unit: 'kg*m/s', metricType: 'higher_is_better', isDerived: true },
     ],
     isLoading: false,
@@ -51,6 +52,8 @@ const PREVIEW = {
   formula: 'weight_lbs * 0.45359237 * 9.144 / fly10_time',
 };
 
+let previewFetch: () => Promise<{ ok: boolean; json: () => Promise<unknown> }>;
+
 const renderWithPreview = async () => {
   const user = userEvent.setup();
   render(
@@ -59,7 +62,7 @@ const renderWithPreview = async () => {
     </QueryClientProvider>
   );
   await user.click(screen.getByTestId('pick-athlete'));
-  // The form defaults to FLY10_TIME, which is not in the metric list: pick the derived metric
+  // The form defaults to FLY10_TIME: pick the derived metric
   await user.click(screen.getByTestId('metric-select'));
   await user.click(await screen.findByRole('option', { name: 'Momentum' }));
   await screen.findByText(/Calculated value:/);
@@ -70,10 +73,12 @@ describe('MeasurementForm derived-metric preview (#579)', () => {
   beforeEach(() => {
     apiRequest.mockReset();
     apiRequest.mockResolvedValue({ json: async () => ({}) });
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => ({
-      ok: true,
-      json: async () => (String(url).startsWith('/api/measurements/calculate-preview') ? PREVIEW : []),
-    })));
+    previewFetch = async () => ({ ok: true, json: async () => PREVIEW });
+    vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+      String(url).startsWith('/api/measurements/calculate-preview')
+        ? previewFetch()
+        : { ok: true, json: async () => [] }
+    ));
   });
 
   afterEach(() => {
@@ -95,6 +100,58 @@ describe('MeasurementForm derived-metric preview (#579)', () => {
     fireEvent.submit(screen.getByTestId('submit-measurement').closest('form')!);
     await new Promise((r) => setTimeout(r, 50));
     expect(apiRequest).not.toHaveBeenCalledWith('POST', '/api/measurements', expect.anything());
+  });
+
+  it('announces the auto-calculated message and ties it to the disabled Save button', async () => {
+    await renderWithPreview();
+
+    const message = screen.getByTestId('derived-auto-calculated');
+    expect(message).toHaveAttribute('role', 'status');
+    expect(message.id).not.toBe('');
+    expect(screen.getByTestId('submit-measurement')).toHaveAttribute('aria-describedby', message.id);
+  });
+
+  it('while the preview is loading, shows Calculating and does not post a leftover value', async () => {
+    previewFetch = () => new Promise(() => {}); // never resolves
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MeasurementForm />
+      </QueryClientProvider>
+    );
+    await user.click(screen.getByTestId('pick-athlete'));
+    // A value typed for the default (direct) metric stays in the form after switching
+    await user.type(screen.getByTestId('measurement-value'), '1.4');
+    await user.click(screen.getByTestId('metric-select'));
+    await user.click(await screen.findByRole('option', { name: 'Momentum' }));
+
+    expect(await screen.findByTestId('derived-preview-loading')).toHaveTextContent(/calculating/i);
+    expect(screen.queryByText(/Cannot calculate/)).not.toBeInTheDocument();
+    expect(screen.getByTestId('submit-measurement')).toBeDisabled();
+
+    fireEvent.submit(screen.getByTestId('submit-measurement').closest('form')!);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(apiRequest).not.toHaveBeenCalledWith('POST', '/api/measurements', expect.anything());
+  });
+
+  it('when the preview fails, keeps offering direct entry', async () => {
+    previewFetch = async () => ({ ok: false, json: async () => ({}) });
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MeasurementForm />
+      </QueryClientProvider>
+    );
+    await user.click(screen.getByTestId('pick-athlete'));
+    await user.click(screen.getByTestId('metric-select'));
+    await user.click(await screen.findByRole('option', { name: 'Momentum' }));
+
+    expect(await screen.findByText(/Cannot calculate/)).toBeInTheDocument();
+    expect(screen.queryByTestId('derived-preview-loading')).not.toBeInTheDocument();
+    await user.click(screen.getByLabelText('Enter direct measurement'));
+    await user.type(screen.getByTestId('measurement-value'), '500');
+    fireEvent.submit(screen.getByTestId('submit-measurement').closest('form')!);
+    await waitFor(() => expect(apiRequest).toHaveBeenCalledWith('POST', '/api/measurements', expect.objectContaining({ metric: 'MOMENTUM', value: 500 })));
   });
 
   it('still posts a direct measurement when Override is checked', async () => {

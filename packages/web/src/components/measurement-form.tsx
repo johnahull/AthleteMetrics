@@ -197,7 +197,7 @@ export default function MeasurementForm() {
   const selectedMetric = availableMetrics.find(m => m.code === metric);
 
   // Query for calculation preview for derived metrics
-  const { data: calculationPreview } = useQuery({
+  const { data: calculationPreview, isFetching: isPreviewFetching } = useQuery({
     queryKey: ['calculation-preview', selectedAthlete?.id, metric, date],
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -224,6 +224,10 @@ export default function MeasurementForm() {
   // A derived value the calculator computes from the source measurements: nothing to post
   const usesCalculatedValue =
     !!selectedMetric?.isDerived && !overrideCalculated && calculationPreview?.calculatedValue != null;
+  // Until the preview answers, Save could post a leftover value as a direct row
+  const isPreviewPending =
+    !!selectedMetric?.isDerived && !overrideCalculated && isPreviewFetching && !usesCalculatedValue;
+  const autoCalculatedMessageId = "derived-auto-calculated-message";
 
   // Watch for date changes and refetch active teams
   useEffect(() => {
@@ -254,7 +258,7 @@ export default function MeasurementForm() {
 
     // The calculator already stores the calculated value; a posted copy would be saved
     // as a direct entry and block recalculation (#579). Only an override posts a row.
-    if (usesCalculatedValue) {
+    if (usesCalculatedValue || isPreviewPending) {
       return;
     }
 
@@ -412,7 +416,12 @@ export default function MeasurementForm() {
                   </p>
                 )}
                 {!overrideCalculated && (
-                  <p className="text-sm text-blue-700 dark:text-blue-300 mt-2" data-testid="derived-auto-calculated">
+                  <p
+                    id={autoCalculatedMessageId}
+                    role="status"
+                    className="text-sm text-blue-700 dark:text-blue-300 mt-2"
+                    data-testid="derived-auto-calculated"
+                  >
                     This value is calculated automatically from the source measurements, so there is nothing to save.
                     To record a directly measured value instead, check the box below.
                   </p>
@@ -427,6 +436,15 @@ export default function MeasurementForm() {
                     Override with direct measurement
                   </label>
                 </div>
+              </div>
+            ) : isPreviewPending ? (
+              <div
+                role="status"
+                className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex items-center gap-2"
+                data-testid="derived-preview-loading"
+              >
+                <Calculator className="h-4 w-4 text-blue-600" />
+                <span className="text-sm text-blue-800 dark:text-blue-200">Calculating…</span>
               </div>
             ) : (
               <div className="bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
@@ -809,7 +827,8 @@ export default function MeasurementForm() {
           </Button>
           <Button
             type="submit"
-            disabled={createMeasurementMutation.isPending || !selectedAthlete || usesCalculatedValue}
+            disabled={createMeasurementMutation.isPending || !selectedAthlete || usesCalculatedValue || isPreviewPending}
+            aria-describedby={usesCalculatedValue ? autoCalculatedMessageId : undefined}
             data-testid="submit-measurement"
           >
             <Save className="h-4 w-4 mr-2" />
