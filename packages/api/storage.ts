@@ -339,7 +339,7 @@ export interface IStorage {
   findUserById(userId: string): Promise<User | null>;
   resetLoginAttempts(userId: string): Promise<void>;
   registerLoginAttempt(userId: string, maxAttempts: number, lockoutMs: number): Promise<LoginAttemptReservation>;
-  releaseLoginAttempt(userId: string): Promise<void>;
+  releaseLoginAttempt(userId: string, maxAttempts: number): Promise<void>;
   updateLastLogin(userId: string): Promise<void>;
   createLoginSession(session: any): Promise<void>;
   findLoginSession(token: string): Promise<any>;
@@ -4219,11 +4219,18 @@ export class DatabaseStorage implements IStorage {
 
   /**
    * Give back one reserved attempt (the password was correct but the login did not complete for a reason
-   * that is not a wrong credential, e.g. an MFA code is still to come). Never shortens an existing lock.
+   * that is not a wrong credential, e.g. an MFA code is still to come).
+   *
+   * If that attempt was the one that reached the limit and set the lock, the lock is undone too: requests
+   * refused while locked never increment, so the count equals maxAttempts only when the attempt being
+   * given back caused the lock. A lower count means no lock is set; a higher one is never produced.
    */
-  async releaseLoginAttempt(userId: string): Promise<void> {
+  async releaseLoginAttempt(userId: string, maxAttempts: number): Promise<void> {
     await db.update(users)
-      .set({ loginAttempts: sql`GREATEST(COALESCE(${users.loginAttempts}, 0) - 1, 0)` })
+      .set({
+        lockedUntil: sql`CASE WHEN COALESCE(${users.loginAttempts}, 0) <= ${maxAttempts} THEN NULL ELSE ${users.lockedUntil} END`,
+        loginAttempts: sql`GREATEST(COALESCE(${users.loginAttempts}, 0) - 1, 0)`,
+      })
       .where(eq(users.id, userId));
   }
 

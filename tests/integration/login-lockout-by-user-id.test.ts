@@ -21,6 +21,8 @@ import { eq } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
 import { storage } from '../../packages/api/storage';
 import { AuthService } from '../../packages/api/services/auth-service';
+import { authenticator } from 'otplib';
+import { PasswordResetService } from '../../packages/api/auth/password-reset';
 import { users } from '@shared/schema';
 import type { User } from '@shared/schema';
 import { purgeTestRows } from '../helpers/purge-test-rows';
@@ -190,5 +192,85 @@ describe('Login lockout keyed on user id with an atomic counter', () => {
     expect(shared.lockedUntil).not.toBeNull();
     // the primary login honours the lock set through the enhanced endpoint (one counter per user id)
     expect((await right(user)).accountLocked).toBe(true);
+  });
+
+  describe('give-back of a reserved attempt, lock timing and MFA paths', () => {
+    const SECRET = 'JBSWY3DPEHPK3PXP';
+    const makeMfaUser = async (opts: { emails?: string[] } = {}) => {
+      const user = await makeUser(opts);
+      await storage.updateUser(user.id, { mfaEnabled: true, mfaSecret: SECRET });
+      return user;
+    };
+
+    it('does not lock a right-password MFA user whose reserved attempt was the 5th', async () => {
+      const user = await makeMfaUser();
+      for (let i = 0; i < MAX - 1; i++) await wrong(user);
+
+      const r = await right(user);
+      expect(r.requiresMFA).toBe(true);
+      const mid = await state(user);
+      expect(mid.lockedUntil).toBeNull();
+      expect(mid.loginAttempts).toBe(MAX - 1);
+
+      const ok = await authService.login({ username: user.username, password: PASSWORD, mfaToken: authenticator.generate(SECRET) });
+      expect(ok.success).toBe(true);
+    });
+
+    it('sets lockedUntil to about now + 15 minutes', async () => {
+      const user = await makeUser();
+      const before = Date.now();
+      for (let i = 0; i < MAX; i++) await wrong(user);
+      const locked = (await state(user)).lockedUntil!;
+      expect(Math.abs(locked.getTime() - (before + 15 * 60 * 1000))).toBeLessThan(5000);
+    });
+
+    it('allows at most 5 compares for a concurrent burst right after the lock expired', async () => {
+      const user = await makeUser({ emails: [] });
+      for (let i = 0; i < MAX; i++) await wrong(user);
+      await db.update(users).set({ lockedUntil: new Date(Date.now() - 1000) }).where(eq(users.id, user.id));
+      const compare = vi.spyOn(bcrypt, 'compare');
+
+      await Promise.all(Array.from({ length: 20 }, () => wrong(user)));
+
+      expect(compare.mock.calls.length).toBeLessThanOrEqual(MAX);
+      expect((await state(user)).lockedUntil).not.toBeNull();
+    });
+
+    it('counts wrong MFA codes and wrong backup codes on /api/enhanced-auth/login', async () => {
+      const user = await makeMfaUser({ emails: [] });
+      await db.update(users).set({ isEmailVerified: true, backupCodes: ['GOODCODE'] }).where(eq(users.id, user.id));
+      const post = (i: number, mfaToken: string) =>
+        request(app).post('/api/enhanced-auth/login').set('X-Forwarded-For', `10.8.${seq}.${i}`)
+          .send({ username: user.username, password: PASSWORD, mfaToken });
+      for (let i = 0; i < MAX; i++) {
+        const r = await post(i, 'BADCODE1');
+        expect(r.status).toBe(401);
+      }
+      expect((await state(user)).lockedUntil).not.toBeNull();
+      expect((await post(9, 'GOODCODE')).status).toBe(423);
+    });
+
+    it('returns 423 for a wrong MFA code while the account is locked', async () => {
+      const user = await makeMfaUser();
+      for (let i = 0; i < MAX; i++) await wrong(user);
+      const r = await authService.login({ username: user.username, password: PASSWORD, mfaToken: '000000' });
+      expect(r.accountLocked).toBe(true);
+    });
+
+    it('clears an active lock when the password is reset', async () => {
+      const user = await makeUser();
+      for (let i = 0; i < MAX; i++) await wrong(user);
+      expect((await state(user)).lockedUntil).not.toBeNull();
+      const token = `${PREFIX}tok${Date.now()}${seq++}`;
+      await storage.createPasswordResetToken({
+        userId: user.id, token, expiresAt: new Date(Date.now() + 60_000), ipAddress: '127.0.0.1',
+      });
+
+      const res = await PasswordResetService.resetPassword(token, 'NewPass123!x', '127.0.0.1');
+      expect(res.success).toBe(true);
+      const after = await state(user);
+      expect(after.lockedUntil).toBeNull();
+      expect(after.loginAttempts).toBe(0);
+    });
   });
 });

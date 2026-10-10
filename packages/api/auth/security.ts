@@ -53,10 +53,10 @@ export class AuthSecurity {
 
   /**
    * Give back a reserved attempt: the credentials were right but the login did not complete (an MFA code
-   * is still needed, email unverified, organization deactivated). Never shortens an existing lock.
+   * is still needed, email unverified, organization deactivated). Undoes the lock if this attempt set it.
    */
   static async releaseLoginAttempt(user: { id: string }): Promise<void> {
-    await storage.releaseLoginAttempt(user.id);
+    await storage.releaseLoginAttempt(user.id, this.MAX_LOGIN_ATTEMPTS);
   }
 
   /**
