@@ -536,23 +536,8 @@ export class DerivedMetricCalculator {
     // measurement of the anchor metric. Without one (anchor deleted, moved, unverified,
     // or the date is a non-anchor source's date) there is nothing to derive on this date.
     const anchorMetric = derivedMetric.calculationConfig?.anchorMetric?.toUpperCase();
-    if (anchorMetric) {
-      const [anchorRow] = await tx
-        .select({ id: measurements.id })
-        .from(measurements)
-        .where(
-          and(
-            eq(measurements.userId, userId),
-            eq(measurements.metric, anchorMetric),
-            eq(measurements.date, date),
-            eq(measurements.isVerified, true),
-            eq(measurements.isCalculated, false)
-          )
-        )
-        .limit(1);
-      if (!anchorRow) {
-        return deleteExisting();
-      }
+    if (anchorMetric && !(await this.hasVerifiedAnchor(userId, anchorMetric, date, tx))) {
+      return deleteExisting();
     }
 
     // Find source measurements for the formula
@@ -1051,6 +1036,32 @@ export class DerivedMetricCalculator {
     metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
     return this.findSourceMeasurements(userId, dependentMetrics, targetDate, config, metricConfigs);
+  }
+
+  /**
+   * Whether the athlete has a verified, direct (non-calculated) measurement of the anchor
+   * metric on this date. An anchored derived metric (e.g. MOMENTUM) only exists on such dates.
+   */
+  async hasVerifiedAnchor(
+    userId: string,
+    anchorMetric: string,
+    date: string,
+    dbOrTx: typeof dbType | DbTransaction = this.db
+  ): Promise<boolean> {
+    const [anchorRow] = await dbOrTx
+      .select({ id: measurements.id })
+      .from(measurements)
+      .where(
+        and(
+          eq(measurements.userId, userId),
+          eq(measurements.metric, anchorMetric),
+          eq(measurements.date, date),
+          eq(measurements.isVerified, true),
+          eq(measurements.isCalculated, false)
+        )
+      )
+      .limit(1);
+    return !!anchorRow;
   }
 
   /**
