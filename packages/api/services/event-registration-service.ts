@@ -10,6 +10,9 @@ import {
   type InsertEventRegistration,
   type RegistrationStatus,
 } from '@shared/schema';
+import { events as eventsTable, eventRegistrations, users, userOrganizations, organizations } from '@shared/schema';
+import { and, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm';
+import { db } from '../db';
 import type { IStorage } from '../storage';
 
 export interface RegisterOptions {
@@ -37,6 +40,19 @@ export interface IRegistrationStorage extends IStorage {
   getNextRegistrationNumber(eventId: string): Promise<number>;
   getNextWaitlistPosition(eventId: string): Promise<number>;
   getFirstWaitlistedRegistration(eventId: string): Promise<EventRegistration | null>;
+}
+
+export interface DirectAddOptions {
+  /** true (default): registrations end up checked_in; false: approved */
+  checkIn?: boolean;
+}
+
+export interface DirectAddResult {
+  added: string[];
+  updated: string[];
+  alreadyOnEvent: string[];
+  rejected: Array<{ userId: string; reason: 'not_in_organization' }>;
+  overCapacity?: boolean;
 }
 
 export class EventRegistrationService {
@@ -395,5 +411,151 @@ export class EventRegistrationService {
         }),
       });
     }
+  }
+
+  /**
+   * Add organization athletes straight onto an event roster (coach override).
+   * Silent (no email/push), ignores capacity and waitlist, and runs in one transaction.
+   * The caller must already have verified that `addedBy` may manage the event's registrations.
+   */
+  async addAthletesDirectly(
+    eventId: string,
+    userIds: string[],
+    addedBy: { id: string; name: string },
+    options: DirectAddOptions = {}
+  ): Promise<DirectAddResult> {
+    const event = await this.storage.getEvent(eventId);
+    if (!event) {
+      throw new Error('Event not found');
+    }
+    if (!event.organizationId) {
+      throw new Error('Event has no organization');
+    }
+    if (event.status === 'cancelled') {
+      throw new Error('Event is cancelled and cannot take new athletes');
+    }
+    const organizationId = event.organizationId;
+    const checkIn = options.checkIn ?? true;
+    const targetStatus: RegistrationStatus = checkIn ? 'checked_in' : 'approved';
+    const requested = Array.from(new Set(userIds));
+
+    const result = await db.transaction(async (tx) => {
+      // Serialise concurrent adds so registration numbers stay unique
+      await tx.select({ id: eventsTable.id }).from(eventsTable).where(eq(eventsTable.id, eventId)).for('update');
+
+      const members = await tx
+        .select({ id: users.id, firstName: users.firstName, lastName: users.lastName, fullName: users.fullName })
+        .from(users)
+        .innerJoin(userOrganizations, eq(userOrganizations.userId, users.id))
+        .where(and(
+          inArray(users.id, requested),
+          eq(userOrganizations.organizationId, organizationId),
+          eq(userOrganizations.role, 'athlete'),
+          eq(users.isActive, true),
+          isNull(users.deletedAt),
+        ));
+      const memberById = new Map(members.map((m) => [m.id, m]));
+
+      const [org] = await tx
+        .select({ id: organizations.id, name: organizations.name })
+        .from(organizations)
+        .where(eq(organizations.id, organizationId));
+
+      const existing = await tx
+        .select()
+        .from(eventRegistrations)
+        .where(and(eq(eventRegistrations.eventId, eventId), inArray(eventRegistrations.userId, requested)));
+      const existingByUser = new Map(existing.map((r) => [r.userId, r]));
+
+      const [{ max }] = await tx
+        .select({ max: sql<number>`coalesce(max(${eventRegistrations.registrationNumber}), 0)` })
+        .from(eventRegistrations)
+        .where(eq(eventRegistrations.eventId, eventId));
+      let nextNumber = Number(max) + 1;
+
+      const out: DirectAddResult = { added: [], updated: [], alreadyOnEvent: [], rejected: [] };
+      const now = new Date();
+      const note = `Added directly by ${addedBy.name}`.slice(0, 200);
+
+      for (const userId of requested) {
+        const member = memberById.get(userId);
+        if (!member) {
+          out.rejected.push({ userId, reason: 'not_in_organization' });
+          continue;
+        }
+        const reg = existingByUser.get(userId);
+        if (reg && (reg.status === 'checked_in' || reg.status === 'completed')) {
+          out.alreadyOnEvent.push(userId);
+          continue;
+        }
+        const stateFields = {
+          status: targetStatus,
+          waitlistPosition: null,
+          approvedAt: now,
+          approvedBy: addedBy.id,
+          checkedInAt: checkIn ? now : null,
+          checkedInBy: checkIn ? addedBy.id : null,
+          declinedAt: null,
+          declinedBy: null,
+          declineReason: null,
+          adminNotes: note,
+        };
+        if (reg) {
+          await tx.update(eventRegistrations).set({ ...stateFields, updatedAt: now }).where(eq(eventRegistrations.id, reg.id));
+          out.updated.push(userId);
+        } else {
+          await tx.insert(eventRegistrations).values({
+            eventId,
+            userId,
+            userFullNameSnapshot: member.fullName || `${member.firstName} ${member.lastName}`,
+            organizationIdSnapshot: org?.id ?? organizationId,
+            organizationNameSnapshot: org?.name ?? null,
+            registrationNumber: nextNumber++,
+            discoveryMethod: 'org_roster',
+            ...stateFields,
+          });
+          out.added.push(userId);
+        }
+      }
+
+      if (event.maxRegistrations !== null && (out.added.length > 0 || out.updated.length > 0)) {
+        const [{ count }] = await tx
+          .select({ count: sql<number>`count(*)` })
+          .from(eventRegistrations)
+          .where(and(eq(eventRegistrations.eventId, eventId), notInArray(eventRegistrations.status, ['cancelled', 'declined', 'waitlisted'])));
+        if (Number(count) > event.maxRegistrations) {
+          out.overCapacity = true;
+        }
+      }
+      return out;
+    });
+
+    if (result.added.length > 0 || result.updated.length > 0) {
+      // The roster change is already committed; a failed audit write must not turn it into an error response.
+      // 'event_registration_created' is the audit action the audit_logs CHECK constraint allows for registrations.
+      try {
+        await this.storage.createAuditLog({
+          userId: addedBy.id,
+          action: 'event_registration_created',
+          resourceType: 'event',
+          resourceId: eventId,
+          details: JSON.stringify({
+            eventName: event.name,
+            discoveryMethod: 'org_roster',
+            directAdd: true,
+            status: targetStatus,
+            added: result.added,
+            updated: result.updated,
+            alreadyOnEvent: result.alreadyOnEvent.length,
+            rejected: result.rejected.length,
+            overCapacity: result.overCapacity ?? false,
+          }),
+        });
+      } catch (error) {
+        console.error('Failed to write audit log for direct athlete add:', error);
+      }
+    }
+
+    return result;
   }
 }

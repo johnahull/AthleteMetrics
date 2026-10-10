@@ -268,6 +268,35 @@ export async function fetchEventRegistrations(eventId: string): Promise<EventReg
   return response.json();
 }
 
+export interface AddEventAthletesResult {
+  added: string[];
+  updated: string[];
+  alreadyOnEvent: string[];
+  rejected: Array<{ userId: string; reason: string }>;
+  overCapacity?: boolean;
+}
+
+/**
+ * Add organization athletes to an event directly (silent: no invitation, no notification)
+ */
+export async function addEventAthletes(
+  eventId: string,
+  data: { userIds: string[]; checkIn?: boolean }
+): Promise<AddEventAthletesResult> {
+  const response = await fetch(`/api/events/${eventId}/registrations/bulk-add`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const message = await getErrorMessage(response, 'Failed to add athletes');
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
 /**
  * Approve a registration
  */
@@ -844,6 +873,23 @@ export function useEventRegistrations(eventId: string | undefined) {
     queryFn: () => fetchEventRegistrations(eventId!),
     enabled: !!eventId,
     staleTime: STALE_TIME.REALTIME,
+  });
+}
+
+/**
+ * Hook to add athletes to an event directly
+ */
+export function useAddEventAthletes() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ eventId, userIds, checkIn }: { eventId: string; userIds: string[]; checkIn?: boolean }) =>
+      addEventAthletes(eventId, { userIds, checkIn }),
+    onSuccess: (_, { eventId }) => {
+      queryClient.invalidateQueries({ queryKey: ['events', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['events', eventId, 'registrations'] });
+      queryClient.invalidateQueries({ queryKey: ['events', 'my-registrations'] });
+    },
   });
 }
 

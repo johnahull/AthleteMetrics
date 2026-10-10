@@ -94,6 +94,7 @@ vi.mock('@/components/events', () => ({
   ),
   CheckInTab: () => <div data-testid="checkin-tab">Check-In Content</div>,
   InviteAthletesModal: () => null,
+  AddAthletesModal: ({ isOpen }: { isOpen: boolean }) => (isOpen ? <div data-testid="add-athletes-modal">Add Modal</div> : null),
 }));
 
 // Mock user with different roles
@@ -171,6 +172,14 @@ describe('Event Detail Page Permissions', () => {
       expect(screen.queryByTestId('tab-results')).not.toBeInTheDocument();
       expect(screen.queryByTestId('tab-reports')).not.toBeInTheDocument();
       expect(screen.queryByTestId('tab-settings')).not.toBeInTheDocument();
+    });
+
+    it('should NOT show the Add athletes button for athletes', async () => {
+      render(<EventDetail />, { wrapper: createWrapper() });
+      await waitFor(() => {
+        expect(screen.getByTestId('tab-overview')).toBeInTheDocument();
+      });
+      expect(screen.queryByRole('button', { name: /add athletes/i })).not.toBeInTheDocument();
     });
 
     it('should NOT show Edit Event button for athletes', async () => {
@@ -269,6 +278,15 @@ describe('Event Detail Page Permissions', () => {
       await userEvent.click(screen.getByTestId('tab-reports'));
 
       expect(await screen.findByTestId('eval-reports-card')).toHaveTextContent('can-manage');
+    });
+
+    it('should show an Add athletes button next to Invite Athletes that opens the modal', async () => {
+      const user = userEvent.setup();
+      render(<EventDetail />, { wrapper: createWrapper() });
+      await user.click(await screen.findByTestId('tab-registrations'));
+      expect(screen.getByRole('button', { name: /invite athletes/i })).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /^add athletes$/i }));
+      expect(screen.getByTestId('add-athletes-modal')).toBeInTheDocument();
     });
 
     it('should show Edit Event button for coaches', async () => {
