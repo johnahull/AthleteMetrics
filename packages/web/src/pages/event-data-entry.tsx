@@ -761,14 +761,14 @@ export default function EventDataEntry() {
                           <th
                             key={metric.metricCode}
                             scope="col"
-                            className="w-[92px] min-w-[92px] p-1.5 text-center align-bottom font-medium"
+                            className="w-[104px] min-w-[104px] p-1.5 text-center align-bottom font-medium"
                           >
                             <div className="flex flex-col items-center gap-0.5">
                               <span className="flex items-start justify-center gap-0.5 text-xs sm:text-sm leading-tight">
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <span
-                                      className="line-clamp-2"
+                                      className="line-clamp-3 break-words"
                                       title={`${display.label} (${display.code})`}
                                     >
                                       {display.label}

@@ -293,7 +293,7 @@ describe('EventDataEntry', () => {
       eventMetricsState = [metric('VERTICAL_JUMP', { isRequired: true, customLabel: 'A very long custom label that will certainly wrap past two lines' })];
       render(<EventDataEntry />);
       const header = screen.getByRole('columnheader', { name: /very long custom label/ });
-      const clamped = header.querySelector('.line-clamp-2') as HTMLElement;
+      const clamped = header.querySelector('.line-clamp-3') as HTMLElement;
       const star = within(header).getByText('*');
       expect(clamped).toHaveTextContent('A very long custom label');
       expect(clamped.contains(star)).toBe(false);
