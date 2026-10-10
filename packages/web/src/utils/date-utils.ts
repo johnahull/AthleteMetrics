@@ -404,3 +404,68 @@ export function getDateKey(date: Date | string | number | null | undefined): str
     return '';
   }
 }
+
+// =============================================================================
+// EVENT (CALENDAR) DATES
+// =============================================================================
+// Event dates are CALENDAR dates stored as UTC midnight (e.g. 2026-10-13T00:00Z
+// means "October 13", for every viewer). Never do `new Date(event.startDate)` +
+// format(): in UTC-5 that shows October 12. Use these helpers instead.
+
+/**
+ * Convert a stored event date to a Date at LOCAL midnight of the stored UTC
+ * calendar day, so date-fns format()/comparisons show the intended day.
+ *
+ * Strings without a zone designator (e.g. "2026-10-13T00:00:00") are treated
+ * as UTC, matching how the API serializes `timestamp without time zone`.
+ *
+ * @returns Date at local midnight, or null for nullish/invalid input
+ */
+export function toCalendarDate(input: string | Date | number | null | undefined): Date | null {
+  let value = input;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    // ISO date-time without offset/Z: interpret as UTC rather than local
+    value = /^\d{4}-\d{2}-\d{2}T[\d:.]+$/.test(trimmed) ? `${trimmed}Z` : trimmed;
+  }
+  const result = safeParseDate(value);
+  if (!result.success || !result.date) {
+    return null;
+  }
+  const d = result.date;
+  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
+/** True once the event's calendar day has ended in the viewer's local time. */
+export function isCalendarDatePast(input: string | Date | number | null | undefined): boolean {
+  const day = toCalendarDate(input);
+  if (!day) return false;
+  const endOfDay = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
+  return endOfDay.getTime() <= Date.now();
+}
+
+/** True while the event's calendar day has not started yet in the viewer's local time. */
+export function isCalendarDateFuture(input: string | Date | number | null | undefined): boolean {
+  const day = toCalendarDate(input);
+  if (!day) return false;
+  return day.getTime() > Date.now();
+}
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const toYmd = (d: Date) => `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}`;
+
+/**
+ * All-day range (RFC 5545 style, exclusive end) for an event's stored dates.
+ * Returns YYYYMMDD strings, or null if the start date is invalid.
+ */
+export function getAllDayCalendarRange(
+  startDate: string | Date | number | null | undefined,
+  endDate: string | Date | number | null | undefined
+): { start: string; endExclusive: string } | null {
+  const start = safeParseDate(startDate);
+  if (!start.success || !start.date) return null;
+  const end = safeParseDate(endDate);
+  const lastDay = end.success && end.date && end.date.getTime() >= start.date.getTime() ? end.date : start.date;
+  const next = new Date(Date.UTC(lastDay.getUTCFullYear(), lastDay.getUTCMonth(), lastDay.getUTCDate() + 1));
+  return { start: toYmd(start.date), endExclusive: toYmd(next) };
+}

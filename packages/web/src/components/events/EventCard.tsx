@@ -8,7 +8,8 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { EventStatusBadge } from "./EventStatusBadge";
 import type { EventWithCounts } from "@/lib/events-api";
-import { format, formatDistanceToNow, isPast, isFuture } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
+import { toCalendarDate, isCalendarDatePast, isCalendarDateFuture } from "@/utils/date-utils";
 
 interface EventCardProps {
   event: EventWithCounts;
@@ -31,10 +32,10 @@ export function EventCard({
   showViewButton = true,
   onManage,
 }: EventCardProps) {
-  const startDate = new Date(event.startDate);
-  const endDate = event.endDate ? new Date(event.endDate) : null;
-  const isUpcoming = isFuture(startDate);
-  const isPastEvent = isPast(endDate || startDate);
+  const startDate = toCalendarDate(event.startDate)!;
+  const endDate = toCalendarDate(event.endDate);
+  const isUpcoming = isCalendarDateFuture(event.startDate);
+  const isPastEvent = isCalendarDatePast(event.endDate || event.startDate);
 
   const formatDateRange = () => {
     if (!endDate || format(startDate, "yyyy-MM-dd") === format(endDate, "yyyy-MM-dd")) {

@@ -24,7 +24,8 @@ import {
   UserPlus,
   CalendarPlus,
 } from "lucide-react";
-import { format, formatDistanceToNow, isFuture, isPast } from "date-fns";
+import { format, formatDistanceToNow, isPast } from "date-fns";
+import { toCalendarDate, isCalendarDateFuture } from "@/utils/date-utils";
 
 export default function EventInvite() {
   const { token } = useParams();
@@ -84,8 +85,8 @@ export default function EventInvite() {
   // Format date range
   const formatDateRange = () => {
     if (!invitation?.event) return "";
-    const startDate = new Date(invitation.event.startDate);
-    const endDate = invitation.event.endDate ? new Date(invitation.event.endDate) : null;
+    const startDate = toCalendarDate(invitation.event.startDate)!;
+    const endDate = toCalendarDate(invitation.event.endDate);
 
     if (!endDate || format(startDate, "yyyy-MM-dd") === format(endDate, "yyyy-MM-dd")) {
       return format(startDate, "EEEE, MMMM d, yyyy");
@@ -239,7 +240,7 @@ export default function EventInvite() {
 
   // Main invitation view
   const event = invitation.event;
-  const startDate = event ? new Date(event.startDate) : null;
+  const startDate = event ? toCalendarDate(event.startDate) : null;
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
@@ -270,8 +271,8 @@ export default function EventInvite() {
                 <div className="flex items-center gap-2">
                   <Calendar className="h-4 w-4" />
                   <span>{formatDateRange()}</span>
-                  {startDate && isFuture(startDate) && (
-                    <span>({formatDistanceToNow(startDate)} from now)</span>
+                  {event && isCalendarDateFuture(event.startDate) && (
+                    <span>({formatDistanceToNow(startDate!)} from now)</span>
                   )}
                 </div>
                 {event.location && (

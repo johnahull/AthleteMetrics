@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Calendar, Users, Clock, BarChart3 } from "lucide-react";
 import { EventCard } from "@/components/events";
 import type { EventWithCounts } from "@/lib/events-api";
-import { isFuture, isPast } from "date-fns";
+import { toCalendarDate, isCalendarDatePast } from "@/utils/date-utils";
 
 type TabValue = "overview" | "upcoming" | "past" | "drafts";
 
@@ -38,11 +38,11 @@ export default function Events() {
 
   // Filter events by status
   const upcomingEvents = events?.filter(
-    (e) => e.status !== "draft" && e.status !== "cancelled" && isFuture(new Date(e.startDate))
+    (e) => e.status !== "draft" && e.status !== "cancelled" && !isCalendarDatePast(e.endDate || e.startDate)
   ) || [];
 
   const pastEvents = events?.filter(
-    (e) => e.status !== "draft" && isPast(new Date(e.endDate || e.startDate))
+    (e) => e.status !== "draft" && isCalendarDatePast(e.endDate || e.startDate)
   ) || [];
 
   const draftEvents = events?.filter((e) => e.status === "draft") || [];

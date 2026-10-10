@@ -12,9 +12,10 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { Calendar, MapPin, Clock, Search, CheckCircle, XCircle, AlertCircle, Mail } from "lucide-react";
-import { format, formatDistanceToNow, isFuture, isPast } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import type { EventRegistration } from "@shared/schema";
 import { InvitationCard } from "@/components/events/InvitationCard";
+import { toCalendarDate, isCalendarDatePast, isCalendarDateFuture } from "@/utils/date-utils";
 
 // Extended registration type with event data
 interface RegistrationWithEvent extends EventRegistration {
@@ -71,10 +72,10 @@ function RegistrationCard({ registration, onCancel }: { registration: Registrati
   const event = registration.event;
   if (!event) return null;
 
-  const startDate = new Date(event.startDate);
-  const endDate = event.endDate ? new Date(event.endDate) : null;
-  const isUpcoming = isFuture(startDate);
-  const isPastEvent = isPast(endDate || startDate);
+  const startDate = toCalendarDate(event.startDate)!;
+  const endDate = toCalendarDate(event.endDate);
+  const isUpcoming = isCalendarDateFuture(event.startDate);
+  const isPastEvent = isCalendarDatePast(event.endDate || event.startDate);
 
   const formatDateRange = () => {
     if (!endDate || format(startDate, "yyyy-MM-dd") === format(endDate, "yyyy-MM-dd")) {
@@ -205,14 +206,13 @@ export default function MyEvents() {
   // Separate into upcoming and past
   const upcomingRegistrations = typedRegistrations.filter((r) => {
     if (!r.event) return false;
-    const eventDate = new Date(r.event.endDate || r.event.startDate);
-    return isFuture(eventDate) && r.status !== "cancelled" && r.status !== "declined";
+    const eventDate = r.event.endDate || r.event.startDate;
+    return !isCalendarDatePast(eventDate) && r.status !== "cancelled" && r.status !== "declined";
   });
 
   const pastRegistrations = typedRegistrations.filter((r) => {
     if (!r.event) return false;
-    const eventDate = new Date(r.event.endDate || r.event.startDate);
-    return isPast(eventDate);
+    return isCalendarDatePast(r.event.endDate || r.event.startDate);
   });
 
   const pendingRegistrations = upcomingRegistrations.filter(

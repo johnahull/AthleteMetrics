@@ -51,6 +51,7 @@ import { canAccessEvalRow, hasInaccessibleEval } from "./eval-report-access";
 import { EVAL_REPORT_TYPE, frozenModelSchema } from "@shared/eval-report-config";
 import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
+import { formatCalendarDate } from "../utils/calendar-date";
 
 const REPORT_NOT_FOUND = { message: "Report not found" };
 
@@ -5084,8 +5085,8 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
     if (reportConfig?.timeframe) {
       const { customStart: startDate, customEnd: endDate } = reportConfig.timeframe;
       if (startDate && endDate) {
-        const start = new Date(startDate).toLocaleDateString();
-        const end = new Date(endDate).toLocaleDateString();
+        const start = formatCalendarDate(startDate);
+        const end = formatCalendarDate(endDate);
         timeframe = `${start} to ${end}`;
       }
     }
