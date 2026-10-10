@@ -13,7 +13,7 @@ export const evalTemplateMetricSchema = z.object({
   metricKey,
   isRequired: z.boolean().default(false),
   displayOrder: z.number().int().min(0).max(9999),
-  customLabel: z.string().trim().min(1).max(100).optional(),
+  customLabel: z.string().trim().min(1).max(100).regex(/^[^\p{Cc}]*$/u, "Label must not contain control characters").optional(),
 });
 
 export const evalTemplateMetricsSchema = z

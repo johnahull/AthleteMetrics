@@ -74,7 +74,7 @@ export function EventMetricsTab({ eventId, organizationId, isFrozen = false, can
   // Filter out already-added metrics from available list
   const addedMetricCodes = new Set(typedEventMetrics.map((m) => m.metricCode));
   const availableMetrics = (siteMetrics || []).filter(
-    (m: SiteMetric) => !addedMetricCodes.has(m.code)
+    (m: SiteMetric) => !addedMetricCodes.has(m.code) && !m.isDerived
   );
 
   // Handle add metric

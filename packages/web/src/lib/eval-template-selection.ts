@@ -24,15 +24,18 @@ export function clearTemplateEntries(list: SelectedMetric[]): SelectedMetric[] {
   return list.filter((m) => !m.fromTemplate);
 }
 
-/** The template's required tests plus the ticked optional ones, in the template's order; unavailable tests never. */
+/**
+ * The template's required tests plus the ticked optional ones, in the template's order; unavailable tests never.
+ * A test the user already added by hand is not duplicated and stays theirs (never removed with the template);
+ * when it is also a REQUIRED test of the template, its isRequired is set to true.
+ */
 export function replaceTemplateEntries(list: SelectedMetric[], resolved: ResolvedEvalTemplateMetric[], includeOptional: string[] = []): SelectedMetric[] {
   const kept = clearTemplateEntries(list);
   const have = new Set(kept.map((m) => m.code));
-  const entries = resolved
-    .filter((m) => m.status === "available" && (m.isRequired || includeOptional.includes(m.metricKey)) && !have.has(m.code))
-    .sort(byDisplayOrder)
-    .map(toSelected);
-  return [...entries, ...kept];
+  const wanted = resolved.filter((m) => m.status === "available" && (m.isRequired || includeOptional.includes(m.metricKey)));
+  const requiredCodes = new Set(wanted.filter((m) => m.isRequired).map((m) => m.code));
+  const entries = wanted.filter((m) => !have.has(m.code)).sort(byDisplayOrder).map(toSelected);
+  return [...entries, ...kept.map((m) => (requiredCodes.has(m.code) && !m.isRequired ? { ...m, isRequired: true } : m))];
 }
 
 /**
@@ -57,8 +60,8 @@ export function setOptionalEntry(list: SelectedMetric[], resolved: ResolvedEvalT
 export function unavailableTests(resolved: ResolvedEvalTemplateMetric[]) {
   const sorted = [...resolved].sort(byDisplayOrder);
   return {
-    /** No such metric yet, or switched off */
-    notAvailableYet: sorted.filter((m) => m.status === "missing" || m.status === "inactive"),
+    /** No such metric yet, switched off, or not offered to the organization's type */
+    notAvailableYet: sorted.filter((m) => m.status === "missing" || m.status === "inactive" || m.status === "unavailable"),
     /** Computed from other tests; nothing to enter */
     calculated: sorted.filter((m) => m.status === "derived"),
   };

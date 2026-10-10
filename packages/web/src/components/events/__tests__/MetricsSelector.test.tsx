@@ -519,4 +519,18 @@ describe('MetricsSelector', () => {
       expect(onMetricsChange).toHaveBeenCalledWith([]);
     });
   });
+
+  it('does not offer a derived metric (computed, nothing to enter) for hand-picking', async () => {
+    const { useSiteMetrics } = await import('@/lib/metrics-api');
+    vi.mocked(useSiteMetrics).mockReturnValueOnce({
+      data: [...mockSiteMetrics, { code: 'MOMENTUM', label: 'Momentum', category: 'Power', unit: 'kg*m/s', isDerived: true }],
+      isLoading: false,
+      error: null,
+    } as any);
+    const user = userEvent.setup();
+    render(<MetricsSelector selectedMetrics={[]} onMetricsChange={vi.fn()} organizationId="org-1" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole('combobox'));
+    expect(screen.getByRole('option', { name: /T-Test/ })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Momentum/ })).not.toBeInTheDocument();
+  });
 });

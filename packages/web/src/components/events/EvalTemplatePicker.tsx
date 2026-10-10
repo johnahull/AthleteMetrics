@@ -4,7 +4,8 @@
  * Renders nothing when the templates cannot be read (a non-writer) or there are none.
  */
 
-import { useRef, type Dispatch, type SetStateAction } from "react";
+import { useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -29,12 +30,16 @@ interface EvalTemplatePickerProps {
 
 const NONE = "none";
 
+const plural = (n: number) => `${n} ${n === 1 ? "test" : "tests"}`;
+
 export function EvalTemplatePicker({ organizationId, value, onChange, onSelectedMetricsChange }: EvalTemplatePickerProps) {
   const { data: templates, isError } = useEvalTemplates(organizationId);
-  const { data: resolvedTemplate, isError: resolveFailed, isLoading: resolving } = useResolvedEvalTemplate(value?.templateId);
+  const { data: resolvedTemplate, isError: resolveFailed, isLoading: resolving } = useResolvedEvalTemplate(value?.templateId, organizationId);
   const fetchResolved = useFetchResolvedEvalTemplate();
   // The template picked last: a slow answer for an earlier pick must not fill the list
   const latestPick = useRef<string | null>(value?.templateId ?? null);
+  // What a screen reader hears after the list changes
+  const [announcement, setAnnouncement] = useState("");
   if (isError || !templates || templates.length === 0) return null;
 
   const selected = templates.find((t) => t.id === value?.templateId);
@@ -45,30 +50,48 @@ export function EvalTemplatePicker({ organizationId, value, onChange, onSelected
   const hasSingleLegPair = SINGLE_LEG_CMJ_KEYS.every((k) => optional.some((m) => m.metricKey === k));
   const unavailable = resolved ? unavailableTests(resolved) : null;
 
-  const chooseTemplate = async (id: string) => {
-    latestPick.current = id === NONE ? null : id;
-    if (id === NONE) {
-      onChange(null);
-      onSelectedMetricsChange(clearTemplateEntries);
-      return;
-    }
-    onChange({ templateId: id, includeOptional: [] });
+  /** Resolve the template and fill the list with its required tests (also the retry after a failure) */
+  const loadTemplate = async (id: string) => {
     // Drop the previous template's tests right away; the new ones arrive when the template is resolved
     onSelectedMetricsChange(clearTemplateEntries);
+    setAnnouncement("");
     try {
-      const answer = await fetchResolved(id);
+      const answer = await fetchResolved(id, organizationId);
       if (latestPick.current !== id) return;
       onSelectedMetricsChange((list) => replaceTemplateEntries(list, answer.metrics, []));
+      const added = replaceTemplateEntries([], answer.metrics, []).length;
+      const { notAvailableYet, calculated } = unavailableTests(answer.metrics);
+      const notAdded = notAvailableYet.length + calculated.length;
+      setAnnouncement(`Template added ${plural(added)}.${notAdded > 0 ? ` ${plural(notAdded)} could not be added.` : ""}`);
     } catch {
       // The query reports the failure below; nothing is added
     }
   };
 
+  const chooseTemplate = async (id: string) => {
+    latestPick.current = id === NONE ? null : id;
+    if (id === NONE) {
+      onChange(null);
+      onSelectedMetricsChange(clearTemplateEntries);
+      setAnnouncement("");
+      return;
+    }
+    onChange({ templateId: id, includeOptional: [] });
+    await loadTemplate(id);
+  };
+
   const toggleOptional = (key: string, checked: boolean) => {
     if (!value || !resolved) return;
-    const next = checked ? [...value.includeOptional, key] : value.includeOptional.filter((k) => k !== key);
-    onChange({ templateId: value.templateId, includeOptional: next });
-    onSelectedMetricsChange((list) => setOptionalEntry(list, resolved, key, checked));
+    // One single-leg jump side per athlete: ticking one unticks the other
+    const other = checked ? SINGLE_LEG_CMJ_KEYS.find((k) => k !== key && (SINGLE_LEG_CMJ_KEYS as readonly string[]).includes(key) && value.includeOptional.includes(k)) : undefined;
+    const kept = value.includeOptional.filter((k) => k !== key && k !== other);
+    onChange({ templateId: value.templateId, includeOptional: checked ? [...kept, key] : kept });
+    onSelectedMetricsChange((list) => {
+      const base = other ? setOptionalEntry(list, resolved, other, false) : list;
+      return setOptionalEntry(base, resolved, key, checked);
+    });
+    const label = templateKeyLabel(key, resolved.find((m) => m.metricKey === key)?.customLabel);
+    setAnnouncement(`${checked ? "Added" : "Removed"} ${label}`);
   };
 
   return (
@@ -93,10 +116,16 @@ export function EvalTemplatePicker({ organizationId, value, onChange, onSelected
         </Select>
         <p className="text-xs text-muted-foreground">Fills the tests below. Add or remove tests before you create the event.</p>
         {value && resolveFailed && (
-          <p role="alert" className="text-xs text-destructive">
-            Could not load this template's tests. Nothing was added; pick the template again or add tests by hand.
-          </p>
+          <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-destructive">
+            <span>Could not load this template's tests. Nothing was added; try again or add tests by hand.</span>
+            <Button type="button" variant="outline" size="sm" onClick={() => loadTemplate(value.templateId)}>
+              Try again
+            </Button>
+          </div>
         )}
+        <p role="status" aria-live="polite" className="text-xs text-muted-foreground empty:hidden">
+          {value && resolving ? "Loading template…" : announcement}
+        </p>
         {unavailable && unavailable.notAvailableYet.length > 0 && (
           <p className="text-xs text-muted-foreground">
             Not available yet: {unavailable.notAvailableYet.map((m) => templateMetricLabel(m)).join(", ")}

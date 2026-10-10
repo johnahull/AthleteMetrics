@@ -62,8 +62,9 @@ export function MetricsSelector({
 
   // Filter out already-selected metrics from dropdown
   const selectedCodes = new Set(selectedMetrics.map((m) => m.code));
+  // A derived metric is computed from other tests: nothing to enter, so it is never hand-picked for an event
   const availableMetrics = (siteMetrics || []).filter(
-    (m: SiteMetric) => !selectedCodes.has(m.code)
+    (m: SiteMetric) => !selectedCodes.has(m.code) && !m.isDerived
   );
 
   // Handle adding a metric

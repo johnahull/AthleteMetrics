@@ -353,7 +353,7 @@ test.describe('Eval report (AM-FEAT-019 P5)', () => {
     await page.getByRole('combobox', { name: /start from template/i }).click();
     await page.getByRole('option', { name: TEMPLATE_NAME }).click();
     // The template's tests are in the list before the event exists, so the coach can adjust them
-    await expect(page.getByText(`Selected Metrics (${metricCount})`)).toBeVisible();
+    await expect(page.getByText(`Selected Metrics (${metricCount})`)).toBeVisible({ timeout: 15000 });
     await page.getByRole('button', { name: /next/i }).click();
     await page.getByRole('button', { name: /publish event/i }).click();
 

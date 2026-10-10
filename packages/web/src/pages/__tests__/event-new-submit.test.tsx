@@ -30,8 +30,9 @@ vi.mock('@/lib/events-api', () => ({
 }));
 // The wizard is covered by EventForm tests: here it just submits the data the test sets up
 vi.mock('@/components/events', () => ({
-  EventForm: ({ onSubmit }: { onSubmit: (d: unknown, draft: boolean) => void }) => (
+  EventForm: ({ onSubmit, isSubmitting }: { onSubmit: (d: unknown, draft: boolean) => void; isSubmitting?: boolean }) => (
     <>
+      <span data-testid="submitting">{String(!!isSubmitting)}</span>
       <button onClick={() => onSubmit(mockFormData, false)}>submit</button>
       <button onClick={() => onSubmit(mockFormData, true)}>submit draft</button>
     </>
@@ -149,5 +150,70 @@ describe('EventNew submit', () => {
     expect(mockToast.mock.calls[0][0]).toMatchObject({ variant: 'destructive', title: 'Error', description: 'Name is taken' });
     expect(mockAddBulk).not.toHaveBeenCalled();
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('ignores a second submit while the first is still running, and shows the form as submitting', async () => {
+    let finish: (v: unknown) => void = () => {};
+    mockCreateEvent.mockReturnValue(new Promise((res) => (finish = res)));
+    render(<EventNew />);
+    await userEvent.click(screen.getByRole('button', { name: 'submit' }));
+    await userEvent.click(screen.getByRole('button', { name: 'submit' }));
+    expect(mockCreateEvent).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('submitting')).toHaveTextContent('true');
+    finish({ id: 'ev-1' });
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/events/ev-1'));
+  });
+
+  it('stays submitting through the metrics request too', async () => {
+    mockFormData = { ...baseForm, selectedMetrics: [metric('A')] };
+    let finish: (v: unknown) => void = () => {};
+    mockAddBulk.mockReturnValue(new Promise((res) => (finish = res)));
+    render(<EventNew />);
+    await userEvent.click(screen.getByRole('button', { name: 'submit' }));
+    await waitFor(() => expect(mockAddBulk).toHaveBeenCalled());
+    expect(screen.getByTestId('submitting')).toHaveTextContent('true');
+    await userEvent.click(screen.getByRole('button', { name: 'submit' }));
+    expect(mockCreateEvent).toHaveBeenCalledTimes(1);
+    finish({ added: ['A'], alreadyPresent: [], skipped: [] });
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalled());
+  });
+
+  it('can submit again after the event could not be created', async () => {
+    mockCreateEvent.mockRejectedValueOnce(new Error('Name is taken'));
+    render(<EventNew />);
+    await userEvent.click(screen.getByRole('button', { name: 'submit' }));
+    await waitFor(() => expect(mockToast).toHaveBeenCalled());
+    await userEvent.click(screen.getByRole('button', { name: 'submit' }));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/events/ev-1'));
+    expect(mockCreateEvent).toHaveBeenCalledTimes(2);
+  });
+
+  it('sends more than 100 tests as sequential batches of 100, keeping list order, and merges the results', async () => {
+    const list = Array.from({ length: 230 }, (_, i) => metric(`M${i}`));
+    mockFormData = { ...baseForm, selectedMetrics: list };
+    mockAddBulk.mockImplementation(async (_id: string, batch: Array<{ metricCode: string }>) => ({
+      added: batch.map((b) => b.metricCode).filter((c) => c !== 'M150'),
+      alreadyPresent: [],
+      skipped: batch.some((b) => b.metricCode === 'M150') ? [{ metricCode: 'M150', reason: 'derived' }] : [],
+    }));
+    render(<EventNew />);
+    await userEvent.click(screen.getByRole('button', { name: 'submit' }));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalled());
+    expect(mockAddBulk.mock.calls.map((c) => c[1].length)).toEqual([100, 100, 30]);
+    expect(mockAddBulk.mock.calls[1][1][0]).toEqual({ metricCode: 'M100', isRequired: false, displayOrder: 100 });
+    expect(mockToast).toHaveBeenCalledTimes(1);
+    expect(mockToast.mock.calls[0][0].description).toBe('Your event has been created with 229 metrics. Not added: Label M150 (calculated automatically).');
+  });
+
+  it('stops at the first failing batch and says some tests were not added', async () => {
+    mockFormData = { ...baseForm, selectedMetrics: Array.from({ length: 150 }, (_, i) => metric(`M${i}`)) };
+    mockAddBulk.mockResolvedValueOnce({ added: Array.from({ length: 100 }, (_, i) => `M${i}`), alreadyPresent: [], skipped: [] }).mockRejectedValueOnce(new Error('Server busy'));
+    render(<EventNew />);
+    await userEvent.click(screen.getByRole('button', { name: 'submit' }));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/events/ev-1'));
+    expect(mockAddBulk).toHaveBeenCalledTimes(2);
+    expect(mockToast).toHaveBeenCalledTimes(1);
+    expect(mockToast.mock.calls[0][0]).toMatchObject({ variant: 'destructive', title: 'Event created, some tests not added' });
+    expect(mockToast.mock.calls[0][0].description).toBe('100 tests were added. Server busy');
   });
 });

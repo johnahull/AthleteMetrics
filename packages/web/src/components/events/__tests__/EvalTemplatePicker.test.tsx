@@ -110,7 +110,7 @@ describe("EvalTemplatePicker", () => {
     await pick("Soccer eval (yards)");
     await waitFor(() => expect(listCodes()).toEqual(["DASH_10YD:req", "HEIGHT_IN:req"]));
     expect(screen.getByTestId("list").querySelector("li")).toHaveAttribute("data-from-template", "yes");
-    expect(mockFetchResolved).toHaveBeenCalledWith("t-global");
+    expect(mockFetchResolved).toHaveBeenCalledWith("t-global", "org-1");
   });
 
   it("says the list below is filled and can be changed, not that tests are added after creation", () => {
@@ -189,6 +189,63 @@ describe("EvalTemplatePicker", () => {
     await pick("Soccer eval (yards)");
     expect(await screen.findByText(/could not load this template's tests/i)).toBeInTheDocument();
     expect(listCodes()).toEqual([]);
+  });
+
+  it("ticking one single-leg jump side unticks the other and removes it from the list", async () => {
+    render(<Host />);
+    await pick("Soccer eval (yards)");
+    await waitFor(() => expect(listCodes()).toHaveLength(2));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Single-leg jump height (left)" }));
+    expect(listCodes()).toEqual(["DASH_10YD:req", "HEIGHT_IN:req", "JUMP_CMJ_SL_L:opt"]);
+    await userEvent.click(screen.getByRole("checkbox", { name: "Single-leg jump height (right)" }));
+    expect(listCodes()).toEqual(["DASH_10YD:req", "HEIGHT_IN:req", "JUMP_CMJ_SL_R:opt"]);
+    expect(screen.getByRole("checkbox", { name: "Single-leg jump height (left)" })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Single-leg jump height (right)" })).toBeChecked();
+  });
+
+  it("offers a Try again button after a failed load, which loads and fills the list", async () => {
+    mockFetchResolved.mockRejectedValueOnce(new Error("500"));
+    mockUseResolved.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+    render(<Host />);
+    await pick("Soccer eval (yards)");
+    mockFetchResolved.mockImplementation(async (id: string) => resolvedByTemplate[id]);
+    await userEvent.click(await screen.findByRole("button", { name: /try again/i }));
+    await waitFor(() => expect(listCodes()).toEqual(["DASH_10YD:req", "HEIGHT_IN:req"]));
+    expect(mockFetchResolved).toHaveBeenCalledTimes(2);
+  });
+
+  it("announces how many tests were added and how many could not be, in a polite live region", async () => {
+    render(<Host />);
+    await pick("Soccer eval (yards)");
+    const status = await screen.findByRole("status");
+    expect(status).toHaveAttribute("aria-live", "polite");
+    await waitFor(() => expect(status).toHaveTextContent("Template added 2 tests. 2 tests could not be added."));
+    await userEvent.click(screen.getByRole("checkbox", { name: "Squat strength" }));
+    expect(status).toHaveTextContent("Added Squat strength");
+    await userEvent.click(screen.getByRole("checkbox", { name: "Squat strength" }));
+    expect(status).toHaveTextContent("Removed Squat strength");
+  });
+
+  it("says Loading template while the tests are fetched and the optional ticks are disabled", async () => {
+    mockUseResolved.mockReturnValue({ data: undefined, isLoading: true, isError: false });
+    render(<Host initialChoice={{ templateId: "t-global", includeOptional: [] }} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Loading template…");
+    expect(screen.getByRole("checkbox", { name: "Squat strength" })).toBeDisabled();
+  });
+
+  it("passes the organization to the resolve call, so organization-type availability applies", async () => {
+    render(<Host />);
+    await pick("Soccer eval (yards)");
+    await waitFor(() => expect(mockFetchResolved).toHaveBeenCalledWith("t-global", "org-1"));
+    expect(mockUseResolved).toHaveBeenCalledWith("t-global", "org-1");
+  });
+
+  it("lists a test the org type does not offer under Not available yet", async () => {
+    resolvedByTemplate["t-org"].metrics.push(r("HAND", "HAND_GRIP", 5, false, { status: "unavailable" }));
+    render(<Host />);
+    await pick("Spring battery");
+    await waitFor(() => expect(screen.getByText(/Not available yet: Hand/i)).toBeInTheDocument());
+    resolvedByTemplate["t-org"].metrics.pop();
   });
 
   it("lists the optional tests as a multi-select", async () => {

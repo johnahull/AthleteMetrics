@@ -14,6 +14,13 @@
 -- (packages/api/services/eval-report/template-keys.ts, TEMPLATE_METRIC_CODES); a key outside the map is a
 -- literal site_metrics code. The map below is a point-in-time copy.
 --
+-- Fresh databases rely on this migration to undo the MOMENTUM entry that 0153 seeds (0152 creates MOMENTUM as derived
+-- before 0153 runs, so the seed includes it).
+--
+-- Defensive rules: a metrics value that is not a jsonb array is ignored; an entry without a metricKey is kept;
+-- a template that would be left with NO entries (evalTemplateMetricsSchema requires at least one) is not rewritten,
+-- and the NOTICE counts those.
+--
 -- Transaction: supplied by scripts/apply-manual-migrations.js, so no BEGIN/COMMIT.
 -- Idempotent: a second run finds nothing to strip.
 
@@ -69,29 +76,37 @@ CREATE TEMP TABLE _eval_derived_keys (metric_key VARCHAR(100) PRIMARY KEY) ON CO
 INSERT INTO _eval_derived_keys (metric_key)
 SELECT DISTINCT e.value->>'metricKey'
   FROM eval_battery_templates t
- CROSS JOIN LATERAL jsonb_array_elements(t.metrics) AS e(value)
+ CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(t.metrics) = 'array' THEN t.metrics ELSE '[]'::jsonb END) AS e(value)
   JOIN site_metrics sm ON sm.code = COALESCE((SELECT k.code FROM _eval_key_codes k WHERE k.metric_key = e.value->>'metricKey'), e.value->>'metricKey')
  WHERE sm.is_derived = true;
 
 DO $$
 DECLARE
   v_templates INTEGER;
+  v_emptied INTEGER;
   v_keys TEXT;
 BEGIN
   SELECT string_agg(metric_key, ', ' ORDER BY metric_key) INTO v_keys FROM _eval_derived_keys;
 
+  DROP TABLE IF EXISTS pg_temp._eval_strip_targets;
+  -- Templates with a derived entry (kept = what would remain)
+  CREATE TEMP TABLE _eval_strip_targets ON COMMIT DROP AS
+  SELECT t.id,
+         (SELECT COALESCE(jsonb_agg(e.value ORDER BY e.ord), '[]'::jsonb)
+            FROM jsonb_array_elements(t.metrics) WITH ORDINALITY AS e(value, ord)
+           WHERE NOT COALESCE(e.value->>'metricKey' IN (SELECT metric_key FROM _eval_derived_keys), false)) AS kept
+    FROM eval_battery_templates t
+   WHERE jsonb_typeof(t.metrics) = 'array'
+     AND EXISTS (SELECT 1 FROM jsonb_array_elements(t.metrics) AS e(value)
+                  WHERE COALESCE(e.value->>'metricKey' IN (SELECT metric_key FROM _eval_derived_keys), false));
+
+  SELECT COUNT(*) INTO v_emptied FROM _eval_strip_targets WHERE jsonb_array_length(kept) = 0;
+
   UPDATE eval_battery_templates t
-     SET metrics = COALESCE((
-           SELECT jsonb_agg(e.value ORDER BY e.ord)
-             FROM jsonb_array_elements(t.metrics) WITH ORDINALITY AS e(value, ord)
-            WHERE e.value->>'metricKey' NOT IN (SELECT metric_key FROM _eval_derived_keys)
-         ), '[]'::jsonb),
-         updated_at = NOW()
-   WHERE EXISTS (
-           SELECT 1 FROM jsonb_array_elements(t.metrics) AS e(value)
-            WHERE e.value->>'metricKey' IN (SELECT metric_key FROM _eval_derived_keys)
-         );
+     SET metrics = s.kept, updated_at = NOW()
+    FROM _eval_strip_targets s
+   WHERE s.id = t.id AND jsonb_array_length(s.kept) > 0;
   GET DIAGNOSTICS v_templates = ROW_COUNT;
 
-  RAISE NOTICE 'Migration 0154 complete: removed derived metrics (%) from % eval battery templates.', COALESCE(v_keys, 'none found'), v_templates;
+  RAISE NOTICE 'Migration 0154 complete: removed derived metrics (%) from % eval battery templates; % left untouched because nothing else would remain.', COALESCE(v_keys, 'none found'), v_templates, v_emptied;
 END $$;

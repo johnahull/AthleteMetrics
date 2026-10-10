@@ -51,6 +51,7 @@ describe('eval templates and org eval report settings', () => {
   const SUFFIX = Math.random().toString(36).slice(2, 8).toUpperCase();
   const DERIVED_CODE = `ZZ_DERIVED_${SUFFIX}`;
   const INACTIVE_CODE = `ZZ_INACTIVE_${SUFFIX}`;
+  const COLLEGE_CODE = `ZZ_COLLEGE_${SUFFIX}`;
 
   const as = (who: Who) => ({
     get: (url: string) => request(app).get(url).set('Cookie', cookies[who]),
@@ -134,7 +135,7 @@ describe('eval templates and org eval report settings', () => {
     }
 
     // A derived and an inactive metric, for the resolved statuses (literal codes: a key outside the key map is a code)
-    for (const [code, extra] of [[DERIVED_CODE, { isDerived: true }], [INACTIVE_CODE, { isActive: false }]] as const) {
+    for (const [code, extra] of [[DERIVED_CODE, { isDerived: true }], [INACTIVE_CODE, { isActive: false }], [COLLEGE_CODE, { availableOrgTypes: ['college'] }]] as const) {
       await db.insert(siteMetrics).values({ code, label: `Label ${code}`, category: 'power', unit: 'kg', metricType: 'tracking', ...extra } as any);
       createdSiteMetricCodes.push(code);
     }
@@ -521,6 +522,27 @@ describe('eval templates and org eval report settings', () => {
       expect(byKey.ZZ_NO_SUCH_CODE).toMatchObject({ label: null, unit: null, category: null });
     });
 
+    it("marks a metric the org's type does not offer as 'unavailable' (org template, and the global default with ?organizationId)", async () => {
+      const [t] = await db.insert(evalBatteryTemplates).values({
+        organizationId: orgA, sport: 'SOCCER', name: `${PREFIX}-unavail`,
+        metrics: [{ metricKey: 'DASH_10', isRequired: true, displayOrder: 1 }, { metricKey: COLLEGE_CODE, isRequired: false, displayOrder: 2 }],
+      } as any).returning({ id: evalBatteryTemplates.id });
+      const own = await as('coachA').get(`/api/eval-templates/${t.id}/resolved`);
+      expect(own.body.metrics.map((m: any) => [m.metricKey, m.status])).toEqual([['DASH_10', 'available'], [COLLEGE_CODE, 'unavailable']]);
+      // The global default: the type comes from the organization the form is for, which the caller must write in
+      const [g] = await db.select().from(evalBatteryTemplates).where(eq(evalBatteryTemplates.id, globalId));
+      await db.update(evalBatteryTemplates).set({ metrics: [...g.metrics, { metricKey: COLLEGE_CODE, isRequired: false, displayOrder: 99 }] as any }).where(eq(evalBatteryTemplates.id, globalId));
+      try {
+        const withOrg = await as('coachA').get(`/api/eval-templates/${globalId}/resolved?organizationId=${orgA}`);
+        expect(withOrg.body.metrics.find((m: any) => m.metricKey === COLLEGE_CODE).status).toBe('unavailable');
+        const without = await as('coachA').get(`/api/eval-templates/${globalId}/resolved`);
+        expect(without.body.metrics.find((m: any) => m.metricKey === COLLEGE_CODE).status).toBe('available');
+        expect((await as('coachA').get(`/api/eval-templates/${globalId}/resolved?organizationId=${orgB}`)).status).toBe(404);
+      } finally {
+        await db.update(evalBatteryTemplates).set({ metrics: g.metrics as any }).where(eq(evalBatteryTemplates.id, globalId));
+      }
+    });
+
     it('is readable by org_admin and by a site admin; the global default by a writer of any org', async () => {
       expect((await as('adminA').get(`/api/eval-templates/${tplId}/resolved`)).status).toBe(200);
       expect((await as('siteAdmin').get(`/api/eval-templates/${tplId}/resolved`)).status).toBe(200);
@@ -557,6 +579,10 @@ describe('eval templates and org eval report settings', () => {
       expect(res.status).toBe(200);
       expect(res.body.added).toEqual(['DASH_10YD']);
       expect(res.body.skipped.sort()).toEqual([DERIVED_CODE, INACTIVE_CODE].sort());
+      // ... and one the org's type does not offer
+      const [t2] = await db.insert(evalBatteryTemplates).values({ organizationId: orgB, sport: 'SOCCER', name: `${PREFIX}-college`, metrics: [{ metricKey: COLLEGE_CODE, isRequired: true, displayOrder: 1 }] } as any).returning({ id: evalBatteryTemplates.id });
+      const res2 = await as('coachB').post(`/api/events/${ev.id}/apply-eval-template`).send({ templateId: t2.id });
+      expect(res2.body).toEqual({ added: [], skipped: [COLLEGE_CODE], alreadyPresent: [] });
       const rows = await db.select().from(eventMetrics).where(eq(eventMetrics.eventId, ev.id));
       expect(rows.map((r) => r.metricCode)).toEqual(['DASH_10YD']);
     });

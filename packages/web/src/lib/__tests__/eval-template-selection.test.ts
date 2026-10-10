@@ -64,6 +64,16 @@ describe("replaceTemplateEntries", () => {
     expect(codes(clearTemplateEntries(after))).toEqual(["DASH_10YD"]);
   });
 
+  it("makes a hand-added test required when it is also a REQUIRED template test (the hand entry stays theirs)", () => {
+    const after = replaceTemplateEntries([hand("DASH_10YD")], resolved, []);
+    const entry = after.find((m) => m.code === "DASH_10YD");
+    expect(entry).toMatchObject({ isRequired: true });
+    expect(entry?.fromTemplate).toBeUndefined();
+    // an optional template test does not change a hand entry
+    const optional = replaceTemplateEntries([hand("SQUAT_1RM")], resolved, ["STRENGTH_SQUAT"]);
+    expect(optional.find((m) => m.code === "SQUAT_1RM")?.isRequired).toBe(false);
+  });
+
   it("uses the template's own label when it has one, and carries it as customLabel", () => {
     const list = replaceTemplateEntries([], [r("CMJ_HOH", "JUMP_CMJ_HOH", { customLabel: "CMJ" })], []);
     expect(list[0]).toMatchObject({ label: "CMJ", customLabel: "CMJ" });
@@ -114,6 +124,7 @@ describe("unavailableTests", () => {
   it("splits what the template lists but can not be added into not-yet-available and calculated ones", () => {
     const out = unavailableTests(resolved);
     expect(out.notAvailableYet.map((m) => m.metricKey)).toEqual(["GCT", "OLD"]);
+    expect(unavailableTests([r("X", "X", { status: "unavailable" })]).notAvailableYet).toHaveLength(1);
     expect(out.calculated.map((m) => m.metricKey)).toEqual(["MOMENTUM"]);
   });
 });

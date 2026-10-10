@@ -1,49 +1,79 @@
 /**
- * Save a whole metric list on an event in one request (new-event form).
- * Codes that can not be event metrics are skipped with a reason instead of failing the request:
- * 'unknown' (no site_metrics row), 'inactive' (switched off) and 'derived' (computed, never entered).
+ * Save a whole metric list on an event in one request (new-event form), all or nothing.
+ * Codes that can not be event metrics are skipped with a reason instead of failing the request
+ * (see event-metric-eligibility.ts). The insert and its audit row share ONE transaction; a code another
+ * request inserted first is reported as alreadyPresent (ON CONFLICT DO NOTHING), never as an error.
  */
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { storage } from "../storage";
-import { eventMetrics, siteMetrics } from "@shared/schema";
-import { EventMetricsService, type BulkAddMetricItem } from "./event-metrics-service";
+import { auditLogs, eventMetrics, events, organizations } from "@shared/schema";
+import { EventMetricsFrozenError } from "./event-metrics-service";
+import { fetchEligibilityRows, ineligibleReason, type IneligibleReason } from "./event-metric-eligibility";
 
-export type SkipReason = "unknown" | "inactive" | "derived";
+export interface BulkAddItem {
+  metricCode: string;
+  displayOrder?: number;
+  isRequired?: boolean;
+  customLabel?: string;
+}
 
 export interface BulkAddResult {
   /** Codes actually inserted by this request */
   added: string[];
   alreadyPresent: string[];
-  skipped: Array<{ metricCode: string; reason: SkipReason }>;
+  skipped: Array<{ metricCode: string; reason: IneligibleReason }>;
 }
 
 /** Throws EventMetricsFrozenError for a frozen event (also when every code would have been skipped). */
-export async function bulkAddEventMetrics(eventId: string, userId: string, requested: BulkAddMetricItem[]): Promise<BulkAddResult> {
+export async function bulkAddEventMetrics(eventId: string, userId: string, requested: BulkAddItem[]): Promise<BulkAddResult> {
   const seen = new Set<string>();
   const items = requested.filter((m) => !seen.has(m.metricCode) && !!seen.add(m.metricCode));
 
-  const rows = items.length
-    ? await db.select({ code: siteMetrics.code, isActive: siteMetrics.isActive, isDerived: siteMetrics.isDerived }).from(siteMetrics).where(inArray(siteMetrics.code, items.map((m) => m.metricCode)))
-    : [];
-  const byCode = new Map(rows.map((r) => [r.code, r]));
-  const present = new Set((await db.select({ code: eventMetrics.metricCode }).from(eventMetrics).where(eq(eventMetrics.eventId, eventId))).map((r) => r.code));
+  return db.transaction(async (tx) => {
+    const [event] = await tx
+      .select({ name: events.name, isFrozen: events.isFrozen, orgType: organizations.orgType })
+      .from(events)
+      .leftJoin(organizations, eq(organizations.id, events.organizationId))
+      .where(eq(events.id, eventId));
+    if (!event) throw new Error("Event not found");
+    if (event.isFrozen) throw new EventMetricsFrozenError();
 
-  const skipped: BulkAddResult["skipped"] = [];
-  const alreadyPresent: string[] = [];
-  const toAdd: BulkAddMetricItem[] = [];
-  for (const item of items) {
-    const row = byCode.get(item.metricCode);
-    if (!row) skipped.push({ metricCode: item.metricCode, reason: "unknown" });
-    else if (row.isDerived) skipped.push({ metricCode: item.metricCode, reason: "derived" });
-    else if (!row.isActive) skipped.push({ metricCode: item.metricCode, reason: "inactive" });
-    else if (present.has(item.metricCode)) alreadyPresent.push(item.metricCode);
-    else toAdd.push(item);
-  }
+    const rows = await fetchEligibilityRows(items.map((m) => m.metricCode), tx);
+    const skipped: BulkAddResult["skipped"] = [];
+    const toAdd: BulkAddItem[] = [];
+    for (const item of items) {
+      const reason = ineligibleReason(rows.get(item.metricCode), event.orgType);
+      if (reason) skipped.push({ metricCode: item.metricCode, reason });
+      else toAdd.push(item);
+    }
 
-  const inserted = await new EventMetricsService(storage).bulkAddMetrics(eventId, userId, toAdd, { skipExisting: true });
-  const insertedCodes = new Set(inserted.map((r) => r.metricCode));
-  // A code a concurrent request added in between was skipped by the insert
-  const raced = toAdd.filter((m) => !insertedCodes.has(m.metricCode)).map((m) => m.metricCode);
-  return { added: toAdd.filter((m) => insertedCodes.has(m.metricCode)).map((m) => m.metricCode), alreadyPresent: [...alreadyPresent, ...raced], skipped };
+    const inserted = toAdd.length
+      ? await tx
+          .insert(eventMetrics)
+          .values(
+            toAdd.map((m, i) => ({
+              eventId,
+              metricCode: m.metricCode,
+              displayOrder: m.displayOrder ?? 999 + i,
+              isRequired: m.isRequired ?? false,
+              customLabel: m.customLabel ?? null,
+            }))
+          )
+          .onConflictDoNothing({ target: [eventMetrics.eventId, eventMetrics.metricCode] })
+          .returning({ code: eventMetrics.metricCode })
+      : [];
+    const insertedCodes = new Set(inserted.map((r) => r.code));
+    const added = toAdd.filter((m) => insertedCodes.has(m.metricCode)).map((m) => m.metricCode);
+
+    if (added.length > 0) {
+      await tx.insert(auditLogs).values({
+        userId,
+        action: "event_metrics_bulk_added",
+        resourceType: "event",
+        resourceId: eventId,
+        details: JSON.stringify({ eventName: event.name, metricsAdded: added, count: added.length }),
+      });
+    }
+    return { added, alreadyPresent: toAdd.filter((m) => !insertedCodes.has(m.metricCode)).map((m) => m.metricCode), skipped };
+  });
 }

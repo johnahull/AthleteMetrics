@@ -464,8 +464,8 @@ export interface BulkAddEventMetricsResult {
   /** Codes this request inserted */
   added: string[];
   alreadyPresent: string[];
-  /** Codes that can not be event metrics: no such metric, switched off, or computed from other tests */
-  skipped: Array<{ metricCode: string; reason: 'unknown' | 'inactive' | 'derived' }>;
+  /** Codes that can not be event metrics: no such metric, switched off, computed from other tests, or not offered to the organization's type */
+  skipped: Array<{ metricCode: string; reason: 'unknown' | 'inactive' | 'derived' | 'unavailable' }>;
 }
 
 /**

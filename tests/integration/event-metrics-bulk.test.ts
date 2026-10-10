@@ -12,7 +12,7 @@ import express, { type Express } from 'express';
 import bcrypt from 'bcrypt';
 import { eq, inArray } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
-import { eventMetrics, events, organizations, siteMetrics, userOrganizations, users } from '@shared/schema';
+import { auditLogs, eventMetrics, events, organizations, siteMetrics, userOrganizations, users } from '@shared/schema';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 import { purgeTestRows } from '../helpers/purge-test-rows';
 
@@ -35,6 +35,7 @@ vi.mock('express-rate-limit', async (importOriginal) => {
 });
 
 import { registerRoutes } from '../../packages/api/routes';
+import { bulkAddEventMetrics } from '../../packages/api/services/event-metrics-bulk';
 
 const PASSWORD = 'BulkMetrics123!';
 const PREFIX = `bulkmet-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -43,6 +44,9 @@ const MUTATION_LIMITER = 'Too many event metrics modification attempts, please t
 const code = (n: number | string) => `ZZB_${SUFFIX}_${n}`;
 const DERIVED = code('DERIVED');
 const INACTIVE = code('INACTIVE');
+const COLLEGE_ONLY = code('COLLEGE_ONLY');
+const CLUB_ONLY = code('CLUB_ONLY');
+const ANY_TYPE = code('ANY_TYPE');
 
 type Who = 'coachA' | 'adminA' | 'athleteA' | 'coachB' | 'siteAdmin';
 
@@ -95,6 +99,9 @@ describe('POST /api/events/:eventId/metrics/bulk', () => {
       ...Array.from({ length: 30 }, (_, i) => ({ code: code(i), isActive: true, isDerived: false })),
       { code: DERIVED, isActive: true, isDerived: true },
       { code: INACTIVE, isActive: false, isDerived: false },
+      { code: COLLEGE_ONLY, isActive: true, isDerived: false, availableOrgTypes: ['college'] },
+      { code: CLUB_ONLY, isActive: true, isDerived: false, availableOrgTypes: ['club'] },
+      { code: ANY_TYPE, isActive: true, isDerived: false, availableOrgTypes: [] },
     ];
     for (const r of rows) {
       await db.insert(siteMetrics).values({ ...r, label: `Label ${r.code}`, category: 'speed', unit: 's', metricType: 'lower_is_better' } as any).onConflictDoNothing();
@@ -231,5 +238,108 @@ describe('POST /api/events/:eventId/metrics/bulk', () => {
     const rows = await db.select().from(eventMetrics).where(eq(eventMetrics.eventId, ev));
     expect(rows).toHaveLength(1);
     expect(rows[0].id).not.toBe('x');
+  });
+
+  describe('atomic: all or nothing', () => {
+    const auditRows = async (eventId: string) => db.select().from(auditLogs).where(eq(auditLogs.resourceId, eventId));
+
+    it('saves nothing, and writes no audit row, when the audit insert fails after the metric insert', async () => {
+      const ev = await newEvent(orgA);
+      // an author that does not exist: the audit row violates its foreign key after the metrics were inserted
+      await expect(bulkAddEventMetrics(ev, 'no-such-user', [item(code(0)), item(code(1))])).rejects.toThrow();
+      expect(await codesOf(ev)).toEqual([]);
+      expect(await auditRows(ev)).toEqual([]);
+    });
+
+    it('saves nothing when one item violates a column limit (service called with a label Zod would have refused)', async () => {
+      const ev = await newEvent(orgA);
+      await expect(bulkAddEventMetrics(ev, u.coachA.id, [item(code(0)), item(code(1), { customLabel: 'x'.repeat(101) })])).rejects.toThrow();
+      expect(await codesOf(ev)).toEqual([]);
+      expect(await auditRows(ev)).toEqual([]);
+    });
+
+    it('answers a plain 500 and leaves nothing behind when the write fails', async () => {
+      const ev = await newEvent(orgA);
+      const orig = db.transaction.bind(db);
+      const spy = vi.spyOn(db, 'transaction').mockImplementationOnce(((fn: any) => orig(async (tx: any) => { await fn(tx); throw new Error('boom'); })) as any);
+      const res = await as('coachA').post(`/api/events/${ev}/metrics/bulk`).send({ metrics: [item(code(0))] });
+      spy.mockRestore();
+      expect(res.status).toBe(500);
+      expect(res.body.error).toMatch(/failed/i);
+      expect(await codesOf(ev)).toEqual([]);
+      expect(await auditRows(ev)).toEqual([]);
+    });
+
+    it('two identical requests at once: no 500, no duplicates, each code added exactly once overall', async () => {
+      const ev = await newEvent(orgA);
+      const metrics = Array.from({ length: 10 }, (_, i) => item(code(i), { displayOrder: i }));
+      const [r1, r2] = await Promise.all([
+        as('coachA').post(`/api/events/${ev}/metrics/bulk`).send({ metrics }),
+        as('adminA').post(`/api/events/${ev}/metrics/bulk`).send({ metrics }),
+      ]);
+      expect([r1.status, r2.status]).toEqual([200, 200]);
+      const added = [...r1.body.added, ...r2.body.added].sort();
+      expect(added).toEqual(metrics.map((m) => m.metricCode).sort());
+      expect([...r1.body.alreadyPresent, ...r2.body.alreadyPresent].sort()).toEqual(added);
+      expect(await codesOf(ev)).toEqual(added);
+    });
+  });
+
+  describe('organization type availability', () => {
+    it("skips a metric the org's type does not offer ('unavailable'); null and empty lists mean every type", async () => {
+      const ev = await newEvent(orgA); // organizations default to type club
+      const res = await as('coachA').post(`/api/events/${ev}/metrics/bulk`).send({ metrics: [item(COLLEGE_ONLY), item(CLUB_ONLY), item(ANY_TYPE), item(code(0))] });
+      expect(res.status).toBe(200);
+      expect(res.body.added).toEqual([CLUB_ONLY, ANY_TYPE, code(0)]);
+      expect(res.body.skipped).toEqual([{ metricCode: COLLEGE_ONLY, reason: 'unavailable' }]);
+    });
+  });
+
+  describe('input hygiene', () => {
+    it('rejects control characters in a label and badly formed metric codes with 400', async () => {
+      const ev = await newEvent(orgA);
+      for (const metrics of [[item(code(0), { customLabel: 'Line\nbreak' })], [item(code(0), { customLabel: 'Nul\u0000' })], [item('has space')], [item('semi;colon')], [item('dash-ed')]]) {
+        expect((await as('coachA').post(`/api/events/${ev}/metrics/bulk`).send({ metrics })).status, JSON.stringify(metrics)).toBe(400);
+      }
+      expect(await codesOf(ev)).toEqual([]);
+    });
+  });
+
+  describe('single POST /api/events/:eventId/metrics: same eligibility, rejected with 400', () => {
+    const post = (ev: string, body: Record<string, unknown>, who: Who = 'coachA') => as(who).post(`/api/events/${ev}/metrics`).send(body);
+
+    it('rejects derived, inactive and org-type-unavailable metrics with a plain message', async () => {
+      const ev = await newEvent(orgA);
+      const derived = await post(ev, { metricCode: DERIVED });
+      expect(derived.status).toBe(400);
+      expect(derived.body.error).toMatch(/calculated/i);
+      const inactive = await post(ev, { metricCode: INACTIVE });
+      expect(inactive.status).toBe(400);
+      expect(inactive.body.error).toMatch(/not active/i);
+      const unavailable = await post(ev, { metricCode: COLLEGE_ONLY });
+      expect(unavailable.status).toBe(400);
+      expect(unavailable.body.error).toMatch(/organization's type/i);
+      expect(await codesOf(ev)).toEqual([]);
+    });
+
+    it('still adds an eligible metric (201) and answers 400 for an unknown one', async () => {
+      const ev = await newEvent(orgA);
+      expect((await post(ev, { metricCode: code(0), customLabel: 'Sprint' })).status).toBe(201);
+      expect((await post(ev, { metricCode: code('NOPE') })).status).toBe(400);
+      expect(await codesOf(ev)).toEqual([code(0)]);
+    });
+
+    it('validates customLabel: too long, control characters and non-strings are 400, not a DB 500', async () => {
+      const ev = await newEvent(orgA);
+      for (const customLabel of ['x'.repeat(101), 'a\nb', 5]) {
+        expect((await post(ev, { metricCode: code(0), customLabel })).status, String(customLabel)).toBe(400);
+      }
+      expect(await codesOf(ev)).toEqual([]);
+    });
+
+    it('answers 400 (not 409 as the bulk route does) for a frozen event', async () => {
+      const ev = await newEvent(orgA, { isFrozen: true });
+      expect((await post(ev, { metricCode: code(0) })).status).toBe(400);
+    });
   });
 });

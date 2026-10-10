@@ -88,12 +88,19 @@ export function registerEvalTemplateRoutes(app: Express) {
     }
   });
 
-  /** The template's tests resolved against site_metrics, for the new-event form. Same visibility as the plain read. */
+  /**
+   * The template's tests resolved against site_metrics, for the new-event form. Same visibility as the plain read.
+   * `?organizationId=` names the organization the event is for (needed for the global default to apply the
+   * organization-type availability rule); the caller must write in it, else 404.
+   */
   app.get("/api/eval-templates/:id/resolved", requireAuth, readLimiter, async (req, res) => {
     try {
       const template = await svc.getVisibleTemplate(userOf(req), req.params.id);
       if (!template) return res.status(404).json(NOT_FOUND);
-      return res.json({ template: { id: template.id, name: template.name }, metrics: await svc.resolveTemplateMetrics(template) });
+      const asked = typeof req.query.organizationId === "string" ? req.query.organizationId : null;
+      if (asked && !(await svc.isOrgWriter(userOf(req), asked))) return res.status(404).json(NOT_FOUND);
+      const orgType = await svc.orgTypeOf(asked ?? template.organizationId);
+      return res.json({ template: { id: template.id, name: template.name }, metrics: await svc.resolveTemplateMetrics(template, orgType) });
     } catch (e) {
       return handleError(res, e);
     }
@@ -159,7 +166,7 @@ export function registerEvalTemplateRoutes(app: Express) {
       if (!template || template.archivedAt || (template.organizationId && template.organizationId !== event.organizationId)) {
         return res.status(404).json(NOT_FOUND);
       }
-      return res.json(await svc.applyTemplateToEvent(event.id, userOf(req).id, template, parsed.data.includeOptional));
+      return res.json(await svc.applyTemplateToEvent(event.id, userOf(req).id, template, event.organizationId, parsed.data.includeOptional));
     } catch (e) {
       return handleError(res, e);
     }

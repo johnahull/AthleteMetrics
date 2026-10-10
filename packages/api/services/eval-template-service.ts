@@ -13,7 +13,9 @@ import type { EvalBatteryTemplate, OrgEvalReportSettings, UserOrganization } fro
 import type { EvalTemplateMetric, EvalReportSettingsInput } from "@shared/eval-template-schemas";
 import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
 import { isSiteAdmin } from "../permissions/helpers";
-import { EventMetricsService, EventMetricsFrozenError } from "./event-metrics-service";
+import { EventMetricsFrozenError } from "./event-metrics-service";
+import { bulkAddEventMetrics } from "./event-metrics-bulk";
+import { fetchEligibilityRows, ineligibleReason } from "./event-metric-eligibility";
 import { keyForCode, resolveTemplateKey } from "./eval-report/template-keys";
 
 export type Actor = { id: string; isSiteAdmin?: boolean; role?: string };
@@ -184,8 +186,9 @@ const SINGLE_LEG_CMJ = ["CMJ_SL_LEFT", "CMJ_SL_RIGHT"];
 /**
  * 'derived': the metric is computed, never entered, so it can not be an event metric.
  * 'inactive': switched off by a site admin. 'missing': no site_metrics row for the key's code.
+ * 'unavailable': the metric is not offered to the organization's type.
  */
-export type ResolvedMetricStatus = "available" | "missing" | "inactive" | "derived";
+export type ResolvedMetricStatus = "available" | "missing" | "inactive" | "derived" | "unavailable";
 
 export interface ResolvedTemplateMetric {
   metricKey: string;
@@ -200,18 +203,23 @@ export interface ResolvedTemplateMetric {
   status: ResolvedMetricStatus;
 }
 
-/** Every entry of the template resolved to its site_metrics code and status, in displayOrder (ONE query). */
-export async function resolveTemplateMetrics(template: Pick<EvalBatteryTemplate, "metrics">): Promise<ResolvedTemplateMetric[]> {
+/** The organization's type (for the availability rule), or null when there is none or the org is unknown */
+export async function orgTypeOf(organizationId: string | null | undefined): Promise<string | null> {
+  if (!organizationId) return null;
+  const [row] = await db.select({ orgType: organizations.orgType }).from(organizations).where(eq(organizations.id, organizationId));
+  return row?.orgType ?? null;
+}
+
+/**
+ * Every entry of the template resolved to its site_metrics code and status, in displayOrder (ONE query).
+ * With `orgType`, a metric not offered to that organization type is 'unavailable'.
+ */
+export async function resolveTemplateMetrics(template: Pick<EvalBatteryTemplate, "metrics">, orgType: string | null = null): Promise<ResolvedTemplateMetric[]> {
   const entries = [...template.metrics].sort((a, b) => a.displayOrder - b.displayOrder).map((m) => ({ ...m, code: resolveTemplateKey(m.metricKey) }));
-  if (entries.length === 0) return [];
-  const rows = await db
-    .select({ code: siteMetrics.code, label: siteMetrics.label, unit: siteMetrics.unit, category: siteMetrics.category, isActive: siteMetrics.isActive, isDerived: siteMetrics.isDerived })
-    .from(siteMetrics)
-    .where(inArray(siteMetrics.code, entries.map((m) => m.code)));
-  const byCode = new Map(rows.map((r) => [r.code, r]));
+  const byCode = await fetchEligibilityRows(entries.map((m) => m.code));
   return entries.map((m) => {
     const row = byCode.get(m.code);
-    const status: ResolvedMetricStatus = !row ? "missing" : row.isDerived ? "derived" : !row.isActive ? "inactive" : "available";
+    const reason = ineligibleReason(row, orgType);
     return {
       metricKey: m.metricKey,
       code: m.code,
@@ -221,18 +229,18 @@ export async function resolveTemplateMetrics(template: Pick<EvalBatteryTemplate,
       ...(m.customLabel ? { customLabel: m.customLabel } : {}),
       isRequired: m.isRequired,
       displayOrder: m.displayOrder,
-      status,
+      status: reason === null ? "available" : reason === "unknown" ? "missing" : reason,
     };
   });
 }
 
 /**
  * Pre-load the event's metrics from a template: the required ones, plus the optional ones named in
- * `includeOptional` (at most one single-leg CMJ). Keys whose site_metrics code does not exist, is inactive or is
- * derived are skipped and returned in `skipped`; metrics already on the event are left alone (`alreadyPresent`).
- * The write goes through EventMetricsService.bulkAddMetrics (frozen check and audit log).
+ * `includeOptional` (at most one single-leg CMJ). Keys whose metric is missing, inactive, derived or not offered
+ * to the event's organization type are skipped and returned in `skipped`; metrics already on the event are left
+ * alone (`alreadyPresent`). The write is the atomic bulkAddEventMetrics (frozen check, insert and audit log in one transaction).
  */
-export async function applyTemplateToEvent(eventId: string, userId: string, template: EvalBatteryTemplate, includeOptional: string[] = []) {
+export async function applyTemplateToEvent(eventId: string, userId: string, template: EvalBatteryTemplate, organizationId: string | null, includeOptional: string[] = []) {
   const optionalKeys = new Set(template.metrics.filter((m) => !m.isRequired).map((m) => m.metricKey));
   const notOptional = includeOptional.filter((k) => !optionalKeys.has(k));
   if (notOptional.length > 0) throw new TemplateValidationError(`Not optional metrics of this template: ${notOptional.join(", ")}`);
@@ -240,32 +248,22 @@ export async function applyTemplateToEvent(eventId: string, userId: string, temp
     throw new TemplateValidationError("Use one single-leg CMJ per athlete, not both");
   }
 
-  const chosen = (await resolveTemplateMetrics(template)).filter((m) => m.isRequired || includeOptional.includes(m.metricKey));
+  const chosen = (await resolveTemplateMetrics(template, await orgTypeOf(organizationId))).filter((m) => m.isRequired || includeOptional.includes(m.metricKey));
   if (chosen.length === 0) return { added: [], skipped: [], alreadyPresent: [] };
-  const present = new Set(
-    (await db.select({ code: eventMetrics.metricCode }).from(eventMetrics).where(eq(eventMetrics.eventId, eventId))).map((r) => r.code)
-  );
 
   const usable = chosen.filter((m) => m.status === "available");
   const skipped = chosen.filter((m) => m.status !== "available").map((m) => m.metricKey);
-  const alreadyPresent = usable.filter((m) => present.has(m.code)).map((m) => m.code);
-  const toAdd = usable.filter((m) => !present.has(m.code));
-  let inserted: Set<string>;
   try {
-    const rows = await new EventMetricsService(storage).bulkAddMetrics(
+    const result = await bulkAddEventMetrics(
       eventId,
       userId,
-      toAdd.map((m) => ({ metricCode: m.code, displayOrder: m.displayOrder, isRequired: m.isRequired, customLabel: m.customLabel })),
-      { skipExisting: true }
+      usable.map((m) => ({ metricCode: m.code, displayOrder: m.displayOrder, isRequired: m.isRequired, customLabel: m.customLabel }))
     );
-    inserted = new Set(rows.map((r) => r.metricCode));
+    return { added: result.added, skipped, alreadyPresent: result.alreadyPresent };
   } catch (e) {
     if (e instanceof EventMetricsFrozenError) throw new EventFrozenError(e.message);
     throw e;
   }
-  // `added` is what the insert confirmed; a code a concurrent request added in between was skipped by it
-  const raced = toAdd.filter((m) => !inserted.has(m.code)).map((m) => m.code);
-  return { added: toAdd.filter((m) => inserted.has(m.code)).map((m) => m.code), skipped, alreadyPresent: [...alreadyPresent, ...raced] };
 }
 
 /** What GET returns: a stored row, or the synthetic default when none exists yet (no timestamps or author). */

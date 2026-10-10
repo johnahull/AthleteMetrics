@@ -22,10 +22,12 @@ const isDisposableTestDb =
   process.env.NODE_ENV === 'test' && (/@(localhost|127\.0\.0\.1)[:/]/.test(dbUrl) || process.env.CI === 'true');
 
 describe('Migration 0154: static analysis', () => {
-  it('embeds the full logical key map used by the API', () => {
-    for (const [key, code] of Object.entries(TEMPLATE_METRIC_CODES)) {
-      expect(UP, key).toContain(`('${key}', '${code}')`);
-    }
+  // Direction matters: the map may grow after this migration was applied; what the SQL says must never contradict it.
+  it('every (key, code) pair in the SQL still agrees with the API key map', () => {
+    const block = UP.slice(UP.indexOf('INSERT INTO _eval_key_codes'), UP.indexOf(';', UP.indexOf('INSERT INTO _eval_key_codes')));
+    const pairs = [...block.matchAll(/\('([A-Z0-9_]+)',\s*'([A-Z0-9_]+)'\)/g)];
+    expect(pairs.length).toBeGreaterThan(30);
+    for (const [, key, code] of pairs) expect(TEMPLATE_METRIC_CODES[key], key).toBe(code);
   });
   it('is idempotent in form and runs no BEGIN/COMMIT of its own', () => {
     expect(UP).toMatch(/DROP TABLE IF EXISTS pg_temp\._eval_key_codes/);
@@ -167,6 +169,29 @@ describe.skipIf(!isDisposableTestDb)('Migration 0154: against a disposable DB (r
       expect((await metricsOf(tx, o)).metrics).toEqual([entry('FLY_10', 1, true)]);
       await tx.unsafe(UP);
       expect((await metricsOf(tx, g)).metrics).toEqual([entry('FLY_10', 1, true), entry('T_TEST', 5)]);
+    });
+  });
+
+  it('ignores a non-array metrics value, keeps entries without a metricKey, and leaves a template that would become empty untouched', async () => {
+    await rollbackable(async (tx) => {
+      await setup(tx);
+      // metrics is NOT NULL jsonb: a scalar and an object are the malformed shapes that can exist
+      const scalar = await insertTemplate(tx, null, 'Scalar', 'not an array' as any);
+      const obj = await insertTemplate(tx, null, 'Object', { metricKey: 'MOMENTUM' } as any);
+      const mixed = await insertTemplate(tx, null, 'Mixed', [entry('MOMENTUM', 1), { isRequired: true, displayOrder: 2 } as any, entry('FLY_10', 3)]);
+      const onlyDerived = await insertTemplate(tx, null, 'Only derived', [entry('MOMENTUM', 1)]);
+      await tx`UPDATE eval_battery_templates SET updated_at = '2020-01-01' WHERE id = ${onlyDerived}`;
+      notices.length = 0;
+      await tx.unsafe(UP);
+      expect((await metricsOf(tx, scalar)).metrics).toBe('not an array');
+      expect((await metricsOf(tx, obj)).metrics).toEqual({ metricKey: 'MOMENTUM' });
+      expect((await metricsOf(tx, mixed)).metrics).toEqual([{ isRequired: true, displayOrder: 2 }, entry('FLY_10', 3)]);
+      const only = await metricsOf(tx, onlyDerived);
+      expect(only.metrics).toEqual([entry('MOMENTUM', 1)]);
+      expect(new Date(only.updated_at).getFullYear()).toBe(2020);
+      const msg = notices.find((n) => n.includes('Migration 0154 complete')) ?? '';
+      expect(msg).toContain('from 1 eval battery templates');
+      expect(msg).toContain('1 left untouched');
     });
   });
 });
