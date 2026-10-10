@@ -53,9 +53,9 @@ SELECT n.code, n.label, n.display_order, COALESCE(n.description, src.description
        src.is_derived, src.formula, src.dependent_metrics, src.calculation_config, src.auxiliary_input_config
   FROM (VALUES
     ('RSI_105', 'RSI', 'RSI Bilateral (10/5 Repeat Hop)', 71,
-     'Bilateral Reactive Strength Index via 10/5 Repeat Hop protocol: 10 consecutive maximal two-leg hops; the best 5 ground contacts are used. RSI = jump height (or flight time) ÷ ground contact time. Higher RSI = better elastic energy use and reactive control. Same unit and range as RSI.',
+     'Bilateral Reactive Strength Index via 10/5 Repeat Hop protocol: 10 consecutive maximal two-leg hops; the best 5 ground contacts are used. RSI = jump height ÷ ground contact time. Higher RSI = better elastic energy use and reactive control. Same unit and range as RSI.',
      'How quickly and how high you bounce in ten two-leg hops (the 10/5 test) — spring and stiffness in one number.',
-     'The 10/5 repeat hop test: ten consecutive two-leg hops, each as high as you can with as little time on the ground as you can. RSI is jump height (or flight time) divided by ground contact time, from your best five ground contacts.'),
+     'The 10/5 repeat hop test: ten consecutive two-leg hops, each as high as you can with as little time on the ground as you can. RSI is jump height divided by ground contact time, from your best five ground contacts.'),
     ('JUMP_CMJ_SL_L', 'JUMP_CMJ_HOH', 'Counter-Movement Jump (Left Leg)', 65,
      'Single-leg Counter-Movement Jump with hands-on-hips (HOH) protocol, left leg: athlete keeps hands fixed on hips throughout, takes off and lands on the left leg only, and performs a full counter-movement into an explosive vertical jump with no arm swing. Same unit and range as JUMP_CMJ_HOH. An eval event tests one side per athlete.',
      NULL, NULL),
