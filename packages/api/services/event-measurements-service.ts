@@ -451,11 +451,14 @@ export class EventMeasurementsService {
       metricCode?: string;
       limit?: number;
       offset?: number;
+      /** Event managers see unverified rows too; others see verified rows only */
+      includeUnverified?: boolean;
     }
   ): Promise<Measurement[]> {
     return this.storage.getMeasurements({
       userId: options?.userId,
       eventId,
+      includeUnverified: options?.includeUnverified,
     });
   }
 
@@ -532,7 +535,8 @@ export class EventMeasurementsService {
     uniqueAthletes: number;
     metricsRecorded: string[];
   }> {
-    const measurements = await this.getEventMeasurements(eventId);
+    // Manager-only endpoint: count what managers see in the grid, unverified rows included
+    const measurements = await this.getEventMeasurements(eventId, { includeUnverified: true });
 
     const uniqueAthletes = new Set(measurements.map((m: any) => m.userId)).size;
     const metricsRecorded = [...new Set(measurements.map((m: any) => m.metric))];

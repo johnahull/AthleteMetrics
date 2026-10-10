@@ -1506,9 +1506,13 @@ export function useCreateEventMeasurementsBulk() {
     }: {
       eventId: string;
       measurements: CreateEventMeasurementInput[];
+      /** false: the caller refetches the measurements itself (e.g. once after several requests) */
+      invalidateMeasurements?: boolean;
     }) => createEventMeasurementsBulk(eventId, measurements),
-    onSuccess: (_, { eventId }) => {
-      queryClient.invalidateQueries({ queryKey: ['events', eventId, 'measurements'] });
+    onSuccess: (_, { eventId, invalidateMeasurements = true }) => {
+      if (invalidateMeasurements) {
+        queryClient.invalidateQueries({ queryKey: ['events', eventId, 'measurements'] });
+      }
       queryClient.invalidateQueries({ queryKey: ['events', eventId, 'results'] });
     },
   });

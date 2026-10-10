@@ -103,6 +103,10 @@ interface AthleteRow {
 const MQ_BASE_CODES = new Set([...MQI_PATTERNS, ...MQI_TRANSITIONS].map((m) => m.code));
 const MQ_CODES = new Set([...MQ_BASE_CODES, MQI_TOTAL_CODE, MQI_TRANSITION_TOTAL_CODE]);
 
+// A dirty cell with a number, also one the server rejected last time (its error is cleared on send)
+const isSendable = (cell: MeasurementCell) =>
+  cell.isDirty && cell.value !== "" && !isNaN(Number(cell.value));
+
 // Stable empty list so consumers' memoized prefill does not re-run on every render
 const EMPTY_MEASUREMENTS: Measurement[] = [];
 
@@ -183,10 +187,11 @@ export default function EventDataEntry() {
     if (!checkedInAthletes.length || !sortedMetrics.length) return;
 
     // Rows come newest first (date, then createdAt): the first row per athlete+metric is the
-    // cell's value, the rest are earlier trials. Rows derived from other rows are not typed values.
+    // cell's value, the rest are earlier trials. Rows derived from other rows are not typed values:
+    // the server's rule, isCalculated unless the source list is empty (a paired-input row).
     const measurementLookup = new Map<string, { latest: Measurement; count: number }>();
     existingMeasurements?.forEach((m: Measurement) => {
-      if (m.isCalculated && m.calculatedFromMeasurementIds?.length) return;
+      if (m.isCalculated && !(Array.isArray(m.calculatedFromMeasurementIds) && m.calculatedFromMeasurementIds.length === 0)) return;
       const key = `${m.userId}-${m.metric}`;
       const entry = measurementLookup.get(key);
       if (entry) entry.count++;
@@ -288,7 +293,7 @@ export default function EventDataEntry() {
     let count = 0;
     Object.values(gridData).forEach((row) => {
       Object.values(row.measurements).forEach((cell) => {
-        if (cell.isDirty && cell.value !== "" && !cell.error) {
+        if (isSendable(cell)) {
           count++;
         }
       });
@@ -356,7 +361,7 @@ export default function EventDataEntry() {
 
     Object.values(gridData).forEach((row) => {
       Object.values(row.measurements).forEach((cell) => {
-        if (cell.isDirty && cell.value !== "" && !cell.error) {
+        if (isSendable(cell)) {
           cellsToSave.push(cell);
           measurementsToSave.push({
             userId: cell.userId,
@@ -382,6 +387,21 @@ export default function EventDataEntry() {
       return;
     }
 
+    // A server error on a cell is cleared when the cell is sent again
+    setGridData((prev) => {
+      const next = { ...prev };
+      cellsToSave.forEach((sent) => {
+        const row = next[sent.userId];
+        const current = row?.measurements[sent.metricCode];
+        if (!current?.error) return;
+        next[sent.userId] = {
+          ...row,
+          measurements: { ...row.measurements, [sent.metricCode]: { ...current, error: undefined } },
+        };
+      });
+      return next;
+    });
+
     // Apply one request's per-item results to the cells it sent. A cell edited again while
     // the request was in flight keeps its new value and stays dirty.
     const applyResult = (offset: number, result: BulkMeasurementResult) => {
@@ -397,7 +417,9 @@ export default function EventDataEntry() {
           originalValue: Number(sent.value),
           savedMeasurementId: row.id,
           savedCount: replaced ? sent.savedCount : sent.savedCount + 1,
-          ...(current.value === sent.value ? { isDirty: false, error: undefined } : {}),
+          // Dirty against the value now saved, also when it was typed back to the old value meanwhile
+          isDirty: current.value !== sent.value,
+          ...(current.value === sent.value ? { error: undefined } : {}),
         }));
       });
       result.errors.forEach(({ index, error }) => {
@@ -429,7 +451,8 @@ export default function EventDataEntry() {
     try {
       let offset = 0;
       for (const chunk of chunkBulkItems(measurementsToSave)) {
-        const result = await bulkCreate.mutateAsync({ eventId: eventId!, measurements: chunk });
+        // No per-request refetch: the one in `finally` reloads the grid after the last request
+        const result = await bulkCreate.mutateAsync({ eventId: eventId!, measurements: chunk, invalidateMeasurements: false });
         const counts = applyResult(offset, result);
         savedCount += counts.saved;
         failedCount += counts.failed;

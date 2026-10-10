@@ -197,6 +197,7 @@ export function registerEventMeasurementsRoutes(app: Express) {
         const measurements = await eventMeasurementsService.getEventMeasurements(eventId, {
           userId: effectiveUserId,
           metricCode: req.query.metricCode as string | undefined,
+          includeUnverified: hasManagementAccess,
         });
 
         // Same clip rule as the measurement list (managers and the owner pass the gate above)

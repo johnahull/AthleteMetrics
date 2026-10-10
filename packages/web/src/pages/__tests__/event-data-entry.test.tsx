@@ -95,8 +95,12 @@ const metric = (metricCode: string, extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
+// Typed rows as GET /api/events/:id/measurements returns them (isCalculated + source ids included)
 const m = (userId: string, metricCode: string, value: number): Measurement =>
-  ({ id: `m-${userId}-${metricCode}`, userId, metric: metricCode, value: String(value), notes: null, mediaUrl: null }) as any;
+  ({
+    id: `m-${userId}-${metricCode}`, userId, metric: metricCode, value: String(value), notes: null, mediaUrl: null,
+    isCalculated: false, calculatedFromMeasurementIds: null,
+  }) as any;
 
 const verticalJumpCell = (rowName: string) => {
   const row = screen.getByText(rowName).closest('tr')!;
@@ -337,7 +341,10 @@ describe('EventDataEntry', () => {
   describe('grid save', () => {
     // GET /api/events/:id/measurements returns rows newest first (date, then createdAt)
     const saved = (id: string, userId: string, metricCode: string, value: number, extra: Record<string, unknown> = {}): Measurement =>
-      ({ id, userId, metric: metricCode, value: String(value), notes: null, mediaUrl: null, ...extra }) as any;
+      ({
+        id, userId, metric: metricCode, value: String(value), notes: null, mediaUrl: null,
+        isCalculated: false, calculatedFromMeasurementIds: null, ...extra,
+      }) as any;
     const sentItems = (call = 0) => mutateBulk.mock.calls[call][0].measurements;
     const saveButton = () => screen.getByRole('button', { name: /^save/i });
     const ok = (rows: Array<Record<string, unknown>>, replaced: Array<Record<string, unknown>> = [], errors: unknown[] = []) => ({
@@ -364,6 +371,88 @@ describe('EventDataEntry', () => {
       render(<EventDataEntry />);
       expect(verticalJumpCell('Jordan Lee')).toHaveValue('30');
       expect(screen.queryByText(/saved trials/i)).toBeNull();
+    });
+
+    it('ignores a legacy derived row (isCalculated with no source list)', () => {
+      measurementsState.data = [
+        saved('legacy', 'ath-1', 'VERTICAL_JUMP', 99, { isCalculated: true, calculatedFromMeasurementIds: null }),
+        saved('typed', 'ath-1', 'VERTICAL_JUMP', 30),
+      ];
+      render(<EventDataEntry />);
+      expect(verticalJumpCell('Jordan Lee')).toHaveValue('30');
+      expect(screen.queryByText(/saved trials/i)).toBeNull();
+    });
+
+    it('keeps a paired-input row (isCalculated with an empty source list) as a typed value', () => {
+      measurementsState.data = [
+        saved('pair', 'ath-1', 'VERTICAL_JUMP', 33, { isCalculated: true, calculatedFromMeasurementIds: [] }),
+        saved('typed', 'ath-1', 'VERTICAL_JUMP', 30),
+      ];
+      render(<EventDataEntry />);
+      expect(verticalJumpCell('Jordan Lee')).toHaveValue('33');
+      expect(screen.getByText('2 saved trials')).toBeInTheDocument();
+    });
+
+    it('saves without a per-request measurements refetch; the page refetches once at the end', async () => {
+      const user = userEvent.setup();
+      mutateBulk.mockResolvedValue(ok([{ ...saved('n1', 'ath-1', 'VERTICAL_JUMP', 30), index: 0 }]));
+      render(<EventDataEntry />);
+      await user.type(verticalJumpCell('Jordan Lee'), '30');
+      await user.click(saveButton());
+
+      await waitFor(() => expect(refetchMeasurements).toHaveBeenCalledTimes(1));
+      expect(mutateBulk.mock.calls[0][0]).toMatchObject({ eventId: 'ev-1', invalidateMeasurements: false });
+    });
+
+    it('a cell typed back to its old value while its save is in flight stays dirty and is saved next time', async () => {
+      const user = userEvent.setup();
+      measurementsState.data = [saved('m1', 'ath-1', 'VERTICAL_JUMP', 10)];
+      let resolve!: (value: unknown) => void;
+      mutateBulk.mockImplementationOnce(
+        () =>
+          new Promise((r) => {
+            resolve = r;
+          }),
+      );
+      render(<EventDataEntry />);
+
+      await user.clear(verticalJumpCell('Jordan Lee'));
+      await user.type(verticalJumpCell('Jordan Lee'), '12');
+      await user.click(saveButton());
+      await waitFor(() => expect(mutateBulk).toHaveBeenCalledTimes(1));
+
+      await user.clear(verticalJumpCell('Jordan Lee'));
+      await user.type(verticalJumpCell('Jordan Lee'), '10');
+      measurementsState = { ...measurementsState, data: [saved('m1', 'ath-1', 'VERTICAL_JUMP', 12)] };
+      resolve(ok([], [{ ...saved('m1', 'ath-1', 'VERTICAL_JUMP', 12), index: 0 }]));
+
+      await waitFor(() => expect(refetchMeasurements).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(saveButton()).toBeEnabled());
+      expect(verticalJumpCell('Jordan Lee')).toHaveValue('10');
+      expect(verticalJumpCell('Jordan Lee')).toHaveClass('bg-yellow-50');
+
+      mutateBulk.mockResolvedValueOnce(ok([], [{ ...saved('m1', 'ath-1', 'VERTICAL_JUMP', 10), index: 0 }]));
+      await user.click(saveButton());
+      await waitFor(() => expect(mutateBulk).toHaveBeenCalledTimes(2));
+      expect(sentItems(1)).toEqual([
+        { userId: 'ath-1', metric: 'VERTICAL_JUMP', value: 10, date: '2026-03-10T00:00:00.000Z', replaceMeasurementId: 'm1' },
+      ]);
+    });
+
+    it('re-sends a cell that failed on the server at the next Save without editing it', async () => {
+      const user = userEvent.setup();
+      mutateBulk.mockResolvedValueOnce(ok([], [], [{ index: 0, error: 'Server busy' }]));
+      render(<EventDataEntry />);
+      await user.type(verticalJumpCell('Jordan Lee'), '30');
+      await user.click(saveButton());
+      expect(await screen.findByText('Server busy')).toBeInTheDocument();
+
+      mutateBulk.mockResolvedValueOnce(ok([{ ...saved('n1', 'ath-1', 'VERTICAL_JUMP', 30), index: 0 }]));
+      await user.click(screen.getByRole('button', { name: /save \(1\)/i }));
+      await waitFor(() => expect(mutateBulk).toHaveBeenCalledTimes(2));
+      expect(sentItems(1)).toEqual([{ userId: 'ath-1', metric: 'VERTICAL_JUMP', value: 30, date: '2026-03-10T00:00:00.000Z' }]);
+      await waitFor(() => expect(screen.queryByText('Server busy')).toBeNull());
+      expect(verticalJumpCell('Jordan Lee')).toHaveClass('bg-green-50');
     });
 
     it('a retyped saved cell replaces that row, is clean after save + refetch, and a second Save sends nothing', async () => {
@@ -453,6 +542,29 @@ describe('EventDataEntry', () => {
         await waitFor(() => expect(refetchMeasurements).toHaveBeenCalled());
         expect(mutateBulk.mock.calls.map((c) => c[0].measurements.length)).toEqual([200, 200, 50]);
         expect(saveButton()).toBeDisabled();
+      }, 30_000);
+
+      it('maps a per-item error in the second request to the first cell of that request', async () => {
+        const replacedFor = (items: any[]) =>
+          items.map((it, index) => ({ ...saved(`id-${it.userId}-${it.metric}`, it.userId, it.metric, it.value), index }));
+        mutateBulk
+          .mockImplementationOnce(async ({ measurements }) => createdFor(measurements))
+          .mockImplementationOnce(async ({ measurements }) =>
+            ok([], replacedFor(measurements).slice(1), [{ index: 0, error: 'Not an event metric' }]),
+          )
+          .mockImplementationOnce(async ({ measurements }) => createdFor(measurements));
+        render(<EventDataEntry />);
+        fillAll();
+        fireEvent.click(saveButton());
+
+        await waitFor(() => expect(refetchMeasurements).toHaveBeenCalled());
+        const inputs = screen.getAllByRole('textbox');
+        const flagged = inputs.filter((input) => input.getAttribute('aria-invalid') === 'true');
+        expect(flagged).toEqual([inputs[200]]);
+        expect(inputs[200]).toHaveAccessibleDescription('Not an event metric');
+        expect(inputs[199]).toHaveClass('bg-green-50');
+        expect(inputs[201]).toHaveClass('bg-green-50');
+        expect(screen.getByRole('button', { name: /save \(1\)/i })).toBeEnabled();
       }, 30_000);
 
       it('stops at the first request that fails, keeps the rest dirty and says how many were saved', async () => {

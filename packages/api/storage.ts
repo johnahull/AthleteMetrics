@@ -3482,6 +3482,9 @@ export class DatabaseStorage implements IStorage {
       mediaUrl: measurements.mediaUrl,
       organizationId: measurements.organizationId,
       createdAt: measurements.createdAt,
+      // Derived-row markers (the event grid skips rows computed from other rows)
+      isCalculated: measurements.isCalculated,
+      calculatedFromMeasurementIds: measurements.calculatedFromMeasurementIds,
       // Event context fields
       eventId: measurements.eventId,
       eventNameSnapshot: measurements.eventNameSnapshot,
@@ -3604,7 +3607,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     const result = await finalQuery
-      .orderBy(desc(measurements.date), desc(measurements.createdAt));
+      .orderBy(desc(measurements.date), desc(measurements.createdAt), desc(measurements.id));
 
     // If no measurements found, return empty array
     if (result.length === 0) {

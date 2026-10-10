@@ -452,3 +452,34 @@ describe('replaceMeasurementId', () => {
     expect(Number((await rowsOf(ev.id))[0].value)).toBe(4.9);
   });
 });
+
+describe('GET /api/events/:eventId/measurements', () => {
+  it('managers get unverified rows too, with the derived-row fields; the athlete gets verified rows only', async () => {
+    const ev = await mkEvent();
+    const athlete = byStatus.approved;
+    const verified = (await single(ev.id, item(athlete.id, { value: 4.9 }))).body;
+    const unverified = (await single(ev.id, item(athlete.id, { value: 4.7 }))).body;
+    await db.update(measurements).set({ isVerified: true }).where(eq(measurements.id, verified.id));
+    await db.update(measurements).set({ isVerified: false }).where(eq(measurements.id, unverified.id));
+    await db.update(events).set({ resultsPublishedAt: new Date() } as any).where(eq(events.id, ev.id));
+
+    const manager = await request(app).get(`/api/events/${ev.id}/measurements`).set('Cookie', coachCookie);
+    expect(manager.status).toBe(200);
+    expect(manager.body.map((r: any) => r.id).sort()).toEqual([verified.id, unverified.id].sort());
+    for (const row of manager.body) {
+      expect(row).toHaveProperty('isCalculated', false);
+      expect(row).toHaveProperty('calculatedFromMeasurementIds');
+    }
+
+    const stats = await request(app).get(`/api/events/${ev.id}/measurements/stats`).set('Cookie', coachCookie);
+    expect(stats.body.totalMeasurements).toBe(2);
+
+    const login = await request(app).post('/api/auth/login').send({ username: athlete.username, password: PASSWORD });
+    expect(login.status).toBe(200);
+    const own = await request(app)
+      .get(`/api/events/${ev.id}/measurements?userId=${athlete.id}`)
+      .set('Cookie', login.headers['set-cookie'][0]);
+    expect(own.status).toBe(200);
+    expect(own.body.map((r: any) => r.id)).toEqual([verified.id]);
+  });
+});
