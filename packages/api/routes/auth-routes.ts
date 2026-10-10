@@ -2,7 +2,7 @@
  * Authentication routes
  */
 
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import { AuthService } from "../services/auth-service";
 import { coppaService } from "../services/coppa-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
@@ -17,12 +17,17 @@ import { PasswordResetService } from "../auth/password-reset";
 
 const authService = new AuthService();
 
-// Login counts only failed attempts; password reset has its own strict bucket
-const { loginLimiter, passwordResetLimiter } = createAuthRateLimiters({
-  skip: (req) => shouldSkipRateLimiting(req, 'auth'),
-});
+export interface AuthRoutesOptions {
+  /** Tests inject `() => false` to exercise the real limiters; production uses the localhost/test-env bypass. */
+  skipRateLimit?: (req: Request) => boolean;
+}
 
-export function registerAuthRoutes(app: Express) {
+export function registerAuthRoutes(app: Express, options: AuthRoutesOptions = {}) {
+  // Login counts only failed attempts; forgot-password and the two token endpoints each have their own bucket
+  const { loginLimiter, forgotPasswordLimiter, resetTokenLimiter } = createAuthRateLimiters({
+    skip: options.skipRateLimit ?? ((req) => shouldSkipRateLimiting(req, 'auth')),
+  });
+
   /**
    * User login
    */
@@ -332,7 +337,7 @@ export function registerAuthRoutes(app: Express) {
   // Mounted at /api/auth/* to match the web client. CSRF is skipped for these
   // unauthenticated requests. Responses never reveal whether an account exists.
 
-  app.post("/api/auth/forgot-password", passwordResetLimiter, async (req, res) => {
+  app.post("/api/auth/forgot-password", forgotPasswordLimiter, async (req, res) => {
     try {
       const { email } = req.body;
       if (!email || typeof email !== 'string') {
@@ -347,7 +352,7 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  app.post("/api/auth/validate-reset-token", passwordResetLimiter, async (req, res) => {
+  app.post("/api/auth/validate-reset-token", resetTokenLimiter, async (req, res) => {
     try {
       const { token } = req.body;
       if (!token || typeof token !== 'string') {
@@ -361,7 +366,7 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  app.post("/api/auth/reset-password", passwordResetLimiter, async (req, res) => {
+  app.post("/api/auth/reset-password", resetTokenLimiter, async (req, res) => {
     try {
       const { token, newPassword } = req.body;
       if (!token || !newPassword) {

@@ -728,8 +728,13 @@ The application runs as a **single-process Node.js server** without clustering:
 - `BYPASS_GENERAL_RATE_LIMIT` - Set to "true" to bypass general API rate limiting (default: false)
 
 #### Auth Rate Limits
-- `POST /api/auth/login`: 20 **failed** attempts per 15 minutes per IP (`skipSuccessfulRequests`, so successful logins are not counted). Per-account lockout (5 failures, 15 min, `packages/api/auth/security.ts`) is separate and unchanged.
-- Password reset endpoints (`forgot-password`, `validate-reset-token`, `reset-password`): 5 requests per 15 minutes per IP, counting all requests, in their own bucket. Built by `createAuthRateLimiters` in `packages/api/middleware/auth-rate-limiters.ts`.
+- `POST /api/auth/login`: 20 **failed** attempts per 15 minutes per IP (`skipSuccessfulRequests`, so successful logins are not counted).
+- `POST /api/auth/forgot-password`: 5 requests per 15 minutes per IP, counting all requests (it sends email), in its own bucket.
+- `POST /api/auth/validate-reset-token` and `POST /api/auth/reset-password`: 20 requests per 15 minutes per IP, counting all requests, in a bucket shared by those two endpoints only (both answer 200 for a bad token, so failures cannot be told apart; tokens are high entropy, so this is a backstop that leaves room for page reloads).
+- The three limiters are built by `createAuthRateLimiters` in `packages/api/middleware/auth-rate-limiters.ts` and wired in `packages/api/routes/auth-routes.ts`.
+- **Per-account lockout** (separate from the IP limiters): 5 password attempts, then the account is locked for 15 minutes (HTTP 423). It is keyed on the user ID, not the email, so accounts without an email and accounts that share an email are handled correctly. The attempt is reserved atomically in the database BEFORE the password is compared (`AuthSecurity.reserveLoginAttempt`, `storage.registerLoginAttempt`), so concurrent guesses cannot exceed the limit. A correct password during the lock is rejected; a successful login resets the counter. It applies to both `/api/auth/login` and `/api/enhanced-auth/login`.
+- `/api/enhanced-auth/{login,forgot-password,validate-reset-token,reset-password}` keep their own separate limiter of 5 requests per 15 minutes per IP (`packages/api/routes/enhanced-auth.ts`); it is not shared with the `/api/auth/*` buckets above.
+- Invitation acceptance (`packages/api/routes/invitation-routes.ts`) has its own limiter.
 
 **Security Note**: Rate limiting bypasses are disabled by default and automatically disabled in production environments (NODE_ENV=production) regardless of environment variable settings. This provides an additional safeguard against accidental security vulnerabilities in production deployments.
 

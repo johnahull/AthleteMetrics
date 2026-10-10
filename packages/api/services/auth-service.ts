@@ -56,19 +56,6 @@ export class AuthService extends BaseService {
         return { success: false, error: "Your account has been deactivated. Please contact your administrator." };
       }
 
-      // Account lockout: block probing an account that has been locked by
-      // repeated failed attempts (brute-force / credential-stuffing protection).
-      const accountEmail = user.emails?.[0] ?? username;
-      const lock = await AuthSecurity.checkAccountLock(accountEmail);
-      if (lock.isLocked) {
-        return {
-          success: false,
-          accountLocked: true,
-          lockUntil: lock.lockUntil,
-          error: "Account temporarily locked due to too many failed attempts. Please try again later.",
-        };
-      }
-
       // Handle invitation pending state
       if (user.password === INVITATION_PENDING_PASSWORD) {
         return { success: false, error: "Please complete your registration first" };
@@ -83,21 +70,35 @@ export class AuthService extends BaseService {
         };
       }
 
+      // Account lockout, keyed on the user id. Reserve the attempt atomically BEFORE comparing the
+      // password: concurrent guesses are then bounded by the lock, not by how fast bcrypt answers.
+      const reservation = await AuthSecurity.reserveLoginAttempt(user, ipAddress, userAgent);
+      if (!reservation.allowed) {
+        return {
+          success: false,
+          accountLocked: true,
+          lockUntil: reservation.lockUntil,
+          error: "Account temporarily locked due to too many failed attempts. Please try again later.",
+        };
+      }
+
       // Verify password
       const isValidPassword = await bcrypt.compare(password, user.password);
       if (!isValidPassword) {
-        await AuthSecurity.recordFailedLogin(accountEmail, ipAddress, userAgent);
+        await AuthSecurity.recordFailedLogin(user, ipAddress, userAgent);
         return { success: false, error: "Invalid credentials" };
       }
 
       // MFA: if enabled, a valid TOTP/backup code is required to complete login.
       if (user.mfaEnabled === true) {
         if (!mfaToken) {
+          // Right password, code still to come: not a failed guess
+          await AuthSecurity.releaseLoginAttempt(user);
           return { success: false, requiresMFA: true, error: "Authentication code required" };
         }
         const mfaValid = !!user.mfaSecret && AuthSecurity.verifyMFAToken(user.mfaSecret, mfaToken);
         if (!mfaValid) {
-          await AuthSecurity.recordFailedLogin(accountEmail, ipAddress, userAgent);
+          await AuthSecurity.recordFailedLogin(user, ipAddress, userAgent);
           return { success: false, error: "Invalid authentication code" };
         }
       }
@@ -120,6 +121,7 @@ export class AuthService extends BaseService {
             if (!hasActiveOrganization) {
               // Log security event
               console.warn(`Login denied: User ${user.id} has no active organizations`);
+              await AuthSecurity.releaseLoginAttempt(user);
 
               return {
                 success: false,
@@ -131,6 +133,7 @@ export class AuthService extends BaseService {
           console.error("AuthService.login: Error checking org status:", orgCheckError);
 
           // Fail-closed for security: deny access on any org check error
+          await AuthSecurity.releaseLoginAttempt(user).catch(() => undefined);
           return {
             success: false,
             error: "Unable to verify access. Please try again."

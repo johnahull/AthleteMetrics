@@ -10,63 +10,72 @@ export class AuthSecurity {
   private static readonly REMEMBER_ME_DURATION = 30 * 24 * 60 * 60 * 1000; // 30 days
 
   /**
-   * Check if account is locked due to failed login attempts
+   * Reserve one password attempt for this account BEFORE the password (or MFA code) is compared.
+   *
+   * The account is identified by its user ID (never by email: accounts without an email, or sharing one,
+   * were not locked correctly) and the counter is bumped atomically in the database, so concurrent requests
+   * cannot all read the same count. At most MAX_LOGIN_ATTEMPTS requests per lock window get past this
+   * point; the one that reaches the limit locks the account. When the account is locked, `allowed` is false
+   * and the caller must reject WITHOUT comparing the password.
+   *
+   * Pair with recordFailedLogin (credentials wrong), releaseLoginAttempt (credentials right, login not
+   * finished) or recordSuccessfulLogin (login done).
    */
-  static async checkAccountLock(email: string): Promise<{ isLocked: boolean; lockUntil?: Date }> {
-    const user = await storage.getUserByEmail(email);
-    if (!user) return { isLocked: false };
-
-    if (user.lockedUntil && new Date() < new Date(user.lockedUntil)) {
-      return { isLocked: true, lockUntil: new Date(user.lockedUntil) };
-    }
-
-    // Reset lock if expired
-    if (user.lockedUntil && new Date() >= new Date(user.lockedUntil)) {
-      await storage.resetLoginAttempts(user.id);
-    }
-
-    return { isLocked: false };
-  }
-
-  /**
-   * Record failed login attempt and lock account if necessary
-   */
-  static async recordFailedLogin(
-    email: string, 
-    ipAddress: string, 
+  static async reserveLoginAttempt(
+    user: { id: string },
+    ipAddress: string,
     userAgent?: string
-  ): Promise<void> {
-    const user = await storage.getUserByEmail(email);
-    
-    // Log security event even if user doesn't exist (to track brute force attempts)
-    await this.logSecurityEvent({
-      userId: user?.id || null,
-      eventType: 'login_failed',
-      eventData: JSON.stringify({ email, reason: user ? 'invalid_credentials' : 'user_not_found' }),
-      ipAddress,
-      userAgent,
-      severity: 'warning',
-    });
+  ): Promise<{ allowed: true } | { allowed: false; lockUntil: Date }> {
+    const reservation = await storage.registerLoginAttempt(
+      user.id,
+      this.MAX_LOGIN_ATTEMPTS,
+      this.LOCKOUT_DURATION
+    );
 
-    if (!user) return;
+    if (!reservation.allowed) {
+      return { allowed: false, lockUntil: reservation.lockedUntil ?? new Date(Date.now() + this.LOCKOUT_DURATION) };
+    }
 
-    const attempts = (user.loginAttempts || 0) + 1;
-    
-    if (attempts >= this.MAX_LOGIN_ATTEMPTS) {
-      const lockedUntil = new Date(Date.now() + this.LOCKOUT_DURATION);
-      await storage.lockAccount(user.id, lockedUntil);
-      
+    if (reservation.lockedUntil) {
+      // This attempt reached the limit: the account is now locked
       await this.logSecurityEvent({
         userId: user.id,
         eventType: 'login_locked',
-        eventData: JSON.stringify({ attempts, lockedUntil }),
+        eventData: JSON.stringify({ attempts: reservation.attempts, lockedUntil: reservation.lockedUntil }),
         ipAddress,
         userAgent,
         severity: 'critical',
       });
-    } else {
-      await storage.incrementLoginAttempts(user.id, attempts);
     }
+
+    return { allowed: true };
+  }
+
+  /**
+   * Give back a reserved attempt: the credentials were right but the login did not complete (an MFA code
+   * is still needed, email unverified, organization deactivated). Never shortens an existing lock.
+   */
+  static async releaseLoginAttempt(user: { id: string }): Promise<void> {
+    await storage.releaseLoginAttempt(user.id);
+  }
+
+  /**
+   * Log a failed login. The attempt was already counted by reserveLoginAttempt; this only records the
+   * security event.
+   */
+  static async recordFailedLogin(
+    user: { id: string },
+    ipAddress: string,
+    userAgent?: string
+  ): Promise<void> {
+    await this.logSecurityEvent({
+      userId: user.id,
+      eventType: 'login_failed',
+      eventData: JSON.stringify({ reason: 'invalid_credentials' }),
+      ipAddress,
+      userAgent,
+      severity: 'warning',
+    });
   }
 
   /**

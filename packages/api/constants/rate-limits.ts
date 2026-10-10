@@ -113,17 +113,24 @@ export const RATE_LIMITS = {
   /**
    * Failed login attempts per IP (successful logins are not counted)
    * Deliberately generous so a team behind one venue Wi-Fi is not locked out together;
-   * per-account lockout (MAX_LOGIN_ATTEMPTS in auth/security.ts) is the tight control
+   * per-account lockout (MAX_LOGIN_ATTEMPTS in auth/security.ts, keyed on the user id) is the tight control
    * @default 20 failed requests per 15-minute window per IP
    */
   LOGIN_FAILURES_PER_IP: 20,
 
   /**
-   * Password reset endpoints (forgot-password, validate-reset-token, reset-password)
-   * Counts ALL requests: these send emails and validate tokens, so they stay strict
+   * forgot-password only. Counts ALL requests: it sends an email, so it stays strict
    * @default 5 requests per 15-minute window per IP
    */
   PASSWORD_RESET_PER_IP: 5,
+
+  /**
+   * validate-reset-token and reset-password. Counts ALL requests (both answer 200 for a bad token, so
+   * failures cannot be told apart), in a bucket separate from forgot-password. Reset tokens are high
+   * entropy, so this is a backstop; the limit leaves room for page reloads and rejected new passwords
+   * @default 20 requests per 15-minute window per IP
+   */
+  RESET_TOKEN_REQUESTS_PER_IP: 20,
 } as const;
 
 /**
