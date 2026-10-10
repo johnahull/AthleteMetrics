@@ -33,6 +33,7 @@ import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { PAGINATION } from "../constants/pagination";
 import { storage } from "../storage";
 import { clipViewer, omitClipsHiddenFromViewer } from "../utils/measurement-redaction";
+import type { MeasurementVisibilityScope } from "../services/derived-metric-calculator";
 
 // Rate limiting for measurement endpoints
 const measurementLimiter = rateLimit({
@@ -348,7 +349,11 @@ export function registerMeasurementRoutes(app: Express) {
       }
 
       // Validate user has access to at least one of the athlete's organizations
-      if (!isSiteAdmin(user)) {
+      // SECURITY: the preview reads only rows the caller could read one by one via
+      // GET /api/measurements/:id: rows in the caller's organizations, and personal (no-org)
+      // rows only for the athlete themself. Site admins see every row (scope undefined).
+      let scope: MeasurementVisibilityScope | undefined;
+      if (!canQueryCrossOrganization(user)) {
         const userOrgs = await storage.getUserOrganizations(user.id);
         const userOrgIds = new Set(userOrgs.map(o => o.organizationId));
         const hasOrgAccess = targetUserTeams.some(t => userOrgIds.has(t.organizationId));
@@ -357,6 +362,7 @@ export function registerMeasurementRoutes(app: Express) {
             message: "Cannot access athletes in different organizations"
           });
         }
+        scope = { organizationIds: [...userOrgIds], includePersonal: athleteId === user.id };
       }
 
       // Get the metric definition
@@ -384,7 +390,7 @@ export function registerMeasurementRoutes(app: Express) {
       // Same gate as the calculator: an anchored metric (e.g. MOMENTUM) only exists on a
       // date with a verified, direct measurement of the anchor metric (#579).
       const anchorMetric = metric.calculationConfig?.anchorMetric?.toUpperCase();
-      if (anchorMetric && !(await calculator.hasVerifiedAnchor(athleteId, anchorMetric, date))) {
+      if (anchorMetric && !(await calculator.hasVerifiedAnchor(athleteId, anchorMetric, date, db, scope))) {
         return res.json({
           calculatedValue: null,
           sourceMetrics: [],
@@ -401,7 +407,9 @@ export function registerMeasurementRoutes(app: Express) {
           dateMatchStrategy: 'same_date',
           missingSourceBehavior: 'skip',
           maxDateDifference: undefined,
-        }
+        },
+        undefined,
+        scope
       );
 
       if (!sourceMeasurementsMap) {

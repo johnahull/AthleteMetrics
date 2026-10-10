@@ -41,30 +41,69 @@ const PASSWORD = 'TestPass123!';
 let app: Express;
 let orgId: string;
 let athleteId: string;
+let athleteUsername: string;
 let coachId: string;
 let coachCookie: string;
 let nextIp = 1;
 const ip = () => `10.5.79.${nextIp++}`;
 
-const preview = (date: string) =>
+const preview = (date: string, cookie = coachCookie) =>
   request(app)
     .get('/api/measurements/calculate-preview')
     .query({ athleteId, metricCode: DERIVED, date })
     .set('X-Forwarded-For', ip())
-    .set('Cookie', coachCookie);
+    .set('Cookie', cookie);
 
-const insert = (metric: string, value: string, date: string, isVerified: boolean) =>
-  db.insert(measurements).values({
-    userId: athleteId,
-    organizationId: orgId,
-    submittedBy: coachId,
-    isVerified,
-    metric,
-    value,
-    units: metric === WEIGHT ? 'lb' : 's',
-    age: 18,
-    date,
-  } as any);
+const insert = async (
+  metric: string,
+  value: string,
+  date: string,
+  isVerified: boolean,
+  opts: { organizationId?: string | null; isCalculated?: boolean } = {}
+): Promise<string> => {
+  const [row] = await db
+    .insert(measurements)
+    .values({
+      userId: athleteId,
+      organizationId: opts.organizationId === undefined ? orgId : opts.organizationId,
+      submittedBy: coachId,
+      isVerified,
+      metric,
+      value,
+      units: metric === WEIGHT ? 'lb' : 's',
+      age: 18,
+      date,
+      ...(opts.isCalculated ? { isCalculated: true, calculatedFromMeasurementIds: [] } : {}),
+    } as any)
+    .returning();
+  return row.id;
+};
+
+const momentum = (lb: number, fly: number) => (lb * 0.45359237 * 9.144) / fly;
+
+async function makeUser(tag: string, extra: Record<string, unknown> = {}) {
+  const ts = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const hashed = await bcrypt.hash(PASSWORD, BCRYPT_SALT_ROUNDS);
+  const [u] = await db
+    .insert(users)
+    .values({
+      username: `pva_${tag}_${ts}`,
+      emails: [`pva_${tag}_${ts}@test.com`],
+      password: hashed,
+      firstName: tag,
+      lastName: 'Pva',
+      fullName: `${tag} Pva`,
+      birthDate: '2008-01-01',
+      birthYear: 2008,
+      ...extra,
+    } as any)
+    .returning();
+  return u;
+}
+
+const loginAs = async (username: string) =>
+  (await request(app).post('/api/auth/login').set('X-Forwarded-For', ip()).send({ username, password: PASSWORD }))
+    .headers['set-cookie'][0];
 
 beforeAll(async () => {
   await db.execute(sql`
@@ -103,34 +142,17 @@ beforeEach(async () => {
   const [org] = await db.insert(organizations).values({ name: `Preview Anchor Org ${ts}`, isActive: true } as any).returning();
   orgId = org.id;
   const [team] = await db.insert(teams).values({ name: 'Preview Anchor Team', organizationId: orgId, level: 'College' } as any).returning();
-  const hashed = await bcrypt.hash(PASSWORD, BCRYPT_SALT_ROUNDS);
-  const mk = async (tag: string) =>
-    (
-      await db
-        .insert(users)
-        .values({
-          username: `pva_${tag}_${ts}`,
-          emails: [`pva_${tag}_${ts}@test.com`],
-          password: hashed,
-          firstName: tag,
-          lastName: 'Pva',
-          fullName: `${tag} Pva`,
-          birthDate: '2008-01-01',
-          birthYear: 2008,
-        } as any)
-        .returning()
-    )[0];
-  const athlete = await mk('ath');
-  const coach = await mk('coach');
+  const athlete = await makeUser('ath');
+  const coach = await makeUser('coach');
   athleteId = athlete.id;
+  athleteUsername = athlete.username;
   coachId = coach.id;
   await db.insert(userOrganizations).values([
     { userId: athleteId, organizationId: orgId, role: 'athlete' },
     { userId: coachId, organizationId: orgId, role: 'coach' },
   ] as any);
   await db.insert(userTeams).values({ userId: athleteId, teamId: team.id, joinedAt: new Date('2020-01-01'), isActive: true } as any);
-  const login = await request(app).post('/api/auth/login').set('X-Forwarded-For', ip()).send({ username: coach.username, password: PASSWORD });
-  coachCookie = login.headers['set-cookie'][0];
+  coachCookie = await loginAs(coach.username);
 });
 
 afterEach(async () => {
@@ -190,5 +212,121 @@ describe('GET /api/measurements/calculate-preview: anchorMetric gate (#579)', ()
     expect(res.body.sourceMetrics).toEqual([]);
     expect(res.body.missingMetrics).toEqual([FLY]);
     expect(res.body.formula).toBe(`${WEIGHT.toLowerCase()} * 0.45359237 * 9.144 / fly10_time`);
+  });
+});
+
+describe('GET /api/measurements/calculate-preview: visibility scope', () => {
+  const D = '2026-03-10';
+  let orgBId: string;
+  let orgCId: string;
+  const extraUserIds: string[] = [];
+
+  beforeEach(async () => {
+    const ts = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const [b] = await db.insert(organizations).values({ name: `Preview Org B ${ts}`, isActive: true } as any).returning();
+    const [c] = await db.insert(organizations).values({ name: `Preview Org C ${ts}`, isActive: true } as any).returning();
+    orgBId = b.id;
+    orgCId = c.id;
+    // The athlete also belongs to org B, where the org-A coach has no access
+    await db.insert(userOrganizations).values({ userId: athleteId, organizationId: orgBId, role: 'athlete' } as any);
+  });
+
+  afterEach(async () => {
+    await db.delete(measurements).where(eq(measurements.userId, athleteId));
+    if (extraUserIds.length > 0) {
+      await db.delete(userOrganizations).where(inArray(userOrganizations.userId, extraUserIds));
+      await db.delete(users).where(inArray(users.id, extraUserIds));
+      extraUserIds.length = 0;
+    }
+    await db.delete(userOrganizations).where(inArray(userOrganizations.organizationId, [orgBId, orgCId]));
+    await db.delete(organizations).where(inArray(organizations.id, [orgBId, orgCId]));
+  });
+
+  const seedAcrossOrgs = async () => ({
+    aFly: await insert(FLY, '1.30', D, true),
+    aWeight: await insert(WEIGHT, '150', '2026-02-28', true),
+    // Closer / better rows in org B and a personal row: an unscoped lookup picks these
+    bFly: await insert(FLY, '1.50', D, true, { organizationId: orgBId }),
+    bWeight: await insert(WEIGHT, '200', '2026-03-09', true, { organizationId: orgBId }),
+    personalWeight: await insert(WEIGHT, '250', '2026-03-08', true, { organizationId: null }),
+  });
+
+  it("a coach sees only the caller's organizations' rows, never org B or personal rows", async () => {
+    const ids = await seedAcrossOrgs();
+
+    const res = await preview(D);
+
+    expect(res.status).toBe(200);
+    expect(res.body.calculatedValue).toBeCloseTo(momentum(150, 1.3), 6);
+    expect([...res.body.sourceMeasurementIds].sort()).toEqual([ids.aFly, ids.aWeight].sort());
+    const text = JSON.stringify(res.body);
+    for (const hidden of [ids.bFly, ids.bWeight, ids.personalWeight]) {
+      expect(text).not.toContain(hidden);
+    }
+    expect(res.body.sourceMetrics.map((s: { value: number }) => s.value).sort((x: number, y: number) => x - y)).toEqual([1.3, 150]);
+  });
+
+  it('an anchor that exists only in an organization the caller cannot see does not count', async () => {
+    await insert(FLY, '1.40', D, true, { organizationId: orgBId });
+    await insert(FLY, '1.30', '2026-03-13', true);
+    await insert(WEIGHT, '150', D, true);
+
+    const res = await preview(D);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      calculatedValue: null,
+      sourceMetrics: [],
+      missingMetrics: [FLY],
+      formula: `${WEIGHT.toLowerCase()} * 0.45359237 * 9.144 / fly10_time`,
+    });
+  });
+
+  it('a site admin still sees every organization and personal row', async () => {
+    const ids = await seedAcrossOrgs();
+    const admin = await makeUser('siteadmin', { isSiteAdmin: true });
+    extraUserIds.push(admin.id);
+
+    const res = await preview(D, await loginAs(admin.username));
+
+    expect(res.status).toBe(200);
+    expect(res.body.calculatedValue).toBeCloseTo(momentum(200, 1.5), 6);
+    expect([...res.body.sourceMeasurementIds].sort()).toEqual([ids.bFly, ids.bWeight].sort());
+  });
+
+  it('the athlete previewing themself sees their personal rows', async () => {
+    await insert(FLY, '1.30', D, true);
+    await insert(WEIGHT, '150', '2026-02-28', true);
+    const personal = await insert(WEIGHT, '250', '2026-03-08', true, { organizationId: null });
+
+    const res = await preview(D, await loginAs(athleteUsername));
+
+    expect(res.status).toBe(200);
+    expect(res.body.calculatedValue).toBeCloseTo(momentum(250, 1.3), 6);
+    expect(res.body.sourceMeasurementIds).toContain(personal);
+  });
+
+  it('a caller sharing no organization with the athlete gets 403', async () => {
+    await seedAcrossOrgs();
+    const outsider = await makeUser('outsider');
+    extraUserIds.push(outsider.id);
+    await db.insert(userOrganizations).values({ userId: outsider.id, organizationId: orgCId, role: 'coach' } as any);
+
+    const res = await preview(D, await loginAs(outsider.username));
+
+    expect(res.status).toBe(403);
+    expect(res.body).not.toHaveProperty('calculatedValue');
+  });
+
+  it('a calculated (isCalculated) anchor row does not count as an anchor', async () => {
+    await insert(FLY, '1.30', D, true, { isCalculated: true });
+    await insert(FLY, '1.35', '2026-03-13', true);
+    await insert(WEIGHT, '150', D, true);
+
+    const res = await preview(D);
+
+    expect(res.status).toBe(200);
+    expect(res.body.calculatedValue).toBeNull();
+    expect(res.body.missingMetrics).toEqual([FLY]);
   });
 });
