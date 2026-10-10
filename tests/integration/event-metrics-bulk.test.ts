@@ -10,6 +10,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import express, { type Express } from 'express';
 import bcrypt from 'bcrypt';
+import pg from 'pg';
 import { eq, inArray } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
 import { auditLogs, eventMetrics, events, organizations, siteMetrics, userOrganizations, users } from '@shared/schema';
@@ -35,6 +36,7 @@ vi.mock('express-rate-limit', async (importOriginal) => {
 });
 
 import { registerRoutes } from '../../packages/api/routes';
+import { EventMetricsFrozenError } from '../../packages/api/services/event-metrics-service';
 import { bulkAddEventMetrics } from '../../packages/api/services/event-metrics-bulk';
 import { EventNotFoundError } from '../../packages/api/services/event-registration-service';
 
@@ -175,6 +177,30 @@ describe('POST /api/events/:eventId/metrics/bulk', () => {
     expect(res.status).toBe(409);
     expect(res.body.error).toMatch(/frozen/i);
     expect(await codesOf(ev)).toEqual([]);
+  });
+
+  it('a freeze that commits while the bulk call waits on the event row still wins (no metrics slip into a frozen event)', async () => {
+    const ev = await newEvent(orgA);
+    const other = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    await other.connect();
+    try {
+      await other.query('BEGIN');
+      await other.query('SELECT id FROM events WHERE id = $1 FOR UPDATE', [ev]);
+      const pending = bulkAddEventMetrics(ev, u.coachA.id, [item(code(0))]).then(
+        (r) => ({ ok: r }),
+        (e) => ({ err: e })
+      );
+      // Give the call time to read the event and block on the lock (it can not finish while the lock is held)
+      await new Promise((r) => setTimeout(r, 400));
+      await other.query('UPDATE events SET is_frozen = true WHERE id = $1', [ev]);
+      await other.query('COMMIT');
+      const outcome: any = await pending;
+      expect(outcome.err).toBeInstanceOf(EventMetricsFrozenError);
+      expect(await codesOf(ev)).toEqual([]);
+    } finally {
+      await other.query('ROLLBACK').catch(() => undefined);
+      await other.end();
+    }
   });
 
   it('answers 409 for a frozen event even when every code would be skipped', async () => {

@@ -638,6 +638,18 @@ describe('eval templates and org eval report settings', () => {
       createdSiteMetricCodes.push(GONE_CODE);
     });
 
+    it("resolves an organization template against its own organization's type, ignoring ?organizationId=", async () => {
+      const id = await insertTpl(orgA, 'own-org-type', [metrics[0], { metricKey: COLLEGE_CODE, isRequired: false, displayOrder: 2 }]);
+      const statusOf = (body: any) => body.metrics.find((m: any) => m.metricKey === COLLEGE_CODE).status;
+      // orgA is not a college: the college-only metric is unavailable, even when a site admin names a college organization
+      expect(statusOf((await as('siteAdmin').get(`/api/eval-templates/${id}/resolved`)).body)).toBe('unavailable');
+      const named = await as('siteAdmin').get(`/api/eval-templates/${id}/resolved?organizationId=${orgCollege}`);
+      expect(named.status).toBe(200);
+      expect(statusOf(named.body)).toBe('unavailable');
+      // The parameter is not even checked for an organization template (coachA does not write in orgB)
+      expect((await as('coachA').get(`/api/eval-templates/${id}/resolved?organizationId=${orgB}`)).status).toBe(200);
+    });
+
     it('rejects a derived metric on create and on update, naming it, and writes nothing', async () => {
       const bad = [metrics[0], { metricKey: DERIVED_CODE, isRequired: false, displayOrder: 2 }];
       const res = await post('coachA', orgA, { name: `${PREFIX}-derived`, metrics: bad });

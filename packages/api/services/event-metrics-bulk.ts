@@ -36,11 +36,14 @@ export async function bulkAddEventMetrics(eventId: string, userId: string, reque
   }
 
   return db.transaction(async (tx) => {
+    // Lock the event row (not the joined organization) so a concurrent freeze cannot commit between this
+    // frozen check and the insert below; the freeze waits for this transaction, or this waits for the freeze.
     const [event] = await tx
       .select({ name: events.name, isFrozen: events.isFrozen, orgType: organizations.orgType })
       .from(events)
       .leftJoin(organizations, eq(organizations.id, events.organizationId))
-      .where(eq(events.id, eventId));
+      .where(eq(events.id, eventId))
+      .for("update", { of: events });
     if (!event) throw new EventNotFoundError();
     if (event.isFrozen) throw new EventMetricsFrozenError();
 
