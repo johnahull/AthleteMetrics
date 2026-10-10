@@ -21,9 +21,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
+import { useHorizontalScrollState } from "@/hooks/use-horizontal-scroll-state";
 import { useAuth } from "@/lib/auth";
 import { canManageEvent } from "@/lib/event-permissions";
+import { getEventMetricDisplay } from "@/lib/event-metric-display";
 import {
   MovementQualityPanel,
   type MovementQualitySaveInput,
@@ -46,16 +49,15 @@ import {
   Loader2,
   RefreshCw,
   Activity,
+  MoveHorizontal,
 } from "lucide-react";
 import { format } from "date-fns";
-import type { EventMetric, Measurement } from "@shared/schema";
+import type { EventMetric, Measurement, SiteMetric } from "@shared/schema";
 import { toCalendarDate } from "@/utils/date-utils";
 
-// Extended metric type with details from site_metrics
+// Event metric with its site metric, as the server returns it (includeDetails=true)
 interface EventMetricWithDetails extends EventMetric {
-  label?: string;
-  category?: string;
-  units?: string;
+  metricDetails?: Pick<SiteMetric, "label" | "unit" | "category"> | null;
 }
 
 // Cell data type for the measurement grid
@@ -67,6 +69,28 @@ interface MeasurementCell {
   isDirty: boolean;
   error?: string;
 }
+
+export type CellState = "error" | "dirty" | "saved" | "empty";
+
+/** Visual state of one grid cell: an error wins over unsaved, unsaved over saved. */
+export function getCellState(cell: Pick<MeasurementCell, "error" | "isDirty" | "originalValue">): CellState {
+  if (cell.error) return "error";
+  if (cell.isDirty) return "dirty";
+  if (cell.originalValue !== undefined) return "saved";
+  return "empty";
+}
+
+const CELL_STATE_CLASSES: Record<CellState, string> = {
+  error: "border-red-500 focus:ring-red-500",
+  dirty: "border-yellow-500 bg-yellow-50",
+  saved: "bg-green-50",
+  empty: "",
+};
+
+// Pinned Athlete column. Opaque backgrounds that match the row and header tints, so
+// cells scrolled under it do not show through; the box-shadow draws its right edge.
+const ATHLETE_COL_WIDTH = "w-32 min-w-32 max-w-32 sm:w-44 sm:min-w-44 sm:max-w-44";
+const PINNED_CELL = "sticky left-0 shadow-[1px_0_0_var(--border)]";
 
 // Grid row type (one row per athlete)
 interface AthleteRow {
@@ -146,6 +170,12 @@ export default function EventDataEntry() {
     [sortedMetrics]
   );
   const hasMovementQuality = mqEnabledCodes.length > 0;
+  const metricColumnCount = gridMetrics.length + (hasMovementQuality ? 1 : 0);
+  const displayByCode = useMemo(
+    () => new Map(gridMetrics.map((m) => [m.metricCode, getEventMetricDisplay(m)])),
+    [gridMetrics]
+  );
+  const gridScroll = useHorizontalScrollState();
   // MQI_TOTAL / MQ_TRANSITION_TOTAL enabled without any base score to enter them from
   const hasOnlyMqTotals =
     !hasMovementQuality &&
@@ -584,7 +614,7 @@ export default function EventDataEntry() {
   return (
     <div className="container mx-auto py-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" onClick={() => navigate(`/events/${eventId}`)}>
             <ArrowLeft className="h-4 w-4 mr-2" />
@@ -637,9 +667,7 @@ export default function EventDataEntry() {
         <Card>
           <CardContent className="py-3">
             <div className="text-sm text-muted-foreground">Metrics</div>
-            <div className="text-2xl font-bold">
-              {gridMetrics.length + (hasMovementQuality ? 1 : 0)}
-            </div>
+            <div className="text-2xl font-bold">{metricColumnCount}</div>
           </CardContent>
         </Card>
         <Card>
@@ -714,106 +742,155 @@ export default function EventDataEntry() {
             marked with *.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="border-b bg-muted/50">
-                  <th className="p-3 text-left font-medium sticky left-0 bg-muted/50 min-w-[200px]">
-                    Athlete
-                  </th>
-                  {gridMetrics.map((metric: EventMetricWithDetails) => (
-                    <th
-                      key={metric.metricCode}
-                      className="p-3 text-center font-medium min-w-[120px]"
-                    >
-                      <div className="flex flex-col items-center gap-1">
-                        <span>
-                          {metric.customLabel || metric.label || metric.metricCode}
-                          {metric.isRequired && <span className="text-red-500 ml-1">*</span>}
-                        </span>
-                        {metric.units && (
-                          <span className="text-xs text-muted-foreground">({metric.units})</span>
-                        )}
-                      </div>
-                    </th>
-                  ))}
-                  {hasMovementQuality && (
-                    <th className="p-3 text-center font-medium min-w-[160px]">
-                      <div className="flex flex-col items-center gap-1">
-                        <span>Movement Quality</span>
-                        <span className="text-xs text-muted-foreground">(MQI, 0-24)</span>
-                      </div>
-                    </th>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {Object.values(gridData).map((row) => (
-                  <tr key={row.userId} className="border-b hover:bg-muted/30">
-                    <td className="p-3 sticky left-0 bg-white">
-                      <div className="font-medium">{row.fullName}</div>
-                      <div className="text-xs text-muted-foreground capitalize">
-                        {row.status === "checked_in" ? (
-                          <span className="flex items-center gap-1 text-green-600">
-                            <CheckCircle className="h-3 w-3" />
-                            Checked In
-                          </span>
-                        ) : (
-                          row.status
-                        )}
-                      </div>
-                    </td>
-                    {gridMetrics.map((metric: EventMetricWithDetails) => {
-                      const cell = row.measurements[metric.metricCode];
-                      if (!cell) return <td key={metric.metricCode} className="p-1" />;
-
-                      return (
-                        <td key={metric.metricCode} className="p-1">
-                          <Input
-                            type="text"
-                            inputMode="decimal"
-                            value={cell.value}
-                            onChange={(e) =>
-                              handleCellChange(row.userId, metric.metricCode, e.target.value)
-                            }
-                            disabled={event.isFrozen}
-                            className={`text-center ${
-                              cell.error
-                                ? "border-red-500 focus:ring-red-500"
-                                : cell.isDirty
-                                  ? "border-yellow-500 bg-yellow-50"
-                                  : cell.originalValue !== undefined
-                                    ? "bg-green-50"
-                                    : ""
-                            }`}
-                            placeholder="-"
-                          />
-                          {cell.error && (
-                            <div className="text-xs text-red-500 text-center mt-1">{cell.error}</div>
-                          )}
-                        </td>
-                      );
-                    })}
-                    {hasMovementQuality && (
-                      <td className="p-1 text-center">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openMovementQuality(row.userId)}
-                          disabled={measurementsError}
-                          aria-label={`Movement Quality for ${row.fullName}`}
+        <CardContent className="px-3 sm:px-6">
+          {gridScroll.hasOverflow && (
+            <p className="mb-2 flex items-center gap-1.5 text-sm text-muted-foreground">
+              <MoveHorizontal className="h-4 w-4 shrink-0" aria-hidden="true" />
+              {metricColumnCount} metric columns - scroll sideways to see them all
+            </p>
+          )}
+          <div className="relative">
+            <div
+              ref={gridScroll.ref}
+              className="relative overflow-x-auto scrollbar-always-visible scroll-pl-32 sm:scroll-pl-44"
+            >
+              <TooltipProvider delayDuration={300}>
+                <table className="w-max min-w-full border-collapse">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th
+                        scope="col"
+                        className={`${PINNED_CELL} ${ATHLETE_COL_WIDTH} z-20 p-2 sm:p-3 text-left font-medium bg-[color-mix(in_srgb,var(--muted)_50%,var(--card))]`}
+                      >
+                        Athlete
+                      </th>
+                      {gridMetrics.map((metric: EventMetricWithDetails) => {
+                        const display = displayByCode.get(metric.metricCode)!;
+                        return (
+                          <th
+                            key={metric.metricCode}
+                            scope="col"
+                            className="w-[92px] min-w-[92px] p-1.5 text-center align-bottom font-medium"
+                          >
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span className="line-clamp-2 text-xs sm:text-sm leading-tight">
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span>{display.label}</span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <div>{display.label}</div>
+                                    <div className="font-mono text-xs text-muted-foreground">{display.code}</div>
+                                  </TooltipContent>
+                                </Tooltip>
+                                {metric.isRequired && (
+                                  <>
+                                    <span className="text-red-500 ml-0.5" aria-hidden="true">*</span>
+                                    <span className="sr-only">(required)</span>
+                                  </>
+                                )}
+                              </span>
+                              {display.unit && (
+                                <span className="text-xs font-normal text-muted-foreground">({display.unit})</span>
+                              )}
+                            </div>
+                          </th>
+                        );
+                      })}
+                      {hasMovementQuality && (
+                        <th scope="col" className="min-w-[136px] p-1.5 text-center align-bottom font-medium">
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className="text-xs sm:text-sm leading-tight">Movement Quality</span>
+                            <span className="text-xs font-normal text-muted-foreground">(MQI, 0-24)</span>
+                          </div>
+                        </th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.values(gridData).map((row) => (
+                      <tr key={row.userId} className="group border-b hover:bg-muted/30">
+                        <th
+                          scope="row"
+                          className={`${PINNED_CELL} ${ATHLETE_COL_WIDTH} z-10 p-2 sm:p-3 text-left font-normal bg-card group-hover:bg-[color-mix(in_srgb,var(--muted)_30%,var(--card))]`}
                         >
-                          <Activity className="h-4 w-4 mr-2" />
-                          {mqSummaryByUser.get(row.userId) ?? "Not scored"}
-                        </Button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                          <div className="font-medium break-words">{row.fullName}</div>
+                          <div className="text-xs text-muted-foreground capitalize">
+                            {row.status === "checked_in" ? (
+                              <span className="flex items-center gap-1 text-green-600">
+                                <CheckCircle className="h-3 w-3" />
+                                Checked In
+                              </span>
+                            ) : (
+                              row.status
+                            )}
+                          </div>
+                        </th>
+                        {gridMetrics.map((metric: EventMetricWithDetails) => {
+                          const cell = row.measurements[metric.metricCode];
+                          if (!cell) return <td key={metric.metricCode} className="p-1" />;
+                          const errorId = `cell-error-${row.userId}-${metric.metricCode}`;
+
+                          return (
+                            <td key={metric.metricCode} className="p-1">
+                              <Input
+                                type="text"
+                                inputMode="decimal"
+                                value={cell.value}
+                                onChange={(e) =>
+                                  handleCellChange(row.userId, metric.metricCode, e.target.value)
+                                }
+                                disabled={event.isFrozen}
+                                aria-label={`${displayByCode.get(metric.metricCode)!.label} for ${row.fullName}`}
+                                aria-required={metric.isRequired || undefined}
+                                aria-invalid={cell.error ? true : undefined}
+                                aria-describedby={cell.error ? errorId : undefined}
+                                className={`h-9 px-1 text-center ${CELL_STATE_CLASSES[getCellState(cell)]}`}
+                                placeholder="-"
+                              />
+                              {cell.error && (
+                                <div id={errorId} className="text-[11px] leading-tight text-red-500 text-center mt-1">
+                                  {cell.error}
+                                </div>
+                              )}
+                            </td>
+                          );
+                        })}
+                        {hasMovementQuality && (
+                          <td className="p-1 text-center">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openMovementQuality(row.userId)}
+                              disabled={measurementsError}
+                              aria-label={`Movement Quality for ${row.fullName}`}
+                            >
+                              <Activity className="h-4 w-4 mr-2" />
+                              {mqSummaryByUser.get(row.userId) ?? "Not scored"}
+                            </Button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </TooltipProvider>
+            </div>
+            {/* Edge fades: show that more columns are hidden even where the OS hides scrollbars.
+                The left one reads as a shadow cast by the pinned Athlete column. */}
+            {gridScroll.canScrollLeft && (
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-y-0 left-32 sm:left-44 z-10 w-3 bg-linear-to-r from-foreground/10 to-transparent"
+              />
+            )}
+            {gridScroll.canScrollRight && (
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-linear-to-l from-card to-transparent"
+              />
+            )}
           </div>
         </CardContent>
       </Card>
@@ -835,7 +912,7 @@ export default function EventDataEntry() {
       )}
 
       {/* Legend */}
-      <div className="flex items-center gap-6 text-sm text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded bg-green-50 border border-green-200" />
           <span>Saved</span>
