@@ -591,6 +591,19 @@ describe('MetricProgressCard', () => {
       expect(confettiMock).not.toHaveBeenCalled();
     });
 
+    it('hides the PR row for tracking but keeps it for lower_is_better', () => {
+      const { unmount } = render(
+        <MetricProgressCard metric="MOMENTUM" displayName="Momentum" measurements={recent} units="kg*m/s" personalRecord={recentPr} metricType="tracking" />
+      );
+      expect(screen.queryByTestId('pr-value')).toBeNull();
+      expect(screen.queryByText('PR:')).toBeNull();
+      unmount();
+      render(
+        <MetricProgressCard metric="MOMENTUM" displayName="Momentum" measurements={recent} units="kg*m/s" personalRecord={recentPr} metricType="lower_is_better" />
+      );
+      expect(screen.getByTestId('pr-value')).toBeInTheDocument();
+    });
+
     it('still shows them for a performance metric', () => {
       render(
         <MetricProgressCard metric="MOMENTUM" displayName="Momentum" measurements={recent} units="kg*m/s" personalRecord={recentPr} metricType="higher_is_better" />
