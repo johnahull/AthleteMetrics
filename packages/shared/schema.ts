@@ -112,6 +112,7 @@ export {
   insertBenchmarkSetItemSchema,
   updateBenchmarkSetItemSchema,
   reorderBenchmarkSetItemsSchema,
+  derivedCalculationConfigSchema,
 } from "./schema-original";
 
 // Re-export validation types
