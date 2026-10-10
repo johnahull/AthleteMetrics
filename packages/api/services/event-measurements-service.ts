@@ -79,7 +79,7 @@ export interface EventMeasurementInput {
   auxiliaryValue?: number | null;
   /** Optional fly-in distance (FLY10_TIME) */
   flyInDistance?: number;
-  /** Update this saved row (same event, athlete and metric, not calculated) instead of adding one */
+  /** Update this saved row (same event, athlete and metric, not cross-row derived) instead of adding one */
   replaceMeasurementId?: string;
 }
 
@@ -93,10 +93,11 @@ export interface MovementQualityScoreInput {
 /** Organization membership roles that can be the subject of an event measurement */
 const EVENT_SUBJECT_ROLES = new Set(["athlete", "coach", "org_admin"]);
 
+/** `index` is the item's position in the request array, like errors[].index */
 export interface BulkCreateResult {
-  created: Measurement[];
+  created: Array<Measurement & { index: number }>;
   /** Rows updated in place through replaceMeasurementId */
-  replaced: Measurement[];
+  replaced: Array<Measurement & { index: number }>;
   errors: Array<{ index: number; error: string }>;
 }
 
@@ -107,7 +108,10 @@ interface EventWriteScope {
   /** Metric codes configured on the event */
   metrics: Set<string>;
   /** Rows named by replaceMeasurementId */
-  replaceTargets: Map<string, Pick<Measurement, "eventId" | "userId" | "metric" | "isCalculated">>;
+  replaceTargets: Map<
+    string,
+    Pick<Measurement, "eventId" | "userId" | "metric" | "isCalculated" | "calculatedFromMeasurementIds">
+  >;
 }
 
 type Db = typeof defaultDb;
@@ -203,6 +207,7 @@ export class EventMeasurementsService {
               userId: measurements.userId,
               metric: measurements.metric,
               isCalculated: measurements.isCalculated,
+              calculatedFromMeasurementIds: measurements.calculatedFromMeasurementIds,
             })
             .from(measurements)
             .where(inArray(measurements.id, replaceIds))
@@ -226,15 +231,20 @@ export class EventMeasurementsService {
     }
     if (data.replaceMeasurementId) {
       const target = scope.replaceTargets.get(data.replaceMeasurementId);
+      // Paired-input rows (e.g. 1RM estimates) are calculated from their own inputs and store
+      // an empty source list; updateMeasurement recomputes them. Rows derived from other rows
+      // (non-empty source list) are owned by the derived-metric calculator.
+      const isCrossRowDerived =
+        !!target?.isCalculated && !(Array.isArray(target.calculatedFromMeasurementIds) && target.calculatedFromMeasurementIds.length === 0);
       if (
         !target ||
         target.eventId !== event.id ||
         target.userId !== data.userId ||
         target.metric !== data.metric ||
-        target.isCalculated
+        isCrossRowDerived
       ) {
         throw new EventMeasurementInputError(
-          "replaceMeasurementId must name a saved, non-calculated measurement of this athlete and metric on this event"
+          "replaceMeasurementId must name a saved measurement of this athlete and metric on this event that is not derived from other measurements"
         );
       }
     }
@@ -481,9 +491,10 @@ export class EventMeasurementsService {
     const event = await this.getWritableEvent(eventId);
     const scope = await this.loadWriteScope(eventId, measurementsData);
 
-    const created: Measurement[] = [];
-    const replaced: Measurement[] = [];
+    const created: BulkCreateResult["created"] = [];
+    const replaced: BulkCreateResult["replaced"] = [];
     const errors: Array<{ index: number; error: string }> = [];
+    const replaceIdsSeen = new Set<string>();
 
     for (let i = 0; i < measurementsData.length; i++) {
       try {
@@ -494,8 +505,16 @@ export class EventMeasurementsService {
           throw new Error('Invalid metric code');
         }
 
+        if (m.replaceMeasurementId) {
+          // One replace per row per batch: a second one would silently overwrite the first
+          if (replaceIdsSeen.has(m.replaceMeasurementId)) {
+            throw new Error("replaceMeasurementId is sent more than once in this request");
+          }
+          replaceIdsSeen.add(m.replaceMeasurementId);
+        }
+
         const measurement = await this.writeEventMeasurement(event, m, createdBy, submitterRole, undefined, undefined, scope);
-        (m.replaceMeasurementId ? replaced : created).push(measurement);
+        (m.replaceMeasurementId ? replaced : created).push({ ...measurement, index: i });
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
         errors.push({ index: i, error: errorMessage });

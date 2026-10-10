@@ -2,7 +2,7 @@
  * Who and what an event measurement write may target (recording-sheet PR A):
  * POST /api/events/:eventId/measurements and .../measurements/bulk accept only athletes with an
  * eligible registration (approved, checked_in, completed) and metrics configured on the event, cap a
- * bulk request at 500 items, and replace a saved row by id (replaceMeasurementId) instead of appending.
+ * bulk request at 200 items, and replace a saved row by id (replaceMeasurementId) instead of appending.
  */
 
 process.env.NODE_ENV = 'test';
@@ -53,7 +53,9 @@ const tag = `${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`.toUpp
 const SPRINT = `EMB_SPRINT_${tag}`;
 const JUMP = `EMB_JUMP_${tag}`;
 const OFF_EVENT = `EMB_OFF_${tag}`;
-const OWN_METRICS = [SPRINT, JUMP, OFF_EVENT];
+// Paired-input (1RM-style): stored with is_calculated = true and no source rows
+const PAIRED = `EMB_PAIRED_${tag}`;
+const OWN_METRICS = [SPRINT, JUMP, OFF_EVENT, PAIRED];
 
 let app: Express;
 let orgA: any;
@@ -99,6 +101,7 @@ async function mkEvent(frozen = false) {
   await db.insert(eventMetrics).values([
     { eventId: e.id, metricCode: SPRINT, displayOrder: 1 },
     { eventId: e.id, metricCode: JUMP, displayOrder: 2 },
+    { eventId: e.id, metricCode: PAIRED, displayOrder: 3 },
   ]);
   await db.insert(eventRegistrations).values([
     ...registrationStatusEnum.map((status) => ({
@@ -132,8 +135,26 @@ const BAD_REPLACE = /replaceMeasurementId/;
 beforeAll(async () => {
   await db
     .insert(siteMetrics)
-    .values(OWN_METRICS.map((code) => ({ code, label: `Label ${code}`, category: 'speed', unit: 's', metricType: 'lower_is_better' }) as any))
+    .values([SPRINT, JUMP, OFF_EVENT].map((code) => ({ code, label: `Label ${code}`, category: 'speed', unit: 's', metricType: 'lower_is_better' }) as any))
     .onConflictDoNothing();
+  await db.insert(siteMetrics).values({
+    code: PAIRED,
+    label: `Label ${PAIRED}`,
+    category: 'strength',
+    unit: 'lbs',
+    metricType: 'higher_is_better',
+    isActive: true,
+    auxiliaryInputConfig: {
+      label: 'Reps',
+      unit: 'reps',
+      validationMin: 1,
+      validationMax: 12,
+      required: true,
+      computeFormula: 'load * (1 + reps / 30)',
+      primaryInputLabel: 'Weight Lifted',
+      primaryInputUnit: 'lbs',
+    },
+  } as any);
 
   app = express();
   app.use(express.json());
@@ -240,12 +261,40 @@ describe('who can be written to', () => {
 });
 
 describe('batch size and append', () => {
-  it('501 items are refused with 400 and nothing is written', async () => {
+  it('201 items are refused with 400 and nothing is written', async () => {
     const ev = await mkEvent();
-    const tooMany = await bulk(ev.id, Array.from({ length: 501 }, () => item(byStatus.approved.id)));
+    const tooMany = await bulk(ev.id, Array.from({ length: 201 }, () => item(byStatus.approved.id)));
     expect(tooMany.status).toBe(400);
-    expect(tooMany.body.error).toMatch(/500/);
+    expect(tooMany.body.error).toMatch(/200/);
     expect(await rowsOf(ev.id)).toHaveLength(0);
+  });
+
+  it('exactly 200 items are accepted', async () => {
+    const ev = await mkEvent();
+    const res = await bulk(ev.id, Array.from({ length: 200 }, () => item(byStatus.approved.id)));
+    expect(res.status).toBe(201);
+    expect(res.body.errors).toEqual([]);
+    expect(res.body.created).toHaveLength(200);
+    expect(await rowsOf(ev.id)).toHaveLength(200);
+  });
+
+  it('every created and replaced entry carries its index in the request', async () => {
+    const ev = await mkEvent();
+    const a = byStatus.approved.id;
+    const saved = (await single(ev.id, item(a, { value: 4.9 }))).body;
+    const res = await bulk(ev.id, [
+      item(a, { value: 4.5 }),
+      item(a, { value: 4.6, replaceMeasurementId: saved.id }),
+      item(member.id),
+      item(a, { metric: JUMP, value: 20 }),
+    ]);
+    expect(res.status).toBe(201);
+    expect(res.body.created.map((m: any) => [m.index, Number(m.value)])).toEqual([
+      [0, 4.5],
+      [3, 20],
+    ]);
+    expect(res.body.replaced.map((m: any) => [m.index, m.id])).toEqual([[1, saved.id]]);
+    expect(res.body.errors).toEqual([{ index: 2, error: expect.stringMatching(NOT_REGISTERED) }]);
   });
 
   it('normal items keep append semantics (trials are separate rows)', async () => {
@@ -294,7 +343,7 @@ describe('replaceMeasurementId', () => {
     expect(Number(rows[0].value)).toBe(4.7);
   });
 
-  it('rejects a row of another event, athlete or metric, a calculated row and an unknown id, and never inserts', async () => {
+  it('rejects a row of another event, athlete or metric, a cross-row derived row and an unknown id, and never inserts', async () => {
     const ev = await mkEvent();
     const other = await mkEvent();
     const a = byStatus.approved.id;
@@ -316,7 +365,8 @@ describe('replaceMeasurementId', () => {
         eventId: ev.id,
         organizationId: orgA.id,
         isCalculated: true,
-        calculatedFromMeasurementIds: [],
+        // Cross-row derived: computed from other measurement rows
+        calculatedFromMeasurementIds: [mine.id],
         calculationMetadata: {},
       } as any)
       .returning();
@@ -338,6 +388,45 @@ describe('replaceMeasurementId', () => {
     expect(rows.every((r) => Number(r.value) !== 4.1)).toBe(true);
     expect(Number((await rowsOf(other.id))[0].value)).toBe(4.9);
     expect(mine.id).toBeDefined();
+  });
+
+  it('replaces a paired-input row: the value is recomputed and the row is listed as replaced', async () => {
+    const ev = await mkEvent();
+    const a = byStatus.approved.id;
+    const saved = (await single(ev.id, item(a, { metric: PAIRED, value: 300, auxiliaryValue: 3 }))).body;
+    expect(saved.isCalculated).toBe(true);
+    expect(Number(saved.value)).toBe(330);
+
+    const res = await bulk(ev.id, [item(a, { metric: PAIRED, value: 300, auxiliaryValue: 6, replaceMeasurementId: saved.id })]);
+    expect(res.status).toBe(201);
+    expect(res.body.errors).toEqual([]);
+    expect(res.body.created).toEqual([]);
+    expect(res.body.replaced).toHaveLength(1);
+    expect(res.body.replaced[0].id).toBe(saved.id);
+    expect(Number(res.body.replaced[0].value)).toBe(360);
+
+    const rows = await rowsOf(ev.id);
+    expect(rows).toHaveLength(1);
+    expect(Number(rows[0].value)).toBe(360);
+    expect(Number(rows[0].auxiliaryValue)).toBe(6);
+    expect(rows[0].isCalculated).toBe(true);
+  });
+
+  it('a replaceMeasurementId sent twice in one batch: the first applies, later ones are per-item errors', async () => {
+    const ev = await mkEvent();
+    const a = byStatus.approved.id;
+    const saved = (await single(ev.id, item(a, { value: 4.9 }))).body;
+    const res = await bulk(ev.id, [
+      item(a, { value: 4.6, replaceMeasurementId: saved.id }),
+      item(a, { value: 4.5 }),
+      item(a, { value: 4.4, replaceMeasurementId: saved.id }),
+    ]);
+    expect(res.status).toBe(201);
+    expect(res.body.replaced.map((m: any) => m.index)).toEqual([0]);
+    expect(res.body.created.map((m: any) => m.index)).toEqual([1]);
+    expect(res.body.errors).toEqual([{ index: 2, error: expect.stringMatching(/more than once/i) }]);
+    const replacedRow = (await rowsOf(ev.id)).find((r) => r.id === saved.id)!;
+    expect(Number(replacedRow.value)).toBe(4.6);
   });
 
   it('a replace for an unregistered athlete is refused even with a matching row', async () => {

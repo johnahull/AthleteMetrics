@@ -43,8 +43,12 @@ function parseMediaUrl(raw: unknown): { ok: true; value: string | null | undefin
   return { ok: true, value: result.data };
 }
 
-/** Bulk write cap: 500 items stay well under Express' 100 kB JSON body limit */
-const MAX_BULK_EVENT_MEASUREMENTS = 500;
+/**
+ * Bulk write cap. Express' default JSON body limit (100 kB) still applies and answers 413:
+ * a plain item is ~170 bytes, more with notes/flyInDistance/mediaUrl, so 200 items fit
+ * only when items are small. Clients chunk to <= 200 items AND well under 100 kB.
+ */
+const MAX_BULK_EVENT_MEASUREMENTS = 200;
 
 /** replaceMeasurementId is optional; when sent it must be a non-empty string */
 const isValidReplaceId = (raw: unknown) => raw === undefined || (typeof raw === "string" && raw.length > 0 && raw.length <= 64);
