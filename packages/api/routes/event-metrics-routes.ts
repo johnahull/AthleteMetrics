@@ -53,7 +53,7 @@ const bulkAddSchema = z.object({
         metricCode: metricCodeSchema,
         isRequired: z.boolean().optional(),
         displayOrder: z.number().int().min(0).max(9999).optional(),
-        customLabel: customLabelSchema.optional(),
+        customLabel: customLabelSchema.nullish().transform((v) => v ?? undefined),
       })
     )
     .max(100),
@@ -160,6 +160,7 @@ export function registerEventMetricsRoutes(app: Express) {
         }
 
         const reason = ineligibleReason((await fetchEligibilityRows([metricCode])).get(metricCode), await orgTypeOf(event.organizationId));
+        // An unknown code falls through on purpose: EventMetricsService rejects it with a 400 ("not found").
         if (reason && reason !== "unknown") {
           return res.status(400).json({ error: INELIGIBLE_MESSAGE[reason](metricCode) });
         }

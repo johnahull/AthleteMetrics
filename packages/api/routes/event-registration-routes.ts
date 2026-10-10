@@ -17,7 +17,7 @@
 
 import type { Express, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
-import { EventRegistrationService, type RegisterOptions, type RegistrationFilters, type IRegistrationStorage } from "../services/event-registration-service";
+import { EventRegistrationService, EventRegistrationConflictError, type RegisterOptions, type RegistrationFilters, type IRegistrationStorage } from "../services/event-registration-service";
 import { requireAuth } from "../middleware";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { storage } from "../storage";
@@ -299,7 +299,7 @@ export function registerEventRegistrationRoutes(app: Express) {
       console.error("Bulk add athletes error:", error);
       const message = error instanceof Error ? error.message : "Failed to add athletes";
 
-      if (message.toLowerCase().includes('cancelled') || message.toLowerCase().includes('frozen') || message.toLowerCase().includes('try again')) {
+      if (error instanceof EventRegistrationConflictError) {
         return res.status(409).json({ message });
       }
       if (message.toLowerCase().includes('not found')) {

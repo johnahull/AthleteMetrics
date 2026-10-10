@@ -15,6 +15,32 @@ import { and, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm';
 import { db } from '../db';
 import type { IStorage } from '../storage';
 
+/** Thrown by addAthletesDirectly when the request conflicts with the event's state; routes answer 409. */
+export class EventRegistrationConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'EventRegistrationConflictError';
+  }
+}
+export class EventCancelledError extends EventRegistrationConflictError {
+  constructor(message = 'Event is cancelled and cannot take new athletes') {
+    super(message);
+    this.name = 'EventCancelledError';
+  }
+}
+export class EventFrozenError extends EventRegistrationConflictError {
+  constructor(message = 'Event is frozen and registrations cannot be modified') {
+    super(message);
+    this.name = 'EventFrozenError';
+  }
+}
+export class RegistrationChangedError extends EventRegistrationConflictError {
+  constructor(message = 'Registration changed while adding athletes, please try again') {
+    super(message);
+    this.name = 'RegistrationChangedError';
+  }
+}
+
 export interface RegisterOptions {
   discoveryMethod?: 'event_code' | 'direct_link' | 'invitation' | 'org_roster' | null;
   athleteNotes?: string | null;
@@ -450,10 +476,10 @@ export class EventRegistrationService {
         throw new Error('Event not found');
       }
       if (locked.status === 'cancelled') {
-        throw new Error('Event is cancelled and cannot take new athletes');
+        throw new EventCancelledError();
       }
       if (locked.isFrozen) {
-        throw new Error('Event is frozen and registrations cannot be modified');
+        throw new EventFrozenError();
       }
 
       const members = await tx
@@ -529,7 +555,7 @@ export class EventRegistrationService {
             .from(eventRegistrations)
             .where(and(eq(eventRegistrations.eventId, eventId), eq(eventRegistrations.userId, userId)));
           if (!reg) {
-            throw new Error('Registration changed while adding athletes, please try again');
+            throw new RegistrationChangedError();
           }
         }
         if (reg.status === 'checked_in' || reg.status === 'completed' || reg.status === targetStatus) {

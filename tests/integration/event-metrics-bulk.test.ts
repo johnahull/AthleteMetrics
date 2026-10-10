@@ -337,6 +337,16 @@ describe('POST /api/events/:eventId/metrics/bulk', () => {
       expect(await codesOf(ev)).toEqual([]);
     });
 
+    it('accepts customLabel: null on both the single and the bulk route (stored as no label)', async () => {
+      const ev = await newEvent(orgA);
+      expect((await post(ev, { metricCode: code(0), customLabel: null })).status).toBe(201);
+      const bulk = await as('coachA').post(`/api/events/${ev}/metrics/bulk`).send({ metrics: [item(code(1), { customLabel: null })] });
+      expect(bulk.status).toBe(200);
+      expect(bulk.body.added).toEqual([code(1)]);
+      const rows = await db.select().from(eventMetrics).where(eq(eventMetrics.eventId, ev));
+      expect(rows.map((r) => r.customLabel)).toEqual([null, null]);
+    });
+
     it('answers 400 (not 409 as the bulk route does) for a frozen event', async () => {
       const ev = await newEvent(orgA, { isFrozen: true });
       expect((await post(ev, { metricCode: code(0) })).status).toBe(400);

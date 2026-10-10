@@ -27,7 +27,12 @@ export interface BulkAddResult {
 /** Throws EventMetricsFrozenError for a frozen event (also when every code would have been skipped). */
 export async function bulkAddEventMetrics(eventId: string, userId: string, requested: BulkAddItem[]): Promise<BulkAddResult> {
   const seen = new Set<string>();
-  const items = requested.filter((m) => !seen.has(m.metricCode) && !!seen.add(m.metricCode));
+  const items: BulkAddItem[] = [];
+  for (const m of requested) {
+    if (seen.has(m.metricCode)) continue;
+    seen.add(m.metricCode);
+    items.push(m);
+  }
 
   return db.transaction(async (tx) => {
     const [event] = await tx
