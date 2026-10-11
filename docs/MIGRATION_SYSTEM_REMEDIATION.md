@@ -13,6 +13,7 @@
 > 0154 (strip derived metrics from eval templates) and 0155 (eval template audit actions) belong to the same
 > AM-FEAT-019 branch and follow 0153 if it is renumbered.
 > 0156 (RSI_105 and single-leg CMJ metrics, eval template top-up) is an AM-FEAT-019 follow-up.
+> 0157 (full UNIQUE (event_id, user_id) on event_registrations) fixes bulk-add 500s on migration-built databases.
 
 ## Current State (2025-10-30)
 
