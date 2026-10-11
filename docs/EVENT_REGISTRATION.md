@@ -48,7 +48,7 @@ Retries: a replace is idempotent, an append is not. If a bulk response is lost (
 
 Code: `EventMeasurementsService.createEventMeasurement` / `createEventMeasurementsBulk` (`packages/api/services/event-measurements-service.ts`), routes in `packages/api/routes/event-measurements-routes.ts`. Movement Quality scores saved through `PUT /api/events/:id/athletes/:userId/movement-quality` are not covered by these checks.
 
-## Recording sheet (CSV / XLSX)
+## Recording sheet (CSV / XLSX / printable PDF)
 
 The data entry page (`/events/:id/data-entry`) can download a blank recording sheet and load a filled one. Everything runs in the browser: values from a sheet become unsaved grid cells and are saved through the bulk route above, so all of its checks apply. There are no server changes.
 
@@ -67,4 +67,13 @@ Conflicts: a file value that differs from the saved value is a conflict. The cel
 
 Upload is blocked while the grid has unsaved edits, while a save is in flight and while another sheet is being read; Save and `Discard file values` are off while a sheet is read, and `Discard file values` is off during a save.
 
-Code: `packages/web/src/lib/recording-sheet.ts` (generate, read), `packages/web/src/lib/recording-sheet-import.ts` (plan, apply), `packages/web/src/components/events/RecordingSheet*.tsx`, `packages/web/src/pages/event-data-entry.tsx`.
+Printable PDF (`Download sheet > Printable PDF`, off for a frozen event like the other downloads): the same athletes, order and metric columns as the CSV / XLSX, for writing results by hand. It cannot be uploaded; type the results into the grid (or into a CSV / XLSX sheet and upload that).
+
+- Letter, landscape only (A4 can be added if asked). Helvetica, generated in the browser with `jspdf` + `jspdf-autotable`, both loaded only when a PDF is made.
+- Every page has the event name, the date (the same yyyy-mm-dd as the CSV), the location when the event has one, the event id in small print and `Page n of N`.
+- Table: `#`, `Athlete`, then one empty box per metric (header = label on up to 2 lines, then the unit). Rows are about 0.36 in tall with alternating light shading; up to 15 athletes per page.
+- Column strips: a page holds at most 7 metric columns (at least 1 in wide each). More metrics are split into balanced strips (12 metrics = 6 + 6), each repeating `#` and `Athlete`, and each page says `Columns 1-6 of 12 (part 1 of 2)`. Page order: every athlete for strip 1, then every athlete for strip 2, and so on; match rows across strips by `#`.
+- Characters: the built-in font prints Latin-1 only. Curly quotes and dashes print as plain ones; any other character (for example Chinese or Polish `Ł`) prints as `?`, and the first page then says that some text contains characters the PDF cannot print. Long names and labels are cut with `...`.
+- File name: `recording-sheet-<event-name-slug>-<date>.pdf`, as for the CSV / XLSX.
+
+Code: `packages/web/src/lib/recording-sheet.ts` (generate, read), `packages/web/src/lib/recording-sheet-pdf.ts` (PDF layout plan and rendering), `packages/web/src/lib/recording-sheet-import.ts` (plan, apply), `packages/web/src/components/events/RecordingSheet*.tsx`, `packages/web/src/pages/event-data-entry.tsx`.

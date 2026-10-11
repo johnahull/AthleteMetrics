@@ -677,6 +677,9 @@ describe('EventDataEntry', () => {
       await user.click(screen.getByRole('button', { name: /download sheet/i }));
       await user.click(await screen.findByRole('menuitem', { name: /excel/i }));
       expect(downloadRecordingSheet).toHaveBeenLastCalledWith(expect.anything(), 'xlsx');
+      await user.click(screen.getByRole('button', { name: /download sheet/i }));
+      await user.click(await screen.findByRole('menuitem', { name: /printable pdf/i }));
+      expect(downloadRecordingSheet).toHaveBeenLastCalledWith(expect.anything(), 'pdf');
     });
 
     it('disables download and upload for a frozen event and says why', () => {
@@ -847,6 +850,17 @@ describe('EventDataEntry', () => {
       render(<EventDataEntry />);
       await user.click(screen.getByRole('button', { name: /download sheet/i }));
       await user.click(await screen.findByRole('menuitem', { name: /excel/i }));
+      await waitFor(() =>
+        expect(toast).toHaveBeenCalledWith(expect.objectContaining({ variant: 'destructive', title: 'Could not create the sheet' })),
+      );
+    });
+
+    it('shows an error toast when the printable PDF cannot be created', async () => {
+      const user = userEvent.setup();
+      downloadRecordingSheet.mockRejectedValue(new Error('Failed to fetch dynamically imported module'));
+      render(<EventDataEntry />);
+      await user.click(screen.getByRole('button', { name: /download sheet/i }));
+      await user.click(await screen.findByRole('menuitem', { name: /printable pdf/i }));
       await waitFor(() =>
         expect(toast).toHaveBeenCalledWith(expect.objectContaining({ variant: 'destructive', title: 'Could not create the sheet' })),
       );

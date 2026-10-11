@@ -84,6 +84,15 @@ describe('buildRecordingSheet', () => {
       athletes: SHEET.athletes,
     });
   });
+
+  it('keeps the event location for the printable sheet', () => {
+    const sheet = buildRecordingSheet({
+      event: { id: 'ev-1', name: 'Spring Screen', startDate: '2026-03-10', location: 'Main Gym' },
+      metrics: [],
+      athletes: [],
+    });
+    expect(sheet.location).toBe('Main Gym');
+  });
 });
 
 describe('recordingSheetTable', () => {
@@ -265,6 +274,7 @@ describe('recordingSheetFilename', () => {
       'recording-sheet-spring-screen-2-2026-03-10.xlsx',
     );
     expect(recordingSheetFilename({ ...SHEET, eventName: '***' }, 'csv')).toBe('recording-sheet-event-2026-03-10.csv');
+    expect(recordingSheetFilename(SHEET, 'pdf')).toBe('recording-sheet-spring-screen-2026-03-10.pdf');
   });
 
   it('cuts a long event name to 60 characters', () => {

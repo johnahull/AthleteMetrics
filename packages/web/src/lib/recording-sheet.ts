@@ -30,6 +30,8 @@ export interface RecordingSheet {
   eventName: string;
   /** yyyy-mm-dd */
   eventDate: string;
+  /** Printed on the PDF only; the CSV / XLSX layout has no location row */
+  location?: string;
   metrics: SheetMetric[];
   athletes: Array<{ userId: string; name: string }>;
 }
@@ -54,7 +56,7 @@ export function sheetIgnoredMetrics(metrics: EventMetricWithSiteDetails[]) {
 }
 
 export function buildRecordingSheet(input: {
-  event: { id: string; name: string; startDate: string | Date };
+  event: { id: string; name: string; startDate: string | Date; location?: string | null };
   metrics: EventMetricWithSiteDetails[];
   athletes: Array<{ userId: string; name: string }>;
 }): RecordingSheet {
@@ -63,6 +65,7 @@ export function buildRecordingSheet(input: {
     eventId: input.event.id,
     eventName: input.event.name,
     eventDate: date ? formatDate(date, "yyyy-MM-dd") : "",
+    ...(input.event.location ? { location: input.event.location } : {}),
     metrics: input.metrics
       .filter((m) => sheetExclusionReason(m) === null)
       .map((m) => {
@@ -124,7 +127,7 @@ export async function recordingSheetToXlsx(sheet: RecordingSheet): Promise<Uint8
   return new Uint8Array(buffer as ArrayBuffer);
 }
 
-export function recordingSheetFilename(sheet: RecordingSheet, ext: "csv" | "xlsx"): string {
+export function recordingSheetFilename(sheet: RecordingSheet, ext: "csv" | "xlsx" | "pdf"): string {
   const slug =
     sheet.eventName
       .toLowerCase()
@@ -134,12 +137,14 @@ export function recordingSheetFilename(sheet: RecordingSheet, ext: "csv" | "xlsx
   return `recording-sheet-${slug}${sheet.eventDate ? `-${sheet.eventDate}` : ""}.${ext}`;
 }
 
-export async function downloadRecordingSheet(sheet: RecordingSheet, format: "csv" | "xlsx"): Promise<void> {
+export async function downloadRecordingSheet(sheet: RecordingSheet, format: "csv" | "xlsx" | "pdf"): Promise<void> {
   // The BOM makes Excel read the CSV as UTF-8 (accented names)
   const blob =
     format === "csv"
       ? new Blob(["﻿" + recordingSheetToCsv(sheet)], { type: "text/csv;charset=utf-8" })
-      : new Blob([await recordingSheetToXlsx(sheet)], { type: XLSX_MIME });
+      : format === "xlsx"
+        ? new Blob([await recordingSheetToXlsx(sheet)], { type: XLSX_MIME })
+        : new Blob([await (await import("./recording-sheet-pdf")).recordingSheetToPdf(sheet)], { type: "application/pdf" });
   const url = URL.createObjectURL(blob);
   try {
     const link = document.createElement("a");

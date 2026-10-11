@@ -390,7 +390,7 @@ export default function EventDataEntry() {
     setReadingSheet(null);
   };
 
-  const handleSheetDownload = async (format: "csv" | "xlsx") => {
+  const handleSheetDownload = async (format: "csv" | "xlsx" | "pdf") => {
     try {
       await downloadRecordingSheet(recordingSheet(), format);
     } catch {
