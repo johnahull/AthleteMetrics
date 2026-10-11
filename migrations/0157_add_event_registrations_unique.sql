@@ -6,6 +6,8 @@
 -- migration-built database (staging) therefore answered bulk-add with 500 (42P10); db:push databases (CI) had it.
 -- Fails (and changes nothing) if a (event_id, user_id) pair already has more than one row; resolve those first.
 --
+-- The partial index event_registrations_user_active_unique from 0076 is now redundant; it is left in place.
+--
 -- IDEMPOTENT: safe to run multiple times.
 
 DO $$

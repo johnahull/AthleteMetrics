@@ -51,7 +51,6 @@ const bulkAddConflictClause = (tx: any) =>
 describe('migration 0157: event_registrations (event_id, user_id) unique', () => {
   it('without it, the bulk-add ON CONFLICT clause cannot be planned', async () => {
     await inMigrationBuiltDb(async (tx) => {
-      await tx.execute(sql`SAVEPOINT s`);
       await expect(bulkAddConflictClause(tx)).rejects.toThrow();
     });
   });
@@ -72,11 +71,16 @@ describe('migration 0157: event_registrations (event_id, user_id) unique', () =>
     });
   });
 
-  it('down removes the constraint', async () => {
+  it('down removes the constraint and forgets its manual_migrations row', async () => {
     await inMigrationBuiltDb(async (tx) => {
       await tx.execute(sql.raw(UP));
+      // A push-built database has no tracking table; the down migration only touches it when present.
+      await tx.execute(sql`CREATE TABLE IF NOT EXISTS manual_migrations (id SERIAL PRIMARY KEY, migration_name TEXT NOT NULL UNIQUE, applied_at TIMESTAMP DEFAULT NOW() NOT NULL)`);
+      await tx.execute(sql`INSERT INTO manual_migrations (migration_name) VALUES ('0157_add_event_registrations_unique') ON CONFLICT DO NOTHING`);
       await tx.execute(sql.raw(DOWN));
       expect(await hasConstraint(tx)).toBe(false);
+      const r = await tx.execute(sql`SELECT 1 FROM manual_migrations WHERE migration_name = '0157_add_event_registrations_unique'`);
+      expect((r.rows ?? r).length).toBe(0);
     });
   });
 });
