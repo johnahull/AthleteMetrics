@@ -1,5 +1,5 @@
 /**
- * Recording sheet controls of the event data-entry page: download a blank sheet (CSV / Excel)
+ * Recording sheet controls of the event data-entry page: download a blank sheet (CSV / Excel / printable PDF)
  * and upload a filled one. Reading and planning the file is up to the page.
  */
 import { useRef } from "react";
@@ -17,7 +17,7 @@ interface RecordingSheetActionsProps {
   disabledReason?: string;
   /** Why only upload is off (e.g. unsaved edits) */
   uploadBlockedReason?: string;
-  onDownload: (format: "csv" | "xlsx") => void;
+  onDownload: (format: "csv" | "xlsx" | "pdf") => void;
   onUpload: (file: File) => void;
 }
 
@@ -47,6 +47,7 @@ export function RecordingSheetActions({ disabledReason, uploadBlockedReason, onD
           <DropdownMenuContent align="end">
             <DropdownMenuItem onSelect={() => onDownload("csv")}>CSV (.csv)</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => onDownload("xlsx")}>Excel (.xlsx)</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => onDownload("pdf")}>Printable PDF</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <Button
