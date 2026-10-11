@@ -23,6 +23,8 @@ interface MovementQualityGridCellProps {
   onOpen: () => void;
   onResolve: (metricCode: string, choice: "saved" | "file") => void;
   onResolveAll: (choice: "saved" | "file") => void;
+  /** Drop this athlete's scores from the sheet (also ones the server refused), back to the saved scores */
+  onDiscard: () => void;
   /** Extra attributes for the button (keyboard navigation) */
   buttonProps?: ButtonHTMLAttributes<HTMLButtonElement> & Record<`data-${string}`, string | number>;
 }
@@ -39,6 +41,7 @@ export function MovementQualityGridCell({
   onOpen,
   onResolve,
   onResolveAll,
+  onDiscard,
   buttonProps,
 }: MovementQualityGridCellProps) {
   const buttonId = `mq-button-${userId}`;
@@ -85,7 +88,7 @@ export function MovementQualityGridCell({
           <PopoverTrigger asChild>
             <button
               type="button"
-              className="mt-1 w-full rounded text-[11px] leading-tight text-orange-700 underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-orange-500"
+              className="mt-1 min-h-6 w-full rounded text-[11px] leading-tight text-orange-700 underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-orange-500"
               aria-label={`Movement Quality conflicts for ${athleteName}: ${[conflictText, importedText].filter(Boolean).join(", ")}`}
             >
               {conflictText}
@@ -147,6 +150,19 @@ export function MovementQualityGridCell({
             </div>
           ))}
         </div>
+      )}
+      {errors.length + conflicts.length + imported.length > 0 && (
+        <button
+          type="button"
+          className="mt-1 min-h-6 w-full rounded text-[11px] leading-tight text-muted-foreground underline underline-offset-2"
+          aria-label={`Discard sheet scores for ${athleteName}`}
+          onClick={() => {
+            onDiscard();
+            requestAnimationFrame(() => document.getElementById(buttonId)?.focus());
+          }}
+        >
+          Discard sheet scores
+        </button>
       )}
     </>
   );

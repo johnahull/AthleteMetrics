@@ -279,12 +279,12 @@ export default function EventDataEntry() {
         for (const [metricCode, cell] of Object.entries(row.measurements)) {
           const previous = prev[userId]?.measurements[metricCode];
           if (previous?.isDirty) {
-            const originalValue = cell.originalValue?.toString() || "";
             row.measurements[metricCode] = {
               ...cell,
               value: previous.value,
               error: previous.error,
-              isDirty: previous.value !== originalValue,
+              // Numeric: "1.60" typed and 1.6 saved (e.g. by a request whose response was lost) is clean
+              isDirty: previous.value === "" ? cell.originalValue !== undefined : Number(previous.value) !== cell.originalValue,
               fromImport: previous.fromImport,
             };
           } else if (previous?.importedValue !== undefined) {
@@ -640,6 +640,7 @@ export default function EventDataEntry() {
   const handleAddTrial = async (cell: MeasurementCell, label: string, athleteName: string) => {
     if (isSaving || readingSheet || event?.isFrozen || !canAddTrial(cell)) return;
     const inputId = `cell-input-${cell.userId}-${cell.metricCode}`;
+    const button = document.activeElement;
     setIsSaving(true);
     try {
       const result = await bulkCreate.mutateAsync({
@@ -659,9 +660,15 @@ export default function EventDataEntry() {
       toast({ variant: "destructive", title: "Trial not saved", description: error?.message || "Failed to save the trial." });
     } finally {
       setIsSaving(false);
-      // Refetch whatever happened: the row may have been saved before the response was lost
+      // Refetch whatever happened: the row may have been saved before the response was lost. The refetch
+      // then shows it as the cell's saved value, so the cell is clean and a retry cannot add it again.
       await refetchMeasurements();
-      requestAnimationFrame(() => document.getElementById(inputId)?.focus());
+      // Back to the input unless the user has moved on meanwhile (the hidden + button drops focus to body)
+      requestAnimationFrame(() => {
+        if (document.activeElement === document.body || document.activeElement === button) {
+          document.getElementById(inputId)?.focus();
+        }
+      });
     }
   };
 
@@ -1213,6 +1220,7 @@ export default function EventDataEntry() {
                               onOpen={() => openMovementQuality(row.userId)}
                               onResolve={(code, choice) => mqCells.update((c) => resolveConflict(c, choice), row.userId, code)}
                               onResolveAll={(choice) => mqCells.update((c) => resolveConflict(c, choice), row.userId)}
+                              onDiscard={() => mqCells.update(discardImport, row.userId)}
                               buttonProps={{ "data-grid-row": rowIndex, "data-grid-col": gridMetrics.length }}
                             />
                           </td>

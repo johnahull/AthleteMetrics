@@ -28,6 +28,7 @@ function setup(cells: MqCell[]) {
   const onResolve = vi.fn();
   const onResolveAll = vi.fn();
   const onOpen = vi.fn();
+  const onDiscard = vi.fn();
   render(
     <MovementQualityGridCell
       userId="ath-1"
@@ -38,9 +39,10 @@ function setup(cells: MqCell[]) {
       onOpen={onOpen}
       onResolve={onResolve}
       onResolveAll={onResolveAll}
+      onDiscard={onDiscard}
     />,
   );
-  return { onResolve, onResolveAll, onOpen, user: userEvent.setup() };
+  return { onResolve, onResolveAll, onOpen, onDiscard, user: userEvent.setup() };
 }
 
 describe('MovementQualityGridCell', () => {
@@ -105,5 +107,21 @@ describe('MovementQualityGridCell', () => {
     expect(screen.getByRole('button', { name: 'Movement Quality for Jordan Lee' })).toHaveAccessibleDescription(
       'Deceleration: Value must be at most 3 Hip Turn: Value must be at most 3',
     );
+  });
+
+  it('offers "Discard sheet scores" whenever scores from the sheet are pending, and not otherwise', async () => {
+    const { user, onDiscard } = setup([cell('MQ_DECEL', { value: '3', isDirty: true, fromImport: true, error: 'Value must be at most 2' })]);
+    await user.click(screen.getByRole('button', { name: 'Discard sheet scores for Jordan Lee' }));
+    expect(onDiscard).toHaveBeenCalledTimes(1);
+  });
+
+  it('has no discard action without pending scores', () => {
+    setup([cell('MQ_DECEL', { value: '2', originalValue: 2 })]);
+    expect(screen.queryByRole('button', { name: /Discard sheet scores/ })).toBeNull();
+  });
+
+  it('gives the conflict trigger a target of at least 24px', () => {
+    setup([cell('MQ_DECEL', { value: '2', originalValue: 2, importedValue: '3' })]);
+    expect(screen.getByRole('button', { name: /^Movement Quality conflicts/ })).toHaveClass('min-h-6');
   });
 });

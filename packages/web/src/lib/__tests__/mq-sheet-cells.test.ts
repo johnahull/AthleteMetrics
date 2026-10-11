@@ -32,6 +32,13 @@ describe('buildMqCells', () => {
     expect(grid['ath-1'].measurements.MQ_DECEL).toMatchObject({ value: '2', originalValue: 2, importedValue: '1' });
   });
 
+  it('compares numerically: a kept file value "2.0" against a saved 2 is clean', () => {
+    const prev: MqGrid = {
+      'ath-1': { measurements: { MQ_JUMP: { userId: 'ath-1', metricCode: 'MQ_JUMP', value: '2.0', isDirty: true, fromImport: true } } },
+    };
+    expect(buildMqCells(prev, [row('j', 'ath-1', 'MQ_JUMP', 2)], ['ath-1'], ['MQ_JUMP'])['ath-1'].measurements.MQ_JUMP.isDirty).toBe(false);
+  });
+
   it('a kept file value equal to the new saved score is clean', () => {
     const prev: MqGrid = {
       'ath-1': { measurements: { MQ_JUMP: { userId: 'ath-1', metricCode: 'MQ_JUMP', value: '3', isDirty: true, fromImport: true } } },

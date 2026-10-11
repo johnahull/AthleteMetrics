@@ -218,11 +218,29 @@ test.describe('MQI capture on event data entry', () => {
   });
 
   test('a recording sheet changes a score through the upload and keeps its note and clip', async ({ page }) => {
+    // Own data: a saved Jump 3 with a note and a clip, whatever earlier tests left
+    const jumpOfAthlete = and(eq(schema.measurements.userId, ids.athlete!), eq(schema.measurements.metric, 'MQ_JUMP'));
+    await db.delete(schema.measurements).where(jumpOfAthlete);
+    await db.insert(schema.measurements).values({
+      userId: ids.athlete,
+      submittedBy: ids.coachA,
+      metric: 'MQ_JUMP',
+      value: '3',
+      units: 'score',
+      date: EVENT_DATE,
+      age: 18,
+      isVerified: true,
+      verifiedBy: ids.coachA,
+      eventId: ids.event,
+      organizationId: ids.orgA,
+      notes: 'late left hip',
+      mediaUrl: CLIP,
+    } as any);
     await loginWithCredentials(page, usernames.coachA, PASSWORD);
     await page.goto(`${BASE_URL}/events/${ids.event}/data-entry`);
     await expect(page.getByRole('heading', { name: /Data Entry:/ })).toBeVisible({ timeout: 20000 });
 
-    // Download the CSV: the saved Jump score (3, from the first test) is pre-printed
+    // Download the CSV: the saved Jump score 3 is pre-printed
     const downloading = page.waitForEvent('download');
     await page.getByRole('button', { name: /download sheet/i }).click();
     await page.getByRole('menuitem', { name: /csv/i }).click();

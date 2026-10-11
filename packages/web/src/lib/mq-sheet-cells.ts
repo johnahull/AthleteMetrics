@@ -40,7 +40,8 @@ export function buildMqCells(prev: MqGrid, saved: Measurement[], athleteIds: str
           ...cell,
           value: previous.value,
           error: previous.error,
-          isDirty: previous.value !== cell.value,
+          // Numeric, like the grid: "2.0" from a file and a saved 2 are the same score
+          isDirty: previous.value === "" ? originalValue !== undefined : Number(previous.value) !== originalValue,
           fromImport: previous.fromImport,
         };
       } else if (previous?.importedValue !== undefined) {

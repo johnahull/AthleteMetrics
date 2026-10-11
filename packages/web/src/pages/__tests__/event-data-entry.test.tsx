@@ -675,7 +675,7 @@ describe('EventDataEntry', () => {
       await waitFor(() => expect(flyCell('Jordan Lee')).toHaveFocus());
     });
 
-    it('is not in the accessibility tree for a cell that is unchanged, empty or in conflict', async () => {
+    it('is not in the accessibility tree for an unchanged saved cell, a typed cell with no saved row, or a cell showing a sheet conflict', async () => {
       const user = userEvent.setup();
       render(<EventDataEntry />);
       // Unchanged saved cell and an empty cell (Sam Park has no saved row)
@@ -687,6 +687,41 @@ describe('EventDataEntry', () => {
       await upload(user, csvFile(['ath-1,Jordan Lee,1.70']));
       expect(flyCell('Jordan Lee')).toHaveAttribute('data-state', 'conflict');
       expect(screen.queryAllByRole('button', { name: /as a new 10-Yard Fly trial for Jordan Lee/ })).toHaveLength(0);
+    });
+
+    it('a lost response: the refetch shows the new row and the cell ends clean, so a retry cannot add a third row', async () => {
+      const user = userEvent.setup();
+      mutateBulk.mockImplementation(async () => {
+        // The server saved the row ("1.6") but the response never arrived
+        measurementsState = { ...measurementsState, data: [saved('m2', 'ath-1', 'FLY10_TIME', 1.6), ...measurementsState.data] };
+        throw new Error('Failed to fetch');
+      });
+      const { rerender } = render(<EventDataEntry />);
+      await retype(user, flyCell('Jordan Lee'), '1.60');
+      await user.click(addTrialButton('1.60')!);
+      await waitFor(() => expect(refetchMeasurements).toHaveBeenCalledTimes(1));
+      rerender(<EventDataEntry />);
+
+      expect(await screen.findByText('2 saved trials')).toBeInTheDocument();
+      expect(flyCell('Jordan Lee')).toHaveAttribute('data-state', 'saved');
+      expect(addTrialButton('1.60')).toBeNull();
+      expect(screen.getByRole('button', { name: /^save( \(\d+\))?$/i })).toBeDisabled();
+    });
+
+    it('does not take focus back when the user moved on while the trial was saved', async () => {
+      const user = userEvent.setup();
+      eventMetricsState = [metric('FLY10_TIME'), metric('VERTICAL_JUMP', { displayOrder: 2 })];
+      let finish!: (value: unknown) => void;
+      mutateBulk.mockReturnValue(new Promise((resolve) => (finish = resolve)));
+      render(<EventDataEntry />);
+      await retype(user, flyCell('Jordan Lee'), '1.60');
+      await user.click(addTrialButton('1.60')!);
+      const other = screen.getByRole('textbox', { name: 'Vertical Jump for Sam Park' });
+      await user.click(other);
+      finish({ created: [{ ...saved('m2', 'ath-1', 'FLY10_TIME', 1.6), index: 0 }], replaced: [], errors: [] });
+      await waitFor(() => expect(refetchMeasurements).toHaveBeenCalledTimes(1));
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+      expect(other).toHaveFocus();
     });
 
     it('is not rendered on a frozen event', () => {
@@ -1237,6 +1272,23 @@ describe('EventDataEntry', () => {
       expect(within(dialog).getByRole('button', { name: /save scores/i })).toBeDisabled();
       await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
       await user.click(mqButton('Sam Park'));
+      expect(within(await screen.findByRole('dialog')).getByRole('button', { name: /save scores/i })).toBeEnabled();
+    });
+
+    it('after Close, scores the server refused can still be discarded per athlete, which unblocks the panel', async () => {
+      const user = userEvent.setup();
+      mutateSaveMq.mockRejectedValue(new MovementQualitySaveError('1 score could not be saved', [{ metric: 'MQ_DECEL', error: 'Value must be at most 2' }]));
+      render(<EventDataEntry />);
+      const summary = await upload(user, csvFile(['ath-1,Jordan Lee,,3,']));
+      await user.click(within(summary).getByRole('button', { name: 'Close' }));
+      await user.click(saveButton());
+      expect(await screen.findByText('Deceleration: Value must be at most 2')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Discard sheet scores for Jordan Lee' }));
+      expect(screen.queryByText('Deceleration: Value must be at most 2')).toBeNull();
+      expect(saveButton()).toBeDisabled();
+      expect(screen.getByRole('button', { name: /upload filled sheet/i })).toBeEnabled();
+      await user.click(mqButton('Jordan Lee'));
       expect(within(await screen.findByRole('dialog')).getByRole('button', { name: /save scores/i })).toBeEnabled();
     });
 
