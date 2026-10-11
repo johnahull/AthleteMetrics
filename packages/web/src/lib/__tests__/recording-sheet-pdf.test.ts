@@ -186,6 +186,31 @@ describe('recordingSheetToPdf', () => {
     expect(pdf).not.toContain('x'.repeat(300));
   });
 
+  it('prints saved values in their (shaded) boxes with the trial count, and the legend', async () => {
+    const withValues: RecordingSheet = {
+      ...sheet,
+      metrics: metrics(3),
+      athletes: [
+        { userId: 'ath-1', name: 'Athlete 1', values: { M1: '1.65', M3: '30.5' }, trials: { M1: 3 } },
+        ...athletes(4).slice(1),
+      ],
+    };
+    const pdf = new TextDecoder('latin1').decode(await recordingSheetToPdf(withValues));
+    const pages = pageTexts(pdf);
+    expect(pages).toHaveLength(planRecordingSheetPdf(3, 4).pages.length);
+    expect(pages[0]).toContain('1.65 (3 trials)');
+    expect(pages[0]).toContain('30.5');
+    expect(pages[0]).toContain('Shaded = already recorded (newest saved value shown).');
+    // the shading grey (210 = 0.82) is used as a fill colour
+    expect(pdf).toMatch(/\b0\.82\d* g\n/);
+  });
+
+  it('has no legend and no shading without saved values', async () => {
+    const pdf = new TextDecoder('latin1').decode(await recordingSheetToPdf({ ...sheet, metrics: metrics(3), athletes: athletes(4) }));
+    expect(pdf).not.toContain('Shaded = already recorded');
+    expect(pdf).not.toMatch(/\b0\.82\d* g\n/);
+  });
+
   describe('page count mismatch', () => {
     afterEach(() => {
       vi.doUnmock('jspdf-autotable');

@@ -25,6 +25,19 @@ export interface SheetMetric {
   unit?: string;
 }
 
+/** Printed after the Event ID row of a sheet with pre-printed saved values */
+export const SHEET_VALUES_NOTE =
+  "Saved values are filled in. Change one to replace it (where several trials are saved, the change is added as a new trial); leave it as is to keep it. Clearing a cell does not delete a saved value.";
+
+export interface SheetAthlete {
+  userId: string;
+  name: string;
+  /** Saved value per metric code (the newest typed row), pre-printed in its cell */
+  values?: Record<string, string>;
+  /** Saved rows per metric code, for the "newest of N trials" notes */
+  trials?: Record<string, number>;
+}
+
 export interface RecordingSheet {
   eventId: string;
   eventName: string;
@@ -33,7 +46,7 @@ export interface RecordingSheet {
   /** Printed on the PDF only; the CSV / XLSX layout has no location row */
   location?: string;
   metrics: SheetMetric[];
-  athletes: Array<{ userId: string; name: string }>;
+  athletes: SheetAthlete[];
 }
 
 /** A cell read from an uploaded file: its text, or why it cannot be used (a date, a formula error) */
@@ -58,7 +71,7 @@ export function sheetIgnoredMetrics(metrics: EventMetricWithSiteDetails[]) {
 export function buildRecordingSheet(input: {
   event: { id: string; name: string; startDate: string | Date; location?: string | null };
   metrics: EventMetricWithSiteDetails[];
-  athletes: Array<{ userId: string; name: string }>;
+  athletes: SheetAthlete[];
 }): RecordingSheet {
   const date = toCalendarDate(input.event.startDate);
   return {
@@ -90,14 +103,20 @@ export function cellText(cell: SheetCell | undefined): string {
   return typeof cell === "string" ? cell.normalize("NFC").trim() : "";
 }
 
-/** The sheet as rows of text, the same for CSV and XLSX */
+/** Some cell of the sheet gets a pre-printed saved value */
+export function hasPrintedValues(sheet: RecordingSheet): boolean {
+  return sheet.athletes.some((a) => sheet.metrics.some((m) => !!a.values?.[m.code]));
+}
+
+/** The sheet as rows of text, the same for CSV and XLSX. The note row is there only with pre-printed values. */
 export function recordingSheetTable(sheet: RecordingSheet): string[][] {
   return [
     ["Event", sheet.eventName],
     ["Date", sheet.eventDate],
     ["Event ID", sheet.eventId],
+    ...(hasPrintedValues(sheet) ? [["Note", SHEET_VALUES_NOTE]] : []),
     [ATHLETE_ID_HEADER, ATHLETE_NAME_HEADER, ...sheet.metrics.map(metricHeader)],
-    ...sheet.athletes.map((a) => [a.userId, a.name, ...sheet.metrics.map(() => "")]),
+    ...sheet.athletes.map((a) => [a.userId, a.name, ...sheet.metrics.map((m) => a.values?.[m.code] ?? "")]),
   ];
 }
 
@@ -110,19 +129,31 @@ export function recordingSheetToCsv(sheet: RecordingSheet): string {
 export async function recordingSheetToXlsx(sheet: RecordingSheet): Promise<Uint8Array> {
   const ExcelJS = (await import("exceljs")).default;
   const workbook = new ExcelJS.Workbook();
+  const table = recordingSheetTable(sheet);
+  // 1-based row of the table header: 4, or 5 after the note row
+  const headerRow = table.findIndex((row) => row[0] === ATHLETE_ID_HEADER) + 1;
   const worksheet = workbook.addWorksheet("Recording sheet", {
-    views: [{ state: "frozen", xSplit: 2, ySplit: 4 }],
+    views: [{ state: "frozen", xSplit: 2, ySplit: headerRow }],
   });
-  recordingSheetTable(sheet).forEach((row) => worksheet.addRow(row));
-  worksheet.getRow(4).font = { bold: true };
+  table.forEach((row) => worksheet.addRow(row));
+  worksheet.getRow(headerRow).font = { bold: true };
   worksheet.getColumn(1).width = 38;
   worksheet.getColumn(2).width = 28;
   sheet.metrics.forEach((_, i) => {
     worksheet.getColumn(i + 3).width = 18;
   });
-  for (let r = 5; r <= worksheet.rowCount; r++) {
+  for (let r = headerRow + 1; r <= worksheet.rowCount; r++) {
     worksheet.getCell(r, 1).font = { color: { argb: "FF808080" } };
   }
+  sheet.athletes.forEach((athlete, a) => {
+    sheet.metrics.forEach((metric, m) => {
+      if (!athlete.values?.[metric.code]) return;
+      const cell = worksheet.getCell(headerRow + 1 + a, m + 3);
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE7E7E7" } };
+      const trials = athlete.trials?.[metric.code] ?? 1;
+      if (trials > 1) cell.note = `Newest of ${trials} saved trials`;
+    });
+  });
   const buffer = await workbook.xlsx.writeBuffer();
   return new Uint8Array(buffer as ArrayBuffer);
 }

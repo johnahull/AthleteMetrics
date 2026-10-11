@@ -380,12 +380,24 @@ export default function EventDataEntry() {
     [gridData],
   );
 
-  // Recording sheet: grid athletes x metrics that can be typed
+  // Recording sheet: grid athletes x metrics that can be typed, with saved values (never unsaved edits) pre-printed
   const recordingSheet = () =>
     buildRecordingSheet({
       event: event!,
       metrics: gridMetrics,
-      athletes: Object.values(gridData).map((row) => ({ userId: row.userId, name: row.fullName })),
+      athletes: Object.values(gridData).map((row) => {
+        const saved = Object.values(row.measurements).filter((c) => c.originalValue !== undefined);
+        return {
+          userId: row.userId,
+          name: row.fullName,
+          ...(saved.length > 0
+            ? {
+                values: Object.fromEntries(saved.map((c) => [c.metricCode, String(c.originalValue)])),
+                trials: Object.fromEntries(saved.map((c) => [c.metricCode, c.savedCount])),
+              }
+            : {}),
+        };
+      }),
     });
 
   const handleSheetUpload = async (file: File) => {
@@ -858,7 +870,14 @@ export default function EventDataEntry() {
 
         <div className="flex flex-wrap items-start gap-3">
           <RecordingSheetActions
-            disabledReason={event.isFrozen ? "This event is frozen, so results cannot be entered from a sheet." : undefined}
+            disabledReason={
+              event.isFrozen
+                ? "This event is frozen, so results cannot be entered from a sheet."
+                : measurementsError
+                  // Without them every file value would look new: no conflicts, and saved rows would be duplicated
+                  ? "Saved results could not be loaded. Refresh before uploading a sheet."
+                  : undefined
+            }
             uploadBlockedReason={
               readingSheet
                 ? `Reading ${readingSheet}…`

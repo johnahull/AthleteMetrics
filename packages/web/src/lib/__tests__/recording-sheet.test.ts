@@ -19,6 +19,7 @@ import {
   recordingSheetToXlsx,
   sheetExclusionReason,
   sheetIgnoredMetrics,
+  SHEET_VALUES_NOTE,
   type RecordingSheet,
 } from '../recording-sheet';
 
@@ -107,6 +108,33 @@ describe('recordingSheetTable', () => {
     ]);
   });
 
+  it('pre-prints saved values and adds the note row after Event ID', () => {
+    const sheet: RecordingSheet = {
+      ...SHEET,
+      athletes: [
+        { userId: 'ath-1', name: 'Jordan Lee', values: { FLY10_TIME: '1.65' }, trials: { FLY10_TIME: 2 } },
+        { userId: 'ath-2', name: 'Sam Park' },
+      ],
+    };
+    expect(recordingSheetTable(sheet)).toEqual([
+      ['Event', 'Spring Screen'],
+      ['Date', '2026-03-10'],
+      ['Event ID', 'ev-1'],
+      ['Note', SHEET_VALUES_NOTE],
+      [ATHLETE_ID_HEADER, 'Athlete', 'Vertical Jump (in) [VERTICAL_JUMP]', '10-Yard Fly (s) [FLY10_TIME]'],
+      ['ath-1', 'Jordan Lee', '', '1.65'],
+      ['ath-2', 'Sam Park', '', ''],
+    ]);
+    expect(SHEET_VALUES_NOTE).toBe(
+      'Saved values are filled in. Change one to replace it (where several trials are saved, the change is added as a new trial); leave it as is to keep it. Clearing a cell does not delete a saved value.',
+    );
+  });
+
+  it('has no note row when no value is pre-printed (values of metrics not on the sheet do not count)', () => {
+    const sheet: RecordingSheet = { ...SHEET, athletes: [{ userId: 'ath-1', name: 'Jordan Lee', values: { OTHER: '3' } }] };
+    expect(recordingSheetTable(sheet).map((r) => r[0])).toEqual(['Event', 'Date', 'Event ID', ATHLETE_ID_HEADER, 'ath-1']);
+  });
+
   it('leaves the unit out of the header when the metric has none', () => {
     expect(metricHeader({ code: 'RSI', label: 'Reactive Strength Index' })).toBe('Reactive Strength Index [RSI]');
   });
@@ -169,6 +197,43 @@ describe('recordingSheetToXlsx / parseXlsxSheet', () => {
     const ws = wb.worksheets[0];
     expect(ws.getRow(4).font?.bold).toBe(true);
     expect(ws.views[0]).toMatchObject({ state: 'frozen', xSplit: 2, ySplit: 4 });
+  });
+
+  it('shades pre-printed cells, notes multi-trial cells and freezes the header row that follows the note row', async () => {
+    const sheet: RecordingSheet = {
+      ...SHEET,
+      athletes: [
+        { userId: 'ath-1', name: 'Jordan Lee', values: { VERTICAL_JUMP: '30', FLY10_TIME: '1.65' }, trials: { VERTICAL_JUMP: 1, FLY10_TIME: 3 } },
+        { userId: 'ath-2', name: 'Sam Park' },
+      ],
+    };
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load((await recordingSheetToXlsx(sheet)) as unknown as ArrayBuffer);
+    const ws = wb.worksheets[0];
+    expect(ws.getCell('A4').value).toBe('Note');
+    expect(ws.getRow(5).font?.bold).toBe(true);
+    expect(ws.getRow(4).font?.bold).toBeFalsy();
+    expect(ws.views[0]).toMatchObject({ state: 'frozen', xSplit: 2, ySplit: 5 });
+    const fill = (ref: string) => (ws.getCell(ref).fill as ExcelJS.FillPattern | undefined)?.fgColor?.argb;
+    expect(ws.getCell('C6').value).toBe('30');
+    expect(fill('C6')).toBe('FFE7E7E7');
+    expect(fill('D6')).toBe('FFE7E7E7');
+    expect(fill('C7')).toBeUndefined();
+    expect(ws.getCell('C6').note).toBeUndefined();
+    const note = ws.getCell('D6').note;
+    expect(typeof note === 'string' ? note : note?.texts?.map((t) => t.text).join('')).toBe('Newest of 3 saved trials');
+    expect(ws.getCell('D7').note).toBeUndefined();
+    // Athlete ids are grey from the first athlete row on, not on the header
+    expect(ws.getCell('A6').font?.color?.argb).toBe('FF808080');
+    expect(ws.getCell('A5').font?.color?.argb).toBeUndefined();
+  });
+
+  it('greys the athlete id column of a blank sheet from row 5', async () => {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load((await recordingSheetToXlsx(SHEET)) as unknown as ArrayBuffer);
+    const ws = wb.worksheets[0];
+    expect(ws.getCell('A5').font?.color?.argb).toBe('FF808080');
+    expect(ws.getCell('A4').font?.color?.argb).toBeUndefined();
   });
 
   it('reads numbers, numeric text, formula results, and flags dates and formulas without a result', async () => {

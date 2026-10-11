@@ -333,3 +333,49 @@ describe('applyImportPlan / resolveConflict / discardImport', () => {
     expect(discardImport(typed)).toBe(typed);
   });
 });
+
+describe('round trip of a sheet with pre-printed saved values', () => {
+  const withValues = buildRecordingSheet({
+    event: { id: 'ev-1', name: 'Spring Screen', startDate: '2026-03-10T00:00:00.000Z' },
+    metrics: [
+      { metricCode: 'VERTICAL_JUMP', metricDetails: { label: 'Vertical Jump', unit: 'in', category: null } },
+      { metricCode: 'FLY10_TIME', metricDetails: { label: '10-Yard Fly', unit: 's', category: null } },
+    ],
+    athletes: [
+      { userId: 'ath-1', name: 'Jordan Lee', values: { VERTICAL_JUMP: '30.5', FLY10_TIME: '1.65' }, trials: { FLY10_TIME: 2 } },
+      { userId: 'ath-2', name: 'Sam Park', values: { FLY10_TIME: '1.8' } },
+    ],
+  });
+  const saved = [
+    { userId: 'ath-1', name: 'Jordan Lee', saved: { VERTICAL_JUMP: 30.5, FLY10_TIME: 1.65 } },
+    { userId: 'ath-2', name: 'Sam Park', saved: { FLY10_TIME: 1.8 } },
+  ];
+  const planOf = (rows: SheetCell[][], format: 'csv' | 'xlsx') =>
+    planSheetImport({ rows, format, eventId: 'ev-1', athletes: saved, metrics: withValues.metrics, ignoredMetrics: [] });
+
+  it('CSV uploaded untouched: every printed value is unchanged, nothing imported, no conflict', () => {
+    const result = planOf(parseCsvSheet(recordingSheetToCsv(withValues)), 'csv');
+    expect(result).toMatchObject({ rejections: [], cellErrors: [], warnings: [] });
+    expect(result.cells.map((c) => c.kind)).toEqual(['unchanged', 'unchanged', 'unchanged']);
+  });
+
+  it('XLSX uploaded untouched: every printed value is unchanged', async () => {
+    const bytes = await recordingSheetToXlsx(withValues);
+    const rows = await parseXlsxSheet(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
+    const result = planOf(rows, 'xlsx');
+    expect(result).toMatchObject({ rejections: [], cellErrors: [], warnings: [] });
+    expect(result.cells.map((c) => c.kind)).toEqual(['unchanged', 'unchanged', 'unchanged']);
+  });
+
+  it('an edited printed value is a conflict and a cleared one changes nothing', () => {
+    const rows = parseCsvSheet(recordingSheetToCsv(withValues)) as string[][];
+    expect(rows[3][0]).toBe('Note');
+    rows[5][3] = '1.60'; // Jordan Lee, 10-Yard Fly
+    rows[6][3] = ''; // Sam Park, 10-Yard Fly cleared
+    const result = planOf(parseCsvSheet(Papa.unparse(rows)), 'csv');
+    expect(result.cells).toEqual([
+      { userId: 'ath-1', metricCode: 'VERTICAL_JUMP', value: '30.5', kind: 'unchanged', savedValue: 30.5 },
+      { userId: 'ath-1', metricCode: 'FLY10_TIME', value: '1.60', kind: 'conflict', savedValue: 1.65 },
+    ]);
+  });
+});

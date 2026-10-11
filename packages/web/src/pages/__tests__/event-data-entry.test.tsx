@@ -797,6 +797,34 @@ describe('EventDataEntry', () => {
       expect(downloadRecordingSheet).toHaveBeenLastCalledWith(expect.anything(), 'pdf');
     });
 
+    it('pre-prints saved values (the newest typed row) and trial counts, never an unsaved edit', async () => {
+      const user = userEvent.setup();
+      measurementsState.data = [
+        saved('t2', 'ath-1', 'FLY10_TIME', 1.65),
+        saved('t1', 'ath-1', 'FLY10_TIME', 1.7),
+        saved('m3', 'ath-2', 'VERTICAL_JUMP', 30),
+      ];
+      render(<EventDataEntry />);
+      await user.clear(cell('Sam Park', 'Vertical Jump'));
+      await user.type(cell('Sam Park', 'Vertical Jump'), '31');
+      await user.click(screen.getByRole('button', { name: /download sheet/i }));
+      await user.click(await screen.findByRole('menuitem', { name: /csv/i }));
+      expect(downloadRecordingSheet.mock.calls[0][0].athletes).toEqual([
+        { userId: 'ath-1', name: 'Jordan Lee', values: { FLY10_TIME: '1.65' }, trials: { FLY10_TIME: 2 } },
+        { userId: 'ath-2', name: 'Sam Park', values: { VERTICAL_JUMP: '30' }, trials: { VERTICAL_JUMP: 1 } },
+      ]);
+    });
+
+    it('turns download and upload off when saved results could not be loaded', () => {
+      measurementsState = { data: undefined as any, isError: true };
+      render(<EventDataEntry />);
+      expect(screen.getByRole('button', { name: /download sheet/i })).toBeDisabled();
+      expect(screen.getByRole('button', { name: /upload filled sheet/i })).toBeDisabled();
+      expect(screen.getByRole('button', { name: /upload filled sheet/i })).toHaveAccessibleDescription(
+        'Saved results could not be loaded. Refresh before uploading a sheet.',
+      );
+    });
+
     it('disables download and upload for a frozen event and says why', () => {
       eventState = FROZEN_EVENT;
       render(<EventDataEntry />);

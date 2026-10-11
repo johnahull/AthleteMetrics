@@ -62,9 +62,13 @@ Code: `EventMeasurementsService.createEventMeasurement` / `createEventMeasuremen
 
 ## Recording sheet (CSV / XLSX / printable PDF)
 
-The data entry page (`/events/:id/data-entry`) can download a blank recording sheet and load a filled one. Everything runs in the browser: values from a sheet become unsaved grid cells and are saved through the bulk route above, so all of its checks apply. There are no server changes.
+The data entry page (`/events/:id/data-entry`) can download a recording sheet and load a filled one. Everything runs in the browser: values from a sheet become unsaved grid cells and are saved through the bulk route above, so all of its checks apply. There are no server changes.
 
-Layout: three rows `Event`, `Date` (yyyy-mm-dd) and `Event ID`, then the table header `Athlete ID (do not edit)`, `Athlete` and one `Label (unit) [CODE]` column per metric, then one row per athlete of the grid (`approved`, `checked_in`, `completed`). Metrics that are not typed have no column: derived metrics, paired-input metrics and Movement Quality scores (entered in their panel). A column of one of those, or of a metric not on the event, is ignored with a warning.
+Layout: three rows `Event`, `Date` (yyyy-mm-dd) and `Event ID`, then the table header `Athlete ID (do not edit)`, `Athlete` and one `Label (unit) [CODE]` column per metric, then one row per athlete of the grid (`approved`, `checked_in`, `completed`).
+
+Saved values are pre-printed: each cell holds the athlete's saved value for that metric (the newest typed row, never a derived row and never an unsaved edit in the grid). When at least one value is printed, a `Note` row after `Event ID` says: "Saved values are filled in. Change one to replace it (where several trials are saved, the change is added as a new trial); leave it as is to keep it. Clearing a cell does not delete a saved value." A sheet without saved values has no note row (the table header is then row 4, else row 5). XLSX: printed cells are shaded light grey, and a cell whose athlete has several saved rows for the metric has the cell note `Newest of N saved trials`. CSV: the value only (any extra text would stop it reading as a number). Uploading a pre-printed sheet untouched loads nothing: every printed value equals the saved one (`unchanged`). An edited printed value is a conflict; a cleared one changes nothing.
+
+Metrics that are not typed have no column: derived metrics, paired-input metrics and Movement Quality scores (entered in their panel). A column of one of those, or of a metric not on the event, is ignored with a warning.
 
 Loading a sheet:
 
@@ -77,13 +81,14 @@ Loading a sheet:
 
 Conflicts: a file value that differs from the saved value is a conflict. The cell keeps its saved value until you choose `Keep saved` or `Use file value` (per cell, or for all in the summary); Save is blocked while conflicts remain. `Use file value` replaces the saved row when the cell has one, and adds a new trial when it has several. Values you type win: typing in a cell drops its pending file value, and a cell typed in while the file was being read keeps the typed value (the file value is listed as not loaded).
 
-Upload is blocked while the grid has unsaved edits, while a save is in flight and while another sheet is being read; Save and `Discard file values` are off while a sheet is read, and `Discard file values` is off during a save.
+Upload is blocked while the grid has unsaved edits, while a save is in flight and while another sheet is being read. Download and upload are both off while saved results could not be loaded (`Saved results could not be loaded. Refresh before uploading a sheet.`): without them every file value would look new, so no conflict would be shown and saved rows could be duplicated, and a downloaded sheet would miss its pre-printed values. Save and `Discard file values` are off while a sheet is read, and `Discard file values` is off during a save.
 
 Printable PDF (`Download sheet > Printable PDF`, off for a frozen event like the other downloads): the same athletes, order and metric columns as the CSV / XLSX, for writing results by hand. It cannot be uploaded; type the results into the grid (or into a CSV / XLSX sheet and upload that).
 
 - Letter, landscape only (A4 can be added if asked). Helvetica, generated in the browser with `jspdf` + `jspdf-autotable`, both loaded only when a PDF is made.
 - Every page has the event name, the date (the same yyyy-mm-dd as the CSV), the location when the event has one, the event id in small print and `Page n of N`.
-- Table: `#`, `Athlete`, then one empty box per metric (header = label on up to 2 lines, then the unit). Rows are about 0.36 in tall with alternating light shading; up to 15 athletes per page.
+- Table: `#`, `Athlete`, then one box per metric (header = label on up to 2 lines, then the unit). Rows are about 0.36 in tall with alternating light shading; up to 15 athletes per page.
+- Saved values: a box with a saved value is shaded darker grey and shows the value in small grey print at its top right, with ` (N trials)` when several rows are saved, so the box still has room for a handwritten correction. The footer then starts with `Shaded = already recorded (newest saved value shown).`
 - Column strips: a page holds at most 7 metric columns (at least 1 in wide each). More metrics are split into balanced strips (12 metrics = 6 + 6), each repeating `#` and `Athlete`, and each page says `Columns 1-6 of 12 (part 1 of 2)`. Page order: every athlete for strip 1, then every athlete for strip 2, and so on; match rows across strips by `#`.
 - Characters: the built-in font prints Latin-1 only. Curly quotes and dashes print as plain ones; any other character (for example Chinese or Polish `Ł`) prints as `?`, and the first page then says that some text contains characters the PDF cannot print. Long names and labels are cut with `...`.
 - File name: `recording-sheet-<event-name-slug>-<date>.pdf`, as for the CSV / XLSX.
