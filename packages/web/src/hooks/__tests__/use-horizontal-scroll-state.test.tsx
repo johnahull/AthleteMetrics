@@ -116,4 +116,48 @@ describe('useHorizontalScrollState', () => {
     unmount();
     expect(disconnect).toHaveBeenCalled();
   });
+
+  describe('scrollByPage', () => {
+    const scrollBy = vi.fn();
+    beforeEach(() => {
+      scrollBy.mockClear();
+      (Element.prototype as any).scrollBy = scrollBy;
+    });
+    afterEach(() => {
+      delete (Element.prototype as any).scrollBy;
+    });
+
+    it('scrolls one visible page minus the reserved width and one column of overlap, smoothly', () => {
+      vi.stubGlobal('matchMedia', () => ({ matches: false }));
+      const { result } = attach(scroller({ scrollWidth: 1200, clientWidth: 600 }));
+      act(() => result.current.scrollByPage(1, 176));
+      expect(scrollBy).toHaveBeenCalledWith({ left: 600 - 176 - 104, behavior: 'smooth' });
+      act(() => result.current.scrollByPage(-1, 176));
+      expect(scrollBy).toHaveBeenLastCalledWith({ left: -(600 - 176 - 104), behavior: 'smooth' });
+    });
+
+    it('scrolls at least one column on a narrow scroller', () => {
+      vi.stubGlobal('matchMedia', () => ({ matches: false }));
+      const { result } = attach(scroller({ scrollWidth: 1200, clientWidth: 300 }));
+      act(() => result.current.scrollByPage(1, 176));
+      expect(scrollBy).toHaveBeenCalledWith({ left: 104, behavior: 'smooth' });
+    });
+
+    it('jumps without animation when the user prefers reduced motion', () => {
+      vi.stubGlobal('matchMedia', (q: string) => ({ matches: q === '(prefers-reduced-motion: reduce)' }));
+      const { result } = attach(scroller({ scrollWidth: 1200, clientWidth: 600 }));
+      act(() => result.current.scrollByPage(1));
+      expect(scrollBy).toHaveBeenCalledWith({ left: 600 - 104, behavior: 'auto' });
+    });
+
+    it('works without matchMedia and does nothing before a scroller is attached', () => {
+      vi.stubGlobal('matchMedia', undefined);
+      const detached = renderHook(() => useHorizontalScrollState());
+      act(() => detached.result.current.scrollByPage(1));
+      expect(scrollBy).not.toHaveBeenCalled();
+      const { result } = attach(scroller({ scrollWidth: 1200, clientWidth: 600 }));
+      act(() => result.current.scrollByPage(1));
+      expect(scrollBy).toHaveBeenCalledWith({ left: 600 - 104, behavior: 'smooth' });
+    });
+  });
 });

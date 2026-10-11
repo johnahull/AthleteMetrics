@@ -24,6 +24,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useHorizontalScrollState } from "@/hooks/use-horizontal-scroll-state";
+import { useGridKeyboardNav } from "@/hooks/use-grid-keyboard-nav";
 import { useAuth } from "@/lib/auth";
 import { canManageEvent } from "@/lib/event-permissions";
 import { getEventMetricDisplay, type EventMetricWithSiteDetails } from "@/lib/event-metric-display";
@@ -71,6 +72,8 @@ import {
   RefreshCw,
   Activity,
   MoveHorizontal,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { format } from "date-fns";
 import { EVENT_DATA_ENTRY_REGISTRATION_STATUSES } from "@shared/schema";
@@ -121,6 +124,9 @@ const MQ_CODES = new Set([...MQ_BASE_CODES, MQI_TOTAL_CODE, MQI_TRANSITION_TOTAL
 // A dirty cell with a number, also one the server rejected last time (its error is cleared on send)
 const isSendable = (cell: MeasurementCell) =>
   cell.isDirty && cell.value !== "" && !isNaN(Number(cell.value));
+
+const GRID_SCROLLER_ID = "event-data-entry-grid";
+const GRID_KEYS = "ArrowUp ArrowDown ArrowLeft ArrowRight Enter";
 
 // Stable empty list so consumers' memoized prefill does not re-run on every render
 const EMPTY_MEASUREMENTS: Measurement[] = [];
@@ -197,6 +203,10 @@ export default function EventDataEntry() {
     [gridMetrics]
   );
   const gridScroll = useHorizontalScrollState();
+  const onGridKeyDown = useGridKeyboardNav();
+  // The pinned Athlete column: a scroll page is the visible width less this column
+  const athleteHeaderRef = useRef<HTMLTableCellElement>(null);
+  const scrollGrid = (direction: -1 | 1) => gridScroll.scrollByPage(direction, athleteHeaderRef.current?.offsetWidth ?? 0);
   // MQI_TOTAL / MQ_TRANSITION_TOTAL enabled without any base score to enter them from
   const hasOnlyMqTotals =
     !hasMovementQuality &&
@@ -1000,27 +1010,48 @@ export default function EventDataEntry() {
         <CardHeader>
           <CardTitle>Measurement Entry</CardTitle>
           <CardDescription>
-            Enter measurements for each athlete. Tab or click between cells. Required metrics are
-            marked with *.
+            Enter measurements for each athlete. Arrow keys, Enter or Tab move between cells. Required
+            metrics are marked with *.
           </CardDescription>
         </CardHeader>
         <CardContent className="px-3 sm:px-6">
           {gridScroll.hasOverflow && (
-            <p className="mb-2 flex items-center gap-1.5 text-sm text-muted-foreground">
-              <MoveHorizontal className="h-4 w-4 shrink-0" aria-hidden="true" />
-              {metricColumnCount} metric {metricColumnCount === 1 ? "column" : "columns"} · scroll sideways to see {metricColumnCount === 1 ? "it" : "them all"}
-            </p>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <MoveHorizontal className="h-4 w-4 shrink-0" aria-hidden="true" />
+                {metricColumnCount} metric {metricColumnCount === 1 ? "column" : "columns"} · scroll sideways to see {metricColumnCount === 1 ? "it" : "them all"}
+              </p>
+              <div className="flex shrink-0 gap-1">
+                {([-1, 1] as const).map((direction) => (
+                  <Button
+                    key={direction}
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-11 w-11 sm:h-9 sm:w-9"
+                    onClick={() => scrollGrid(direction)}
+                    disabled={direction < 0 ? !gridScroll.canScrollLeft : !gridScroll.canScrollRight}
+                    aria-label={direction < 0 ? "Scroll metrics left" : "Scroll metrics right"}
+                    aria-controls={GRID_SCROLLER_ID}
+                  >
+                    {direction < 0 ? <ChevronLeft aria-hidden="true" /> : <ChevronRight aria-hidden="true" />}
+                  </Button>
+                ))}
+              </div>
+            </div>
           )}
           <div className="relative">
             <div
+              id={GRID_SCROLLER_ID}
               ref={gridScroll.ref}
               className="relative overflow-x-auto scrollbar-always-visible scroll-pl-32 sm:scroll-pl-44"
             >
               <TooltipProvider delayDuration={300}>
-                <table className="w-max min-w-full border-collapse">
+                <table className="w-max min-w-full border-collapse" onKeyDown={onGridKeyDown}>
                   <thead>
                     <tr className="border-b bg-muted/50">
                       <th
+                        ref={athleteHeaderRef}
                         scope="col"
                         className={`${PINNED_CELL} ${ATHLETE_COL_WIDTH} z-20 p-2 sm:p-3 text-left font-medium bg-[color-mix(in_srgb,var(--muted)_50%,var(--card))]`}
                       >
@@ -1075,7 +1106,7 @@ export default function EventDataEntry() {
                     </tr>
                   </thead>
                   <tbody>
-                    {Object.values(gridData).map((row) => (
+                    {Object.values(gridData).map((row, rowIndex) => (
                       <tr key={row.userId} className="group border-b hover:bg-muted/30">
                         <th
                           scope="row"
@@ -1093,7 +1124,7 @@ export default function EventDataEntry() {
                             )}
                           </div>
                         </th>
-                        {gridMetrics.map((metric: EventMetricWithDetails) => {
+                        {gridMetrics.map((metric: EventMetricWithDetails, colIndex) => {
                           const cell = row.measurements[metric.metricCode];
                           if (!cell) return <td key={metric.metricCode} className="p-1" />;
                           const label = (displayByCode.get(metric.metricCode) ?? getEventMetricDisplay(metric)).label;
@@ -1114,6 +1145,7 @@ export default function EventDataEntry() {
                                   sheetExclusionReason(metric) === null ? () => handleAddTrial(cell, label, row.fullName) : undefined
                                 }
                                 addTrialDisabled={isSaving || !!readingSheet}
+                                inputProps={{ "data-grid-row": rowIndex, "data-grid-col": colIndex, "aria-keyshortcuts": GRID_KEYS }}
                               />
                             </td>
                           );
@@ -1126,6 +1158,8 @@ export default function EventDataEntry() {
                               size="sm"
                               onClick={() => openMovementQuality(row.userId)}
                               disabled={measurementsError}
+                              data-grid-row={rowIndex}
+                              data-grid-col={gridMetrics.length}
                               aria-label={`Movement Quality for ${row.fullName}`}
                             >
                               <Activity className="h-4 w-4 mr-2" />

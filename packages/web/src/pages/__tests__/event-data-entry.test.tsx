@@ -1120,6 +1120,49 @@ describe('EventDataEntry', () => {
       stubWidth('clientWidth', 400);
       render(<EventDataEntry />);
       expect(screen.queryByText(/scroll sideways/i)).toBeNull();
+      expect(screen.queryByRole('button', { name: /scroll metrics/i })).toBeNull();
+    });
+
+    it('shows scroll buttons when the grid overflows: left is off at the start, right scrolls the grid', async () => {
+      const user = userEvent.setup();
+      stubWidth('scrollWidth', 1500);
+      stubWidth('clientWidth', 400);
+      const scrollBy = vi.fn();
+      (Element.prototype as any).scrollBy = scrollBy;
+      restore.push(() => delete (Element.prototype as any).scrollBy);
+      render(<EventDataEntry />);
+      const left = screen.getByRole('button', { name: 'Scroll metrics left' });
+      const right = screen.getByRole('button', { name: 'Scroll metrics right' });
+      expect(left).toBeDisabled();
+      expect(right).toBeEnabled();
+      expect(right).toHaveAttribute('aria-controls', 'event-data-entry-grid');
+      expect(document.getElementById('event-data-entry-grid')).not.toBeNull();
+      await user.click(right);
+      expect(scrollBy).toHaveBeenCalledWith(expect.objectContaining({ left: expect.any(Number) }));
+      expect(scrollBy.mock.calls[0][0].left).toBeGreaterThan(0);
+    });
+  });
+
+  describe('keyboard navigation', () => {
+    beforeEach(() => {
+      eventMetricsState = [metric('VERTICAL_JUMP'), metric('FLY10_TIME', { displayOrder: 2 })];
+    });
+
+    it('ArrowDown from Jordan Lee\'s 10-Yard Fly focuses Sam Park\'s 10-Yard Fly', async () => {
+      const user = userEvent.setup();
+      render(<EventDataEntry />);
+      await user.click(screen.getByRole('textbox', { name: '10-Yard Fly for Jordan Lee' }));
+      await user.keyboard('{ArrowDown}');
+      expect(screen.getByRole('textbox', { name: '10-Yard Fly for Sam Park' })).toHaveFocus();
+    });
+
+    it('describes the keys on the inputs and in the card description', () => {
+      render(<EventDataEntry />);
+      expect(screen.getByRole('textbox', { name: 'Vertical Jump for Jordan Lee' })).toHaveAttribute(
+        'aria-keyshortcuts',
+        'ArrowUp ArrowDown ArrowLeft ArrowRight Enter',
+      );
+      expect(screen.getByText(/Arrow keys, Enter or Tab move between cells/)).toBeInTheDocument();
     });
   });
 });

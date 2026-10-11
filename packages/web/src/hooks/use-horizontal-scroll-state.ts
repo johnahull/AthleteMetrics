@@ -1,10 +1,13 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 interface HorizontalScrollState {
   hasOverflow: boolean;
   canScrollLeft: boolean;
   canScrollRight: boolean;
 }
+
+/** One grid metric column: kept as overlap between pages, and the least a page scrolls */
+const SCROLL_COLUMN_PX = 104;
 
 const NO_OVERFLOW: HorizontalScrollState = { hasOverflow: false, canScrollLeft: false, canScrollRight: false };
 
@@ -14,7 +17,8 @@ const NO_OVERFLOW: HorizontalScrollState = { hasOverflow: false, canScrollLeft: 
  * OS scrollbar (overlay scrollbars stay hidden until the user scrolls).
  *
  * Returns a callback ref for the scroller; it re-checks on scroll and when the
- * scroller or its first child (the table) is resized.
+ * scroller or its first child (the table) is resized. scrollByPage scrolls by the
+ * visible width less `reservedPx` (a pinned column) and one column of overlap.
  */
 export function useHorizontalScrollState() {
   const [node, setNode] = useState<HTMLElement | null>(null);
@@ -60,5 +64,17 @@ export function useHorizontalScrollState() {
     };
   }, [node]);
 
-  return { ref: setNode, ...state };
+  const scrollByPage = useCallback(
+    (direction: -1 | 1, reservedPx = 0) => {
+      if (!node) return;
+      const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
+      node.scrollBy({
+        left: direction * Math.max(SCROLL_COLUMN_PX, node.clientWidth - reservedPx - SCROLL_COLUMN_PX),
+        behavior: reduceMotion ? "auto" : "smooth",
+      });
+    },
+    [node]
+  );
+
+  return { ref: setNode, scrollByPage, ...state };
 }
