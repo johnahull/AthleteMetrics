@@ -696,6 +696,7 @@ describe('EventDataEntry', () => {
         measurementsState = { ...measurementsState, data: [saved('m2', 'ath-1', 'FLY10_TIME', 1.6), ...measurementsState.data] };
         throw new Error('Failed to fetch');
       });
+      refetchMeasurements.mockImplementation(async () => ({ data: measurementsState.data }));
       const { rerender } = render(<EventDataEntry />);
       await retype(user, flyCell('Jordan Lee'), '1.60');
       await user.click(addTrialButton('1.60')!);
@@ -703,6 +704,9 @@ describe('EventDataEntry', () => {
       rerender(<EventDataEntry />);
 
       expect(await screen.findByText('2 saved trials')).toBeInTheDocument();
+      // The server kept the trial, so no contradictory failure toast
+      expect(toast).not.toHaveBeenCalledWith(expect.objectContaining({ variant: 'destructive' }));
+      expect(toast).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Trial saved' }));
       expect(flyCell('Jordan Lee')).toHaveAttribute('data-state', 'saved');
       expect(addTrialButton('1.60')).toBeNull();
       expect(screen.getByRole('button', { name: /^save( \(\d+\))?$/i })).toBeDisabled();

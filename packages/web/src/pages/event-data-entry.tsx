@@ -641,6 +641,7 @@ export default function EventDataEntry() {
     if (isSaving || readingSheet || event?.isFrozen || !canAddTrial(cell)) return;
     const inputId = `cell-input-${cell.userId}-${cell.metricCode}`;
     const button = document.activeElement;
+    let failure: string | undefined;
     setIsSaving(true);
     try {
       const result = await bulkCreate.mutateAsync({
@@ -657,12 +658,23 @@ export default function EventDataEntry() {
         patchCells(new Map([[cell, (current) => (current.value === cell.value ? { error } : {})]]));
       }
     } catch (error: any) {
-      toast({ variant: "destructive", title: "Trial not saved", description: error?.message || "Failed to save the trial." });
+      failure = error?.message || "Failed to save the trial.";
     } finally {
       setIsSaving(false);
       // Refetch whatever happened: the row may have been saved before the response was lost. The refetch
       // then shows it as the cell's saved value, so the cell is clean and a retry cannot add it again.
-      await refetchMeasurements();
+      const refetched = await refetchMeasurements();
+      if (failure) {
+        const savedNow = (refetched?.data ?? []).filter(
+          (m: Measurement) => m.userId === cell.userId && m.metric === cell.metricCode,
+        ).length;
+        // The response was lost but the server kept the trial: no failure toast over a saved cell
+        if (savedNow > cell.savedCount) {
+          toast({ title: "Trial saved", description: `${label} for ${athleteName} (${savedNow} trials)` });
+        } else {
+          toast({ variant: "destructive", title: "Trial not saved", description: failure });
+        }
+      }
       // Back to the input unless the user has moved on meanwhile (the hidden + button drops focus to body)
       requestAnimationFrame(() => {
         if (document.activeElement === document.body || document.activeElement === button) {
