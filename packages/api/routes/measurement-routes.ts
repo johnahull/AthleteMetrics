@@ -28,11 +28,12 @@ import { getAuthorizationError, AUTH_ERRORS } from "../helpers/auth-errors";
 import { z } from "zod";
 import { ZodError } from "zod";
 import { db } from "../db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { PAGINATION } from "../constants/pagination";
 import { storage } from "../storage";
 import { clipViewer, omitClipsHiddenFromViewer } from "../utils/measurement-redaction";
+import type { MeasurementVisibilityScope } from "../services/derived-metric-calculator";
 
 // Rate limiting for measurement endpoints
 const measurementLimiter = rateLimit({
@@ -309,6 +310,164 @@ export function registerMeasurementRoutes(app: Express) {
       const message = error instanceof Error ? error.message : "Failed to fetch measurements";
       const statusCode = error instanceof Error && error.message.includes("not found") ? 404 : 500;
       res.status(statusCode).json({ message });
+    }
+  });
+
+  /**
+   * Get calculation preview for derived metrics.
+   * Registered before GET /api/measurements/:id, which would otherwise match "calculate-preview" as an id.
+   */
+  app.get("/api/measurements/calculate-preview", measurementLimiter, requireAuth, async (req, res) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Validate query parameters
+      const querySchema = z.object({
+        athleteId: z.string().uuid(),
+        metricCode: z.string(),
+        date: dateStringSchema,
+      });
+
+      const { athleteId, metricCode, date } = querySchema.parse(req.query);
+
+      // SECURITY: Validate user has access to athlete's organization
+      const targetUserTeams = await db
+        .select({ organizationId: teams.organizationId })
+        .from(userTeams)
+        .innerJoin(teams, eq(userTeams.teamId, teams.id))
+        .where(and(
+          eq(userTeams.userId, athleteId),
+          eq(userTeams.isActive, true),
+          eq(teams.isArchived, false)
+        ));
+
+      if (targetUserTeams.length === 0) {
+        return res.status(404).json({ message: "Athlete not found or not on any team" });
+      }
+
+      // Validate user has access to at least one of the athlete's organizations
+      // SECURITY: the preview reads only rows the caller could read one by one via
+      // GET /api/measurements/:id: rows in the caller's organizations, and personal (no-org)
+      // rows only for the athlete themself. Site admins see every row (scope undefined).
+      let scope: MeasurementVisibilityScope | undefined;
+      if (!canQueryCrossOrganization(user)) {
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        const userOrgIds = new Set(userOrgs.map(o => o.organizationId));
+        const hasOrgAccess = targetUserTeams.some(t => userOrgIds.has(t.organizationId));
+        if (!hasOrgAccess) {
+          return res.status(403).json({
+            message: "Cannot access athletes in different organizations"
+          });
+        }
+        scope = { organizationIds: [...userOrgIds], includePersonal: athleteId === user.id };
+      }
+
+      // Get the metric definition
+      const [metric] = await db
+        .select()
+        .from(siteMetrics)
+        .where(eq(siteMetrics.code, metricCode));
+
+      if (!metric) {
+        return res.status(404).json({ message: "Metric not found" });
+      }
+
+      if (!metric.isDerived || !metric.formula || !metric.dependentMetrics) {
+        return res.json({
+          calculatedValue: null,
+          sourceMetrics: [],
+          formula: null
+        });
+      }
+
+      // Find source measurements using calculator
+      const { DerivedMetricCalculator } = await import("../services/derived-metric-calculator");
+      const calculator = new DerivedMetricCalculator(db);
+
+      // Same gate as the calculator: an anchored metric (e.g. MOMENTUM) only exists on a
+      // date with a verified, direct measurement of the anchor metric (#579).
+      const anchorMetric = metric.calculationConfig?.anchorMetric?.toUpperCase();
+      if (anchorMetric && !(await calculator.hasVerifiedAnchor(athleteId, anchorMetric, date, db, scope))) {
+        return res.json({
+          calculatedValue: null,
+          sourceMetrics: [],
+          missingMetrics: [anchorMetric],
+          formula: metric.formula
+        });
+      }
+
+      const sourceMeasurementsMap = await calculator.findSourceMeasurementsPublic(
+        athleteId,
+        metric.dependentMetrics,
+        date,
+        metric.calculationConfig || {
+          dateMatchStrategy: 'same_date',
+          missingSourceBehavior: 'skip',
+          maxDateDifference: undefined,
+        },
+        undefined,
+        scope
+      );
+
+      if (!sourceMeasurementsMap) {
+        return res.json({
+          calculatedValue: null,
+          sourceMetrics: [],
+          missingMetrics: metric.dependentMetrics,
+          formula: metric.formula
+        });
+      }
+
+      // Build source values and metadata
+      const sourceValues: Record<string, number> = {};
+      const sourceMetrics: Array<{ code: string; label: string; value: number; unit: string; measurementId: string }> = [];
+      const sourceMeasurementIds: string[] = [];
+
+      // Labels and units for all source metrics in one query
+      const sourceCodes = [...sourceMeasurementsMap.keys()];
+      const sourceMetricRows = sourceCodes.length > 0
+        ? await db
+            .select({ code: siteMetrics.code, label: siteMetrics.label, unit: siteMetrics.unit })
+            .from(siteMetrics)
+            .where(inArray(siteMetrics.code, sourceCodes))
+        : [];
+      const sourceMetricByCode = new Map(sourceMetricRows.map(m => [m.code, m]));
+
+      for (const [code, measurement] of sourceMeasurementsMap.entries()) {
+        sourceValues[code.toLowerCase()] = parseFloat(measurement.value);
+        sourceMeasurementIds.push(measurement.id);
+
+        const sourceMetric = sourceMetricByCode.get(code);
+
+        sourceMetrics.push({
+          code,
+          label: sourceMetric?.label || code,
+          value: parseFloat(measurement.value),
+          unit: measurement.units || sourceMetric?.unit || '',
+          measurementId: measurement.id
+        });
+      }
+
+      // Evaluate formula
+      const { evaluateFormula } = await import("../services/formula-service");
+      const calculatedValue = evaluateFormula(metric.formula, sourceValues);
+
+      return res.json({
+        calculatedValue,
+        sourceMetrics,
+        sourceMeasurementIds,
+        formula: metric.formula
+      });
+    } catch (error) {
+      console.error("Calculate preview error:", error);
+      if (error instanceof ZodError) {
+        return res.status(400).json({ message: "Invalid query parameters", errors: error.errors });
+      }
+      const message = error instanceof Error ? error.message : "Failed to calculate preview";
+      res.status(500).json({ message });
     }
   });
 
@@ -1012,138 +1171,6 @@ export function registerMeasurementRoutes(app: Express) {
       // unhandled DB errors, etc.); 500 is the correct semantics rather
       // than 400, which would tell the client the request was malformed.
       res.status(500).json({ message: "Failed to bulk delete measurements" });
-    }
-  });
-
-  /**
-   * Get calculation preview for derived metrics
-   */
-  app.get("/api/measurements/calculate-preview", measurementLimiter, requireAuth, async (req, res) => {
-    try {
-      const user = req.session.user;
-      if (!user?.id) {
-        return res.status(401).json({ message: "User not authenticated" });
-      }
-
-      // Validate query parameters
-      const querySchema = z.object({
-        athleteId: z.string().uuid(),
-        metricCode: z.string(),
-        date: dateStringSchema,
-      });
-
-      const { athleteId, metricCode, date } = querySchema.parse(req.query);
-
-      // SECURITY: Validate user has access to athlete's organization
-      const targetUserTeams = await db
-        .select({ organizationId: teams.organizationId })
-        .from(userTeams)
-        .innerJoin(teams, eq(userTeams.teamId, teams.id))
-        .where(and(
-          eq(userTeams.userId, athleteId),
-          eq(userTeams.isActive, true),
-          eq(teams.isArchived, false)
-        ));
-
-      if (targetUserTeams.length === 0) {
-        return res.status(404).json({ message: "Athlete not found or not on any team" });
-      }
-
-      // Validate user has access to at least one of the athlete's organizations
-      if (!isSiteAdmin(user)) {
-        const userOrgs = await storage.getUserOrganizations(user.id);
-        const userOrgIds = new Set(userOrgs.map(o => o.organizationId));
-        const hasOrgAccess = targetUserTeams.some(t => userOrgIds.has(t.organizationId));
-        if (!hasOrgAccess) {
-          return res.status(403).json({
-            message: "Cannot access athletes in different organizations"
-          });
-        }
-      }
-
-      // Get the metric definition
-      const [metric] = await db
-        .select()
-        .from(siteMetrics)
-        .where(eq(siteMetrics.code, metricCode));
-
-      if (!metric) {
-        return res.status(404).json({ message: "Metric not found" });
-      }
-
-      if (!metric.isDerived || !metric.formula || !metric.dependentMetrics) {
-        return res.json({
-          calculatedValue: null,
-          sourceMetrics: [],
-          formula: null
-        });
-      }
-
-      // Find source measurements using calculator
-      const { DerivedMetricCalculator } = await import("../services/derived-metric-calculator");
-      const calculator = new DerivedMetricCalculator(db);
-
-      const sourceMeasurementsMap = await calculator.findSourceMeasurementsPublic(
-        athleteId,
-        metric.dependentMetrics,
-        date,
-        metric.calculationConfig || {
-          dateMatchStrategy: 'same_date',
-          missingSourceBehavior: 'skip',
-          maxDateDifference: undefined,
-        }
-      );
-
-      if (!sourceMeasurementsMap) {
-        return res.json({
-          calculatedValue: null,
-          sourceMetrics: [],
-          missingMetrics: metric.dependentMetrics,
-          formula: metric.formula
-        });
-      }
-
-      // Build source values and metadata
-      const sourceValues: Record<string, number> = {};
-      const sourceMetrics: Array<{ code: string; label: string; value: number; unit: string; measurementId: string }> = [];
-      const sourceMeasurementIds: string[] = [];
-
-      for (const [code, measurement] of sourceMeasurementsMap.entries()) {
-        sourceValues[code.toLowerCase()] = parseFloat(measurement.value);
-        sourceMeasurementIds.push(measurement.id);
-
-        // Get label and unit from siteMetrics
-        const [sourceMetric] = await db
-          .select()
-          .from(siteMetrics)
-          .where(eq(siteMetrics.code, code));
-
-        sourceMetrics.push({
-          code,
-          label: sourceMetric?.label || code,
-          value: parseFloat(measurement.value),
-          unit: measurement.units || sourceMetric?.unit || '',
-          measurementId: measurement.id
-        });
-      }
-
-      // Evaluate formula
-      const { evaluateFormula } = await import("../services/formula-service");
-      const calculatedValue = evaluateFormula(metric.formula, sourceValues);
-
-      return res.json({
-        calculatedValue,
-        sourceMetrics,
-        sourceMeasurementIds,
-        formula: metric.formula
-      });
-    } catch (error) {
-      console.error("Calculate preview error:", error);
-      if (error instanceof ZodError) {
-        return res.status(400).json({ message: "Invalid query parameters", errors: error.errors });
-      }
-      const message = error instanceof Error ? error.message : "Failed to calculate preview";
-      res.status(500).json({ message });
     }
   });
 
