@@ -157,7 +157,7 @@ export async function downloadRecordingSheet(sheet: RecordingSheet, format: "csv
 
 /** Checked before the file is read into memory */
 export function checkSheetFile(file: { name: string; size: number }): string | null {
-  if (!/.\.(csv|xlsx)$/i.test(file.name)) return "Choose a .csv or .xlsx file (the recording sheet you downloaded).";
+  if (!/\.(csv|xlsx)$/i.test(file.name)) return "Choose a .csv or .xlsx file (the recording sheet you downloaded).";
   if (file.size > MAX_SHEET_FILE_BYTES) return "The file is larger than 1 MB.";
   return null;
 }
@@ -210,7 +210,8 @@ async function checkXlsxZip(data: ArrayBuffer): Promise<void> {
   if (entries.length > MAX_SHEET_ZIP_ENTRIES) {
     throw new Error(`The file has more than ${MAX_SHEET_ZIP_ENTRIES} parts; a recording sheet has far fewer.`);
   }
-  // uncompressedSize is not in JSZip's typings, but every loaded entry has it (from the central directory)
+  // uncompressedSize is not in JSZip's typings, but every loaded entry has it (from the central directory);
+  // private JSZip field; when upgrading jszip re-verify this field name or the guard becomes a no-op (the 20 MB zip-guard test catches a rename)
   const unpacked = entries.reduce(
     (sum, entry) => sum + ((entry as unknown as { _data?: { uncompressedSize?: number } })._data?.uncompressedSize ?? 0),
     0,

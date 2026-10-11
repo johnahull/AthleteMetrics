@@ -210,7 +210,7 @@ describe('recordingSheetToXlsx / parseXlsxSheet', () => {
 });
 
 describe('checkSheetFile', () => {
-  it.each(['sheet.csv', 'SHEET.XLSX'])('accepts %s', (name) => {
+  it.each(['sheet.csv', 'SHEET.XLSX', '.csv', '.xlsx'])('accepts %s', (name) => {
     expect(checkSheetFile({ name, size: 100 })).toBeNull();
   });
 

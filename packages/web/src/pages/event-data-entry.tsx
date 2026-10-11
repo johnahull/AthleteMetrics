@@ -819,9 +819,11 @@ export default function EventDataEntry() {
                 ? `Reading ${readingSheet}…`
                 : isSaving
                   ? "Wait for the save to finish before uploading a sheet."
-                  : hasUnsavedEdits
-                    ? "Save or undo your unsaved changes before uploading a sheet."
-                    : undefined
+                  : conflictCount > 0
+                    ? "Resolve all conflicts (or discard the import) before uploading a new sheet."
+                    : hasUnsavedEdits
+                      ? "Save or discard your unsaved changes before uploading a sheet."
+                      : undefined
             }
             onDownload={handleSheetDownload}
             onUpload={handleSheetUpload}

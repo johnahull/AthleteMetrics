@@ -692,7 +692,16 @@ describe('EventDataEntry', () => {
       render(<EventDataEntry />);
       await user.type(cell('Jordan Lee', 'Vertical Jump'), '30');
       expect(screen.getByRole('button', { name: /upload filled sheet/i })).toBeDisabled();
-      expect(screen.getByRole('button', { name: /upload filled sheet/i })).toHaveAccessibleDescription(/unsaved changes/i);
+      expect(screen.getByRole('button', { name: /upload filled sheet/i })).toHaveAccessibleDescription(/discard your unsaved changes/i);
+    });
+
+    it('tells you to resolve conflicts (not save) when only conflicts are pending', async () => {
+      const user = userEvent.setup();
+      measurementsState.data = [saved('m1', 'ath-1', 'FLY10_TIME', 1.65)];
+      render(<EventDataEntry />);
+      await upload(user, csvFile(['ath-1,Jordan Lee,,1.70']));
+      expect(cell('Jordan Lee', '10-Yard Fly')).toHaveAttribute('data-state', 'conflict');
+      expect(screen.getByRole('button', { name: /upload filled sheet/i })).toHaveAccessibleDescription(/resolve all conflicts/i);
     });
 
     it('loads file values as unsaved cells, flags conflicts, lists rejected rows and moves focus to the summary', async () => {
