@@ -3,7 +3,7 @@
  * Allows coaches to enter measurements for checked-in athletes at an event
  */
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import {
   useEvent,
@@ -27,9 +27,22 @@ import { useToast } from "@/hooks/use-toast";
 import { useHorizontalScrollState } from "@/hooks/use-horizontal-scroll-state";
 import { useAuth } from "@/lib/auth";
 import { canManageEvent } from "@/lib/event-permissions";
-import { getEventMetricDisplay } from "@/lib/event-metric-display";
+import { getEventMetricDisplay, type EventMetricWithSiteDetails } from "@/lib/event-metric-display";
 import { getCellState, type CellState } from "@/lib/event-grid-cell-state";
 import { chunkBulkItems } from "@/lib/event-grid-save";
+import { buildRecordingSheet, downloadRecordingSheet, readSheetFile, sheetIgnoredMetrics } from "@/lib/recording-sheet";
+import {
+  applyImportPlan,
+  discardImport,
+  emptyImportPlan,
+  planSheetImport,
+  resolveConflict,
+  type PlannedCell,
+  type SheetImportPlan,
+} from "@/lib/recording-sheet-import";
+import { RecordingSheetActions } from "@/components/events/RecordingSheetActions";
+import { RecordingSheetConflict } from "@/components/events/RecordingSheetConflict";
+import { RecordingSheetImportSummary, sheetImportAnnouncement } from "@/components/events/RecordingSheetImportSummary";
 import {
   MovementQualityPanel,
   type MovementQualitySaveInput,
@@ -56,12 +69,12 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { EVENT_DATA_ENTRY_REGISTRATION_STATUSES } from "@shared/schema";
-import type { EventMetric, Measurement, SiteMetric } from "@shared/schema";
+import type { EventMetric, Measurement } from "@shared/schema";
 import { toCalendarDate } from "@/utils/date-utils";
 
 // Event metric with its site metric, as the server returns it (includeDetails=true)
 interface EventMetricWithDetails extends EventMetric {
-  metricDetails?: Pick<SiteMetric, "label" | "unit" | "category"> | null;
+  metricDetails?: EventMetricWithSiteDetails["metricDetails"];
 }
 
 // Cell data type for the measurement grid
@@ -76,10 +89,16 @@ interface MeasurementCell {
   savedCount: number;
   isDirty: boolean;
   error?: string;
+  /** Value from an uploaded sheet that differs from the saved one, waiting for a choice */
+  importedValue?: string;
+  /** The unsaved value came from an uploaded sheet */
+  fromImport?: boolean;
 }
 
 const CELL_STATE_CLASSES: Record<CellState, string> = {
   error: "border-red-500 focus:ring-red-500",
+  conflict: "border-2 border-orange-500 bg-orange-50",
+  imported: "border-sky-500 bg-sky-50",
   dirty: "border-yellow-500 bg-yellow-50",
   saved: "bg-green-50",
   empty: "",
@@ -121,6 +140,12 @@ export default function EventDataEntry() {
   const [isSaving, setIsSaving] = useState(false);
   const [mqAthleteId, setMqAthleteId] = useState<string | null>(null);
   const [mqServerErrors, setMqServerErrors] = useState<Record<string, string> | undefined>();
+  const [sheetImport, setSheetImport] = useState<{ fileName: string; plan: SheetImportPlan; skipped: PlannedCell[] } | null>(null);
+  /** Name of the uploaded sheet being read; Upload, Save and Discard are off meanwhile */
+  const [readingSheet, setReadingSheet] = useState<string | null>(null);
+  // The grid as last rendered, for applying a sheet after its (async) read without losing cells typed meanwhile
+  const gridRef = useRef(gridData);
+  gridRef.current = gridData;
 
   // Fetch event details
   const { data: event, isLoading: eventLoading } = useEvent(eventId);
@@ -241,7 +266,11 @@ export default function EventDataEntry() {
               value: previous.value,
               error: previous.error,
               isDirty: previous.value !== originalValue,
+              fromImport: previous.fromImport,
             };
+          } else if (previous?.importedValue !== undefined) {
+            // A conflict from an uploaded sheet waits for its choice
+            row.measurements[metricCode] = { ...cell, importedValue: previous.importedValue };
           }
         }
       }
@@ -279,6 +308,9 @@ export default function EventDataEntry() {
                 value,
                 isDirty,
                 error,
+                // A typed value wins over a pending file value
+                importedValue: undefined,
+                fromImport: false,
               },
             },
           },
@@ -289,17 +321,92 @@ export default function EventDataEntry() {
   );
 
   // Calculate dirty count
-  const dirtyCount = useMemo(() => {
-    let count = 0;
-    Object.values(gridData).forEach((row) => {
-      Object.values(row.measurements).forEach((cell) => {
-        if (isSendable(cell)) {
-          count++;
-        }
-      });
-    });
-    return count;
+  const { dirtyCount, conflictCount, hasUnsavedEdits, hasPendingImport } = useMemo(() => {
+    const cells = Object.values(gridData).flatMap((row) => Object.values(row.measurements));
+    return {
+      dirtyCount: cells.filter(isSendable).length,
+      conflictCount: cells.filter((c) => c.importedValue !== undefined).length,
+      hasUnsavedEdits: cells.some((c) => c.isDirty || c.importedValue !== undefined),
+      hasPendingImport: cells.some((c) => c.importedValue !== undefined || (c.isDirty && c.fromImport)),
+    };
   }, [gridData]);
+
+  const updateCells = (update: (cell: MeasurementCell) => MeasurementCell, userId?: string, metricCode?: string) =>
+    setGridData((prev) => {
+      const next = { ...prev };
+      Object.values(prev).forEach((row) => {
+        if (userId && row.userId !== userId) return;
+        const measurements = { ...row.measurements };
+        Object.entries(measurements).forEach(([code, cell]) => {
+          if (!metricCode || code === metricCode) measurements[code] = update(cell);
+        });
+        next[row.userId] = { ...row, measurements };
+      });
+      return next;
+    });
+
+  const importMetricLabels = useMemo(() => new Map([...displayByCode].map(([code, d]) => [code, d.label])), [displayByCode]);
+  const importAthleteNames = useMemo(
+    () => new Map(Object.values(gridData).map((row) => [row.userId, row.fullName])),
+    [gridData],
+  );
+
+  // Recording sheet: grid athletes x metrics that can be typed
+  const recordingSheet = () =>
+    buildRecordingSheet({
+      event: event!,
+      metrics: gridMetrics,
+      athletes: Object.values(gridData).map((row) => ({ userId: row.userId, name: row.fullName })),
+    });
+
+  const handleSheetUpload = async (file: File) => {
+    if (readingSheet || !event) return;
+    setReadingSheet(file.name);
+    let plan: SheetImportPlan;
+    try {
+      // Snapshot before awaiting: the event or metrics may change (or vanish) while the file is read
+      const sheetMetrics = recordingSheet().metrics;
+      const ignoredMetrics = sheetIgnoredMetrics(sortedMetrics);
+      const sheet = await readSheetFile(file);
+      // Saved values are read after the file is parsed: a refetch landing meanwhile must not cause false conflicts
+      plan = planSheetImport({
+        ...sheet,
+        eventId: eventId!,
+        athletes: Object.values(gridRef.current).map((row) => ({
+          userId: row.userId,
+          name: row.fullName,
+          saved: Object.fromEntries(Object.entries(row.measurements).map(([code, c]) => [code, c.originalValue])),
+        })),
+        metrics: sheetMetrics,
+        ignoredMetrics,
+      });
+    } catch (error) {
+      plan = emptyImportPlan(error instanceof Error ? error.message : "The file could not be read.");
+    }
+    // Cells typed while the file was read keep the typed value (reported as skipped)
+    const applied = plan.fileError ? { grid: gridRef.current, skipped: [] } : applyImportPlan(gridRef.current, plan);
+    setGridData(applied.grid);
+    setSheetImport({ fileName: file.name, plan, skipped: applied.skipped });
+    setReadingSheet(null);
+  };
+
+  const handleSheetDownload = async (format: "csv" | "xlsx") => {
+    try {
+      await downloadRecordingSheet(recordingSheet(), format);
+    } catch {
+      toast({
+        title: "Could not create the sheet",
+        description: "Check your connection and try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const sheetAnnouncement = readingSheet
+    ? { status: `Reading ${readingSheet}…`, alert: "" }
+    : sheetImport
+      ? sheetImportAnnouncement(sheetImport.plan, sheetImport.skipped)
+      : { status: "", alert: "" };
 
   // Calculate completion stats
   const completionStats = useMemo(() => {
@@ -346,6 +453,7 @@ export default function EventDataEntry() {
 
   // Handle save
   const handleSave = async () => {
+    if (conflictCount > 0) return;
     if (event?.isFrozen) {
       toast({
         variant: "destructive",
@@ -714,14 +822,30 @@ export default function EventDataEntry() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-start gap-3">
+          <RecordingSheetActions
+            disabledReason={event.isFrozen ? "This event is frozen, so results cannot be entered from a sheet." : undefined}
+            uploadBlockedReason={
+              readingSheet
+                ? `Reading ${readingSheet}…`
+                : isSaving
+                  ? "Wait for the save to finish before uploading a sheet."
+                  : conflictCount > 0
+                    ? "Resolve all conflicts (or discard the import) before uploading a new sheet."
+                    : hasUnsavedEdits
+                      ? "Save or discard your unsaved changes before uploading a sheet."
+                      : undefined
+            }
+            onDownload={handleSheetDownload}
+            onUpload={handleSheetUpload}
+          />
           <Button variant="outline" size="sm" onClick={handleRefresh}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
           <Button
             onClick={handleSave}
-            disabled={dirtyCount === 0 || isSaving || event.isFrozen}
+            disabled={dirtyCount === 0 || conflictCount > 0 || isSaving || !!readingSheet || event.isFrozen}
           >
             {isSaving ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -808,6 +932,43 @@ export default function EventDataEntry() {
             You have {dirtyCount} unsaved measurement{dirtyCount !== 1 && "s"}.
           </span>
         </div>
+      )}
+
+      {conflictCount > 0 && (
+        <div className="flex items-center gap-2 p-3 bg-orange-50 rounded-lg text-orange-800">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span className="text-sm">
+            {conflictCount} {conflictCount === 1 ? "conflict" : "conflicts"} to resolve before saving: choose
+            Keep saved or Use file value on the outlined cells.
+          </span>
+        </div>
+      )}
+
+      {/* Mounted at all times so screen readers announce changes (a region added with its text often is not read) */}
+      <div data-testid="recording-sheet-status" role="status" aria-live="polite" className="sr-only">
+        {sheetAnnouncement.status}
+      </div>
+      <div data-testid="recording-sheet-alert" role="alert" className="sr-only">
+        {sheetAnnouncement.alert}
+      </div>
+
+      {sheetImport && (
+        <RecordingSheetImportSummary
+          fileName={sheetImport.fileName}
+          plan={sheetImport.plan}
+          skipped={sheetImport.skipped}
+          busy={isSaving || !!readingSheet}
+          conflictsLeft={conflictCount}
+          hasPendingImport={hasPendingImport}
+          metricLabels={importMetricLabels}
+          athleteNames={importAthleteNames}
+          onResolveAll={(choice) => updateCells((c) => resolveConflict(c, choice))}
+          onDiscard={() => {
+            updateCells(discardImport);
+            setSheetImport(null);
+          }}
+          onClose={() => setSheetImport(null)}
+        />
       )}
 
       {/* Data Entry Grid */}
@@ -915,10 +1076,15 @@ export default function EventDataEntry() {
                           const trialsId = `cell-trials-${row.userId}-${metric.metricCode}`;
                           const hasTrials = cell.savedCount > 1;
                           const describedBy = [cell.error && errorId, hasTrials && trialsId].filter(Boolean).join(" ");
+                          const label = (displayByCode.get(metric.metricCode) ?? getEventMetricDisplay(metric)).label;
+                          const inputId = `cell-input-${row.userId}-${metric.metricCode}`;
+                          const state = getCellState(cell);
 
                           return (
                             <td key={metric.metricCode} className="p-1">
                               <Input
+                                id={inputId}
+                                data-state={state}
                                 type="text"
                                 inputMode="decimal"
                                 value={cell.value}
@@ -926,13 +1092,25 @@ export default function EventDataEntry() {
                                   handleCellChange(row.userId, metric.metricCode, e.target.value)
                                 }
                                 disabled={event.isFrozen}
-                                aria-label={`${(displayByCode.get(metric.metricCode) ?? getEventMetricDisplay(metric)).label} for ${row.fullName}`}
+                                aria-label={`${label} for ${row.fullName}`}
                                 aria-required={metric.isRequired || undefined}
                                 aria-invalid={cell.error ? true : undefined}
                                 aria-describedby={describedBy || undefined}
-                                className={`h-9 px-1 text-center ${CELL_STATE_CLASSES[getCellState(cell)]}`}
+                                className={`h-9 px-1 text-center ${CELL_STATE_CLASSES[state]}`}
                                 placeholder="-"
                               />
+                              {cell.importedValue !== undefined && (
+                                <RecordingSheetConflict
+                                  metricLabel={label}
+                                  athleteName={row.fullName}
+                                  savedValue={cell.value}
+                                  fileValue={cell.importedValue}
+                                  inputId={inputId}
+                                  onResolve={(choice) =>
+                                    updateCells((c) => resolveConflict(c, choice), row.userId, metric.metricCode)
+                                  }
+                                />
+                              )}
                               {cell.error && (
                                 <div id={errorId} className="text-[11px] leading-tight text-red-500 text-center mt-1">
                                   {cell.error}
@@ -1014,6 +1192,14 @@ export default function EventDataEntry() {
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded bg-yellow-50 border border-yellow-500" />
           <span>Unsaved changes</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 rounded bg-sky-50 border border-sky-500" />
+          <span>From sheet (unsaved)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 rounded bg-orange-50 border-2 border-orange-500" />
+          <span>Conflict with saved value</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded bg-white border border-gray-300" />
