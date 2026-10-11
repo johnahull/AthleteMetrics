@@ -3,7 +3,8 @@
  * Provides type-safe API calls and data fetching hooks for event management
  */
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCallback } from "react";
+import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type {
   Event,
   InsertEvent,
@@ -1404,7 +1405,11 @@ export interface MovementQualityScoreWrite {
 
 /** Thrown when some Movement Quality scores were rejected; nothing was saved */
 export class MovementQualitySaveError extends Error {
-  constructor(message: string, public readonly errors: Array<{ metric: string; error: string }>) {
+  constructor(
+    message: string,
+    public readonly errors: Array<{ metric: string; error: string }>,
+    public readonly status?: number
+  ) {
     super(message);
     this.name = 'MovementQualitySaveError';
   }
@@ -1434,9 +1439,10 @@ export async function saveEventMovementQuality(
     }
     const message = body?.error || body?.message || 'Failed to save Movement Quality scores';
     if (Array.isArray(body?.errors)) {
-      throw new MovementQualitySaveError(message, body.errors);
+      throw new MovementQualitySaveError(message, body.errors, response.status);
     }
-    throw new Error(message);
+    // status: callers saving several athletes stop on 429 / 403 / 5xx but not on an athlete-specific 400
+    throw Object.assign(new Error(message), { status: response.status });
   }
 
   return response.json();
@@ -1536,18 +1542,31 @@ export function useSaveEventMovementQuality() {
       userId: string;
       upserts: MovementQualityScoreWrite[];
       deletes: string[];
+      /** false: no invalidation at all; the caller saves several athletes, then refetches and calls useInvalidateAfterMovementQualitySave once */
+      invalidateMeasurements?: boolean;
     }) => saveEventMovementQuality(eventId, userId, { upserts, deletes }),
-    onSuccess: (_, { eventId }) => {
+    onSuccess: (_, { eventId, invalidateMeasurements = true }) => {
+      if (!invalidateMeasurements) return;
       queryClient.invalidateQueries({ queryKey: ['events', eventId, 'measurements'] });
-      queryClient.invalidateQueries({ queryKey: ['events', eventId, 'results'] });
-      // MQI_TOTAL is recalculated server-side: refresh athlete / measurement / analytics views
-      queryClient.invalidateQueries({ queryKey: ['/api/measurements'] });
-      queryClient.invalidateQueries({ queryKey: ['measurements'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/athletes'] });
-      queryClient.invalidateQueries({ queryKey: ['athletes'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/analytics/dashboard'] });
+      invalidateAfterMovementQualitySave(queryClient, eventId);
     },
   });
+}
+
+/** Views that show Movement Quality results; MQI_TOTAL is recalculated server-side (event measurements not included) */
+function invalidateAfterMovementQualitySave(queryClient: QueryClient, eventId: string) {
+  queryClient.invalidateQueries({ queryKey: ['events', eventId, 'results'] });
+  queryClient.invalidateQueries({ queryKey: ['/api/measurements'] });
+  queryClient.invalidateQueries({ queryKey: ['measurements'] });
+  queryClient.invalidateQueries({ queryKey: ['/api/athletes'] });
+  queryClient.invalidateQueries({ queryKey: ['athletes'] });
+  queryClient.invalidateQueries({ queryKey: ['/api/analytics/dashboard'] });
+}
+
+/** For callers that saved Movement Quality with invalidateMeasurements: false (and refetch the event measurements themselves) */
+export function useInvalidateAfterMovementQualitySave() {
+  const queryClient = useQueryClient();
+  return useCallback((eventId: string) => invalidateAfterMovementQualitySave(queryClient, eventId), [queryClient]);
 }
 
 // ============================================================================

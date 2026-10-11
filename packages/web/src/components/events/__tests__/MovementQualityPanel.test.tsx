@@ -216,3 +216,17 @@ describe('MovementQualityPanel', () => {
     expect(screen.getByRole('button', { name: /save/i })).toBeDisabled();
   });
 });
+
+describe('MovementQualityPanel saveBlockedReason', () => {
+  it('shows the reason and turns Save scores off', () => {
+    setup({ saveBlockedReason: 'This athlete has unsaved scores from a sheet. Save the page or discard the file values first.' });
+    expect(screen.getByText('This athlete has unsaved scores from a sheet. Save the page or discard the file values first.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /save scores/i })).toBeDisabled();
+  });
+
+  it('keeps Save scores on without a reason', () => {
+    setup();
+    expect(screen.getByRole('button', { name: /save scores/i })).toBeEnabled();
+  });
+});
+

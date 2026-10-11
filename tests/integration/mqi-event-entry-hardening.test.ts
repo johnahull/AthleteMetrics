@@ -613,6 +613,34 @@ describe('PUT /api/events/:eventId/athletes/:userId/movement-quality', () => {
     expect((await rowsFor(athlete.id, 'MQI_TOTAL')).filter((t) => t.date === eventDay(ev))).toHaveLength(0);
   });
 
+  // The data-entry recording sheet saves scores only ({ metric, value }); notes and clips set in the panel must stay
+  it('an upsert without notes / mediaUrl keeps the saved note and clip', async () => {
+    const ev = await mkEvent();
+    const coach = await mkUser('coachSheet');
+    extraUserIds.push(coach.id);
+    await db.insert(userOrganizations).values({ userId: coach.id, organizationId: orgA.id, role: 'coach' } as any);
+    const cookie = await login(coach.username);
+
+    const first = await saveMq(
+      ev.id,
+      athlete.id,
+      { upserts: [{ metric: 'MQ_DECEL', value: 2, notes: 'late hip', mediaUrl: 'https://clips.example.com/decel' }], deletes: [] },
+      cookie,
+    );
+    expect(first.status).toBe(200);
+    const [before] = await rowsFor(athlete.id, 'MQ_DECEL', ev.id);
+
+    const res = await saveMq(ev.id, athlete.id, { upserts: [{ metric: 'MQ_DECEL', value: 1 }], deletes: [] }, cookie);
+    expect(res.status).toBe(200);
+    const rows = await rowsFor(athlete.id, 'MQ_DECEL', ev.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe(before.id);
+    expect(Number(rows[0].value)).toBe(1);
+    expect(rows[0].notes).toBe('late hip');
+    expect(rows[0].mediaUrl).toBe(before.mediaUrl);
+    expect(rows[0].mediaUrl).toBe('https://clips.example.com/decel');
+  });
+
   it('a realistic 25-athlete session (one save per athlete plus grid saves) is not rate limited', async () => {
     const ev = await mkEvent();
     const roster = [];

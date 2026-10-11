@@ -84,6 +84,11 @@ describe('toPdfText', () => {
     expect(toPdfText('O’Brien “Bo” – Jr')).toEqual({ text: 'O\'Brien "Bo" - Jr', altered: false });
   });
 
+  it('maps the arrows of the Movement Quality transition labels to ASCII without flagging', () => {
+    expect(toPdfText('Decel → Lateral Cut')).toEqual({ text: 'Decel -> Lateral Cut', altered: false });
+    expect(toPdfText('Gas ↔ Brake')).toEqual({ text: 'Gas <-> Brake', altered: false });
+  });
+
   it('replaces characters Helvetica cannot print with ? and flags it', () => {
     expect(toPdfText('李小龍')).toEqual({ text: '???', altered: true });
     expect(toPdfText('Łukasz')).toEqual({ text: '?ukasz', altered: true });
@@ -209,6 +214,23 @@ describe('recordingSheetToPdf', () => {
     const pdf = new TextDecoder('latin1').decode(await recordingSheetToPdf({ ...sheet, metrics: metrics(3), athletes: athletes(4) }));
     expect(pdf).not.toContain('Shaded = already recorded');
     expect(pdf).not.toMatch(/\b0\.82\d* g\n/);
+  });
+
+  it('prints the Movement Quality rubric on strips with a Movement Quality column only', async () => {
+    const mq = [
+      { code: 'MQ_DECEL', label: 'Decel → Lateral Cut', unit: '0-3' },
+      { code: 'MQ_JUMP', label: 'Jump', unit: '0-3' },
+    ];
+    const pdf = new TextDecoder('latin1').decode(
+      await recordingSheetToPdf({ ...sheet, metrics: [...metrics(7), ...mq], athletes: athletes(3) }),
+    );
+    const pages = pageTexts(pdf);
+    expect(pages).toHaveLength(2);
+    const rubric = 'Movement Quality: 3 Efficient, 2 Functional, 1 Compensated, 0 Absent';
+    expect(pages[0]).not.toContain(rubric);
+    expect(pages[1]).toContain(rubric);
+    expect(pages[1]).toContain('Decel -> Lateral');
+    expect(pdf).not.toContain('Some text contains characters');
   });
 
   describe('page count mismatch', () => {

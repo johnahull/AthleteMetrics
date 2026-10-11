@@ -8,6 +8,7 @@ import type { Measurement } from '@shared/schema';
 
 const mutateSaveMq = vi.fn();
 const mutateBulk = vi.fn();
+const invalidateAfterMq = vi.fn();
 const refetchMeasurements = vi.fn();
 const toast = vi.fn();
 
@@ -79,6 +80,7 @@ vi.mock('@/lib/events-api', async () => {
     }),
     useCreateEventMeasurementsBulk: () => ({ mutateAsync: mutateBulk }),
     useSaveEventMovementQuality: () => ({ mutateAsync: mutateSaveMq }),
+    useInvalidateAfterMovementQualitySave: () => invalidateAfterMq,
   };
 });
 
@@ -129,6 +131,7 @@ const verticalJumpCell = (rowName: string) => {
 beforeEach(() => {
   mutateSaveMq.mockReset();
   mutateBulk.mockReset();
+  invalidateAfterMq.mockReset();
   refetchMeasurements.mockReset();
   toast.mockReset();
   downloadRecordingSheet.mockReset();
@@ -1112,6 +1115,152 @@ describe('EventDataEntry', () => {
       render(<EventDataEntry />);
       await upload(user, file);
       expect(cell('Sam Park', 'Vertical Jump')).toHaveValue('28.5');
+    });
+  });
+
+  describe('Movement Quality on the recording sheet', () => {
+    const MQ_HEADER = 'Athlete ID (do not edit),Athlete,Vertical Jump (in) [VERTICAL_JUMP],Deceleration (0-3) [MQ_DECEL],Jump (0-3) [MQ_JUMP]';
+    const csvFile = (lines: string[]) => new File([['Event ID,ev-1', MQ_HEADER, ...lines].join('\n')], 'sheet.csv');
+    const upload = async (user: ReturnType<typeof userEvent.setup>, file: File) => {
+      await user.upload(screen.getByLabelText('Recording sheet file'), file);
+      return screen.findByRole('region', { name: /^Sheet/ });
+    };
+    const saveButton = () => screen.getByRole('button', { name: /^save( \(\d+\))?$/i });
+    const mqButton = (name: string) => screen.getByRole('button', { name: `Movement Quality for ${name}` });
+    const tooManyRequests = () => Object.assign(new Error('Too many requests, please try again later.'), { status: 429 });
+
+    beforeEach(() => {
+      registrationsState = [...REGISTRATIONS, { id: 'r3', userId: 'ath-3', status: 'checked_in', userFullName: 'Pat Doe' }];
+    });
+
+    it('downloads the 8 pattern columns after the grid metrics, with saved scores pre-printed', async () => {
+      const user = userEvent.setup();
+      measurementsState.data = [m('ath-1', 'MQ_DECEL', 0)];
+      render(<EventDataEntry />);
+      await user.click(screen.getByRole('button', { name: /download sheet/i }));
+      await user.click(await screen.findByRole('menuitem', { name: /csv/i }));
+      const sheet = downloadRecordingSheet.mock.calls[0][0];
+      expect(sheet.metrics.map((c: { code: string }) => c.code)).toEqual(['VERTICAL_JUMP', ...PATTERNS]);
+      expect(sheet.metrics[3]).toMatchObject({ code: 'MQ_DECEL', label: 'Deceleration', unit: '0-3' });
+      expect(sheet.athletes[0]).toEqual({ userId: 'ath-1', name: 'Jordan Lee', values: { MQ_DECEL: '0' }, trials: {} });
+    });
+
+    it('shows sheet scores as pending in the Movement Quality column and a conflict blocks Save', async () => {
+      const user = userEvent.setup();
+      measurementsState.data = [m('ath-1', 'MQ_DECEL', 2)];
+      render(<EventDataEntry />);
+      await upload(user, csvFile(['ath-1,Jordan Lee,,3,2', 'ath-2,Sam Park,,1,0']));
+
+      expect(screen.getByRole('button', { name: /^Movement Quality conflicts for Jordan Lee: 1 conflict, 1 score from sheet/ })).toBeInTheDocument();
+      expect(mqButton('Sam Park')).toHaveAccessibleDescription('2 scores from sheet (unsaved)');
+      // The saved summary stays the saved scores only
+      expect(mqButton('Sam Park')).toHaveTextContent('Not scored');
+      expect(screen.getByText(/1 conflict to resolve/i)).toBeInTheDocument();
+      expect(saveButton()).toBeDisabled();
+      expect(screen.getByRole('button', { name: /upload filled sheet/i })).toBeDisabled();
+    });
+
+    it('Use file value then Save sends one PUT per athlete with scores only, never through the bulk route', async () => {
+      const user = userEvent.setup();
+      measurementsState.data = [m('ath-1', 'MQ_DECEL', 2)];
+      mutateSaveMq.mockResolvedValue({ saved: [], deleted: [] });
+      mutateBulk.mockResolvedValue({ created: [{ ...m('ath-1', 'VERTICAL_JUMP', 30), id: 'n1', index: 0 }], replaced: [], errors: [] });
+      render(<EventDataEntry />);
+      await upload(user, csvFile(['ath-1,Jordan Lee,30,3,2', 'ath-2,Sam Park,,1,']));
+      await user.click(screen.getByRole('button', { name: /^Movement Quality conflicts for Jordan Lee/ }));
+      await user.click(await screen.findByRole('button', { name: 'Use file value for Deceleration' }));
+      expect(saveButton()).toHaveTextContent('Save (4)');
+      await user.click(saveButton());
+
+      await waitFor(() => expect(mutateSaveMq).toHaveBeenCalledTimes(2));
+      expect(mutateSaveMq.mock.calls.map((c) => c[0])).toEqual([
+        { eventId: 'ev-1', userId: 'ath-1', upserts: [{ metric: 'MQ_DECEL', value: 3 }, { metric: 'MQ_JUMP', value: 2 }], deletes: [], invalidateMeasurements: false },
+        { eventId: 'ev-1', userId: 'ath-2', upserts: [{ metric: 'MQ_DECEL', value: 1 }], deletes: [], invalidateMeasurements: false },
+      ]);
+      expect(mutateBulk).toHaveBeenCalledTimes(1);
+      expect(mutateBulk.mock.calls[0][0].measurements.map((i: { metric: string }) => i.metric)).toEqual(['VERTICAL_JUMP']);
+      await waitFor(() => expect(refetchMeasurements).toHaveBeenCalledTimes(1));
+      expect(invalidateAfterMq).toHaveBeenCalledWith('ev-1');
+      expect(toast).toHaveBeenLastCalledWith(
+        expect.objectContaining({ title: 'Saved Successfully', description: 'Saved 1 measurements and Movement Quality for 2 athletes.' }),
+      );
+      expect(saveButton()).toBeDisabled();
+    });
+
+    it('a rate limit on the 2nd athlete stops the loop and keeps the rest unsaved', async () => {
+      const user = userEvent.setup();
+      mutateSaveMq.mockResolvedValueOnce({ saved: [], deleted: [] }).mockRejectedValueOnce(tooManyRequests());
+      render(<EventDataEntry />);
+      await upload(user, csvFile(['ath-1,Jordan Lee,,3,', 'ath-2,Sam Park,,1,', 'ath-3,Pat Doe,,2,']));
+      await user.click(saveButton());
+
+      await waitFor(() => expect(refetchMeasurements).toHaveBeenCalledTimes(1));
+      expect(mutateSaveMq).toHaveBeenCalledTimes(2);
+      expect(toast).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          variant: 'destructive',
+          description: 'Saved MQ for 1 of 3 athletes. Too many requests, please try again later. Wait up to 15 minutes, then save again to send the rest.',
+        }),
+      );
+      expect(mqButton('Sam Park')).toHaveAccessibleDescription('1 score from sheet (unsaved)');
+      expect(mqButton('Pat Doe')).toHaveAccessibleDescription('1 score from sheet (unsaved)');
+      expect(mqButton('Jordan Lee')).not.toHaveAttribute('aria-describedby');
+      expect(saveButton()).toHaveTextContent('Save (2)');
+    });
+
+    it('per-score errors from the server stay on that athlete; the next athlete is still saved', async () => {
+      const user = userEvent.setup();
+      mutateSaveMq
+        .mockRejectedValueOnce(new MovementQualitySaveError('1 score could not be saved', [{ metric: 'MQ_DECEL', error: 'Value must be at most 3' }]))
+        .mockResolvedValueOnce({ saved: [], deleted: [] });
+      render(<EventDataEntry />);
+      await upload(user, csvFile(['ath-1,Jordan Lee,,3,', 'ath-2,Sam Park,,1,']));
+      await user.click(saveButton());
+
+      await waitFor(() => expect(mutateSaveMq).toHaveBeenCalledTimes(2));
+      expect(await screen.findByText('Deceleration: Value must be at most 3')).toBeInTheDocument();
+      expect(mqButton('Jordan Lee')).toHaveAccessibleDescription('Deceleration: Value must be at most 3');
+      await waitFor(() =>
+        expect(toast).toHaveBeenLastCalledWith(
+          expect.objectContaining({ title: 'Partial Save', description: 'Saved MQ for 1 of 2 athletes. 1 could not be saved; see the Movement Quality column.' }),
+        ),
+      );
+    });
+
+    it("blocks the panel's Save for an athlete with unsaved sheet scores", async () => {
+      const user = userEvent.setup();
+      render(<EventDataEntry />);
+      await upload(user, csvFile(['ath-1,Jordan Lee,,3,']));
+      await user.click(mqButton('Jordan Lee'));
+      const dialog = await screen.findByRole('dialog');
+      expect(dialog).toHaveTextContent('This athlete has unsaved scores from a sheet. Save the page or discard the file values first.');
+      expect(within(dialog).getByRole('button', { name: /save scores/i })).toBeDisabled();
+      await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+      await user.click(mqButton('Sam Park'));
+      expect(within(await screen.findByRole('dialog')).getByRole('button', { name: /save scores/i })).toBeEnabled();
+    });
+
+    it('"Discard file values" clears the pending Movement Quality scores', async () => {
+      const user = userEvent.setup();
+      measurementsState.data = [m('ath-2', 'MQ_DECEL', 2)];
+      render(<EventDataEntry />);
+      const summary = await upload(user, csvFile(['ath-1,Jordan Lee,,3,', 'ath-2,Sam Park,,1,']));
+      await user.click(within(summary).getByRole('button', { name: 'Discard file values' }));
+      expect(screen.queryByText(/from sheet \(unsaved\)/)).toBeNull();
+      expect(screen.queryByRole('button', { name: /^Movement Quality conflicts/ })).toBeNull();
+      expect(saveButton()).toBeDisabled();
+    });
+
+    it('an untouched pre-printed score is unchanged and an MQ total column is ignored with a warning', async () => {
+      const user = userEvent.setup();
+      eventMetricsState = [metric('VERTICAL_JUMP'), ...PATTERNS.map((c) => metric(c)), metric('MQI_TOTAL')];
+      measurementsState.data = [m('ath-1', 'MQ_DECEL', 2)];
+      render(<EventDataEntry />);
+      const file = new File([['Event ID,ev-1', `${MQ_HEADER},MQI [MQI_TOTAL]`, 'ath-1,Jordan Lee,,2,,14'].join('\n')], 'sheet.csv');
+      const summary = await upload(user, file);
+      expect(summary).toHaveTextContent(/0 values loaded/);
+      expect(summary).toHaveTextContent(/Column "MQI \[MQI_TOTAL\]" was ignored: Movement Quality Index \(MQI\) is calculated from the Movement Quality scores/);
+      expect(saveButton()).toBeDisabled();
     });
   });
 

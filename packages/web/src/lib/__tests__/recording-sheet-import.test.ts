@@ -4,6 +4,8 @@ import Papa from 'papaparse';
 import {
   ATHLETE_ID_HEADER,
   buildRecordingSheet,
+  sheetIgnoredMetrics,
+  sheetMqMetrics,
   parseCsvSheet,
   parseXlsxSheet,
   recordingSheetToCsv,
@@ -90,7 +92,7 @@ describe('planSheetImport', () => {
       {
         ignoredMetrics: [
           { code: 'MOMENTUM', label: 'Momentum', reason: 'calculated from other metrics' },
-          { code: 'MQ_JUMP', label: 'Jump', reason: 'entered in the Movement Quality panel' },
+          { code: 'MQ_JUMP', label: 'Jump', reason: 'a test reason' },
         ],
       },
     );
@@ -98,7 +100,7 @@ describe('planSheetImport', () => {
     expect(result.warnings).toEqual([
       'Column "Notes" is not a metric of this event and was ignored.',
       'Column "Momentum [MOMENTUM]" was ignored: Momentum is calculated from other metrics.',
-      'Column "Jump [MQ_JUMP]" was ignored: Jump is entered in the Movement Quality panel.',
+      'Column "Jump [MQ_JUMP]" was ignored: Jump is a test reason.',
     ]);
   });
 
@@ -377,5 +379,53 @@ describe('round trip of a sheet with pre-printed saved values', () => {
       { userId: 'ath-1', metricCode: 'VERTICAL_JUMP', value: '30.5', kind: 'unchanged', savedValue: 30.5 },
       { userId: 'ath-1', metricCode: 'FLY10_TIME', value: '1.60', kind: 'conflict', savedValue: 1.65 },
     ]);
+  });
+});
+
+describe('Movement Quality columns', () => {
+  const MQ = sheetMqMetrics(['MQ_DECEL']);
+  const MQ_HEADER = [ATHLETE_ID_HEADER, 'Athlete', 'Deceleration (0-3) [MQ_DECEL]', 'Jump (0-3) [MQ_JUMP]'];
+  const planMq = (cells: SheetCell[], saved: Record<string, number> = {}, extraHeader: string[] = [], extraIgnored = false) =>
+    plan([[...MQ_HEADER, ...extraHeader], ['ath-1', 'Jordan Lee', ...cells]], {
+      metrics: MQ,
+      athletes: athletes({ 'ath-1': saved }),
+      ignoredMetrics: extraIgnored
+        ? sheetIgnoredMetrics([{ metricCode: 'MQI_TOTAL', metricDetails: { label: 'MQI', unit: 'score', category: null } }])
+        : [],
+    });
+
+  it.each(['0', '1', '2', '3'])('accepts the score %s', (score) => {
+    expect(planMq([score, '']).cells).toEqual([{ userId: 'ath-1', metricCode: 'MQ_DECEL', value: score, kind: 'imported' }]);
+  });
+
+  it.each([
+    ['4', /at most 3/],
+    ['1.5', /whole number/],
+    ['-1', /at least 0/],
+    ['3,0', /dot for decimals/],
+  ])('refuses %s', (raw, message) => {
+    const result = planMq([raw, '']);
+    expect(result.cells).toEqual([]);
+    expect(result.cellErrors).toEqual([expect.objectContaining({ metricCode: 'MQ_DECEL', raw, message: expect.stringMatching(message) })]);
+  });
+
+  it('a blank or "-" changes nothing', () => {
+    expect(planMq(['', '-'], { MQ_DECEL: 2, MQ_JUMP: 1 }).cells).toEqual([]);
+  });
+
+  it('a saved 2 against a file 3 is a conflict; a file 2 against a saved 2 is unchanged; a saved 0 counts', () => {
+    expect(planMq(['3', '2'], { MQ_DECEL: 2, MQ_JUMP: 2 }).cells).toEqual([
+      { userId: 'ath-1', metricCode: 'MQ_DECEL', value: '3', kind: 'conflict', savedValue: 2 },
+      { userId: 'ath-1', metricCode: 'MQ_JUMP', value: '2', kind: 'unchanged', savedValue: 2 },
+    ]);
+    expect(planMq(['1', ''], { MQ_DECEL: 0 }).cells).toEqual([
+      { userId: 'ath-1', metricCode: 'MQ_DECEL', value: '1', kind: 'conflict', savedValue: 0 },
+    ]);
+  });
+
+  it('ignores a column of MQI_TOTAL with a warning', () => {
+    const result = planMq(['2', '', '14'], {}, ['MQI [MQI_TOTAL]'], true);
+    expect(result.cells.map((c) => c.metricCode)).toEqual(['MQ_DECEL']);
+    expect(result.warnings).toEqual(['Column "MQI [MQI_TOTAL]" was ignored: MQI is calculated from the Movement Quality scores.']);
   });
 });

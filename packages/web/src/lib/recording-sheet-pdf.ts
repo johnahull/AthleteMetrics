@@ -6,6 +6,8 @@
  * jspdf and jspdf-autotable are loaded on demand so they stay out of the main bundle.
  */
 import { hasPrintedValues, type RecordingSheet } from "@/lib/recording-sheet";
+import { MQI_RUBRIC } from "@shared/mqi-entry-schema";
+import { isMovementQualityMetric } from "@shared/peer-comparison-exclusions";
 
 /** Page geometry in points (1 in = 72 pt) */
 export const PDF_LAYOUT = {
@@ -68,7 +70,8 @@ export function planRecordingSheetPdf(metricCount: number, athleteCount: number,
   return { strips, rowsPerPage, pages };
 }
 
-const PLAIN: Record<string, string> = { "‘": "'", "’": "'", "“": '"', "”": '"', "–": "-", "—": "-" };
+// Arrows: the Movement Quality transition labels ("Decel → Lateral Cut", "Gas ↔ Brake")
+const PLAIN: Record<string, string> = { "‘": "'", "’": "'", "“": '"', "”": '"', "–": "-", "—": "-", "→": "->", "↔": "<->" };
 
 /**
  * Text the standard Helvetica font can print: Latin-1 only. Typographic quotes and dashes become plain
@@ -188,6 +191,7 @@ export async function recordingSheetToPdf(sheet: RecordingSheet): Promise<Uint8A
     });
   });
 
+  const rubric = `Movement Quality: ${MQI_RUBRIC.map((r) => `${r.score} ${r.label}`).join(", ")}`;
   const legend = hasPrintedValues(sheet) ? "Shaded = already recorded (newest saved value shown). " : "";
 
   // Page header and footer, drawn once the page count is known
@@ -213,6 +217,10 @@ export async function recordingSheetToPdf(sheet: RecordingSheet): Promise<Uint8A
     }
     doc.setFont("helvetica", "normal").setFontSize(7).setTextColor(110, 110, 110);
     doc.text(`Event ID: ${sheet.eventId}`, L.margin, L.margin + 44);
+    const strip = plan.strips[page.strip];
+    if (sheet.metrics.slice(strip.start, strip.end).some((m) => isMovementQualityMetric(m.code))) {
+      doc.text(rubric, L.pageWidth - L.margin, L.margin + 44, { align: "right" });
+    }
     if (i === 0 && altered) {
       doc.setFont("helvetica", "italic").setFontSize(8);
       doc.text('Some text contains characters this PDF cannot print (shown as "?").', L.margin, L.margin + 56);

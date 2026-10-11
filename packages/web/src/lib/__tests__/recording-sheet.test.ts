@@ -19,6 +19,7 @@ import {
   recordingSheetToXlsx,
   sheetExclusionReason,
   sheetIgnoredMetrics,
+  sheetMqMetrics,
   SHEET_VALUES_NOTE,
   type RecordingSheet,
 } from '../recording-sheet';
@@ -50,15 +51,26 @@ describe('sheetExclusionReason', () => {
     expect(sheetExclusionReason({ metricCode: 'FLY10_TIME', metricDetails: null })).toBeNull();
   });
 
-  it('excludes derived, paired-input and Movement Quality metrics', () => {
+  it('excludes derived, paired-input metrics and the Movement Quality totals', () => {
     expect(sheetExclusionReason(metric('MOMENTUM', { isDerived: true }))).toMatch(/calculated/i);
     expect(sheetExclusionReason(metric('SQUAT_1RM', { auxiliaryInputConfig: { inputs: [] } }))).toMatch(/paired/i);
-    expect(sheetExclusionReason(metric('MQ_JUMP'))).toMatch(/Movement Quality/);
-    expect(sheetExclusionReason(metric('MQI_TOTAL'))).toMatch(/Movement Quality/);
+    expect(sheetExclusionReason(metric('MQI_TOTAL'))).toBe('calculated from the Movement Quality scores');
+    expect(sheetExclusionReason(metric('MQ_TRANSITION_TOTAL'))).toBe('calculated from the Movement Quality scores');
+  });
+
+  it('does not exclude the Movement Quality scores: they get their own columns', () => {
+    expect(sheetExclusionReason(metric('MQ_JUMP'))).toBeNull();
+    expect(sheetExclusionReason(metric('MQ_TRANS_GAS_BRAKE'))).toBeNull();
   });
 });
 
 describe('sheetIgnoredMetrics', () => {
+  it('lists the Movement Quality totals, not the scores', () => {
+    expect(sheetIgnoredMetrics([metric('MQ_JUMP'), metric('MQI_TOTAL', { label: 'MQI' })])).toEqual([
+      { code: 'MQI_TOTAL', label: 'MQI', reason: 'calculated from the Movement Quality scores' },
+    ]);
+  });
+
   it('lists the excluded metrics with their label and reason', () => {
     expect(sheetIgnoredMetrics([metric('FLY10_TIME'), metric('MOMENTUM', { label: 'Momentum', isDerived: true })])).toEqual([
       { code: 'MOMENTUM', label: 'Momentum', reason: 'calculated from other metrics' },
@@ -66,24 +78,61 @@ describe('sheetIgnoredMetrics', () => {
   });
 });
 
+describe('sheetMqMetrics', () => {
+  const PATTERN_CODES = ['MQ_LIN_ACCEL', 'MQ_MAX_VELO', 'MQ_DECEL', 'MQ_SHUFFLE', 'MQ_LATRUN', 'MQ_HIPTURN', 'MQ_BACKPEDAL', 'MQ_JUMP'];
+
+  it('gives the 8 pattern columns, scored 0-3, when any Movement Quality score is on the event', () => {
+    const columns = sheetMqMetrics(['MQ_JUMP']);
+    expect(columns.map((c) => c.code)).toEqual(PATTERN_CODES);
+    expect(columns[2]).toEqual({ code: 'MQ_DECEL', label: 'Deceleration', unit: '0-3', bounds: { validationMin: 0, validationMax: 3, decimalPrecision: 0 } });
+    expect(metricHeader(columns[2])).toBe('Deceleration (0-3) [MQ_DECEL]');
+  });
+
+  it('adds the 4 transitions only when one of them is enabled', () => {
+    expect(sheetMqMetrics(['MQ_JUMP', 'MQ_TRANS_GAS_BRAKE']).map((c) => c.code)).toEqual([
+      ...PATTERN_CODES,
+      'MQ_TRANS_DECEL_CUT',
+      'MQ_TRANS_GAS_BRAKE',
+      'MQ_TRANS_BACKPEDAL_TURN',
+      'MQ_TRANS_LAT_LINEAR',
+    ]);
+  });
+
+  it('gives no columns without Movement Quality scores (a total alone does not count)', () => {
+    expect(sheetMqMetrics([])).toEqual([]);
+    expect(sheetMqMetrics(['MQI_TOTAL', 'FLY10_TIME'])).toEqual([]);
+  });
+
+  it('takes the bounds of the event metric when it has them', () => {
+    const [first] = sheetMqMetrics(['MQ_LIN_ACCEL'], [metric('MQ_LIN_ACCEL', { validationMin: '0', validationMax: '2', decimalPrecision: 0 })]);
+    expect(first.bounds).toEqual({ validationMin: '0', validationMax: '2', decimalPrecision: 0 });
+  });
+});
+
 describe('buildRecordingSheet', () => {
-  it('uses the event label and unit and only metrics that can be typed', () => {
+  it('uses the event label and unit and only metrics that can be typed, then the Movement Quality columns', () => {
     const sheet = buildRecordingSheet({
       event: { id: 'ev-1', name: 'Spring Screen', startDate: '2026-03-10T00:00:00.000Z' },
       metrics: [
+        metric('MQ_JUMP'),
         metric('VERTICAL_JUMP', { label: 'Vertical Jump', unit: 'in' }, { customLabel: 'CMJ' }),
         metric('MOMENTUM', { isDerived: true }),
-        metric('MQ_JUMP'),
+        metric('MQI_TOTAL'),
       ],
       athletes: SHEET.athletes,
     });
-    expect(sheet).toEqual({
-      eventId: 'ev-1',
-      eventName: 'Spring Screen',
-      eventDate: '2026-03-10',
-      metrics: [{ code: 'VERTICAL_JUMP', label: 'CMJ', unit: 'in' }],
+    expect(sheet.metrics[0]).toEqual({ code: 'VERTICAL_JUMP', label: 'CMJ', unit: 'in' });
+    expect(sheet.metrics.map((m) => m.code)).toEqual(['VERTICAL_JUMP', ...sheetMqMetrics(['MQ_JUMP']).map((m) => m.code)]);
+    expect(sheet).toMatchObject({ eventId: 'ev-1', eventName: 'Spring Screen', eventDate: '2026-03-10', athletes: SHEET.athletes });
+  });
+
+  it('has no Movement Quality columns without Movement Quality metrics', () => {
+    const sheet = buildRecordingSheet({
+      event: { id: 'ev-1', name: 'Spring Screen', startDate: '2026-03-10T00:00:00.000Z' },
+      metrics: [metric('VERTICAL_JUMP', { label: 'Vertical Jump', unit: 'in' })],
       athletes: SHEET.athletes,
     });
+    expect(sheet.metrics).toEqual([{ code: 'VERTICAL_JUMP', label: 'Vertical Jump', unit: 'in' }]);
   });
 
   it('keeps the event location for the printable sheet', () => {

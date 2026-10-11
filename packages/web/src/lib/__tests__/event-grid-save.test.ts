@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { chunkBulkItems, savedCellPatch, MAX_BULK_ITEMS, MAX_BULK_BYTES } from '../event-grid-save';
+import { chunkBulkItems, saveSummary, savedCellPatch, MAX_BULK_ITEMS, MAX_BULK_BYTES } from '../event-grid-save';
 
 const item = (i: number, notes = '') => ({ userId: `u-${i}`, metric: 'VERTICAL_JUMP', value: i, date: '2026-03-10T00:00:00.000Z', notes });
 const bytes = (chunk: unknown[]) => new TextEncoder().encode(JSON.stringify({ measurements: chunk })).length;
@@ -58,3 +58,43 @@ describe('savedCellPatch', () => {
     expect(patch).not.toHaveProperty('error');
   });
 });
+
+describe('saveSummary', () => {
+  const grid = { total: 40, saved: 40, failed: 0 };
+
+  it('grid only, as before', () => {
+    expect(saveSummary({ grid })).toEqual({ title: 'Saved Successfully', description: '40 measurements saved.' });
+  });
+
+  it('counts both kinds in one message', () => {
+    expect(saveSummary({ grid, mq: { athletes: 12, saved: 12, failed: 0 } }).description).toBe(
+      'Saved 40 measurements and Movement Quality for 12 athletes.',
+    );
+    expect(saveSummary({ grid: { total: 0, saved: 0, failed: 0 }, mq: { athletes: 1, saved: 1, failed: 0 } }).description).toBe(
+      'Saved Movement Quality for 1 athlete.',
+    );
+  });
+
+  it('a stop says how many athletes were saved and to wait after a rate limit', () => {
+    const result = saveSummary({ grid, mq: { athletes: 30, saved: 12, failed: 0, stopped: { message: 'Too many requests.', rateLimited: true } } });
+    expect(result).toMatchObject({ variant: 'destructive', title: 'Save Failed' });
+    expect(result.description).toBe('Saved MQ for 12 of 30 athletes. Too many requests. Wait up to 15 minutes, then save again to send the rest.');
+    expect(
+      saveSummary({ grid, mq: { athletes: 3, saved: 1, failed: 0, stopped: { message: 'Failed to fetch', rateLimited: false } } }).description,
+    ).toBe('Saved MQ for 1 of 3 athletes. Failed to fetch. Save again to send the rest.');
+  });
+
+  it('refused athletes and a failed grid request', () => {
+    expect(saveSummary({ grid, mq: { athletes: 3, saved: 2, failed: 1 } })).toMatchObject({
+      title: 'Partial Save',
+      description: 'Saved MQ for 2 of 3 athletes. 1 could not be saved; see the Movement Quality column.',
+    });
+    expect(
+      saveSummary({ grid: { total: 450, saved: 200, failed: 0, failure: 'Network error' }, mq: { athletes: 2, saved: 0, failed: 0, notSent: true } }),
+    ).toMatchObject({
+      title: 'Save Failed',
+      description: 'Saved 200 of 450 measurements. Network error. Movement Quality scores were not sent; save again to send them.',
+    });
+  });
+});
+

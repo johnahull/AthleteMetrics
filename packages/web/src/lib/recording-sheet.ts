@@ -5,7 +5,8 @@
  */
 import Papa from "papaparse";
 import { format as formatDate } from "date-fns";
-import { isMovementQualityMetric } from "@shared/peer-comparison-exclusions";
+import { MQI_PATTERNS, MQI_TRANSITIONS, MQI_TOTAL_CODE, MQI_TRANSITION_TOTAL_CODE } from "@shared/mqi-entry-schema";
+import type { MetricValueBounds } from "@shared/measurement-value-validation";
 import { getEventMetricDisplay, type EventMetricWithSiteDetails } from "@/lib/event-metric-display";
 import { toCalendarDate } from "@/utils/date-utils";
 
@@ -23,6 +24,34 @@ export interface SheetMetric {
   code: string;
   label: string;
   unit?: string;
+  /** Value bounds for the import check; set for Movement Quality scores (0 is a valid score) */
+  bounds?: MetricValueBounds;
+}
+
+/** Movement Quality scores: whole numbers 0-3 (used when the event metric carries no bounds) */
+export const MQ_SCORE_BOUNDS: MetricValueBounds = { validationMin: 0, validationMax: 3, decimalPrecision: 0 };
+const MQ_SCORE_CODES = new Set([...MQI_PATTERNS, ...MQI_TRANSITIONS].map((m) => m.code));
+
+type SheetSourceMetric = EventMetricWithSiteDetails & {
+  metricDetails?: (NonNullable<EventMetricWithSiteDetails["metricDetails"]> & MetricValueBounds) | null;
+};
+
+/**
+ * Movement Quality columns of the sheet, the same rows as the Movement Quality panel: the 8 patterns when the
+ * event has any Movement Quality score, plus the 4 transitions when one of them is enabled. Labels are the
+ * panel's; columns are matched by [CODE] on import anyway.
+ */
+export function sheetMqMetrics(enabledCodes: string[], metrics: SheetSourceMetric[] = []): SheetMetric[] {
+  if (!enabledCodes.some((c) => MQ_SCORE_CODES.has(c))) return [];
+  const withTransitions = MQI_TRANSITIONS.some((t) => enabledCodes.includes(t.code));
+  return [...MQI_PATTERNS, ...(withTransitions ? MQI_TRANSITIONS : [])].map(({ code, label }) => {
+    const details = metrics.find((m) => m.metricCode === code)?.metricDetails;
+    const bounds =
+      details?.validationMin !== undefined && details?.validationMin !== null
+        ? { validationMin: details.validationMin, validationMax: details.validationMax ?? null, decimalPrecision: details.decimalPrecision ?? null }
+        : MQ_SCORE_BOUNDS;
+    return { code, label, unit: "0-3", bounds };
+  });
 }
 
 /** Printed after the Event ID row of a sheet with pre-printed saved values */
@@ -54,7 +83,9 @@ export type SheetCell = string | { error: string };
 
 /** Why a metric gets no sheet column, or null when it can be typed on the sheet */
 export function sheetExclusionReason(metric: EventMetricWithSiteDetails): string | null {
-  if (isMovementQualityMetric(metric.metricCode)) return "entered in the Movement Quality panel";
+  if (metric.metricCode === MQI_TOTAL_CODE || metric.metricCode === MQI_TRANSITION_TOTAL_CODE) {
+    return "calculated from the Movement Quality scores";
+  }
   if (metric.metricDetails?.isDerived) return "calculated from other metrics";
   if (metric.metricDetails?.auxiliaryInputConfig) return "a paired-input metric and is not entered from a sheet";
   return null;
@@ -70,7 +101,7 @@ export function sheetIgnoredMetrics(metrics: EventMetricWithSiteDetails[]) {
 
 export function buildRecordingSheet(input: {
   event: { id: string; name: string; startDate: string | Date; location?: string | null };
-  metrics: EventMetricWithSiteDetails[];
+  metrics: SheetSourceMetric[];
   athletes: SheetAthlete[];
 }): RecordingSheet {
   const date = toCalendarDate(input.event.startDate);
@@ -79,12 +110,16 @@ export function buildRecordingSheet(input: {
     eventName: input.event.name,
     eventDate: date ? formatDate(date, "yyyy-MM-dd") : "",
     ...(input.event.location ? { location: input.event.location } : {}),
-    metrics: input.metrics
-      .filter((m) => sheetExclusionReason(m) === null)
-      .map((m) => {
-        const { code, label, unit } = getEventMetricDisplay(m);
-        return { code, label, unit };
-      }),
+    // Typed metrics in event order, then the Movement Quality columns
+    metrics: [
+      ...input.metrics
+        .filter((m) => sheetExclusionReason(m) === null && !MQ_SCORE_CODES.has(m.metricCode))
+        .map((m) => {
+          const { code, label, unit } = getEventMetricDisplay(m);
+          return { code, label, unit };
+        }),
+      ...sheetMqMetrics(input.metrics.map((m) => m.metricCode), input.metrics),
+    ],
     athletes: input.athletes,
   };
 }

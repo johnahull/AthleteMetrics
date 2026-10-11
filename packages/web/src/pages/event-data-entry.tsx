@@ -12,6 +12,7 @@ import {
   useEventMeasurements,
   useCreateEventMeasurementsBulk,
   useSaveEventMovementQuality,
+  useInvalidateAfterMovementQualitySave,
   MovementQualitySaveError,
   type EventRegistrationWithUser,
   type CreateEventMeasurementInput,
@@ -25,17 +26,20 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useToast } from "@/hooks/use-toast";
 import { useHorizontalScrollState } from "@/hooks/use-horizontal-scroll-state";
 import { useGridKeyboardNav } from "@/hooks/use-grid-keyboard-nav";
+import { useMovementQualitySheetCells, type MqSaveOutcome } from "@/hooks/use-movement-quality-sheet-cells";
+import { mqSaveRequests } from "@/lib/mq-sheet-cells";
 import { useAuth } from "@/lib/auth";
 import { canManageEvent } from "@/lib/event-permissions";
 import { getEventMetricDisplay, type EventMetricWithSiteDetails } from "@/lib/event-metric-display";
 import { canAddTrial } from "@/lib/event-grid-cell-state";
-import { chunkBulkItems, savedCellPatch } from "@/lib/event-grid-save";
+import { chunkBulkItems, saveSummary, savedCellPatch } from "@/lib/event-grid-save";
 import {
   buildRecordingSheet,
   downloadRecordingSheet,
   readSheetFile,
   sheetExclusionReason,
   sheetIgnoredMetrics,
+  sheetMqMetrics,
 } from "@/lib/recording-sheet";
 import {
   applyImportPlan,
@@ -48,6 +52,7 @@ import {
 } from "@/lib/recording-sheet-import";
 import { RecordingSheetActions } from "@/components/events/RecordingSheetActions";
 import { EventGridCell } from "@/components/events/EventGridCell";
+import { MovementQualityGridCell } from "@/components/events/MovementQualityGridCell";
 import { RecordingSheetImportSummary, sheetImportAnnouncement } from "@/components/events/RecordingSheetImportSummary";
 import {
   MovementQualityPanel,
@@ -70,7 +75,6 @@ import {
   Lock,
   Loader2,
   RefreshCw,
-  Activity,
   MoveHorizontal,
   ChevronLeft,
   ChevronRight,
@@ -117,16 +121,18 @@ interface AthleteRow {
   measurements: Record<string, MeasurementCell>;
 }
 
-// Movement Quality scores are entered in a per-athlete panel, not in the numeric grid
+// Movement Quality scores are entered in a per-athlete panel (or loaded from a sheet), not in the numeric grid
 const MQ_BASE_CODES = new Set([...MQI_PATTERNS, ...MQI_TRANSITIONS].map((m) => m.code));
 const MQ_CODES = new Set([...MQ_BASE_CODES, MQI_TOTAL_CODE, MQI_TRANSITION_TOTAL_CODE]);
 
 // A dirty cell with a number, also one the server rejected last time (its error is cleared on send)
-const isSendable = (cell: MeasurementCell) =>
+const isSendable = (cell: Pick<MeasurementCell, "isDirty" | "value">) =>
   cell.isDirty && cell.value !== "" && !isNaN(Number(cell.value));
 
 const GRID_SCROLLER_ID = "event-data-entry-grid";
 const GRID_KEYS = "ArrowUp ArrowDown ArrowLeft ArrowRight Enter";
+const MQ_SAVE_BLOCKED =
+  "This athlete has unsaved scores from a sheet. Save the page or discard the file values first.";
 
 // Stable empty list so consumers' memoized prefill does not re-run on every render
 const EMPTY_MEASUREMENTS: Measurement[] = [];
@@ -171,6 +177,7 @@ export default function EventDataEntry() {
   // Mutation for bulk save
   const bulkCreate = useCreateEventMeasurementsBulk();
   const saveMovementQuality = useSaveEventMovementQuality();
+  const invalidateAfterMovementQualitySave = useInvalidateAfterMovementQualitySave();
 
   // Athletes the server accepts results for (same statuses as the recording sheet and device import)
   const checkedInAthletes = useMemo(() => {
@@ -197,6 +204,12 @@ export default function EventDataEntry() {
     [sortedMetrics]
   );
   const hasMovementQuality = mqEnabledCodes.length > 0;
+  // Movement Quality columns of the recording sheet, and their scores loaded from an uploaded sheet
+  const mqSheetMetrics = useMemo(() => sheetMqMetrics(mqEnabledCodes), [mqEnabledCodes]);
+  const mqSheetCodes = useMemo(() => mqSheetMetrics.map((m) => m.code), [mqSheetMetrics]);
+  const athleteIds = useMemo(() => checkedInAthletes.map((r) => r.userId), [checkedInAthletes]);
+  const mqCells = useMovementQualitySheetCells(existingMeasurements, athleteIds, mqSheetCodes);
+  const { mqGrid } = mqCells;
   const metricColumnCount = gridMetrics.length + (hasMovementQuality ? 1 : 0);
   const displayByCode = useMemo(
     () => new Map(gridMetrics.map((m) => [m.metricCode, getEventMetricDisplay(m)])),
@@ -326,16 +339,17 @@ export default function EventDataEntry() {
     []
   );
 
-  // Calculate dirty count
+  // Calculate dirty count (grid cells and Movement Quality scores from a sheet)
   const { dirtyCount, conflictCount, hasUnsavedEdits, hasPendingImport } = useMemo(() => {
-    const cells = Object.values(gridData).flatMap((row) => Object.values(row.measurements));
+    const mq = Object.values(mqGrid).flatMap((row) => Object.values(row.measurements));
+    const cells = [...Object.values(gridData).flatMap((row) => Object.values(row.measurements)), ...mq];
     return {
       dirtyCount: cells.filter(isSendable).length,
       conflictCount: cells.filter((c) => c.importedValue !== undefined).length,
       hasUnsavedEdits: cells.some((c) => c.isDirty || c.importedValue !== undefined),
       hasPendingImport: cells.some((c) => c.importedValue !== undefined || (c.isDirty && c.fromImport)),
     };
-  }, [gridData]);
+  }, [gridData, mqGrid]);
 
   const updateCells = (update: (cell: MeasurementCell) => MeasurementCell, userId?: string, metricCode?: string) =>
     setGridData((prev) => {
@@ -374,25 +388,30 @@ export default function EventDataEntry() {
     date: event?.startDate ? new Date(event.startDate).toISOString() : new Date().toISOString(),
   });
 
-  const importMetricLabels = useMemo(() => new Map([...displayByCode].map(([code, d]) => [code, d.label])), [displayByCode]);
+  const importMetricLabels = useMemo(
+    () => new Map([...[...displayByCode].map(([code, d]) => [code, d.label] as const), ...mqSheetMetrics.map((m) => [m.code, m.label] as const)]),
+    [displayByCode, mqSheetMetrics],
+  );
   const importAthleteNames = useMemo(
     () => new Map(Object.values(gridData).map((row) => [row.userId, row.fullName])),
     [gridData],
   );
 
-  // Recording sheet: grid athletes x metrics that can be typed, with saved values (never unsaved edits) pre-printed
+  // Recording sheet: grid athletes x metrics that can be typed plus the Movement Quality scores, with saved
+  // values (never unsaved edits) pre-printed
   const recordingSheet = () =>
     buildRecordingSheet({
       event: event!,
-      metrics: gridMetrics,
+      metrics: sortedMetrics,
       athletes: Object.values(gridData).map((row) => {
         const saved = Object.values(row.measurements).filter((c) => c.originalValue !== undefined);
+        const savedMq = Object.values(mqGrid[row.userId]?.measurements ?? {}).filter((c) => c.originalValue !== undefined);
         return {
           userId: row.userId,
           name: row.fullName,
-          ...(saved.length > 0
+          ...(saved.length + savedMq.length > 0
             ? {
-                values: Object.fromEntries(saved.map((c) => [c.metricCode, String(c.originalValue)])),
+                values: Object.fromEntries([...saved, ...savedMq].map((c) => [c.metricCode, String(c.originalValue)])),
                 trials: Object.fromEntries(saved.map((c) => [c.metricCode, c.savedCount])),
               }
             : {}),
@@ -416,7 +435,11 @@ export default function EventDataEntry() {
         athletes: Object.values(gridRef.current).map((row) => ({
           userId: row.userId,
           name: row.fullName,
-          saved: Object.fromEntries(Object.entries(row.measurements).map(([code, c]) => [code, c.originalValue])),
+          saved: Object.fromEntries(
+            [...Object.values(row.measurements), ...Object.values(mqCells.mqGridRef.current[row.userId]?.measurements ?? {})].map(
+              (c) => [c.metricCode, c.originalValue],
+            ),
+          ),
         })),
         metrics: sheetMetrics,
         ignoredMetrics,
@@ -424,10 +447,12 @@ export default function EventDataEntry() {
     } catch (error) {
       plan = emptyImportPlan(error instanceof Error ? error.message : "The file could not be read.");
     }
-    // Cells typed while the file was read keep the typed value (reported as skipped)
+    // Cells typed while the file was read keep the typed value (reported as skipped). Each grid holds its own codes.
     const applied = plan.fileError ? { grid: gridRef.current, skipped: [] } : applyImportPlan(gridRef.current, plan);
+    const appliedMq = plan.fileError ? { grid: mqCells.mqGridRef.current, skipped: [] } : applyImportPlan(mqCells.mqGridRef.current, plan);
     setGridData(applied.grid);
-    setSheetImport({ fileName: file.name, plan, skipped: applied.skipped });
+    mqCells.setMqGrid(appliedMq.grid);
+    setSheetImport({ fileName: file.name, plan, skipped: [...applied.skipped, ...appliedMq.skipped] });
     setReadingSheet(null);
   };
 
@@ -523,7 +548,9 @@ export default function EventDataEntry() {
       });
     });
 
-    if (measurementsToSave.length === 0) {
+    // Movement Quality scores from a sheet: one request per athlete, after the grid
+    const mqAthletes = mqSaveRequests(mqGrid).length;
+    if (measurementsToSave.length === 0 && mqAthletes === 0) {
       toast({
         title: "No Changes",
         description: "No measurements to save.",
@@ -572,11 +599,12 @@ export default function EventDataEntry() {
     let savedCount = 0;
     let failedCount = 0;
     let failure: string | undefined;
+    let mq: MqSaveOutcome | undefined;
     setIsSaving(true);
     try {
       let offset = 0;
       for (const chunk of chunkBulkItems(measurementsToSave)) {
-        // No per-request refetch: the one in `finally` reloads the grid after the last request
+        // No per-request refetch: the one at the end reloads the grid after the last request
         const result = await bulkCreate.mutateAsync({ eventId: eventId!, measurements: chunk, invalidateMeasurements: false });
         const counts = applyResult(offset, result);
         savedCount += counts.saved;
@@ -585,27 +613,27 @@ export default function EventDataEntry() {
       }
     } catch (error: any) {
       failure = error?.message || "Failed to save measurements.";
+    }
+    try {
+      // Not after a grid request failed as a whole: the next request would likely fail too
+      if (!failure && mqAthletes > 0) {
+        mq = await mqCells.save((userId, upserts) =>
+          saveMovementQuality.mutateAsync({ eventId: eventId!, userId, upserts, deletes: [], invalidateMeasurements: false }),
+        );
+      }
     } finally {
       setIsSaving(false);
       // Refetch whatever happened: earlier requests may have saved rows
       await refetchMeasurements();
+      if (mq && mq.saved > 0) invalidateAfterMovementQualitySave(eventId!);
     }
 
-    const total = measurementsToSave.length;
-    if (failure || failedCount > 0) {
-      toast({
-        variant: "destructive",
-        title: failure ? "Save Failed" : "Partial Save",
-        description: `Saved ${savedCount} of ${total} measurements. ${
-          failure ?? `${failedCount} could not be saved; see the highlighted cells.`
-        }`,
-      });
-    } else {
-      toast({
-        title: "Saved Successfully",
-        description: `${savedCount} measurements saved.`,
-      });
-    }
+    toast(
+      saveSummary({
+        grid: { total: measurementsToSave.length, saved: savedCount, failed: failedCount, failure },
+        mq: mqAthletes > 0 ? (mq ?? { athletes: mqAthletes, saved: 0, failed: 0, notSent: true }) : undefined,
+      }),
+    );
   };
 
   // Save one cell's value now as an extra trial (never replaces a saved row); focus goes back to the input
@@ -1015,9 +1043,13 @@ export default function EventDataEntry() {
           hasPendingImport={hasPendingImport}
           metricLabels={importMetricLabels}
           athleteNames={importAthleteNames}
-          onResolveAll={(choice) => updateCells((c) => resolveConflict(c, choice))}
+          onResolveAll={(choice) => {
+            updateCells((c) => resolveConflict(c, choice));
+            mqCells.update((c) => resolveConflict(c, choice));
+          }}
           onDiscard={() => {
             updateCells(discardImport);
+            mqCells.update(discardImport);
             setSheetImport(null);
           }}
           onClose={() => setSheetImport(null)}
@@ -1171,19 +1203,18 @@ export default function EventDataEntry() {
                         })}
                         {hasMovementQuality && (
                           <td className="p-1 text-center">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => openMovementQuality(row.userId)}
+                            <MovementQualityGridCell
+                              userId={row.userId}
+                              athleteName={row.fullName}
+                              summary={mqSummaryByUser.get(row.userId) ?? "Not scored"}
+                              cells={Object.values(mqGrid[row.userId]?.measurements ?? {})}
+                              labels={importMetricLabels}
                               disabled={measurementsError}
-                              data-grid-row={rowIndex}
-                              data-grid-col={gridMetrics.length}
-                              aria-label={`Movement Quality for ${row.fullName}`}
-                            >
-                              <Activity className="h-4 w-4 mr-2" />
-                              {mqSummaryByUser.get(row.userId) ?? "Not scored"}
-                            </Button>
+                              onOpen={() => openMovementQuality(row.userId)}
+                              onResolve={(code, choice) => mqCells.update((c) => resolveConflict(c, choice), row.userId, code)}
+                              onResolveAll={(choice) => mqCells.update((c) => resolveConflict(c, choice), row.userId)}
+                              buttonProps={{ "data-grid-row": rowIndex, "data-grid-col": gridMetrics.length }}
+                            />
                           </td>
                         )}
                       </tr>
@@ -1222,6 +1253,14 @@ export default function EventDataEntry() {
           disabled={event.isFrozen}
           isSaving={isSaving}
           serverErrors={mqServerErrors}
+          // One writer at a time: the sheet's unsaved scores for this athlete would be overwritten or lost
+          saveBlockedReason={
+            Object.values(mqGrid[mqAthlete.userId]?.measurements ?? {}).some(
+              (c) => c.importedValue !== undefined || (c.isDirty && c.fromImport),
+            )
+              ? MQ_SAVE_BLOCKED
+              : undefined
+          }
           onSave={handleSaveMovementQuality}
         />
       )}

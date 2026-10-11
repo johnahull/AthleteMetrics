@@ -47,3 +47,48 @@ export function savedCellPatch(
     ...(current.value === sent.value ? { error: undefined } : {}),
   };
 }
+
+const athletes = (n: number) => `${n} ${n === 1 ? "athlete" : "athletes"}`;
+const sentence = (text: string) => `${text.trim().replace(/[.\s]+$/, "")}.`;
+
+/** The toast after Save: the grid's measurements and the Movement Quality scores from a sheet, in one message */
+export function saveSummary({
+  grid,
+  mq,
+}: {
+  grid: { total: number; saved: number; failed: number; failure?: string };
+  /** Athletes with Movement Quality scores to save; notSent: skipped because the grid save failed */
+  mq?: { athletes: number; saved: number; failed: number; stopped?: { message: string; rateLimited: boolean }; notSent?: boolean };
+}): { title: string; description: string; variant?: "destructive" } {
+  const problems: string[] = [];
+  if (grid.failure || grid.failed > 0) {
+    problems.push(
+      `Saved ${grid.saved} of ${grid.total} measurements. ${grid.failure ? sentence(grid.failure) : `${grid.failed} could not be saved; see the highlighted cells.`}`,
+    );
+  }
+  if (mq?.notSent) {
+    problems.push("Movement Quality scores were not sent; save again to send them.");
+  } else if (mq?.stopped) {
+    const retry = mq.stopped.rateLimited ? "Wait up to 15 minutes, then save again to send the rest." : "Save again to send the rest.";
+    problems.push(`Saved MQ for ${mq.saved} of ${athletes(mq.athletes)}. ${sentence(mq.stopped.message)} ${retry}`);
+  } else if (mq && mq.failed > 0) {
+    problems.push(`Saved MQ for ${mq.saved} of ${athletes(mq.athletes)}. ${mq.failed} could not be saved; see the Movement Quality column.`);
+  } else if (mq && problems.length > 0) {
+    problems.push(`Saved Movement Quality for ${athletes(mq.saved)}.`);
+  }
+  if (problems.length > 0) {
+    return {
+      variant: "destructive",
+      title: grid.failure || mq?.stopped ? "Save Failed" : "Partial Save",
+      description: problems.join(" "),
+    };
+  }
+  return {
+    title: "Saved Successfully",
+    description: !mq
+      ? `${grid.saved} measurements saved.`
+      : grid.total > 0
+        ? `Saved ${grid.saved} measurements and Movement Quality for ${athletes(mq.saved)}.`
+        : `Saved Movement Quality for ${athletes(mq.saved)}.`,
+  };
+}
