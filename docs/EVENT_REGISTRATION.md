@@ -47,3 +47,24 @@ Retries: a replace is idempotent, an append is not. If a bulk response is lost (
 `GET /api/events/:id/measurements` returns the event's rows newest first (`date`, then `createdAt`, then `id`), each with `isCalculated` and `calculatedFromMeasurementIds` so a client can tell typed rows from derived ones (derived = `isCalculated` unless the list is an empty array). Event managers (coach, org admin of the event's organization, site admin) get unverified rows too; anyone else (an athlete reading their own results once they are published) gets verified rows only. `GET /api/events/:id/measurements/stats` is manager-only and counts unverified rows as well.
 
 Code: `EventMeasurementsService.createEventMeasurement` / `createEventMeasurementsBulk` (`packages/api/services/event-measurements-service.ts`), routes in `packages/api/routes/event-measurements-routes.ts`. Movement Quality scores saved through `PUT /api/events/:id/athletes/:userId/movement-quality` are not covered by these checks.
+
+## Recording sheet (CSV / XLSX)
+
+The data entry page (`/events/:id/data-entry`) can download a blank recording sheet and load a filled one. Everything runs in the browser: values from a sheet become unsaved grid cells and are saved through the bulk route above, so all of its checks apply. There are no server changes.
+
+Layout: three rows `Event`, `Date` (yyyy-mm-dd) and `Event ID`, then the table header `Athlete ID (do not edit)`, `Athlete` and one `Label (unit) [CODE]` column per metric, then one row per athlete of the grid (`approved`, `checked_in`, `completed`). Metrics that are not typed have no column: derived metrics, paired-input metrics and Movement Quality scores (entered in their panel). A column of one of those, or of a metric not on the event, is ignored with a warning.
+
+Loading a sheet:
+
+- The file must carry this event's `Event ID` row. A sheet with no `Event ID` row, a blank one, or a renamed label is refused as a whole, and so is a sheet of another event (compared ignoring case and surrounding spaces).
+- Columns are matched by the `[CODE]` in the header first, then by the exact label or `Label (unit)`. Names and headers are compared in one Unicode form (NFC).
+- A row is refused (and listed) for a missing or unknown athlete id, an athlete not entitled to results on the event, a name that does not match the id, or an athlete that appears more than once.
+- A blank cell or `-` never clears a saved value. Comma decimals (`4,52`) are refused; use a dot. Values go through the normal value validation.
+- CSV: the download escapes cells that start with `= + - @`, tab or CR with a leading `'`; on load that `'` is removed only before one of those characters, so a name like `'Ike` stays as typed. XLSX: formulas give their saved result, date cells are refused, and a percent-formatted cell loads as its fraction (50% is 0.5).
+- Limits: a `.csv` or `.xlsx` file of at most 1 MB, 1000 athlete rows and 200 columns; an XLSX file may have at most 50 zip parts and 20 MB unpacked (as declared by the zip, checked before it is unpacked).
+
+Conflicts: a file value that differs from the saved value is a conflict. The cell keeps its saved value until you choose `Keep saved` or `Use file value` (per cell, or for all in the summary); Save is blocked while conflicts remain. `Use file value` replaces the saved row when the cell has one, and adds a new trial when it has several. Values you type win: typing in a cell drops its pending file value, and a cell typed in while the file was being read keeps the typed value (the file value is listed as not loaded).
+
+Upload is blocked while the grid has unsaved edits, while a save is in flight and while another sheet is being read; Save and `Discard file values` are off while a sheet is read, and `Discard file values` is off during a save.
+
+Code: `packages/web/src/lib/recording-sheet.ts` (generate, read), `packages/web/src/lib/recording-sheet-import.ts` (plan, apply), `packages/web/src/components/events/RecordingSheet*.tsx`, `packages/web/src/pages/event-data-entry.tsx`.

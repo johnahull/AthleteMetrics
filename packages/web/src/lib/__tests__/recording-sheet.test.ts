@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import {
   ATHLETE_ID_HEADER,
   MAX_SHEET_COLUMNS,
@@ -8,6 +9,7 @@ import {
   buildRecordingSheet,
   checkSheetFile,
   checkSheetSize,
+  downloadRecordingSheet,
   metricHeader,
   parseCsvSheet,
   parseXlsxSheet,
@@ -182,6 +184,29 @@ describe('recordingSheetToXlsx / parseXlsxSheet', () => {
     const rows = await parseXlsxSheet((await wb.xlsx.writeBuffer()) as ArrayBuffer);
     expect(rows).toEqual([['a'], [], ['c']]);
   });
+
+  describe('zip guard (checked before the workbook is unpacked)', () => {
+    const sheetZip = async () => JSZip.loadAsync((await recordingSheetToXlsx(SHEET)) as unknown as ArrayBuffer);
+    const bytes = async (zip: JSZip) => (await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE' })) as ArrayBuffer;
+
+    it('refuses a file with more than 50 zip entries', async () => {
+      const zip = await sheetZip();
+      for (let i = Object.keys(zip.files).length; i <= 50; i++) zip.file(`extra/${i}.xml`, '<x/>');
+      expect(Object.keys(zip.files).length).toBeGreaterThan(50);
+      await expect(parseXlsxSheet(await bytes(zip))).rejects.toThrow(/more than 50 parts/);
+    });
+
+    it('refuses a file that unpacks to more than 20 MB', async () => {
+      const zip = await sheetZip();
+      zip.file('xl/media/big.bin', new Uint8Array(21 * 1024 * 1024));
+      await expect(parseXlsxSheet(await bytes(zip))).rejects.toThrow(/larger than 20 MB when unpacked/);
+    });
+
+    it('accepts a normal recording sheet', async () => {
+      const rows = await parseXlsxSheet(await bytes(await sheetZip()));
+      expect(rows[2]).toEqual(['Event ID', 'ev-1']);
+    });
+  });
 });
 
 describe('checkSheetFile', () => {
@@ -218,5 +243,38 @@ describe('recordingSheetFilename', () => {
       'recording-sheet-spring-screen-2-2026-03-10.xlsx',
     );
     expect(recordingSheetFilename({ ...SHEET, eventName: '***' }, 'csv')).toBe('recording-sheet-event-2026-03-10.csv');
+  });
+
+  it('cuts a long event name to 60 characters', () => {
+    const name = recordingSheetFilename({ ...SHEET, eventName: `${'a'.repeat(59)} ${'b'.repeat(100)}` }, 'csv');
+    expect(name).toBe(`recording-sheet-${'a'.repeat(59)}-2026-03-10.csv`);
+    expect(recordingSheetFilename({ ...SHEET, eventName: 'x'.repeat(200) }, 'csv')).toBe(
+      `recording-sheet-${'x'.repeat(60)}-2026-03-10.csv`,
+    );
+  });
+
+  it('falls back to "event" for a name without Latin letters or digits', () => {
+    expect(recordingSheetFilename({ ...SHEET, eventName: '東京 スプリント' }, 'xlsx')).toBe('recording-sheet-event-2026-03-10.xlsx');
+  });
+});
+
+describe('downloadRecordingSheet', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('revokes the object URL after a delay, not right after the click', async () => {
+    vi.useFakeTimers();
+    const create = vi.fn(() => 'blob:sheet');
+    const revoke = vi.fn();
+    Object.assign(URL, { createObjectURL: create, revokeObjectURL: revoke });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    await downloadRecordingSheet(SHEET, 'csv');
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(revoke).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1000);
+    expect(revoke).toHaveBeenCalledWith('blob:sheet');
   });
 });

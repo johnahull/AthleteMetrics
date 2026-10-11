@@ -48,7 +48,10 @@ export const emptyImportPlan = (fileError?: string): SheetImportPlan => ({
   warnings: [],
 });
 
-const normalizeName = (name: string) => name.trim().replace(/\s+/g, " ").toLowerCase();
+const normalizeName = (name: string) => name.normalize("NFC").trim().replace(/\s+/g, " ").toLowerCase();
+
+const NO_EVENT_ID =
+  "This sheet has no Event ID row, so it cannot be checked against this event. Download a fresh sheet for this event.";
 
 export function planSheetImport(input: {
   rows: SheetCell[][];
@@ -60,10 +63,11 @@ export function planSheetImport(input: {
   ignoredMetrics: Array<{ code: string; label: string; reason: string }>;
 }): SheetImportPlan {
   const { rows, metrics, ignoredMetrics } = input;
-  // Our CSV export prefixes cells that look like formulas with one '
+  // Our CSV export (papaparse escapeFormulae) prefixes cells starting with = + - @ tab or CR with one '
   const text = (cell: SheetCell | undefined) => {
     const t = cellText(cell);
-    return input.format === "csv" && t.startsWith("'") ? t.slice(1).trim() : t;
+    const raw = typeof cell === "string" ? cell.trimStart() : "";
+    return input.format === "csv" && /^'[=+\-@\t\r]/.test(raw) ? t.slice(1).trim() : t;
   };
 
   const sizeError = checkSheetSize(rows);
@@ -75,7 +79,8 @@ export function planSheetImport(input: {
   }
   const eventIdRow = rows.slice(0, headerIndex).find((row) => text(row[0]).toLowerCase() === "event id");
   const fileEventId = eventIdRow ? text(eventIdRow[1]) : "";
-  if (fileEventId && fileEventId !== input.eventId) {
+  if (!fileEventId) return emptyImportPlan(NO_EVENT_ID);
+  if (fileEventId.toLowerCase() !== input.eventId.trim().toLowerCase()) {
     return emptyImportPlan(
       `This sheet is for a different event (event id ${fileEventId}). Download the recording sheet of this event.`,
     );
@@ -97,7 +102,9 @@ export function planSheetImport(input: {
       code
         ? list.filter((m) => m.code.toUpperCase() === code)
         : list.filter((m) =>
-            [m.label, m.unit ? `${m.label} (${m.unit})` : m.label].some((l) => l.toLowerCase() === title.toLowerCase()),
+            [m.label, m.unit ? `${m.label} (${m.unit})` : m.label].some(
+              (l) => l.normalize("NFC").toLowerCase() === title.toLowerCase(),
+            ),
           );
     const found = matches(metrics);
     const ignored = matches(ignoredMetrics);
@@ -180,21 +187,30 @@ export interface ImportableCell {
   fromImport?: boolean;
 }
 
-/** Imported values become unsaved cells; conflicts keep the saved value with the file value pending */
+/**
+ * Imported values become unsaved cells; conflicts keep the saved value with the file value pending.
+ * A cell typed in (or given a file value) after the file was chosen keeps that value: it is skipped.
+ */
 export function applyImportPlan<C extends ImportableCell, R extends { measurements: Record<string, C> }>(
   grid: Record<string, R>,
   plan: SheetImportPlan,
-): Record<string, R> {
+): { grid: Record<string, R>; skipped: PlannedCell[] } {
   const next = { ...grid };
-  plan.cells.forEach(({ userId, metricCode, value, kind }) => {
+  const skipped: PlannedCell[] = [];
+  plan.cells.forEach((planned) => {
+    const { userId, metricCode, value, kind } = planned;
     const row = next[userId];
     const cell = row?.measurements[metricCode];
     if (!cell || kind === "unchanged") return;
+    if (cell.isDirty || cell.importedValue !== undefined) {
+      skipped.push(planned);
+      return;
+    }
     const patch: Partial<ImportableCell> =
       kind === "imported" ? { value, isDirty: true, fromImport: true, error: undefined } : { importedValue: value };
     next[userId] = { ...row, measurements: { ...row.measurements, [metricCode]: { ...cell, ...patch } } };
   });
-  return next;
+  return { grid: next, skipped };
 }
 
 export function resolveConflict<C extends ImportableCell>(cell: C, choice: "saved" | "file"): C {

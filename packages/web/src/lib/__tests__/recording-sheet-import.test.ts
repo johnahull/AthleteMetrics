@@ -24,14 +24,15 @@ const METRICS: SheetMetric[] = [
   { code: 'FLY10_TIME', label: '10-Yard Fly', unit: 's' },
 ];
 const HEADER = [ATHLETE_ID_HEADER, 'Athlete', 'Vertical Jump (in) [VERTICAL_JUMP]', '10-Yard Fly (s) [FLY10_TIME]'];
-const TOP = [['Event', 'Spring Screen'], ['Date', '2026-03-10'], ['Event ID', 'ev-1']];
+const ID_ROW = ['Event ID', 'ev-1'];
+const TOP = [['Event', 'Spring Screen'], ['Date', '2026-03-10'], ID_ROW];
 
 const athletes = (saved: Record<string, Record<string, number>> = {}): SheetImportAthlete[] => [
   { userId: 'ath-1', name: 'Jordan Lee', saved: saved['ath-1'] ?? {} },
   { userId: 'ath-2', name: 'Sam Park', saved: saved['ath-2'] ?? {} },
 ];
 
-const plan = (rows: SheetCell[][], opts: Partial<Parameters<typeof planSheetImport>[0]> = {}) =>
+const planRows = (rows: SheetCell[][], opts: Partial<Parameters<typeof planSheetImport>[0]> = {}) =>
   planSheetImport({
     rows,
     format: 'csv',
@@ -41,10 +42,13 @@ const plan = (rows: SheetCell[][], opts: Partial<Parameters<typeof planSheetImpo
     ignoredMetrics: [],
     ...opts,
   });
+/** A sheet of this event: the Event ID row (row 1), then the given rows */
+const plan = (rows: SheetCell[][], opts: Partial<Parameters<typeof planSheetImport>[0]> = {}) => planRows([ID_ROW, ...rows], opts);
+const NO_EVENT_ID = 'This sheet has no Event ID row, so it cannot be checked against this event. Download a fresh sheet for this event.';
 
 describe('planSheetImport', () => {
   it('imports values into empty cells and skips blank and "-" cells', () => {
-    const result = plan([...TOP, HEADER, ['ath-1', 'Jordan Lee', ' 30.5 ', '-'], ['ath-2', 'Sam Park', '', '1.62']]);
+    const result = planRows([...TOP, HEADER, ['ath-1', 'Jordan Lee', ' 30.5 ', '-'], ['ath-2', 'Sam Park', '', '1.62']]);
     expect(result.fileError).toBeUndefined();
     expect(result.rejections).toEqual([]);
     expect(result.cells).toEqual([
@@ -108,13 +112,30 @@ describe('planSheetImport', () => {
   });
 
   it('rejects the whole file when its event id is another event', () => {
-    const result = plan([['Event ID', 'ev-2'], HEADER, ['ath-1', 'Jordan Lee', '30', '']]);
+    const result = planRows([['Event ID', 'ev-2'], HEADER, ['ath-1', 'Jordan Lee', '30', '']]);
     expect(result.fileError).toMatch(/different event/i);
     expect(result.cells).toEqual([]);
   });
 
-  it('accepts a file without an event id row', () => {
-    expect(plan([HEADER, ['ath-1', 'Jordan Lee', '30', '']]).cells).toHaveLength(1);
+  it('rejects the whole file when it has no Event ID row', () => {
+    const result = planRows([HEADER, ['ath-1', 'Jordan Lee', '30', '']]);
+    expect(result.fileError).toBe(NO_EVENT_ID);
+    expect(result.cells).toEqual([]);
+  });
+
+  it('rejects the whole file when its Event ID is blank', () => {
+    expect(planRows([['Event ID', '   '], HEADER, ['ath-1', 'Jordan Lee', '30', '']]).fileError).toBe(NO_EVENT_ID);
+    expect(planRows([['Event ID'], HEADER, ['ath-1', 'Jordan Lee', '30', '']]).fileError).toBe(NO_EVENT_ID);
+  });
+
+  it('rejects the whole file when the Event ID label was renamed', () => {
+    expect(planRows([['Event identifier', 'ev-1'], HEADER, ['ath-1', 'Jordan Lee', '30', '']]).fileError).toBe(NO_EVENT_ID);
+  });
+
+  it('compares the event id ignoring case and surrounding spaces', () => {
+    const result = planRows([[' event id ', '  EV-1 '], HEADER, ['ath-1', 'Jordan Lee', '30', '']]);
+    expect(result.fileError).toBeUndefined();
+    expect(result.cells).toHaveLength(1);
   });
 
   it('rejects a file without the athlete id or athlete name column', () => {
@@ -136,9 +157,9 @@ describe('planSheetImport', () => {
       ['ath-1', ' jordan  LEE ', '30', ''],
     ]);
     expect(result.rejections).toEqual([
-      { row: 2, message: expect.stringMatching(/no athlete id/i) },
-      { row: 3, message: expect.stringMatching(/Pat Doe.*not on this event/) },
-      { row: 4, message: expect.stringMatching(/"Jordan Lee" does not match.*Sam Park/) },
+      { row: 3, message: expect.stringMatching(/no athlete id/i) },
+      { row: 4, message: expect.stringMatching(/Pat Doe.*not on this event/) },
+      { row: 5, message: expect.stringMatching(/"Jordan Lee" does not match.*Sam Park/) },
     ]);
     expect(result.cells).toEqual([{ userId: 'ath-1', metricCode: 'VERTICAL_JUMP', value: '30', kind: 'imported' }]);
   });
@@ -146,17 +167,41 @@ describe('planSheetImport', () => {
   it('rejects every row of an athlete that appears more than once', () => {
     const result = plan([HEADER, ['ath-1', 'Jordan Lee', '30', ''], ['ath-2', 'Sam Park', '28', ''], ['ath-1', 'Jordan Lee', '', '1.6']]);
     expect(result.rejections).toEqual([
-      { row: 2, message: expect.stringMatching(/more than once \(rows 2, 4\)/) },
-      { row: 4, message: expect.stringMatching(/more than once \(rows 2, 4\)/) },
+      { row: 3, message: expect.stringMatching(/more than once \(rows 3, 5\)/) },
+      { row: 5, message: expect.stringMatching(/more than once \(rows 3, 5\)/) },
     ]);
     expect(result.cells.map((c) => c.userId)).toEqual(['ath-2']);
   });
 
-  it('strips one leading apostrophe (CSV formula escape) from names, ids and the event id', () => {
-    const result = plan([['Event ID', "'ev-1"], HEADER, ["'ath-1", "'Jordan Lee", '30', '']], {
-      athletes: [{ userId: 'ath-1', name: 'Jordan Lee', saved: {} }],
+  it('strips the leading apostrophe of the CSV formula escape (before = + - @ tab or CR) only', () => {
+    const result = plan([HEADER, ['ath-1', "'-Jordan Lee", '30', ''], ['ath-2', "'Ike Park", '31', '']], {
+      athletes: [
+        { userId: 'ath-1', name: '-Jordan Lee', saved: {} },
+        { userId: 'ath-2', name: "'Ike Park", saved: {} },
+      ],
     });
     expect(result.rejections).toEqual([]);
+    expect(result.cells).toHaveLength(2);
+    expect(plan([HEADER, ['ath-1', "'=Jordan", '30', '']], { athletes: [{ userId: 'ath-1', name: '=Jordan', saved: {} }] }).rejections).toEqual([]);
+  });
+
+  it('does not strip an apostrophe that is part of a name', () => {
+    expect(plan([HEADER, ['ath-1', "'Jordan Lee", '30', '']]).rejections).toHaveLength(1);
+  });
+
+  it('matches names written with decomposed accents (NFD) to the same name (NFC)', () => {
+    const result = plan([HEADER, ['ath-1', 'Jose\u0301 Pe\u0301rez', '30', '']], {
+      athletes: [{ userId: 'ath-1', name: 'Jos\u00e9 P\u00e9rez', saved: {} }],
+    });
+    expect(result.rejections).toEqual([]);
+    expect(result.cells).toHaveLength(1);
+  });
+
+  it('matches a metric header written with decomposed accents', () => {
+    const result = plan([[ATHLETE_ID_HEADER, 'Athlete', 'Sa\u0301lto'], ['ath-1', 'Jordan Lee', '30']], {
+      metrics: [{ code: 'JUMP_X', label: 'S\u00e1lto' }],
+    });
+    expect(result.warnings).toEqual([]);
     expect(result.cells).toHaveLength(1);
   });
 
@@ -173,10 +218,10 @@ describe('planSheetImport', () => {
     ]);
     expect(result.cells).toEqual([]);
     expect(result.cellErrors).toEqual([
-      { row: 2, userId: 'ath-1', metricCode: 'VERTICAL_JUMP', raw: '1,200', message: expect.stringMatching(/dot for decimals/i) },
-      { row: 2, userId: 'ath-1', metricCode: 'FLY10_TIME', raw: 'DNF', message: 'Value must be a finite number' },
-      { row: 3, userId: 'ath-2', metricCode: 'VERTICAL_JUMP', raw: '0', message: 'Value must be positive' },
-      { row: 3, userId: 'ath-2', metricCode: 'FLY10_TIME', raw: '', message: 'Dates are not accepted' },
+      { row: 3, userId: 'ath-1', metricCode: 'VERTICAL_JUMP', raw: '1,200', message: expect.stringMatching(/dot for decimals/i) },
+      { row: 3, userId: 'ath-1', metricCode: 'FLY10_TIME', raw: 'DNF', message: 'Value must be a finite number' },
+      { row: 4, userId: 'ath-2', metricCode: 'VERTICAL_JUMP', raw: '0', message: 'Value must be positive' },
+      { row: 4, userId: 'ath-2', metricCode: 'FLY10_TIME', raw: '', message: 'Dates are not accepted' },
     ]);
   });
 
@@ -239,7 +284,7 @@ describe('applyImportPlan / resolveConflict / discardImport', () => {
     'ath-1': { userId: 'ath-1', measurements: { VERTICAL_JUMP: cell(), FLY10_TIME: cell({ value: '1.65', originalValue: 1.65, savedCount: 1 }) } },
   });
   const importPlan = planSheetImport({
-    rows: [HEADER, ['ath-1', 'Jordan Lee', '30', '1.70']],
+    rows: [ID_ROW, HEADER, ['ath-1', 'Jordan Lee', '30', '1.70']],
     format: 'csv',
     eventId: 'ev-1',
     athletes: athletes({ 'ath-1': { FLY10_TIME: 1.65 } }),
@@ -249,20 +294,34 @@ describe('applyImportPlan / resolveConflict / discardImport', () => {
 
   it('fills imported cells as unsaved and keeps the saved value of a conflict cell', () => {
     const before = grid();
-    const next = applyImportPlan(before, importPlan);
+    const { grid: next, skipped } = applyImportPlan(before, importPlan);
+    expect(skipped).toEqual([]);
     expect(next['ath-1'].measurements.VERTICAL_JUMP).toMatchObject({ value: '30', isDirty: true, fromImport: true });
     expect(next['ath-1'].measurements.FLY10_TIME).toMatchObject({ value: '1.65', isDirty: false, importedValue: '1.70' });
     expect(before['ath-1'].measurements.VERTICAL_JUMP.value).toBe('');
   });
 
+  it('skips cells typed in or already holding a file value since the file was chosen, and reports them', () => {
+    const before = grid();
+    before['ath-1'].measurements.VERTICAL_JUMP = cell({ value: '29', isDirty: true });
+    before['ath-1'].measurements.FLY10_TIME = cell({ value: '1.65', originalValue: 1.65, savedCount: 1, importedValue: '1.80' });
+    const { grid: next, skipped } = applyImportPlan(before, importPlan);
+    expect(next['ath-1'].measurements.VERTICAL_JUMP).toEqual(cell({ value: '29', isDirty: true }));
+    expect(next['ath-1'].measurements.FLY10_TIME).toMatchObject({ value: '1.65', importedValue: '1.80' });
+    expect(skipped).toEqual([
+      expect.objectContaining({ userId: 'ath-1', metricCode: 'VERTICAL_JUMP', value: '30' }),
+      expect.objectContaining({ userId: 'ath-1', metricCode: 'FLY10_TIME', value: '1.70' }),
+    ]);
+  });
+
   it('keeps the saved value or uses the file value', () => {
-    const conflict = applyImportPlan(grid(), importPlan)['ath-1'].measurements.FLY10_TIME;
+    const conflict = applyImportPlan(grid(), importPlan).grid['ath-1'].measurements.FLY10_TIME;
     expect(resolveConflict(conflict, 'saved')).toMatchObject({ value: '1.65', isDirty: false, importedValue: undefined });
     expect(resolveConflict(conflict, 'file')).toMatchObject({ value: '1.70', isDirty: true, fromImport: true, importedValue: undefined });
   });
 
   it('discards file values back to the saved state, leaving typed edits alone', () => {
-    const next = applyImportPlan(grid(), importPlan);
+    const next = applyImportPlan(grid(), importPlan).grid;
     expect(discardImport(next['ath-1'].measurements.VERTICAL_JUMP)).toMatchObject({ value: '', isDirty: false, fromImport: false });
     expect(discardImport(next['ath-1'].measurements.FLY10_TIME)).toMatchObject({ value: '1.65', importedValue: undefined });
     const typed = cell({ value: '5', isDirty: true });

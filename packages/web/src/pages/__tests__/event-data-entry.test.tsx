@@ -39,11 +39,22 @@ const EVENT = { id: 'ev-1', organizationId: 'org-1', name: 'Spring Screen', star
 const FROZEN_EVENT = { ...EVENT, isFrozen: true };
 let eventState: typeof EVENT;
 const downloadRecordingSheet = vi.fn();
+/** Set to hold an uploaded file's reading until the test resolves it */
+let readSheetGate: Promise<void> | null = null;
+const readSheetCalls = vi.fn();
 
-vi.mock('@/lib/recording-sheet', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/recording-sheet')>()),
-  downloadRecordingSheet: (...args: unknown[]) => downloadRecordingSheet(...args),
-}));
+vi.mock('@/lib/recording-sheet', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/recording-sheet')>();
+  return {
+    ...actual,
+    downloadRecordingSheet: (...args: unknown[]) => downloadRecordingSheet(...args),
+    readSheetFile: async (file: File) => {
+      readSheetCalls(file);
+      if (readSheetGate) await readSheetGate;
+      return actual.readSheetFile(file);
+    },
+  };
+});
 const REGISTRATIONS = [
   { id: 'r1', userId: 'ath-1', status: 'checked_in', userFullName: 'Jordan Lee' },
   { id: 'r2', userId: 'ath-2', status: 'checked_in', userFullName: 'Sam Park' },
@@ -121,6 +132,8 @@ beforeEach(() => {
   refetchMeasurements.mockReset();
   toast.mockReset();
   downloadRecordingSheet.mockReset();
+  readSheetCalls.mockReset();
+  readSheetGate = null;
   eventState = EVENT;
   measurementsState = { data: [], isError: false };
   registrationsState = REGISTRATIONS;
@@ -699,8 +712,8 @@ describe('EventDataEntry', () => {
       expect(cell('Jordan Lee', '10-Yard Fly')).toHaveAttribute('data-state', 'conflict');
       expect(screen.getByRole('button', { name: 'Conflict for 10-Yard Fly for Jordan Lee: saved 1.65, file 1.70' })).toBeInTheDocument();
 
-      expect(within(summary).getByRole('status')).toHaveTextContent(/1 value loaded.*1 conflict/);
-      const alert = within(summary).getByRole('alert');
+      expect(summary).toHaveTextContent(/1 value loaded.*1 conflict/);
+      const alert = summary;
       expect(alert).toHaveTextContent(/Row 7: Pat Doe is not on this event/);
       expect(alert).toHaveTextContent(/Row 6: Sam Park appears more than once \(rows 6, 8\)/);
       expect(alert).toHaveTextContent(/Row 8: Sam Park appears more than once/);
@@ -709,21 +722,108 @@ describe('EventDataEntry', () => {
       expect(screen.getByText(/1 conflict to resolve/i)).toBeInTheDocument();
     });
 
+    it('announces the result in live regions that stay mounted', async () => {
+      const user = userEvent.setup();
+      measurementsState.data = [saved('m1', 'ath-1', 'FLY10_TIME', 1.65)];
+      render(<EventDataEntry />);
+      const status = screen.getByTestId('recording-sheet-status');
+      const alert = screen.getByTestId('recording-sheet-alert');
+      expect(status).toHaveAttribute('role', 'status');
+      expect(status).toHaveAttribute('aria-live', 'polite');
+      expect(alert).toHaveAttribute('role', 'alert');
+
+      await upload(user, csvFile(['ath-1,Jordan Lee,30.5,1.70', 'ath-9,Pat Doe,29,', 'ath-2,Sam Park,0,']));
+      expect(screen.getByTestId('recording-sheet-status')).toBe(status);
+      expect(status).toHaveTextContent('Sheet loaded: 1 value imported, 1 conflict, 1 row rejected');
+      expect(alert).toHaveTextContent('Not loaded: 1 row, 1 invalid value. The list is in the sheet summary.');
+    });
+
+    it('announces a refused file in the alert region', async () => {
+      const user = userEvent.setup();
+      render(<EventDataEntry />);
+      await upload(user, csvFile(['ath-1,Jordan Lee,30,'], 'ev-2'));
+      expect(screen.getByTestId('recording-sheet-alert')).toHaveTextContent(/Sheet not loaded: This sheet is for a different event/);
+    });
+
+    it('refuses a sheet without an Event ID row', async () => {
+      const user = userEvent.setup();
+      render(<EventDataEntry />);
+      const summary = await upload(user, new File([`${HEADER}\nath-1,Jordan Lee,30,`], 'sheet.csv'));
+      expect(summary).toHaveTextContent('This sheet has no Event ID row, so it cannot be checked against this event.');
+      expect(cell('Jordan Lee', 'Vertical Jump')).toHaveValue('');
+    });
+
+    it('while a file is read: Upload and Save are off, and values typed meanwhile win over the file', async () => {
+      const user = userEvent.setup();
+      measurementsState.data = [saved('m1', 'ath-1', 'FLY10_TIME', 1.65)];
+      let release!: () => void;
+      readSheetGate = new Promise<void>((resolve) => (release = resolve));
+      render(<EventDataEntry />);
+      await user.upload(screen.getByLabelText('Recording sheet file'), csvFile(['ath-1,Jordan Lee,30.5,1.70', 'ath-2,Sam Park,28,']));
+      await waitFor(() => expect(screen.getByRole('button', { name: /upload filled sheet/i })).toBeDisabled());
+      expect(screen.getByLabelText('Recording sheet file')).toBeDisabled();
+      expect(screen.getByTestId('recording-sheet-status')).toHaveTextContent('Reading sheet.csv');
+
+      await user.type(cell('Jordan Lee', 'Vertical Jump'), '29');
+      await user.clear(cell('Jordan Lee', '10-Yard Fly'));
+      await user.type(cell('Jordan Lee', '10-Yard Fly'), '1.66');
+      expect(saveButton()).toBeDisabled();
+      // A second file cannot be chosen while the first is read
+      await user.upload(screen.getByLabelText('Recording sheet file'), csvFile(['ath-2,Sam Park,27,']));
+      expect(readSheetCalls).toHaveBeenCalledTimes(1);
+
+      release();
+      const summary = await screen.findByRole('region', { name: /^Sheet/ });
+      expect(cell('Jordan Lee', 'Vertical Jump')).toHaveValue('29');
+      expect(cell('Jordan Lee', 'Vertical Jump')).toHaveAttribute('data-state', 'dirty');
+      expect(cell('Jordan Lee', '10-Yard Fly')).toHaveValue('1.66');
+      expect(screen.queryByRole('button', { name: /^Conflict for 10-Yard Fly for Jordan Lee/ })).toBeNull();
+      expect(cell('Sam Park', 'Vertical Jump')).toHaveValue('28');
+      expect(summary).toHaveTextContent(/Jordan Lee, Vertical Jump: you typed a value while the file was read; the file value 30\.5 was not loaded/);
+      expect(summary).toHaveTextContent(/Jordan Lee, 10-Yard Fly: you typed a value while the file was read; the file value 1\.70 was not loaded/);
+      expect(screen.getByTestId('recording-sheet-status')).toHaveTextContent('Sheet loaded: 1 value imported, 0 conflicts, 0 rows rejected');
+      expect(saveButton()).toBeEnabled();
+    });
+
+    it('turns "Discard file values" off while a save is in flight', async () => {
+      const user = userEvent.setup();
+      let finish!: (value: unknown) => void;
+      mutateBulk.mockReturnValue(new Promise((resolve) => (finish = resolve)));
+      render(<EventDataEntry />);
+      const summary = await upload(user, csvFile(['ath-1,Jordan Lee,30,']));
+      expect(within(summary).getByRole('button', { name: 'Discard file values' })).toBeEnabled();
+      await user.click(saveButton());
+      expect(within(summary).getByRole('button', { name: 'Discard file values' })).toBeDisabled();
+      finish({ created: [], replaced: [], errors: [] });
+      await waitFor(() => expect(refetchMeasurements).toHaveBeenCalled());
+    });
+
+    it('shows an error toast when the sheet cannot be created', async () => {
+      const user = userEvent.setup();
+      downloadRecordingSheet.mockRejectedValue(new Error('Failed to fetch dynamically imported module'));
+      render(<EventDataEntry />);
+      await user.click(screen.getByRole('button', { name: /download sheet/i }));
+      await user.click(await screen.findByRole('menuitem', { name: /excel/i }));
+      await waitFor(() =>
+        expect(toast).toHaveBeenCalledWith(expect.objectContaining({ variant: 'destructive', title: 'Could not create the sheet' })),
+      );
+    });
+
     it('rejects a sheet of another event and leaves the grid untouched', async () => {
       const user = userEvent.setup();
       render(<EventDataEntry />);
       const summary = await upload(user, csvFile(['ath-1,Jordan Lee,30,'], 'ev-2'));
-      expect(within(summary).getByRole('alert')).toHaveTextContent(/different event/i);
+      expect(summary).toHaveTextContent(/different event/i);
       expect(cell('Jordan Lee', 'Vertical Jump')).toHaveValue('');
     });
 
     it('lists invalid values and ignored columns', async () => {
       const user = userEvent.setup();
       render(<EventDataEntry />);
-      const file = new File([`${HEADER},Momentum [MOMENTUM]\nath-1,Jordan Lee,"1,5",DNF,500`], 'sheet.csv');
+      const file = new File([`Event ID,ev-1\n${HEADER},Momentum [MOMENTUM]\nath-1,Jordan Lee,"1,5",DNF,500`], 'sheet.csv');
       const summary = await upload(user, file);
-      expect(within(summary).getByRole('alert')).toHaveTextContent(/Row 2, Jordan Lee, Vertical Jump: "1,5": Use a dot/);
-      expect(within(summary).getByRole('alert')).toHaveTextContent(/10-Yard Fly: "DNF"/);
+      expect(summary).toHaveTextContent(/Row 3, Jordan Lee, Vertical Jump: "1,5": Use a dot/);
+      expect(summary).toHaveTextContent(/10-Yard Fly: "DNF"/);
       expect(summary).toHaveTextContent(/Column "Momentum \[MOMENTUM\]" was ignored: Momentum is calculated/);
     });
 

@@ -14,6 +14,8 @@ export const ATHLETE_NAME_HEADER = "Athlete";
 export const MAX_SHEET_FILE_BYTES = 1024 * 1024;
 export const MAX_SHEET_ROWS = 1000;
 export const MAX_SHEET_COLUMNS = 200;
+export const MAX_SHEET_ZIP_ENTRIES = 50;
+export const MAX_SHEET_UNZIPPED_BYTES = 20 * 1024 * 1024;
 
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -80,8 +82,9 @@ export function isAthleteIdHeader(cell: SheetCell | undefined): boolean {
   return text === ATHLETE_ID_HEADER.toLowerCase() || text === "athlete id";
 }
 
+/** A cell's text, trimmed and in one Unicode form (NFC), so "é" typed either way compares equal */
 export function cellText(cell: SheetCell | undefined): string {
-  return typeof cell === "string" ? cell.trim() : "";
+  return typeof cell === "string" ? cell.normalize("NFC").trim() : "";
 }
 
 /** The sheet as rows of text, the same for CSV and XLSX */
@@ -122,7 +125,12 @@ export async function recordingSheetToXlsx(sheet: RecordingSheet): Promise<Uint8
 }
 
 export function recordingSheetFilename(sheet: RecordingSheet, ext: "csv" | "xlsx"): string {
-  const slug = sheet.eventName.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "event";
+  const slug =
+    sheet.eventName
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, "-")
+      .slice(0, 60)
+      .replace(/^-+|-+$/g, "") || "event";
   return `recording-sheet-${slug}${sheet.eventDate ? `-${sheet.eventDate}` : ""}.${ext}`;
 }
 
@@ -142,7 +150,8 @@ export async function downloadRecordingSheet(sheet: RecordingSheet, format: "csv
     link.click();
     document.body.removeChild(link);
   } finally {
-    URL.revokeObjectURL(url);
+    // Some browsers start the download after click() returns; revoking at once can cancel it
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 }
 
@@ -189,8 +198,29 @@ function readXlsxValue(value: unknown): SheetCell {
   return { error: "Unsupported cell content" };
 }
 
+/**
+ * Refuse a zip (XLSX) with many parts or a large unpacked size before exceljs unpacks it.
+ * shortcut: the sizes are the ones the zip declares (a crafted file can understate them); parsing
+ * is client-side only, so a bomb can at worst hang this tab. Upgrade if sheets are ever parsed on the server.
+ */
+async function checkXlsxZip(data: ArrayBuffer): Promise<void> {
+  const JSZip = (await import("jszip")).default;
+  const zip = await JSZip.loadAsync(data); // reads the central directory; nothing is unpacked yet
+  const entries = Object.values(zip.files);
+  if (entries.length > MAX_SHEET_ZIP_ENTRIES) {
+    throw new Error(`The file has more than ${MAX_SHEET_ZIP_ENTRIES} parts; a recording sheet has far fewer.`);
+  }
+  // uncompressedSize is not in JSZip's typings, but every loaded entry has it (from the central directory)
+  const unpacked = entries.reduce(
+    (sum, entry) => sum + ((entry as unknown as { _data?: { uncompressedSize?: number } })._data?.uncompressedSize ?? 0),
+    0,
+  );
+  if (unpacked > MAX_SHEET_UNZIPPED_BYTES) throw new Error("The file is larger than 20 MB when unpacked.");
+}
+
 /** Rows of the first worksheet of an XLSX file; a formula cell gives its saved result */
 export async function parseXlsxSheet(data: ArrayBuffer): Promise<SheetCell[][]> {
+  await checkXlsxZip(data);
   const ExcelJS = (await import("exceljs")).default;
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(data);

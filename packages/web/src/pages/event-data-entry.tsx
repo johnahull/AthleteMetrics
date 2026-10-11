@@ -3,7 +3,7 @@
  * Allows coaches to enter measurements for checked-in athletes at an event
  */
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import {
   useEvent,
@@ -37,11 +37,12 @@ import {
   emptyImportPlan,
   planSheetImport,
   resolveConflict,
+  type PlannedCell,
   type SheetImportPlan,
 } from "@/lib/recording-sheet-import";
 import { RecordingSheetActions } from "@/components/events/RecordingSheetActions";
 import { RecordingSheetConflict } from "@/components/events/RecordingSheetConflict";
-import { RecordingSheetImportSummary } from "@/components/events/RecordingSheetImportSummary";
+import { RecordingSheetImportSummary, sheetImportAnnouncement } from "@/components/events/RecordingSheetImportSummary";
 import {
   MovementQualityPanel,
   type MovementQualitySaveInput,
@@ -139,7 +140,12 @@ export default function EventDataEntry() {
   const [isSaving, setIsSaving] = useState(false);
   const [mqAthleteId, setMqAthleteId] = useState<string | null>(null);
   const [mqServerErrors, setMqServerErrors] = useState<Record<string, string> | undefined>();
-  const [sheetImport, setSheetImport] = useState<{ fileName: string; plan: SheetImportPlan } | null>(null);
+  const [sheetImport, setSheetImport] = useState<{ fileName: string; plan: SheetImportPlan; skipped: PlannedCell[] } | null>(null);
+  /** Name of the uploaded sheet being read; Upload, Save and Discard are off meanwhile */
+  const [readingSheet, setReadingSheet] = useState<string | null>(null);
+  // The grid as last rendered, for applying a sheet after its (async) read without losing cells typed meanwhile
+  const gridRef = useRef(gridData);
+  gridRef.current = gridData;
 
   // Fetch event details
   const { data: event, isLoading: eventLoading } = useEvent(eventId);
@@ -348,6 +354,8 @@ export default function EventDataEntry() {
     });
 
   const handleSheetUpload = async (file: File) => {
+    if (readingSheet) return;
+    setReadingSheet(file.name);
     let plan: SheetImportPlan;
     try {
       plan = planSheetImport({
@@ -364,9 +372,30 @@ export default function EventDataEntry() {
     } catch (error) {
       plan = emptyImportPlan(error instanceof Error ? error.message : "The file could not be read.");
     }
-    if (!plan.fileError) setGridData((prev) => applyImportPlan(prev, plan));
-    setSheetImport({ fileName: file.name, plan });
+    // Cells typed while the file was read keep the typed value (reported as skipped)
+    const applied = plan.fileError ? { grid: gridRef.current, skipped: [] } : applyImportPlan(gridRef.current, plan);
+    setGridData(applied.grid);
+    setSheetImport({ fileName: file.name, plan, skipped: applied.skipped });
+    setReadingSheet(null);
   };
+
+  const handleSheetDownload = async (format: "csv" | "xlsx") => {
+    try {
+      await downloadRecordingSheet(recordingSheet(), format);
+    } catch {
+      toast({
+        title: "Could not create the sheet",
+        description: "Check your connection and try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const sheetAnnouncement = readingSheet
+    ? { status: `Reading ${readingSheet}…`, alert: "" }
+    : sheetImport
+      ? sheetImportAnnouncement(sheetImport.plan, sheetImport.skipped)
+      : { status: "", alert: "" };
 
   // Calculate completion stats
   const completionStats = useMemo(() => {
@@ -785,8 +814,16 @@ export default function EventDataEntry() {
         <div className="flex flex-wrap items-start gap-3">
           <RecordingSheetActions
             disabledReason={event.isFrozen ? "This event is frozen, so results cannot be entered from a sheet." : undefined}
-            uploadBlockedReason={hasUnsavedEdits ? "Save or undo your unsaved changes before uploading a sheet." : undefined}
-            onDownload={(format) => downloadRecordingSheet(recordingSheet(), format)}
+            uploadBlockedReason={
+              readingSheet
+                ? `Reading ${readingSheet}…`
+                : isSaving
+                  ? "Wait for the save to finish before uploading a sheet."
+                  : hasUnsavedEdits
+                    ? "Save or undo your unsaved changes before uploading a sheet."
+                    : undefined
+            }
+            onDownload={handleSheetDownload}
             onUpload={handleSheetUpload}
           />
           <Button variant="outline" size="sm" onClick={handleRefresh}>
@@ -795,7 +832,7 @@ export default function EventDataEntry() {
           </Button>
           <Button
             onClick={handleSave}
-            disabled={dirtyCount === 0 || conflictCount > 0 || isSaving || event.isFrozen}
+            disabled={dirtyCount === 0 || conflictCount > 0 || isSaving || !!readingSheet || event.isFrozen}
           >
             {isSaving ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -894,10 +931,20 @@ export default function EventDataEntry() {
         </div>
       )}
 
+      {/* Mounted at all times so screen readers announce changes (a region added with its text often is not read) */}
+      <div data-testid="recording-sheet-status" role="status" aria-live="polite" className="sr-only">
+        {sheetAnnouncement.status}
+      </div>
+      <div data-testid="recording-sheet-alert" role="alert" className="sr-only">
+        {sheetAnnouncement.alert}
+      </div>
+
       {sheetImport && (
         <RecordingSheetImportSummary
           fileName={sheetImport.fileName}
           plan={sheetImport.plan}
+          skipped={sheetImport.skipped}
+          busy={isSaving || !!readingSheet}
           conflictsLeft={conflictCount}
           hasPendingImport={hasPendingImport}
           metricLabels={new Map([...displayByCode].map(([code, d]) => [code, d.label]))}
