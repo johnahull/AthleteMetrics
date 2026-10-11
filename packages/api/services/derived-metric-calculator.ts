@@ -19,7 +19,7 @@ import {
   type DerivedCalculationConfig,
   events,
 } from '@shared/schema';
-import { eq, and, gte, lte, sql, or, desc, asc, inArray } from 'drizzle-orm';
+import { eq, and, gte, lte, sql, or, desc, asc, inArray, isNull, type SQL } from 'drizzle-orm';
 import type { PgTransaction } from 'drizzle-orm/pg-core';
 import type { PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js';
 import type { ExtractTablesWithRelations } from 'drizzle-orm';
@@ -32,6 +32,24 @@ type DbTransaction = PgTransaction<
 >;
 import { evaluateFormula } from './formula-service';
 import type { DerivedCalcFailure } from './derived-total-warnings';
+
+/**
+ * Which of the athlete's measurements a caller may see: rows in these organizations, plus the
+ * athlete's personal (no-organization) rows when includePersonal. Undefined means every row
+ * (the calculator itself, and site admins). Used by the calculation preview only.
+ */
+export type MeasurementVisibilityScope = {
+  organizationIds: string[];
+  includePersonal: boolean;
+};
+
+function visibilityCondition(scope?: MeasurementVisibilityScope): SQL | undefined {
+  if (!scope) return undefined;
+  const conditions: SQL[] = [];
+  if (scope.organizationIds.length > 0) conditions.push(inArray(measurements.organizationId, scope.organizationIds));
+  if (scope.includePersonal) conditions.push(isNull(measurements.organizationId));
+  return conditions.length > 0 ? or(...conditions) : sql`false`;
+}
 
 // ============================================================================
 // Metric Config Cache - Performance Optimization
@@ -536,23 +554,8 @@ export class DerivedMetricCalculator {
     // measurement of the anchor metric. Without one (anchor deleted, moved, unverified,
     // or the date is a non-anchor source's date) there is nothing to derive on this date.
     const anchorMetric = derivedMetric.calculationConfig?.anchorMetric?.toUpperCase();
-    if (anchorMetric) {
-      const [anchorRow] = await tx
-        .select({ id: measurements.id })
-        .from(measurements)
-        .where(
-          and(
-            eq(measurements.userId, userId),
-            eq(measurements.metric, anchorMetric),
-            eq(measurements.date, date),
-            eq(measurements.isVerified, true),
-            eq(measurements.isCalculated, false)
-          )
-        )
-        .limit(1);
-      if (!anchorRow) {
-        return deleteExisting();
-      }
+    if (anchorMetric && !(await this.hasVerifiedAnchor(userId, anchorMetric, date, tx))) {
+      return deleteExisting();
     }
 
     // Find source measurements for the formula
@@ -1040,6 +1043,7 @@ export class DerivedMetricCalculator {
    * @param config.dateMatchStrategy - How to find source measurements by date ('same_date', 'latest_before', or 'closest')
    * @param config.maxDateDifference - For 'closest' strategy, max days difference allowed
    * @param config.missingSourceBehavior - What to do if source data is missing ('skip' returns null, 'error' throws)
+   * @param scope - Only consider rows the caller may see (see MeasurementVisibilityScope); omit for all rows
    * @returns Map of metric code to measurement, or null if any required source is missing (when behavior is 'skip')
    * @throws Error if required source measurements are missing and behavior is 'error'
    */
@@ -1048,9 +1052,39 @@ export class DerivedMetricCalculator {
     dependentMetrics: string[],
     targetDate: string,
     config: DerivedCalculationConfig,
-    metricConfigs?: Map<string, { higherIsBetter: boolean }>
+    metricConfigs?: Map<string, { higherIsBetter: boolean }>,
+    scope?: MeasurementVisibilityScope
   ): Promise<Map<string, Measurement> | null> {
-    return this.findSourceMeasurements(userId, dependentMetrics, targetDate, config, metricConfigs);
+    return this.findSourceMeasurements(userId, dependentMetrics, targetDate, config, metricConfigs, scope);
+  }
+
+  /**
+   * Whether the athlete has a verified, direct (non-calculated) measurement of the anchor
+   * metric on this date. An anchored derived metric (e.g. MOMENTUM) only exists on such dates.
+   * `scope` limits the check to rows a caller may see (preview only); omit for all rows.
+   */
+  async hasVerifiedAnchor(
+    userId: string,
+    anchorMetric: string,
+    date: string,
+    dbOrTx: typeof dbType | DbTransaction = this.db,
+    scope?: MeasurementVisibilityScope
+  ): Promise<boolean> {
+    const [anchorRow] = await dbOrTx
+      .select({ id: measurements.id })
+      .from(measurements)
+      .where(
+        and(
+          eq(measurements.userId, userId),
+          eq(measurements.metric, anchorMetric),
+          eq(measurements.date, date),
+          eq(measurements.isVerified, true),
+          eq(measurements.isCalculated, false),
+          visibilityCondition(scope)
+        )
+      )
+      .limit(1);
+    return !!anchorRow;
   }
 
   /**
@@ -1077,9 +1111,10 @@ export class DerivedMetricCalculator {
     dependentMetrics: string[],
     targetDate: string,
     config: DerivedCalculationConfig,
-    metricConfigs?: Map<string, { higherIsBetter: boolean }>
+    metricConfigs?: Map<string, { higherIsBetter: boolean }>,
+    scope?: MeasurementVisibilityScope
   ): Promise<Map<string, Measurement> | null> {
-    return this.findSourceMeasurementsImpl(this.db, userId, dependentMetrics, targetDate, config, metricConfigs);
+    return this.findSourceMeasurementsImpl(this.db, userId, dependentMetrics, targetDate, config, metricConfigs, scope);
   }
 
   /**
@@ -1101,7 +1136,8 @@ export class DerivedMetricCalculator {
     userId: string,
     dependentMetrics: string[],
     targetDate: string,
-    config: { missingSourceBehavior: 'skip' | 'error' }
+    config: { missingSourceBehavior: 'skip' | 'error' },
+    scope?: MeasurementVisibilityScope
   ): Promise<Map<string, Measurement> | null> {
     const codes = dependentMetrics.map((c) => c.toUpperCase());
     const candidates = await dbOrTx
@@ -1123,7 +1159,8 @@ export class DerivedMetricCalculator {
           // practice MQ scores are always verified: coach/org_admin/site_admin writes are
           // auto-verified and athletes cannot enter MQ scores. A direct DB write, backfill
           // or new write path that stores unverified MQ scores would hit this.
-          eq(measurements.isVerified, true)
+          eq(measurements.isVerified, true),
+          visibilityCondition(scope)
         )
       );
 
@@ -1200,11 +1237,13 @@ export class DerivedMetricCalculator {
     dependentMetrics: string[],
     targetDate: string,
     config: DerivedCalculationConfig,
-    metricConfigs?: Map<string, { higherIsBetter: boolean }>
+    metricConfigs?: Map<string, { higherIsBetter: boolean }>,
+    scope?: MeasurementVisibilityScope
   ): Promise<Map<string, Measurement> | null> {
     if (config.sourceSelection === 'latest_event' && config.dateMatchStrategy === 'same_date') {
-      return this.findLatestEventSources(dbOrTx, userId, dependentMetrics, targetDate, config);
+      return this.findLatestEventSources(dbOrTx, userId, dependentMetrics, targetDate, config, scope);
     }
+    const visible = visibilityCondition(scope);
 
     const sourceMeasurementsMap = new Map<string, Measurement>();
 
@@ -1232,7 +1271,8 @@ export class DerivedMetricCalculator {
                 eq(measurements.userId, userId),
                 eq(measurements.metric, normalizedMetricCode),
                 eq(measurements.date, targetDate),
-                eq(measurements.isVerified, true)
+                eq(measurements.isVerified, true),
+                visible
               )
             )
             .orderBy(
@@ -1255,7 +1295,8 @@ export class DerivedMetricCalculator {
                 eq(measurements.userId, userId),
                 eq(measurements.metric, normalizedMetricCode),
                 lte(measurements.date, targetDate),
-                eq(measurements.isVerified, true)
+                eq(measurements.isVerified, true),
+                visible
               )
             )
             .orderBy(
@@ -1289,7 +1330,8 @@ export class DerivedMetricCalculator {
                 eq(measurements.metric, normalizedMetricCode),
                 gte(measurements.date, minDate.toISOString().split('T')[0]),
                 lte(measurements.date, maxDate.toISOString().split('T')[0]),
-                eq(measurements.isVerified, true)
+                eq(measurements.isVerified, true),
+                visible
               )
             )
             .orderBy(measurements.date);
