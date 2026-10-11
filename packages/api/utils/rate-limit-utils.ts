@@ -55,3 +55,13 @@ export function shouldSkipRateLimiting(
 
   return shouldSkip;
 }
+
+/**
+ * Cheap session reads the web app calls on every page load. Counting them
+ * against the general API limit logs users out once the budget is spent
+ * (the client treats a failed /auth/me as "not signed in"). `req.path` is
+ * relative to the `/api` mount.
+ */
+export function isSessionProbe(req: Request): boolean {
+  return req.path === '/auth/me' || req.path === '/auth/me/organizations';
+}
