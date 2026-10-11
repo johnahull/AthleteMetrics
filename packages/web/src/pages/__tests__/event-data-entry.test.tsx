@@ -794,6 +794,22 @@ describe('EventDataEntry', () => {
       expect(saveButton()).toBeEnabled();
     });
 
+    it('a refetch landing while the file is read: a file value equal to the new saved value is unchanged, not a conflict', async () => {
+      const user = userEvent.setup();
+      measurementsState.data = [saved('m1', 'ath-1', 'FLY10_TIME', 1.65)];
+      let release!: () => void;
+      readSheetGate = new Promise<void>((resolve) => (release = resolve));
+      const { rerender } = render(<EventDataEntry />);
+      await user.upload(screen.getByLabelText('Recording sheet file'), csvFile(['ath-1,Jordan Lee,,1.70']));
+      await waitFor(() => expect(screen.getByTestId('recording-sheet-status')).toHaveTextContent('Reading sheet.csv'));
+      measurementsState = { ...measurementsState, data: [saved('m2', 'ath-1', 'FLY10_TIME', 1.7)] };
+      rerender(<EventDataEntry />);
+      release();
+      await screen.findByRole('region', { name: /^Sheet/ });
+      expect(screen.queryByRole('button', { name: /^Conflict for 10-Yard Fly for Jordan Lee/ })).toBeNull();
+      expect(cell('Jordan Lee', '10-Yard Fly')).toHaveAttribute('data-state', 'saved');
+    });
+
     it('turns "Discard file values" off while a save is in flight', async () => {
       const user = userEvent.setup();
       let finish!: (value: unknown) => void;

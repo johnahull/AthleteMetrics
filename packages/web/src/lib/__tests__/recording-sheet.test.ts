@@ -202,6 +202,21 @@ describe('recordingSheetToXlsx / parseXlsxSheet', () => {
       await expect(parseXlsxSheet(await bytes(zip))).rejects.toThrow(/larger than 20 MB when unpacked/);
     });
 
+    it('fails closed when the zip entries carry no size (the private JSZip field is gone)', async () => {
+      const data = await bytes(await sheetZip());
+      const real = JSZip.loadAsync.bind(JSZip);
+      const spy = vi.spyOn(JSZip, 'loadAsync').mockImplementation(async (...args: Parameters<typeof JSZip.loadAsync>) => {
+        const zip = await real(...args);
+        Object.values(zip.files).forEach((entry) => delete (entry as unknown as { _data?: unknown })._data);
+        return zip;
+      });
+      try {
+        await expect(parseXlsxSheet(data)).rejects.toThrow(/zip size check unavailable/);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
     it('accepts a normal recording sheet', async () => {
       const rows = await parseXlsxSheet(await bytes(await sheetZip()));
       expect(rows[2]).toEqual(['Event ID', 'ev-1']);

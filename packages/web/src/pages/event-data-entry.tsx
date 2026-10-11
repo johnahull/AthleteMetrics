@@ -345,6 +345,12 @@ export default function EventDataEntry() {
       return next;
     });
 
+  const importMetricLabels = useMemo(() => new Map([...displayByCode].map(([code, d]) => [code, d.label])), [displayByCode]);
+  const importAthleteNames = useMemo(
+    () => new Map(Object.values(gridData).map((row) => [row.userId, row.fullName])),
+    [gridData],
+  );
+
   // Recording sheet: grid athletes x metrics that can be typed
   const recordingSheet = () =>
     buildRecordingSheet({
@@ -358,10 +364,12 @@ export default function EventDataEntry() {
     setReadingSheet(file.name);
     let plan: SheetImportPlan;
     try {
+      const sheet = await readSheetFile(file);
+      // Saved values are read after the file is parsed: a refetch landing meanwhile must not cause false conflicts
       plan = planSheetImport({
-        ...(await readSheetFile(file)),
+        ...sheet,
         eventId: eventId!,
-        athletes: Object.values(gridData).map((row) => ({
+        athletes: Object.values(gridRef.current).map((row) => ({
           userId: row.userId,
           name: row.fullName,
           saved: Object.fromEntries(Object.entries(row.measurements).map(([code, c]) => [code, c.originalValue])),
@@ -949,8 +957,8 @@ export default function EventDataEntry() {
           busy={isSaving || !!readingSheet}
           conflictsLeft={conflictCount}
           hasPendingImport={hasPendingImport}
-          metricLabels={new Map([...displayByCode].map(([code, d]) => [code, d.label]))}
-          athleteNames={new Map(Object.values(gridData).map((row) => [row.userId, row.fullName]))}
+          metricLabels={importMetricLabels}
+          athleteNames={importAthleteNames}
           onResolveAll={(choice) => updateCells((c) => resolveConflict(c, choice))}
           onDiscard={() => {
             updateCells(discardImport);

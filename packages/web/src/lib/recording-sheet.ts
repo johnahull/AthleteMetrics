@@ -216,6 +216,10 @@ async function checkXlsxZip(data: ArrayBuffer): Promise<void> {
     (sum, entry) => sum + ((entry as unknown as { _data?: { uncompressedSize?: number } })._data?.uncompressedSize ?? 0),
     0,
   );
+  // fail closed: a real workbook has more than 3 parts and unpacks to more than 0 bytes
+  if (entries.length > 3 && unpacked === 0) {
+    throw new Error("Could not check the size of this workbook (zip size check unavailable). Please export it again.");
+  }
   if (unpacked > MAX_SHEET_UNZIPPED_BYTES) throw new Error("The file is larger than 20 MB when unpacked.");
 }
 
