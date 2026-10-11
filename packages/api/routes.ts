@@ -15,6 +15,7 @@ import { createServer } from "http";
 import session from "express-session";
 import passport from "passport";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import { isSessionProbe } from "./utils/rate-limit-utils";
 import helmet from "helmet";
 import csrf from "csrf";
 import DOMPurify from "isomorphic-dompurify";
@@ -852,8 +853,8 @@ export async function registerRoutes(app: Express) {
     standardHeaders: true,
     legacyHeaders: false,
     skip: (req) => {
-      // Skip rate limiting for local development
-      return req.ip === '127.0.0.1' || req.ip === '::1';
+      // Skip local development and the session probes (/auth/me), so a spent budget cannot log users out
+      return req.ip === '127.0.0.1' || req.ip === '::1' || isSessionProbe(req);
     }
   });
 
