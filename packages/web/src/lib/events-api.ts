@@ -174,7 +174,7 @@ export async function updateEvent(eventId: string, data: Partial<UpdateEvent>): 
 /**
  * Delete an event
  */
-export async function deleteEvent(eventId: string): Promise<{ success: boolean }> {
+export async function deleteEvent(eventId: string): Promise<void> {
   const response = await fetch(`/api/events/${eventId}`, {
     method: 'DELETE',
   });
@@ -183,8 +183,7 @@ export async function deleteEvent(eventId: string): Promise<{ success: boolean }
     const message = await getErrorMessage(response, 'Failed to delete event');
     throw new Error(message);
   }
-
-  return response.json();
+  // 204 No Content: there is no body to parse
 }
 
 /**
@@ -826,7 +825,9 @@ export function useDeleteEvent() {
 
   return useMutation({
     mutationFn: deleteEvent,
-    onSuccess: () => {
+    onSuccess: (_data, eventId) => {
+      // Drop the deleted event's own queries first so an open detail page does not refetch into a 404
+      queryClient.removeQueries({ queryKey: ['events', eventId] });
       queryClient.invalidateQueries({ queryKey: ['events'] });
     },
   });

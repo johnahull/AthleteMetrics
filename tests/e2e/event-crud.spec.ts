@@ -381,6 +381,46 @@ test.describe('Event CRUD Tests', () => {
     await expect(page.locator('button:has-text("Freeze")')).toBeVisible();
   });
 
+  test('should delete an event from the detail page after confirming', async ({ page }) => {
+    test.skip(!testOrganizationId, 'Test organization required');
+
+    const testEvent = generateTestEvent();
+
+    // Create event via API first (with organization)
+    const createResponse = await page.request.post(`${STAGING_URL}/api/events`, {
+      data: {
+        name: testEvent.name,
+        startDate: testEvent.startDate,
+        status: 'published',
+        organizationId: testOrganizationId,
+      },
+    });
+
+    expect(createResponse.ok()).toBeTruthy();
+    const createdEvent = await createResponse.json();
+    if (createdEvent?.id) {
+      createdEventIds.push(createdEvent.id);
+    }
+
+    await navigateTo(page, `/events/${createdEvent.id}`);
+
+    // Cancelling the confirmation keeps the event
+    await page.getByRole('button', { name: 'Delete Event' }).click();
+    const dialog = page.getByRole('alertdialog');
+    await expect(dialog).toContainText('Registrations, invitations and the metric set are deleted');
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.locator('h1', { hasText: testEvent.name })).toBeVisible();
+
+    // Confirming deletes it and returns to the events list
+    await page.getByRole('button', { name: 'Delete Event' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(page).toHaveURL(/\/events$/);
+
+    const getResponse = await page.request.get(`${STAGING_URL}/api/events/${createdEvent.id}`);
+    expect(getResponse.status()).toBe(404);
+  });
+
   test.fixme('should filter events by tab', async ({ page }) => {
     // FIXME: Requires org context in frontend
     test.skip(!testOrganizationId, 'Test organization required');
