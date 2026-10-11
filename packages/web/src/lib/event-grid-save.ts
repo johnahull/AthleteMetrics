@@ -26,3 +26,24 @@ export function chunkBulkItems<T>(items: T[], maxItems = MAX_BULK_ITEMS, maxByte
   if (current.length > 0) chunks.push(current);
   return chunks;
 }
+
+/**
+ * Fields of a cell whose value `sent` was saved as row `savedId`: it replaced the cell's only row, or
+ * was added as a new trial. A cell edited again while the request was in flight keeps its new value
+ * and stays dirty.
+ */
+export function savedCellPatch(
+  sent: { value: string; savedCount: number },
+  current: { value: string },
+  savedId: string,
+  replaced: boolean,
+): { originalValue: number; savedMeasurementId: string; savedCount: number; isDirty: boolean; error?: undefined } {
+  return {
+    originalValue: Number(sent.value),
+    savedMeasurementId: savedId,
+    savedCount: replaced ? sent.savedCount : sent.savedCount + 1,
+    // Dirty against the value now saved, also when it was typed back to the old value meanwhile
+    isDirty: current.value !== sent.value,
+    ...(current.value === sent.value ? { error: undefined } : {}),
+  };
+}

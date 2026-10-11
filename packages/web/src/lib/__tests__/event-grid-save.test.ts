@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { chunkBulkItems, MAX_BULK_ITEMS, MAX_BULK_BYTES } from '../event-grid-save';
+import { chunkBulkItems, savedCellPatch, MAX_BULK_ITEMS, MAX_BULK_BYTES } from '../event-grid-save';
 
 const item = (i: number, notes = '') => ({ userId: `u-${i}`, metric: 'VERTICAL_JUMP', value: i, date: '2026-03-10T00:00:00.000Z', notes });
 const bytes = (chunk: unknown[]) => new TextEncoder().encode(JSON.stringify({ measurements: chunk })).length;
@@ -30,5 +30,31 @@ describe('chunkBulkItems', () => {
 
   it('returns no chunks for no items', () => {
     expect(chunkBulkItems([])).toEqual([]);
+  });
+});
+
+describe('savedCellPatch', () => {
+  it('a replaced row keeps the trial count; the cell is clean with the new saved value', () => {
+    expect(savedCellPatch({ value: '31', savedCount: 1 }, { value: '31' }, 'm1', true)).toEqual({
+      originalValue: 31,
+      savedMeasurementId: 'm1',
+      savedCount: 1,
+      isDirty: false,
+      error: undefined,
+    });
+  });
+
+  it('a created row adds a trial', () => {
+    expect(savedCellPatch({ value: '32', savedCount: 1 }, { value: '32' }, 'm2', false)).toMatchObject({
+      savedMeasurementId: 'm2',
+      savedCount: 2,
+      isDirty: false,
+    });
+  });
+
+  it('a value retyped while the request was in flight stays dirty and keeps its error state', () => {
+    const patch = savedCellPatch({ value: '32', savedCount: 1 }, { value: '33' }, 'm2', false);
+    expect(patch).toMatchObject({ originalValue: 32, savedCount: 2, isDirty: true });
+    expect(patch).not.toHaveProperty('error');
   });
 });

@@ -369,7 +369,7 @@ describe('EventDataEntry', () => {
         isCalculated: false, calculatedFromMeasurementIds: null, ...extra,
       }) as any;
     const sentItems = (call = 0) => mutateBulk.mock.calls[call][0].measurements;
-    const saveButton = () => screen.getByRole('button', { name: /^save/i });
+    const saveButton = () => screen.getByRole('button', { name: /^save( \(\d+\))?$/i });
     const ok = (rows: Array<Record<string, unknown>>, replaced: Array<Record<string, unknown>> = [], errors: unknown[] = []) => ({
       created: rows,
       replaced,
@@ -632,6 +632,121 @@ describe('EventDataEntry', () => {
     });
   });
 
+  describe('add trial', () => {
+    const saved = (id: string, userId: string, metricCode: string, value: number): Measurement =>
+      ({ id, userId, metric: metricCode, value: String(value), notes: null, mediaUrl: null, isCalculated: false, calculatedFromMeasurementIds: null }) as any;
+    const flyCell = (name: string) => screen.getByRole('textbox', { name: `10-Yard Fly for ${name}` });
+    const addTrialButton = (value: string, name = 'Jordan Lee') =>
+      screen.queryByRole('button', { name: `Save ${value} as a new 10-Yard Fly trial for ${name}` });
+    const retype = async (user: ReturnType<typeof userEvent.setup>, input: HTMLElement, value: string) => {
+      await user.clear(input);
+      await user.type(input, value);
+    };
+
+    beforeEach(() => {
+      eventMetricsState = [metric('FLY10_TIME')];
+      measurementsState.data = [saved('m1', 'ath-1', 'FLY10_TIME', 1.65)];
+    });
+
+    it('sends exactly one item with no replaceMeasurementId, then shows the cell clean with 2 saved trials', async () => {
+      const user = userEvent.setup();
+      mutateBulk.mockImplementation(async () => {
+        measurementsState = { ...measurementsState, data: [saved('m2', 'ath-1', 'FLY10_TIME', 1.6), ...measurementsState.data] };
+        return { created: [{ ...saved('m2', 'ath-1', 'FLY10_TIME', 1.6), index: 0 }], replaced: [], errors: [] };
+      });
+      const { rerender } = render(<EventDataEntry />);
+      await retype(user, flyCell('Jordan Lee'), '1.60');
+      await user.click(addTrialButton('1.60')!);
+
+      await waitFor(() => expect(refetchMeasurements).toHaveBeenCalledTimes(1));
+      rerender(<EventDataEntry />);
+      expect(mutateBulk).toHaveBeenCalledTimes(1);
+      expect(mutateBulk.mock.calls[0][0]).toEqual({
+        eventId: 'ev-1',
+        measurements: [{ userId: 'ath-1', metric: 'FLY10_TIME', value: 1.6, date: '2026-03-10T00:00:00.000Z' }],
+        invalidateMeasurements: false,
+      });
+      expect(await screen.findByText('2 saved trials')).toBeInTheDocument();
+      expect(flyCell('Jordan Lee')).toHaveAttribute('data-state', 'saved');
+      expect(toast).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Trial saved', description: '10-Yard Fly for Jordan Lee (2 trials)' }));
+      await waitFor(() => expect(flyCell('Jordan Lee')).toHaveFocus());
+    });
+
+    it('is not in the accessibility tree for a cell that is unchanged, empty or in conflict', async () => {
+      const user = userEvent.setup();
+      render(<EventDataEntry />);
+      // Unchanged saved cell and an empty cell (Sam Park has no saved row)
+      expect(screen.queryAllByRole('button', { name: /as a new 10-Yard Fly trial/ })).toHaveLength(0);
+      await user.type(flyCell('Sam Park'), '1.7');
+      expect(addTrialButton('1.7', 'Sam Park')).toBeNull();
+      await user.clear(flyCell('Sam Park'));
+
+      await upload(user, csvFile(['ath-1,Jordan Lee,1.70']));
+      expect(flyCell('Jordan Lee')).toHaveAttribute('data-state', 'conflict');
+      expect(screen.queryAllByRole('button', { name: /as a new 10-Yard Fly trial for Jordan Lee/ })).toHaveLength(0);
+    });
+
+    it('is not rendered on a frozen event', () => {
+      eventState = FROZEN_EVENT;
+      const { container } = render(<EventDataEntry />);
+      expect(container.querySelector('[title="Save as a new trial"]')).toBeNull();
+    });
+
+    it('is not rendered for a paired-input or derived column', () => {
+      eventMetricsState = [
+        metric('FLY10_TIME', { metricDetails: { label: '10-Yard Fly', unit: 's', category: 'speed', auxiliaryInputConfig: { inputs: [] } } }),
+        metric('MOMENTUM', { displayOrder: 2, metricDetails: { label: 'Momentum', unit: 'kg·m/s', category: 'speed', isDerived: true } }),
+      ];
+      measurementsState.data = [saved('m1', 'ath-1', 'FLY10_TIME', 1.65), saved('m3', 'ath-1', 'MOMENTUM', 400)];
+      const { container } = render(<EventDataEntry />);
+      expect(container.querySelector('[title="Save as a new trial"]')).toBeNull();
+    });
+
+    it('Save on a single-row cell still replaces that row', async () => {
+      const user = userEvent.setup();
+      mutateBulk.mockResolvedValue({ created: [], replaced: [{ ...saved('m1', 'ath-1', 'FLY10_TIME', 1.6), index: 0 }], errors: [] });
+      render(<EventDataEntry />);
+      await retype(user, flyCell('Jordan Lee'), '1.60');
+      await user.click(screen.getByRole('button', { name: /^save( \(\d+\))?$/i }));
+      await waitFor(() => expect(mutateBulk).toHaveBeenCalledTimes(1));
+      expect(mutateBulk.mock.calls[0][0].measurements).toEqual([
+        { userId: 'ath-1', metric: 'FLY10_TIME', value: 1.6, date: '2026-03-10T00:00:00.000Z', replaceMeasurementId: 'm1' },
+      ]);
+    });
+
+    it('is disabled while Save is in flight', async () => {
+      const user = userEvent.setup();
+      measurementsState.data = [saved('m1', 'ath-1', 'FLY10_TIME', 1.65), saved('m2', 'ath-2', 'FLY10_TIME', 1.8)];
+      let finish!: (value: unknown) => void;
+      mutateBulk.mockReturnValue(new Promise((resolve) => (finish = resolve)));
+      render(<EventDataEntry />);
+      await retype(user, flyCell('Jordan Lee'), '1.60');
+      await retype(user, flyCell('Sam Park'), '1.75');
+      await user.click(screen.getByRole('button', { name: /^save( \(\d+\))?$/i }));
+      expect(addTrialButton('1.60')).toBeDisabled();
+      finish({ created: [], replaced: [], errors: [] });
+      await waitFor(() => expect(refetchMeasurements).toHaveBeenCalled());
+    });
+
+    it('shows a per-item error on the cell, which stays dirty', async () => {
+      const user = userEvent.setup();
+      mutateBulk.mockResolvedValue({ created: [], replaced: [], errors: [{ index: 0, error: 'Not an event metric' }] });
+      render(<EventDataEntry />);
+      await retype(user, flyCell('Jordan Lee'), '1.60');
+      await user.click(addTrialButton('1.60')!);
+      expect(await screen.findByText('Not an event metric')).toBeInTheDocument();
+      expect(flyCell('Jordan Lee')).toHaveAttribute('aria-invalid', 'true');
+      expect(flyCell('Jordan Lee')).toHaveValue('1.60');
+    });
+
+    const csvFile = (lines: string[]) =>
+      new File([['Event ID,ev-1', 'Athlete ID (do not edit),Athlete,10-Yard Fly (s) [FLY10_TIME]', ...lines].join('\n')], 'sheet.csv');
+    const upload = async (user: ReturnType<typeof userEvent.setup>, file: File) => {
+      await user.upload(screen.getByLabelText('Recording sheet file'), file);
+      return screen.findByRole('region', { name: /^Sheet/ });
+    };
+  });
+
   describe('recording sheet', () => {
     const saved = (id: string, userId: string, metricCode: string, value: number): Measurement =>
       ({ id, userId, metric: metricCode, value: String(value), notes: null, mediaUrl: null, isCalculated: false, calculatedFromMeasurementIds: null }) as any;
@@ -643,7 +758,7 @@ describe('EventDataEntry', () => {
       return screen.findByRole('region', { name: /^Sheet/ });
     };
     const cell = (name: string, label: string) => screen.getByRole('textbox', { name: `${label} for ${name}` });
-    const saveButton = () => screen.getByRole('button', { name: /^save/i });
+    const saveButton = () => screen.getByRole('button', { name: /^save( \(\d+\))?$/i });
 
     beforeEach(() => {
       eventMetricsState = [

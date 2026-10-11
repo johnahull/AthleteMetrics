@@ -20,7 +20,6 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
@@ -28,9 +27,15 @@ import { useHorizontalScrollState } from "@/hooks/use-horizontal-scroll-state";
 import { useAuth } from "@/lib/auth";
 import { canManageEvent } from "@/lib/event-permissions";
 import { getEventMetricDisplay, type EventMetricWithSiteDetails } from "@/lib/event-metric-display";
-import { getCellState, type CellState } from "@/lib/event-grid-cell-state";
-import { chunkBulkItems } from "@/lib/event-grid-save";
-import { buildRecordingSheet, downloadRecordingSheet, readSheetFile, sheetIgnoredMetrics } from "@/lib/recording-sheet";
+import { canAddTrial } from "@/lib/event-grid-cell-state";
+import { chunkBulkItems, savedCellPatch } from "@/lib/event-grid-save";
+import {
+  buildRecordingSheet,
+  downloadRecordingSheet,
+  readSheetFile,
+  sheetExclusionReason,
+  sheetIgnoredMetrics,
+} from "@/lib/recording-sheet";
 import {
   applyImportPlan,
   discardImport,
@@ -41,7 +46,7 @@ import {
   type SheetImportPlan,
 } from "@/lib/recording-sheet-import";
 import { RecordingSheetActions } from "@/components/events/RecordingSheetActions";
-import { RecordingSheetConflict } from "@/components/events/RecordingSheetConflict";
+import { EventGridCell } from "@/components/events/EventGridCell";
 import { RecordingSheetImportSummary, sheetImportAnnouncement } from "@/components/events/RecordingSheetImportSummary";
 import {
   MovementQualityPanel,
@@ -94,15 +99,6 @@ interface MeasurementCell {
   /** The unsaved value came from an uploaded sheet */
   fromImport?: boolean;
 }
-
-const CELL_STATE_CLASSES: Record<CellState, string> = {
-  error: "border-red-500 focus:ring-red-500",
-  conflict: "border-2 border-orange-500 bg-orange-50",
-  imported: "border-sky-500 bg-sky-50",
-  dirty: "border-yellow-500 bg-yellow-50",
-  saved: "bg-green-50",
-  empty: "",
-};
 
 // Pinned Athlete column. Opaque backgrounds that match the row and header tints, so
 // cells scrolled under it do not show through; the box-shadow draws its right edge.
@@ -345,6 +341,29 @@ export default function EventDataEntry() {
       return next;
     });
 
+  // Apply patches to the cells they were computed for; a cell gone from the grid meanwhile is skipped
+  const patchCells = (patches: Map<MeasurementCell, (current: MeasurementCell) => Partial<MeasurementCell>>) =>
+    setGridData((prev) => {
+      const next = { ...prev };
+      patches.forEach((patch, sent) => {
+        const row = next[sent.userId];
+        const current = row?.measurements[sent.metricCode];
+        if (!current) return;
+        next[sent.userId] = {
+          ...row,
+          measurements: { ...row.measurements, [sent.metricCode]: { ...current, ...patch(current) } },
+        };
+      });
+      return next;
+    });
+
+  const measurementItem = (cell: MeasurementCell): CreateEventMeasurementInput => ({
+    userId: cell.userId,
+    metric: cell.metricCode,
+    value: Number(cell.value),
+    date: event?.startDate ? new Date(event.startDate).toISOString() : new Date().toISOString(),
+  });
+
   const importMetricLabels = useMemo(() => new Map([...displayByCode].map(([code, d]) => [code, d.label])), [displayByCode]);
   const importAthleteNames = useMemo(
     () => new Map(Object.values(gridData).map((row) => [row.userId, row.fullName])),
@@ -472,12 +491,7 @@ export default function EventDataEntry() {
         if (isSendable(cell)) {
           cellsToSave.push(cell);
           measurementsToSave.push({
-            userId: cell.userId,
-            metric: cell.metricCode,
-            value: Number(cell.value),
-            date: event?.startDate
-              ? new Date(event.startDate).toISOString()
-              : new Date().toISOString(),
+            ...measurementItem(cell),
             // One saved row: the retype corrects it. Several (trials): the retype is a new trial.
             ...(cell.savedCount === 1 && cell.savedMeasurementId
               ? { replaceMeasurementId: cell.savedMeasurementId }
@@ -521,32 +535,13 @@ export default function EventDataEntry() {
       savedRows.forEach(({ row, replaced }) => {
         const sent = cellsToSave[offset + row.index];
         if (!sent) return;
-        patches.set(sent, (current) => ({
-          originalValue: Number(sent.value),
-          savedMeasurementId: row.id,
-          savedCount: replaced ? sent.savedCount : sent.savedCount + 1,
-          // Dirty against the value now saved, also when it was typed back to the old value meanwhile
-          isDirty: current.value !== sent.value,
-          ...(current.value === sent.value ? { error: undefined } : {}),
-        }));
+        patches.set(sent, (current) => savedCellPatch(sent, current, row.id, replaced));
       });
       result.errors.forEach(({ index, error }) => {
         const sent = cellsToSave[offset + index];
         if (sent) patches.set(sent, (current) => (current.value === sent.value ? { error } : {}));
       });
-      setGridData((prev) => {
-        const next = { ...prev };
-        patches.forEach((patch, sent) => {
-          const row = next[sent.userId];
-          const current = row?.measurements[sent.metricCode];
-          if (!current) return;
-          next[sent.userId] = {
-            ...row,
-            measurements: { ...row.measurements, [sent.metricCode]: { ...current, ...patch(current) } },
-          };
-        });
-        return next;
-      });
+      patchCells(patches);
       return { saved: savedRows.length, failed: result.errors.length };
     };
 
@@ -588,6 +583,35 @@ export default function EventDataEntry() {
         title: "Saved Successfully",
         description: `${savedCount} measurements saved.`,
       });
+    }
+  };
+
+  // Save one cell's value now as an extra trial (never replaces a saved row); focus goes back to the input
+  const handleAddTrial = async (cell: MeasurementCell, label: string, athleteName: string) => {
+    if (isSaving || readingSheet || event?.isFrozen || !canAddTrial(cell)) return;
+    const inputId = `cell-input-${cell.userId}-${cell.metricCode}`;
+    setIsSaving(true);
+    try {
+      const result = await bulkCreate.mutateAsync({
+        eventId: eventId!,
+        measurements: [measurementItem(cell)],
+        invalidateMeasurements: false,
+      });
+      const [created] = result.created;
+      if (created) {
+        patchCells(new Map([[cell, (current) => savedCellPatch(cell, current, created.id, false)]]));
+        toast({ title: "Trial saved", description: `${label} for ${athleteName} (${cell.savedCount + 1} trials)` });
+      } else {
+        const error = result.errors[0]?.error ?? "The trial was not saved.";
+        patchCells(new Map([[cell, (current) => (current.value === cell.value ? { error } : {})]]));
+      }
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Trial not saved", description: error?.message || "Failed to save the trial." });
+    } finally {
+      setIsSaving(false);
+      // Refetch whatever happened: the row may have been saved before the response was lost
+      await refetchMeasurements();
+      requestAnimationFrame(() => document.getElementById(inputId)?.focus());
     }
   };
 
@@ -1072,59 +1096,25 @@ export default function EventDataEntry() {
                         {gridMetrics.map((metric: EventMetricWithDetails) => {
                           const cell = row.measurements[metric.metricCode];
                           if (!cell) return <td key={metric.metricCode} className="p-1" />;
-                          const errorId = `cell-error-${row.userId}-${metric.metricCode}`;
-                          const trialsId = `cell-trials-${row.userId}-${metric.metricCode}`;
-                          const hasTrials = cell.savedCount > 1;
-                          const describedBy = [cell.error && errorId, hasTrials && trialsId].filter(Boolean).join(" ");
                           const label = (displayByCode.get(metric.metricCode) ?? getEventMetricDisplay(metric)).label;
-                          const inputId = `cell-input-${row.userId}-${metric.metricCode}`;
-                          const state = getCellState(cell);
-
                           return (
                             <td key={metric.metricCode} className="p-1">
-                              <Input
-                                id={inputId}
-                                data-state={state}
-                                type="text"
-                                inputMode="decimal"
-                                value={cell.value}
-                                onChange={(e) =>
-                                  handleCellChange(row.userId, metric.metricCode, e.target.value)
+                              <EventGridCell
+                                cell={cell}
+                                cellKey={`${row.userId}-${metric.metricCode}`}
+                                metricLabel={label}
+                                athleteName={row.fullName}
+                                isRequired={metric.isRequired ?? false}
+                                disabled={!!event.isFrozen}
+                                onChange={(value) => handleCellChange(row.userId, metric.metricCode, value)}
+                                onResolve={(choice) =>
+                                  updateCells((c) => resolveConflict(c, choice), row.userId, metric.metricCode)
                                 }
-                                disabled={event.isFrozen}
-                                aria-label={`${label} for ${row.fullName}`}
-                                aria-required={metric.isRequired || undefined}
-                                aria-invalid={cell.error ? true : undefined}
-                                aria-describedby={describedBy || undefined}
-                                className={`h-9 px-1 text-center ${CELL_STATE_CLASSES[state]}`}
-                                placeholder="-"
+                                onAddTrial={
+                                  sheetExclusionReason(metric) === null ? () => handleAddTrial(cell, label, row.fullName) : undefined
+                                }
+                                addTrialDisabled={isSaving || !!readingSheet}
                               />
-                              {cell.importedValue !== undefined && (
-                                <RecordingSheetConflict
-                                  metricLabel={label}
-                                  athleteName={row.fullName}
-                                  savedValue={cell.value}
-                                  fileValue={cell.importedValue}
-                                  inputId={inputId}
-                                  onResolve={(choice) =>
-                                    updateCells((c) => resolveConflict(c, choice), row.userId, metric.metricCode)
-                                  }
-                                />
-                              )}
-                              {cell.error && (
-                                <div id={errorId} className="text-[11px] leading-tight text-red-500 text-center mt-1">
-                                  {cell.error}
-                                </div>
-                              )}
-                              {hasTrials && (
-                                <div
-                                  id={trialsId}
-                                  title="Shows the newest trial. A new value is saved as another trial."
-                                  className="text-[11px] leading-tight text-muted-foreground text-center mt-1"
-                                >
-                                  {cell.savedCount} saved trials
-                                </div>
-                              )}
                             </td>
                           );
                         })}

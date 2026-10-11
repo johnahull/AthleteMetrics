@@ -42,6 +42,15 @@ Items are appended by default: several rows per athlete, metric and event are no
 
 Retries: a replace is idempotent, an append is not. If a bulk response is lost (timeout, dropped connection) after the server wrote the rows, re-sending the same request applies the replace items again (no change) but appends the plain items a second time, so a retry after a lost response can duplicate appended rows. The data entry grid sends a replace only when a cell has exactly one saved row, so only cells that were empty or held several trials can be duplicated this way.
 
+## Data entry grid
+
+The data entry page (`/events/:id/data-entry`) shows one row per athlete (`approved`, `checked_in`, `completed`) and one column per metric. A cell shows the newest typed (non-derived) saved row; `N saved trials` under it means the athlete has several rows for that metric.
+
+- Save: a retyped cell with exactly one saved row replaces that row (`replaceMeasurementId`); a retyped cell with several saved rows is added as a new trial; an empty cell creates the first row.
+- Add trial (`+` to the right of the input): shown when a cell that already has a saved row holds a changed number and no pending sheet conflict, on a column that can be typed (not derived or paired-input) of an event that is not frozen. It saves that one value at once as a new row (a single-item bulk request without `replaceMeasurementId`), so the cell turns saved and its trial count goes up. It never replaces a row. A per-item error is shown on the cell; a failed request leaves the cell unsaved. It is off while a save runs or a sheet is read, and Save and Upload are off while it runs. An append is not idempotent (see Retries above).
+
+Code: `packages/web/src/pages/event-data-entry.tsx`, `packages/web/src/components/events/EventGridCell.tsx`, `packages/web/src/lib/event-grid-cell-state.ts` (`getCellState`, `canAddTrial`), `packages/web/src/lib/event-grid-save.ts` (`chunkBulkItems`, `savedCellPatch`).
+
 ## Reading event results
 
 `GET /api/events/:id/measurements` returns the event's rows newest first (`date`, then `createdAt`, then `id`), each with `isCalculated` and `calculatedFromMeasurementIds` so a client can tell typed rows from derived ones (derived = `isCalculated` unless the list is an empty array). Event managers (coach, org admin of the event's organization, site admin) get unverified rows too; anyone else (an athlete reading their own results once they are published) gets verified rows only. `GET /api/events/:id/measurements/stats` is manager-only and counts unverified rows as well.
