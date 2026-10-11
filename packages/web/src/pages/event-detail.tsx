@@ -6,7 +6,7 @@
 import { useState, useMemo } from "react";
 import { useParams, Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
-import { canManageEvent as canUserManageEvent } from "@/lib/event-permissions";
+import { canManageEvent as canUserManageEvent, canDeleteEvent as canUserDeleteEvent } from "@/lib/event-permissions";
 import { Eye } from "lucide-react";
 import {
   useEvent,
@@ -19,6 +19,7 @@ import {
   useCancelInvitation,
   useCancelRegistration,
   useMyEventRegistration,
+  useDeleteEvent,
 } from "@/lib/events-api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,6 +35,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { EventStatusBadge, EventMetricsTab, EventResultsTab, EventReportsTab, EventEvalReportsCard, CheckInTab, InviteAthletesModal, AddAthletesModal } from "@/components/events";
 import {
@@ -51,6 +64,7 @@ import {
   CheckCircle,
   Edit,
   ExternalLink,
+  Trash2,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import type { EventRegistration, EventInvitation } from "@shared/schema";
@@ -96,6 +110,7 @@ export default function EventDetail() {
   const declineMutation = useDeclineRegistration();
   const cancelInvitationMutation = useCancelInvitation();
   const cancelRegistrationMutation = useCancelRegistration();
+  const deleteMutation = useDeleteEvent();
 
   // Fetch athlete's own registration (for athlete view)
   const { data: myRegistration } = useMyEventRegistration(eventId);
@@ -204,6 +219,25 @@ export default function EventDetail() {
     navigate(`/events/${eventId}/edit`);
   };
 
+  // Handle delete event - the API refuses frozen events (409), so show its message
+  const handleDeleteEvent = async () => {
+    if (!eventId) return;
+    try {
+      await deleteMutation.mutateAsync(eventId);
+      toast({
+        title: "Event Deleted",
+        description: "The event has been deleted.",
+      });
+      navigate("/events");
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete event.",
+      });
+    }
+  };
+
   // Calculate stats
   const typedRegistrations = (registrations as RegistrationWithUser[]) || [];
   const approvedCount = typedRegistrations.filter((r) => r.status === "approved" || r.status === "checked_in").length;
@@ -214,6 +248,12 @@ export default function EventDetail() {
   // Determine if user can manage this event (coach, org_admin, or site_admin)
   const canManageEvent = useMemo(
     () => canUserManageEvent(user, userOrganizations, event),
+    [event, user, userOrganizations]
+  );
+
+  // Only an org admin of the event's organization (or a site admin) can delete it
+  const canDeleteEvent = useMemo(
+    () => canUserDeleteEvent(user, userOrganizations, event),
     [event, user, userOrganizations]
   );
 
@@ -350,7 +390,7 @@ export default function EventDetail() {
             </div>
           </div>
           {canManageEvent && (
-            <div className="flex gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
               <Button variant="outline" onClick={handleToggleFreeze} disabled={freezeMutation.isPending || unfreezeMutation.isPending}>
                 {event.isFrozen ? (
                   <>
@@ -368,6 +408,41 @@ export default function EventDetail() {
                 <Edit className="h-4 w-4 mr-2" />
                 Edit Event
               </Button>
+              {canDeleteEvent && (
+                <AlertDialog>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span tabIndex={event.isFrozen ? 0 : -1}>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="destructive" disabled={event.isFrozen || deleteMutation.isPending}>
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete Event
+                            </Button>
+                          </AlertDialogTrigger>
+                        </span>
+                      </TooltipTrigger>
+                      {event.isFrozen && <TooltipContent>Unfreeze to delete</TooltipContent>}
+                    </Tooltip>
+                  </TooltipProvider>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete "{event.name}"?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This cannot be undone. Registrations, invitations and the metric set are deleted. Recorded
+                        measurements stay in athlete history under the event's name, saved eval reports are kept,
+                        and import records lose their event link.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={handleDeleteEvent}>
+                        Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
             </div>
           )}
         </div>

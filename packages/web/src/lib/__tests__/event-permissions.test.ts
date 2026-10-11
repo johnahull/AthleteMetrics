@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canManageEvent } from '../event-permissions';
+import { canManageEvent, canDeleteEvent } from '../event-permissions';
 
 const event = { organizationId: 'org-1' };
 const member = (role: string, organizationId = 'org-1') => [{ organizationId, role }] as any;
@@ -23,5 +23,26 @@ describe('canManageEvent', () => {
     expect(canManageEvent(null, member('coach'), event)).toBe(false);
     expect(canManageEvent(user, member('coach'), undefined)).toBe(false);
     expect(canManageEvent(user, member('coach'), { organizationId: null })).toBe(false);
+  });
+});
+
+describe('canDeleteEvent', () => {
+  it('allows a site admin for any event, including one without an organization', () => {
+    expect(canDeleteEvent({ isSiteAdmin: true } as any, null, event)).toBe(true);
+    expect(canDeleteEvent({ isSiteAdmin: true } as any, null, { organizationId: null })).toBe(true);
+  });
+
+  it("allows only an org admin of the event's organization", () => {
+    expect(canDeleteEvent(user, member('org_admin'), event)).toBe(true);
+  });
+
+  it('denies coaches, athletes, other organizations, missing user/event and events without an organization', () => {
+    expect(canDeleteEvent(user, member('coach'), event)).toBe(false);
+    expect(canDeleteEvent(user, member('athlete'), event)).toBe(false);
+    expect(canDeleteEvent(user, member('org_admin', 'org-2'), event)).toBe(false);
+    expect(canDeleteEvent(user, null, event)).toBe(false);
+    expect(canDeleteEvent(null, member('org_admin'), event)).toBe(false);
+    expect(canDeleteEvent(user, member('org_admin'), undefined)).toBe(false);
+    expect(canDeleteEvent(user, member('org_admin'), { organizationId: null })).toBe(false);
   });
 });

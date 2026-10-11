@@ -468,7 +468,7 @@ describe("EventService", () => {
   });
 
   describe("deleteEvent", () => {
-    it("should soft delete event", async () => {
+    it("should delete the event (hard delete)", async () => {
       mockStorage.getEvent = vi.fn().mockResolvedValue(mockEvent);
       mockStorage.deleteEvent = vi.fn().mockResolvedValue({ success: true });
 

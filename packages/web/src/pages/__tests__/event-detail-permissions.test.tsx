@@ -26,10 +26,17 @@ beforeAll(() => {
   }
 });
 
+// Stable mocks the delete-flow tests assert on
+const { mockNavigate, mockToast, mockDeleteMutateAsync } = vi.hoisted(() => ({
+  mockNavigate: vi.fn(),
+  mockToast: vi.fn(),
+  mockDeleteMutateAsync: vi.fn(),
+}));
+
 // Mock wouter
 vi.mock('wouter', () => ({
   useParams: () => ({ eventId: 'test-event-123' }),
-  useLocation: () => ['/events/test-event-123', vi.fn()],
+  useLocation: () => ['/events/test-event-123', mockNavigate],
   Link: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a>,
 }));
 
@@ -76,11 +83,12 @@ vi.mock('@/lib/events-api', () => ({
   useDeclineRegistration: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
   useCancelInvitation: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
   useCancelRegistration: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
+  useDeleteEvent: vi.fn(() => ({ mutateAsync: mockDeleteMutateAsync, isPending: false })),
 }));
 
 // Mock toast
 vi.mock('@/hooks/use-toast', () => ({
-  useToast: () => ({ toast: vi.fn() }),
+  useToast: () => ({ toast: mockToast }),
 }));
 
 // Mock event components
@@ -473,6 +481,103 @@ describe('Event Detail Page Permissions', () => {
 
       expect(screen.queryByRole('button', { name: /edit event/i })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /freeze/i })).not.toBeInTheDocument();
+    });
+  });
+  describe('Delete Event', () => {
+    const asOrgAdmin = () => {
+      mockUser = { id: 'admin-1', firstName: 'Admin', lastName: 'Jones', role: 'org_admin', isSiteAdmin: false };
+      mockUserOrganizations = [{ organizationId: 'org-123', role: 'org_admin' }];
+    };
+
+    it.each([
+      ['an athlete', 'athlete'],
+      ['a coach of the event organization', 'coach'],
+    ] as Array<[string, 'athlete' | 'coach']>)('is hidden for %s', async (_label, role) => {
+      mockUser = { id: 'u-1', firstName: 'A', lastName: 'B', role, isSiteAdmin: false };
+      mockUserOrganizations = [{ organizationId: 'org-123', role }];
+      render(<EventDetail />, { wrapper: createWrapper() });
+      await screen.findByText('Spring Combine 2024');
+      expect(screen.queryByRole('button', { name: /delete event/i })).not.toBeInTheDocument();
+    });
+
+    it("is shown for an org admin of the event's organization and for a site admin", async () => {
+      asOrgAdmin();
+      const { unmount } = render(<EventDetail />, { wrapper: createWrapper() });
+      expect(await screen.findByRole('button', { name: /delete event/i })).toBeEnabled();
+      unmount();
+
+      mockUser = { id: 'sa-1', firstName: 'Site', lastName: 'Admin', role: 'admin', isSiteAdmin: true };
+      mockUserOrganizations = [];
+      render(<EventDetail />, { wrapper: createWrapper() });
+      expect(await screen.findByRole('button', { name: /delete event/i })).toBeEnabled();
+    });
+
+    it('is disabled while the event is frozen', async () => {
+      asOrgAdmin();
+      const original = { ...mockEvent };
+      mockEvent.isFrozen = true;
+      try {
+        render(<EventDetail />, { wrapper: createWrapper() });
+        expect(await screen.findByRole('button', { name: /delete event/i })).toBeDisabled();
+      } finally {
+        Object.assign(mockEvent, original);
+      }
+    });
+
+    it('explains what is deleted and what is kept before deleting', async () => {
+      asOrgAdmin();
+      const user = userEvent.setup();
+      render(<EventDetail />, { wrapper: createWrapper() });
+      await user.click(await screen.findByRole('button', { name: /delete event/i }));
+
+      const dialog = await screen.findByRole('alertdialog');
+      expect(dialog).toHaveTextContent(/registrations, invitations and the metric set/i);
+      expect(dialog).toHaveTextContent(/measurements stay in athlete history/i);
+      expect(dialog).toHaveTextContent(/saved eval reports are kept/i);
+      expect(dialog).toHaveTextContent(/import records lose their event link/i);
+    });
+
+    it('deletes, shows a toast and goes to /events on confirm, with no error state', async () => {
+      asOrgAdmin();
+      mockDeleteMutateAsync.mockResolvedValue(undefined);
+      const user = userEvent.setup();
+      render(<EventDetail />, { wrapper: createWrapper() });
+      await user.click(await screen.findByRole('button', { name: /delete event/i }));
+      await user.click(await screen.findByRole('button', { name: /^delete$/i }));
+
+      await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/events'));
+      expect(mockDeleteMutateAsync).toHaveBeenCalledWith('test-event-123');
+      expect(mockToast).toHaveBeenCalledWith(expect.objectContaining({ title: 'Event Deleted' }));
+      expect(mockToast).not.toHaveBeenCalledWith(expect.objectContaining({ variant: 'destructive' }));
+      expect(screen.queryByText(/event not found/i)).not.toBeInTheDocument();
+    });
+
+    it('does nothing on cancel', async () => {
+      asOrgAdmin();
+      const user = userEvent.setup();
+      render(<EventDetail />, { wrapper: createWrapper() });
+      await user.click(await screen.findByRole('button', { name: /delete event/i }));
+      await user.click(await screen.findByRole('button', { name: /cancel/i }));
+
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+      expect(mockDeleteMutateAsync).not.toHaveBeenCalled();
+      expect(mockNavigate).not.toHaveBeenCalled();
+    });
+
+    it("shows the server's message and stays on the page when the delete fails", async () => {
+      asOrgAdmin();
+      mockDeleteMutateAsync.mockRejectedValue(new Error('Frozen event cannot be deleted'));
+      const user = userEvent.setup();
+      render(<EventDetail />, { wrapper: createWrapper() });
+      await user.click(await screen.findByRole('button', { name: /delete event/i }));
+      await user.click(await screen.findByRole('button', { name: /^delete$/i }));
+
+      await waitFor(() =>
+        expect(mockToast).toHaveBeenCalledWith(
+          expect.objectContaining({ variant: 'destructive', description: 'Frozen event cannot be deleted' })
+        )
+      );
+      expect(mockNavigate).not.toHaveBeenCalled();
     });
   });
 });

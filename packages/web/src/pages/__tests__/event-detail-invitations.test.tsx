@@ -234,6 +234,10 @@ vi.mock('@/lib/events-api', () => ({
     data: null,
     isLoading: false,
   }),
+  useDeleteEvent: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
 }));
 
 // Mock child components
