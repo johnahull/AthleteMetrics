@@ -143,6 +143,11 @@ describe('planSheetImport', () => {
     expect(plan([[ATHLETE_ID_HEADER, 'Vertical Jump [VERTICAL_JUMP]']]).fileError).toMatch(/"Athlete" column/);
   });
 
+  it('names the missing header, not the row count, for a long file of another format', () => {
+    const rows = Array.from({ length: 1500 }, () => ['a', 'b']);
+    expect(plan(rows).fileError).toMatch(/Could not find the table header/);
+  });
+
   it('rejects a file with more than 1000 rows', () => {
     const rows = [HEADER, ...Array.from({ length: 1001 }, () => ['ath-1', 'Jordan Lee', '', ''])];
     expect(plan(rows).fileError).toMatch(/1000 rows/);

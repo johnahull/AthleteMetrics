@@ -117,6 +117,7 @@ describe('recordingSheetToCsv', () => {
     const rows = parseCsvSheet(csv);
     expect(rows[0][1]).toBe(`'=HYPERLINK("http://x")`);
     expect(rows.slice(4).map((r) => r[1])).toEqual([`'=cmd|calc`, `'+1`, `'@x`]);
+    expect(csv.split('\n')[0]).toContain(`'=HYPERLINK`);
   });
 
   it('round-trips through parseCsvSheet', () => {
@@ -140,15 +141,17 @@ describe('parseCsvSheet', () => {
 
 describe('recordingSheetToXlsx / parseXlsxSheet', () => {
   it('round-trips and writes names as text, never formulas', async () => {
-    const buffer = await recordingSheetToXlsx({ ...SHEET, athletes: [{ userId: 'ath-1', name: '=1+1' }] });
+    const buffer = await recordingSheetToXlsx({ ...SHEET, eventName: '=SUM(1)', athletes: [{ userId: 'ath-1', name: '=1+1' }] });
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(buffer as unknown as ArrayBuffer);
+    expect(wb.worksheets[0].getCell('B1').type).toBe(ExcelJS.ValueType.String);
+    expect(wb.worksheets[0].getCell('B1').value).toBe('=SUM(1)');
     const cell = wb.worksheets[0].getCell('B5');
     expect(cell.type).toBe(ExcelJS.ValueType.String);
     expect(cell.value).toBe('=1+1');
 
     const rows = await parseXlsxSheet(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer);
-    expect(rows).toEqual(recordingSheetTable({ ...SHEET, athletes: [{ userId: 'ath-1', name: '=1+1' }] }));
+    expect(rows).toEqual(recordingSheetTable({ ...SHEET, eventName: '=SUM(1)', athletes: [{ userId: 'ath-1', name: '=1+1' }] }));
   });
 
   it('bolds and freezes the table header', async () => {
@@ -244,6 +247,10 @@ describe('checkSheetSize', () => {
     const rows = (n: number) => [['Event', 'x'], [ATHLETE_ID_HEADER, 'Athlete'], ...Array.from({ length: n }, () => ['id', 'name'])];
     expect(checkSheetSize(rows(MAX_SHEET_ROWS))).toBeNull();
     expect(checkSheetSize(rows(MAX_SHEET_ROWS + 1))).toMatch(/1000 rows/);
+  });
+
+  it('leaves a file without the athlete header to the missing-header error, however long it is', () => {
+    expect(checkSheetSize(Array.from({ length: 1500 }, () => ['a', 'b']))).toBeNull();
   });
 
   it('rejects more than 200 columns', () => {

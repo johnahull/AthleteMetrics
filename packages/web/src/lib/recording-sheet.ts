@@ -166,6 +166,7 @@ export function checkSheetFile(file: { name: string; size: number }): string | n
 export function checkSheetSize(rows: SheetCell[][]): string | null {
   if (rows.some((row) => row.length > MAX_SHEET_COLUMNS)) return `The sheet has more than ${MAX_SHEET_COLUMNS} columns.`;
   const header = rows.findIndex((row) => row.some(isAthleteIdHeader));
+  if (header === -1) return null; // planSheetImport reports the missing header, which is the useful message
   const dataRows = rows.slice(header + 1).filter((row) => row.some((c) => typeof c !== "string" || c.trim() !== ""));
   if (dataRows.length > MAX_SHEET_ROWS) return `The sheet has more than ${MAX_SHEET_ROWS} rows of athletes.`;
   return null;
@@ -186,7 +187,7 @@ function readXlsxValue(value: unknown): SheetCell {
   if (value === null || value === undefined) return "";
   if (value instanceof Date) return { error: "A date is not a result value" };
   if (typeof value !== "object") return String(value);
-  const v = value as Record<string, any>;
+  const v = value as Record<string, unknown>;
   if ("formula" in v || "sharedFormula" in v) {
     return v.result === undefined || v.result === null
       ? { error: "Formula without a saved result (open and save the file in a spreadsheet app)" }

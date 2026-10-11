@@ -360,10 +360,13 @@ export default function EventDataEntry() {
     });
 
   const handleSheetUpload = async (file: File) => {
-    if (readingSheet) return;
+    if (readingSheet || !event) return;
     setReadingSheet(file.name);
     let plan: SheetImportPlan;
     try {
+      // Snapshot before awaiting: the event or metrics may change (or vanish) while the file is read
+      const sheetMetrics = recordingSheet().metrics;
+      const ignoredMetrics = sheetIgnoredMetrics(sortedMetrics);
       const sheet = await readSheetFile(file);
       // Saved values are read after the file is parsed: a refetch landing meanwhile must not cause false conflicts
       plan = planSheetImport({
@@ -374,8 +377,8 @@ export default function EventDataEntry() {
           name: row.fullName,
           saved: Object.fromEntries(Object.entries(row.measurements).map(([code, c]) => [code, c.originalValue])),
         })),
-        metrics: recordingSheet().metrics,
-        ignoredMetrics: sheetIgnoredMetrics(sortedMetrics),
+        metrics: sheetMetrics,
+        ignoredMetrics,
       });
     } catch (error) {
       plan = emptyImportPlan(error instanceof Error ? error.message : "The file could not be read.");

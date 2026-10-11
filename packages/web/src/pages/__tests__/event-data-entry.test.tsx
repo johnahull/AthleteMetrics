@@ -810,6 +810,24 @@ describe('EventDataEntry', () => {
       expect(cell('Jordan Lee', '10-Yard Fly')).toHaveAttribute('data-state', 'saved');
     });
 
+    it('the event query dropping out while the file is read does not break the import', async () => {
+      const user = userEvent.setup();
+      let release!: () => void;
+      readSheetGate = new Promise<void>((resolve) => (release = resolve));
+      const { rerender } = render(<EventDataEntry />);
+      await user.upload(screen.getByLabelText('Recording sheet file'), csvFile(['ath-1,Jordan Lee,30,']));
+      await waitFor(() => expect(screen.getByTestId('recording-sheet-status')).toHaveTextContent('Reading sheet.csv'));
+      eventState = undefined as unknown as typeof EVENT;
+      rerender(<EventDataEntry />);
+      release();
+      await waitFor(() => expect(readSheetCalls).toHaveBeenCalled());
+      eventState = EVENT;
+      rerender(<EventDataEntry />);
+      const summary = await screen.findByRole('region', { name: /^Sheet/ });
+      expect(summary).not.toHaveTextContent(/undefined/);
+      expect(cell('Jordan Lee', 'Vertical Jump')).toHaveValue('30');
+    });
+
     it('turns "Discard file values" off while a save is in flight', async () => {
       const user = userEvent.setup();
       let finish!: (value: unknown) => void;
