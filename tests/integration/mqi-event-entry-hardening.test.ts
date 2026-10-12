@@ -506,6 +506,7 @@ describe('PUT /api/events/:eventId/athletes/:userId/movement-quality', () => {
     const f = await saveMq(frozen.id, athlete.id, { upserts: [{ metric: 'MQ_JUMP', value: 2 }], deletes: [] });
     expect(f.status).toBe(400);
     expect(f.body.error).toMatch(/frozen/i);
+    expect(f.body.code).toBe("EVENT_FROZEN");
 
     const ev = await mkEvent();
     const denied = await saveMq(ev.id, athlete.id, { upserts: [{ metric: 'MQ_JUMP', value: 2 }], deletes: [] }, coachBCookie);

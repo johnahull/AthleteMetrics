@@ -71,11 +71,11 @@ export function mqSaveRequests(grid: MqGrid): Array<{ userId: string; upserts: A
  * event stops the loop, since the next athlete would fail the same way.
  */
 export function mqSaveFailure(error: unknown): { stop: boolean; message: string; errors?: Record<string, string> } {
-  const e = (error ?? {}) as { message?: string; status?: number; errors?: Array<{ metric: string; error: string }> };
+  const e = (error ?? {}) as { message?: string; status?: number; code?: string; errors?: Array<{ metric: string; error: string }> };
   const message = e.message || "Failed to save Movement Quality scores";
   if (Array.isArray(e.errors)) {
     return { stop: false, message, errors: Object.fromEntries(e.errors.map((x) => [x.metric, x.error])) };
   }
-  if (e.status === 400 && !/frozen/i.test(message)) return { stop: false, message };
+  if (e.status === 400 && e.code !== "EVENT_FROZEN") return { stop: false, message };
   return { stop: true, message };
 }

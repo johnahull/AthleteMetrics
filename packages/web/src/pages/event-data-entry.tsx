@@ -621,6 +621,8 @@ export default function EventDataEntry() {
           saveMovementQuality.mutateAsync({ eventId: eventId!, userId, upserts, deletes: [], invalidateMeasurements: false }),
         );
       }
+    } catch (error: any) {
+      mq = { athletes: mqAthletes, saved: 0, failed: 0, stopped: { message: error?.message || "Failed to save Movement Quality scores.", rateLimited: false } };
     } finally {
       setIsSaving(false);
       // Refetch whatever happened: earlier requests may have saved rows

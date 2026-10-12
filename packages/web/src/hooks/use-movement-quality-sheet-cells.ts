@@ -45,7 +45,7 @@ export function useMovementQualitySheetCells(saved: Measurement[] | undefined, a
   );
 
   /** Patch the cells that were sent, leaving any changed meanwhile (other value) alone */
-  const patchSent = (cells: MqCell[], patch: (sent: MqCell) => Partial<MqCell>) =>
+  const patchSent = useCallback((cells: MqCell[], patch: (sent: MqCell) => Partial<MqCell>) =>
     setMqGrid((prev) => {
       const next = { ...prev };
       cells.forEach((sent) => {
@@ -54,9 +54,9 @@ export function useMovementQualitySheetCells(saved: Measurement[] | undefined, a
         next[sent.userId] = { measurements: { ...next[sent.userId].measurements, [sent.metricCode]: { ...current, ...patch(sent) } } };
       });
       return next;
-    });
+    }), []);
 
-  const save = async (send: (userId: string, upserts: Array<{ metric: string; value: number }>) => Promise<unknown>): Promise<MqSaveOutcome> => {
+  const save = useCallback(async (send: (userId: string, upserts: Array<{ metric: string; value: number }>) => Promise<unknown>): Promise<MqSaveOutcome> => {
     const requests = mqSaveRequests(mqGridRef.current);
     const outcome: MqSaveOutcome = { athletes: requests.length, saved: 0, failed: 0 };
     for (const { userId, upserts, cells } of requests) {
@@ -77,7 +77,7 @@ export function useMovementQualitySheetCells(saved: Measurement[] | undefined, a
       }
     }
     return outcome;
-  };
+  }, [mqGridRef, patchSent]);
 
   return { mqGrid, mqGridRef, setMqGrid, update, save };
 }

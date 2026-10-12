@@ -1442,7 +1442,7 @@ export async function saveEventMovementQuality(
       throw new MovementQualitySaveError(message, body.errors, response.status);
     }
     // status: callers saving several athletes stop on 429 / 403 / 5xx but not on an athlete-specific 400
-    throw Object.assign(new Error(message), { status: response.status });
+    throw Object.assign(new Error(message), { status: response.status, code: body?.code });
   }
 
   return response.json();

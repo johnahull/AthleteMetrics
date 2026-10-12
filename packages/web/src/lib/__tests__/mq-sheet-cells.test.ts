@@ -76,7 +76,7 @@ describe('mqSaveRequests', () => {
 });
 
 describe('mqSaveFailure', () => {
-  const withStatus = (message: string, status?: number) => Object.assign(new Error(message), status ? { status } : {});
+  const withStatus = (message: string, status?: number, code?: string) => Object.assign(new Error(message), status ? { status, code } : {});
 
   it('per-score errors: no stop, the errors by metric', () => {
     const error = Object.assign(new Error('1 score could not be saved'), { errors: [{ metric: 'MQ_JUMP', error: 'Value must be at most 3' }] });
@@ -92,7 +92,7 @@ describe('mqSaveFailure', () => {
     ['access', withStatus('Access denied', 403)],
     ['server', withStatus('Internal error', 503)],
     ['network', new Error('Failed to fetch')],
-    ['frozen event', withStatus('Event is frozen', 400)],
+    ['frozen event', withStatus('Event is locked', 400, 'EVENT_FROZEN')],
   ])('stops on a %s error', (_name, error) => {
     expect(mqSaveFailure(error)).toMatchObject({ stop: true, message: error.message });
   });

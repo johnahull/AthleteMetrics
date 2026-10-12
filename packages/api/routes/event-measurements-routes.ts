@@ -129,7 +129,10 @@ export function sendEventMeasurementError(res: Response, error: unknown) {
   if (error instanceof MeasurementValueValidationError || error instanceof PairedInputValidationError) {
     return res.status(400).json({ error: error.message, field: error.field });
   }
-  if (error instanceof EventFrozenError || error instanceof EventMeasurementInputError) {
+  if (error instanceof EventFrozenError) {
+    return res.status(400).json({ error: error.message, code: "EVENT_FROZEN" });
+  }
+  if (error instanceof EventMeasurementInputError) {
     return res.status(400).json({ error: error.message });
   }
   if (error instanceof MeasurementAccessDeniedError) {
