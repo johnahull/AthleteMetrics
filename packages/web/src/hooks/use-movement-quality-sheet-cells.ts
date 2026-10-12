@@ -77,7 +77,7 @@ export function useMovementQualitySheetCells(saved: Measurement[] | undefined, a
       }
     }
     return outcome;
-  }, [mqGridRef, patchSent]);
+  }, [patchSent]);
 
   return { mqGrid, mqGridRef, setMqGrid, update, save };
 }
