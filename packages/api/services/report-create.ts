@@ -65,7 +65,7 @@ export async function createReportsFromInput(
   if (athletes.length !== athleteIds.length) {
     const found = new Set(athletes.map((a) => a.id));
     throw new ReportCreateError(400, {
-      message: "Some athlete IDs are invalid",
+      message: "Some athlete IDs are invalid or not members of this organization",
       missingIds: athleteIds.filter((id) => !found.has(id)),
     });
   }
@@ -84,7 +84,8 @@ export async function createReportsFromInput(
   return {
     kind: "batch",
     reports: created.map((report) => {
-      const athleteId = (report.config as { athleteId: string }).athleteId;
+      const athleteId = (report.config as InsertReport["config"]).athleteId;
+      if (!athleteId) throw new Error(`Report ${report.id} was saved without an athleteId`);
       return { ...report, athleteId, athleteName: names.get(athleteId) || "Unknown Athlete" };
     }),
   };
