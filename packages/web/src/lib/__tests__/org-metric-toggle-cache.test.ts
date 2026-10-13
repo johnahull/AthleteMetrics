@@ -27,6 +27,19 @@ describe('applyOrgMetricUpdate', () => {
     expect(list.find((m) => m.metricCode === 'B')!.isEnabled).toBe(true);
   });
 
+  it('keeps the patched full list fresh across mounts', () => {
+    const qc = seeded();
+    applyOrgMetricUpdate(qc, ORG, { id: 'om-A', organizationId: ORG, metricCode: 'A', isEnabled: true } as any);
+    expect(qc.getQueryState(['organizationMetrics', ORG, false])!.isInvalidated).toBe(false);
+  });
+
+  it('does not throw when nothing is cached yet', () => {
+    const qc = new QueryClient();
+    expect(() =>
+      applyOrgMetricUpdate(qc, ORG, { id: 'om-A', organizationId: ORG, metricCode: 'A', isEnabled: true } as any)
+    ).not.toThrow();
+  });
+
   it('does not refetch active queries', () => {
     const qc = seeded();
     applyOrgMetricUpdate(qc, ORG, { id: 'om-A', organizationId: ORG, metricCode: 'A', isEnabled: true } as any);

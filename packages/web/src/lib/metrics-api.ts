@@ -309,7 +309,7 @@ export function useOrganizationMetrics(organizationId: string, enabledOnly = fal
 /**
  * Apply an org-metric write to the cached lists without refetching them: each refetch spends the
  * per-user API rate-limit budget. The full list is patched from the response; other variants
- * (e.g. enabledOnly) are only marked stale. A metric missing from the cached list needs its joined
+ * (enabledOnly) are only marked stale. A metric missing from the cached list needs its joined
  * siteMetric, so that case falls back to a normal refetch.
  */
 export function applyOrgMetricUpdate(
@@ -326,7 +326,7 @@ export function applyOrgMetricUpdate(
       fullKey,
       cached!.map((m) => (m.metricCode === updated.metricCode ? { ...m, ...updated } : m))
     );
-    queryClient.invalidateQueries({ queryKey: ['organizationMetrics', organizationId], refetchType: 'none' });
+    queryClient.invalidateQueries({ queryKey: ['organizationMetrics', organizationId, true], refetchType: 'none' });
   } else {
     queryClient.invalidateQueries({ queryKey: ['organizationMetrics', organizationId] });
   }
