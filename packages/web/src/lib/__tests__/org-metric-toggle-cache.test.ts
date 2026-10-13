@@ -3,7 +3,7 @@
  * per-user API rate-limit budget (100 requests / 15 min), so ~30 toggles locked users out.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { QueryClient, QueryObserver } from '@tanstack/react-query';
 import { applyOrgMetricUpdate } from '../metrics-api';
 
@@ -47,7 +47,7 @@ describe('applyOrgMetricUpdate', () => {
     expect(qc.getQueryState(['organizationMetrics', ORG, true])!.isInvalidated).toBe(true);
   });
 
-  it('refetches the enabledOnly variant when a component is watching it', () => {
+  it('refetches the enabledOnly variant when a component is watching it', async () => {
     const qc = seeded();
     let fetches = 0;
     const unsubscribe = new QueryObserver(qc, {
@@ -57,7 +57,7 @@ describe('applyOrgMetricUpdate', () => {
     }).subscribe(() => {});
     fetches = 0;
     applyOrgMetricUpdate(qc, ORG, { id: 'om-A', organizationId: ORG, metricCode: 'A', isEnabled: true } as any);
-    expect(fetches).toBe(1);
+    await vi.waitFor(() => expect(fetches).toBe(1));
     unsubscribe();
   });
 
