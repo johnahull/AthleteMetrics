@@ -1121,6 +1121,7 @@ export class DerivedMetricCalculator {
    * Walks the verified anchors best-first and returns the first whose sources are complete under the
    * organization rule (anchor organization or personal). `anchorRow` is undefined when the date has no
    * anchor; `sources` is null when no anchor yields complete sources (anchorRow is then the best one).
+   * With missingSourceBehavior 'error', the last candidate's incomplete sources throw instead of returning null.
    */
   async findAnchoredSources(
     dbOrTx: typeof dbType | DbTransaction,
@@ -1680,10 +1681,12 @@ export class DerivedMetricCalculator {
                   calcMeasurement.date, metricConfigs
                 );
                 if (!found.sources) result.deleted++;
-                else if (organizationId && found.anchorRow!.organizationId !== organizationId) result.skipped++;
+                else if (organizationId && found.anchorRow?.organizationId !== organizationId) result.skipped++;
                 else result.recalculated++;
                 continue;
               }
+              // Tradeoff: one transaction (and its round-trips) per row for fault isolation and prompt lock
+              // release, so a large first backfill (e.g. MOMENTUM) is slow: run it off-peak.
               const updated = await this.db.transaction(async (tx) => {
                 const row = await this.computeAndUpsertDerived(
                   tx, derivedMetric, calcMeasurement.userId, calcMeasurement.date, metricConfigs,
@@ -1912,6 +1915,7 @@ export class DerivedMetricCalculator {
           if (isAnchored) {
             for (const source of batch) {
               try {
+                // One transaction per row (fault isolation, prompt lock release): slow on a large first backfill.
                 const created = await this.db.transaction((tx) =>
                   this.computeAndUpsertDerived(
                     tx, derivedMetric, source.userId, source.date, metricConfigs,
