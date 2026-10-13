@@ -16,6 +16,7 @@ import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { UserPlus, Trash2, Link as LinkIcon, User, CheckCircle, XCircle, Clock, UserCheck, Eye, EyeOff, ChevronDown, ChevronRight } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
+import { UnaffiliatedUsersSection } from "@/components/users/UnaffiliatedUsersSection";
 
 type Organization = {
   id: string;
@@ -934,6 +935,11 @@ export default function UserManagement() {
                   )}
                 </div>
               </div>
+              )}
+
+              {/* Users in no organization (site admin only; they have no role to filter by) */}
+              {isSiteAdmin && roleFilter === "all" && (
+                <UnaffiliatedUsersSection organizations={organizations ?? []} />
               )}
 
               {/* Users by Organization */}

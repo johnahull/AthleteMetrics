@@ -182,6 +182,8 @@ function isValidUUID(id: string): boolean {
   return UUID_REGEX.test(id);
 }
 
+const ASSIGNABLE_ROLES = ["athlete", "coach", "org_admin"];
+
 export function registerOrganizationRoutes(app: Express) {
   /**
    * Get all organizations (site admin only)
@@ -723,6 +725,66 @@ export function registerOrganizationRoutes(app: Express) {
       const message = sanitizeError(error, "Failed to add user to organization");
       const statusCode = message.includes("Unauthorized") ? 403 : 400;
       res.status(statusCode).json({ message });
+    }
+  });
+
+  /**
+   * Users who belong to no organization (site admin only), so they can be assigned to one.
+   * Parents are flagged: they reach their children through parent_athlete_links, never org roles.
+   */
+  app.get("/api/users/unaffiliated", requireAuth, requireSiteAdmin, async (_req, res) => {
+    try {
+      res.json(await storage.getUnaffiliatedUsers());
+    } catch (error) {
+      console.error("Get unaffiliated users error:", error);
+      res.status(500).json({ message: sanitizeError(error, "Failed to fetch unaffiliated users") });
+    }
+  });
+
+  /**
+   * Assign an unaffiliated user to an organization (site admin only).
+   * Refuses users who already belong to any org: storage.addUserToOrganization replaces a role,
+   * and role changes have their own endpoint.
+   */
+  app.post("/api/organizations/:orgId/users/:userId/assign", requireAuth, requireSiteAdmin, async (req, res) => {
+    try {
+      const { orgId, userId } = req.params;
+      if (!isValidUUID(orgId) || !isValidUUID(userId)) {
+        return res.status(400).json({ message: "Invalid ID format" });
+      }
+
+      const role = req.body?.role ?? "athlete";
+      if (!ASSIGNABLE_ROLES.includes(role)) {
+        return res.status(400).json({ message: `Role must be one of: ${ASSIGNABLE_ROLES.join(", ")}` });
+      }
+
+      const [organization, user] = await Promise.all([storage.getOrganization(orgId), storage.getUser(userId)]);
+      if (!organization) return res.status(404).json({ message: "Organization not found" });
+      if (!organization.isActive) return res.status(400).json({ message: "Organization is not active" });
+      if (!user) return res.status(404).json({ message: "User not found" });
+      if (user.isSiteAdmin) return res.status(400).json({ message: "Site admins cannot be assigned to an organization" });
+      if (await storage.isParentAccount(userId)) {
+        return res.status(400).json({ message: "Parent accounts cannot be assigned to an organization" });
+      }
+      if ((await storage.getUserOrganizations(userId)).length > 0) {
+        return res.status(409).json({ message: "User already belongs to an organization" });
+      }
+
+      const membership = await storage.addUserToOrganization(userId, orgId, role);
+      await storage.createAuditLog({
+        userId: req.session.user!.id,
+        action: "user_assigned_to_organization",
+        resourceType: "user",
+        resourceId: userId,
+        details: JSON.stringify({ organizationId: orgId, role }),
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent"),
+      });
+
+      res.status(201).json(membership);
+    } catch (error) {
+      console.error("Assign user to organization error:", error);
+      res.status(500).json({ message: sanitizeError(error, "Failed to assign user to organization") });
     }
   });
 
