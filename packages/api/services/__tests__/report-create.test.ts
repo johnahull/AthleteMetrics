@@ -6,6 +6,7 @@ const h = vi.hoisted(() => {
     members: [] as Array<{ id: string; fullName: string }>,
     insertCalls: [] as any[][],
     failInsert: false,
+    reverseReturning: false,
   };
   const db = {
     select: () => ({
@@ -17,7 +18,8 @@ const h = vi.hoisted(() => {
           if (state.failInsert) throw new Error('insert boom');
           const rows = Array.isArray(v) ? v : [v];
           state.insertCalls.push(rows);
-          return rows.map((r, i) => ({ id: `r${i}`, ...r }));
+          const out = rows.map((r, i) => ({ id: `r${i}`, ...r }));
+          return state.reverseReturning ? out.reverse() : out;
         },
       }),
     }),
@@ -27,7 +29,7 @@ const h = vi.hoisted(() => {
 
 vi.mock('../../db', () => ({ db: h.db }));
 
-import { createReportsFromInput, ReportCreateError } from '../report-create';
+import { createReportsFromInput, ReportCreateError, MAX_REPORT_ATHLETES } from '../report-create';
 
 const timeframe = { type: 'custom', customStart: '2026-01-01', customEnd: '2026-02-01' };
 const base = { name: 'Combine', organizationId: 'org1', description: undefined, isTemplate: false };
@@ -39,6 +41,7 @@ describe('createReportsFromInput', () => {
     h.state.members = [];
     h.state.insertCalls = [];
     h.state.failInsert = false;
+    h.state.reverseReturning = false;
   });
 
   it('creates one report per athlete in a single insert, with athleteId and name suffix', async () => {
@@ -96,6 +99,23 @@ describe('createReportsFromInput', () => {
     expect(err).toBeInstanceOf(ReportCreateError);
     expect(err.status).toBe(400);
     expect(h.state.insertCalls).toHaveLength(0);
+  });
+
+  it('rejects more athletes than the batch cap before touching the db', async () => {
+    const ids = Array.from({ length: MAX_REPORT_ATHLETES + 1 }, (_, i) => `a${i}`);
+    const err = await createReportsFromInput('u1', individual({ athleteIds: ids })).catch((e) => e);
+    expect(err).toBeInstanceOf(ReportCreateError);
+    expect(err.status).toBe(400);
+    expect(h.state.insertCalls).toHaveLength(0);
+  });
+
+  it('takes athleteId and name from each returned row, not from insert order', async () => {
+    h.state.members = [{ id: 'a1', fullName: 'Ann' }, { id: 'a2', fullName: 'Bob' }];
+    h.state.reverseReturning = true;
+    const res = await createReportsFromInput('u1', individual({ athleteIds: ['a1', 'a2'] }));
+    if (res.kind !== 'batch') throw new Error('expected batch');
+    for (const r of res.reports) expect(r.name).toBe(`Combine - ${r.athleteName}`);
+    expect(res.reports.map((r) => r.athleteId)).toEqual(['a2', 'a1']);
   });
 
   it('lets a failed insert propagate with nothing persisted (one statement, no partial batch)', async () => {

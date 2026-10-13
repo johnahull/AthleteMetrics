@@ -9,6 +9,9 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../db";
 import { reports, users, userOrganizations, type InsertReport, type Report } from "@shared/schema";
 
+// Matches the athlete picker's "Select All" cap in the web app; bounds the multi-row insert
+export const MAX_REPORT_ATHLETES = 200;
+
 export class ReportCreateError extends Error {
   constructor(
     public readonly status: number,
@@ -46,6 +49,11 @@ export async function createReportsFromInput(
   if (athleteIds.length === 0) {
     throw new ReportCreateError(400, { message: "Individual reports require at least one athlete" });
   }
+  if (athleteIds.length > MAX_REPORT_ATHLETES) {
+    throw new ReportCreateError(400, {
+      message: `At most ${MAX_REPORT_ATHLETES} athletes per request`,
+    });
+  }
 
   // Only members of the report's organization: no cross-org names or report rows
   const athletes = await db
@@ -72,12 +80,12 @@ export async function createReportsFromInput(
     )
     .returning();
 
+  // Read the athlete back from each row instead of relying on RETURNING order
   return {
     kind: "batch",
-    reports: created.map((report, i) => ({
-      ...report,
-      athleteId: athleteIds[i],
-      athleteName: names.get(athleteIds[i]) || "Unknown Athlete",
-    })),
+    reports: created.map((report) => {
+      const athleteId = (report.config as { athleteId: string }).athleteId;
+      return { ...report, athleteId, athleteName: names.get(athleteId) || "Unknown Athlete" };
+    }),
   };
 }

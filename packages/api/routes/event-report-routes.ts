@@ -237,7 +237,7 @@ export function registerEventReportRoutes(app: Express) {
           if (!Array.isArray(athleteIds) || athleteIds.length === 0) {
             return res.status(400).json({ message: "Individual reports require at least one athlete" });
           }
-          // Athletes must be on the event, as in quick-report
+          // Athletes must be on the event, as in quick-report (the service then also checks org membership)
           const registrations = await eventRegistrationService.listRegistrations(eventId, userId);
           const onEvent = new Set(
             registrations
