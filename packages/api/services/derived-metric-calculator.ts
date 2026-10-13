@@ -1132,6 +1132,9 @@ export class DerivedMetricCalculator {
     metricConfigs: Map<string, { higherIsBetter: boolean }>,
     scope?: MeasurementVisibilityScope
   ): Promise<{ anchorRow?: Measurement; sources: Map<string, Measurement> | null }> {
+    if (!metricConfigs.has(anchorMetric)) {
+      console.warn(`Anchor metric ${anchorMetric} missing from metricConfigs; assuming higher is better`);
+    }
     const anchors = await this.findVerifiedAnchorRows(
       dbOrTx, userId, anchorMetric, date, metricConfigs.get(anchorMetric)?.higherIsBetter ?? true, scope
     );
@@ -1663,7 +1666,14 @@ export class DerivedMetricCalculator {
           for (const calcMeasurement of batch) {
             try {
               if (dryRun) {
-                // shortcut: a coexisting direct measurement (which also deletes the row) is counted as recalculated
+                // A coexisting direct measurement makes the real run delete the row, so count it as deleted
+                const [direct] = await this.db.select({ id: measurements.id }).from(measurements).where(and(
+                  eq(measurements.userId, calcMeasurement.userId),
+                  eq(measurements.metric, derivedMetric.code),
+                  eq(measurements.date, calcMeasurement.date),
+                  eq(measurements.isCalculated, false)
+                )).limit(1);
+                if (direct) { result.deleted++; continue; }
                 const found = await this.findAnchoredSources(
                   this.db, calcMeasurement.userId, derivedMetric.dependentMetrics || [],
                   derivedMetric.calculationConfig, derivedMetric.calculationConfig.anchorMetric!.toUpperCase(),

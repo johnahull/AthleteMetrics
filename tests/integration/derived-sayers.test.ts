@@ -328,4 +328,23 @@ describe('Sayers peak power (anchored on the restricted CMJ)', () => {
       expect(await dates(code)).toEqual(['2026-03-10', '2026-04-05']);
     }
   });
+  it('dry run and real run both report deleted:1 when a direct measurement coexists with the calculated row', async () => {
+    const base = { userId: athleteId, submittedBy: coachId, age: 18, isVerified: true, organizationId: orgId, date: '2026-03-10' };
+    await db.insert(measurements).values([
+      { ...base, metric: WEIGHT, value: '150', units: 'lbs' },
+      { ...base, metric: CMJ, value: '20', units: 'in' },
+      { ...base, metric: PP_W, value: '4000', units: 'W', isCalculated: true },
+      { ...base, metric: PP_W, value: '4100', units: 'W', isCalculated: false },
+    ] as any);
+    const run = (dryRun: boolean) =>
+      new DerivedMetricCalculator(db).recalculateAllDerivedMetrics({
+        metricCode: PP_W, organizationId: orgId, createMissing: false, dryRun,
+      });
+    const dry = await run(true);
+    expect(dry.deleted).toBe(1);
+    expect(dry.recalculated).toBe(0);
+    const real = await run(false);
+    expect(real.deleted).toBe(1);
+    expect(real.recalculated).toBe(0);
+  });
 });
