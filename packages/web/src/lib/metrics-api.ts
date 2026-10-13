@@ -3,7 +3,7 @@
  * Provides type-safe API calls and data fetching hooks for metric management
  */
 
-import { useQuery, useMutation, useQueryClient, type UseQueryOptions } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, type QueryClient, type UseQueryOptions } from "@tanstack/react-query";
 import type { DynamicMetricConfig, OrganizationMetricConfig } from "@shared/analytics-types";
 import type { SiteMetric, InsertSiteMetric, UpdateSiteMetric, OrganizationMetric, UpdateOrganizationMetric } from "@shared/schema";
 import { STALE_TIME } from "@/lib/queryClient";
@@ -307,6 +307,32 @@ export function useOrganizationMetrics(organizationId: string, enabledOnly = fal
 }
 
 /**
+ * Apply an org-metric write to the cached lists without refetching them: each refetch spends the
+ * per-user API rate-limit budget. The full list is patched from the response; other variants
+ * (e.g. enabledOnly) are only marked stale. A metric missing from the cached list needs its joined
+ * siteMetric, so that case falls back to a normal refetch.
+ */
+export function applyOrgMetricUpdate(
+  queryClient: QueryClient,
+  organizationId: string,
+  updated: OrganizationMetric
+) {
+  const fullKey = ['organizationMetrics', organizationId, false];
+  const cached = queryClient.getQueryData<(OrganizationMetric & { siteMetric: SiteMetric })[]>(fullKey);
+  const known = cached?.some((m) => m.metricCode === updated.metricCode);
+
+  if (known) {
+    queryClient.setQueryData(
+      fullKey,
+      cached!.map((m) => (m.metricCode === updated.metricCode ? { ...m, ...updated } : m))
+    );
+    queryClient.invalidateQueries({ queryKey: ['organizationMetrics', organizationId], refetchType: 'none' });
+  } else {
+    queryClient.invalidateQueries({ queryKey: ['organizationMetrics', organizationId] });
+  }
+}
+
+/**
  * Hook to enable metric for organization
  */
 export function useEnableMetricForOrganization() {
@@ -315,8 +341,8 @@ export function useEnableMetricForOrganization() {
   return useMutation({
     mutationFn: ({ organizationId, metricCode }: { organizationId: string; metricCode: string }) =>
       enableMetricForOrganization(organizationId, metricCode),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['organizationMetrics', variables.organizationId] });
+    onSuccess: (updated, variables) => {
+      applyOrgMetricUpdate(queryClient, variables.organizationId, updated);
     },
   });
 }
@@ -330,8 +356,8 @@ export function useDisableMetricForOrganization() {
   return useMutation({
     mutationFn: ({ organizationId, metricCode }: { organizationId: string; metricCode: string }) =>
       disableMetricForOrganization(organizationId, metricCode),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['organizationMetrics', variables.organizationId] });
+    onSuccess: (updated, variables) => {
+      applyOrgMetricUpdate(queryClient, variables.organizationId, updated);
     },
   });
 }
@@ -352,8 +378,8 @@ export function useUpdateOrganizationMetric() {
       metricCode: string;
       data: Partial<UpdateOrganizationMetric>;
     }) => updateOrganizationMetric(organizationId, metricCode, data),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['organizationMetrics', variables.organizationId] });
+    onSuccess: (updated, variables) => {
+      applyOrgMetricUpdate(queryClient, variables.organizationId, updated);
     },
   });
 }
