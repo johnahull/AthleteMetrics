@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Eye, EyeOff, Shield, Mail, Lock, AlertCircle, CheckCircle, Clock } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { OAuthButtons } from "./oauth-buttons";
+import { safeRedirectPath } from "@/utils/safe-redirect";
 
 interface LoginFormData {
   username: string;  // Can be username or email - backend accepts both
@@ -199,8 +200,9 @@ export function EnhancedLoginForm() {
         setError(null);
       } else if (result.user) {
         // Login successful - backend returns user object on success
-        // Redirect based on backend-provided URL or default to dashboard
-        window.location.href = result.redirectUrl || '/dashboard';
+        // An explicit, same-origin ?redirect (e.g. /join/CODE) wins over the backend's role-based default
+        const requested = safeRedirectPath(new URLSearchParams(window.location.search).get('redirect'));
+        window.location.href = requested || result.redirectUrl || '/dashboard';
       } else {
         // Handle various error types
         if (result.accountLocked) {
