@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, QueryObserver } from '@tanstack/react-query';
 import { applyOrgMetricUpdate } from '../metrics-api';
 
 const ORG = 'org-1';
@@ -40,11 +40,25 @@ describe('applyOrgMetricUpdate', () => {
     ).not.toThrow();
   });
 
-  it('does not refetch active queries', () => {
+  it('does not refetch unmounted queries, only marks the enabledOnly variant stale', () => {
     const qc = seeded();
     applyOrgMetricUpdate(qc, ORG, { id: 'om-A', organizationId: ORG, metricCode: 'A', isEnabled: true } as any);
     expect(qc.isFetching()).toBe(0);
     expect(qc.getQueryState(['organizationMetrics', ORG, true])!.isInvalidated).toBe(true);
+  });
+
+  it('refetches the enabledOnly variant when a component is watching it', () => {
+    const qc = seeded();
+    let fetches = 0;
+    const unsubscribe = new QueryObserver(qc, {
+      queryKey: ['organizationMetrics', ORG, true],
+      queryFn: async () => { fetches++; return []; },
+      staleTime: Infinity,
+    }).subscribe(() => {});
+    fetches = 0;
+    applyOrgMetricUpdate(qc, ORG, { id: 'om-A', organizationId: ORG, metricCode: 'A', isEnabled: true } as any);
+    expect(fetches).toBe(1);
+    unsubscribe();
   });
 
   it('falls back to a refetch when the metric is not in the cached list', () => {
