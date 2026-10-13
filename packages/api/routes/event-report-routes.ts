@@ -6,6 +6,7 @@
 import type { Express, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { ReportService } from "../services/report-service";
+import { createReportsFromInput, ReportCreateError } from "../services/report-create";
 import { EventService, type IEventStorage } from "../services/event-service";
 import { EventMetricsService, type IMetricsStorage } from "../services/event-metrics-service";
 import { EventRegistrationService, type IRegistrationStorage } from "../services/event-registration-service";
@@ -224,37 +225,30 @@ export function registerEventReportRoutes(app: Express) {
           metrics: metrics || [],
         };
 
-        if (reportType === 'individual' && athleteIds) {
-          config.athleteIds = athleteIds;
-          // Store first athlete for individual report generation
-          if (Array.isArray(athleteIds) && athleteIds.length > 0) {
-            config.athleteId = athleteIds[0];
+        if (reportType === 'individual') {
+          if (!Array.isArray(athleteIds) || athleteIds.length === 0) {
+            return res.status(400).json({ message: "Individual reports require at least one athlete" });
           }
+          config.athleteIds = athleteIds;
         }
 
-        // Validate and create report
-        const reportData = {
+        // Validate and create report (individual reports fan out one row per athlete)
+        const validated = insertReportSchema.parse({
           name: name || `${event.name} - ${reportType === 'team' ? 'Team Report' : 'Individual Report'}`,
           organizationId: event.organizationId,
           reportType,
           config,
           createdBy: userId,
-        };
+        });
 
-        const validated = insertReportSchema.parse(reportData);
-
-        const [newReport] = await db
-          .insert(reports)
-          .values({
-            ...validated,
-            id: crypto.randomUUID(),
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          })
-          .returning();
-
-        return res.status(201).json(newReport);
+        const result = await createReportsFromInput(userId, validated);
+        return result.kind === 'batch'
+          ? res.status(201).json({ reports: result.reports })
+          : res.status(201).json(result.report);
       } catch (error: unknown) {
+        if (error instanceof ReportCreateError) {
+          return res.status(error.status).json(error.body);
+        }
         console.error("Error creating event report:", error);
         if (error instanceof ZodError) {
           return res.status(400).json({ message: "Invalid report data", errors: error.errors });
