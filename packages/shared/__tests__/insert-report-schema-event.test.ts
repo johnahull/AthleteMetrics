@@ -22,6 +22,12 @@ describe('insertReportSchema event config', () => {
     });
   });
 
+  // Both POST routes parse through this schema, so eval rows (which have their own access gate)
+  // cannot be created via /api/reports or /api/events/:id/reports
+  it.each(['eval', 'bogus'])('rejects reportType %s', (reportType) => {
+    expect(() => insertReportSchema.parse({ ...base, reportType })).toThrow();
+  });
+
   it('rejects a non-uuid eventId', () => {
     expect(() =>
       insertReportSchema.parse({ ...base, config: { ...base.config, eventId: 'nope' } })
