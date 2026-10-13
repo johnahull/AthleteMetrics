@@ -78,7 +78,7 @@ const insert = async (
       units: metric === WEIGHT ? 'lb' : 's',
       age: 18,
       date,
-      ...(opts.isCalculated ? { isCalculated: true, calculatedFromMeasurementIds: [] } : {}),
+      ...(opts.isCalculated ? { isCalculated: true, calculatedFromMeasurementIds: [], calculationMetadata: {} } : {}),
     } as any)
     .returning();
   return row.id;
@@ -313,7 +313,7 @@ describe('GET /api/measurements/calculate-preview: visibility scope', () => {
     });
   });
 
-  it('a site admin still sees every organization and personal row', async () => {
+  it('a site admin sees every organization: the best anchor (lowest fly) decides the organization of the other sources', async () => {
     const ids = await seedAcrossOrgs();
     const admin = await makeUser('siteadmin', { isSiteAdmin: true });
     extraUserIds.push(admin.id);
@@ -321,8 +321,9 @@ describe('GET /api/measurements/calculate-preview: visibility scope', () => {
     const res = await preview(D, await loginAs(admin.username));
 
     expect(res.status).toBe(200);
-    expect(res.body.calculatedValue).toBeCloseTo(momentum(200, 1.5), 6);
-    expect([...res.body.sourceMeasurementIds].sort()).toEqual([ids.bFly, ids.bWeight].sort());
+    // Org B rows are not used; the closer personal weight is allowed with an org A anchor
+    expect(res.body.calculatedValue).toBeCloseTo(momentum(250, 1.3), 6);
+    expect([...res.body.sourceMeasurementIds].sort()).toEqual([ids.aFly, ids.personalWeight].sort());
   });
 
   it('the athlete previewing themself sees their personal rows', async () => {
@@ -361,8 +362,10 @@ describe('GET /api/measurements/calculate-preview: visibility scope', () => {
     expect(res.body.missingMetrics).toEqual([FLY]);
   });
 
-  it('a coach in org A and org B sees both organizations, but not a third org or personal rows', async () => {
+  it('a coach in org A and org B: other-org weights are not mixed into an anchored preview, nor are a third org or personal rows', async () => {
     const aFly = await insert(FLY, '1.30', D, true);
+    const aWeight = await insert(WEIGHT, '150', '2026-03-01', true);
+    // Closer than the org A weight, in an organization the coach can see but the anchor is not in
     const bWeight = await insert(WEIGHT, '200', '2026-03-09', true, { organizationId: orgBId });
     // Same-date rows with higher values: an unscoped 'closest' lookup picks one of these
     const cWeight = await insert(WEIGHT, '250', D, true, { organizationId: orgCId });
@@ -377,11 +380,42 @@ describe('GET /api/measurements/calculate-preview: visibility scope', () => {
     const res = await preview(D, await loginAs(coachAB.username));
 
     expect(res.status).toBe(200);
-    expect([...res.body.sourceMeasurementIds].sort()).toEqual([aFly, bWeight].sort());
-    expect(res.body.calculatedValue).toBeCloseTo(momentum(200, 1.3), 6);
+    expect([...res.body.sourceMeasurementIds].sort()).toEqual([aFly, aWeight].sort());
+    expect(res.body.calculatedValue).toBeCloseTo(momentum(150, 1.3), 6);
     const text = JSON.stringify(res.body);
-    expect(text).not.toContain(cWeight);
-    expect(text).not.toContain(personalWeight);
+    for (const hidden of [bWeight, cWeight, personalWeight]) {
+      expect(text).not.toContain(hidden);
+    }
+  });
+
+  it('a coach in org A and org B: a better anchor in an org without a weight does not hide the computable org A anchor', async () => {
+    const aFly = await insert(FLY, '1.30', D, true);
+    const aWeight = await insert(WEIGHT, '150', '2026-03-01', true);
+    await insert(FLY, '1.25', D, true, { organizationId: orgBId });
+    const coachAB = await makeUser('coachab2');
+    extraUserIds.push(coachAB.id);
+    await db.insert(userOrganizations).values([
+      { userId: coachAB.id, organizationId: orgId, role: 'coach' },
+      { userId: coachAB.id, organizationId: orgBId, role: 'coach' },
+    ] as any);
+
+    const res = await preview(D, await loginAs(coachAB.username));
+
+    expect(res.status).toBe(200);
+    expect(res.body.calculatedValue).toBeCloseTo(momentum(150, 1.3), 6);
+    expect([...res.body.sourceMeasurementIds].sort()).toEqual([aFly, aWeight].sort());
+  });
+
+  it('an equally close pair of weights uses the metric direction (tracking: lowest), like the real calculation', async () => {
+    await insert(FLY, '1.30', D, true);
+    await insert(WEIGHT, '160', '2026-03-15', true);
+    const lighter = await insert(WEIGHT, '150', '2026-03-05', true);
+
+    const res = await preview(D);
+
+    expect(res.status).toBe(200);
+    expect(res.body.sourceMeasurementIds).toContain(lighter);
+    expect(res.body.calculatedValue).toBeCloseTo(momentum(150, 1.3), 6);
   });
 
   // Each strategy builds its own query; the org-B row is the one an unscoped lookup picks

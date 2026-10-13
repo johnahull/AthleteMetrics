@@ -260,6 +260,9 @@ export function registerAdminUtilityRoutes(app: Express) {
       if (result.created > 0) {
         messageParts.push(`created ${result.created}`);
       }
+      if (result.deleted > 0) {
+        messageParts.push(`deleted ${result.deleted}`);
+      }
       if (messageParts.length === 0) {
         messageParts.push('no changes made');
       }
@@ -271,6 +274,7 @@ export function registerAdminUtilityRoutes(app: Express) {
         recalculated: result.recalculated,
         created: result.created,
         skipped: result.skipped,
+        deleted: result.deleted,
         errors: result.errors,
       });
 
@@ -319,6 +323,9 @@ export function registerAdminUtilityRoutes(app: Express) {
       }
       if (result.created > 0) {
         messageParts.push(`created ${result.created}`);
+      }
+      if (result.deleted > 0) {
+        messageParts.push(`deleted ${result.deleted}`);
       }
       if (messageParts.length === 0) {
         messageParts.push('no changes');

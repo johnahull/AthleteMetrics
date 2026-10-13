@@ -13,6 +13,12 @@ These methods transform basic measurements into actionable biomechanical insight
 
 ## Part 1: Sayers Equation Power Calculation
 
+> **Shipped (migration 0158, AM-FEAT-021):** `PEAK_POWER_W` and `PEAK_POWER_REL` are live derived metrics, so the
+> example code below is a design sketch, not what runs. Only `JUMP_CMJ_HOH` (the restricted, hands-on-hips CMJ) feeds
+> them; the equation is not valid for HF-CMJ or the legacy `VERTICAL_JUMP`. Youth values are estimates (the equation was
+> fitted on adults), and a negative value means bad data. Formulas, weight window and backfill:
+> `docs/DERIVED_METRICS_AND_TRAINING_INSIGHTS.md` (section 5).
+
 ### Scientific Background
 
 **Reference**: Sayers et al. (1999) - "Cross-validation of three jump power equations"

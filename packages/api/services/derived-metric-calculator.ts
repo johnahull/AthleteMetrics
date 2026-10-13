@@ -25,6 +25,13 @@ import type { PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js';
 import type { ExtractTablesWithRelations } from 'drizzle-orm';
 
 // Type for Drizzle transaction
+/**
+ * Scope of an anchored derived metric's sources: the anchor metric's source IS the given verified
+ * anchor row, and every other source must be in that row's organization or personal (organization
+ * null), never another organization's rows.
+ */
+type AnchorOrgScope = { anchorCode: string; anchorRow: Measurement };
+
 type DbTransaction = PgTransaction<
   PostgresJsQueryResultHKT,
   typeof import('@shared/schema'),
@@ -477,6 +484,8 @@ export class DerivedMetricCalculator {
    *   existing calculated rows are deleted when a direct measurement exists for the
    *   date, its sources are missing, or the formula result is invalid.
    * @param allowCreate - When false, only an existing calculated row is updated.
+   * @param anchorOrganizationId - Anchored metrics, organization-scoped runs: leave the date alone
+   *   when the anchor actually used belongs to another organization.
    * @returns the created/updated calculated measurement, or null when it cannot be
    *   calculated (direct measurement exists, sources missing, invalid result)
    */
@@ -495,7 +504,8 @@ export class DerivedMetricCalculator {
     triggerContext: TriggerContext | undefined,
     contextMeasurement?: Measurement,
     deleteWhenUncomputable = false,
-    allowCreate = true
+    allowCreate = true,
+    anchorOrganizationId?: string
   ): Promise<Measurement | null> {
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtextextended(${`derived:${userId}:${derivedMetric.code}:${date}`}, 0))`
@@ -553,23 +563,40 @@ export class DerivedMetricCalculator {
     // Anchored metric (e.g. MOMENTUM): only exists on dates with a verified direct
     // measurement of the anchor metric. Without one (anchor deleted, moved, unverified,
     // or the date is a non-anchor source's date) there is nothing to derive on this date.
+    // Organization rule: the non-anchor sources must be in the anchor row's organization or personal
+    // (never another organization's), and the derived row takes the anchor row's organization.
     const anchorMetric = derivedMetric.calculationConfig?.anchorMetric?.toUpperCase();
-    if (anchorMetric && !(await this.hasVerifiedAnchor(userId, anchorMetric, date, tx))) {
-      return deleteExisting();
+    const calcConfig = derivedMetric.calculationConfig || {
+      dateMatchStrategy: 'same_date' as const,
+      missingSourceBehavior: 'skip' as const,
+    };
+    let anchorRow: Measurement | undefined;
+    let sourceMeasurementsMap: Map<string, Measurement> | null;
+    if (anchorMetric) {
+      // Best verified anchor whose organization (or personal) sources are complete
+      const found = await this.findAnchoredSources(
+        tx, userId, derivedMetric.dependentMetrics || [], calcConfig, anchorMetric, date, metricConfigsMap
+      );
+      if (!found.anchorRow) {
+        return deleteExisting();
+      }
+      anchorRow = found.anchorRow;
+      sourceMeasurementsMap = found.sources;
+      // An organization-scoped run never writes into, or removes a row because of, another organization
+      if (sourceMeasurementsMap && anchorOrganizationId && anchorRow.organizationId !== anchorOrganizationId) {
+        return null;
+      }
+    } else {
+      // Find source measurements for the formula
+      sourceMeasurementsMap = await this.findSourceMeasurementsInTransaction(
+        tx,
+        userId,
+        derivedMetric.dependentMetrics || [],
+        date,
+        calcConfig,
+        metricConfigsMap
+      );
     }
-
-    // Find source measurements for the formula
-    const sourceMeasurementsMap = await this.findSourceMeasurementsInTransaction(
-      tx,
-      userId,
-      derivedMetric.dependentMetrics || [],
-      date,
-      derivedMetric.calculationConfig || {
-        dateMatchStrategy: 'same_date',
-        missingSourceBehavior: 'skip',
-      },
-      metricConfigsMap
-    );
 
     if (!sourceMeasurementsMap) {
       // Missing source measurements - skip based on missingSourceBehavior.
@@ -649,7 +676,7 @@ export class DerivedMetricCalculator {
     // latest_event: the total belongs to the chosen event's sources (possibly another
     // org than the measurement that triggered the calculation), so it takes their context.
     const isLatestEvent = derivedMetric.calculationConfig?.sourceSelection === 'latest_event';
-    const context = isLatestEvent ? newestSource : contextMeasurement ?? newestSource;
+    const context = isLatestEvent ? newestSource : anchorRow ?? contextMeasurement ?? newestSource;
 
     if (existingCalculated.length > 0) {
       // Update the survivor (newest calculated row) and delete any duplicates
@@ -665,8 +692,8 @@ export class DerivedMetricCalculator {
           value: calculatedValue.toFixed(3),
           calculatedFromMeasurementIds: sourceMeasurementIds,
           calculationMetadata,
-          // The chosen event may have changed: refresh the context columns too
-          ...(isLatestEvent
+          // The chosen event / anchor row may have changed: refresh the context columns too
+          ...(isLatestEvent || anchorRow
             ? {
                 submittedBy: context.submittedBy,
                 isVerified: context.isVerified,
@@ -1015,9 +1042,10 @@ export class DerivedMetricCalculator {
     dependentMetrics: string[],
     targetDate: string,
     config: DerivedCalculationConfig,
-    metricConfigs?: Map<string, { higherIsBetter: boolean }>
+    metricConfigs?: Map<string, { higherIsBetter: boolean }>,
+    orgScope?: AnchorOrgScope
   ): Promise<Map<string, Measurement> | null> {
-    return this.findSourceMeasurementsImpl(dbOrTx, userId, dependentMetrics, targetDate, config, metricConfigs);
+    return this.findSourceMeasurementsImpl(dbOrTx, userId, dependentMetrics, targetDate, config, metricConfigs, undefined, orgScope);
   }
 
   /**
@@ -1044,6 +1072,7 @@ export class DerivedMetricCalculator {
    * @param config.maxDateDifference - For 'closest' strategy, max days difference allowed
    * @param config.missingSourceBehavior - What to do if source data is missing ('skip' returns null, 'error' throws)
    * @param scope - Only consider rows the caller may see (see MeasurementVisibilityScope); omit for all rows
+   * @param orgScope - Anchored metrics: the anchor row and the organization rule for the other sources
    * @returns Map of metric code to measurement, or null if any required source is missing (when behavior is 'skip')
    * @throws Error if required source measurements are missing and behavior is 'error'
    */
@@ -1053,25 +1082,27 @@ export class DerivedMetricCalculator {
     targetDate: string,
     config: DerivedCalculationConfig,
     metricConfigs?: Map<string, { higherIsBetter: boolean }>,
-    scope?: MeasurementVisibilityScope
+    scope?: MeasurementVisibilityScope,
+    orgScope?: AnchorOrgScope
   ): Promise<Map<string, Measurement> | null> {
-    return this.findSourceMeasurements(userId, dependentMetrics, targetDate, config, metricConfigs, scope);
+    return this.findSourceMeasurements(userId, dependentMetrics, targetDate, config, metricConfigs, scope, orgScope);
   }
 
   /**
-   * Whether the athlete has a verified, direct (non-calculated) measurement of the anchor
-   * metric on this date. An anchored derived metric (e.g. MOMENTUM) only exists on such dates.
-   * `scope` limits the check to rows a caller may see (preview only); omit for all rows.
+   * The verified, direct anchor measurements a derived row on this date can be built from, best
+   * first: best value (by the anchor's direction), then newest. Same order as the same_date source
+   * lookup. `scope` limits the lookup to rows a caller may see (preview only); omit for all rows.
    */
-  async hasVerifiedAnchor(
+  async findVerifiedAnchorRows(
+    dbOrTx: typeof dbType | DbTransaction,
     userId: string,
     anchorMetric: string,
     date: string,
-    dbOrTx: typeof dbType | DbTransaction = this.db,
+    higherIsBetter: boolean,
     scope?: MeasurementVisibilityScope
-  ): Promise<boolean> {
-    const [anchorRow] = await dbOrTx
-      .select({ id: measurements.id })
+  ): Promise<Measurement[]> {
+    return dbOrTx
+      .select()
       .from(measurements)
       .where(
         and(
@@ -1083,8 +1114,36 @@ export class DerivedMetricCalculator {
           visibilityCondition(scope)
         )
       )
-      .limit(1);
-    return !!anchorRow;
+      .orderBy(higherIsBetter ? desc(measurements.value) : asc(measurements.value), desc(measurements.createdAt));
+  }
+
+  /**
+   * Walks the verified anchors best-first and returns the first whose sources are complete under the
+   * organization rule (anchor organization or personal). `anchorRow` is undefined when the date has no
+   * anchor; `sources` is null when no anchor yields complete sources (anchorRow is then the best one).
+   */
+  async findAnchoredSources(
+    dbOrTx: typeof dbType | DbTransaction,
+    userId: string,
+    dependentMetrics: string[],
+    config: DerivedCalculationConfig,
+    anchorMetric: string,
+    date: string,
+    metricConfigs: Map<string, { higherIsBetter: boolean }>,
+    scope?: MeasurementVisibilityScope
+  ): Promise<{ anchorRow?: Measurement; sources: Map<string, Measurement> | null }> {
+    const anchors = await this.findVerifiedAnchorRows(
+      dbOrTx, userId, anchorMetric, date, metricConfigs.get(anchorMetric)?.higherIsBetter ?? true, scope
+    );
+    for (let i = 0; i < anchors.length; i++) {
+      // Only the last candidate may throw for 'error' behavior; earlier ones fall through to the next anchor
+      const cfg = i < anchors.length - 1 ? { ...config, missingSourceBehavior: 'skip' as const } : config;
+      const sources = await this.findSourceMeasurementsImpl(
+        dbOrTx, userId, dependentMetrics, date, cfg, metricConfigs, scope, { anchorCode: anchorMetric, anchorRow: anchors[i] }
+      );
+      if (sources) return { anchorRow: anchors[i], sources };
+    }
+    return { anchorRow: anchors[0], sources: null };
   }
 
   /**
@@ -1097,9 +1156,10 @@ export class DerivedMetricCalculator {
     dependentMetrics: string[],
     targetDate: string,
     config: DerivedCalculationConfig,
-    metricConfigs?: Map<string, { higherIsBetter: boolean }>
+    metricConfigs?: Map<string, { higherIsBetter: boolean }>,
+    orgScope?: AnchorOrgScope
   ): Promise<Map<string, Measurement> | null> {
-    return this.findSourceMeasurementsImpl(tx, userId, dependentMetrics, targetDate, config, metricConfigs);
+    return this.findSourceMeasurementsImpl(tx, userId, dependentMetrics, targetDate, config, metricConfigs, undefined, orgScope);
   }
 
   /**
@@ -1112,9 +1172,10 @@ export class DerivedMetricCalculator {
     targetDate: string,
     config: DerivedCalculationConfig,
     metricConfigs?: Map<string, { higherIsBetter: boolean }>,
-    scope?: MeasurementVisibilityScope
+    scope?: MeasurementVisibilityScope,
+    orgScope?: AnchorOrgScope
   ): Promise<Map<string, Measurement> | null> {
-    return this.findSourceMeasurementsImpl(this.db, userId, dependentMetrics, targetDate, config, metricConfigs, scope);
+    return this.findSourceMeasurementsImpl(this.db, userId, dependentMetrics, targetDate, config, metricConfigs, scope, orgScope);
   }
 
   /**
@@ -1238,7 +1299,8 @@ export class DerivedMetricCalculator {
     targetDate: string,
     config: DerivedCalculationConfig,
     metricConfigs?: Map<string, { higherIsBetter: boolean }>,
-    scope?: MeasurementVisibilityScope
+    scope?: MeasurementVisibilityScope,
+    orgScope?: AnchorOrgScope
   ): Promise<Map<string, Measurement> | null> {
     if (config.sourceSelection === 'latest_event' && config.dateMatchStrategy === 'same_date') {
       return this.findLatestEventSources(dbOrTx, userId, dependentMetrics, targetDate, config, scope);
@@ -1256,6 +1318,19 @@ export class DerivedMetricCalculator {
       // Default to true (higher is better) if not specified
       const higherIsBetter = metricConfigs?.get(normalizedMetricCode)?.higherIsBetter ?? true;
 
+      // Anchored metric: the anchor source is the anchor row itself; the others never come from
+      // another organization (see AnchorOrgScope)
+      if (orgScope && normalizedMetricCode === orgScope.anchorCode) {
+        sourceMeasurementsMap.set(metricCode, orgScope.anchorRow);
+        continue;
+      }
+      const anchorOrgId = orgScope?.anchorRow.organizationId;
+      const orgFilter = orgScope
+        ? anchorOrgId
+          ? or(isNull(measurements.organizationId), eq(measurements.organizationId, anchorOrgId))
+          : isNull(measurements.organizationId)
+        : undefined;
+
       // An anchored metric is only computed on dates with a verified direct anchor measurement
       // (the gate in computeAndUpsertDerived), and 'closest' returns a same-date match first, so
       // the anchor needs no special-casing here.
@@ -1272,7 +1347,8 @@ export class DerivedMetricCalculator {
                 eq(measurements.metric, normalizedMetricCode),
                 eq(measurements.date, targetDate),
                 eq(measurements.isVerified, true),
-                visible
+                visible,
+                orgFilter
               )
             )
             .orderBy(
@@ -1296,7 +1372,8 @@ export class DerivedMetricCalculator {
                 eq(measurements.metric, normalizedMetricCode),
                 lte(measurements.date, targetDate),
                 eq(measurements.isVerified, true),
-                visible
+                visible,
+                orgFilter
               )
             )
             .orderBy(
@@ -1331,7 +1408,8 @@ export class DerivedMetricCalculator {
                 gte(measurements.date, minDate.toISOString().split('T')[0]),
                 lte(measurements.date, maxDate.toISOString().split('T')[0]),
                 eq(measurements.isVerified, true),
-                visible
+                visible,
+                orgFilter
               )
             )
             .orderBy(measurements.date);
@@ -1482,6 +1560,7 @@ export class DerivedMetricCalculator {
     recalculated: number;
     created: number;
     skipped: number;
+    deleted: number;
     errors: string[];
   }> {
     const { organizationId, metricCode, dryRun = false, batchSize = 500, createMissing = true } = options || {};
@@ -1491,6 +1570,7 @@ export class DerivedMetricCalculator {
       recalculated: 0,
       created: 0,
       skipped: 0,
+      deleted: 0,
       errors: [] as string[],
     };
 
@@ -1575,6 +1655,47 @@ export class DerivedMetricCalculator {
       // This prevents memory exhaustion and connection pool issues for large datasets
       for (let i = 0; i < calculatedMeasurements.length; i += batchSize) {
         const batch = calculatedMeasurements.slice(i, i + batchSize);
+
+        // Anchored metric: the row belongs to the verified anchor row's organization, which can differ
+        // from this row's (stale), so each row goes through the shared single write path in its own short
+        // transaction: advisory locks release promptly and one failing row does not abort the others.
+        if (derivedMetric.calculationConfig?.anchorMetric) {
+          for (const calcMeasurement of batch) {
+            try {
+              if (dryRun) {
+                // shortcut: a coexisting direct measurement (which also deletes the row) is counted as recalculated
+                const found = await this.findAnchoredSources(
+                  this.db, calcMeasurement.userId, derivedMetric.dependentMetrics || [],
+                  derivedMetric.calculationConfig, derivedMetric.calculationConfig.anchorMetric!.toUpperCase(),
+                  calcMeasurement.date, metricConfigs
+                );
+                if (!found.sources) result.deleted++;
+                else if (organizationId && found.anchorRow!.organizationId !== organizationId) result.skipped++;
+                else result.recalculated++;
+                continue;
+              }
+              const updated = await this.db.transaction(async (tx) => {
+                const row = await this.computeAndUpsertDerived(
+                  tx, derivedMetric, calcMeasurement.userId, calcMeasurement.date, metricConfigs,
+                  { event: 'manual_recalculation' as const }, undefined, true, false, organizationId
+                );
+                if (row) return 'updated' as const;
+                const [stillThere] = await tx.select({ id: measurements.id }).from(measurements)
+                  .where(eq(measurements.id, calcMeasurement.id)).limit(1);
+                return stillThere ? ('skipped' as const) : ('deleted' as const);
+              });
+              if (updated === 'updated') result.recalculated++;
+              else if (updated === 'deleted') result.deleted++;
+              else result.skipped++;
+            } catch (error) {
+              const errorMsg = `Error recalculating ${derivedMetric.code} for user ${calcMeasurement.userId} on ${calcMeasurement.date}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+              result.errors.push(errorMsg);
+              console.error(errorMsg);
+            }
+          }
+          await new Promise(resolve => setImmediate(resolve));
+          continue;
+        }
 
         if (dryRun) {
           // In dry run mode, just count what would be recalculated
@@ -1745,14 +1866,20 @@ export class DerivedMetricCalculator {
 
         // Create a Set of existing (userId, date, organizationId) combinations for fast lookup
         // Including organizationId prevents cross-org matching issues
-        const existingSet = new Set(
-          existingDerived.map(e => `${e.userId}|${e.date}|${e.organizationId}`)
-        );
+        // An anchored metric has one row per (athlete, date), whichever organization it is in
+        const isAnchored = !!derivedMetric.calculationConfig?.anchorMetric;
+        const keyOf = (e: { userId: string; date: string; organizationId: string | null }) =>
+          isAnchored ? `${e.userId}|${e.date}` : `${e.userId}|${e.date}|${e.organizationId}`;
+        const existingSet = new Set(existingDerived.map(keyOf));
 
         // Filter to only sources that don't have a derived measurement yet
-        const missingSources = potentialSources.filter(
-          s => !existingSet.has(`${s.userId}|${s.date}|${s.organizationId}`)
-        );
+        const seenKeys = new Set<string>();
+        const missingSources = potentialSources.filter(s => {
+          const key = keyOf(s);
+          if (existingSet.has(key) || seenKeys.has(key)) return false;
+          seenKeys.add(key);
+          return true;
+        });
 
         if (missingSources.length === 0) {
           continue;
@@ -1766,6 +1893,31 @@ export class DerivedMetricCalculator {
             // In dry run mode, just count what would be created
             result.created += batch.length;
             result.total += batch.length;
+            continue;
+          }
+
+          // Anchored metric: one row from the best verified anchor row with complete sources (its organization
+          // and context) through the shared single write path, each in its own short transaction (prompt lock
+          // release, failures isolated). An organization-scoped run never writes into another organization.
+          if (isAnchored) {
+            for (const source of batch) {
+              try {
+                const created = await this.db.transaction((tx) =>
+                  this.computeAndUpsertDerived(
+                    tx, derivedMetric, source.userId, source.date, metricConfigs,
+                    { event: 'manual_recalculation' as const }, undefined, false, true, organizationId
+                  )
+                );
+                if (created) result.created++;
+                else result.skipped++;
+              } catch (error) {
+                const errorMsg = `Error creating ${derivedMetric.code} for user ${source.userId} on ${source.date}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+                result.errors.push(errorMsg);
+                console.error(errorMsg);
+              }
+              result.total++;
+            }
+            await new Promise(resolve => setImmediate(resolve));
             continue;
           }
 
