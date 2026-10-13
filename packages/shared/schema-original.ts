@@ -2290,6 +2290,9 @@ export const insertReportSchema = createInsertSchema(reports).omit({
       gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
       positions: z.array(z.string()).optional(),
     }).optional(),
+    // Event scoping: the event report list and ReportService filter on config.eventId
+    eventId: z.string().uuid().optional(),
+    includeEventPercentiles: z.boolean().optional(),
     // Individual report athlete identifiers
     athleteIds: z.array(z.string()).optional(), // Array of athlete IDs (used in creation)
     athleteId: z.string().optional(), // Single athlete ID (stored in database)
@@ -2340,6 +2343,9 @@ export const updateReportSchema = z.object({
       gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
       positions: z.array(z.string()).optional(),
     }).optional(),
+    // Event scoping: the event report list and ReportService filter on config.eventId
+    eventId: z.string().uuid().optional(),
+    includeEventPercentiles: z.boolean().optional(),
     // Individual report athlete identifiers
     athleteIds: z.array(z.string()).optional(), // Array of athlete IDs (used in creation)
     athleteId: z.string().optional(), // Single athlete ID (stored in database)

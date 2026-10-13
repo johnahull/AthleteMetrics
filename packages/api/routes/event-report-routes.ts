@@ -213,6 +213,14 @@ export function registerEventReportRoutes(app: Express) {
           return res.status(404).json({ message: "Event not found" });
         }
 
+        // The UI sends no metrics: default to the event's own metrics
+        const reportMetrics: string[] = Array.isArray(metrics) && metrics.length > 0
+          ? metrics
+          : (await eventMetricsService.listEventMetrics(eventId)).map((m) => m.metricCode);
+        if (reportMetrics.length === 0) {
+          return res.status(400).json({ message: "No metrics configured for this event" });
+        }
+
         // Build report config with eventId
         const config: Record<string, unknown> = {
           eventId,
@@ -222,12 +230,26 @@ export function registerEventReportRoutes(app: Express) {
             customStart: event.startDate ? new Date(event.startDate).toISOString().split('T')[0] : undefined,
             customEnd: event.endDate ? new Date(event.endDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
           },
-          metrics: metrics || [],
+          metrics: reportMetrics,
         };
 
         if (reportType === 'individual') {
           if (!Array.isArray(athleteIds) || athleteIds.length === 0) {
             return res.status(400).json({ message: "Individual reports require at least one athlete" });
+          }
+          // Athletes must be on the event, as in quick-report
+          const registrations = await eventRegistrationService.listRegistrations(eventId, userId);
+          const onEvent = new Set(
+            registrations
+              .filter((r) => r.status === 'approved' || r.status === 'checked_in')
+              .map((r) => r.userId)
+          );
+          const notOnEvent = athleteIds.filter((id: string) => !onEvent.has(id));
+          if (notOnEvent.length > 0) {
+            return res.status(400).json({
+              message: "Some athletes are not registered for this event",
+              missingIds: notOnEvent,
+            });
           }
           config.athleteIds = athleteIds;
         }

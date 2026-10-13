@@ -1,12 +1,13 @@
 /**
  * Shared report creation for POST /api/reports and POST /api/events/:eventId/reports.
  * Callers authorize first; this fans an individual report out to one row per athlete,
- * validates the athletes, and rolls back a partial batch.
+ * checks that each athlete belongs to the report's organization, and writes the rows in
+ * one statement so a batch is all-or-nothing.
  */
 
-import { inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../db";
-import { reports, users, type InsertReport, type Report } from "@shared/schema";
+import { reports, users, userOrganizations, type InsertReport, type Report } from "@shared/schema";
 
 export class ReportCreateError extends Error {
   constructor(
@@ -17,12 +18,6 @@ export class ReportCreateError extends Error {
   }
 }
 
-interface IndividualConfig {
-  athleteId?: string;
-  athleteIds?: string[];
-  [key: string]: unknown;
-}
-
 export type CreateReportsResult =
   | { kind: "single"; report: Report }
   | { kind: "batch"; reports: Array<Report & { athleteId: string; athleteName: string }> };
@@ -31,70 +26,58 @@ export async function createReportsFromInput(
   userId: string,
   data: InsertReport
 ): Promise<CreateReportsResult> {
-  const config = data.config as IndividualConfig;
-  const isIndividual =
-    data.reportType === "individual" &&
-    typeof config === "object" &&
-    config !== null &&
-    ("athleteId" in config || "athleteIds" in config);
-  const athleteIds = isIndividual ? config.athleteIds : undefined;
-
-  const row = (name: string, rowConfig: unknown) => ({
+  const row = (name: string, config: InsertReport["config"]) => ({
     name,
     organizationId: data.organizationId,
     reportType: data.reportType,
-    config: rowConfig,
+    config,
     description: data.description,
     isTemplate: data.isTemplate || false,
     createdBy: userId,
   });
 
-  if (Array.isArray(athleteIds) && athleteIds.length > 0) {
-    const athletes = await db
-      .select({ id: users.id, fullName: users.fullName })
-      .from(users)
-      .where(inArray(users.id, athleteIds));
-
-    if (athletes.length !== athleteIds.length) {
-      const found = new Set(athletes.map((a) => a.id));
-      throw new ReportCreateError(400, {
-        message: "Some athlete IDs are invalid",
-        missingIds: athleteIds.filter((id) => !found.has(id)),
-      });
-    }
-
-    const names = new Map(athletes.map((a) => [a.id, a.fullName]));
-    const created: Array<Report & { athleteId: string; athleteName: string }> = [];
-
-    try {
-      for (const athleteId of athleteIds) {
-        const athleteName = names.get(athleteId) || "Unknown Athlete";
-        const { athleteIds: _drop, ...rest } = config;
-        const [report] = await db
-          .insert(reports)
-          .values(row(`${data.name} - ${athleteName}`, { ...rest, athleteId }) as any)
-          .returning();
-        created.push({ ...report, athleteId, athleteName });
-      }
-    } catch (error) {
-      if (created.length > 0) {
-        await db.delete(reports).where(inArray(reports.id, created.map((r) => r.id)));
-      }
-      throw error;
-    }
-
-    return { kind: "batch", reports: created };
+  if (data.reportType !== "individual") {
+    const [report] = await db.insert(reports).values(row(data.name, data.config)).returning();
+    return { kind: "single", report };
   }
 
-  if (isIndividual && "athleteIds" in config) {
+  const { athleteIds: listed, athleteId, ...rest } = data.config;
+  const athleteIds = [...new Set(listed?.length ? listed : athleteId ? [athleteId] : [])];
+  if (athleteIds.length === 0) {
+    throw new ReportCreateError(400, { message: "Individual reports require at least one athlete" });
+  }
+
+  // Only members of the report's organization: no cross-org names or report rows
+  const athletes = await db
+    .select({ id: users.id, fullName: users.fullName })
+    .from(users)
+    .innerJoin(userOrganizations, eq(userOrganizations.userId, users.id))
+    .where(and(inArray(users.id, athleteIds), eq(userOrganizations.organizationId, data.organizationId)));
+
+  if (athletes.length !== athleteIds.length) {
+    const found = new Set(athletes.map((a) => a.id));
     throw new ReportCreateError(400, {
-      message: "Individual reports require at least one athlete",
+      message: "Some athlete IDs are invalid",
+      missingIds: athleteIds.filter((id) => !found.has(id)),
     });
   }
 
-  const [report] = await db
+  const names = new Map(athletes.map((a) => [a.id, a.fullName]));
+  const created = await db
     .insert(reports)
-    .values(row(data.name, data.config) as any)
+    .values(
+      athleteIds.map((id) =>
+        row(`${data.name} - ${names.get(id) || "Unknown Athlete"}`, { ...rest, athleteId: id })
+      )
+    )
     .returning();
-  return { kind: "single", report };
+
+  return {
+    kind: "batch",
+    reports: created.map((report, i) => ({
+      ...report,
+      athleteId: athleteIds[i],
+      athleteName: names.get(athleteIds[i]) || "Unknown Athlete",
+    })),
+  };
 }
