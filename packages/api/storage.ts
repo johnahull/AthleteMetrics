@@ -32,13 +32,14 @@ import {
   securityEvents,
   type SecurityEvent,
 } from "@shared/schema";
+import { parentAthleteLinks } from "@shared/schema/tables/coppa";
 import type { WellnessTrend } from "@shared/wellness-types";
 import { validateMeasurementValue, MeasurementValueValidationError } from "@shared/measurement-value-validation";
 import { isMovementQualityMetric } from "@shared/peer-comparison-exclusions";
 import { assertFlyInDistanceMatches, assertFlyInDistanceOnUpdate } from "@shared/fly-run-in";
 import { db } from "./db";
 import { wellnessRepository, type WellnessTrend as RepoWellnessTrend } from "./repositories/wellness-repository";
-import { eq, desc, asc, and, gte, lte, gt, inArray, sql, arrayContains, or, isNull, isNotNull, exists, ne, SQL } from "drizzle-orm";
+import { eq, desc, asc, and, gte, lte, gt, inArray, sql, arrayContains, or, isNull, isNotNull, exists, notExists, ne, SQL } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { hashToken } from "./lib/token-hash";
@@ -95,6 +96,17 @@ export interface LoginAttemptReservation {
   lockedUntil: Date | null;
 }
 
+export interface UnaffiliatedUser {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  username: string | null;
+  emails: string[] | null;
+  isActive: boolean;
+  createdAt: Date;
+  isParent: boolean;
+}
+
 export interface IStorage {
   // Authentication & Users
   authenticateUser(username: string, password: string): Promise<User | null>;
@@ -113,6 +125,9 @@ export interface IStorage {
   deleteUser(id: string): Promise<void>;
   hardDeleteUser(id: string): Promise<void>;
   getUserOrganizations(userId: string): Promise<(UserOrganization & { organization: Organization })[]>;
+  getUnaffiliatedUsers(): Promise<UnaffiliatedUser[]>;
+  isParentAccount(userId: string): Promise<boolean>;
+  assignUnaffiliatedUser(userId: string, organizationId: string, role: string, auditLog: InsertAuditLog): Promise<UserOrganization | null>;
   getUserTeams(userId: string): Promise<(UserTeam & { team: Team & { organization: Organization } })[]>;
 
   // Organizations
@@ -927,6 +942,52 @@ export class DatabaseStorage implements IStorage {
 
       // HARD DELETE: Permanently remove user record
       await tx.delete(users).where(eq(users.id, id));
+    });
+  }
+
+  // Users in no organization (parents included, flagged), for site admins to assign
+  async getUnaffiliatedUsers(): Promise<UnaffiliatedUser[]> {
+    return db.select({
+      id: users.id,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      username: users.username,
+      emails: users.emails,
+      isActive: users.isActive,
+      createdAt: users.createdAt,
+      isParent: sql<boolean>`${exists(
+        db.select({ one: sql`1` }).from(parentAthleteLinks).where(and(
+          eq(parentAthleteLinks.parentUserId, users.id),
+          eq(parentAthleteLinks.isActive, true)
+        ))
+      )}`,
+    })
+      .from(users)
+      .where(and(
+        whereUserNotDeleted(),
+        eq(users.isSiteAdmin, false),
+        notExists(db.select({ one: sql`1` }).from(userOrganizations).where(eq(userOrganizations.userId, users.id)))
+      ))
+      .orderBy(asc(users.lastName), asc(users.firstName));
+  }
+
+  async isParentAccount(userId: string): Promise<boolean> {
+    const [link] = await db.select({ id: parentAthleteLinks.id }).from(parentAthleteLinks)
+      .where(and(eq(parentAthleteLinks.parentUserId, userId), eq(parentAthleteLinks.isActive, true))).limit(1);
+    return !!link;
+  }
+
+  // Locks the user row so two concurrent assigns cannot both see "no membership"; null = already a member
+  async assignUnaffiliatedUser(userId: string, organizationId: string, role: string, auditLog: InsertAuditLog): Promise<UserOrganization | null> {
+    return db.transaction(async (tx: any) => {
+      await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).for('update');
+      const existing = await tx.select({ id: userOrganizations.id }).from(userOrganizations)
+        .where(eq(userOrganizations.userId, userId)).limit(1);
+      if (existing.length > 0) return null;
+
+      const membership = await this.addUserToOrganization(userId, organizationId, role, tx);
+      await tx.insert(auditLogs).values(auditLog);
+      return membership;
     });
   }
 
