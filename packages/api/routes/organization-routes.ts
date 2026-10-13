@@ -766,12 +766,9 @@ export function registerOrganizationRoutes(app: Express) {
       if (await storage.isParentAccount(userId)) {
         return res.status(400).json({ message: "Parent accounts cannot be assigned to an organization" });
       }
-      if ((await storage.getUserOrganizations(userId)).length > 0) {
-        return res.status(409).json({ message: "User already belongs to an organization" });
-      }
 
-      const membership = await storage.addUserToOrganization(userId, orgId, role);
-      await storage.createAuditLog({
+      // The membership check, insert and audit log run in one locked transaction
+      const membership = await storage.assignUnaffiliatedUser(userId, orgId, role, {
         userId: req.session.user!.id,
         action: "user_assigned_to_organization",
         resourceType: "user",
@@ -780,6 +777,9 @@ export function registerOrganizationRoutes(app: Express) {
         ipAddress: req.ip,
         userAgent: req.get("user-agent"),
       });
+      if (!membership) {
+        return res.status(409).json({ message: "User already belongs to an organization" });
+      }
 
       res.status(201).json(membership);
     } catch (error) {

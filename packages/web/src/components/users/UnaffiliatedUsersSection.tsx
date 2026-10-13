@@ -25,8 +25,12 @@ const ROLES = [
   { value: "org_admin", label: "Org Admin" },
 ];
 
+const displayName = (u: UnaffiliatedUser) => [u.firstName, u.lastName].filter(Boolean).join(" ") || u.username || "Unnamed user";
+
 /** Site-admin list of users in no organization, each assignable to one. */
-export function UnaffiliatedUsersSection({ organizations }: { organizations: { id: string; name: string }[] }) {
+export function UnaffiliatedUsersSection({ organizations: allOrganizations }: { organizations: { id: string; name: string; isActive?: boolean }[] }) {
+  // The API refuses inactive organizations, so don't offer them
+  const organizations = allOrganizations.filter((o) => o.isActive !== false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [target, setTarget] = useState<UnaffiliatedUser | null>(null);
@@ -46,8 +50,8 @@ export function UnaffiliatedUsersSection({ organizations }: { organizations: { i
     onSuccess: (_data, { user, orgId }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/users/unaffiliated"] });
       queryClient.invalidateQueries({ queryKey: ["/api/organizations-with-users"] });
-      const orgName = organizations.find((o) => o.id === orgId)?.name;
-      toast({ title: "User assigned", description: `${user.firstName} ${user.lastName} was added to ${orgName}.` });
+      const orgName = organizations.find((o) => o.id === orgId)?.name ?? "the organization";
+      toast({ title: "User assigned", description: `${displayName(user)} was added to ${orgName}.` });
       setTarget(null);
     },
     onError: (error: Error) => {
@@ -57,7 +61,7 @@ export function UnaffiliatedUsersSection({ organizations }: { organizations: { i
 
   const openDialog = (user: UnaffiliatedUser) => {
     setTarget(user);
-    setOrganizationId(organizations[0]?.id ?? "");
+    setOrganizationId("");
     setRole("athlete");
   };
 
@@ -85,14 +89,12 @@ export function UnaffiliatedUsersSection({ organizations }: { organizations: { i
             >
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">
-                    {u.firstName} {u.lastName}
-                  </span>
+                  <span className="font-medium">{displayName(u)}</span>
                   {u.isParent && <Badge variant="secondary">Parent</Badge>}
                   {!u.isActive && <Badge variant="outline">Inactive</Badge>}
                 </div>
                 <p className="text-sm text-gray-500 truncate">
-                  @{u.username} • {u.emails?.[0]}
+                  {[u.username && `@${u.username}`, u.emails?.[0]].filter(Boolean).join(" • ")}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
@@ -111,7 +113,7 @@ export function UnaffiliatedUsersSection({ organizations }: { organizations: { i
           <DialogHeader>
             <DialogTitle>Assign to organization</DialogTitle>
             <DialogDescription>
-              Add {target?.firstName} {target?.lastName} to an organization.
+              Add {target && displayName(target)} to an organization.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">

@@ -18,17 +18,22 @@ const organizations = [
   { id: 'org-2', name: 'Other Org' },
 ];
 
-function renderSection(data: unknown[] = users) {
+function renderSection(data: unknown[] = users, orgs: { id: string; name: string; isActive?: boolean }[] = organizations) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, queryFn: async () => data } },
   });
   const invalidate = vi.spyOn(client, 'invalidateQueries');
   render(
     <QueryClientProvider client={client}>
-      <UnaffiliatedUsersSection organizations={organizations} />
+      <UnaffiliatedUsersSection organizations={orgs} />
     </QueryClientProvider>,
   );
   return { invalidate };
+}
+
+async function chooseOrg(name: string) {
+  fireEvent.click(await screen.findByRole('combobox', { name: /organization/i }));
+  fireEvent.click(await screen.findByRole('option', { name }));
 }
 
 describe('UnaffiliatedUsersSection', () => {
@@ -61,13 +66,14 @@ describe('UnaffiliatedUsersSection', () => {
     expect(within(row).getByText(/parents can't be assigned/i)).toBeInTheDocument();
   });
 
-  it('assigns with the first org and athlete role by default, then refreshes both lists', async () => {
+  it('assigns the chosen org with the athlete role by default, then refreshes both lists', async () => {
     apiRequestMock.mockResolvedValue({ ok: true, json: async () => ({}) });
     const { invalidate } = renderSection();
     await screen.findByText('Lucy Ortiz');
 
     fireEvent.click(within(screen.getByTestId('unaffiliated-user-u1')).getByRole('button', { name: /assign to organization/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /^assign$/i }));
+    await chooseOrg('Big Time Athletes');
+    fireEvent.click(screen.getByRole('button', { name: /^assign$/i }));
 
     await waitFor(() =>
       expect(apiRequestMock).toHaveBeenCalledWith('POST', '/api/organizations/org-1/users/u1/assign', { role: 'athlete' }),
@@ -84,7 +90,8 @@ describe('UnaffiliatedUsersSection', () => {
     renderSection();
     await screen.findByText('Lucy Ortiz');
     fireEvent.click(within(screen.getByTestId('unaffiliated-user-u1')).getByRole('button', { name: /assign to organization/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /^assign$/i }));
+    await chooseOrg('Big Time Athletes');
+    fireEvent.click(screen.getByRole('button', { name: /^assign$/i }));
 
     await waitFor(() =>
       expect(toastMock).toHaveBeenCalledWith(
@@ -97,5 +104,44 @@ describe('UnaffiliatedUsersSection', () => {
   it('shows an empty state', async () => {
     renderSection([]);
     expect(await screen.findByText(/no unaffiliated users/i)).toBeInTheDocument();
+  });
+
+  it('offers only active organizations and preselects none', async () => {
+    renderSection(users, [
+      { id: 'org-off', name: 'Closed Org', isActive: false },
+      { id: 'org-1', name: 'Big Time Athletes', isActive: true },
+    ]);
+    await screen.findByText('Lucy Ortiz');
+    fireEvent.click(within(screen.getByTestId('unaffiliated-user-u1')).getByRole('button', { name: /assign to organization/i }));
+
+    expect(await screen.findByRole('button', { name: /^assign$/i })).toBeDisabled(); // nothing preselected
+    fireEvent.click(screen.getByRole('combobox', { name: /organization/i }));
+    expect(await screen.findByRole('option', { name: 'Big Time Athletes' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Closed Org' })).not.toBeInTheDocument();
+  });
+
+  it('renders users with missing names or username without "null" or a dangling "@"', async () => {
+    renderSection([
+      { id: 'u3', firstName: null, lastName: null, username: 'solo', emails: [], isActive: true, isParent: false },
+      { id: 'u4', firstName: 'Only', lastName: null, username: null, emails: ['only@example.com'], isActive: true, isParent: false },
+    ]);
+    const nameless = await screen.findByTestId('unaffiliated-user-u3');
+    expect(within(nameless).getByText('solo')).toBeInTheDocument();
+    const noUsername = screen.getByTestId('unaffiliated-user-u4');
+    expect(within(noUsername).getByText('Only')).toBeInTheDocument();
+    expect(noUsername.textContent).not.toMatch(/null|undefined|@ /);
+    expect(noUsername.textContent).not.toMatch(/@\s*•/);
+  });
+
+  it('toast names the user and organization without "null"', async () => {
+    apiRequestMock.mockResolvedValue({ ok: true, json: async () => ({}) });
+    renderSection([{ id: 'u3', firstName: 'Solo', lastName: null, username: 'solo', emails: [], isActive: true, isParent: false }]);
+    await screen.findByTestId('unaffiliated-user-u3');
+    fireEvent.click(screen.getByRole('button', { name: /assign to organization/i }));
+    await chooseOrg('Big Time Athletes');
+    fireEvent.click(screen.getByRole('button', { name: /^assign$/i }));
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ title: 'User assigned' })));
+    const description = toastMock.mock.calls[0][0].description as string;
+    expect(description).toBe('Solo was added to Big Time Athletes.');
   });
 });

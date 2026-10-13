@@ -127,6 +127,7 @@ export interface IStorage {
   getUserOrganizations(userId: string): Promise<(UserOrganization & { organization: Organization })[]>;
   getUnaffiliatedUsers(): Promise<UnaffiliatedUser[]>;
   isParentAccount(userId: string): Promise<boolean>;
+  assignUnaffiliatedUser(userId: string, organizationId: string, role: string, auditLog: InsertAuditLog): Promise<UserOrganization | null>;
   getUserTeams(userId: string): Promise<(UserTeam & { team: Team & { organization: Organization } })[]>;
 
   // Organizations
@@ -955,7 +956,10 @@ export class DatabaseStorage implements IStorage {
       isActive: users.isActive,
       createdAt: users.createdAt,
       isParent: sql<boolean>`${exists(
-        db.select({ one: sql`1` }).from(parentAthleteLinks).where(eq(parentAthleteLinks.parentUserId, users.id))
+        db.select({ one: sql`1` }).from(parentAthleteLinks).where(and(
+          eq(parentAthleteLinks.parentUserId, users.id),
+          eq(parentAthleteLinks.isActive, true)
+        ))
       )}`,
     })
       .from(users)
@@ -969,8 +973,22 @@ export class DatabaseStorage implements IStorage {
 
   async isParentAccount(userId: string): Promise<boolean> {
     const [link] = await db.select({ id: parentAthleteLinks.id }).from(parentAthleteLinks)
-      .where(eq(parentAthleteLinks.parentUserId, userId)).limit(1);
+      .where(and(eq(parentAthleteLinks.parentUserId, userId), eq(parentAthleteLinks.isActive, true))).limit(1);
     return !!link;
+  }
+
+  // Locks the user row so two concurrent assigns cannot both see "no membership"; null = already a member
+  async assignUnaffiliatedUser(userId: string, organizationId: string, role: string, auditLog: InsertAuditLog): Promise<UserOrganization | null> {
+    return db.transaction(async (tx: any) => {
+      await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).for('update');
+      const existing = await tx.select({ id: userOrganizations.id }).from(userOrganizations)
+        .where(eq(userOrganizations.userId, userId)).limit(1);
+      if (existing.length > 0) return null;
+
+      const membership = await this.addUserToOrganization(userId, organizationId, role, tx);
+      await tx.insert(auditLogs).values(auditLog);
+      return membership;
+    });
   }
 
   async getUserOrganizations(userId: string): Promise<any[]> {

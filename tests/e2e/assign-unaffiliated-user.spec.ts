@@ -43,6 +43,8 @@ test.describe('Assign unaffiliated users', () => {
     await expect(parentRow.getByRole('button', { name: /assign to organization/i })).toBeDisabled();
 
     await page.getByTestId('unaffiliated-user-u1').getByRole('button', { name: /assign to organization/i }).click();
+    await page.getByRole('combobox', { name: 'Organization' }).click();
+    await page.getByRole('option', { name: 'Big Time Athletes' }).click();
     await page.getByRole('button', { name: 'Assign', exact: true }).click();
 
     await expect(page.getByTestId('unaffiliated-user-u1')).toBeHidden();

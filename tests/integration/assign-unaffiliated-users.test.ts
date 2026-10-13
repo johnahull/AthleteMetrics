@@ -21,7 +21,7 @@ import { db } from '../../packages/api/db';
 import { users, organizations, auditLogs } from '@shared/schema';
 import { userOrganizations } from '@shared/schema/tables/membership';
 import { parentAthleteLinks } from '@shared/schema/tables/coppa';
-import { and, eq, like } from 'drizzle-orm';
+import { and, eq, inArray, like } from 'drizzle-orm';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 import { purgeTestRows } from '../helpers/purge-test-rows';
 
@@ -107,7 +107,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await db.delete(parentAthleteLinks).where(like(parentAthleteLinks.parentEmail, `${PREFIX}%`));
-  await db.delete(auditLogs).where(like(auditLogs.action, 'user_assigned_to_organization'));
+  await db.delete(auditLogs).where(and(eq(auditLogs.action, 'user_assigned_to_organization'), inArray(auditLogs.resourceId, createdUserIds)));
   await purgeTestRows({
     userIds: createdUserIds,
     orgIds: createdOrgIds,
@@ -157,6 +157,29 @@ describe('GET /api/users/unaffiliated', () => {
     expect(byId.has(siteAdmin.id)).toBe(false);
     expect(byId.has(deleted.id)).toBe(false);
     expect(byId.get(loose.id)).not.toHaveProperty('password');
+  });
+});
+
+describe('parents with only deactivated links', () => {
+  // auth-service treats such a user as an athlete (consent denied/revoked), so they stay assignable
+  it('are listed with isParent false and can be assigned', async () => {
+    const exParent = await createUser('exparent');
+    const kid = await createUser('exkid');
+    await db.insert(parentAthleteLinks).values({
+      parentEmail: `${PREFIX}ex_${uid()}@example.com`,
+      parentUserId: exParent.id,
+      athleteUserId: kid.id,
+      isActive: false,
+    });
+
+    const list = await request(app).get('/api/users/unaffiliated').set('Cookie', siteCookie);
+    expect(list.body.find((u: any) => u.id === exParent.id)?.isParent).toBe(false);
+
+    const res = await request(app)
+      .post(`/api/organizations/${org.id}/users/${exParent.id}/assign`)
+      .set('Cookie', siteCookie)
+      .send({});
+    expect(res.status).toBe(201);
   });
 });
 
@@ -252,5 +275,16 @@ describe('POST /api/organizations/:orgId/users/:userId/assign', () => {
   it('400 for malformed ids', async () => {
     expect((await assign('not-a-uuid', crypto.randomUUID(), siteCookie)).status).toBe(400);
     expect((await assign(org.id, 'not-a-uuid', siteCookie)).status).toBe(400);
+  });
+
+  it('concurrent assigns of one user to different orgs: exactly one 201, the rest 409, one membership', async () => {
+    const target = await createUser('trace');
+    const orgs = await Promise.all(['raceA', 'raceB', 'raceC', 'raceD', 'raceE'].map((n) => createOrg(n)));
+
+    const results = await Promise.all(orgs.map((o) => assign(o.id, target.id, siteCookie)));
+
+    expect(results.map((r) => r.status).sort()).toEqual([201, 409, 409, 409, 409]);
+    const rows = await db.select().from(userOrganizations).where(eq(userOrganizations.userId, target.id));
+    expect(rows).toHaveLength(1);
   });
 });
