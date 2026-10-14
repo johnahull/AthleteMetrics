@@ -221,7 +221,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
   // Remove athlete mutation with optimistic updates
   const removeAthleteMutation = useMutation({
     mutationFn: async ({ athleteId, teamId }: { athleteId: string; teamId: string }): Promise<void> => {
-      await apiRequest("DELETE", `/api/teams/${teamId}/athletes/${athleteId}`);
+      await apiRequest("DELETE", `/api/teams/${teamId}/members/${athleteId}`);
     },
     onMutate: async ({ athleteId }) => {
       // Cancel outgoing refetches to avoid optimistic update being overwritten
@@ -304,7 +304,12 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
       const response = await apiRequest("POST", `/api/teams/${team!.id}/add-athletes`, {
         athleteIds: athleteIds
       });
-      return response.json();
+      const result = await response.json();
+      // Nothing was added: throw so onError rolls back and restores the selection
+      if (!result.success && result.errorCount > 0) {
+        throw new Error(result.errors?.[0]?.message || "Failed to add athletes to team");
+      }
+      return result;
     },
     onMutate: async (athleteIds: string[]) => {
       // Cancel outgoing refetches
@@ -432,6 +437,10 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
         athleteIds
       });
       const result = await response.json();
+      // Nothing was removed: throw so onError rolls back and restores the selection
+      if (!result.success && result.errorCount > 0) {
+        throw new Error(result.errors?.[0]?.message || `Failed to remove athletes from ${labels.team.toLowerCase()}`);
+      }
 
       return {
         success: result.success || 0,
@@ -508,12 +517,6 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
           title: "Partial Success",
           description: `Removed ${successCount} athlete${successCount !== 1 ? 's' : ''} from ${team?.name}. ${errorCount} failed.`,
           variant: "default",
-        });
-      } else if (errorCount > 0) {
-        toast({
-          title: "Error",
-          description: `Failed to remove ${errorCount} athlete${errorCount !== 1 ? 's' : ''} from ${team?.name}`,
-          variant: "destructive",
         });
       }
     },

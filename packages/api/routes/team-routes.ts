@@ -3,7 +3,7 @@
  * Uses TeamService for direct DB access instead of storage layer
  */
 
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { TeamService } from "../services/team-service";
 import { storage } from "../storage";
@@ -12,10 +12,10 @@ import { insertTeamSchema, measurements, userOrganizations } from "@shared/schem
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { hasOrganizationAccess, validateOrganizationAccess } from "../helpers/org-access";
 import { getAuthorizationError, AUTH_ERRORS } from "../helpers/auth-errors";
-import { ZodError } from "zod";
+import { z, ZodError } from "zod";
 import { db } from "../db";
 import { eq } from "drizzle-orm";
-import { requirePermission } from "../permissions/index";
+import { requirePermission, getOrgRole } from "../permissions/index";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 
 // Rate limiting for team endpoints
@@ -35,6 +35,10 @@ const teamMutationLimiter = rateLimit({
   standardHeaders: 'draft-7',
   legacyHeaders: false,
 });
+
+const bulkAthleteIdsSchema = z.object({
+  athleteIds: z.array(z.string().uuid()).min(1).max(200),
+}).strict();
 
 export function registerTeamRoutes(app: Express) {
   const teamService = new TeamService();
@@ -426,6 +430,74 @@ export function registerTeamRoutes(app: Express) {
       res.status(statusCode).json({ message });
     }
   });
+
+  /**
+   * Bulk add / remove athletes (org admins and coaches)
+   * One request per bulk operation; each id is handled on its own and failures are reported per id.
+   */
+  const bulkMembershipHandler = (action: "add" | "remove") => async (req: Request, res: Response) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const parsed = bulkAthleteIdsSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "athleteIds must be 1 to 200 athlete ids" });
+      }
+
+      const teamId = req.params.id;
+      const existingTeam = await teamService.getTeam(teamId);
+      if (!existingTeam) {
+        return res.status(404).json({ message: "Team not found" });
+      }
+
+      // SECURITY: Validate user has access to team's organization via database membership
+      const hasAccess = await hasOrganizationAccess(user, existingTeam.organization.id);
+      if (!hasAccess) {
+        return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.TEAM_ORG_MISMATCH) });
+      }
+
+      // The session role is the role in the caller's FIRST organization; use the role in the team's organization
+      const orgRole = await getOrgRole(user, existingTeam.organization.id);
+      if (orgRole !== "site_admin" && orgRole !== "org_admin" && orgRole !== "coach") {
+        return res.status(403).json({ message: "Access denied - you must be an org admin or coach of this team's organization" });
+      }
+
+      // Always pass the team's organization (site admins too) so the service, inside its transaction,
+      // refuses athletes from other organizations (TOCTOU-safe)
+      const organizationId = existingTeam.organization.id;
+      let success = 0;
+      const errors: Array<{ athleteId: string; message: string }> = [];
+      for (const athleteId of Array.from(new Set(parsed.data.athleteIds))) {
+        try {
+          if (action === "add") {
+            await teamService.addUserToTeam(athleteId, teamId, organizationId);
+          } else {
+            await teamService.removeUserFromTeam(athleteId, teamId, organizationId);
+          }
+          success++;
+        } catch (error) {
+          // Only the service's own messages reach the client; anything else (e.g. database errors) is logged
+          const message = error instanceof Error ? error.message : "";
+          const isServiceMessage = /^(Access denied|Team not found)/.test(message);
+          if (!isServiceMessage) {
+            console.error(`Bulk ${action} team athlete ${athleteId} error:`, error);
+          }
+          errors.push({ athleteId, message: isServiceMessage ? message : `Failed to ${action} athlete` });
+        }
+      }
+
+      res.json({ success, errorCount: errors.length, errors });
+    } catch (error) {
+      console.error(`Bulk ${action} team athletes error:`, error);
+      res.status(500).json({ message: `Failed to ${action} athletes` });
+    }
+  };
+
+  app.post("/api/teams/:id/add-athletes", teamMutationLimiter, requireAuth, requirePermission('MANAGE_TEAM'), bulkMembershipHandler("add"));
+  app.delete("/api/teams/:id/remove-athletes", teamMutationLimiter, requireAuth, requirePermission('MANAGE_TEAM'), bulkMembershipHandler("remove"));
 
   /**
    * Update team membership (org admins and coaches)
