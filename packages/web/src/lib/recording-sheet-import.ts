@@ -59,7 +59,7 @@ export function planSheetImport(input: {
   eventId: string;
   athletes: SheetImportAthlete[];
   metrics: SheetMetric[];
-  /** Event metrics without a sheet column (derived, paired-input, Movement Quality) */
+  /** Event metrics without a sheet column (derived, paired-input, Movement Quality totals) */
   ignoredMetrics: Array<{ code: string; label: string; reason: string }>;
 }): SheetImportPlan {
   const { rows, metrics, ignoredMetrics } = input;
@@ -160,7 +160,7 @@ export function planSheetImport(input: {
       const raw = cellText(cell);
       if (raw === "" || raw === "-") return; // no value: never clears a saved one
       if (raw.includes(",")) return cellError(raw, "Use a dot for decimals and no thousands separators (for example 4.52).");
-      const invalid = validateMeasurementValue(raw, undefined, metric.code);
+      const invalid = validateMeasurementValue(raw, metric.bounds, metric.code);
       if (invalid) return cellError(raw, invalid);
 
       const savedValue = athlete.saved[metric.code];

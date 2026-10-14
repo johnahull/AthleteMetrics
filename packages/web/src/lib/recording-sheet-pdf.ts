@@ -5,7 +5,9 @@
  * Page order: every athlete for strip 1, then every athlete for strip 2, and so on.
  * jspdf and jspdf-autotable are loaded on demand so they stay out of the main bundle.
  */
-import type { RecordingSheet } from "@/lib/recording-sheet";
+import { hasPrintedValues, type RecordingSheet } from "@/lib/recording-sheet";
+import { MQI_RUBRIC } from "@shared/mqi-entry-schema";
+import { isMovementQualityMetric } from "@shared/peer-comparison-exclusions";
 
 /** Page geometry in points (1 in = 72 pt) */
 export const PDF_LAYOUT = {
@@ -68,7 +70,8 @@ export function planRecordingSheetPdf(metricCount: number, athleteCount: number,
   return { strips, rowsPerPage, pages };
 }
 
-const PLAIN: Record<string, string> = { "‘": "'", "’": "'", "“": '"', "”": '"', "–": "-", "—": "-" };
+// Arrows: the Movement Quality transition labels ("Decel → Lateral Cut", "Gas ↔ Brake")
+const PLAIN: Record<string, string> = { "‘": "'", "’": "'", "“": '"', "”": '"', "–": "-", "—": "-", "→": "->", "↔": "<->" };
 
 /**
  * Text the standard Helvetica font can print: Latin-1 only. Typographic quotes and dashes become plain
@@ -127,6 +130,17 @@ export async function recordingSheetToPdf(sheet: RecordingSheet): Promise<Uint8A
       const label = lines.length > 2 ? [lines[0], fit(lines.slice(1).join(" "), textWidth)] : lines;
       return [...label, ...(m.unit ? [fit(`(${m.unit})`, textWidth)] : [])].join("\n");
     });
+    // Saved values: small grey text at the top right of a shaded box, so the box still takes a handwritten value
+    doc.setFont("helvetica", "normal").setFontSize(7);
+    const athletesOnPage = sheet.athletes.slice(page.rowStart, page.rowEnd);
+    const printed = athletesOnPage.map((a) =>
+      sheet.metrics.slice(strip.start, strip.end).map((m) => {
+        const value = a.values?.[m.code];
+        if (!value) return "";
+        const trials = a.trials?.[m.code] ?? 1;
+        return fit(clean(`${value}${trials > 1 ? ` (${trials} trials)` : ""}`), textWidth);
+      }),
+    );
     autoTable(doc, {
       startY: top,
       margin: { top, left: L.margin, right: L.margin, bottom: L.margin + L.footerHeight },
@@ -136,8 +150,20 @@ export async function recordingSheetToPdf(sheet: RecordingSheet): Promise<Uint8A
       body: names.slice(page.rowStart, page.rowEnd).map((name, r) => [
         String(page.rowStart + r + 1),
         name,
-        ...stripMetrics.map(() => ""),
+        ...printed[r],
       ]),
+      didParseCell: (data) => {
+        if (data.section !== "body" || data.column.index < 2) return;
+        if (!printed[data.row.index]?.[data.column.index - 2]) return;
+        Object.assign(data.cell.styles, {
+          fillColor: [210, 210, 210],
+          fontSize: 7,
+          textColor: [90, 90, 90],
+          halign: "right",
+          valign: "top",
+          overflow: "ellipsize",
+        });
+      },
       styles: {
         font: "helvetica",
         fontSize: 10,
@@ -165,6 +191,9 @@ export async function recordingSheetToPdf(sheet: RecordingSheet): Promise<Uint8A
     });
   });
 
+  const rubric = `Movement Quality: ${MQI_RUBRIC.map((r) => `${r.score} ${r.label}`).join(", ")}`;
+  const legend = hasPrintedValues(sheet) ? "Shaded = already recorded (newest saved value shown). " : "";
+
   // Page header and footer, drawn once the page count is known
   const width = L.pageWidth - 2 * L.margin;
   const total = doc.getNumberOfPages();
@@ -188,12 +217,20 @@ export async function recordingSheetToPdf(sheet: RecordingSheet): Promise<Uint8A
     }
     doc.setFont("helvetica", "normal").setFontSize(7).setTextColor(110, 110, 110);
     doc.text(`Event ID: ${sheet.eventId}`, L.margin, L.margin + 44);
+    const strip = plan.strips[page.strip];
+    if (sheet.metrics.slice(strip.start, strip.end).some((m) => isMovementQualityMetric(m.code))) {
+      doc.text(rubric, L.pageWidth - L.margin, L.margin + 44, { align: "right" });
+    }
     if (i === 0 && altered) {
       doc.setFont("helvetica", "italic").setFontSize(8);
       doc.text('Some text contains characters this PDF cannot print (shown as "?").', L.margin, L.margin + 56);
     }
     doc.setFont("helvetica", "normal").setFontSize(8);
-    doc.text("Enter these results on the event's Data Entry page in AthleteMetrics.", L.margin, L.pageHeight - L.margin);
+    doc.text(
+      `${legend}Enter these results on the event's Data Entry page in AthleteMetrics.`,
+      L.margin,
+      L.pageHeight - L.margin,
+    );
   }
 
   return new Uint8Array(doc.output("arraybuffer"));

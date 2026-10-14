@@ -8,6 +8,7 @@ import type { Measurement } from '@shared/schema';
 
 const mutateSaveMq = vi.fn();
 const mutateBulk = vi.fn();
+const invalidateAfterMq = vi.fn();
 const refetchMeasurements = vi.fn();
 const toast = vi.fn();
 
@@ -79,6 +80,7 @@ vi.mock('@/lib/events-api', async () => {
     }),
     useCreateEventMeasurementsBulk: () => ({ mutateAsync: mutateBulk }),
     useSaveEventMovementQuality: () => ({ mutateAsync: mutateSaveMq }),
+    useInvalidateAfterMovementQualitySave: () => invalidateAfterMq,
   };
 });
 
@@ -129,6 +131,7 @@ const verticalJumpCell = (rowName: string) => {
 beforeEach(() => {
   mutateSaveMq.mockReset();
   mutateBulk.mockReset();
+  invalidateAfterMq.mockReset();
   refetchMeasurements.mockReset();
   toast.mockReset();
   downloadRecordingSheet.mockReset();
@@ -369,7 +372,7 @@ describe('EventDataEntry', () => {
         isCalculated: false, calculatedFromMeasurementIds: null, ...extra,
       }) as any;
     const sentItems = (call = 0) => mutateBulk.mock.calls[call][0].measurements;
-    const saveButton = () => screen.getByRole('button', { name: /^save/i });
+    const saveButton = () => screen.getByRole('button', { name: /^save( \(\d+\))?$/i });
     const ok = (rows: Array<Record<string, unknown>>, replaced: Array<Record<string, unknown>> = [], errors: unknown[] = []) => ({
       created: rows,
       replaced,
@@ -632,6 +635,160 @@ describe('EventDataEntry', () => {
     });
   });
 
+  describe('add trial', () => {
+    const saved = (id: string, userId: string, metricCode: string, value: number): Measurement =>
+      ({ id, userId, metric: metricCode, value: String(value), notes: null, mediaUrl: null, isCalculated: false, calculatedFromMeasurementIds: null }) as any;
+    const flyCell = (name: string) => screen.getByRole('textbox', { name: `10-Yard Fly for ${name}` });
+    const addTrialButton = (value: string, name = 'Jordan Lee') =>
+      screen.queryByRole('button', { name: `Save ${value} as a new 10-Yard Fly trial for ${name}` });
+    const retype = async (user: ReturnType<typeof userEvent.setup>, input: HTMLElement, value: string) => {
+      await user.clear(input);
+      await user.type(input, value);
+    };
+
+    beforeEach(() => {
+      eventMetricsState = [metric('FLY10_TIME')];
+      measurementsState.data = [saved('m1', 'ath-1', 'FLY10_TIME', 1.65)];
+    });
+
+    it('sends exactly one item with no replaceMeasurementId, then shows the cell clean with 2 saved trials', async () => {
+      const user = userEvent.setup();
+      mutateBulk.mockImplementation(async () => {
+        measurementsState = { ...measurementsState, data: [saved('m2', 'ath-1', 'FLY10_TIME', 1.6), ...measurementsState.data] };
+        return { created: [{ ...saved('m2', 'ath-1', 'FLY10_TIME', 1.6), index: 0 }], replaced: [], errors: [] };
+      });
+      const { rerender } = render(<EventDataEntry />);
+      await retype(user, flyCell('Jordan Lee'), '1.60');
+      await user.click(addTrialButton('1.60')!);
+
+      await waitFor(() => expect(refetchMeasurements).toHaveBeenCalledTimes(1));
+      rerender(<EventDataEntry />);
+      expect(mutateBulk).toHaveBeenCalledTimes(1);
+      expect(mutateBulk.mock.calls[0][0]).toEqual({
+        eventId: 'ev-1',
+        measurements: [{ userId: 'ath-1', metric: 'FLY10_TIME', value: 1.6, date: '2026-03-10T00:00:00.000Z' }],
+        invalidateMeasurements: false,
+      });
+      expect(await screen.findByText('2 saved trials')).toBeInTheDocument();
+      expect(flyCell('Jordan Lee')).toHaveAttribute('data-state', 'saved');
+      expect(toast).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Trial saved', description: '10-Yard Fly for Jordan Lee (2 trials)' }));
+      await waitFor(() => expect(flyCell('Jordan Lee')).toHaveFocus());
+    });
+
+    it('is not in the accessibility tree for an unchanged saved cell, a typed cell with no saved row, or a cell showing a sheet conflict', async () => {
+      const user = userEvent.setup();
+      render(<EventDataEntry />);
+      // Unchanged saved cell and an empty cell (Sam Park has no saved row)
+      expect(screen.queryAllByRole('button', { name: /as a new 10-Yard Fly trial/ })).toHaveLength(0);
+      await user.type(flyCell('Sam Park'), '1.7');
+      expect(addTrialButton('1.7', 'Sam Park')).toBeNull();
+      await user.clear(flyCell('Sam Park'));
+
+      await upload(user, csvFile(['ath-1,Jordan Lee,1.70']));
+      expect(flyCell('Jordan Lee')).toHaveAttribute('data-state', 'conflict');
+      expect(screen.queryAllByRole('button', { name: /as a new 10-Yard Fly trial for Jordan Lee/ })).toHaveLength(0);
+    });
+
+    it('a lost response: the refetch shows the new row and the cell ends clean, so a retry cannot add a third row', async () => {
+      const user = userEvent.setup();
+      mutateBulk.mockImplementation(async () => {
+        // The server saved the row ("1.6") but the response never arrived
+        measurementsState = { ...measurementsState, data: [saved('m2', 'ath-1', 'FLY10_TIME', 1.6), ...measurementsState.data] };
+        throw new Error('Failed to fetch');
+      });
+      refetchMeasurements.mockImplementation(async () => ({ data: measurementsState.data }));
+      const { rerender } = render(<EventDataEntry />);
+      await retype(user, flyCell('Jordan Lee'), '1.60');
+      await user.click(addTrialButton('1.60')!);
+      await waitFor(() => expect(refetchMeasurements).toHaveBeenCalledTimes(1));
+      rerender(<EventDataEntry />);
+
+      expect(await screen.findByText('2 saved trials')).toBeInTheDocument();
+      // The server kept the trial, so no contradictory failure toast
+      expect(toast).not.toHaveBeenCalledWith(expect.objectContaining({ variant: 'destructive' }));
+      expect(toast).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Trial saved' }));
+      expect(flyCell('Jordan Lee')).toHaveAttribute('data-state', 'saved');
+      expect(addTrialButton('1.60')).toBeNull();
+      expect(screen.getByRole('button', { name: /^save( \(\d+\))?$/i })).toBeDisabled();
+    });
+
+    it('does not take focus back when the user moved on while the trial was saved', async () => {
+      const user = userEvent.setup();
+      eventMetricsState = [metric('FLY10_TIME'), metric('VERTICAL_JUMP', { displayOrder: 2 })];
+      let finish!: (value: unknown) => void;
+      mutateBulk.mockReturnValue(new Promise((resolve) => (finish = resolve)));
+      render(<EventDataEntry />);
+      await retype(user, flyCell('Jordan Lee'), '1.60');
+      await user.click(addTrialButton('1.60')!);
+      const other = screen.getByRole('textbox', { name: 'Vertical Jump for Sam Park' });
+      await user.click(other);
+      finish({ created: [{ ...saved('m2', 'ath-1', 'FLY10_TIME', 1.6), index: 0 }], replaced: [], errors: [] });
+      await waitFor(() => expect(refetchMeasurements).toHaveBeenCalledTimes(1));
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+      expect(other).toHaveFocus();
+    });
+
+    it('is not rendered on a frozen event', () => {
+      eventState = FROZEN_EVENT;
+      const { container } = render(<EventDataEntry />);
+      expect(container.querySelector('[title="Save as a new trial"]')).toBeNull();
+    });
+
+    it('is not rendered for a paired-input or derived column', () => {
+      eventMetricsState = [
+        metric('FLY10_TIME', { metricDetails: { label: '10-Yard Fly', unit: 's', category: 'speed', auxiliaryInputConfig: { inputs: [] } } }),
+        metric('MOMENTUM', { displayOrder: 2, metricDetails: { label: 'Momentum', unit: 'kg·m/s', category: 'speed', isDerived: true } }),
+      ];
+      measurementsState.data = [saved('m1', 'ath-1', 'FLY10_TIME', 1.65), saved('m3', 'ath-1', 'MOMENTUM', 400)];
+      const { container } = render(<EventDataEntry />);
+      expect(container.querySelector('[title="Save as a new trial"]')).toBeNull();
+    });
+
+    it('Save on a single-row cell still replaces that row', async () => {
+      const user = userEvent.setup();
+      mutateBulk.mockResolvedValue({ created: [], replaced: [{ ...saved('m1', 'ath-1', 'FLY10_TIME', 1.6), index: 0 }], errors: [] });
+      render(<EventDataEntry />);
+      await retype(user, flyCell('Jordan Lee'), '1.60');
+      await user.click(screen.getByRole('button', { name: /^save( \(\d+\))?$/i }));
+      await waitFor(() => expect(mutateBulk).toHaveBeenCalledTimes(1));
+      expect(mutateBulk.mock.calls[0][0].measurements).toEqual([
+        { userId: 'ath-1', metric: 'FLY10_TIME', value: 1.6, date: '2026-03-10T00:00:00.000Z', replaceMeasurementId: 'm1' },
+      ]);
+    });
+
+    it('is disabled while Save is in flight', async () => {
+      const user = userEvent.setup();
+      measurementsState.data = [saved('m1', 'ath-1', 'FLY10_TIME', 1.65), saved('m2', 'ath-2', 'FLY10_TIME', 1.8)];
+      let finish!: (value: unknown) => void;
+      mutateBulk.mockReturnValue(new Promise((resolve) => (finish = resolve)));
+      render(<EventDataEntry />);
+      await retype(user, flyCell('Jordan Lee'), '1.60');
+      await retype(user, flyCell('Sam Park'), '1.75');
+      await user.click(screen.getByRole('button', { name: /^save( \(\d+\))?$/i }));
+      expect(addTrialButton('1.60')).toBeDisabled();
+      finish({ created: [], replaced: [], errors: [] });
+      await waitFor(() => expect(refetchMeasurements).toHaveBeenCalled());
+    });
+
+    it('shows a per-item error on the cell, which stays dirty', async () => {
+      const user = userEvent.setup();
+      mutateBulk.mockResolvedValue({ created: [], replaced: [], errors: [{ index: 0, error: 'Not an event metric' }] });
+      render(<EventDataEntry />);
+      await retype(user, flyCell('Jordan Lee'), '1.60');
+      await user.click(addTrialButton('1.60')!);
+      expect(await screen.findByText('Not an event metric')).toBeInTheDocument();
+      expect(flyCell('Jordan Lee')).toHaveAttribute('aria-invalid', 'true');
+      expect(flyCell('Jordan Lee')).toHaveValue('1.60');
+    });
+
+    const csvFile = (lines: string[]) =>
+      new File([['Event ID,ev-1', 'Athlete ID (do not edit),Athlete,10-Yard Fly (s) [FLY10_TIME]', ...lines].join('\n')], 'sheet.csv');
+    const upload = async (user: ReturnType<typeof userEvent.setup>, file: File) => {
+      await user.upload(screen.getByLabelText('Recording sheet file'), file);
+      return screen.findByRole('region', { name: /^Sheet/ });
+    };
+  });
+
   describe('recording sheet', () => {
     const saved = (id: string, userId: string, metricCode: string, value: number): Measurement =>
       ({ id, userId, metric: metricCode, value: String(value), notes: null, mediaUrl: null, isCalculated: false, calculatedFromMeasurementIds: null }) as any;
@@ -643,7 +800,7 @@ describe('EventDataEntry', () => {
       return screen.findByRole('region', { name: /^Sheet/ });
     };
     const cell = (name: string, label: string) => screen.getByRole('textbox', { name: `${label} for ${name}` });
-    const saveButton = () => screen.getByRole('button', { name: /^save/i });
+    const saveButton = () => screen.getByRole('button', { name: /^save( \(\d+\))?$/i });
 
     beforeEach(() => {
       eventMetricsState = [
@@ -680,6 +837,34 @@ describe('EventDataEntry', () => {
       await user.click(screen.getByRole('button', { name: /download sheet/i }));
       await user.click(await screen.findByRole('menuitem', { name: /printable pdf/i }));
       expect(downloadRecordingSheet).toHaveBeenLastCalledWith(expect.anything(), 'pdf');
+    });
+
+    it('pre-prints saved values (the newest typed row) and trial counts, never an unsaved edit', async () => {
+      const user = userEvent.setup();
+      measurementsState.data = [
+        saved('t2', 'ath-1', 'FLY10_TIME', 1.65),
+        saved('t1', 'ath-1', 'FLY10_TIME', 1.7),
+        saved('m3', 'ath-2', 'VERTICAL_JUMP', 30),
+      ];
+      render(<EventDataEntry />);
+      await user.clear(cell('Sam Park', 'Vertical Jump'));
+      await user.type(cell('Sam Park', 'Vertical Jump'), '31');
+      await user.click(screen.getByRole('button', { name: /download sheet/i }));
+      await user.click(await screen.findByRole('menuitem', { name: /csv/i }));
+      expect(downloadRecordingSheet.mock.calls[0][0].athletes).toEqual([
+        { userId: 'ath-1', name: 'Jordan Lee', values: { FLY10_TIME: '1.65' }, trials: { FLY10_TIME: 2 } },
+        { userId: 'ath-2', name: 'Sam Park', values: { VERTICAL_JUMP: '30' }, trials: { VERTICAL_JUMP: 1 } },
+      ]);
+    });
+
+    it('turns download and upload off when saved results could not be loaded', () => {
+      measurementsState = { data: undefined as any, isError: true };
+      render(<EventDataEntry />);
+      expect(screen.getByRole('button', { name: /download sheet/i })).toBeDisabled();
+      expect(screen.getByRole('button', { name: /upload filled sheet/i })).toBeDisabled();
+      expect(screen.getByRole('button', { name: /upload filled sheet/i })).toHaveAccessibleDescription(
+        'Saved results could not be loaded. Refresh before uploading a sheet.',
+      );
     });
 
     it('disables download and upload for a frozen event and says why', () => {
@@ -972,6 +1157,169 @@ describe('EventDataEntry', () => {
     });
   });
 
+  describe('Movement Quality on the recording sheet', () => {
+    const MQ_HEADER = 'Athlete ID (do not edit),Athlete,Vertical Jump (in) [VERTICAL_JUMP],Deceleration (0-3) [MQ_DECEL],Jump (0-3) [MQ_JUMP]';
+    const csvFile = (lines: string[]) => new File([['Event ID,ev-1', MQ_HEADER, ...lines].join('\n')], 'sheet.csv');
+    const upload = async (user: ReturnType<typeof userEvent.setup>, file: File) => {
+      await user.upload(screen.getByLabelText('Recording sheet file'), file);
+      return screen.findByRole('region', { name: /^Sheet/ });
+    };
+    const saveButton = () => screen.getByRole('button', { name: /^save( \(\d+\))?$/i });
+    const mqButton = (name: string) => screen.getByRole('button', { name: `Movement Quality for ${name}` });
+    const tooManyRequests = () => Object.assign(new Error('Too many requests, please try again later.'), { status: 429 });
+
+    beforeEach(() => {
+      registrationsState = [...REGISTRATIONS, { id: 'r3', userId: 'ath-3', status: 'checked_in', userFullName: 'Pat Doe' }];
+    });
+
+    it('downloads the 8 pattern columns after the grid metrics, with saved scores pre-printed', async () => {
+      const user = userEvent.setup();
+      measurementsState.data = [m('ath-1', 'MQ_DECEL', 0)];
+      render(<EventDataEntry />);
+      await user.click(screen.getByRole('button', { name: /download sheet/i }));
+      await user.click(await screen.findByRole('menuitem', { name: /csv/i }));
+      const sheet = downloadRecordingSheet.mock.calls[0][0];
+      expect(sheet.metrics.map((c: { code: string }) => c.code)).toEqual(['VERTICAL_JUMP', ...PATTERNS]);
+      expect(sheet.metrics[3]).toMatchObject({ code: 'MQ_DECEL', label: 'Deceleration', unit: '0-3' });
+      expect(sheet.athletes[0]).toEqual({ userId: 'ath-1', name: 'Jordan Lee', values: { MQ_DECEL: '0' }, trials: {} });
+    });
+
+    it('shows sheet scores as pending in the Movement Quality column and a conflict blocks Save', async () => {
+      const user = userEvent.setup();
+      measurementsState.data = [m('ath-1', 'MQ_DECEL', 2)];
+      render(<EventDataEntry />);
+      await upload(user, csvFile(['ath-1,Jordan Lee,,3,2', 'ath-2,Sam Park,,1,0']));
+
+      expect(screen.getByRole('button', { name: /^Movement Quality conflicts for Jordan Lee: 1 conflict, 1 score from sheet/ })).toBeInTheDocument();
+      expect(mqButton('Sam Park')).toHaveAccessibleDescription('2 scores from sheet (unsaved)');
+      // The saved summary stays the saved scores only
+      expect(mqButton('Sam Park')).toHaveTextContent('Not scored');
+      expect(screen.getByText(/1 conflict to resolve/i)).toBeInTheDocument();
+      expect(saveButton()).toBeDisabled();
+      expect(screen.getByRole('button', { name: /upload filled sheet/i })).toBeDisabled();
+    });
+
+    it('Use file value then Save sends one PUT per athlete with scores only, never through the bulk route', async () => {
+      const user = userEvent.setup();
+      measurementsState.data = [m('ath-1', 'MQ_DECEL', 2)];
+      mutateSaveMq.mockResolvedValue({ saved: [], deleted: [] });
+      mutateBulk.mockResolvedValue({ created: [{ ...m('ath-1', 'VERTICAL_JUMP', 30), id: 'n1', index: 0 }], replaced: [], errors: [] });
+      render(<EventDataEntry />);
+      await upload(user, csvFile(['ath-1,Jordan Lee,30,3,2', 'ath-2,Sam Park,,1,']));
+      await user.click(screen.getByRole('button', { name: /^Movement Quality conflicts for Jordan Lee/ }));
+      await user.click(await screen.findByRole('button', { name: 'Use file value for Deceleration' }));
+      expect(saveButton()).toHaveTextContent('Save (4)');
+      await user.click(saveButton());
+
+      await waitFor(() => expect(mutateSaveMq).toHaveBeenCalledTimes(2));
+      expect(mutateSaveMq.mock.calls.map((c) => c[0])).toEqual([
+        { eventId: 'ev-1', userId: 'ath-1', upserts: [{ metric: 'MQ_DECEL', value: 3 }, { metric: 'MQ_JUMP', value: 2 }], deletes: [], invalidateMeasurements: false },
+        { eventId: 'ev-1', userId: 'ath-2', upserts: [{ metric: 'MQ_DECEL', value: 1 }], deletes: [], invalidateMeasurements: false },
+      ]);
+      expect(mutateBulk).toHaveBeenCalledTimes(1);
+      expect(mutateBulk.mock.calls[0][0].measurements.map((i: { metric: string }) => i.metric)).toEqual(['VERTICAL_JUMP']);
+      await waitFor(() => expect(refetchMeasurements).toHaveBeenCalledTimes(1));
+      expect(invalidateAfterMq).toHaveBeenCalledWith('ev-1');
+      expect(toast).toHaveBeenLastCalledWith(
+        expect.objectContaining({ title: 'Saved Successfully', description: 'Saved 1 measurements and Movement Quality for 2 athletes.' }),
+      );
+      expect(saveButton()).toBeDisabled();
+    });
+
+    it('a rate limit on the 2nd athlete stops the loop and keeps the rest unsaved', async () => {
+      const user = userEvent.setup();
+      mutateSaveMq.mockResolvedValueOnce({ saved: [], deleted: [] }).mockRejectedValueOnce(tooManyRequests());
+      render(<EventDataEntry />);
+      await upload(user, csvFile(['ath-1,Jordan Lee,,3,', 'ath-2,Sam Park,,1,', 'ath-3,Pat Doe,,2,']));
+      await user.click(saveButton());
+
+      await waitFor(() => expect(refetchMeasurements).toHaveBeenCalledTimes(1));
+      expect(mutateSaveMq).toHaveBeenCalledTimes(2);
+      expect(toast).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          variant: 'destructive',
+          description: 'Saved MQ for 1 of 3 athletes. Too many requests, please try again later. Wait up to 15 minutes, then save again to send the rest.',
+        }),
+      );
+      expect(mqButton('Sam Park')).toHaveAccessibleDescription('1 score from sheet (unsaved)');
+      expect(mqButton('Pat Doe')).toHaveAccessibleDescription('1 score from sheet (unsaved)');
+      expect(mqButton('Jordan Lee')).not.toHaveAttribute('aria-describedby');
+      expect(saveButton()).toHaveTextContent('Save (2)');
+    });
+
+    it('per-score errors from the server stay on that athlete; the next athlete is still saved', async () => {
+      const user = userEvent.setup();
+      mutateSaveMq
+        .mockRejectedValueOnce(new MovementQualitySaveError('1 score could not be saved', [{ metric: 'MQ_DECEL', error: 'Value must be at most 3' }]))
+        .mockResolvedValueOnce({ saved: [], deleted: [] });
+      render(<EventDataEntry />);
+      await upload(user, csvFile(['ath-1,Jordan Lee,,3,', 'ath-2,Sam Park,,1,']));
+      await user.click(saveButton());
+
+      await waitFor(() => expect(mutateSaveMq).toHaveBeenCalledTimes(2));
+      expect(await screen.findByText('Deceleration: Value must be at most 3')).toBeInTheDocument();
+      expect(mqButton('Jordan Lee')).toHaveAccessibleDescription('Deceleration: Value must be at most 3');
+      await waitFor(() =>
+        expect(toast).toHaveBeenLastCalledWith(
+          expect.objectContaining({ title: 'Partial Save', description: 'Saved MQ for 1 of 2 athletes. 1 could not be saved; see the Movement Quality column.' }),
+        ),
+      );
+    });
+
+    it("blocks the panel's Save for an athlete with unsaved sheet scores", async () => {
+      const user = userEvent.setup();
+      render(<EventDataEntry />);
+      await upload(user, csvFile(['ath-1,Jordan Lee,,3,']));
+      await user.click(mqButton('Jordan Lee'));
+      const dialog = await screen.findByRole('dialog');
+      expect(dialog).toHaveTextContent('This athlete has unsaved scores from a sheet. Save the page or discard the file values first.');
+      expect(within(dialog).getByRole('button', { name: /save scores/i })).toBeDisabled();
+      await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+      await user.click(mqButton('Sam Park'));
+      expect(within(await screen.findByRole('dialog')).getByRole('button', { name: /save scores/i })).toBeEnabled();
+    });
+
+    it('after Close, scores the server refused can still be discarded per athlete, which unblocks the panel', async () => {
+      const user = userEvent.setup();
+      mutateSaveMq.mockRejectedValue(new MovementQualitySaveError('1 score could not be saved', [{ metric: 'MQ_DECEL', error: 'Value must be at most 2' }]));
+      render(<EventDataEntry />);
+      const summary = await upload(user, csvFile(['ath-1,Jordan Lee,,3,']));
+      await user.click(within(summary).getByRole('button', { name: 'Close' }));
+      await user.click(saveButton());
+      expect(await screen.findByText('Deceleration: Value must be at most 2')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Discard sheet scores for Jordan Lee' }));
+      expect(screen.queryByText('Deceleration: Value must be at most 2')).toBeNull();
+      expect(saveButton()).toBeDisabled();
+      expect(screen.getByRole('button', { name: /upload filled sheet/i })).toBeEnabled();
+      await user.click(mqButton('Jordan Lee'));
+      expect(within(await screen.findByRole('dialog')).getByRole('button', { name: /save scores/i })).toBeEnabled();
+    });
+
+    it('"Discard file values" clears the pending Movement Quality scores', async () => {
+      const user = userEvent.setup();
+      measurementsState.data = [m('ath-2', 'MQ_DECEL', 2)];
+      render(<EventDataEntry />);
+      const summary = await upload(user, csvFile(['ath-1,Jordan Lee,,3,', 'ath-2,Sam Park,,1,']));
+      await user.click(within(summary).getByRole('button', { name: 'Discard file values' }));
+      expect(screen.queryByText(/from sheet \(unsaved\)/)).toBeNull();
+      expect(screen.queryByRole('button', { name: /^Movement Quality conflicts/ })).toBeNull();
+      expect(saveButton()).toBeDisabled();
+    });
+
+    it('an untouched pre-printed score is unchanged and an MQ total column is ignored with a warning', async () => {
+      const user = userEvent.setup();
+      eventMetricsState = [metric('VERTICAL_JUMP'), ...PATTERNS.map((c) => metric(c)), metric('MQI_TOTAL')];
+      measurementsState.data = [m('ath-1', 'MQ_DECEL', 2)];
+      render(<EventDataEntry />);
+      const file = new File([['Event ID,ev-1', `${MQ_HEADER},MQI [MQI_TOTAL]`, 'ath-1,Jordan Lee,,2,,14'].join('\n')], 'sheet.csv');
+      const summary = await upload(user, file);
+      expect(summary).toHaveTextContent(/0 values loaded/);
+      expect(summary).toHaveTextContent(/Column "MQI \[MQI_TOTAL\]" was ignored: Movement Quality Index \(MQI\) is calculated from the Movement Quality scores/);
+      expect(saveButton()).toBeDisabled();
+    });
+  });
+
   describe('sideways scroll hint', () => {
     const restore: Array<() => void> = [];
     const stubWidth = (prop: 'scrollWidth' | 'clientWidth', value: number) => {
@@ -1005,6 +1353,49 @@ describe('EventDataEntry', () => {
       stubWidth('clientWidth', 400);
       render(<EventDataEntry />);
       expect(screen.queryByText(/scroll sideways/i)).toBeNull();
+      expect(screen.queryByRole('button', { name: /scroll metrics/i })).toBeNull();
+    });
+
+    it('shows scroll buttons when the grid overflows: left is off at the start, right scrolls the grid', async () => {
+      const user = userEvent.setup();
+      stubWidth('scrollWidth', 1500);
+      stubWidth('clientWidth', 400);
+      const scrollBy = vi.fn();
+      (Element.prototype as any).scrollBy = scrollBy;
+      restore.push(() => delete (Element.prototype as any).scrollBy);
+      render(<EventDataEntry />);
+      const left = screen.getByRole('button', { name: 'Scroll metrics left' });
+      const right = screen.getByRole('button', { name: 'Scroll metrics right' });
+      expect(left).toBeDisabled();
+      expect(right).toBeEnabled();
+      expect(right).toHaveAttribute('aria-controls', 'event-data-entry-grid');
+      expect(document.getElementById('event-data-entry-grid')).not.toBeNull();
+      await user.click(right);
+      expect(scrollBy).toHaveBeenCalledWith(expect.objectContaining({ left: expect.any(Number) }));
+      expect(scrollBy.mock.calls[0][0].left).toBeGreaterThan(0);
+    });
+  });
+
+  describe('keyboard navigation', () => {
+    beforeEach(() => {
+      eventMetricsState = [metric('VERTICAL_JUMP'), metric('FLY10_TIME', { displayOrder: 2 })];
+    });
+
+    it('ArrowDown from Jordan Lee\'s 10-Yard Fly focuses Sam Park\'s 10-Yard Fly', async () => {
+      const user = userEvent.setup();
+      render(<EventDataEntry />);
+      await user.click(screen.getByRole('textbox', { name: '10-Yard Fly for Jordan Lee' }));
+      await user.keyboard('{ArrowDown}');
+      expect(screen.getByRole('textbox', { name: '10-Yard Fly for Sam Park' })).toHaveFocus();
+    });
+
+    it('describes the keys on the inputs and in the card description', () => {
+      render(<EventDataEntry />);
+      expect(screen.getByRole('textbox', { name: 'Vertical Jump for Jordan Lee' })).toHaveAttribute(
+        'aria-keyshortcuts',
+        'ArrowUp ArrowDown ArrowLeft ArrowRight Enter',
+      );
+      expect(screen.getByText(/Arrow keys, Enter or Tab move between cells/)).toBeInTheDocument();
     });
   });
 });

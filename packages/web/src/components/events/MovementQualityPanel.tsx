@@ -62,6 +62,8 @@ interface MovementQualityPanelProps {
   isSaving?: boolean;
   /** Per-metric errors returned by the server for the last save (metric code -> message) */
   serverErrors?: Record<string, string>;
+  /** Why Save is off although the event is not frozen (e.g. unsaved scores from an uploaded sheet) */
+  saveBlockedReason?: string;
   onSave: (input: MovementQualitySaveInput) => Promise<void> | void;
 }
 
@@ -104,6 +106,7 @@ export function MovementQualityPanel({
   disabled = false,
   isSaving = false,
   serverErrors,
+  saveBlockedReason,
   onSave,
 }: MovementQualityPanelProps) {
   const saved = useMemo(() => savedRowsFor(userId, measurements), [userId, measurements]);
@@ -281,6 +284,13 @@ export function MovementQualityPanel({
           </div>
         )}
 
+        {saveBlockedReason && !disabled && (
+          <div role="note" className="flex items-center gap-2 rounded-lg bg-sky-50 p-3 text-sm text-sky-800">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            {saveBlockedReason}
+          </div>
+        )}
+
         <form onSubmit={submit} className="space-y-4" noValidate>
           <div
             data-testid="mqi-total"
@@ -335,7 +345,7 @@ export function MovementQualityPanel({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={disabled || isSaving}>
+            <Button type="submit" disabled={disabled || isSaving || !!saveBlockedReason}>
               {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save scores
             </Button>

@@ -1,4 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
+import fs from 'fs';
+import Papa from 'papaparse';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import bcrypt from 'bcrypt';
@@ -213,6 +215,70 @@ test.describe('MQI capture on event data entry', () => {
     await openPanel(page);
     await expect(page.getByLabel('Jump clip link')).toHaveValue(CLIP);
     await expect(page.getByLabel('Jump notes')).toHaveValue('late left hip');
+  });
+
+  test('a recording sheet changes a score through the upload and keeps its note and clip', async ({ page }) => {
+    // Own data: a saved Jump 3 with a note and a clip, whatever earlier tests left
+    const jumpOfAthlete = and(eq(schema.measurements.userId, ids.athlete!), eq(schema.measurements.metric, 'MQ_JUMP'));
+    await db.delete(schema.measurements).where(jumpOfAthlete);
+    await db.insert(schema.measurements).values({
+      userId: ids.athlete,
+      submittedBy: ids.coachA,
+      metric: 'MQ_JUMP',
+      value: '3',
+      units: 'score',
+      date: EVENT_DATE,
+      age: 18,
+      isVerified: true,
+      verifiedBy: ids.coachA,
+      eventId: ids.event,
+      organizationId: ids.orgA,
+      notes: 'late left hip',
+      mediaUrl: CLIP,
+    } as any);
+    await loginWithCredentials(page, usernames.coachA, PASSWORD);
+    await page.goto(`${BASE_URL}/events/${ids.event}/data-entry`);
+    await expect(page.getByRole('heading', { name: /Data Entry:/ })).toBeVisible({ timeout: 20000 });
+
+    // Download the CSV: the saved Jump score 3 is pre-printed
+    const downloading = page.waitForEvent('download');
+    await page.getByRole('button', { name: /download sheet/i }).click();
+    await page.getByRole('menuitem', { name: /csv/i }).click();
+    const download = await downloading;
+    const rows = Papa.parse<string[]>(fs.readFileSync((await download.path())!, 'utf-8').replace(/^\uFEFF/, '')).data;
+    const header = rows.findIndex((r) => r[0] === 'Athlete ID (do not edit)');
+    const jumpCol = rows[header].indexOf('Jump (0-3) [MQ_JUMP]');
+    const athleteRow = rows.findIndex((r) => r[0] === ids.athlete);
+    expect(jumpCol).toBeGreaterThan(1);
+    expect(rows[athleteRow][jumpCol]).toBe('3');
+
+    // Change Jump 3 -> 1 and upload: a conflict in the Movement Quality column
+    rows[athleteRow][jumpCol] = '1';
+    await page.getByLabel('Recording sheet file').setInputFiles({
+      name: 'sheet.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from(Papa.unparse(rows)),
+    });
+    await page.getByRole('button', { name: /^Movement Quality conflicts for/ }).click();
+    await page.getByRole('button', { name: 'Use file value for Jump' }).click();
+    await page.getByRole('button', { name: /^Save \(1\)$/ }).click();
+    await expect(page.getByRole('button', { name: /^Save( \(\d+\))?$/ })).toBeDisabled({ timeout: 15000 });
+
+    await expect
+      .poll(async () => {
+        const [jump] = await db
+          .select()
+          .from(schema.measurements)
+          .where(and(eq(schema.measurements.userId, ids.athlete!), eq(schema.measurements.metric, 'MQ_JUMP')));
+        return jump ? `${Number(jump.value)}|${jump.notes}|${jump.mediaUrl}` : 'none';
+      })
+      .toBe(`1|late left hip|${CLIP}`);
+    await openPanel(page);
+    await expect(
+      page.getByRole('group', { name: 'Jump score (0 to 3)' }).getByRole('radio', { name: /^1\b/ }),
+    ).toHaveAttribute('aria-checked', 'true');
+    await expect(page.getByLabel('Jump notes')).toHaveValue('late left hip');
+    await expect(page.getByLabel('Jump clip link')).toHaveValue(CLIP);
   });
 
   test('rejects a non-https clip link in the panel', async ({ page }) => {

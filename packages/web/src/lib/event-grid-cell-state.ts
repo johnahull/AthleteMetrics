@@ -17,3 +17,22 @@ export function getCellState(cell: {
   if (cell.originalValue !== undefined) return "saved";
   return "empty";
 }
+
+/**
+ * The cell's typed (or accepted file) value can be saved now as an extra trial: it has a saved row,
+ * a changed number, and no file value waiting for a choice. A cell with no saved row is left to Save.
+ */
+export function canAddTrial(cell: {
+  value: string;
+  isDirty: boolean;
+  savedCount: number;
+  importedValue?: string;
+}): boolean {
+  return (
+    cell.savedCount >= 1 &&
+    cell.isDirty &&
+    cell.value !== "" &&
+    !isNaN(Number(cell.value)) &&
+    cell.importedValue === undefined
+  );
+}
