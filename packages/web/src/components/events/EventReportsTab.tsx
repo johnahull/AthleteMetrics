@@ -133,6 +133,7 @@ export function EventReportsTab({
 
       // Reset and close
       setSelectedAthletes([]);
+      setGroupComparison(false);
       setShowCreateModal(false);
     } catch (error: any) {
       toast({

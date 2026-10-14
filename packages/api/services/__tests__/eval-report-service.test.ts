@@ -286,6 +286,11 @@ describe('assembleEvalReportModel: age-group comparison switch', () => {
     expect(model.selection.ageGroupComparison).toBe(false);
   });
 
+  it('off: ignores a limiter override that names a metric outside the selection instead of failing', () => {
+    const model = assembleEvalReportModel({ ...three(), selection: off, overrides: { limiter: 'NOT_SELECTED' } });
+    expect(model.limiter).toBeNull();
+  });
+
   it('off: leaves the college standard alone', () => {
     const d1 = average('DASH_10YD', '1.8', 'lte', { level: 'D1', ageMin: null, ageMax: null });
     const benchmarks = [average('DASH_10YD', '1.95', 'lte'), d1];

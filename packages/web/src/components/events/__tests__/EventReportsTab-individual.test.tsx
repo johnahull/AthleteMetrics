@@ -355,6 +355,33 @@ describe('EventReportsTab - Individual Reports', () => {
       });
     });
 
+    it('should start the next report with comparison off after one was generated with it on', async () => {
+      mockCreateReportMutation.mutateAsync.mockResolvedValue({ id: 'report-new', name: 'Individual Report' });
+
+      render(
+        <EventReportsTab
+          eventId="event-123"
+          eventName="Spring Combine 2025"
+        />,
+        { wrapper: createWrapper() }
+      );
+
+      const user = userEvent.setup();
+      await user.click(screen.getByText(/individual/i).closest('button')!);
+      await waitFor(() => {
+        expect(screen.getByText('John Smith')).toBeInTheDocument();
+      });
+      await user.click(screen.getByLabelText(/Remove John Smith/i));
+      await user.click(screen.getByRole('checkbox', { name: /compare to a group/i }));
+      await user.click(screen.getByRole('button', { name: /generate.*report/i }));
+      await waitFor(() => expect(mockCreateReportMutation.mutateAsync).toHaveBeenCalled());
+
+      await user.click(screen.getByText(/individual/i).closest('button')!);
+      await waitFor(() => {
+        expect(screen.getByRole('checkbox', { name: /compare to a group/i })).not.toBeChecked();
+      });
+    });
+
     it('should disable generate button when no athletes selected', async () => {
       render(
         <EventReportsTab

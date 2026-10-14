@@ -178,7 +178,7 @@ export function assembleEvalReportModel(input: EvalAssemblyInput): EvalReportMod
   const { limiter: limiterOverride } = input.overrides;
   let limiter = suggested.limiter;
   if (limiterOverride === null) limiter = null;
-  else if (limiterOverride !== undefined) {
+  else if (limiterOverride !== undefined && sectionOn.ageGroupComparison) {
     if (!isKey(limiterOverride) || !shown.has(limiterOverride)) throw new EvalReportInputError("invalid_override");
     limiter = limiterOverride;
   }
