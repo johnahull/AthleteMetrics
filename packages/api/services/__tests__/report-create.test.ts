@@ -116,6 +116,7 @@ describe('createReportsFromInput', () => {
     if (res.kind !== 'batch') throw new Error('expected batch');
     for (const r of res.reports) expect(r.name).toBe(`Combine - ${r.athleteName}`);
     expect(res.reports.map((r) => r.athleteId)).toEqual(['a2', 'a1']);
+    expect(res.reports.map((r) => r.athleteName)).toEqual(['Bob', 'Ann']);
   });
 
   it('lets a failed insert propagate with nothing persisted (one statement, no partial batch)', async () => {
