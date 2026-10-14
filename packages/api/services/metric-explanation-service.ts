@@ -7,6 +7,7 @@
  *   2. site_metrics explanation columns (shortDescription / whatItMeasures / whyItMatters)
  *   3. site_metric_explanations table overrides (highest priority among site-level)
  *   4. custom_org_metrics (for codes that aren't built-ins)
+ * For codes without a built-in, the site_metrics label, unit and direction feed the fallback text.
  *
  * Extracted from ReportService.getMetricExplanationsMap so both the report
  * service and the athlete-facing route can share one implementation.
@@ -36,6 +37,9 @@ export async function getMetricExplanationsMap(
     db
       .select({
         code: siteMetrics.code,
+        label: siteMetrics.label,
+        unit: siteMetrics.unit,
+        metricType: siteMetrics.metricType,
         shortDescription: siteMetrics.shortDescription,
         whatItMeasures: siteMetrics.whatItMeasures,
         whyItMatters: siteMetrics.whyItMatters,
@@ -100,7 +104,18 @@ export async function getMetricExplanationsMap(
     }
   }
 
+  // Site metrics without a built-in explanation still have a label, unit and direction of their own. Their
+  // description is an admin-facing note (it can cite internal docs), so it is not used as athlete-facing text.
+  // Org custom metrics (below) take precedence for the same code
   const customMap: CustomMetricsMap = {};
+  for (const row of siteMetricRows) {
+    customMap[row.code] = {
+      label: row.label,
+      description: null,
+      unit: row.unit,
+      metricType: row.metricType,
+    };
+  }
   for (const row of customRows) {
     customMap[row.code] = {
       label: row.label,
