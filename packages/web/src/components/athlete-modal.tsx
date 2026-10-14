@@ -192,9 +192,10 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
             const teamResponse = await apiRequest("POST", `/api/teams/${teamId}/add-athletes`, {
               athleteIds: [athlete.id]
             });
-            if (!teamResponse.ok) {
-              const errorData = await teamResponse.json();
-              teamErrors.push(`Team assignment failed: ${errorData.message || 'Unknown error'}`);
+            // apiRequest throws on a non-2xx status; a 200 can still report a per-athlete failure
+            const result = await teamResponse.json();
+            if (result.errorCount > 0) {
+              teamErrors.push(`Team assignment failed: ${result.errors?.[0]?.message || 'Unknown error'}`);
             }
           } catch (error) {
             teamErrors.push(`Error adding athlete to team: ${error instanceof Error ? error.message : 'Unknown error'}`);

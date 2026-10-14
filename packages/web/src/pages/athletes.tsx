@@ -314,7 +314,7 @@ export default function Athletes() {
   // Remove athlete from team mutation
   const removeAthleteFromTeamMutation = useMutation({
     mutationFn: async ({ athleteId, teamId }: { athleteId: string; teamId: string }) => {
-      await apiRequest("DELETE", `/api/teams/${teamId}/athletes/${athleteId}`);
+      await apiRequest("DELETE", `/api/teams/${teamId}/members/${athleteId}`);
     },
     onSuccess: (_, { athleteId, teamId }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });

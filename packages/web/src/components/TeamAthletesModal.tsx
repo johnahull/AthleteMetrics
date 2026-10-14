@@ -35,6 +35,13 @@ interface UserWithTeamMemberships extends User {
   }>;
 }
 
+// Response of POST /api/teams/:id/add-athletes and /remove-athletes
+type BulkTeamResult = {
+  success: number;
+  errorCount: number;
+  errors: Array<{ athleteId: string; message: string }>;
+};
+
 interface TeamAthletesModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -221,7 +228,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
   // Remove athlete mutation with optimistic updates
   const removeAthleteMutation = useMutation({
     mutationFn: async ({ athleteId, teamId }: { athleteId: string; teamId: string }): Promise<void> => {
-      await apiRequest("DELETE", `/api/teams/${teamId}/athletes/${athleteId}`);
+      await apiRequest("DELETE", `/api/teams/${teamId}/members/${athleteId}`);
     },
     onMutate: async ({ athleteId }) => {
       // Cancel outgoing refetches to avoid optimistic update being overwritten
@@ -300,11 +307,16 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
 
   // Add athletes mutation with optimistic updates
   const addAthletesMutation = useMutation({
-    mutationFn: async (athleteIds: string[]): Promise<{ success: number; errorCount: number; errors?: any[] }> => {
+    mutationFn: async (athleteIds: string[]): Promise<BulkTeamResult> => {
       const response = await apiRequest("POST", `/api/teams/${team!.id}/add-athletes`, {
         athleteIds: athleteIds
       });
-      return response.json();
+      const result = await response.json();
+      // Nothing was added: throw so onError rolls back and restores the selection
+      if (result.success === 0 && result.errorCount > 0) {
+        throw new Error(result.errors?.[0]?.message || "Failed to add athletes to team");
+      }
+      return result;
     },
     onMutate: async (athleteIds: string[]) => {
       // Cancel outgoing refetches
@@ -374,7 +386,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
 
       return { previousAthletes, previousUsers, selectedIds: athleteIds };
     },
-    onSuccess: (data: { success: number; errorCount: number; errors?: any[] }) => {
+    onSuccess: (data: BulkTeamResult) => {
       // Invalidate all related queries to ensure fresh data
       queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
@@ -397,10 +409,11 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
       } else if (successCount > 0 && errorCount > 0) {
         toast({
           title: "Partial Success",
-          description: `Added ${successCount} athlete${successCount !== 1 ? 's' : ''} to ${team?.name}. ${errorCount} failed.`,
+          description: `Added ${successCount} athlete${successCount !== 1 ? 's' : ''} to ${team?.name}. ${errorCount} failed: ${data.errors[0]?.message || 'unknown error'}`,
           variant: "default",
         });
-        setActiveTab('current');
+        // Stay on this tab with only the failed athletes selected so they can be retried
+        setSelectedPlayerIds(data.errors.map((e) => e.athleteId));
       }
     },
     onError: (error: Error, _, context) => {
@@ -426,12 +439,16 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
 
   // Bulk remove athletes mutation with optimistic updates
   const bulkRemoveAthletesMutation = useMutation({
-    mutationFn: async (athleteIds: string[]): Promise<{ success: number; errorCount: number; errors?: any[] }> => {
+    mutationFn: async (athleteIds: string[]): Promise<BulkTeamResult> => {
       // Use the new bulk remove endpoint with database transactions
-      const response = await apiRequest("DELETE", `/api/teams/${team!.id}/remove-athletes`, {
+      const response = await apiRequest("POST", `/api/teams/${team!.id}/remove-athletes`, {
         athleteIds
       });
       const result = await response.json();
+      // Nothing was removed: throw so onError rolls back and restores the selection
+      if (result.success === 0 && result.errorCount > 0) {
+        throw new Error(result.errors?.[0]?.message || `Failed to remove athletes from ${labels.team.toLowerCase()}`);
+      }
 
       return {
         success: result.success || 0,
@@ -485,7 +502,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
 
       return { previousAthletes, previousUsers, selectedIds: athleteIds };
     },
-    onSuccess: (data: { success: number; errorCount: number; errors?: any[] }) => {
+    onSuccess: (data: BulkTeamResult) => {
       // Invalidate all related queries to ensure fresh data
       queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
@@ -506,15 +523,11 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
       } else if (successCount > 0 && errorCount > 0) {
         toast({
           title: "Partial Success",
-          description: `Removed ${successCount} athlete${successCount !== 1 ? 's' : ''} from ${team?.name}. ${errorCount} failed.`,
+          description: `Removed ${successCount} athlete${successCount !== 1 ? 's' : ''} from ${team?.name}. ${errorCount} failed: ${data.errors[0]?.message || 'unknown error'}`,
           variant: "default",
         });
-      } else if (errorCount > 0) {
-        toast({
-          title: "Error",
-          description: `Failed to remove ${errorCount} athlete${errorCount !== 1 ? 's' : ''} from ${team?.name}`,
-          variant: "destructive",
-        });
+        // Keep only the failed athletes selected so they can be retried
+        setSelectedCurrentAthleteIds(data.errors.map((e) => e.athleteId));
       }
     },
     onError: (error: Error, _, context) => {
