@@ -381,6 +381,8 @@ export class TeamService {
    * @param expectedOrganizationId Optional organization ID for TOCTOU-safe validation
    * @param options.requireAthleteRole Refuse a user whose role in expectedOrganizationId is not 'athlete'
    *   (checked on the locked membership row; requires expectedOrganizationId)
+   * @param options.rejectArchivedTeam Refuse an archived team (checked on the locked team row; requires
+   *   expectedOrganizationId)
    * @returns User team membership
    * @throws Error if organization validation fails or user/team belong to different org
    */
@@ -388,10 +390,10 @@ export class TeamService {
     userId: string,
     teamId: string,
     expectedOrganizationId?: string,
-    { requireAthleteRole = false }: { requireAthleteRole?: boolean } = {}
+    { requireAthleteRole = false, rejectArchivedTeam = false }: { requireAthleteRole?: boolean; rejectArchivedTeam?: boolean } = {}
   ): Promise<UserTeam> {
-    if (requireAthleteRole && !expectedOrganizationId) {
-      throw new Error('requireAthleteRole needs expectedOrganizationId');
+    if ((requireAthleteRole || rejectArchivedTeam) && !expectedOrganizationId) {
+      throw new Error('requireAthleteRole and rejectArchivedTeam need expectedOrganizationId');
     }
     // Use transaction with row-level locking to prevent race conditions
     return await db.transaction(async (tx) => {
@@ -413,6 +415,10 @@ export class TeamService {
 
           if (team.organizationId !== expectedOrganizationId) {
             throw new TeamServiceError('Access denied - team belongs to different organization');
+          }
+
+          if (rejectArchivedTeam && team.isArchived) {
+            throw new TeamServiceError('Cannot add athletes to an archived team');
           }
 
           // Lock user-org relationship and verify user belongs to expected org

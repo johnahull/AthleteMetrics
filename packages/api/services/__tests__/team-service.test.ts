@@ -531,6 +531,39 @@ describe('TeamService', () => {
         expect(result.isActive).toBe(true);
       });
     });
+
+    // The bulk route also refuses archived teams up front; this is the authoritative check on the locked team row
+    describe('rejectArchivedTeam option', () => {
+      const setupArchived = async () => {
+        const [team] = await db.insert(teams).values({
+          name: 'Archived Team Test',
+          organizationId: testOrgId,
+          isArchived: true,
+          archivedAt: new Date(),
+        }).returning();
+        await db.insert(userOrganizations).values({ userId: testUserId, organizationId: testOrgId, role: 'athlete' });
+        return team;
+      };
+
+      it('rejects an archived team inside the transaction', async () => {
+        const team = await setupArchived();
+
+        await expect(
+          teamService.addUserToTeam(testUserId, team.id, testOrgId, { rejectArchivedTeam: true })
+        ).rejects.toThrow('Cannot add athletes to an archived team');
+
+        const memberships = await db.select().from(userTeams).where(eq(userTeams.teamId, team.id));
+        expect(memberships).toHaveLength(0);
+      });
+
+      it('adds to an archived team when the option is not set', async () => {
+        const team = await setupArchived();
+
+        const result = await teamService.addUserToTeam(testUserId, team.id, testOrgId);
+
+        expect(result.isActive).toBe(true);
+      });
+    });
   });
 
   describe('removeUserFromTeam', () => {

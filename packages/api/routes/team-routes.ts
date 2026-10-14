@@ -468,6 +468,7 @@ export function registerTeamRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied - you must be an org admin or coach of this team's organization" });
       }
 
+      // Fast path: one 400 instead of a per-id error for every athlete; the service re-checks inside its transaction
       if (action === "add" && existingTeam.isArchived) {
         return res.status(400).json({ message: "Cannot add athletes to an archived team" });
       }
@@ -482,8 +483,8 @@ export function registerTeamRoutes(app: Express) {
       for (const athleteId of athleteIds) {
         try {
           if (action === "add") {
-            // Rosters hold athletes; the role is checked on the membership row locked inside the transaction
-            await teamService.addUserToTeam(athleteId, teamId, organizationId, { requireAthleteRole: true });
+            // Rosters hold athletes on active teams; both are checked on the rows locked inside the transaction
+            await teamService.addUserToTeam(athleteId, teamId, organizationId, { requireAthleteRole: true, rejectArchivedTeam: true });
           } else {
             // The caller's role and the team's organization are verified above, and removal only touches this
             // team's roster, so an athlete who has already left the organization can still be removed

@@ -39,7 +39,7 @@ interface UserWithTeamMemberships extends User {
 type BulkTeamResult = {
   success: number;
   errorCount: number;
-  errors?: Array<{ athleteId: string; message: string }>;
+  errors: Array<{ athleteId: string; message: string }>;
 };
 
 interface TeamAthletesModalProps {
@@ -409,11 +409,11 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
       } else if (successCount > 0 && errorCount > 0) {
         toast({
           title: "Partial Success",
-          description: `Added ${successCount} athlete${successCount !== 1 ? 's' : ''} to ${team?.name}. ${errorCount} failed: ${data.errors?.[0]?.message || 'unknown error'}`,
+          description: `Added ${successCount} athlete${successCount !== 1 ? 's' : ''} to ${team?.name}. ${errorCount} failed: ${data.errors[0]?.message || 'unknown error'}`,
           variant: "default",
         });
         // Stay on this tab with only the failed athletes selected so they can be retried
-        setSelectedPlayerIds((data.errors || []).map((e) => e.athleteId));
+        setSelectedPlayerIds(data.errors.map((e) => e.athleteId));
       }
     },
     onError: (error: Error, _, context) => {
@@ -523,11 +523,11 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
       } else if (successCount > 0 && errorCount > 0) {
         toast({
           title: "Partial Success",
-          description: `Removed ${successCount} athlete${successCount !== 1 ? 's' : ''} from ${team?.name}. ${errorCount} failed: ${data.errors?.[0]?.message || 'unknown error'}`,
+          description: `Removed ${successCount} athlete${successCount !== 1 ? 's' : ''} from ${team?.name}. ${errorCount} failed: ${data.errors[0]?.message || 'unknown error'}`,
           variant: "default",
         });
         // Keep only the failed athletes selected so they can be retried
-        setSelectedCurrentAthleteIds((data.errors || []).map((e) => e.athleteId));
+        setSelectedCurrentAthleteIds(data.errors.map((e) => e.athleteId));
       }
     },
     onError: (error: Error, _, context) => {
