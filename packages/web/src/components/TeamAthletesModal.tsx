@@ -35,6 +35,13 @@ interface UserWithTeamMemberships extends User {
   }>;
 }
 
+// Response of POST /api/teams/:id/add-athletes and /remove-athletes
+type BulkTeamResult = {
+  success: number;
+  errorCount: number;
+  errors?: Array<{ athleteId: string; message: string }>;
+};
+
 interface TeamAthletesModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -300,7 +307,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
 
   // Add athletes mutation with optimistic updates
   const addAthletesMutation = useMutation({
-    mutationFn: async (athleteIds: string[]): Promise<{ success: number; errorCount: number; errors?: any[] }> => {
+    mutationFn: async (athleteIds: string[]): Promise<BulkTeamResult> => {
       const response = await apiRequest("POST", `/api/teams/${team!.id}/add-athletes`, {
         athleteIds: athleteIds
       });
@@ -379,7 +386,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
 
       return { previousAthletes, previousUsers, selectedIds: athleteIds };
     },
-    onSuccess: (data: { success: number; errorCount: number; errors?: any[] }) => {
+    onSuccess: (data: BulkTeamResult) => {
       // Invalidate all related queries to ensure fresh data
       queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
@@ -406,7 +413,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
           variant: "default",
         });
         // Stay on this tab with only the failed athletes selected so they can be retried
-        setSelectedPlayerIds((data.errors || []).map((e: { athleteId: string }) => e.athleteId));
+        setSelectedPlayerIds((data.errors || []).map((e) => e.athleteId));
       }
     },
     onError: (error: Error, _, context) => {
@@ -432,7 +439,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
 
   // Bulk remove athletes mutation with optimistic updates
   const bulkRemoveAthletesMutation = useMutation({
-    mutationFn: async (athleteIds: string[]): Promise<{ success: number; errorCount: number; errors?: any[] }> => {
+    mutationFn: async (athleteIds: string[]): Promise<BulkTeamResult> => {
       // Use the new bulk remove endpoint with database transactions
       const response = await apiRequest("POST", `/api/teams/${team!.id}/remove-athletes`, {
         athleteIds
@@ -495,7 +502,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
 
       return { previousAthletes, previousUsers, selectedIds: athleteIds };
     },
-    onSuccess: (data: { success: number; errorCount: number; errors?: any[] }) => {
+    onSuccess: (data: BulkTeamResult) => {
       // Invalidate all related queries to ensure fresh data
       queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
@@ -520,7 +527,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
           variant: "default",
         });
         // Keep only the failed athletes selected so they can be retried
-        setSelectedCurrentAthleteIds((data.errors || []).map((e: { athleteId: string }) => e.athleteId));
+        setSelectedCurrentAthleteIds((data.errors || []).map((e) => e.athleteId));
       }
     },
     onError: (error: Error, _, context) => {
