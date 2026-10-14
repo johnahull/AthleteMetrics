@@ -7,7 +7,7 @@ import type { Express } from "express";
 import rateLimit, { type Options } from "express-rate-limit";
 import { MeasurementService, MediaUrlPermissionError, MovementQualityPermissionError, MeasurementAccessDeniedError } from "../services/measurement-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
-import { insertMeasurementSchema, teams, userTeams, siteMetrics } from "@shared/schema";
+import { insertMeasurementSchema, teams, userTeams, siteMetrics, type Measurement } from "@shared/schema";
 import {
   computePairedInputMeasurement,
   PairedInputValidationError,
@@ -28,7 +28,7 @@ import { getAuthorizationError, AUTH_ERRORS } from "../helpers/auth-errors";
 import { z } from "zod";
 import { ZodError } from "zod";
 import { db } from "../db";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { PAGINATION } from "../constants/pagination";
 import { storage } from "../storage";
@@ -387,30 +387,53 @@ export function registerMeasurementRoutes(app: Express) {
       const { DerivedMetricCalculator } = await import("../services/derived-metric-calculator");
       const calculator = new DerivedMetricCalculator(db);
 
-      // Same gate as the calculator: an anchored metric (e.g. MOMENTUM) only exists on a
-      // date with a verified, direct measurement of the anchor metric (#579).
-      const anchorMetric = metric.calculationConfig?.anchorMetric?.toUpperCase();
-      if (anchorMetric && !(await calculator.hasVerifiedAnchor(athleteId, anchorMetric, date, db, scope))) {
-        return res.json({
-          calculatedValue: null,
-          sourceMetrics: [],
-          missingMetrics: [anchorMetric],
-          formula: metric.formula
-        });
-      }
-
-      const sourceMeasurementsMap = await calculator.findSourceMeasurementsPublic(
-        athleteId,
-        metric.dependentMetrics,
-        date,
-        metric.calculationConfig || {
-          dateMatchStrategy: 'same_date',
-          missingSourceBehavior: 'skip',
-          maxDateDifference: undefined,
-        },
-        undefined,
-        scope
+      // Metric directions, so ties pick the same row as the real calculation
+      const dependentCodes = metric.dependentMetrics.map(c => c.toUpperCase());
+      const directionRows = dependentCodes.length > 0
+        ? await db
+            .select({ code: siteMetrics.code, metricType: siteMetrics.metricType })
+            .from(siteMetrics)
+            .where(inArray(sql`UPPER(${siteMetrics.code})`, dependentCodes))
+        : [];
+      const metricConfigs = new Map(
+        directionRows.map(r => [r.code.toUpperCase(), { higherIsBetter: r.metricType === 'higher_is_better' }])
       );
+
+      // Same gate as the calculator: an anchored metric (e.g. MOMENTUM) only exists on a
+      // date with a verified, direct measurement of the anchor metric (#579). The anchor row is
+      // resolved inside the caller's visibility scope and fixes the organization of the other sources.
+      // Limitation: metricConfigs holds directions of the dependent metrics only, as before.
+      const anchorMetric = metric.calculationConfig?.anchorMetric?.toUpperCase();
+      const calcConfig = metric.calculationConfig || {
+        dateMatchStrategy: 'same_date' as const,
+        missingSourceBehavior: 'skip' as const,
+        maxDateDifference: undefined,
+      };
+      let sourceMeasurementsMap: Map<string, Measurement> | null;
+      if (anchorMetric) {
+        // Best visible anchor whose organization (or personal) sources are complete, like the real calculation
+        const found = await calculator.findAnchoredSources(
+          db, athleteId, metric.dependentMetrics, calcConfig, anchorMetric, date, metricConfigs, scope
+        );
+        if (!found.anchorRow) {
+          return res.json({
+            calculatedValue: null,
+            sourceMetrics: [],
+            missingMetrics: [anchorMetric],
+            formula: metric.formula
+          });
+        }
+        sourceMeasurementsMap = found.sources;
+      } else {
+        sourceMeasurementsMap = await calculator.findSourceMeasurementsPublic(
+          athleteId,
+          metric.dependentMetrics,
+          date,
+          calcConfig,
+          metricConfigs,
+          scope
+        );
+      }
 
       if (!sourceMeasurementsMap) {
         return res.json({
