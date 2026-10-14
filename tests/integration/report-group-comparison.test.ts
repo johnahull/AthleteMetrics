@@ -153,12 +153,9 @@ afterEach(async () => {
   createdPeerIds = [];
 
   if (testOrg) await db.delete(reports).where(eq(reports.organizationId, testOrg.id));
+  createdReportIds = [];
 
   // Cleanup in reverse dependency order
-  for (const reportId of createdReportIds) {
-    await db.delete(reports).where(eq(reports.id, reportId));
-  }
-  createdReportIds = [];
 
   for (const teamId of createdTeamIds) {
     await db.delete(teams).where(eq(teams.id, teamId));
@@ -328,7 +325,7 @@ describe('POST /api/reports/:id/generate — groupComparison', () => {
       .set('Cookie', coachAuthCookie)
       .send({});
 
-    expect(response.status).toBeLessThan(300);
+    expect(response.status).toBe(201);
     const rows = await db.select().from(reportSnapshots).where(eq(reportSnapshots.reportId, report.id));
     expect(rows).toHaveLength(1);
     const data = rows[0].snapshotData as any;

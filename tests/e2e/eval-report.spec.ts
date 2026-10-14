@@ -280,7 +280,7 @@ test.describe('Eval report (AM-FEAT-019 P5)', () => {
 
     const compare = dialog.getByRole('switch', { name: 'Compare to age group' });
     await expect(compare).not.toBeChecked();
-    await expect(dialog.getByRole('switch', { name: 'Strengths and areas to develop' })).toBeDisabled();
+    await expect(dialog.getByRole('switch', { name: 'Strengths and areas to develop' })).toBeEnabled();
     await expect(dialog.getByRole('switch', { name: 'Radar chart' })).toBeDisabled();
 
     await dialog.getByRole('button', { name: 'Preview' }).click();

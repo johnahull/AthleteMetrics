@@ -205,7 +205,6 @@ describe("EvalReportDialog", () => {
 
     await user.click(compare);
     expect(screen.getByRole("switch", { name: "Radar chart" })).toBeEnabled();
-    expect(screen.getByRole("switch", { name: "Radar chart" })).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: "Generate report" }));
     await screen.findByText(/report saved/i);
