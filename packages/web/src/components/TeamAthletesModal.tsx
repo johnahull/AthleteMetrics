@@ -434,7 +434,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
   const bulkRemoveAthletesMutation = useMutation({
     mutationFn: async (athleteIds: string[]): Promise<{ success: number; errorCount: number; errors?: any[] }> => {
       // Use the new bulk remove endpoint with database transactions
-      const response = await apiRequest("DELETE", `/api/teams/${team!.id}/remove-athletes`, {
+      const response = await apiRequest("POST", `/api/teams/${team!.id}/remove-athletes`, {
         athleteIds
       });
       const result = await response.json();

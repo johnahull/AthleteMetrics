@@ -516,9 +516,11 @@ export function registerTeamRoutes(app: Express) {
     }
   };
 
-  app.post("/api/teams/:id/add-athletes", teamMutationLimiter, requireAuth, requirePermission('MANAGE_TEAM'), bulkMembershipHandler("add"));
-  // DELETE with a JSON body: some proxies drop DELETE bodies, and a dropped body gets the 400 from validation
-  app.delete("/api/teams/:id/remove-athletes", teamMutationLimiter, requireAuth, requirePermission('MANAGE_TEAM'), bulkMembershipHandler("remove"));
+  // No requirePermission('MANAGE_TEAM') here: it checks the session role (the caller's FIRST organization), which
+  // would wrongly refuse a coach of the team's organization; the handler checks the role in the team's organization.
+  // Remove is a POST, not a DELETE with a JSON body, because some proxies drop DELETE bodies.
+  app.post("/api/teams/:id/add-athletes", teamMutationLimiter, requireAuth, bulkMembershipHandler("add"));
+  app.post("/api/teams/:id/remove-athletes", teamMutationLimiter, requireAuth, bulkMembershipHandler("remove"));
 
   /**
    * Update team membership (org admins and coaches)

@@ -96,13 +96,13 @@ describe('TeamAthletesModal bulk operations', () => {
     expect(mockToast).not.toHaveBeenCalledWith(expect.objectContaining({ title: 'Success' }));
   });
 
-  it('removes all selected athletes with one DELETE to /api/teams/:id/remove-athletes', async () => {
+  it('removes all selected athletes with one POST to /api/teams/:id/remove-athletes', async () => {
     mockApiRequest.mockResolvedValue(jsonResponse({ success: 2, errorCount: 0, errors: [] }));
     await removeBoth();
 
     await waitFor(() => expect(mockToast).toHaveBeenCalledWith(expect.objectContaining({ title: 'Success' })));
     expect(mockApiRequest).toHaveBeenCalledTimes(1);
-    expect(mockApiRequest).toHaveBeenCalledWith('DELETE', '/api/teams/team-1/remove-athletes', { athleteIds: ['a1', 'a2'] });
+    expect(mockApiRequest).toHaveBeenCalledWith('POST', '/api/teams/team-1/remove-athletes', { athleteIds: ['a1', 'a2'] });
   });
 
   it('removes a single athlete with DELETE /api/teams/:id/members/:userId', async () => {

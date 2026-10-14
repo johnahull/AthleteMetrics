@@ -1,7 +1,7 @@
 /**
  * Bulk team roster changes from the team athletes modal:
  *   POST   /api/teams/:id/add-athletes     body { athleteIds }
- *   DELETE /api/teams/:id/remove-athletes  body { athleteIds }
+ *   POST   /api/teams/:id/remove-athletes  body { athleteIds }
  *
  * One request per bulk operation (the team mutation limiter allows few requests per window). Each id is
  * handled on its own; failures are reported per id in { success, errorCount, errors }.
@@ -50,6 +50,7 @@ let coachA: any;
 let coachB: any;
 let athleteCaller: any;
 let dualRole: any;
+let coachOnlyInB: any;
 let siteAdmin: any;
 const cookies: Record<string, string> = {};
 
@@ -97,7 +98,7 @@ const addAthletes = (teamId: string, body: unknown, cookie: string | null = cook
 };
 
 const removeAthletes = (teamId: string, body: unknown, cookie: string | null = cookies.coachA) => {
-  const req = request(app).delete(`/api/teams/${teamId}/remove-athletes`);
+  const req = request(app).post(`/api/teams/${teamId}/remove-athletes`);
   return (cookie ? req.set('Cookie', cookie) : req).send(body as any);
 };
 
@@ -121,6 +122,7 @@ beforeAll(async () => {
   coachB = await mkUser('coachB');
   athleteCaller = await mkUser('callerathlete');
   dualRole = await mkUser('dualrole');
+  coachOnlyInB = await mkUser('coachonlyinb');
   siteAdmin = await mkUser('siteadmin', { isSiteAdmin: true });
   await db.insert(userOrganizations).values([
     { userId: coachA.id, organizationId: orgA.id, role: 'coach' },
@@ -129,11 +131,15 @@ beforeAll(async () => {
     // Coach in Org A (alphabetically first, so the session role is 'coach'), athlete in Org B
     { userId: dualRole.id, organizationId: orgA.id, role: 'coach' },
     { userId: dualRole.id, organizationId: orgB.id, role: 'athlete' },
+    // The reverse: athlete in Org A (primary, so the session role is 'athlete'), coach in Org B
+    { userId: coachOnlyInB.id, organizationId: orgA.id, role: 'athlete' },
+    { userId: coachOnlyInB.id, organizationId: orgB.id, role: 'coach' },
   ] as any);
   cookies.coachA = await login(coachA.username);
   cookies.coachB = await login(coachB.username);
   cookies.athlete = await login(athleteCaller.username);
   cookies.dualRole = await login(dualRole.username);
+  cookies.coachOnlyInB = await login(coachOnlyInB.username);
   cookies.siteAdmin = await login(siteAdmin.username);
 });
 
@@ -201,6 +207,20 @@ describe('POST /api/teams/:id/add-athletes', () => {
     const b1 = await mkAthlete(orgB);
     const res = await addAthletes(team.id, { athleteIds: [b1.id] }, cookies.dualRole);
     expect(res.status).toBe(403);
+    expect(await activeMemberIds(team.id)).toEqual([]);
+  });
+
+  it('lets a caller who is an athlete in their primary organization but a coach in the team organization add and remove', async () => {
+    const team = await mkTeam(orgB);
+    const b1 = await mkAthlete(orgB);
+    const added = await addAthletes(team.id, { athleteIds: [b1.id] }, cookies.coachOnlyInB);
+    expect(added.status).toBe(200);
+    expect(added.body).toEqual({ success: 1, errorCount: 0, errors: [] });
+    expect(await activeMemberIds(team.id)).toEqual([b1.id]);
+
+    const removed = await removeAthletes(team.id, { athleteIds: [b1.id] }, cookies.coachOnlyInB);
+    expect(removed.status).toBe(200);
+    expect(removed.body).toEqual({ success: 1, errorCount: 0, errors: [] });
     expect(await activeMemberIds(team.id)).toEqual([]);
   });
 
@@ -299,7 +319,7 @@ describe('POST /api/teams/:id/add-athletes', () => {
   });
 });
 
-describe('DELETE /api/teams/:id/remove-athletes', () => {
+describe('POST /api/teams/:id/remove-athletes', () => {
   it('removes every athlete in one request', async () => {
     const team = await mkTeam();
     const a1 = await mkAthlete(orgA);
