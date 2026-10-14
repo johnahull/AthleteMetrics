@@ -235,6 +235,49 @@ test.describe('Report Public Sharing - TDD Tests', () => {
     }
   });
 
+  test('should hide percentile and group average on the public page when group comparison is off', async ({ page, context }) => {
+    const userOrgId = await getUserOrgId(page);
+    // The signed-in user stands in as the athlete (any org member works)
+    const athleteId = await page.evaluate(() => {
+      const authData = localStorage.getItem('auth');
+      return authData ? JSON.parse(authData).user?.id ?? null : null;
+    });
+    const testReport = generateTestReport();
+    const createResponse = await page.request.post(`${STAGING_URL}/api/reports`, {
+      data: {
+        name: testReport.name,
+        reportType: 'individual',
+        organizationId: userOrgId,
+        config: {
+          timeframe: { type: 'preset', preset: 'all_time' },
+          metrics: ['FLY10_TIME', 'VERTICAL_JUMP'],
+          athleteIds: [athleteId],
+          groupComparison: false
+        }
+      }
+    });
+
+    const created = await createResponse.json();
+    const reportId = created.id ?? created.reports?.[0]?.id;
+    createdReportIds.push(reportId);
+
+    const snapshotResponse = await page.request.post(`${STAGING_URL}/api/reports/${reportId}/snapshots`, {
+      data: { expirationDays: 7 }
+    });
+    const snapshotData = await snapshotResponse.json();
+    createdSnapshotIds.push(snapshotData.id);
+
+    const incognitoContext = await context.browser()!.newContext();
+    const publicPage = await incognitoContext.newPage();
+    await publicPage.goto(`${STAGING_URL}/public/reports/${snapshotData.publicToken}`);
+
+    await expect(publicPage.getByRole('columnheader', { name: 'Best Result' })).toBeVisible({ timeout: 10000 });
+    await expect(publicPage.getByRole('columnheader', { name: 'Percentile' })).toHaveCount(0);
+    await expect(publicPage.getByRole('columnheader', { name: /Average/ })).toHaveCount(0);
+
+    await incognitoContext.close();
+  });
+
   test('should display frozen snapshot data (not live)', async ({ page, context }) => {
     const userOrgId = await getUserOrgId(page);
     const testReport = generateTestReport();

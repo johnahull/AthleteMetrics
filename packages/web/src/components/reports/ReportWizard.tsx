@@ -23,6 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -57,6 +58,8 @@ const reportConfigSchema = z.object({
   positions: z.array(z.string()).optional(),
   audience: z.enum(["coach", "athlete", "parent"]).default("coach"),
   enableCompositeIndex: z.boolean().default(false),
+  // Individual reports only: compare the athlete to a group (percentiles, radar, distribution)
+  groupComparison: z.boolean().default(false),
   charts: z.object({
     radar: z.boolean().default(true),
     benchmarkStanding: z.boolean().default(true),
@@ -116,6 +119,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       teamIds: [],
       positions: [],
       enableCompositeIndex: false,
+      groupComparison: false,
       charts: DEFAULT_CHART_SELECTION,
     },
   });
@@ -139,6 +143,10 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const selectedMetrics = watch("metrics");
   const enableCompositeIndex = watch("enableCompositeIndex");
   const charts = watch("charts");
+  const groupComparison = watch("groupComparison");
+  // Radar and distribution are group comparisons: unavailable on an individual report without one
+  const comparisonChartOff = (key: string) =>
+    reportType === "individual" && !groupComparison && (key === "radar" || key === "distribution");
 
   // Fetch organization's enabled metrics using standardized hook
   const { data: metrics, isLoading: metricsLoading, error: metricsError } = useOrganizationMetrics(
@@ -295,7 +303,8 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     <>
       {items.map(([key, title, desc]) => (
         <div key={key} className="flex items-start gap-x-2">
-          <Checkbox id={`chart-${key}`} checked={charts?.[key] ?? true}
+          <Checkbox id={`chart-${key}`} checked={!comparisonChartOff(key) && (charts?.[key] ?? true)}
+            disabled={comparisonChartOff(key)}
             onCheckedChange={(v) => setValue(`charts.${key}` as const, v as boolean)} className="mt-1" />
           <div>
             <Label htmlFor={`chart-${key}`} className="cursor-pointer font-medium">{title}</Label>
@@ -363,6 +372,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       metrics: data.metrics,
       athleteIds: data.athleteIds,
       audience: data.audience,
+      ...(data.reportType === "individual" && { groupComparison: data.groupComparison }),
     };
 
     // Handle benchmarks - either from set or individual selection
@@ -408,15 +418,17 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
           tierDistribution: data.charts.tierDistribution,
         }
       : {
-          radar: data.charts.radar,
+          radar: data.groupComparison && data.charts.radar,
           benchmarkStanding: data.charts.benchmarkStanding,
           trends: data.charts.trends,
-          distribution: data.charts.distribution,
+          distribution: data.groupComparison && data.charts.distribution,
           // Never persist true while the sprint-FV feature is off for this org.
           fvProfile: fvEnabled ? data.charts.fvProfile : false,
         };
 
-    if (data.teamIds?.length || data.gender || data.positions?.length) {
+    // An individual report without group comparison has no cohort to filter
+    const hasCohort = data.reportType === "team" || data.groupComparison;
+    if (hasCohort && (data.teamIds?.length || data.gender || data.positions?.length)) {
       config.filters = {
         teamIds: data.teamIds,
         gender: data.gender,
@@ -809,6 +821,23 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
           {/* Step 7: Filters (Optional) */}
           {step === 7 && (
             <div className="grid gap-y-4">
+              {reportType === "individual" && (
+                <div className="flex items-start gap-x-3 border rounded-lg p-4">
+                  <Switch
+                    id="group-comparison"
+                    checked={groupComparison}
+                    onCheckedChange={(v) => setValue("groupComparison", v)}
+                  />
+                  <div>
+                    <Label htmlFor="group-comparison" className="cursor-pointer font-medium">Compare to a group</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Show group average, percentile, radar and distribution. Off: results and benchmarks only.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {(reportType === "team" || groupComparison) && (<>
               <Label>Filters (Optional)</Label>
               <p className="text-sm text-muted-foreground">
                 Filter athletes included in the report
@@ -870,6 +899,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                   </SelectContent>
                 </Select>
               </div>
+              </>)}
             </div>
           )}
 

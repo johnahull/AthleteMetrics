@@ -199,7 +199,7 @@ export function registerEventReportRoutes(app: Express) {
       try {
         const { eventId } = req.params;
         const userId = req.user!.id;
-        const { name, reportType, athleteIds, includeEventPercentiles, metrics } = req.body;
+        const { name, reportType, athleteIds, includeEventPercentiles, groupComparison, metrics } = req.body;
 
         // Check access
         const canAccess = await canAccessEventReports(userId, eventId, eventService);
@@ -225,6 +225,7 @@ export function registerEventReportRoutes(app: Express) {
         const config: Record<string, unknown> = {
           eventId,
           includeEventPercentiles: includeEventPercentiles ?? true,
+          ...(groupComparison !== undefined && { groupComparison }),
           timeframe: {
             type: 'custom',
             customStart: event.startDate ? new Date(event.startDate).toISOString().split('T')[0] : undefined,

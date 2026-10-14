@@ -61,6 +61,7 @@ export function EventReportsTab({
 
   // Individual report dialog state
   const [selectedAthletes, setSelectedAthletes] = useState<string[]>([]);
+  const [groupComparison, setGroupComparison] = useState(false);
   const [includeEventPercentiles, setIncludeEventPercentiles] = useState(true);
   const [generateAiInsights, setGenerateAiInsights] = useState(false);
 
@@ -119,7 +120,8 @@ export function EventReportsTab({
           name: `${eventName} - Individual Reports`,
           reportType: 'individual',
           athleteIds: selectedAthletes,
-          includeEventPercentiles,
+          groupComparison,
+          includeEventPercentiles: groupComparison && includeEventPercentiles,
           generateAiInsights,
         },
       });
@@ -354,8 +356,20 @@ export function EventReportsTab({
                   <div className="space-y-3 pt-2 border-t">
                     <div className="flex items-center gap-x-2">
                       <Checkbox
+                        id="group-comparison"
+                        checked={groupComparison}
+                        onCheckedChange={(checked) => setGroupComparison(checked === true)}
+                        aria-label="Compare to a group"
+                      />
+                      <Label htmlFor="group-comparison">
+                        Compare to a group
+                      </Label>
+                    </div>
+                    <div className="flex items-center gap-x-2">
+                      <Checkbox
                         id="event-percentiles"
-                        checked={includeEventPercentiles}
+                        checked={groupComparison && includeEventPercentiles}
+                        disabled={!groupComparison}
                         onCheckedChange={(checked) => setIncludeEventPercentiles(checked === true)}
                         aria-label="Include Event Percentiles"
                       />
@@ -426,7 +440,7 @@ export function EventReportsTab({
             <div>
               <p className="font-medium">Event Reports Include</p>
               <ul className="text-sm text-muted-foreground mt-1 space-y-1">
-                <li>• <strong>Event Percentiles:</strong> Compare athletes within this event</li>
+                <li>• <strong>Event Percentiles:</strong> Compare athletes within this event (when Compare to a group is on)</li>
                 <li>• <strong>AI Insights:</strong> Personalized coaching recommendations</li>
                 <li>• <strong>Team Statistics:</strong> Averages, medians, and rankings</li>
                 <li>• <strong>PDF Export:</strong> Share reports with athletes and parents</li>

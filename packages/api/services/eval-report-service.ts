@@ -104,7 +104,9 @@ export function assembleEvalReportModel(input: EvalAssemblyInput): EvalReportMod
     freshAndHealthy: sections.freshAndHealthy ?? defaults.freshAndHealthy,
     coachNote: sections.coachNote ?? true,
     noteFirst: sections.noteFirst ?? defaults.noteFirst,
-    strengths: sections.strengths ?? true,
+    ageGroupComparison: sections.ageGroupComparison ?? true,
+    // Strengths, development areas and the limiter all rank by comparison, so they go with it
+    strengths: (sections.strengths ?? true) && (sections.ageGroupComparison ?? true),
     retestTrend: sections.retestTrend ?? defaults.retestTrend,
     radar: sections.radar ?? false,
   };
@@ -135,9 +137,11 @@ export function assembleEvalReportModel(input: EvalAssemblyInput): EvalReportMod
       label: key ? METRIC_LABELS[key] : (OTHER_METRIC_LABELS[code] ?? code),
       value,
       unit,
-      comparison: matchTierGroup({
-        metricCode: code, value, lowerIsBetter, athlete: tierAthlete, eventDate: event.date, candidates: input.benchmarks,
-      }),
+      comparison: sectionOn.ageGroupComparison
+        ? matchTierGroup({
+            metricCode: code, value, lowerIsBetter, athlete: tierAthlete, eventDate: event.date, candidates: input.benchmarks,
+          })
+        : null,
       collegeStandard: matchCollegeStandard({ metricCode: code, value, athlete: tierAthlete, candidates: input.benchmarks }),
       collegeGauge: selection.metricCollegeGauge?.[key ?? code] ?? collegeGauge,
       trend:

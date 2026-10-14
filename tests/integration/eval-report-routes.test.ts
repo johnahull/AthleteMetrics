@@ -16,6 +16,7 @@ import { loadEvalReportInputs } from '../../packages/api/services/eval-report-se
 import { registerEventReportRoutes } from '../../packages/api/routes/event-report-routes';
 import { eventRegistrations, events, measurements, organizations, reports, siteBenchmarks, siteMetrics, userOrganizations, users } from '@shared/schema';
 import { evalReportConfigSchema } from '@shared/eval-report-config';
+import { buildEvalReportPdf } from '../../packages/api/utils/eval-report-pdf';
 import { purgeTestRows } from '../helpers/purge-test-rows';
 
 const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -289,6 +290,31 @@ describe('eval report routes', () => {
     expect(keysAndText(config)).toEqual([]);
   });
 
+  it('with the age-group comparison off, preview and save carry no comparison, and the saved model renders a PDF', async () => {
+    const selection = { sections: { ageGroupComparison: false } };
+    const prev = await preview('coachA', eventA, u.athlete.id, { selection });
+    expect(prev.status).toBe(200);
+    expect(prev.body.model.metrics.every((m: any) => m.comparison === null)).toBe(true);
+    expect(prev.body.model.strengths).toEqual([]);
+    expect(prev.body.model.limiter).toBeNull();
+
+    const res = await save('coachA', eventA, u.athlete.id, { selection });
+    expect(res.status).toBe(201);
+    const [row] = await db.select().from(reports).where(eq(reports.id, res.body.report.id));
+    const config = row.config as any;
+    expect(evalReportConfigSchema.safeParse(config).success).toBe(true);
+    expect(config.model.selection.ageGroupComparison).toBe(false);
+    expect(config.model.metrics.every((m: any) => m.comparison === null)).toBe(true);
+    const org = { name: 'Org', brandPrimaryColor: null, brandSecondaryColor: null, brandTagline: null };
+    expect(buildEvalReportPdf(config.model, org).blocks.length).toBeGreaterThan(0);
+  });
+
+  it('a request with no ageGroupComparison key still compares', async () => {
+    const res = await preview('coachA');
+    expect(res.body.model.selection.ageGroupComparison).toBe(true);
+    expect(res.body.model.metrics.some((m: any) => m.comparison)).toBe(true);
+  });
+
   it('returns 404 to a coach of another organization, on all three routes', async () => {
     for (const res of [await preview('coachB'), await save('coachB'), await defaults('coachB')]) {
       expect(res.status).toBe(404);
@@ -444,6 +470,14 @@ describe('eval report routes', () => {
     expect(res.body).toMatchObject({ source: 'saved', reportId: latest.body.report.id, load: 'heavy', coachNote: 'newest' });
     expect(res.body.selection.preset).toBe('senior');
     expect(res.body.offered.headline.map((o: any) => o.code)).toContain('DASH_10YD');
+  });
+
+  it('defaults reopen a saved eval with the age-group comparison still off', async () => {
+    const saved = await save('coachA', eventA, u.athlete.id, { selection: { sections: { ageGroupComparison: false } } });
+    expect(saved.status).toBe(201);
+    const res = await defaults('coachA');
+    expect(res.body).toMatchObject({ source: 'saved', reportId: saved.body.report.id });
+    expect(res.body.selection.sections.ageGroupComparison).toBe(false);
   });
 
   it('re-generating after a correction writes a NEW row and leaves the old one unchanged', async () => {

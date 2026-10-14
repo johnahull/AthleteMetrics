@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveChartSelection, resolveTeamChartSelection, DEFAULT_CHART_SELECTION } from '../report-charts';
+import { isGroupComparisonOn, resolveChartSelection, resolveTeamChartSelection, DEFAULT_CHART_SELECTION } from '../report-charts';
 
 describe('resolveChartSelection', () => {
   it('uses explicit charts config when present (missing keys -> false)', () => {
@@ -83,5 +83,21 @@ describe('resolveTeamChartSelection', () => {
       benchmarkStanding: false, trends: false,
       boxSwarm: false, leaderboard: false, tierDistribution: false,
     });
+  });
+});
+
+describe('isGroupComparisonOn', () => {
+  it('missing key (legacy/API reports) compares; only an explicit false turns it off', () => {
+    expect(isGroupComparisonOn(undefined)).toBe(true);
+    expect(isGroupComparisonOn({})).toBe(true);
+    expect(isGroupComparisonOn({ groupComparison: true })).toBe(true);
+    expect(isGroupComparisonOn({ groupComparison: false })).toBe(false);
+  });
+
+  it('resolveChartSelection forces radar + distribution off when comparison is off', () => {
+    expect(resolveChartSelection({ groupComparison: false, charts: { radar: true, distribution: true, trends: true } })).toEqual({
+      radar: false, benchmarkStanding: false, trends: true, distribution: false, fvProfile: false,
+    });
+    expect(resolveChartSelection({ groupComparison: false })).toMatchObject({ radar: false, distribution: false, benchmarkStanding: true });
   });
 });

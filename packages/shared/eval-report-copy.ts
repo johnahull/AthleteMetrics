@@ -15,6 +15,9 @@ export const BALANCE_LABELS = {
   neutral: "Left-right balance",
 } as const;
 
+/** Section title when no metric has an age-group comparison */
+export const RESULTS_TITLE = "Results";
+
 export const LEFT_RIGHT_SUFFIX = "left vs right";
 
 /** Neutral balance shows the raw left vs right percentage; other statuses show their label. */

@@ -39,7 +39,7 @@ import { pickLatestInWindow, toReportFvProfile } from './report-fv';
 import { SprintFvService } from './sprint-fv-service';
 import { checkSprintFvEnabled } from '../middleware/require-sprint-fv-enabled';
 import { stripMediaUrlDeep } from '../utils/measurement-redaction';
-import { resolveChartSelection, resolveTeamChartSelection, type ChartSelection } from '@shared/report-charts';
+import { isGroupComparisonOn, resolveChartSelection, resolveTeamChartSelection, type ChartSelection } from '@shared/report-charts';
 import type { ReportTrends, ReportDistributions, TeamReportTrends, TeamReportDistributions } from '@shared/report-trends-types';
 import type { ReportFvProfile } from '@shared/report-fv-types';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
@@ -66,6 +66,7 @@ interface ReportFilters {
 interface ReportConfig {
   eventId?: string; // Filter measurements to specific event
   includeEventPercentiles?: boolean; // Compare against event participants
+  groupComparison?: boolean; // false = no peer comparison; missing = compare
   timeframe: TimeframeConfig;
   metrics: string[];
   benchmarks?: {
@@ -515,20 +516,23 @@ export class ReportService extends BaseService {
     // (narrowed by config.filters — team/gender/positions — or the whole org when
     // no filters are set). eventId is intentionally NOT passed: the cohort spans
     // all events so the athlete is ranked against every comparable performance.
-    const { percentiles, teamAverages, peerValues } = await this.calculatePercentilesAndAverages(
-      athleteId,
-      report.organizationId,
-      config.metrics,
-      bestPerformances,
-      startDate,
-      endDate,
-      undefined, // eventId intentionally not passed - cohort spans all events
-      config.filters
-    );
+    const groupComparison = isGroupComparisonOn(config);
+    const { percentiles, teamAverages, peerValues } = groupComparison
+      ? await this.calculatePercentilesAndAverages(
+        athleteId,
+        report.organizationId,
+        config.metrics,
+        bestPerformances,
+        startDate,
+        endDate,
+        undefined, // eventId intentionally not passed - cohort spans all events
+        config.filters
+      )
+      : { percentiles: {}, teamAverages: {}, peerValues: {} };
 
-    // Calculate event percentiles if requested
+    // Calculate event percentiles if requested (also a group comparison)
     let eventPercentiles: Record<string, number> | undefined;
-    if (config.includeEventPercentiles && config.eventId) {
+    if (groupComparison && config.includeEventPercentiles && config.eventId) {
       const { percentiles: evtPercentiles } = await this.calculateEventPercentiles(
         athleteId,
         config.eventId,
@@ -608,7 +612,9 @@ export class ReportService extends BaseService {
 
     // Human label for the peer cohort (names the group in the "Where You Stand"
     // caption). Undefined when no filter narrows the cohort → frontend says "your group".
-    const comparisonLabel = await this.resolveComparisonLabel(report.organizationId, config.filters);
+    const comparisonLabel = groupComparison
+      ? await this.resolveComparisonLabel(report.organizationId, config.filters)
+      : undefined;
 
     const athletePerformance: AthletePerformance = {
       userId: athlete.id,

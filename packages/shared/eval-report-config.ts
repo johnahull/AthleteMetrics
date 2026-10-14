@@ -58,6 +58,8 @@ export const evalSelectionInputSchema = z.object({
       /** "What we saw" note first and prominent */
       noteFirst: z.boolean().optional(),
       strengths: z.boolean().optional(),
+      /** Compare each metric to the age-group average; absent = compare (reports saved before the switch) */
+      ageGroupComparison: z.boolean().optional(),
       retestTrend: z.boolean().optional(),
       radar: z.boolean().optional(),
     })

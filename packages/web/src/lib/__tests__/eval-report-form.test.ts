@@ -40,6 +40,7 @@ const base: EvalFormValues = {
   strengthsOn: true,
   retestTrend: true,
   radar: false,
+  ageGroupComparison: true,
   load: "none",
   coachNote: "",
   strengths: null,
@@ -87,6 +88,30 @@ describe("toRequest", () => {
   it("rejects a note over the limit with the shared schema's message", () => {
     const built = toRequest({ ...base, coachNote: "x".repeat(2001) }, ctx);
     expect(built.ok).toBe(false);
+  });
+});
+
+describe("ageGroupComparison", () => {
+  const settings: EvalReportSettings = { presets: {}, lastSelection: null };
+  const args = { settings, age: 16 };
+
+  it("starts off for a new report", () => {
+    expect(buildInitialValues({ ...args, defaults: defaults() }).ageGroupComparison).toBe(false);
+  });
+
+  it("a saved eval without the key keeps comparing; a saved false stays off", () => {
+    const saved = (sections?: Record<string, boolean>) =>
+      defaults({ source: "saved", selection: { preset: "high_school", metricKeys: ["DASH_10"], ...(sections ? { sections } : {}) } });
+    expect(buildInitialValues({ ...args, defaults: saved({ strengths: true }) }).ageGroupComparison).toBe(true);
+    expect(buildInitialValues({ ...args, defaults: saved({ ageGroupComparison: false }) }).ageGroupComparison).toBe(false);
+  });
+
+  it("toRequest always sends the boolean", () => {
+    const ctx = { offered, hasPrior: true };
+    for (const on of [true, false]) {
+      const built = toRequest({ ...base, ageGroupComparison: on }, ctx);
+      expect(built.ok && built.body.selection?.sections?.ageGroupComparison).toBe(on);
+    }
   });
 });
 

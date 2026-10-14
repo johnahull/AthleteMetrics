@@ -2293,6 +2293,7 @@ export const insertReportSchema = createInsertSchema(reports).omit({
     // Event scoping: the event report list and ReportService filter on config.eventId
     eventId: z.string().uuid().optional(),
     includeEventPercentiles: z.boolean().optional(),
+    groupComparison: z.boolean().optional(),
     // Individual report athlete identifiers
     athleteIds: z.array(z.string()).optional(), // Array of athlete IDs (used in creation)
     athleteId: z.string().optional(), // Single athlete ID (stored in database)
@@ -2346,6 +2347,7 @@ export const updateReportSchema = z.object({
     // Event scoping: the event report list and ReportService filter on config.eventId
     eventId: z.string().uuid().optional(),
     includeEventPercentiles: z.boolean().optional(),
+    groupComparison: z.boolean().optional(),
     // Individual report athlete identifiers
     athleteIds: z.array(z.string()).optional(), // Array of athlete IDs (used in creation)
     athleteId: z.string().optional(), // Single athlete ID (stored in database)

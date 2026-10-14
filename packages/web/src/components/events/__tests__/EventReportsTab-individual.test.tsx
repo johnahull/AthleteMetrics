@@ -244,8 +244,11 @@ describe('EventReportsTab - Individual Reports', () => {
         expect(screen.getByText('John Smith')).toBeInTheDocument();
       });
 
-      // Find and toggle the option
+      // Event percentiles are a group comparison: unavailable until comparison is on
       const percentileCheckbox = screen.getByRole('checkbox', { name: /event percentiles/i });
+      expect(percentileCheckbox).toBeDisabled();
+      await user.click(screen.getByRole('checkbox', { name: /compare to a group/i }));
+      expect(percentileCheckbox).toBeEnabled();
       expect(percentileCheckbox).toBeChecked(); // Default on
 
       await user.click(percentileCheckbox);
@@ -316,8 +319,38 @@ describe('EventReportsTab - Individual Reports', () => {
           data: expect.objectContaining({
             reportType: 'individual',
             athleteIds: expect.arrayContaining(['user-1', 'user-2']),
-            includeEventPercentiles: true,
+            groupComparison: false,
+            includeEventPercentiles: false,
           }),
+        });
+      });
+    });
+
+    it('should send groupComparison true and event percentiles when comparison is turned on', async () => {
+      mockCreateReportMutation.mutateAsync.mockResolvedValue({ id: 'report-new', name: 'Individual Report' });
+
+      render(
+        <EventReportsTab
+          eventId="event-123"
+          eventName="Spring Combine 2025"
+        />,
+        { wrapper: createWrapper() }
+      );
+
+      const user = userEvent.setup();
+      await user.click(screen.getByText(/individual/i).closest('button')!);
+      await waitFor(() => {
+        expect(screen.getByText('John Smith')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByLabelText(/Remove John Smith/i));
+      await user.click(screen.getByRole('checkbox', { name: /compare to a group/i }));
+      await user.click(screen.getByRole('button', { name: /generate.*report/i }));
+
+      await waitFor(() => {
+        expect(mockCreateReportMutation.mutateAsync).toHaveBeenCalledWith({
+          eventId: 'event-123',
+          data: expect.objectContaining({ groupComparison: true, includeEventPercentiles: true }),
         });
       });
     });

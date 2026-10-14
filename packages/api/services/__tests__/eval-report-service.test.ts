@@ -259,6 +259,43 @@ describe('assembleEvalReportModel: selection, note and overrides', () => {
   });
 });
 
+describe('assembleEvalReportModel: age-group comparison switch', () => {
+  const three = () =>
+    input({
+      rows: [row('DASH_10YD', 1.8), row('FLY10_TIME', 1.6), row('JUMP_CMJ_HOH', 10)],
+      benchmarks: [average('DASH_10YD', '2.05', 'lte'), average('FLY10_TIME', '1.5', 'lte'), average('JUMP_CMJ_HOH', '14', 'gte')],
+    });
+  const off = { sections: { ageGroupComparison: false } };
+
+  it('compares when the key is missing or true', () => {
+    expect(assembleEvalReportModel(input()).metrics.every((m) => m.comparison)).toBe(true);
+    expect(assembleEvalReportModel(input({ selection: { sections: { ageGroupComparison: true } } })).metrics.every((m) => m.comparison)).toBe(true);
+    expect(assembleEvalReportModel(input()).selection.ageGroupComparison).toBe(true);
+  });
+
+  it('off: no comparisons, no strengths, development areas or limiter, even with overrides', () => {
+    const model = assembleEvalReportModel({
+      ...three(),
+      selection: off,
+      overrides: { strengths: ['CMJ_HOH'], developmentAreas: ['FLY_10'], limiter: 'DASH_10' },
+    });
+    expect(model.metrics.every((m) => m.comparison === null)).toBe(true);
+    expect(model.strengths).toEqual([]);
+    expect(model.developmentAreas).toEqual([]);
+    expect(model.limiter).toBeNull();
+    expect(model.selection.ageGroupComparison).toBe(false);
+  });
+
+  it('off: leaves the college standard alone', () => {
+    const d1 = average('DASH_10YD', '1.8', 'lte', { level: 'D1', ageMin: null, ageMax: null });
+    const benchmarks = [average('DASH_10YD', '1.95', 'lte'), d1];
+    const offModel = metric(assembleEvalReportModel(input({ benchmarks, selection: { ...off, collegeGauge: true } })), 'DASH_10YD')!;
+    expect(offModel.comparison).toBeNull();
+    expect(offModel.collegeGauge).toBe(true);
+    expect(offModel.collegeStandard).toMatchObject({ kind: 'average' });
+  });
+});
+
 describe('assembleEvalReportModel: privacy', () => {
   const WELLNESS = /sleep|soreness|stress|energy|cycle|wellness|mood|readiness|pain/i;
   const walk = (value: unknown, found: string[]): string[] => {

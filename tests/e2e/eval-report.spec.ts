@@ -274,6 +274,25 @@ test.describe('Eval report (AM-FEAT-019 P5)', () => {
     expect(defaults.source).toBe('computed');
   });
 
+  test('comparison is off by default: the preview shows Results with no strengths; switching it on brings the age-group gauges', async ({ page }) => {
+    await openReportsTab(page, created.eventId);
+    const dialog = await openDialog(page, created.measuredAthlete.name);
+
+    const compare = dialog.getByRole('switch', { name: 'Compare to age group' });
+    await expect(compare).not.toBeChecked();
+    await expect(dialog.getByRole('switch', { name: 'Strengths and areas to develop' })).toBeDisabled();
+    await expect(dialog.getByRole('switch', { name: 'Radar chart' })).toBeDisabled();
+
+    await dialog.getByRole('button', { name: 'Preview' }).click();
+    const body = dialog.getByTestId('eval-report-body');
+    await expect(body.getByRole('heading', { name: 'Results' })).toBeVisible();
+    await expect(body.getByText('How your athlete compares for their age')).toHaveCount(0);
+
+    await compare.click();
+    await dialog.getByRole('button', { name: 'Preview' }).click();
+    await expect(body.getByText('How your athlete compares for their age')).toBeVisible();
+  });
+
   test('generate saves the report, downloads a PDF and creates no share link', async ({ page }) => {
     await openReportsTab(page, created.eventId);
     const dialog = await openDialog(page, created.measuredAthlete.name);

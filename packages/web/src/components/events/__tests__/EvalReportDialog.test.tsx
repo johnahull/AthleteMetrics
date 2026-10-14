@@ -195,6 +195,24 @@ describe("EvalReportDialog", () => {
     expect(screen.getByRole("switch", { name: "Fresh & Healthy" })).toBeChecked();
   });
 
+  it("compares to the age group only when switched on: off by default, and off disables strengths and radar", async () => {
+    setupApi();
+    renderDialog();
+    await ready();
+    const compare = screen.getByRole("switch", { name: "Compare to age group" });
+    expect(compare).not.toBeChecked();
+    expect(screen.getByRole("switch", { name: "Strengths and areas to develop" })).toBeDisabled();
+    expect(screen.getByRole("switch", { name: "Radar chart" })).toBeDisabled();
+
+    await user.click(compare);
+    expect(screen.getByRole("switch", { name: "Strengths and areas to develop" })).toBeEnabled();
+    expect(screen.getByRole("switch", { name: "Radar chart" })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "Generate report" }));
+    await screen.findByText(/report saved/i);
+    expect(lastBody("POST", "/eval-report").selection.sections.ageGroupComparison).toBe(true);
+  });
+
   it("shows a loading skeleton before the defaults arrive", () => {
     mockApiRequest.mockImplementation(() => new Promise(() => {}));
     renderDialog();
@@ -306,6 +324,9 @@ describe("EvalReportDialog", () => {
     setupApi();
     renderDialog();
     await ready();
+    // Strengths need the age-group comparison, which a new report starts without
+    expect(screen.queryByRole("group", { name: "Strengths" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("switch", { name: "Compare to age group" }));
 
     const strengths = await screen.findByRole("group", { name: "Strengths" });
     await waitFor(() => expect(within(strengths).getByRole("checkbox", { name: "Strength: 10-yard dash" })).toBeChecked());
@@ -325,6 +346,14 @@ describe("EvalReportDialog", () => {
     expect(body.strengthsOverride).toEqual(["DASH_10", "FLY_10", "CMJ_HOH"]);
   });
 
+  it("asks for suggestions as if the comparison were on, so turning it on needs no Preview", async () => {
+    setupApi();
+    renderDialog();
+    await ready();
+    await waitFor(() => expect(callsTo("POST", "/eval-report/preview").length).toBe(2)); // probe + suggestions
+    expect(lastBody("POST", "/eval-report/preview").selection.sections.ageGroupComparison).toBe(true);
+  });
+
   it("generates with the right body, downloads the PDF, and remembers the selection", async () => {
     setupApi();
     renderDialog();
@@ -339,7 +368,7 @@ describe("EvalReportDialog", () => {
     const body = lastBody("POST", "/eval-report");
     expect(body.selection.preset).toBe("high_school");
     expect(body.selection.metricKeys).toEqual(["DASH_10", "CMJ_HOH", "505", "505_LSI", "EUR"]);
-    expect(body.selection.sections).toMatchObject({ freshAndHealthy: true, coachNote: true, strengths: true, radar: false });
+    expect(body.selection.sections).toMatchObject({ freshAndHealthy: true, coachNote: true, strengths: true, radar: false, ageGroupComparison: false });
     expect(body.load).toBe("medium");
 
     expect(fetchMock).toHaveBeenCalledWith("/api/reports/rep-1/pdf", expect.anything());

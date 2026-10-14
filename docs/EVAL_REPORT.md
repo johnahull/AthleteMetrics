@@ -79,6 +79,12 @@ Other report routes (delete, pin, archive, generate, snapshot list and delete, s
 
 Reads use the STANDARD limiter; writes use MUTATION (20 per 15 minutes).
 
+## Age-group comparison switch
+
+`selection.sections.ageGroupComparison` (boolean, optional). The selection dialog shows "Compare to age group", off for a new report. A missing key means compare, so reports saved before the switch, API callers and frozen models are unchanged; the saved-selection branch of the form reads a missing key as on, so reopening an older eval keeps its comparison.
+
+Off: every metric has `comparison: null`, and strengths, areas to develop and the limiter are empty (coach overrides are ignored, and the strengths section is switched off in the stored selection). The web view and PDF title the section "Results" (`RESULTS_TITLE` in `packages/shared/eval-report-copy.ts`) and draw no radar. The college standard gauge keeps its own switch. The org does not remember this choice. The frozen config stays immutable.
+
 ## Data model
 
 `reports` row (`packages/shared/schema/tables/reports.ts`), `reportType = 'eval'`, `config` validated by `evalReportConfigSchema`:

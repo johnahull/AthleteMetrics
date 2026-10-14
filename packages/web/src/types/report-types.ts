@@ -87,6 +87,7 @@ export interface IndividualReportConfig {
   athleteIds?: string[];
   timeframe: TimeframeConfig;
   metrics: string[];
+  groupComparison?: boolean; // false = no group comparison; missing = compare
   audience?: 'coach' | 'athlete' | 'parent';
   benchmarks?: {
     site?: string[]; // Site benchmark IDs
@@ -139,6 +140,7 @@ export interface IndividualAthleteData {
 
 export interface IndividualReportData {
   athlete: IndividualAthleteData;
+  reportConfig?: IndividualReportConfig;
   generatedAt: string;
   metricLabels?: Record<string, string>;
   metricUnits?: Record<string, string>;

@@ -65,6 +65,10 @@ After an evaluation event a coach needs a family-facing report: only that event'
 - Two separate controls decide minor handling for eval rows (share block by age today; public-link restriction by `isMinor` and age at the event date); they can disagree for one athlete by design (follow-ups).
 - The gate loops are sequential awaits (`hasInaccessibleEval`, `dropBlockedEvalShares`).
 
+## Addendum: optional age-group comparison
+
+Each eval carries `selection.sections.ageGroupComparison`. The dialog defaults it to off for a new report, the server treats a missing key as on, and the form reads a missing key on a saved eval as on, so nothing already saved changes. Off empties strengths, areas to develop and the limiter (they rank by comparison); the college gauge keeps its own switch. No new route, so `canAccessEvalRow` is unchanged.
+
 ## Known limitations / follow-ups
 
 See `docs/EVAL_REPORT_FOLLOWUPS.md` for the prioritized list. Highlights: embedded Unicode font; merge-time renumbering of 0153; male benchmarks (AM-FEAT-020) and tier ladders for age-group sets; the eval Playwright spec is not in CI because the E2E suite is red (#490).

@@ -106,6 +106,13 @@ describe('EvalReportView', () => {
     expect(screen.getByText('Improved by 8% since the last evaluation')).toBeInTheDocument();
   });
 
+  it('titles the section "Results" when no metric has a comparison', () => {
+    const none = { ...model, metrics: model.metrics.map((m) => ({ ...m, comparison: null })) };
+    render(<EvalReportBody model={none} />);
+    expect(screen.getByRole('heading', { name: 'Results' })).toBeInTheDocument();
+    expect(screen.queryByText('How your athlete compares for their age')).not.toBeInTheDocument();
+  });
+
   it('omits sections the saved selection turned off', () => {
     const off = { ...model, selection: { freshAndHealthy: false, strengths: false, coachNote: false } };
     render(<EvalReportBody model={off} />);
