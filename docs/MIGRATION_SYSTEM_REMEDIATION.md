@@ -15,6 +15,8 @@
 > 0156 (RSI_105 and single-leg CMJ metrics, eval template top-up) is an AM-FEAT-019 follow-up.
 > 0157 (full UNIQUE (event_id, user_id) on event_registrations) fixes bulk-add 500s on migration-built databases.
 > 0158 (Sayers peak power derived metrics PEAK_POWER_W / PEAK_POWER_REL, AM-FEAT-021) is provisional: renumber at merge if another branch lands 0158 first (file, `_down`, test, tracking row, this line).
+> 0159 (athlete-facing explanations for 55 site metrics that had none) is provisional: renumber at merge if another branch lands 0159 first (file, `_down`, test, tracking row, this line).
+> 0160 (descriptions, RSI unit and category spellings for site metrics) is provisional: renumber at merge if another branch lands 0160 first (file, `_down`, test, tracking row, this line).
 
 ## Current State (2025-10-30)
 

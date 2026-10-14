@@ -101,7 +101,7 @@ async function seedMetrics() {
       {
         code: 'VERTICAL_JUMP',
         label: 'Vertical Jump',
-        category: 'power',
+        category: 'Power',
         unit: 'in',
         metricType: 'higher_is_better' as const,
         isSystemDefault: true,
@@ -191,8 +191,8 @@ async function seedMetrics() {
       {
         code: 'RSI',
         label: 'Reactive Strength Index',
-        category: 'power',
-        unit: '',
+        category: 'Power',
+        unit: 'ratio',
         metricType: 'higher_is_better' as const,
         isSystemDefault: true,
         isActive: true,
