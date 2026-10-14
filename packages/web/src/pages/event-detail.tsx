@@ -921,6 +921,7 @@ export default function EventDetail() {
             canManage={canManageEvent}
           />
           <EventReportsTab
+            key={eventId}
             eventId={eventId!}
             eventName={event.name}
             isFrozen={event.isFrozen}
