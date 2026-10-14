@@ -370,6 +370,21 @@ describe("EvalReportDialog", () => {
     expect(lastBody("POST", "/eval-report/preview").selection.sections.ageGroupComparison).toBe(true);
   });
 
+  it("refreshes the suggestions for the metrics chosen while the comparison was off when it is turned on", async () => {
+    setupApi();
+    renderDialog();
+    await ready();
+    await waitFor(() => expect(callsTo("POST", "/eval-report/preview").length).toBe(2)); // probe + suggestions
+
+    await user.click(screen.getByRole("checkbox", { name: "Elastic use ratio" })); // picked with the comparison off
+    await user.click(screen.getByRole("switch", { name: "Compare to age group" }));
+
+    await waitFor(() => expect(callsTo("POST", "/eval-report/preview").length).toBe(3));
+    const body = lastBody("POST", "/eval-report/preview");
+    expect(body.selection.sections.ageGroupComparison).toBe(true);
+    expect(body.selection.metricKeys).toContain("EUR");
+  });
+
   it("generates with the right body, downloads the PDF, and remembers the selection", async () => {
     setupApi();
     renderDialog();

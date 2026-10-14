@@ -175,16 +175,19 @@ export function EvalReportDialog({ open, onOpenChange, eventId, organizationId, 
         touched.current.add(f)
       );
     }
-    const built = toRequest(initial, ctx);
-    // Suggestions only matter once the comparison is on, and the coach may switch it on later
-    if (built.ok) {
-      setSuggestBody({
-        ...built.body,
-        selection: { ...built.body.selection, sections: { ...built.body.selection?.sections, ageGroupComparison: true } },
-      });
-    }
+    refreshSuggestions(initial);
     setHydrated(true);
   }, [settled, hydrated, defaults, settings, age, form, ctx, probeQuery.data]);
+
+  // Suggestions only matter once the comparison is on, so they are always asked for as if it were on
+  const refreshSuggestions = (v: EvalFormValues) => {
+    const built = toRequest(v, ctx);
+    if (!built.ok) return;
+    setSuggestBody({
+      ...built.body,
+      selection: { ...built.body.selection, sections: { ...built.body.selection?.sections, ageGroupComparison: true } },
+    });
+  };
 
   useEffect(() => {
     if (suggestQuery.data) {
@@ -572,7 +575,10 @@ export function EvalReportDialog({ open, onOpenChange, eventId, organizationId, 
 
               <fieldset className="space-y-3">
                 <legend className="text-sm font-semibold">Sections</legend>
-                {sectionSwitch("eval-age-group", "Compare to age group", values.ageGroupComparison, (c) => form.setValue("ageGroupComparison", c, { shouldDirty: true }), {
+                {sectionSwitch("eval-age-group", "Compare to age group", values.ageGroupComparison, (c) => {
+                  form.setValue("ageGroupComparison", c, { shouldDirty: true });
+                  if (c) refreshSuggestions({ ...form.getValues(), ageGroupComparison: true });
+                }, {
                   hint: "Off shows each result on its own, with no age-group gauge, strengths or radar.",
                 })}
                 {sectionSwitch("eval-college", "Show college standard gauge", effectiveCollege, (c) => setField("collegeGauge", c), {
