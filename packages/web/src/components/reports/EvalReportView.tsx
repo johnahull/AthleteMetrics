@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { exportEventReportPDF } from "@/lib/events-api";
-import { LOAD_LABELS, balanceText, formatValue as formatValueWithUnit } from "@shared/eval-report-copy";
+import { LOAD_LABELS, RESULTS_TITLE, balanceText, formatValue as formatValueWithUnit } from "@shared/eval-report-copy";
 import type { EvalReportModelView, EvalMetricResultView, Report } from "@/types/report-types";
 
 /** "2026-05-01" -> "May 1, 2026" without a timezone shift */
@@ -110,7 +110,7 @@ export function EvalReportBody({ model }: { model: EvalReportModelView }) {
 
       <Card>
         <CardHeader>
-          <SectionHeading>How your athlete compares for their age</SectionHeading>
+          <SectionHeading>{metrics.some((m) => m.comparison) ? "How your athlete compares for their age" : RESULTS_TITLE}</SectionHeading>
         </CardHeader>
         <CardContent className="space-y-4">
           {metrics.map((m) => {

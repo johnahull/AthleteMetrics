@@ -29,7 +29,7 @@ import { TrendSection } from "@/components/reports/TrendSection";
 import { PercentileRadarSection } from "@/components/reports/PercentileRadarSection";
 import { DistributionSection } from "@/components/reports/DistributionSection";
 import { FvProfileSection } from "@/components/reports/FvProfileSection";
-import { resolveChartSelection } from "@shared/report-charts";
+import { isGroupComparisonOn, resolveChartSelection } from "@shared/report-charts";
 import { TierProgressChart } from "@/components/charts/TierProgressChart";
 import { BenchmarkStandingBar } from "@/components/charts/BenchmarkStandingBar";
 import { format } from "date-fns";
@@ -118,6 +118,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
   const { athlete, metricLabels, metricUnits, metricExplanations, trends, distributions } = reportData;
   const measurementCodes = athlete?.measurements ? Object.keys(athlete.measurements) : [];
   const sel = resolveChartSelection(reportData.reportConfig);
+  const showComparison = isGroupComparisonOn(reportData.reportConfig);
 
   return (
     <div className="space-y-6">
@@ -206,8 +207,8 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                 <TableRow>
                   <TableHead>Metric</TableHead>
                   <TableHead>Best Result</TableHead>
-                  <TableHead>Group Average</TableHead>
-                  <TableHead>Percentile</TableHead>
+                  {showComparison && <TableHead>Group Average</TableHead>}
+                  {showComparison && <TableHead>Percentile</TableHead>}
                   <TableHead>Benchmark Comparisons</TableHead>
                 </TableRow>
               </TableHeader>
@@ -234,20 +235,24 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                               : `${value.toFixed(2)}${unit ? ` ${unit}` : ''}`)
                           : "N/A"}
                       </TableCell>
-                      <TableCell>
-                        {teamAverage !== undefined
-                          ? (isFly10Metric(metricCode)
-                              ? formatFly10Dual(teamAverage)
-                              : `${teamAverage.toFixed(2)}${unit ? ` ${unit}` : ''}`)
-                          : "N/A"}
-                      </TableCell>
-                      <TableCell>
-                        {percentile !== undefined ? (
-                          <Badge>{percentile.toFixed(1)}th percentile</Badge>
-                        ) : (
-                          "N/A"
-                        )}
-                      </TableCell>
+                      {showComparison && (
+                        <TableCell>
+                          {teamAverage !== undefined
+                            ? (isFly10Metric(metricCode)
+                                ? formatFly10Dual(teamAverage)
+                                : `${teamAverage.toFixed(2)}${unit ? ` ${unit}` : ''}`)
+                            : "N/A"}
+                        </TableCell>
+                      )}
+                      {showComparison && (
+                        <TableCell>
+                          {percentile !== undefined ? (
+                            <Badge>{percentile.toFixed(1)}th percentile</Badge>
+                          ) : (
+                            "N/A"
+                          )}
+                        </TableCell>
+                      )}
                       <TableCell>
                         {benchmarks.length > 0 ? (
                           <div className="space-y-2">

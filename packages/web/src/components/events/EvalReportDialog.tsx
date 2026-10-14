@@ -175,10 +175,19 @@ export function EvalReportDialog({ open, onOpenChange, eventId, organizationId, 
         touched.current.add(f)
       );
     }
-    const built = toRequest(initial, ctx);
-    if (built.ok) setSuggestBody(built.body);
+    refreshSuggestions(initial);
     setHydrated(true);
   }, [settled, hydrated, defaults, settings, age, form, ctx, probeQuery.data]);
+
+  // Suggestions only matter once the comparison is on, so they are always asked for as if it were on
+  const refreshSuggestions = (v: EvalFormValues) => {
+    const built = toRequest(v, ctx);
+    if (!built.ok) return;
+    setSuggestBody({
+      ...built.body,
+      selection: { ...built.body.selection, sections: { ...built.body.selection?.sections, ageGroupComparison: true } },
+    });
+  };
 
   useEffect(() => {
     if (suggestQuery.data) {
@@ -238,9 +247,11 @@ export function EvalReportDialog({ open, onOpenChange, eventId, organizationId, 
     }
   };
 
-  const currentStrengths = values.strengths ?? suggested?.strengths ?? [];
-  const currentDevelopment = values.developmentAreas ?? suggested?.developmentAreas ?? [];
-  const currentLimiter = values.limiter ?? suggested?.limiter ?? "";
+  // Suggestions rank by age-group position, so with the comparison off only the coach's own picks count
+  const suggestions = values.ageGroupComparison ? suggested : null;
+  const currentStrengths = values.strengths ?? suggestions?.strengths ?? [];
+  const currentDevelopment = values.developmentAreas ?? suggestions?.developmentAreas ?? [];
+  const currentLimiter = values.limiter ?? suggestions?.limiter ?? "";
   const inOrder = (list: string[]) => rankable.map(metricId).filter((id) => list.includes(id));
 
   const toggleStrength = (id: string, checked: boolean) => {
@@ -292,7 +303,7 @@ export function EvalReportDialog({ open, onOpenChange, eventId, organizationId, 
       setPreviewModel(model);
       setStatus("Preview updated. It is not saved.");
       // Keep the suggestions in step with the metrics now chosen, for fields the coach has not edited
-      if (formValues.strengthsOn) {
+      if (formValues.strengthsOn && formValues.ageGroupComparison) {
         setSuggested((prev) => ({
           strengths: formValues.strengths === null ? (model.strengths ?? []) : (prev?.strengths ?? []),
           developmentAreas: formValues.developmentAreas === null ? (model.developmentAreas ?? []) : (prev?.developmentAreas ?? []),
@@ -564,10 +575,18 @@ export function EvalReportDialog({ open, onOpenChange, eventId, organizationId, 
 
               <fieldset className="space-y-3">
                 <legend className="text-sm font-semibold">Sections</legend>
+                {sectionSwitch("eval-age-group", "Compare to age group", values.ageGroupComparison, (c) => {
+                  form.setValue("ageGroupComparison", c, { shouldDirty: true });
+                  if (c) refreshSuggestions({ ...form.getValues(), ageGroupComparison: true });
+                }, {
+                  hint: "Off shows each result on its own, with no age-group gauge, strengths or radar.",
+                })}
                 {sectionSwitch("eval-college", "Show college standard gauge", effectiveCollege, (c) => setField("collegeGauge", c), {
                   hint: youngAthlete
                     ? `Hidden by default for athletes under ${COLLEGE_GAUGE_MIN_AGE}. Turn it on if you want it.`
-                    : "A second gauge against the college average, next to the age-group comparison.",
+                    : values.ageGroupComparison
+                      ? "A second gauge against the college average, next to the age-group comparison."
+                      : "A gauge against the college average, shown on its own.",
                 })}
                 {sectionSwitch("eval-fresh", "Fresh & Healthy", values.freshAndHealthy, (c) => setField("freshAndHealthy", c))}
                 {sectionSwitch("eval-note-on", "What we saw note", values.coachNoteOn, (c) => setField("coachNoteOn", c), {
@@ -578,7 +597,10 @@ export function EvalReportDialog({ open, onOpenChange, eventId, organizationId, 
                   disabled: !hasPrior,
                   hint: hasPrior ? "Shows change since the last evaluation." : "There is no comparable earlier evaluation for this athlete.",
                 })}
-                {sectionSwitch("eval-radar", "Radar chart", values.radar, (c) => form.setValue("radar", c, { shouldDirty: true }))}
+                {sectionSwitch("eval-radar", "Radar chart", values.radar && values.ageGroupComparison, (c) => form.setValue("radar", c, { shouldDirty: true }), {
+                  disabled: !values.ageGroupComparison,
+                  hint: values.ageGroupComparison ? undefined : "Needs the age-group comparison.",
+                })}
               </fieldset>
 
               <fieldset className="space-y-2">
@@ -624,7 +646,9 @@ export function EvalReportDialog({ open, onOpenChange, eventId, organizationId, 
               {values.strengthsOn && (
                 <div className="space-y-4">
                   <p className="text-xs text-muted-foreground">
-                    Suggested from how each metric compares with the age group. Change any of them before you generate.
+                    {values.ageGroupComparison
+                      ? "Suggested from how each metric compares with the age group. Change any of them before you generate."
+                      : "Choose which results to highlight."}
                   </p>
                   <fieldset className="space-y-2">
                     <legend className="text-sm font-semibold">Strengths</legend>

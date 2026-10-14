@@ -45,7 +45,12 @@ export interface TeamChartSelection {
 interface ChartConfigInput {
   charts?: Partial<ChartSelection>;
   showTrends?: boolean;
+  groupComparison?: boolean;
 }
+
+/** Missing key = compare (legacy reports, API callers); only an explicit false turns it off. */
+export const isGroupComparisonOn = (c: { groupComparison?: boolean } | undefined | null): boolean =>
+  c?.groupComparison !== false;
 
 /**
  * Resolve which report charts are enabled. New reports carry `charts`; legacy
@@ -53,6 +58,12 @@ interface ChartConfigInput {
  * standing on, trends driven by the old `showTrends` flag, distribution off.
  */
 export function resolveChartSelection(config: ChartConfigInput | undefined | null): ChartSelection {
+  const sel = resolveChartSelectionRaw(config);
+  // Radar and distribution are comparisons against a group.
+  return isGroupComparisonOn(config) ? sel : { ...sel, radar: false, distribution: false };
+}
+
+function resolveChartSelectionRaw(config: ChartConfigInput | undefined | null): ChartSelection {
   const c = config?.charts;
   // A present `charts` object is the explicit selection — an empty object means
   // all charts off (only legacy reports, which have no `charts`, get the defaults).

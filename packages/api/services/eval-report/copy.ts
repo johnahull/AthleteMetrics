@@ -1,5 +1,5 @@
 import { MQI_BANDS } from "@shared/mqi-band";
-import { LOAD_LABELS, BALANCE_LABELS, LEFT_RIGHT_SUFFIX, formatValue } from "@shared/eval-report-copy";
+import { LOAD_LABELS, BALANCE_LABELS, LEFT_RIGHT_SUFFIX, RESULTS_TITLE, formatValue } from "@shared/eval-report-copy";
 import type { EvalMetricKey } from "./metric-key-map";
 
 /**
@@ -67,7 +67,7 @@ export { LOAD_LABELS, BALANCE_LABELS };
 /** Strings drawn by the eval PDF renderer (utils/eval-report-pdf.ts); all are covered by the copy lint. */
 export const PDF_COPY = {
   reportTitle: "Athletic Evaluation Report",
-  resultsTitle: "Results",
+  resultsTitle: RESULTS_TITLE,
   strengthsTitle: "Strengths and areas to develop",
   limiterLabel: "Biggest opportunity",
   statusAtOrAhead: "Ahead of or at the age-group average",

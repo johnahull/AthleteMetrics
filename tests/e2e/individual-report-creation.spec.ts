@@ -209,7 +209,8 @@ test.describe.skip('Individual Report Creation - TDD Tests', () => {
         organizationId: userOrgId, // REQUIRED: organizationId must be included
         config: {
           timeframe: { type: 'preset', preset: 'season' },
-          metrics: ['FLY10_TIME', 'VERTICAL_JUMP']
+          metrics: ['FLY10_TIME', 'VERTICAL_JUMP'],
+          groupComparison: true
         }
       }
     });
@@ -226,6 +227,38 @@ test.describe.skip('Individual Report Creation - TDD Tests', () => {
 
     // Verify percentile value is displayed (e.g., "85th", "72%")
     await expect(page.locator('td, [role="cell"]').filter({ hasText: /\d+%|\d+th/ })).toBeVisible();
+  });
+
+  test('should hide percentile and group average when group comparison is off', async ({ page }) => {
+    const userOrgId = await page.evaluate(() => {
+      const authData = localStorage.getItem('auth');
+      return authData ? JSON.parse(authData).organizationContext || null : null;
+    });
+
+    const testReport = generateTestReport();
+    const createResponse = await page.request.post(`${STAGING_URL}/api/reports`, {
+      data: {
+        name: testReport.name,
+        reportType: 'individual',
+        organizationId: userOrgId,
+        config: {
+          timeframe: { type: 'preset', preset: 'season' },
+          metrics: ['FLY10_TIME', 'VERTICAL_JUMP'],
+          groupComparison: false
+        }
+      }
+    });
+
+    const reportData = await createResponse.json();
+    createdReportIds.push(reportData.id);
+
+    await page.goto(`${STAGING_URL}/reports/${reportData.id}`);
+    await page.click('button:has-text("Generate Report")');
+    await page.waitForTimeout(2000);
+
+    await expect(page.getByRole('columnheader', { name: 'Best Result' })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('columnheader', { name: 'Percentile' })).toHaveCount(0);
+    await expect(page.getByRole('columnheader', { name: 'Group Average' })).toHaveCount(0);
   });
 
   test('should display benchmark comparisons', async ({ page }) => {

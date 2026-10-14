@@ -61,6 +61,7 @@ import {
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { useTeams } from "@/hooks/use-teams";
 import type { Report, TeamReportData, TeamStatistic, AthleteRanking, PdfFormat, IndividualReportData, BenchmarkComparison, TeamReportConfig } from "@/types/report-types";
+import { isGroupComparisonOn } from "@shared/report-charts";
 
 interface AthleteReportViewProps {
   report: Report;
@@ -142,6 +143,7 @@ function AthleteIndividualReportView({ report }: { report: Report }) {
   }
 
   const { athlete, metricLabels, metricUnits } = reportData;
+  const showComparison = isGroupComparisonOn(reportData.reportConfig);
   // Backstop label resolution with the org's currently-active metric labels —
   // see the matching block in AthleteTeamReportView below for rationale.
   const { getLabel } = useMetricLabels();
@@ -217,8 +219,8 @@ function AthleteIndividualReportView({ report }: { report: Report }) {
                 <TableRow>
                   <TableHead>Metric</TableHead>
                   <TableHead>Best Result</TableHead>
-                  <TableHead>Group Average</TableHead>
-                  <TableHead>Percentile</TableHead>
+                  {showComparison && <TableHead>Group Average</TableHead>}
+                  {showComparison && <TableHead>Percentile</TableHead>}
                   <TableHead>Benchmark Comparisons</TableHead>
                 </TableRow>
               </TableHeader>
@@ -240,20 +242,24 @@ function AthleteIndividualReportView({ report }: { report: Report }) {
                               : `${value.toFixed(2)}${unit ? ` ${unit}` : ""}`)
                           : "N/A"}
                       </TableCell>
-                      <TableCell>
-                        {teamAverage !== undefined
-                          ? (isFly10Metric(metricCode)
-                              ? formatFly10Dual(teamAverage)
-                              : `${teamAverage.toFixed(2)}${unit ? ` ${unit}` : ""}`)
-                          : "N/A"}
-                      </TableCell>
-                      <TableCell>
-                        {percentile !== undefined ? (
-                          <Badge>{percentile.toFixed(1)}th percentile</Badge>
-                        ) : (
-                          "N/A"
-                        )}
-                      </TableCell>
+                      {showComparison && (
+                        <TableCell>
+                          {teamAverage !== undefined
+                            ? (isFly10Metric(metricCode)
+                                ? formatFly10Dual(teamAverage)
+                                : `${teamAverage.toFixed(2)}${unit ? ` ${unit}` : ""}`)
+                            : "N/A"}
+                        </TableCell>
+                      )}
+                      {showComparison && (
+                        <TableCell>
+                          {percentile !== undefined ? (
+                            <Badge>{percentile.toFixed(1)}th percentile</Badge>
+                          ) : (
+                            "N/A"
+                          )}
+                        </TableCell>
+                      )}
                       <TableCell>
                         {benchmarks.length > 0 ? (
                           <div className="space-y-1">

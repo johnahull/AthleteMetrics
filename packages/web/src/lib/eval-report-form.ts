@@ -44,6 +44,7 @@ export const evalFormSchema = z.object({
   strengthsOn: z.boolean(),
   retestTrend: z.boolean(),
   radar: z.boolean(),
+  ageGroupComparison: z.boolean(),
   load: z.enum(["light", "medium", "heavy", "none"]),
   coachNote: z.string().max(COACH_NOTE_MAX_LENGTH, `Keep the note to ${COACH_NOTE_MAX_LENGTH} characters or fewer`),
   /** null = not edited, the server suggests */
@@ -135,6 +136,7 @@ export function buildInitialValues(args: {
     preset,
     metricCollegeGauge: {} as Record<string, boolean>,
     radar: false,
+    ageGroupComparison: false,
     load: "none" as const,
     coachNote: "",
     strengths: null,
@@ -156,6 +158,8 @@ export function buildInitialValues(args: {
       coachNoteOn: sel.sections?.coachNote ?? true,
       strengthsOn: sel.sections?.strengths ?? true,
       radar: sel.sections?.radar ?? false,
+      // An eval saved before the switch compared
+      ageGroupComparison: sel.sections?.ageGroupComparison ?? true,
       load: defaults.load ?? "none",
       coachNote: defaults.coachNote ?? "",
     };
@@ -193,6 +197,7 @@ export function toRequest(values: EvalFormValues, ctx: RequestContext): BuiltReq
         strengths: values.strengthsOn,
         retestTrend: values.retestTrend && ctx.hasPrior,
         radar: values.radar,
+        ageGroupComparison: values.ageGroupComparison,
       },
     },
     load: values.load === "none" ? null : values.load,

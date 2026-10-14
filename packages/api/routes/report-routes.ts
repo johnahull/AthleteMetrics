@@ -35,6 +35,7 @@ import { isSiteAdmin } from "../utils/auth-helpers";
 import { coppaService } from "../services/coppa-service";
 import { parentalConsents, parentAthleteLinks } from "@shared/schema/tables/coppa";
 import { COPPA_ACTIONS, isUnder13OrUnknownDob } from "@shared/coppa-utils";
+import { isGroupComparisonOn } from "@shared/report-charts";
 import type { MetricExplanation } from "@shared/metric-explanations";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { jsPDF } from "jspdf";
@@ -73,6 +74,7 @@ interface IndividualReportConfig {
     customEnd?: string;
   };
   metrics: string[];
+  groupComparison?: boolean;
   audience?: 'coach' | 'athlete' | 'parent';
   benchmarks?: {
     site?: string[];
@@ -4400,22 +4402,21 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     yPos += 5; // Add spacing before measurements table
 
     if (athlete.measurements) {
+      const showPercentile = isGroupComparisonOn(reportData.reportConfig);
       const measurementRows = Object.entries(athlete.measurements).map(
         ([metric, value]: [string, any]) => {
           const label = reportData.metricLabels?.[metric] || metric;
           const unit = reportData.metricUnits?.[metric] || '';
           const formatted = `${value.toFixed(2)}${unit ? ` ${unit}` : ''}`;
-          return [
-            label,
-            formatted,
-            athlete.percentiles[metric]?.toFixed(1) || "N/A",
-          ];
+          return showPercentile
+            ? [label, formatted, athlete.percentiles[metric]?.toFixed(1) || "N/A"]
+            : [label, formatted];
         }
       );
 
       autoTable(doc, {
         startY: yPos,
-        head: [["Metric", "Value", "Percentile"]],
+        head: [showPercentile ? ["Metric", "Value", "Percentile"] : ["Metric", "Value"]],
         body: measurementRows,
         theme: isVisual ? "striped" : "grid",
         headStyles: { fillColor: colors.primary },
@@ -4925,8 +4926,10 @@ function calculateBenchmarkAchievements(athleteRankings: any[], teamStatistics?:
  * - MAX_METRICS: 20 metrics maximum
  * - MAX_ATHLETES: 100 athletes maximum for team reports
  * - MAX_VALUES_PER_METRIC: 100 values per metric
+ *
+ * Exported only so the integration test can assert the prompt data; routes should not import it.
  */
-async function buildReportDataForAI(report: Report, userId: string, reportService: ReportService): Promise<import("../services/ai-insights-service").ReportData> {
+export async function buildReportDataForAI(report: Report, userId: string, reportService: ReportService): Promise<import("../services/ai-insights-service").ReportData> {
   // Data size limits to prevent large AI payloads
   const MAX_METRICS = 20;
   const MAX_ATHLETES = 100;

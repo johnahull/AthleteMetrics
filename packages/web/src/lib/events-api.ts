@@ -1584,6 +1584,7 @@ export interface EventReport {
   config: {
     eventId?: string;
     includeEventPercentiles?: boolean;
+    groupComparison?: boolean;
     metrics?: string[];
     athleteId?: string;
     athleteIds?: string[];
@@ -1608,6 +1609,7 @@ export interface CreateEventReportInput {
   reportType: 'team' | 'individual';
   athleteIds?: string[];
   includeEventPercentiles?: boolean;
+  groupComparison?: boolean;
   generateAiInsights?: boolean;
   metrics?: string[];
 }

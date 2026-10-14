@@ -236,6 +236,14 @@ describe('eval report PDF renderer', () => {
     expect(pdfText(buildEvalReportPdf(model(3), org).doc)).not.toContain('Since the last evaluation');
   });
 
+  it('titles the section "Results" and draws no radar when the comparison is off', () => {
+    const off = model(5, false, { selection: { ...model(3).selection, radar: true, ageGroupComparison: false } });
+    const { doc, blocks } = buildEvalReportPdf(off, org);
+    expect(pdfText(doc)).toContain('Results');
+    expect(pdfText(doc)).not.toContain('How your athlete compares for their age');
+    expect(blocks.some((b) => b.kind === 'radar')).toBe(false);
+  });
+
   it('draws a radar only when selected and when at least 3 metrics carry a comparison', () => {
     const withRadar = (n: number, comparisons = true) => model(n, comparisons, { selection: { ...model(3).selection, radar: true } });
     expect(buildEvalReportPdf(model(5), org).blocks.some((b) => b.kind === 'radar')).toBe(false);

@@ -26,6 +26,8 @@ export interface EvalSelection {
   retestTrend: boolean;
   /** Optional spider chart of the age-group comparisons; absent on rows saved before it existed */
   radar?: boolean;
+  /** Age-group comparison on; absent on rows saved before the switch, which compared */
+  ageGroupComparison?: boolean;
 }
 
 export interface EvalMetricResult {

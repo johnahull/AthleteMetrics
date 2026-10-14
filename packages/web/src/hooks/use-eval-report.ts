@@ -34,6 +34,7 @@ export interface EvalDefaultsSelection {
     coachNote?: boolean;
     noteFirst?: boolean;
     strengths?: boolean;
+    ageGroupComparison?: boolean;
     retestTrend?: boolean;
     radar?: boolean;
   };

@@ -91,6 +91,16 @@ describe('evalReportRequestSchema', () => {
     expect(evalReportConfigSchema.safeParse({ ...config, model: bad }).success).toBe(false);
   });
 
+  it('keeps sections.ageGroupComparison, and frozen models validate with or without it', () => {
+    const body = evalReportRequestSchema.parse({ selection: { sections: { ageGroupComparison: false } } });
+    expect(body.selection?.sections?.ageGroupComparison).toBe(false);
+    expect(evalReportRequestSchema.safeParse({ selection: { sections: { ageGroupComparison: 'no' } } }).success).toBe(false);
+    for (const extra of [{}, { ageGroupComparison: false }]) {
+      const sel = { ...model.selection, ...extra };
+      expect(evalReportConfigSchema.safeParse({ ...config, model: { ...model, selection: sel } }).success).toBe(true);
+    }
+  });
+
   it('accepts an empty body', () => {
     expect(evalReportRequestSchema.safeParse({}).success).toBe(true);
   });
