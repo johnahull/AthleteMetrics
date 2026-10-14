@@ -97,6 +97,16 @@ export class MeasurementAccessDeniedError extends Error {
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
+ * The team membership had started by the measurement's calendar day. joined_at is the (UTC) moment of the add, the
+ * measurement date a calendar day in the entering client's unknown timezone, so the membership counts from the UTC day
+ * before joined_at: a same-day join resolves both east and west of UTC, a date 2+ days before the join still does not.
+ * Written as joined_at < measurement day + 2 (same as joined_at::date - 1 <= measurement day) so it stays index-friendly.
+ */
+function joinedByMeasurementDay(measurementDate: Date) {
+  return sql`${userTeams.joinedAt} < (${measurementDate.toISOString().slice(0, 10)}::date + 2)`;
+}
+
+/**
  * Trusted server-side event context (set only by the event measurement service after its
  * frozen/permission checks); deliberately NOT read from the request body schema.
  */
@@ -214,8 +224,8 @@ export class MeasurementService {
       .where(
         and(
           eq(userTeams.userId, userId),
-          // Must have joined on or before the measurement date
-          lte(userTeams.joinedAt, measurementDate),
+          // Must have joined by the measurement date (calendar day)
+          joinedByMeasurementDay(measurementDate),
           // Must not have left before the measurement date
           or(isNull(userTeams.leftAt), gte(userTeams.leftAt, measurementDate)),
           eq(userTeams.isActive, true),
@@ -260,7 +270,7 @@ export class MeasurementService {
       .where(
         and(
           eq(userTeams.userId, measurement.userId),
-          lte(userTeams.joinedAt, measurementDate),
+          joinedByMeasurementDay(measurementDate),
           or(isNull(userTeams.leftAt), gte(userTeams.leftAt, measurementDate)),
           eq(userTeams.isActive, true),
           eq(teams.isArchived, false)
@@ -421,7 +431,7 @@ export class MeasurementService {
             .where(
               and(
                 eq(userTeams.userId, measurement.userId),
-                lte(userTeams.joinedAt, measurementDate),
+                joinedByMeasurementDay(measurementDate),
                 or(isNull(userTeams.leftAt), gte(userTeams.leftAt, measurementDate)),
                 eq(userTeams.isActive, true),
                 eq(teams.isArchived, false),
