@@ -248,6 +248,38 @@ describe('POST /api/teams/:id/add-athletes', () => {
     }
   });
 
+  it('does not pass through a plain error even when its text looks like a service message', async () => {
+    const team = await mkTeam();
+    const a1 = await mkAthlete(orgA);
+    const spy = vi.spyOn(TeamService.prototype, 'addUserToTeam').mockRejectedValueOnce(new Error('Access denied - internal detail'));
+    try {
+      const res = await addAthletes(team.id, { athleteIds: [a1.id] });
+      expect(res.body.errors).toEqual([{ athleteId: a1.id, message: 'Failed to add athlete' }]);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('rejects an archived team before adding anyone', async () => {
+    const team = await mkTeam();
+    await db.update(teams).set({ isArchived: true, archivedAt: new Date() } as any).where(eq(teams.id, team.id));
+    const a1 = await mkAthlete(orgA);
+    const res = await addAthletes(team.id, { athleteIds: [a1.id] });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/archived/i);
+    expect(await activeMemberIds(team.id)).toEqual([]);
+  });
+
+  it('reports a target who is not an athlete in the team organization and still adds the athletes', async () => {
+    const team = await mkTeam();
+    const a1 = await mkAthlete(orgA);
+    const res = await addAthletes(team.id, { athleteIds: [a1.id, coachA.id] });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(1);
+    expect(res.body.errors).toEqual([{ athleteId: coachA.id, message: expect.stringContaining('not an athlete') }]);
+    expect(await activeMemberIds(team.id)).toEqual([a1.id]);
+  });
+
   it('returns 404 for an unknown team', async () => {
     const a1 = await mkAthlete(orgA);
     const res = await addAthletes('00000000-0000-4000-8000-000000000000', { athleteIds: [a1.id] });
@@ -280,16 +312,31 @@ describe('DELETE /api/teams/:id/remove-athletes', () => {
     expect(await activeMemberIds(team.id)).toEqual([a3.id]);
   });
 
-  it('reports an athlete from another organization', async () => {
+  it('removes an athlete who has already left the organization', async () => {
     const team = await mkTeam();
     const a1 = await mkAthlete(orgA);
-    const outsider = await mkAthlete(orgB);
     await addAthletes(team.id, { athleteIds: [a1.id] });
-    const res = await removeAthletes(team.id, { athleteIds: [a1.id, outsider.id] });
+    await db.delete(userOrganizations).where(eq(userOrganizations.userId, a1.id));
+    const res = await removeAthletes(team.id, { athleteIds: [a1.id] });
     expect(res.status).toBe(200);
-    expect(res.body.success).toBe(1);
-    expect(res.body.errors).toEqual([{ athleteId: outsider.id, message: expect.stringContaining('does not belong') }]);
+    expect(res.body).toEqual({ success: 1, errorCount: 0, errors: [] });
     expect(await activeMemberIds(team.id)).toEqual([]);
+  });
+
+  it("only touches the named team's roster", async () => {
+    const team = await mkTeam();
+    const otherTeamA = await mkTeam();
+    const teamB = await mkTeam(orgB);
+    const a1 = await mkAthlete(orgA);
+    const b1 = await mkAthlete(orgB);
+    await addAthletes(team.id, { athleteIds: [a1.id] });
+    await addAthletes(otherTeamA.id, { athleteIds: [a1.id] });
+    await addAthletes(teamB.id, { athleteIds: [b1.id] }, cookies.coachB);
+    const res = await removeAthletes(team.id, { athleteIds: [a1.id, b1.id] });
+    expect(res.status).toBe(200);
+    expect(await activeMemberIds(team.id)).toEqual([]);
+    expect(await activeMemberIds(otherTeamA.id)).toEqual([a1.id]);
+    expect(await activeMemberIds(teamB.id)).toEqual([b1.id]);
   });
 
   it('rejects a coach of another organization with 403', async () => {

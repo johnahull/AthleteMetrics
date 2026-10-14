@@ -124,4 +124,34 @@ describe('TeamAthletesModal bulk operations', () => {
     // Selection restored by onError, so the bulk remove button is back
     expect(await screen.findByText(/Remove 2 Athletes/)).toBeInTheDocument();
   });
+
+  const partial = (message: string) =>
+    jsonResponse({ success: 1, errorCount: 1, errors: [{ athleteId: 'a2', message }] });
+
+  it('on a partial add, names the failure and keeps only the failed athlete selected', async () => {
+    mockApiRequest.mockResolvedValue(partial('Access denied - user does not belong to your organization'));
+    await addBoth();
+
+    await waitFor(() =>
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Partial Success',
+          description: expect.stringMatching(/1 failed.*Access denied - user does not belong to your organization/),
+        }),
+      ),
+    );
+    expect(await screen.findByText(/Add 1 Athlete$/)).toBeInTheDocument();
+  });
+
+  it('on a partial remove, names the failure and keeps only the failed athlete selected', async () => {
+    mockApiRequest.mockResolvedValue(partial('Remove failed'));
+    await removeBoth();
+
+    await waitFor(() =>
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Partial Success', description: expect.stringMatching(/1 failed.*Remove failed/) }),
+      ),
+    );
+    expect(await screen.findByText(/Remove 1 Athlete$/)).toBeInTheDocument();
+  });
 });

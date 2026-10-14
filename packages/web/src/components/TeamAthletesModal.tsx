@@ -306,7 +306,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
       });
       const result = await response.json();
       // Nothing was added: throw so onError rolls back and restores the selection
-      if (!result.success && result.errorCount > 0) {
+      if (result.success === 0 && result.errorCount > 0) {
         throw new Error(result.errors?.[0]?.message || "Failed to add athletes to team");
       }
       return result;
@@ -402,10 +402,11 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
       } else if (successCount > 0 && errorCount > 0) {
         toast({
           title: "Partial Success",
-          description: `Added ${successCount} athlete${successCount !== 1 ? 's' : ''} to ${team?.name}. ${errorCount} failed.`,
+          description: `Added ${successCount} athlete${successCount !== 1 ? 's' : ''} to ${team?.name}. ${errorCount} failed: ${data.errors?.[0]?.message || 'unknown error'}`,
           variant: "default",
         });
-        setActiveTab('current');
+        // Stay on this tab with only the failed athletes selected so they can be retried
+        setSelectedPlayerIds((data.errors || []).map((e: { athleteId: string }) => e.athleteId));
       }
     },
     onError: (error: Error, _, context) => {
@@ -438,7 +439,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
       });
       const result = await response.json();
       // Nothing was removed: throw so onError rolls back and restores the selection
-      if (!result.success && result.errorCount > 0) {
+      if (result.success === 0 && result.errorCount > 0) {
         throw new Error(result.errors?.[0]?.message || `Failed to remove athletes from ${labels.team.toLowerCase()}`);
       }
 
@@ -515,9 +516,11 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
       } else if (successCount > 0 && errorCount > 0) {
         toast({
           title: "Partial Success",
-          description: `Removed ${successCount} athlete${successCount !== 1 ? 's' : ''} from ${team?.name}. ${errorCount} failed.`,
+          description: `Removed ${successCount} athlete${successCount !== 1 ? 's' : ''} from ${team?.name}. ${errorCount} failed: ${data.errors?.[0]?.message || 'unknown error'}`,
           variant: "default",
         });
+        // Keep only the failed athletes selected so they can be retried
+        setSelectedCurrentAthleteIds((data.errors || []).map((e: { athleteId: string }) => e.athleteId));
       }
     },
     onError: (error: Error, _, context) => {

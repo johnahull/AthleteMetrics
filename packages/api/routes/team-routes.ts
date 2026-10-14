@@ -5,7 +5,7 @@
 
 import type { Express, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
-import { TeamService } from "../services/team-service";
+import { TeamService, TeamServiceError } from "../services/team-service";
 import { storage } from "../storage";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { insertTeamSchema, measurements, userOrganizations } from "@shared/schema";
@@ -14,7 +14,7 @@ import { hasOrganizationAccess, validateOrganizationAccess } from "../helpers/or
 import { getAuthorizationError, AUTH_ERRORS } from "../helpers/auth-errors";
 import { z, ZodError } from "zod";
 import { db } from "../db";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { requirePermission, getOrgRole } from "../permissions/index";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 
@@ -465,27 +465,47 @@ export function registerTeamRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied - you must be an org admin or coach of this team's organization" });
       }
 
+      if (action === "add" && existingTeam.isArchived) {
+        return res.status(400).json({ message: "Cannot add athletes to an archived team" });
+      }
+
       // Always pass the team's organization (site admins too) so the service, inside its transaction,
       // refuses athletes from other organizations (TOCTOU-safe)
       const organizationId = existingTeam.organization.id;
+      const athleteIds = Array.from(new Set(parsed.data.athleteIds));
+
+      // Role of each target in the team's organization, in one query (add only: rosters hold athletes)
+      const targetRoles = new Map<string, string>();
+      if (action === "add") {
+        const rows = await db
+          .select({ userId: userOrganizations.userId, role: userOrganizations.role })
+          .from(userOrganizations)
+          .where(and(eq(userOrganizations.organizationId, organizationId), inArray(userOrganizations.userId, athleteIds)));
+        rows.forEach((row) => targetRoles.set(row.userId, row.role));
+      }
+
       let success = 0;
       const errors: Array<{ athleteId: string; message: string }> = [];
-      for (const athleteId of Array.from(new Set(parsed.data.athleteIds))) {
+      for (const athleteId of athleteIds) {
         try {
           if (action === "add") {
+            const role = targetRoles.get(athleteId);
+            if (role && role !== "athlete") {
+              throw new TeamServiceError("Access denied - user is not an athlete in this organization");
+            }
             await teamService.addUserToTeam(athleteId, teamId, organizationId);
           } else {
-            await teamService.removeUserFromTeam(athleteId, teamId, organizationId);
+            // The caller's role and the team's organization are verified above, and removal only touches this
+            // team's roster, so an athlete who has already left the organization can still be removed
+            await teamService.removeUserFromTeam(athleteId, teamId, organizationId, { requireUserInOrganization: false });
           }
           success++;
         } catch (error) {
-          // Only the service's own messages reach the client; anything else (e.g. database errors) is logged
-          const message = error instanceof Error ? error.message : "";
-          const isServiceMessage = /^(Access denied|Team not found)/.test(message);
-          if (!isServiceMessage) {
+          // Only deliberate service errors reach the client; anything else (e.g. database errors) is logged
+          if (!(error instanceof TeamServiceError)) {
             console.error(`Bulk ${action} team athlete ${athleteId} error:`, error);
           }
-          errors.push({ athleteId, message: isServiceMessage ? message : `Failed to ${action} athlete` });
+          errors.push({ athleteId, message: error instanceof TeamServiceError ? error.message : `Failed to ${action} athlete` });
         }
       }
 
@@ -497,6 +517,7 @@ export function registerTeamRoutes(app: Express) {
   };
 
   app.post("/api/teams/:id/add-athletes", teamMutationLimiter, requireAuth, requirePermission('MANAGE_TEAM'), bulkMembershipHandler("add"));
+  // DELETE with a JSON body: some proxies drop DELETE bodies, and a dropped body gets the 400 from validation
   app.delete("/api/teams/:id/remove-athletes", teamMutationLimiter, requireAuth, requirePermission('MANAGE_TEAM'), bulkMembershipHandler("remove"));
 
   /**
