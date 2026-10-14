@@ -7,6 +7,7 @@ import express, { type Express } from "express";
 import { DEFAULT_AI_MODEL_KEY, getAIModel } from "@shared/ai-models";
 import rateLimit from "express-rate-limit";
 import { ReportService } from "../services/report-service";
+import { createReportsFromInput, ReportCreateError } from "../services/report-create";
 import { planChartPageBreaks } from "./pdf-chart-layout";
 import { requireAuth, requireAIEnabled, type AuthenticatedRequest } from "../middleware";
 import { storage } from "../storage";
@@ -263,129 +264,14 @@ export function registerReportRoutes(app: Express) {
           .json({ message: "Access denied to this organization" });
       }
 
-      // Handle batch creation for individual reports with multiple athletes
-      if (
-        validatedData.reportType === "individual" &&
-        validatedData.config &&
-        isIndividualReportConfig(validatedData.config) &&
-        validatedData.config.athleteIds &&
-        Array.isArray(validatedData.config.athleteIds) &&
-        validatedData.config.athleteIds.length > 0
-      ) {
-        const athleteIds = validatedData.config.athleteIds;
-
-        // Fetch athlete names for better report titles
-        const athletes = await db
-          .select({
-            id: users.id,
-            fullName: users.fullName,
-          })
-          .from(users)
-          .where(inArray(users.id, athleteIds));
-
-        // Validate all athletes exist
-        if (athletes.length !== athleteIds.length) {
-          const foundIds = new Set(athletes.map((a) => a.id));
-          const missingIds = athleteIds.filter((id) => !foundIds.has(id));
-          return res.status(400).json({
-            message: "Some athlete IDs are invalid",
-            missingIds,
-          });
-        }
-
-        const athleteMap = new Map(athletes.map((a) => [a.id, a.fullName]));
-
-        // Create one report per athlete
-        const createdReports = [];
-
-        try {
-          for (const athleteId of athleteIds) {
-            const athleteName = athleteMap.get(athleteId) || "Unknown Athlete";
-
-            // Create individual report config with single athleteId
-            const reportConfig: IndividualReportConfig = {
-              ...validatedData.config,
-              athleteId, // Set single athleteId for this report
-            };
-
-            // Remove athleteIds array from config
-            delete reportConfig.athleteIds;
-
-            const [report] = await db
-              .insert(reports)
-              .values({
-                name: `${validatedData.name} - ${athleteName}`,
-                organizationId: validatedData.organizationId,
-                reportType: validatedData.reportType,
-                config: reportConfig,
-                description: validatedData.description,
-                isTemplate: validatedData.isTemplate || false,
-                createdBy: user.id,
-              })
-              .returning();
-
-            createdReports.push({
-              ...report,
-              athleteId,
-              athleteName,
-            });
-          }
-
-          return res.status(201).json({ reports: createdReports });
-        } catch (batchError) {
-          // If batch creation fails, attempt to clean up created reports
-          if (createdReports.length > 0) {
-            const createdIds = createdReports.map((r) => r.id);
-            await db.delete(reports).where(inArray(reports.id, createdIds));
-          }
-          throw batchError;
-        }
-      }
-
-      // Single report creation (for coach reports or edge cases)
-      // For individual reports, normalize athleteIds array to single athleteId
-      let finalConfig = validatedData.config;
-
-      if (validatedData.reportType === "individual" && isIndividualReportConfig(validatedData.config)) {
-        const athleteIds = validatedData.config.athleteIds;
-
-        // Validate that individual reports have an athlete
-        if (!athleteIds || !Array.isArray(athleteIds) || athleteIds.length === 0) {
-          return res.status(400).json({
-            message: "Individual reports require at least one athlete",
-          });
-        }
-
-        // If single athlete in array, normalize to athleteId (singular)
-        if (athleteIds.length === 1) {
-          const { athleteIds: _, ...configWithoutAthleteIds } = validatedData.config;
-          finalConfig = {
-            ...configWithoutAthleteIds,
-            athleteId: athleteIds[0],
-          };
-        } else {
-          // Multiple athletes should have been handled by batch creation above
-          return res.status(400).json({
-            message: "Multiple athletes detected but batch creation was not triggered",
-          });
-        }
-      }
-
-      const [report] = await db
-        .insert(reports)
-        .values({
-          name: validatedData.name,
-          organizationId: validatedData.organizationId,
-          reportType: validatedData.reportType,
-          config: finalConfig,
-          description: validatedData.description,
-          isTemplate: validatedData.isTemplate || false,
-          createdBy: user.id,
-        })
-        .returning();
-
-      res.status(201).json(report);
+      const result = await createReportsFromInput(user.id, validatedData);
+      return result.kind === "batch"
+        ? res.status(201).json({ reports: result.reports })
+        : res.status(201).json(result.report);
     } catch (error) {
+      if (error instanceof ReportCreateError) {
+        return res.status(error.status).json(error.body);
+      }
       if (error instanceof ZodError) {
         return res.status(400).json({
           message: "Validation error",

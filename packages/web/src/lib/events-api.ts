@@ -1670,7 +1670,7 @@ export async function fetchEventReports(eventId: string): Promise<EventReport[]>
 export async function createEventReport(
   eventId: string,
   data: CreateEventReportInput
-): Promise<EventReport> {
+): Promise<EventReport | { reports: EventReport[] }> {
   const response = await fetch(`/api/events/${eventId}/reports`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

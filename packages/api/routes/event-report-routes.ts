@@ -6,6 +6,7 @@
 import type { Express, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { ReportService } from "../services/report-service";
+import { createReportsFromInput, ReportCreateError } from "../services/report-create";
 import { EventService, type IEventStorage } from "../services/event-service";
 import { EventMetricsService, type IMetricsStorage } from "../services/event-metrics-service";
 import { EventRegistrationService, type IRegistrationStorage } from "../services/event-registration-service";
@@ -212,6 +213,14 @@ export function registerEventReportRoutes(app: Express) {
           return res.status(404).json({ message: "Event not found" });
         }
 
+        // The UI sends no metrics: default to the event's own metrics
+        const reportMetrics: string[] = Array.isArray(metrics) && metrics.length > 0
+          ? metrics
+          : (await eventMetricsService.listEventMetrics(eventId)).map((m) => m.metricCode);
+        if (reportMetrics.length === 0) {
+          return res.status(400).json({ message: "No metrics configured for this event" });
+        }
+
         // Build report config with eventId
         const config: Record<string, unknown> = {
           eventId,
@@ -221,40 +230,47 @@ export function registerEventReportRoutes(app: Express) {
             customStart: event.startDate ? new Date(event.startDate).toISOString().split('T')[0] : undefined,
             customEnd: event.endDate ? new Date(event.endDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
           },
-          metrics: metrics || [],
+          metrics: reportMetrics,
         };
 
-        if (reportType === 'individual' && athleteIds) {
-          config.athleteIds = athleteIds;
-          // Store first athlete for individual report generation
-          if (Array.isArray(athleteIds) && athleteIds.length > 0) {
-            config.athleteId = athleteIds[0];
+        if (reportType === 'individual') {
+          if (!Array.isArray(athleteIds) || athleteIds.length === 0) {
+            return res.status(400).json({ message: "Individual reports require at least one athlete" });
           }
+          // Athletes must be on the event, as in quick-report (the service then also checks org membership)
+          const registrations = await eventRegistrationService.listRegistrations(eventId, userId);
+          const onEvent = new Set(
+            registrations
+              .filter((r) => r.status === 'approved' || r.status === 'checked_in')
+              .map((r) => r.userId)
+          );
+          const notOnEvent = athleteIds.filter((id: string) => !onEvent.has(id));
+          if (notOnEvent.length > 0) {
+            return res.status(400).json({
+              message: "Some athletes are not registered for this event",
+              missingIds: notOnEvent,
+            });
+          }
+          config.athleteIds = athleteIds;
         }
 
-        // Validate and create report
-        const reportData = {
+        // Validate and create report (individual reports fan out one row per athlete)
+        const validated = insertReportSchema.parse({
           name: name || `${event.name} - ${reportType === 'team' ? 'Team Report' : 'Individual Report'}`,
           organizationId: event.organizationId,
           reportType,
           config,
           createdBy: userId,
-        };
+        });
 
-        const validated = insertReportSchema.parse(reportData);
-
-        const [newReport] = await db
-          .insert(reports)
-          .values({
-            ...validated,
-            id: crypto.randomUUID(),
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          })
-          .returning();
-
-        return res.status(201).json(newReport);
+        const result = await createReportsFromInput(userId, validated);
+        return result.kind === 'batch'
+          ? res.status(201).json({ reports: result.reports })
+          : res.status(201).json(result.report);
       } catch (error: unknown) {
+        if (error instanceof ReportCreateError) {
+          return res.status(error.status).json(error.body);
+        }
         console.error("Error creating event report:", error);
         if (error instanceof ZodError) {
           return res.status(400).json({ message: "Invalid report data", errors: error.errors });
