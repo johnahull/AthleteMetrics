@@ -4926,6 +4926,8 @@ function calculateBenchmarkAchievements(athleteRankings: any[], teamStatistics?:
  * - MAX_METRICS: 20 metrics maximum
  * - MAX_ATHLETES: 100 athletes maximum for team reports
  * - MAX_VALUES_PER_METRIC: 100 values per metric
+ *
+ * Exported only so the integration test can assert the prompt data; routes should not import it.
  */
 export async function buildReportDataForAI(report: Report, userId: string, reportService: ReportService): Promise<import("../services/ai-insights-service").ReportData> {
   // Data size limits to prevent large AI payloads

@@ -225,6 +225,7 @@ export function registerEventReportRoutes(app: Express) {
         const config: Record<string, unknown> = {
           eventId,
           includeEventPercentiles: includeEventPercentiles ?? true,
+          // Not coerced here: insertReportSchema.parse below rejects a non-boolean with a 400
           ...(groupComparison !== undefined && { groupComparison }),
           timeframe: {
             type: 'custom',
