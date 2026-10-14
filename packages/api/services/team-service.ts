@@ -379,14 +379,20 @@ export class TeamService {
    * @param userId User ID
    * @param teamId Team ID
    * @param expectedOrganizationId Optional organization ID for TOCTOU-safe validation
+   * @param options.requireAthleteRole Refuse a user whose role in expectedOrganizationId is not 'athlete'
+   *   (checked on the locked membership row; requires expectedOrganizationId)
    * @returns User team membership
    * @throws Error if organization validation fails or user/team belong to different org
    */
   async addUserToTeam(
     userId: string,
     teamId: string,
-    expectedOrganizationId?: string
+    expectedOrganizationId?: string,
+    { requireAthleteRole = false }: { requireAthleteRole?: boolean } = {}
   ): Promise<UserTeam> {
+    if (requireAthleteRole && !expectedOrganizationId) {
+      throw new Error('requireAthleteRole needs expectedOrganizationId');
+    }
     // Use transaction with row-level locking to prevent race conditions
     return await db.transaction(async (tx) => {
       try {
@@ -423,6 +429,10 @@ export class TeamService {
 
           if (!userOrg) {
             throw new TeamServiceError('Access denied - user does not belong to your organization');
+          }
+
+          if (requireAthleteRole && userOrg.role !== 'athlete') {
+            throw new TeamServiceError('Access denied - user is not an athlete in this organization');
           }
         }
 

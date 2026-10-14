@@ -14,7 +14,7 @@ import { hasOrganizationAccess, validateOrganizationAccess } from "../helpers/or
 import { getAuthorizationError, AUTH_ERRORS } from "../helpers/auth-errors";
 import { z, ZodError } from "zod";
 import { db } from "../db";
-import { and, eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { requirePermission, getOrgRole } from "../permissions/index";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 
@@ -448,6 +448,9 @@ export function registerTeamRoutes(app: Express) {
       }
 
       const teamId = req.params.id;
+      if (!z.string().uuid().safeParse(teamId).success) {
+        return res.status(400).json({ message: "Invalid team id" });
+      }
       const existingTeam = await teamService.getTeam(teamId);
       if (!existingTeam) {
         return res.status(404).json({ message: "Team not found" });
@@ -474,26 +477,13 @@ export function registerTeamRoutes(app: Express) {
       const organizationId = existingTeam.organization.id;
       const athleteIds = Array.from(new Set(parsed.data.athleteIds));
 
-      // Role of each target in the team's organization, in one query (add only: rosters hold athletes)
-      const targetRoles = new Map<string, string>();
-      if (action === "add") {
-        const rows = await db
-          .select({ userId: userOrganizations.userId, role: userOrganizations.role })
-          .from(userOrganizations)
-          .where(and(eq(userOrganizations.organizationId, organizationId), inArray(userOrganizations.userId, athleteIds)));
-        rows.forEach((row) => targetRoles.set(row.userId, row.role));
-      }
-
       let success = 0;
       const errors: Array<{ athleteId: string; message: string }> = [];
       for (const athleteId of athleteIds) {
         try {
           if (action === "add") {
-            const role = targetRoles.get(athleteId);
-            if (role && role !== "athlete") {
-              throw new TeamServiceError("Access denied - user is not an athlete in this organization");
-            }
-            await teamService.addUserToTeam(athleteId, teamId, organizationId);
+            // Rosters hold athletes; the role is checked on the membership row locked inside the transaction
+            await teamService.addUserToTeam(athleteId, teamId, organizationId, { requireAthleteRole: true });
           } else {
             // The caller's role and the team's organization are verified above, and removal only touches this
             // team's roster, so an athlete who has already left the organization can still be removed

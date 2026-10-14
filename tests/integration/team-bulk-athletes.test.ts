@@ -92,12 +92,12 @@ async function mkTeam(org: any = orgA) {
   return t;
 }
 
-const addAthletes = (teamId: string, body: unknown, cookie: string | null = cookies.coachA) => {
+const addAthletes = (teamId: string, body: unknown, cookie: string | null) => {
   const req = request(app).post(`/api/teams/${teamId}/add-athletes`);
   return (cookie ? req.set('Cookie', cookie) : req).send(body as any);
 };
 
-const removeAthletes = (teamId: string, body: unknown, cookie: string | null = cookies.coachA) => {
+const removeAthletes = (teamId: string, body: unknown, cookie: string | null) => {
   const req = request(app).post(`/api/teams/${teamId}/remove-athletes`);
   return (cookie ? req.set('Cookie', cookie) : req).send(body as any);
 };
@@ -152,7 +152,7 @@ describe('POST /api/teams/:id/add-athletes', () => {
     const team = await mkTeam();
     const a1 = await mkAthlete(orgA);
     const a2 = await mkAthlete(orgA);
-    const res = await addAthletes(team.id, { athleteIds: [a1.id, a2.id] });
+    const res = await addAthletes(team.id, { athleteIds: [a1.id, a2.id] }, cookies.coachA);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ success: 2, errorCount: 0, errors: [] });
     expect(await activeMemberIds(team.id)).toEqual([a1.id, a2.id].sort());
@@ -161,8 +161,8 @@ describe('POST /api/teams/:id/add-athletes', () => {
   it('is idempotent for athletes already on the team', async () => {
     const team = await mkTeam();
     const a1 = await mkAthlete(orgA);
-    await addAthletes(team.id, { athleteIds: [a1.id] });
-    const res = await addAthletes(team.id, { athleteIds: [a1.id] });
+    await addAthletes(team.id, { athleteIds: [a1.id] }, cookies.coachA);
+    const res = await addAthletes(team.id, { athleteIds: [a1.id] }, cookies.coachA);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ success: 1, errorCount: 0, errors: [] });
     expect(await activeMemberIds(team.id)).toEqual([a1.id]);
@@ -172,7 +172,7 @@ describe('POST /api/teams/:id/add-athletes', () => {
     const team = await mkTeam();
     const a1 = await mkAthlete(orgA);
     const outsider = await mkAthlete(orgB);
-    const res = await addAthletes(team.id, { athleteIds: [a1.id, outsider.id] });
+    const res = await addAthletes(team.id, { athleteIds: [a1.id, outsider.id] }, cookies.coachA);
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(1);
     expect(res.body.errorCount).toBe(1);
@@ -227,7 +227,7 @@ describe('POST /api/teams/:id/add-athletes', () => {
   it('counts a duplicated id once', async () => {
     const team = await mkTeam();
     const a1 = await mkAthlete(orgA);
-    const res = await addAthletes(team.id, { athleteIds: [a1.id, a1.id] });
+    const res = await addAthletes(team.id, { athleteIds: [a1.id, a1.id] }, cookies.coachA);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ success: 1, errorCount: 0, errors: [] });
   });
@@ -260,7 +260,7 @@ describe('POST /api/teams/:id/add-athletes', () => {
       .spyOn(TeamService.prototype, 'addUserToTeam')
       .mockRejectedValueOnce(new Error('insert or update on table "user_teams" violates foreign key constraint'));
     try {
-      const res = await addAthletes(team.id, { athleteIds: [a1.id] });
+      const res = await addAthletes(team.id, { athleteIds: [a1.id] }, cookies.coachA);
       expect(res.status).toBe(200);
       expect(res.body.errors).toEqual([{ athleteId: a1.id, message: 'Failed to add athlete' }]);
     } finally {
@@ -273,7 +273,7 @@ describe('POST /api/teams/:id/add-athletes', () => {
     const a1 = await mkAthlete(orgA);
     const spy = vi.spyOn(TeamService.prototype, 'addUserToTeam').mockRejectedValueOnce(new Error('Access denied - internal detail'));
     try {
-      const res = await addAthletes(team.id, { athleteIds: [a1.id] });
+      const res = await addAthletes(team.id, { athleteIds: [a1.id] }, cookies.coachA);
       expect(res.body.errors).toEqual([{ athleteId: a1.id, message: 'Failed to add athlete' }]);
     } finally {
       spy.mockRestore();
@@ -284,7 +284,7 @@ describe('POST /api/teams/:id/add-athletes', () => {
     const team = await mkTeam();
     await db.update(teams).set({ isArchived: true, archivedAt: new Date() } as any).where(eq(teams.id, team.id));
     const a1 = await mkAthlete(orgA);
-    const res = await addAthletes(team.id, { athleteIds: [a1.id] });
+    const res = await addAthletes(team.id, { athleteIds: [a1.id] }, cookies.coachA);
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/archived/i);
     expect(await activeMemberIds(team.id)).toEqual([]);
@@ -293,7 +293,7 @@ describe('POST /api/teams/:id/add-athletes', () => {
   it('reports a target who is not an athlete in the team organization and still adds the athletes', async () => {
     const team = await mkTeam();
     const a1 = await mkAthlete(orgA);
-    const res = await addAthletes(team.id, { athleteIds: [a1.id, coachA.id] });
+    const res = await addAthletes(team.id, { athleteIds: [a1.id, coachA.id] }, cookies.coachA);
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(1);
     expect(res.body.errors).toEqual([{ athleteId: coachA.id, message: expect.stringContaining('not an athlete') }]);
@@ -302,8 +302,18 @@ describe('POST /api/teams/:id/add-athletes', () => {
 
   it('returns 404 for an unknown team', async () => {
     const a1 = await mkAthlete(orgA);
-    const res = await addAthletes('00000000-0000-4000-8000-000000000000', { athleteIds: [a1.id] });
+    const res = await addAthletes('00000000-0000-4000-8000-000000000000', { athleteIds: [a1.id] }, cookies.coachA);
     expect(res.status).toBe(404);
+  });
+
+  it.each([
+    ['add', addAthletes],
+    ['remove', removeAthletes],
+  ])('%s rejects a malformed team id with 400', async (_label, call) => {
+    const a1 = await mkAthlete(orgA);
+    const res = await call('not-a-uuid', { athleteIds: [a1.id] }, cookies.coachA);
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('Invalid team id');
   });
 
   it.each([
@@ -313,7 +323,7 @@ describe('POST /api/teams/:id/add-athletes', () => {
     ['missing athleteIds', {}],
   ])('rejects %s with 400', async (_label, body) => {
     const team = await mkTeam();
-    const res = await addAthletes(team.id, body);
+    const res = await addAthletes(team.id, body, cookies.coachA);
     expect(res.status).toBe(400);
     expect(typeof res.body.message).toBe('string');
   });
@@ -325,8 +335,8 @@ describe('POST /api/teams/:id/remove-athletes', () => {
     const a1 = await mkAthlete(orgA);
     const a2 = await mkAthlete(orgA);
     const a3 = await mkAthlete(orgA);
-    await addAthletes(team.id, { athleteIds: [a1.id, a2.id, a3.id] });
-    const res = await removeAthletes(team.id, { athleteIds: [a1.id, a2.id] });
+    await addAthletes(team.id, { athleteIds: [a1.id, a2.id, a3.id] }, cookies.coachA);
+    const res = await removeAthletes(team.id, { athleteIds: [a1.id, a2.id] }, cookies.coachA);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ success: 2, errorCount: 0, errors: [] });
     expect(await activeMemberIds(team.id)).toEqual([a3.id]);
@@ -335,9 +345,9 @@ describe('POST /api/teams/:id/remove-athletes', () => {
   it('removes an athlete who has already left the organization', async () => {
     const team = await mkTeam();
     const a1 = await mkAthlete(orgA);
-    await addAthletes(team.id, { athleteIds: [a1.id] });
+    await addAthletes(team.id, { athleteIds: [a1.id] }, cookies.coachA);
     await db.delete(userOrganizations).where(eq(userOrganizations.userId, a1.id));
-    const res = await removeAthletes(team.id, { athleteIds: [a1.id] });
+    const res = await removeAthletes(team.id, { athleteIds: [a1.id] }, cookies.coachA);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ success: 1, errorCount: 0, errors: [] });
     expect(await activeMemberIds(team.id)).toEqual([]);
@@ -349,10 +359,10 @@ describe('POST /api/teams/:id/remove-athletes', () => {
     const teamB = await mkTeam(orgB);
     const a1 = await mkAthlete(orgA);
     const b1 = await mkAthlete(orgB);
-    await addAthletes(team.id, { athleteIds: [a1.id] });
-    await addAthletes(otherTeamA.id, { athleteIds: [a1.id] });
+    await addAthletes(team.id, { athleteIds: [a1.id] }, cookies.coachA);
+    await addAthletes(otherTeamA.id, { athleteIds: [a1.id] }, cookies.coachA);
     await addAthletes(teamB.id, { athleteIds: [b1.id] }, cookies.coachB);
-    const res = await removeAthletes(team.id, { athleteIds: [a1.id, b1.id] });
+    const res = await removeAthletes(team.id, { athleteIds: [a1.id, b1.id] }, cookies.coachA);
     expect(res.status).toBe(200);
     expect(await activeMemberIds(team.id)).toEqual([]);
     expect(await activeMemberIds(otherTeamA.id)).toEqual([a1.id]);
@@ -362,7 +372,7 @@ describe('POST /api/teams/:id/remove-athletes', () => {
   it('rejects a coach of another organization with 403', async () => {
     const team = await mkTeam();
     const a1 = await mkAthlete(orgA);
-    await addAthletes(team.id, { athleteIds: [a1.id] });
+    await addAthletes(team.id, { athleteIds: [a1.id] }, cookies.coachA);
     const res = await removeAthletes(team.id, { athleteIds: [a1.id] }, cookies.coachB);
     expect(res.status).toBe(403);
     expect(await activeMemberIds(team.id)).toEqual([a1.id]);
@@ -386,8 +396,8 @@ describe('POST /api/teams/:id/remove-athletes', () => {
   it('counts a duplicated id once', async () => {
     const team = await mkTeam();
     const a1 = await mkAthlete(orgA);
-    await addAthletes(team.id, { athleteIds: [a1.id] });
-    const res = await removeAthletes(team.id, { athleteIds: [a1.id, a1.id] });
+    await addAthletes(team.id, { athleteIds: [a1.id] }, cookies.coachA);
+    const res = await removeAthletes(team.id, { athleteIds: [a1.id, a1.id] }, cookies.coachA);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ success: 1, errorCount: 0, errors: [] });
   });
@@ -397,7 +407,7 @@ describe('POST /api/teams/:id/remove-athletes', () => {
     const a1 = await mkAthlete(orgA);
     const spy = vi.spyOn(TeamService.prototype, 'removeUserFromTeam').mockRejectedValueOnce(new Error('deadlock detected'));
     try {
-      const res = await removeAthletes(team.id, { athleteIds: [a1.id] });
+      const res = await removeAthletes(team.id, { athleteIds: [a1.id] }, cookies.coachA);
       expect(res.status).toBe(200);
       expect(res.body.errors).toEqual([{ athleteId: a1.id, message: 'Failed to remove athlete' }]);
     } finally {
@@ -407,7 +417,7 @@ describe('POST /api/teams/:id/remove-athletes', () => {
 
   it('rejects an invalid body with 400', async () => {
     const team = await mkTeam();
-    const res = await removeAthletes(team.id, { athleteIds: ['not-a-uuid'] });
+    const res = await removeAthletes(team.id, { athleteIds: ['not-a-uuid'] }, cookies.coachA);
     expect(res.status).toBe(400);
   });
 });
