@@ -14,6 +14,10 @@ const NAME = '0160_site_metric_descriptions_units_categories';
 const UP = read(`${NAME}.sql`);
 const DOWN = read(`${NAME}_down.sql`);
 
+const Q = "'((?:[^']|'')*)'";
+const EXPECTED_DESC = Object.fromEntries(
+  [...UP.matchAll(new RegExp(`\\('([A-Z0-9_]+)',\\s*${Q}\\)`, 'g'))].map((m) => [m[1], m[2].replace(/''/g, "'")]),
+);
 const DESCRIBED = ['APPROACH_JUMP', 'APPROACH_REACH', 'BLOCK_JUMP', 'BLOCK_REACH', 'DASH_10YD', 'TOP_SPEED_MPH'];
 const RSI_CODES = ['RSI', 'RSI_SINGLE_LEFT', 'RSI_SINGLE_RIGHT', 'RSI_105'];
 const SPEED_UP = ['DASH_5YD', 'DASH_20YD', 'DASH_30YD', 'TOP_SPEED_MPH', 'DASH_10YD'];
@@ -81,7 +85,8 @@ describe.skipIf(!isDisposableTestDb)('Migration 0160: against a disposable DB (r
     await rollbackable(async (tx) => {
       await setup(tx);
       await tx.unsafe(UP);
-      for (const code of DESCRIBED) expect((await row(tx, code)).description?.length, code).toBeGreaterThan(30);
+      expect(Object.keys(EXPECTED_DESC).sort()).toEqual([...DESCRIBED].sort());
+      for (const code of DESCRIBED) expect((await row(tx, code)).description, code).toBe(EXPECTED_DESC[code]);
     });
   });
 
@@ -113,6 +118,15 @@ describe.skipIf(!isDisposableTestDb)('Migration 0160: against a disposable DB (r
       for (const code of SPEED_UP) expect((await row(tx, code)).category, code).toBe('speed');
       const [{ n }] = await tx`SELECT count(*)::int AS n FROM site_metrics WHERE code = ANY(${ALL}) AND category IN ('power', 'Speed', 'Acceleration')`;
       expect(n).toBe(0);
+    });
+  });
+
+  it('merges VERTICAL_JUMP too', async () => {
+    await rollbackable(async (tx) => {
+      await setup(tx);
+      await tx`INSERT INTO site_metrics (code, label, metric_type, category) VALUES ('VERTICAL_JUMP', 'Vertical Jump', 'higher_is_better', 'power') ON CONFLICT (code) DO UPDATE SET category = 'power'`;
+      await tx.unsafe(UP);
+      expect((await row(tx, 'VERTICAL_JUMP')).category).toBe('Power');
     });
   });
 
