@@ -1,8 +1,10 @@
 -- Down Migration 0160: restore the descriptions, units and categories 0160 changed
 --
 -- Descriptions are cleared only where they still equal the text 0160 wrote, so an edit made since survives.
--- The RSI units go back to empty; the categories go back to their earlier spellings. VERTICAL_JUMP is not
--- restored to 'power': its earlier spelling differs between databases (staging already had 'Power').
+-- The RSI units go back to '' (empty string), also for a database where the unit was NULL before 0160; the up treats
+-- NULL and '' alike, so re-applying works. The categories go back to their earlier spellings. VERTICAL_JUMP is not
+-- restored to 'power': its earlier spelling differs between databases (staging already had 'Power'), so a rollback
+-- leaves it at 'Power' everywhere.
 -- Also forgets the manual_migrations row so db:migrate:manual re-applies 0160.
 
 UPDATE site_metrics AS m
