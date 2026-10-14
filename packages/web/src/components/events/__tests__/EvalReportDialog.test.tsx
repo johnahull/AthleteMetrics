@@ -201,11 +201,10 @@ describe("EvalReportDialog", () => {
     await ready();
     const compare = screen.getByRole("switch", { name: "Compare to age group" });
     expect(compare).not.toBeChecked();
-    expect(screen.getByRole("switch", { name: "Strengths and areas to develop" })).toBeDisabled();
     expect(screen.getByRole("switch", { name: "Radar chart" })).toBeDisabled();
 
     await user.click(compare);
-    expect(screen.getByRole("switch", { name: "Strengths and areas to develop" })).toBeEnabled();
+    expect(screen.getByRole("switch", { name: "Radar chart" })).toBeEnabled();
     expect(screen.getByRole("switch", { name: "Radar chart" })).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: "Generate report" }));
@@ -324,8 +323,6 @@ describe("EvalReportDialog", () => {
     setupApi();
     renderDialog();
     await ready();
-    // Strengths need the age-group comparison, which a new report starts without
-    expect(screen.queryByRole("group", { name: "Strengths" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("switch", { name: "Compare to age group" }));
 
     const strengths = await screen.findByRole("group", { name: "Strengths" });
@@ -344,6 +341,26 @@ describe("EvalReportDialog", () => {
     await waitFor(() => expect(callsTo("POST", "/eval-report/preview").length).toBe(before + 1));
     body = lastBody("POST", "/eval-report/preview");
     expect(body.strengthsOverride).toEqual(["DASH_10", "FLY_10", "CMJ_HOH"]);
+  });
+
+  it("with the comparison off, strengths stay manual: switch enabled, pickers listed, nothing pre-checked", async () => {
+    setupApi();
+    renderDialog();
+    await ready();
+    expect(screen.getByRole("switch", { name: "Strengths and areas to develop" })).toBeEnabled();
+    expect(screen.getByRole("switch", { name: "Strengths and areas to develop" })).toBeChecked();
+    expect(screen.queryByText(/Suggested from how each metric compares/)).not.toBeInTheDocument();
+    const strengths = await screen.findByRole("group", { name: "Strengths" });
+    await waitFor(() => expect(callsTo("POST", "/eval-report/preview").length).toBe(2));
+    expect(within(strengths).getByRole("checkbox", { name: "Strength: 10-yard dash" })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Area to develop: Jump height" })).not.toBeChecked();
+
+    await user.click(within(strengths).getByRole("checkbox", { name: "Strength: Jump height" }));
+    await user.click(screen.getByRole("button", { name: "Generate report" }));
+    await screen.findByText(/report saved/i);
+    const body = lastBody("POST", "/eval-report");
+    expect(body.selection.sections.ageGroupComparison).toBe(false);
+    expect(body.strengthsOverride).toEqual(["CMJ_HOH"]);
   });
 
   it("asks for suggestions as if the comparison were on, so turning it on needs no Preview", async () => {

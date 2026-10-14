@@ -273,12 +273,8 @@ describe('assembleEvalReportModel: age-group comparison switch', () => {
     expect(assembleEvalReportModel(input()).selection.ageGroupComparison).toBe(true);
   });
 
-  it('off: no comparisons, no strengths, development areas or limiter, even with overrides', () => {
-    const model = assembleEvalReportModel({
-      ...three(),
-      selection: off,
-      overrides: { strengths: ['CMJ_HOH'], developmentAreas: ['FLY_10'], limiter: 'DASH_10' },
-    });
+  it('off: no comparisons and no suggested strengths, development areas or limiter', () => {
+    const model = assembleEvalReportModel({ ...three(), selection: off });
     expect(model.metrics.every((m) => m.comparison === null)).toBe(true);
     expect(model.strengths).toEqual([]);
     expect(model.developmentAreas).toEqual([]);
@@ -286,9 +282,19 @@ describe('assembleEvalReportModel: age-group comparison switch', () => {
     expect(model.selection.ageGroupComparison).toBe(false);
   });
 
-  it('off: ignores a limiter override that names a metric outside the selection instead of failing', () => {
-    const model = assembleEvalReportModel({ ...three(), selection: off, overrides: { limiter: 'NOT_SELECTED' } });
-    expect(model.limiter).toBeNull();
+  it('off: still honours the coach picking strengths, development areas and the limiter', () => {
+    const model = assembleEvalReportModel({
+      ...three(),
+      selection: off,
+      overrides: { strengths: ['CMJ_HOH'], developmentAreas: ['FLY_10'], limiter: 'DASH_10' },
+    });
+    expect(model.strengths).toEqual(['CMJ_HOH']);
+    expect(model.developmentAreas).toEqual(['FLY_10']);
+    expect(model.limiter).toBe('DASH_10');
+  });
+
+  it('off: rejects a limiter override that names a metric outside the selection', () => {
+    expect(() => assembleEvalReportModel({ ...three(), selection: off, overrides: { limiter: 'NOT_SELECTED' } })).toThrow(/invalid_override/);
   });
 
   it('off: leaves the college standard alone', () => {

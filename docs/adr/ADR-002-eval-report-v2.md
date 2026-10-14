@@ -67,7 +67,7 @@ After an evaluation event a coach needs a family-facing report: only that event'
 
 ## Addendum: optional age-group comparison
 
-Each eval carries `selection.sections.ageGroupComparison`. The dialog defaults it to off for a new report, the server treats a missing key as on, and the form reads a missing key on a saved eval as on, so nothing already saved changes. Off empties strengths, areas to develop and the limiter (they rank by comparison); the college gauge keeps its own switch. No new route, so `canAccessEvalRow` is unchanged.
+Each eval carries `selection.sections.ageGroupComparison`. The dialog defaults it to off for a new report, the server treats a missing key as on, and the form reads a missing key on a saved eval as on, so nothing already saved changes. Off removes the automatic strengths, areas to develop and limiter suggestions (they rank by comparison), so they are manual-only; coach picks are still honoured; the college gauge keeps its own switch. No new route, so `canAccessEvalRow` is unchanged.
 
 ## Known limitations / follow-ups
 

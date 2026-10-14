@@ -244,9 +244,11 @@ export function EvalReportDialog({ open, onOpenChange, eventId, organizationId, 
     }
   };
 
-  const currentStrengths = values.strengths ?? suggested?.strengths ?? [];
-  const currentDevelopment = values.developmentAreas ?? suggested?.developmentAreas ?? [];
-  const currentLimiter = values.limiter ?? suggested?.limiter ?? "";
+  // Suggestions rank by age-group position, so with the comparison off only the coach's own picks count
+  const suggestions = values.ageGroupComparison ? suggested : null;
+  const currentStrengths = values.strengths ?? suggestions?.strengths ?? [];
+  const currentDevelopment = values.developmentAreas ?? suggestions?.developmentAreas ?? [];
+  const currentLimiter = values.limiter ?? suggestions?.limiter ?? "";
   const inOrder = (list: string[]) => rankable.map(metricId).filter((id) => list.includes(id));
 
   const toggleStrength = (id: string, checked: boolean) => {
@@ -584,10 +586,7 @@ export function EvalReportDialog({ open, onOpenChange, eventId, organizationId, 
                 {sectionSwitch("eval-note-on", "What we saw note", values.coachNoteOn, (c) => setField("coachNoteOn", c), {
                   hint: values.preset === "middle_school" ? "For middle school this note appears first in the report." : undefined,
                 })}
-                {sectionSwitch("eval-strengths-on", "Strengths and areas to develop", values.strengthsOn && values.ageGroupComparison, (c) => setField("strengthsOn", c), {
-                  disabled: !values.ageGroupComparison,
-                  hint: values.ageGroupComparison ? undefined : "Needs the age-group comparison.",
-                })}
+                {sectionSwitch("eval-strengths-on", "Strengths and areas to develop", values.strengthsOn, (c) => setField("strengthsOn", c))}
                 {sectionSwitch("eval-retest", "Retest trend", values.retestTrend && hasPrior, (c) => setField("retestTrend", c), {
                   disabled: !hasPrior,
                   hint: hasPrior ? "Shows change since the last evaluation." : "There is no comparable earlier evaluation for this athlete.",
@@ -638,10 +637,12 @@ export function EvalReportDialog({ open, onOpenChange, eventId, organizationId, 
                 </div>
               </div>
 
-              {values.strengthsOn && values.ageGroupComparison && (
+              {values.strengthsOn && (
                 <div className="space-y-4">
                   <p className="text-xs text-muted-foreground">
-                    Suggested from how each metric compares with the age group. Change any of them before you generate.
+                    {values.ageGroupComparison
+                      ? "Suggested from how each metric compares with the age group. Change any of them before you generate."
+                      : "Choose which results to highlight."}
                   </p>
                   <fieldset className="space-y-2">
                     <legend className="text-sm font-semibold">Strengths</legend>

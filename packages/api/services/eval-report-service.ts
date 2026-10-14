@@ -105,8 +105,7 @@ export function assembleEvalReportModel(input: EvalAssemblyInput): EvalReportMod
     coachNote: sections.coachNote ?? true,
     noteFirst: sections.noteFirst ?? defaults.noteFirst,
     ageGroupComparison: sections.ageGroupComparison ?? true,
-    // Strengths, development areas and the limiter all rank by comparison, so they go with it
-    strengths: (sections.strengths ?? true) && (sections.ageGroupComparison ?? true),
+    strengths: sections.strengths ?? true,
     retestTrend: sections.retestTrend ?? defaults.retestTrend,
     radar: sections.radar ?? false,
   };
@@ -178,7 +177,7 @@ export function assembleEvalReportModel(input: EvalAssemblyInput): EvalReportMod
   const { limiter: limiterOverride } = input.overrides;
   let limiter = suggested.limiter;
   if (limiterOverride === null) limiter = null;
-  else if (limiterOverride !== undefined && sectionOn.ageGroupComparison) {
+  else if (limiterOverride !== undefined) {
     if (!isKey(limiterOverride) || !shown.has(limiterOverride)) throw new EvalReportInputError("invalid_override");
     limiter = limiterOverride;
   }
