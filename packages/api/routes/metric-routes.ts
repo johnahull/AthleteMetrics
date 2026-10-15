@@ -469,7 +469,7 @@ export function registerMetricRoutes(app: Express) {
   app.post("/api/organizations/:organizationId/metrics/bulk-update",
     metricModifyLimiter,
     requireAuth,
-    requireOrganizationAccess(),
+    requireOrganizationAccess("org_admin"),
     async (req: Request, res: Response) => {
       try {
         const { organizationId } = req.params;

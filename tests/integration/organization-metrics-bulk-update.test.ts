@@ -14,7 +14,8 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import express, { type Express } from 'express';
 import { db } from '../../packages/api/db';
-import { organizations, users, siteMetrics, organizationMetrics } from '@shared/schema';
+import bcrypt from 'bcrypt';
+import { organizations, users, userOrganizations, siteMetrics, organizationMetrics } from '@shared/schema';
 import { eq, and, inArray } from 'drizzle-orm';
 
 vi.mock('../../packages/api/vite.js', () => ({
@@ -27,6 +28,8 @@ import { registerRoutes } from '../../packages/api/routes';
 let app: Express;
 let authCookie: string;
 let adminId: string;
+const memberCookies: Record<string, string> = {};
+const memberIds: string[] = [];
 let orgId: string;
 const stamp = Date.now();
 const A = `BULKUPD_${stamp}_A`;
@@ -65,11 +68,25 @@ beforeAll(async () => {
   ]);
   const [org] = await db.insert(organizations).values({ name: `Bulk Update Org ${stamp}`, organizationType: 'club' } as any).returning();
   orgId = org.id;
+  const hash = await bcrypt.hash('RoleTest123!x', 4);
+  for (const role of ['coach', 'athlete'] as const) {
+    const [u] = await db.insert(users).values({
+      username: `bulkupd-${role}-${stamp}`, emails: [`bulkupd-${role}-${stamp}@test.com`], password: hash,
+      firstName: 'Bulk', lastName: role, fullName: `Bulk ${role}`, isActive: true,
+    } as any).returning();
+    memberIds.push(u.id);
+    await db.insert(userOrganizations).values({ userId: u.id, organizationId: orgId, role } as any);
+    const r = await request(app).post('/api/auth/login').send({ username: u.username, password: 'RoleTest123!x' });
+    if (r.status !== 200) throw new Error(`login ${role} failed (${r.status}): ${JSON.stringify(r.body)}`);
+    memberCookies[role] = r.headers['set-cookie'][0];
+  }
   // B starts enabled so a single call can disable it while enabling A
   await db.insert(organizationMetrics).values({ organizationId: orgId, metricCode: B, isEnabled: true });
 });
 
 afterAll(async () => {
+  await db.delete(userOrganizations).where(inArray(userOrganizations.userId, memberIds));
+  await db.delete(users).where(inArray(users.id, memberIds));
   await db.delete(organizationMetrics).where(eq(organizationMetrics.organizationId, orgId));
   await db.delete(organizations).where(eq(organizations.id, orgId));
   await db.delete(siteMetrics).where(inArray(siteMetrics.code, [A, B, C, INACTIVE]));
@@ -79,6 +96,12 @@ describe('POST /api/organizations/:id/metrics/bulk-update', () => {
   it('rejects unauthenticated callers', async () => {
     const res = await request(app).post(url()).send({ enable: [A] });
     expect([401, 403]).toContain(res.status);
+  });
+
+  it.each(['coach', 'athlete'] as const)('rejects a %s of the organization with 403', async (role) => {
+    const res = await request(app).post(url()).set('Cookie', memberCookies[role]).send({ enable: [A] });
+    expect(res.status).toBe(403);
+    expect(await enabledMap()).toEqual({ [B]: true });
   });
 
   it('rolls everything back when one code is not active', async () => {
