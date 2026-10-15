@@ -14,7 +14,7 @@ import { sanitizeCSVValue } from "../utils/csv-utils";
 import { ocrService } from "../ocr/ocr-service";
 import { findBestAthleteMatch, type MatchingCriteria, type MatchResult } from "../athlete-matching";
 import { isSiteAdmin } from "@shared/auth-utils";
-import { parseImportValue } from "@shared/duration-format";
+import { parseImportValue, formatMeasurement } from "@shared/duration-format";
 import { OCR_REQUIRED_CHOICE_MESSAGES, type OcrRequiredChoice } from "@shared/ocr-types";
 import { METRIC_CONFIG } from "@shared/analytics-types";
 import { COMMON_METRICS, type ImportResult } from "@shared/import-types";
@@ -26,8 +26,8 @@ import { getPgErrorCode, PG_UNIQUE_VIOLATION } from "../lib/pg-error";
 import { importValidationService, type ValidationContext } from "../services/import-validation-service";
 import { logAuthorizationFailure } from "../helpers/audit-logging";
 import { getCachedUserOrganizations } from "../helpers/cached-org-access";
-import { eq } from "drizzle-orm";
-import { users, userTeams, userOrganizations, type SiteMetric } from "@shared/schema";
+import { and, eq, inArray } from "drizzle-orm";
+import { users, userTeams, userOrganizations, siteMetrics, customOrgMetrics, type SiteMetric } from "@shared/schema";
 import { DerivedMetricCalculator } from "../services/derived-metric-calculator";
 import { assertCanEnterMetric, MovementQualityPermissionError } from "../services/measurement-service";
 import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
@@ -1732,8 +1732,21 @@ export function registerImportExportRoutes(app: Express) {
       // Headers match client/src/pages/import-export.tsx measurementsTemplate (line 694)
       const csvHeaders = [
         'firstName', 'lastName', 'gender', 'teamName', 'date', 'age',
-        'metric', 'value', 'units', 'flyInDistance', 'notes'
+        'metric', 'value', 'units', 'flyInDistance', 'notes', 'display_value'
       ];
+
+      // display_value: mm:ss for duration metrics (site or custom), otherwise the same as value
+      const exportedCodes = [...new Set(measurements.map(m => m.metric).filter(Boolean))];
+      const durationFormats = new Map<string, { displayFormat: 'duration'; decimalPrecision: number }>();
+      if (exportedCodes.length > 0) {
+        for (const table of [siteMetrics, customOrgMetrics]) {
+          const rows = await db
+            .select({ code: table.code, decimalPrecision: table.decimalPrecision })
+            .from(table)
+            .where(and(inArray(table.code, exportedCodes), eq(table.displayFormat, 'duration')));
+          for (const r of rows) durationFormats.set(r.code, { displayFormat: 'duration', decimalPrecision: r.decimalPrecision });
+        }
+      }
 
       // Check for measurements with multi-team users that will lose data in export
       const multiTeamMeasurements = measurements.filter(m => m.user?.teams && m.user.teams.length > 1);
@@ -1755,7 +1768,10 @@ export function registerImportExportRoutes(app: Express) {
           measurement.value || '',
           measurement.units || '',
           measurement.flyInDistance || '',
-          measurement.notes || ''
+          measurement.notes || '',
+          durationFormats.has(measurement.metric) && measurement.value
+            ? formatMeasurement(Number(measurement.value), durationFormats.get(measurement.metric)!)
+            : measurement.value || ''
         ].map(field => {
           // SECURITY: Sanitize for formula injection, then escape for CSV format
           let value = String(field || '');

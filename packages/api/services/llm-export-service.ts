@@ -21,6 +21,7 @@ import { goals } from '@shared/schema/tables/gamification';
 import { wellnessResponses } from '@shared/schema/tables/wellness';
 import { sprintFvProfiles } from '@shared/schema/tables/sprint-fv-profiles';
 import { and, desc, eq, gte, inArray } from 'drizzle-orm';
+import { formatMeasurement, type DisplayFormat } from '@shared/duration-format';
 import {
   buildMetricExplanationsMap,
   type MetricExplanation,
@@ -29,6 +30,15 @@ import {
 // ---------- Types ----------
 
 export type ExportFormat = 'markdown' | 'json';
+
+/** displayFormat/decimalPrecision are set only for duration metrics, whose values print as mm:ss */
+export interface MetricGlossaryEntry {
+  label: string;
+  units: string;
+  explanation: string;
+  displayFormat?: DisplayFormat;
+  decimalPrecision?: number;
+}
 
 export interface AthleteExportData {
   generatedAt: Date;
@@ -93,7 +103,7 @@ export interface AthleteExportData {
     responses: Record<string, unknown>;
   }>;
   notes: { medicalNotes: string | null; coachNotes: string | null };
-  metricGlossary: Record<string, { label: string; units: string; explanation: string }>;
+  metricGlossary: Record<string, MetricGlossaryEntry>;
   warnings: string[];
 }
 
@@ -133,6 +143,16 @@ function escapeMdInline(v: string): string {
 
 function fmtNum(n: number): string {
   return Number.isFinite(n) ? String(n) : '—';
+}
+
+/** The glossary entry when the metric is shown as mm:ss, otherwise undefined */
+function durationOf(d: AthleteExportData, code: string): MetricGlossaryEntry | undefined {
+  const g = d.metricGlossary[code];
+  return g?.displayFormat === 'duration' ? g : undefined;
+}
+
+function fmtDuration(n: number, g: MetricGlossaryEntry): string {
+  return Number.isFinite(n) ? formatMeasurement(n, g) : '—';
 }
 
 function fmtDate(d: Date): string {
@@ -218,8 +238,10 @@ function renderSnapshotSection(d: AthleteExportData): string {
   }
   lines.push('', '| Metric | Value | Unit | Date |', '|---|---|---|---|');
   for (const row of d.currentSnapshot) {
+    const dur = durationOf(d, row.metricCode);
+    const value = dur ? fmtDuration(row.value, dur) : fmtNum(row.value);
     lines.push(
-      `| ${escapeCell(row.metricLabel)} | ${fmtNum(row.value)} | ${escapeCell(row.units)} | ${row.date} |`,
+      `| ${escapeCell(row.metricLabel)} | ${value} | ${dur ? 'mm:ss' : escapeCell(row.units)} | ${row.date} |`,
     );
   }
   return lines.join('\n');
@@ -236,6 +258,13 @@ function renderHistorySection(d: AthleteExportData): string {
     const rows = d.measurementHistory[code];
     if (!rows || !rows.length) continue;
     const label = d.metricGlossary[code]?.label ?? code;
+    const dur = durationOf(d, code);
+    if (dur) {
+      lines.push('', `### ${escapeCell(label)} (mm:ss)`);
+      lines.push('| Date | Value |', '|---|---|');
+      for (const r of rows) lines.push(`| ${r.date} | ${fmtDuration(r.value, dur)} |`);
+      continue;
+    }
     const units = d.metricGlossary[code]?.units ?? rows[0]?.units ?? '';
     lines.push('', `### ${escapeCell(label)}${units ? ` (${units})` : ''}`);
     lines.push('| Date | Value |', '|---|---|');
@@ -294,11 +323,13 @@ function renderGoalsSection(d: AthleteExportData): string {
     // `_` can't toggle emphasis across the rest of the section.
     const units = escapeMdInline(g.units);
     const goalType = escapeMdInline(g.goalType);
+    const dur = durationOf(d, g.metricCode);
+    const val = (n: number) => (dur ? fmtDuration(n, dur) : `${fmtNum(n)} ${units}`);
     const parts = [
       `${escapeCell(g.metricLabel)}:`,
-      `baseline ${fmtNum(g.baselineValue)} ${units}`,
-      `→ current ${fmtNum(g.currentValue)} ${units}`,
-      `→ target ${fmtNum(g.targetValue)} ${units}`,
+      `baseline ${val(g.baselineValue)}`,
+      `→ current ${val(g.currentValue)}`,
+      `→ target ${val(g.targetValue)}`,
       `by ${g.targetDate}`,
       `(${goalType})`,
     ];
@@ -403,7 +434,7 @@ export function renderJson(d: AthleteExportData): AthleteLlmExport {
 
 async function loadMetricGlossary(
   codes: string[],
-): Promise<Record<string, { label: string; units: string; explanation: string }>> {
+): Promise<Record<string, MetricGlossaryEntry>> {
   if (!codes.length) return {};
   const rows = await db
     .select({
@@ -412,6 +443,8 @@ async function loadMetricGlossary(
       unit: siteMetrics.unit,
       whatItMeasures: siteMetrics.whatItMeasures,
       shortDescription: siteMetrics.shortDescription,
+      displayFormat: siteMetrics.displayFormat,
+      decimalPrecision: siteMetrics.decimalPrecision,
     })
     .from(siteMetrics)
     .where(inArray(siteMetrics.code, codes));
@@ -420,7 +453,7 @@ async function loadMetricGlossary(
     buildMetricExplanationsMap(codes);
 
   const siteCodes = new Set(rows.map((r) => r.code));
-  const out: Record<string, { label: string; units: string; explanation: string }> = {};
+  const out: Record<string, MetricGlossaryEntry> = {};
   for (const r of rows) {
     const expl = explanationMap[r.code];
     out[r.code] = {
@@ -431,6 +464,7 @@ async function loadMetricGlossary(
         r.shortDescription ??
         expl?.whatItMeasures ??
         'No explanation available.',
+      ...(r.displayFormat === 'duration' ? { displayFormat: r.displayFormat, decimalPrecision: r.decimalPrecision } : {}),
     };
   }
   // Codes absent from site_metrics still deserve a glossary entry from static explanations.
@@ -636,7 +670,7 @@ export async function gatherAthleteExportData(
   const glossary = await safe(
     'Metric glossary',
     () => loadMetricGlossary(metricCodes),
-    {} as Record<string, { label: string; units: string; explanation: string }>,
+    {} as Record<string, MetricGlossaryEntry>,
   );
 
   const snapshot = metricCodes
