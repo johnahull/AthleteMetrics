@@ -144,8 +144,9 @@ export function getBestPerformanceValue(metric: string, stats: StatisticalSummar
 /**
  * Filters data to best measurements per athlete (for 'best' data type)
  * Uses metric configuration to determine what "best" means
+ * @param metricTypes - Each metric's type from its DB row; a code without an entry falls back to the static list
  */
-export function filterToBestMeasurements(data: ChartDataPoint[]): ChartDataPoint[] {
+export function filterToBestMeasurements(data: ChartDataPoint[], metricTypes?: Record<string, MetricType>): ChartDataPoint[] {
   if (data.length === 0) return [];
 
   const grouped = data.reduce((acc, point) => {
@@ -159,7 +160,7 @@ export function filterToBestMeasurements(data: ChartDataPoint[]): ChartDataPoint
     if (athleteMetricData.length === 0) return athleteMetricData[0]; // Should not happen
 
     const metric = athleteMetricData[0].metric;
-    const metricType = getMetricTypeWithFallback(metric);
+    const metricType = metricTypes?.[metric] ?? getMetricTypeWithFallback(metric);
 
     if (metricType === 'tracking') {
       // For tracking metrics, find the most recent measurement by date
@@ -218,8 +219,9 @@ export function filterToBestPerPlayer<T>(
 
 /**
  * Filters data to best measurements per athlete per date (for 'trends' data type)
+ * @param metricTypes - Each metric's type from its DB row; a code without an entry falls back to the static list
  */
-export function filterToBestMeasurementsPerDate(data: ChartDataPoint[]): ChartDataPoint[] {
+export function filterToBestMeasurementsPerDate(data: ChartDataPoint[], metricTypes?: Record<string, MetricType>): ChartDataPoint[] {
   if (data.length === 0) return [];
 
   const grouped = data.reduce((acc, point) => {
@@ -235,7 +237,7 @@ export function filterToBestMeasurementsPerDate(data: ChartDataPoint[]): ChartDa
     if (athleteMetricDateData.length === 0) return athleteMetricDateData[0]; // Should not happen
 
     const metric = athleteMetricDateData[0].metric;
-    const metricType = getMetricTypeWithFallback(metric);
+    const metricType = metricTypes?.[metric] ?? getMetricTypeWithFallback(metric);
 
     if (metricType === 'tracking') {
       // For tracking metrics, all values on same date are equally valid, return first

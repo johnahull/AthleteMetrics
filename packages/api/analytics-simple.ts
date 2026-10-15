@@ -14,9 +14,9 @@ import type {
   StatisticalSummary,
   TrendData,
   TrendDataPoint,
-  MultiMetricData
+  MultiMetricData,
+  MetricType
 } from "@shared/analytics-types";
-import { METRIC_CONFIG } from "@shared/analytics-types";
 import {
   calculateStatistics,
   filterToBestMeasurements,
@@ -28,6 +28,7 @@ import {
 } from "@shared/analytics-utils";
 import { isPeerComparisonExcludedMetric } from "@shared/peer-comparison-exclusions";
 import DOMPurify from "isomorphic-dompurify";
+import { getMetricTypes } from "./utils/metric-type";
 
 // Type for the database query result
 type QueryResult = {
@@ -145,7 +146,7 @@ export class AnalyticsService {
   /**
    * Generate trends data from filtered chart data points
    */
-  private generateTrendsData(chartData: ChartDataPoint[], metric: string): TrendData[] {
+  private generateTrendsData(chartData: ChartDataPoint[], metric: string, metricTypes: Record<string, MetricType> = {}): TrendData[] {
     // Early return if no data
     if (!chartData || chartData.length === 0) {
       return [];
@@ -208,8 +209,7 @@ export class AnalyticsService {
 
       // Track personal bests for this athlete
       let personalBest = sortedPoints[0].value;
-      const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-      const lowerIsBetter = metricConfig?.metricType === 'lower_is_better';
+      const lowerIsBetter = metricTypes[metric] === 'lower_is_better';
 
       const trendDataPoints: TrendDataPoint[] = sortedPoints.map((point, index) => {
         // First point is always a personal best, then check subsequent points
@@ -257,12 +257,12 @@ export class AnalyticsService {
   /**
    * Generate trends data for all selected metrics
    */
-  private generateTrendsDataForAllMetrics(chartData: ChartDataPoint[], metrics: string[]): TrendData[] {
+  private generateTrendsDataForAllMetrics(chartData: ChartDataPoint[], metrics: string[], metricTypes: Record<string, MetricType> = {}): TrendData[] {
     // Generate trends data for each metric and combine
     const allTrends: TrendData[] = [];
 
     for (const metric of metrics) {
-      const metricTrends = this.generateTrendsData(chartData, metric);
+      const metricTrends = this.generateTrendsData(chartData, metric, metricTypes);
       allTrends.push(...metricTrends);
     }
 
@@ -272,7 +272,7 @@ export class AnalyticsService {
   /**
    * Generate multi-metric data for radar charts from filtered chart data points
    */
-  private generateMultiMetricData(chartData: ChartDataPoint[], metrics: string[]): MultiMetricData[] {
+  private generateMultiMetricData(chartData: ChartDataPoint[], metrics: string[], metricTypes: Record<string, MetricType> = {}): MultiMetricData[] {
     // Early return if no data or less than 2 metrics
     if (!chartData || chartData.length === 0 || metrics.length < 2) {
       return [];
@@ -292,8 +292,7 @@ export class AnalyticsService {
 
         // Store the best value for each metric per athlete
         const currentBest = groups[point.athleteId].measurements[point.metric];
-        const metricConfig = METRIC_CONFIG[point.metric as keyof typeof METRIC_CONFIG];
-        const lowerIsBetter = metricConfig?.metricType === 'lower_is_better';
+        const lowerIsBetter = metricTypes[point.metric] === 'lower_is_better';
 
         if (!currentBest ||
             (lowerIsBetter && point.value < currentBest) ||
@@ -558,11 +557,14 @@ export class AnalyticsService {
         teamName: sanitizeString(row.teamName) || 'No Team'
       }));
 
+      // Each metric's direction from its own row (site metric, else this organization's custom metric)
+      const metricTypes = await getMetricTypes(allMetrics, request.filters.organizationId);
+
       // Apply filtering based on timeframe type
       if (request.timeframe.type === 'best') {
-        chartData = filterToBestMeasurements(chartData);
+        chartData = filterToBestMeasurements(chartData, metricTypes);
       } else if (request.timeframe.type === 'trends') {
-        chartData = filterToBestMeasurementsPerDate(chartData);
+        chartData = filterToBestMeasurementsPerDate(chartData, metricTypes);
       }
 
       // Robust statistics calculation using utility functions
@@ -591,7 +593,7 @@ export class AnalyticsService {
       const trends: TrendData[] = [];
       if (request.timeframe?.type === 'trends' && chartData.length > 0) {
         // Use the generateTrendsDataForAllMetrics method instead of inline logic
-        const generatedTrends = this.generateTrendsDataForAllMetrics(chartData, allSelectedMetrics);
+        const generatedTrends = this.generateTrendsDataForAllMetrics(chartData, allSelectedMetrics, metricTypes);
         trends.push(...generatedTrends);
         
         console.log(`Trends Debug: Generated ${trends.length} trend series for ${allSelectedMetrics.length} metrics`);
@@ -601,7 +603,7 @@ export class AnalyticsService {
       // Generate multiMetric data when we have 2+ metrics (not just 3+) to support radar charts
       const shouldGenerateMultiMetric = metricCount >= 2;
       const multiMetric = shouldGenerateMultiMetric
-        ? this.generateMultiMetricData(chartData, allSelectedMetrics)
+        ? this.generateMultiMetricData(chartData, allSelectedMetrics, metricTypes)
         : [];
 
       console.log(`Analytics Debug: metricCount=${metricCount}, allSelectedMetrics=${JSON.stringify(allSelectedMetrics)}, shouldGenerateMultiMetric=${shouldGenerateMultiMetric}, multiMetric.length=${multiMetric.length}`);
