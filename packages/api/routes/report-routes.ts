@@ -4280,17 +4280,20 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
         yPos += 6;
 
         // Sort athletes by this metric
-        const sortedAthletes = await sortAthletesByMetric(reportData.athleteRankings, stat.metric);
+        const sortedAthletes = await sortAthletesByMetric(reportData.athleteRankings, stat.metric, report.organizationId);
         const totalAthletes = sortedAthletes.length;
         const displayedAthletes = sortedAthletes.slice(0, PDF_LIMITS.MAX_ATHLETES_PER_METRIC);
 
         if (displayedAthletes.length > 0) {
+          const benchmarkLabels = await Promise.all(
+            displayedAthletes.map((athlete: any) => getBenchmarkLabel(athlete, stat.metric, report.organizationId)),
+          );
           // Collect tier color for each row's benchmark column
           const rowTierColors: (string | null)[] = [];
           const metricRows = displayedAthletes.map((athlete: any, idx: number) => {
             const value = athlete.measurements[stat.metric];
             const percentile = athlete.percentiles?.[stat.metric];
-            const benchmarkLabel = getBenchmarkLabel(athlete, stat.metric);
+            const benchmarkLabel = benchmarkLabels[idx];
 
             // Check if this athlete has a tier benchmark for coloring
             const comps = athlete.benchmarkComparisons?.[stat.metric];
