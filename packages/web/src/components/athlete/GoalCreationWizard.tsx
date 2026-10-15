@@ -12,6 +12,7 @@ import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DurationInput } from '@/components/duration-input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -54,6 +55,8 @@ interface GoalCreationData {
 interface GoalCreationWizardProps {
   measurements: Measurement[];
   availableMetrics: string[];
+  /** Codes of time (mm:ss) metrics: their target value is typed as m:ss */
+  durationMetrics?: string[];
   onCreateGoal: (goal: GoalCreationData) => void | Promise<void>;
   onCancel: () => void;
 }
@@ -63,6 +66,7 @@ type WizardStep = 1 | 2 | 3;
 export function GoalCreationWizard({
   measurements,
   availableMetrics,
+  durationMetrics,
   onCreateGoal,
   onCancel,
 }: GoalCreationWizardProps) {
@@ -405,6 +409,14 @@ export function GoalCreationWizard({
             {/* Target Value Input */}
             <div className="grid gap-y-2">
               <Label htmlFor="target-value">{getTargetInputLabel()}</Label>
+              {selectedGoalType === GoalType.TARGET_VALUE && durationMetrics?.includes(selectedMetric) ? (
+                <DurationInput
+                  id="target-value"
+                  value={targetValue ? Number(targetValue) : undefined}
+                  onValueChange={(seconds) => handleTargetValueChange(seconds === undefined ? '' : String(seconds))}
+                  aria-describedby={errors.target ? 'target-error' : undefined}
+                />
+              ) : (
               <Input
                 id="target-value"
                 type="number"
@@ -420,6 +432,7 @@ export function GoalCreationWizard({
                 }
                 aria-describedby={errors.target ? 'target-error' : undefined}
               />
+              )}
               {errors.target && (
                 <p id="target-error" className="text-sm text-red-600">
                   {errors.target}

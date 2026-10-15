@@ -13,6 +13,7 @@ import { useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useAthleteDashboardData } from '@/hooks/useAthleteDashboardData';
 import { useAthleteContext } from '@/hooks/useAthleteContext';
+import { useAvailableMetrics } from '@/hooks/use-available-metrics';
 import { useActiveGoals, useGoals, useUpdateGoalStatus, useCreateGoal, GoalStatus, GoalType } from '@/hooks/useGoals';
 import { GoalProgressCard } from '@/components/athlete/GoalProgressCard';
 import { GoalCreationWizard } from '@/components/athlete/GoalCreationWizard';
@@ -56,6 +57,8 @@ export default function MyGoalsPage() {
   const { data: allGoals = [], isLoading: allLoading } = useGoals();
   const updateGoalStatus = useUpdateGoalStatus();
   const createGoal = useCreateGoal();
+  const { metrics } = useAvailableMetrics();
+  const durationMetrics = metrics.filter((m) => m.displayFormat === 'duration').map((m) => m.code);
 
   // Filter completed/archived goals
   const completedGoals = allGoals.filter(
@@ -211,6 +214,7 @@ export default function MyGoalsPage() {
           <GoalCreationWizard
             measurements={dashboardData?.measurements || []}
             availableMetrics={dashboardData?.availableMetrics || []}
+            durationMetrics={durationMetrics}
             onCreateGoal={handleCreateGoal}
             onCancel={() => setShowGoalWizard(false)}
           />
