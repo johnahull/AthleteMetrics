@@ -5,11 +5,12 @@
  * with event percentiles and AI insights options.
  */
 
-import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { EventReportsTab } from '../EventReportsTab';
+import { useEventReports } from '@/lib/events-api';
 
 // Polyfill for happy-dom (Radix UI components)
 beforeAll(() => {
@@ -405,6 +406,45 @@ describe('EventReportsTab - Individual Reports', () => {
 
       // Button should show loading
       expect(screen.getByRole('button', { name: /generating/i })).toBeInTheDocument();
+    });
+  });
+
+  describe('PDF export', () => {
+    const { createObjectURL, revokeObjectURL } = window.URL;
+
+    afterEach(() => {
+      vi.mocked(useEventReports).mockReturnValue({ data: [], isLoading: false, error: null } as never);
+      window.URL.createObjectURL = createObjectURL;
+      window.URL.revokeObjectURL = revokeObjectURL;
+    });
+
+    const report = (reportType: string, config: object) => ({
+      id: 'report-1',
+      name: 'Grace Diaz Eval - Individual Reports - Grace Diaz',
+      reportType,
+      organizationId: 'org-1',
+      config,
+      createdAt: '2025-01-15T09:00:00Z',
+      createdBy: 'coach-1',
+    });
+
+    const clickDownload = async (r: ReturnType<typeof report>) => {
+      vi.mocked(useEventReports).mockReturnValue({ data: [r], isLoading: false, error: null } as never);
+      mockExportPDFMutation.mutateAsync.mockResolvedValue(new Blob());
+      window.URL.createObjectURL = vi.fn(() => 'blob:x');
+      window.URL.revokeObjectURL = vi.fn();
+      render(<EventReportsTab eventId="event-123" eventName="Spring Combine 2025" />, { wrapper: createWrapper() });
+      await userEvent.setup().click(screen.getByRole('button', { name: /download .* as pdf/i }));
+    };
+
+    it('sends the athlete of an individual report', async () => {
+      await clickDownload(report('individual', { athleteId: 'user-1' }));
+      expect(mockExportPDFMutation.mutateAsync).toHaveBeenCalledWith({ reportId: 'report-1', athleteId: 'user-1' });
+    });
+
+    it('sends no athlete for a team report', async () => {
+      await clickDownload(report('team', {}));
+      expect(mockExportPDFMutation.mutateAsync).toHaveBeenCalledWith({ reportId: 'report-1', athleteId: undefined });
     });
   });
 
