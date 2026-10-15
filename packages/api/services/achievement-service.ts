@@ -11,32 +11,7 @@
 import { storage } from '../storage';
 import type { Measurement, AchievementDefinition, UserAchievement, siteMetrics } from '@shared/schema';
 import { startOfMonth, endOfMonth, subMonths, differenceInMonths } from 'date-fns';
-import { db } from '../db';
-import { eq } from 'drizzle-orm';
-import { siteMetrics as siteMetricsTable } from '@shared/schema';
-
-// Cache for metric types to avoid repeated DB queries
-const metricTypeCache = new Map<string, string>();
-
-// Helper to determine if lower values are better for a metric
-// Queries siteMetrics table as source of truth
-async function isLowerBetterMetric(metricCode: string): Promise<boolean> {
-  // Check cache first
-  if (metricTypeCache.has(metricCode)) {
-    return metricTypeCache.get(metricCode) === 'lower_is_better';
-  }
-
-  // Query database for metric type
-  const [metric] = await db
-    .select({ metricType: siteMetricsTable.metricType })
-    .from(siteMetricsTable)
-    .where(eq(siteMetricsTable.code, metricCode));
-
-  const metricType = metric?.metricType || 'higher_is_better';
-  metricTypeCache.set(metricCode, metricType);
-
-  return metricType === 'lower_is_better';
-}
+import { isLowerBetter as isLowerBetterInOrg } from '../utils/metric-type';
 
 export class AchievementService {
   /**
@@ -88,7 +63,7 @@ export class AchievementService {
 
     // Get measurements for this specific metric
     const metricMeasurements = allMeasurements.filter(m => m.metric === metric);
-    const isLowerBetter = await isLowerBetterMetric(metric);
+    const isLowerBetter = await isLowerBetterInOrg(metric, organizationId);
 
     // Sort to find best value
     const sortedMeasurements = [...metricMeasurements].sort((a, b) => {
@@ -235,7 +210,7 @@ export class AchievementService {
       return new Date(a.date).getTime() - new Date(b.date).getTime();
     });
 
-    const isLowerBetter = await isLowerBetterMetric(metric);
+    const isLowerBetter = await isLowerBetterInOrg(metric, organizationId);
     const latest = sorted[sorted.length - 1];
     const latestValue = parseFloat(latest.value as string);
 
