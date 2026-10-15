@@ -105,16 +105,18 @@ export function isLowerBetter(metric: string, metricType?: MetricType): boolean 
  * @param metric - The metric code
  * @param oldValue - Previous measurement value
  * @param newValue - New measurement value
+ * @param metricType - The metric's type from the metric list; without it the built-in list decides
  * @returns 'improved' | 'declined' | 'unchanged'
  */
 export function getProgressionStatus(
   metric: string,
   oldValue: number,
-  newValue: number
+  newValue: number,
+  metricType?: MetricType
 ): 'improved' | 'declined' | 'unchanged' {
   if (oldValue === newValue) return 'unchanged';
 
-  const lowerIsBetter = isLowerBetter(metric);
+  const lowerIsBetter = isLowerBetter(metric, metricType);
   const improved = lowerIsBetter ? newValue < oldValue : newValue > oldValue;
 
   return improved ? 'improved' : 'declined';
