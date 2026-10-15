@@ -3,6 +3,7 @@ import type { ReportTrends, ReportDistributions, TeamReportTrends, TeamReportDis
 import type { ReportFvProfile } from '@shared/report-fv-types';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
 import type { ChartSelection, TeamChartSelection } from '@shared/report-charts';
+import type { DisplayFormat } from '@shared/duration-format';
 
 export interface Benchmark {
   name: string;
@@ -164,6 +165,8 @@ export interface EvalMetricResultView {
   label: string;
   value: number;
   unit: string;
+  /** Absent on models saved before mm:ss display existed (decimal) */
+  displayFormat?: DisplayFormat;
   comparison:
     | { kind: "tiers"; comparison: BenchmarkComparison }
     | { kind: "average"; name: string | null; averageValue: number; status: "at_or_better" | "below"; distancePct: number }
