@@ -30,7 +30,7 @@ export default function Publish() {
   const labels = useContextualLabels();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { getLabel: getMetricLabel, formats: metricFormats } = useMetricLabels();
+  const { getLabel: getMetricLabel, formats: metricFormats, types: metricTypes } = useMetricLabels();
 
   // Get available metrics using centralized hook (filters by active+enabled)
   const { metrics: availableMetrics } = useAvailableMetrics();
@@ -187,7 +187,9 @@ export default function Publish() {
     if (!measurements) return [];
 
     const athleteBest = new Map();
-    const isTimeBased = isLowerIsBetterMetric(filters.metric);
+    const isTimeBased = metricTypes[filters.metric]
+      ? metricTypes[filters.metric] === 'lower_is_better'
+      : isLowerIsBetterMetric(filters.metric);
 
     measurements.forEach((measurement: any) => {
       const athleteId = measurement.user.id;
@@ -219,14 +221,16 @@ export default function Publish() {
         return bValue - aValue; // descending for others (higher is better)
       }
     });
-  }, [measurements, filters.metric]);
+  }, [measurements, filters.metric, metricTypes]);
 
   // PERFORMANCE: Memoize expensive sorting to prevent recomputation on every render
   // All measurements sorted (for both "best by measurement" and "all" views)
   const allMeasurementsSorted = useMemo(() => {
     if (!measurements) return [];
 
-    const isTimeBased = isLowerIsBetterMetric(filters.metric);
+    const isTimeBased = metricTypes[filters.metric]
+      ? metricTypes[filters.metric] === 'lower_is_better'
+      : isLowerIsBetterMetric(filters.metric);
     return [...measurements].sort((a: any, b: any) => {
       const aValue = parseFloat(a.value);
       const bValue = parseFloat(b.value);
@@ -237,7 +241,7 @@ export default function Publish() {
         return bValue - aValue; // descending for others (higher is better)
       }
     });
-  }, [measurements, filters.metric]);
+  }, [measurements, filters.metric, metricTypes]);
 
   // Sort handler
   const handleSort = (column: string) => {
