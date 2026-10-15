@@ -65,7 +65,7 @@ export function BenchmarkProgressBar({
         </div>
         {progress > 100 && (
           <div
-            className="absolute top-0 left-[100%] w-px h-3 bg-border"
+            className="absolute top-0 left-full w-px h-3 bg-border"
             title="100% Goal Line"
           />
         )}

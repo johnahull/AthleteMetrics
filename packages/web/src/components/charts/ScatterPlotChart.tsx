@@ -936,7 +936,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
     <div className="w-full h-full space-y-4">
       {/* Controls */}
       <div className="flex flex-wrap gap-4 text-sm">
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-x-2">
           <Switch
             id="regression-line"
             checked={showRegressionLine}
@@ -944,7 +944,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
           />
           <Label htmlFor="regression-line">Show Trend Line</Label>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-x-2">
           <Switch
             id="quadrants"
             checked={showQuadrants}
@@ -952,7 +952,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
           />
           <Label htmlFor="quadrants">Show Performance Quadrants</Label>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-x-2">
           <Switch
             id="athlete-names"
             checked={localShowAthleteNames}
@@ -979,9 +979,9 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
           </h4>
           <div className="grid grid-cols-2 gap-3 text-xs" role="list">
             {quadrantLegend.map((item, index) => (
-              <div key={index} className="flex items-center space-x-2" role="listitem">
+              <div key={index} className="flex items-center gap-x-2" role="listitem">
                 <div
-                  className="w-4 h-4 rounded border-2 flex-shrink-0"
+                  className="w-4 h-4 rounded border-2 shrink-0"
                   style={{
                     backgroundColor: item.bg,
                     borderColor: item.border

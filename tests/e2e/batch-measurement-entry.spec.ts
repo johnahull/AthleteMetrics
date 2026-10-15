@@ -111,7 +111,7 @@ test.describe('Batch Measurement Entry Tests', () => {
     // Select metric
     const metricSelect = row.locator('[data-testid*="metric"], select').nth(1);
     await metricSelect.click();
-    await page.locator('text="FLY10_TIME", text="10-Yard Fly"').first().click().catch(async () => {
+    await page.getByRole('option', { name: '10-Yard Fly, 20 yd run-in', exact: true }).click().catch(async () => {
       // Fallback for native select
       await row.locator('select').nth(1).selectOption('FLY10_TIME');
     });

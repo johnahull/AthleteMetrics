@@ -171,7 +171,7 @@ export default function WellnessAnalytics() {
       </div>
 
       {/* Analytics Tabs */}
-      <Tabs defaultValue="overview" className="space-y-6">
+      <Tabs defaultValue="overview" className="flex flex-col gap-y-6 [&>[role=tabpanel]]:mt-0">
         <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-1">
           <TabsTrigger value="overview" className="min-h-[44px] py-3">Overview</TabsTrigger>
           <TabsTrigger value="teams" className="min-h-[44px] py-3">Teams</TabsTrigger>

@@ -19,6 +19,14 @@ import {
 import { db } from '../db';
 import { eq, and, asc, ne, sql } from 'drizzle-orm';
 
+/** An expected, client-safe failure (not found / access denied); its message may be shown to the caller. */
+export class TeamServiceError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TeamServiceError';
+  }
+}
+
 export class TeamService {
   /**
    * Get all non-archived teams for an organization
@@ -371,14 +379,22 @@ export class TeamService {
    * @param userId User ID
    * @param teamId Team ID
    * @param expectedOrganizationId Optional organization ID for TOCTOU-safe validation
+   * @param options.requireAthleteRole Refuse a user whose role in expectedOrganizationId is not 'athlete'
+   *   (checked on the locked membership row; requires expectedOrganizationId)
+   * @param options.rejectArchivedTeam Refuse an archived team (checked on the locked team row; requires
+   *   expectedOrganizationId)
    * @returns User team membership
    * @throws Error if organization validation fails or user/team belong to different org
    */
   async addUserToTeam(
     userId: string,
     teamId: string,
-    expectedOrganizationId?: string
+    expectedOrganizationId?: string,
+    { requireAthleteRole = false, rejectArchivedTeam = false }: { requireAthleteRole?: boolean; rejectArchivedTeam?: boolean } = {}
   ): Promise<UserTeam> {
+    if ((requireAthleteRole || rejectArchivedTeam) && !expectedOrganizationId) {
+      throw new Error('requireAthleteRole and rejectArchivedTeam need expectedOrganizationId');
+    }
     // Use transaction with row-level locking to prevent race conditions
     return await db.transaction(async (tx) => {
       try {
@@ -394,11 +410,15 @@ export class TeamService {
             .for('update');
 
           if (!team) {
-            throw new Error('Team not found');
+            throw new TeamServiceError('Team not found');
           }
 
           if (team.organizationId !== expectedOrganizationId) {
-            throw new Error('Access denied - team belongs to different organization');
+            throw new TeamServiceError('Access denied - team belongs to different organization');
+          }
+
+          if (rejectArchivedTeam && team.isArchived) {
+            throw new TeamServiceError('Cannot add athletes to an archived team');
           }
 
           // Lock user-org relationship and verify user belongs to expected org
@@ -414,7 +434,11 @@ export class TeamService {
             .for('update');
 
           if (!userOrg) {
-            throw new Error('Access denied - user does not belong to your organization');
+            throw new TeamServiceError('Access denied - user does not belong to your organization');
+          }
+
+          if (requireAthleteRole && userOrg.role !== 'athlete') {
+            throw new TeamServiceError('Access denied - user is not an athlete in this organization');
           }
         }
 
@@ -493,12 +517,15 @@ export class TeamService {
    * @param userId User ID
    * @param teamId Team ID
    * @param expectedOrganizationId Optional organization ID for TOCTOU-safe validation
+   * @param options.requireUserInOrganization Set false to remove a user who has already left the
+   *   organization (the team's organization is still checked)
    * @throws Error if organization validation fails or user/team belong to different org
    */
   async removeUserFromTeam(
     userId: string,
     teamId: string,
-    expectedOrganizationId?: string
+    expectedOrganizationId?: string,
+    { requireUserInOrganization = true }: { requireUserInOrganization?: boolean } = {}
   ): Promise<void> {
     // Use transaction for atomicity and organization validation
     await db.transaction(async (tx) => {
@@ -512,11 +539,11 @@ export class TeamService {
           .for('update');
 
         if (!team) {
-          throw new Error('Team not found');
+          throw new TeamServiceError('Team not found');
         }
 
         if (team.organizationId !== expectedOrganizationId) {
-          throw new Error('Access denied - team belongs to different organization');
+          throw new TeamServiceError('Access denied - team belongs to different organization');
         }
 
         // Lock user-org relationship and verify user belongs to expected org
@@ -531,8 +558,8 @@ export class TeamService {
           )
           .for('update');
 
-        if (!userOrg) {
-          throw new Error('Access denied - user does not belong to your organization');
+        if (!userOrg && requireUserInOrganization) {
+          throw new TeamServiceError('Access denied - user does not belong to your organization');
         }
       }
 

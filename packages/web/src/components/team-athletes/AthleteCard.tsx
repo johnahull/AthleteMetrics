@@ -58,7 +58,7 @@ export function AthleteCard({
       role="listitem"
     >
       <CardContent className="flex items-center justify-between p-4">
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center gap-x-3">
           {mode === 'current' && onSelection && (
             <Checkbox
               checked={isSelected}

@@ -31,7 +31,7 @@ export function MetricExplanation({ label, explanation, className }: MetricExpla
           aria-expanded={open}
           aria-controls={contentId}
           aria-label={`Explanation for ${explanation.title}`}
-          className="inline-flex items-center justify-center rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex items-center justify-center rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Info className="h-3.5 w-3.5" aria-hidden="true" />
           <ChevronDown

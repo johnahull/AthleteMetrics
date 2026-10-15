@@ -14,6 +14,7 @@ process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'TestPassword123!';
 process.env.BYPASS_GENERAL_RATE_LIMIT = 'true'; // Bypass rate limits for these tests
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 import request from 'supertest';
 import express, { type Express } from 'express';
 import { db } from '../../packages/api/db';
@@ -134,6 +135,10 @@ afterEach(async () => {
   }
   if (testOrg) {
     await db.delete(organizations).where(eq(organizations.id, testOrg.id));
+  }
+  // beforeEach creates a coach per test; deleting only the last one in afterAll leaked the rest
+  if (testCoach) {
+    await purgeTestRows({ userIds: [testCoach.id] });
   }
 });
 

@@ -23,10 +23,10 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll as vitestAfterAll } from 'vitest';
 import { db } from '../db';
 import { storage } from '../storage';
-import { users, organizations, teams, userOrganizations, measurements } from '@shared/schema';
-import { eq } from 'drizzle-orm';
+import { users } from '@shared/schema';
 import type { User, Organization, Team } from '@shared/schema';
 import bcrypt from 'bcrypt';
+import { purgeTestRows } from "../../../tests/helpers/purge-test-rows";
 
 describe('Multi-Tenant Data Isolation', () => {
   let orgA: Organization;
@@ -161,50 +161,11 @@ describe('Multi-Tenant Data Isolation', () => {
   });
 
   afterAll(async () => {
-    // Clean up test data
-    // Delete in reverse order of foreign key dependencies
-    try {
-      if (athleteA?.id) {
-        await db.delete(measurements).where(eq(measurements.userId, athleteA.id));
-      }
-      if (athleteB?.id) {
-        await db.delete(measurements).where(eq(measurements.userId, athleteB.id));
-      }
-
-      if (athleteA?.id && teamA?.id) {
-        await storage.removeUserFromTeam(athleteA.id, teamA.id);
-      }
-      if (athleteB?.id && teamB?.id) {
-        await storage.removeUserFromTeam(athleteB.id, teamB.id);
-      }
-
-      if (athleteA?.id && orgA?.id) {
-        await storage.removeUserFromOrganization(athleteA.id, orgA.id, false);
-      }
-      if (athleteB?.id && orgB?.id) {
-        await storage.removeUserFromOrganization(athleteB.id, orgB.id, false);
-      }
-      if (adminA?.id && orgA?.id) {
-        await storage.removeUserFromOrganization(adminA.id, orgA.id, false);
-      }
-      if (adminB?.id && orgB?.id) {
-        await storage.removeUserFromOrganization(adminB.id, orgB.id, false);
-      }
-
-      if (teamA?.id) await storage.deleteTeam(teamA.id);
-      if (teamB?.id) await storage.deleteTeam(teamB.id);
-
-      if (athleteA?.id) await storage.deleteUser(athleteA.id);
-      if (athleteB?.id) await storage.deleteUser(athleteB.id);
-      if (adminA?.id) await storage.deleteUser(adminA.id);
-      if (adminB?.id) await storage.deleteUser(adminB.id);
-      if (siteAdmin?.id) await storage.deleteUser(siteAdmin.id);
-
-      if (orgA?.id) await storage.deleteOrganization(orgA.id);
-      if (orgB?.id) await storage.deleteOrganization(orgB.id);
-    } catch (error) {
-      console.error('Cleanup error:', error);
-    }
+    await purgeTestRows({
+      userIds: [athleteA?.id, athleteB?.id, adminA?.id, adminB?.id, siteAdmin?.id].filter((id): id is string => !!id),
+      orgIds: [orgA?.id, orgB?.id].filter((id): id is string => !!id),
+      teamIds: [teamA?.id, teamB?.id].filter((id): id is string => !!id),
+    });
   });
 
   describe('GET /api/athletes - Athlete List Endpoint', () => {

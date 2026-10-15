@@ -15,6 +15,7 @@
  * 3.  Event registrations / invitations
  * 4.  Report shares (removes athlete from shared reports)
  * 5.  AI coaching insights (nulled on report snapshots — not hard-deleted)
+ * 5b. Eval reports (code STEP 4c; reports.report_type = 'eval' with config.athleteId = athlete; shares/snapshots cascade)
  * 6.  Global athlete links (unlink from cross-org profile)
  * 7.  Organization memberships + team memberships
  * 8.  Parent-athlete links
@@ -31,7 +32,7 @@
  *   not lost via user FK cascade (athleteUserId → users.id onDelete: cascade)
  */
 
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, and, inArray, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { BaseService } from './base-service';
 import { EmailService } from './email-service';
@@ -55,6 +56,7 @@ import {
   getAuditRetentionDate,
   type CoppaAction,
 } from '@shared/coppa-utils';
+import { EVAL_REPORT_TYPE } from '@shared/eval-report-config';
 import type { AuditParams } from './coppa-service';
 
 // ============================================================================
@@ -334,6 +336,10 @@ export class CoppaDeletionService extends BaseService {
         // STEP 4: Delete report shares and collect affected report IDs.
         // We capture reportIds before deleting so we can null AI coaching
         // insights on those reports in step 4b.
+        // A share row whose athleteId is this athlete is deleted here and counted under report_shares, including
+        // shares of the athlete's own eval reports. Shares of those eval reports to OTHER accounts (athleteId is
+        // someone else) are not matched here; they vanish with the reports.id cascade in step 4c and are not
+        // counted separately, only under eval_reports.
         const deletedShares = await tx.delete(reportShares)
           .where(eq(reportShares.athleteId, athleteUserId))
           .returning({ id: reportShares.id, reportId: reportShares.reportId });
@@ -355,6 +361,19 @@ export class CoppaDeletionService extends BaseService {
             })
             .where(inArray(reports.id, affectedReportIds));
           deletedCategories.push(`ai_coaching_insights_cleared (${affectedReportIds.length} reports)`);
+        }
+
+        // STEP 4c: Delete the athlete's eval reports, shared or not. The athlete is only named in
+        // config.athleteId (no FK), so the user cascade never reaches them; report_shares and
+        // report_snapshots cascade from reports.id. Like the other steps this is keyed on the user id, not the org.
+        const deletedEvalReports = await tx.delete(reports)
+          .where(and(
+            eq(reports.reportType, EVAL_REPORT_TYPE),
+            sql`${reports.config}->>'athleteId' = ${athleteUserId}`,
+          ))
+          .returning({ id: reports.id });
+        if (deletedEvalReports.length > 0) {
+          deletedCategories.push(`eval_reports (${deletedEvalReports.length})`);
         }
 
         // STEP 5: Unlink from global athlete profiles

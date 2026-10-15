@@ -246,7 +246,7 @@ export function InjuryBodyMapHeatmap({
                           className={cn(
                             'px-3 py-2 rounded-md border text-sm transition-all',
                             'hover:ring-2 hover:ring-primary hover:ring-offset-2',
-                            'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
+                            'focus:outline-hidden focus:ring-2 focus:ring-primary focus:ring-offset-2',
                             'min-h-[44px]',
                             colorClass,
                             isSelected && 'ring-2 ring-primary ring-offset-2'

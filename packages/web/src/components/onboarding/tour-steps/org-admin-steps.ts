@@ -10,7 +10,7 @@ export const orgAdminSteps: Step[] = [
   {
     target: '[data-tour="dashboard"]',
     content: 'Welcome! As an organization admin, you have full control over your organization.',
-    disableBeacon: true,
+    skipBeacon: true,
     placement: 'right',
   },
   {

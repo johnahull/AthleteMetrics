@@ -1,5 +1,23 @@
 # Migration System Remediation Plan
 
+> **Historical document (written 2025-10-30).** The 0014-0021 manual range below describes the
+> state at the time. Option 2 was implemented: `scripts/apply-manual-migrations.js` now applies
+> every migration file numbered 0014 or above that is not a `*_down.sql` file, in numeric order,
+> each in its own transaction (tracked in `manual_migrations`). Down migrations are never applied
+> by the script; run them by hand.
+>
+> **Reserved numbers:** 0144 and 0145 are reserved for AM-FEAT-016, so the manual sequence has a
+> gap there until that feature lands (AM-FEAT-015 uses 0146-0149).
+> 0153 is provisional for AM-FEAT-019 (eval report templates; 0151 is taken by both the yard-benchmark
+> description rewrite and the unmerged AM-FEAT-018 momentum branch): take the next free number at merge.
+> 0154 (strip derived metrics from eval templates) and 0155 (eval template audit actions) belong to the same
+> AM-FEAT-019 branch and follow 0153 if it is renumbered.
+> 0156 (RSI_105 and single-leg CMJ metrics, eval template top-up) is an AM-FEAT-019 follow-up.
+> 0157 (full UNIQUE (event_id, user_id) on event_registrations) fixes bulk-add 500s on migration-built databases.
+> 0158 (Sayers peak power derived metrics PEAK_POWER_W / PEAK_POWER_REL, AM-FEAT-021) is provisional: renumber at merge if another branch lands 0158 first (file, `_down`, test, tracking row, this line).
+> 0159 (athlete-facing explanations for 55 site metrics that had none) is provisional: renumber at merge if another branch lands 0159 first (file, `_down`, test, tracking row, this line).
+> 0160 (descriptions, RSI unit and category spellings for site metrics) is provisional: renumber at merge if another branch lands 0160 first (file, `_down`, test, tracking row, this line).
+
 ## Current State (2025-10-30)
 
 ### Overview

@@ -196,7 +196,7 @@ export function MeasurementHistoryTable({
         <TableHeader>
           <TableRow>
             <TableHead
-              className="cursor-pointer hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
+              className="cursor-pointer hover:bg-muted/50 focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-1"
               onClick={() => handleSort('date')}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
@@ -212,7 +212,7 @@ export function MeasurementHistoryTable({
               <SortIcon field="date" />
             </TableHead>
             <TableHead
-              className="cursor-pointer hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
+              className="cursor-pointer hover:bg-muted/50 focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-1"
               onClick={() => handleSort('metric')}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
@@ -228,7 +228,7 @@ export function MeasurementHistoryTable({
               <SortIcon field="metric" />
             </TableHead>
             <TableHead
-              className="cursor-pointer hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
+              className="cursor-pointer hover:bg-muted/50 focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-1"
               onClick={() => handleSort('value')}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
@@ -255,7 +255,7 @@ export function MeasurementHistoryTable({
             return (
               <React.Fragment key={measurement.id}>
                 <TableRow
-                  className="cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
+                  className="cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-ring focus:ring-offset-1"
                   onClick={() => handleRowClick(measurement.id)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {

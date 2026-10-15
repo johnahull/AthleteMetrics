@@ -235,6 +235,69 @@ describe('MeasurementService - Derived Metric Integration', () => {
       // Should NOT create calculator instance when only notes change
       expect(MockedCalculator).not.toHaveBeenCalled();
     });
+    it('should trigger recalculate when only auxiliaryValue changes (paired-input metric)', async () => {
+      const code = `TEST_AUX_RECALC_${Date.now()}`;
+      await db.insert(siteMetrics).values({
+        code,
+        label: 'TEST paired-input 1RM',
+        category: 'strength',
+        unit: 'lbs',
+        metricType: 'higher_is_better',
+        isActive: true,
+        auxiliaryInputConfig: {
+          label: 'Reps',
+          unit: 'reps',
+          validationMin: 1,
+          validationMax: 12,
+          required: true,
+          computeFormula: 'load * (1 + reps / 30)',
+          primaryInputLabel: 'Weight Lifted',
+          primaryInputUnit: 'lbs',
+        },
+      } as any);
+
+      try {
+        const [initialMeasurement] = await db.insert(measurements).values({
+          userId: testUserId,
+          submittedBy: testSubmitterId,
+          date: new Date('2024-01-15').toISOString(),
+          metric: code,
+          value: '330',
+          units: 'lbs',
+          auxiliaryValue: '3',
+          age: 24,
+          organizationId: testOrgId,
+          teamId: testTeamId,
+          isCalculated: true,
+          calculatedFromMeasurementIds: [],
+          calculationMetadata: {
+            formula: 'load * (1 + reps / 30)',
+            sourceValues: { load: 300, reps: 3 },
+            calculatedAt: new Date().toISOString(),
+            calculationVersion: '1.0.0',
+          },
+        } as any).returning();
+
+        vi.clearAllMocks();
+
+        const updated = await measurementService.updateMeasurement(initialMeasurement.id, {
+          auxiliaryValue: 6,
+        } as any);
+        expect(Number(updated.value)).toBe(360);
+
+        const MockedCalculator = vi.mocked(DerivedMetricCalculator);
+        const calculatorInstance = MockedCalculator.mock.results[0]?.value;
+        expect(calculatorInstance?.recalculateForAthlete).toHaveBeenCalledWith(
+          testUserId,
+          code,
+          updated.date,
+          expect.anything()
+        );
+      } finally {
+        await db.delete(measurements).where(eq(measurements.metric, code));
+        await db.delete(siteMetrics).where(eq(siteMetrics.code, code));
+      }
+    });
   });
 
   describe('deleteMeasurement', () => {

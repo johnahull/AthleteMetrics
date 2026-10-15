@@ -71,12 +71,13 @@ test.describe('Metric Management - Site Admin', () => {
 
     // Should show at least the 8 default metrics
     const metricRows = page.locator('[data-testid^="metric-row-"]');
-    await expect(metricRows).toHaveCount(8, { timeout: 5000 });
+    await expect(metricRows.first()).toBeVisible({ timeout: 5000 });
+    expect(await metricRows.count()).toBeGreaterThanOrEqual(8);
 
     // Should display FLY10_TIME as a system default
     const fly10Row = page.locator('[data-testid="metric-row-FLY10_TIME"]');
     await expect(fly10Row).toBeVisible();
-    await expect(fly10Row).toContainText('10-Yard Fly Time');
+    await expect(fly10Row).toContainText('10-Yard Fly, 20 yd run-in');
     await expect(fly10Row).toContainText('System Default');
   });
 

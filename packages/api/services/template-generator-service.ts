@@ -16,7 +16,8 @@ export class TemplateGeneratorService {
     FLY10_TIME: '1.28',
     VERTICAL_JUMP: '22.5',
     DASH_40YD: '5.1',
-    AGILITY_505: '2.45',
+    AGILITY_505_M: '2.45',
+    AGILITY_505_YD: '2.24',
     AGILITY_5105: '4.8',
     T_TEST: '9.8',
     TOP_SPEED: '18.5',
@@ -106,8 +107,9 @@ export class TemplateGeneratorService {
     const value = this.getSampleValue(metric.code);
     const units = metric.unit || '';
 
-    // flyInDistance is typically 10 or 20 yards for fly times
-    const flyInDistance = metric.code.includes('FLY') ? '10' : '';
+    // flyInDistance stays blank: for fly metrics the code carries the run-in
+    // (FLY10_TIME_RI10, FLY10_TIME = 20 yd, ...) and a mismatch is rejected.
+    const flyInDistance = '';
 
     return {
       firstName,

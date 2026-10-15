@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { TeamReportView } from "@/components/reports/TeamReportView";
 import { IndividualReportView } from "@/components/reports/IndividualReportView";
+import { EvalReportView } from "@/components/reports/EvalReportView";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { useLocation } from "wouter";
@@ -72,6 +73,8 @@ export default function ReportView() {
 
       {report.reportType === "team" ? (
         <TeamReportView report={report} />
+      ) : report.reportType === "eval" ? (
+        <EvalReportView report={report} />
       ) : (
         <IndividualReportView report={report} />
       )}

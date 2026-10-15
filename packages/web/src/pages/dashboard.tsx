@@ -340,7 +340,7 @@ export default function Dashboard() {
       {!effectiveOrganizationId && (
         <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
           <div className="flex">
-            <div className="flex-shrink-0">
+            <div className="shrink-0">
               <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
               </svg>
@@ -359,7 +359,7 @@ export default function Dashboard() {
       {error && (
         <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex">
-            <div className="flex-shrink-0">
+            <div className="shrink-0">
               <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
               </svg>
@@ -559,6 +559,7 @@ export default function Dashboard() {
               units={getMetricUnits(metric)}
               personalRecord={athleteDashboardData.personalRecords.find(pr => pr.metric === metric)}
               showConfetti={false}
+              metricType={availableMetrics.find(m => m.code === metric)?.metricType}
             />
           ))}
         </div>
@@ -601,7 +602,7 @@ export default function Dashboard() {
             /* Loading State */
             <div className="space-y-3">
               {[...Array(5)].map((_, i) => (
-                <div key={i} className="flex items-center space-x-3 animate-pulse">
+                <div key={i} className="flex items-center gap-x-3 animate-pulse">
                   <div className="w-8 h-8 bg-gray-200 rounded-full"></div>
                   <div className="flex-1">
                     <div className="h-4 bg-gray-200 rounded w-32 mb-2"></div>
@@ -643,7 +644,7 @@ export default function Dashboard() {
                 {Array.isArray(recentMeasurements) && (recentMeasurements as RecentMeasurement[]).slice(0, 10).map((measurement) => (
                   <tr key={measurement.id} className="border-b border-gray-100">
                     <td className="py-3">
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center gap-x-3">
                         <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
                           <span className="text-xs font-medium">
                             {measurement.user?.firstName?.charAt(0) || ''}{measurement.user?.lastName?.charAt(0) || ''}

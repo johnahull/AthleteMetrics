@@ -275,7 +275,7 @@ export default function MyGlobalProfilePage() {
         <CardContent className="space-y-6">
           {/* Cross-Org Linking */}
           <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
+            <div className="grid gap-y-0.5">
               <Label className="text-base">Allow Cross-Organization Linking</Label>
               <p className="text-sm text-muted-foreground">
                 When enabled, new accounts with the same verified email will automatically link to your profile.
@@ -292,7 +292,7 @@ export default function MyGlobalProfilePage() {
 
           {/* Measurement Sharing */}
           <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
+            <div className="grid gap-y-0.5">
               <Label className="text-base">Share Measurements</Label>
               <p className="text-sm text-muted-foreground">
                 When enabled, your measurements from this account are visible in your unified dashboard.
@@ -334,7 +334,7 @@ export default function MyGlobalProfilePage() {
                   key={log.id}
                   className="flex items-start gap-3 p-2 rounded text-sm"
                 >
-                  <div className="flex-shrink-0 mt-0.5">
+                  <div className="shrink-0 mt-0.5">
                     {log.action === 'created' && (
                       <CheckCircle className="h-4 w-4 text-green-500" />
                     )}

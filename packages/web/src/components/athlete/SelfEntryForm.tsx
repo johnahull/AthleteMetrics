@@ -30,6 +30,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
+import { isMovementQualityMetric } from "@shared/peer-comparison-exclusions";
 
 // Form validation schema
 // Accept any valid metric code - actual validation happens against org-enabled metrics at API level
@@ -81,9 +82,10 @@ export function SelfEntryForm({
   onCancel,
   isSubmitting = false,
 }: SelfEntryFormProps) {
-  // Get available metrics and filter out derived metrics
+  // Get available metrics and filter out derived metrics and Movement Quality
+  // scores (coach-entered only, AM-FEAT-015)
   const { metrics: availableMetrics } = useAvailableMetrics();
-  const selectableMetrics = availableMetrics.filter(m => !m.isDerived);
+  const selectableMetrics = availableMetrics.filter(m => !m.isDerived && !isMovementQualityMetric(m.code));
 
   const form = useForm<SelfEntryFormData>({
     resolver: zodResolver(selfEntrySchema),

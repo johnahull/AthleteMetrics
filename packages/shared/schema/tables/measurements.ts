@@ -19,12 +19,16 @@ export const measurements = pgTable("measurements", {
   isVerified: boolean("is_verified").default(false).notNull(),
   date: date("date").notNull(),
   age: integer("age").notNull(), // User's age at time of measurement
-  metric: text("metric").notNull(), // "FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD", "RSI", "TOP_SPEED"
+  metric: text("metric").notNull(), // "FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505_M", "AGILITY_505_YD", "AGILITY_5105", "T_TEST", "DASH_40YD", "RSI", "TOP_SPEED"
   value: decimal("value", { precision: 10, scale: 3 }).notNull(),
   units: text("units").notNull(), // "s" or "in"
   flyInDistance: decimal("fly_in_distance", { precision: 10, scale: 3 }), // Optional yards for FLY10_TIME
   auxiliaryValue: decimal("auxiliary_value", { precision: 10, scale: 3 }), // Secondary input for paired-input metrics (e.g., reps for 1RM-est)
   notes: text("notes"),
+  // Optional https link to media (e.g. video clip). Validated on write (mediaUrlSchema / isSafePublicUrl,
+  // max 2048); migration 0147 also adds CHECK (char_length(media_url) <= 2048), not declared here.
+  // NEVER include in public reports/snapshots or CSV/LLM/COPPA exports (AM-FEAT-015 Decision 12).
+  mediaUrl: text("media_url"),
   // Team context fields - immutable snapshot of team at time of measurement
   // IMPORTANT: teamId is historical reference WITHOUT foreign key constraint
   // This allows measurements to retain team context even after team deletion/rename

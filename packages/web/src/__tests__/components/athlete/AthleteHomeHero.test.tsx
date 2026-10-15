@@ -148,7 +148,7 @@ describe('AthleteHomeHero', () => {
 
       const heroElement = container.querySelector('[data-testid="athlete-home-hero"]');
       expect(heroElement).toBeInTheDocument();
-      expect(heroElement).toHaveClass('bg-gradient-to-r');
+      expect(heroElement).toHaveClass('bg-linear-to-r/srgb');
     });
 
     it('should have hero banner styling', () => {

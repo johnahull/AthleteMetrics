@@ -10,7 +10,7 @@ export const coachSteps: Step[] = [
   {
     target: '[data-tour="dashboard"]',
     content: 'Welcome, Coach! Your dashboard provides an overview of your teams and athletes.',
-    disableBeacon: true,
+    skipBeacon: true,
     placement: 'right',
   },
   {

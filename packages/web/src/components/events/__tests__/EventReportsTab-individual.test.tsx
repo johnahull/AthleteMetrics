@@ -5,11 +5,12 @@
  * with event percentiles and AI insights options.
  */
 
-import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { EventReportsTab } from '../EventReportsTab';
+import { useEventReports } from '@/lib/events-api';
 
 // Polyfill for happy-dom (Radix UI components)
 beforeAll(() => {
@@ -244,8 +245,11 @@ describe('EventReportsTab - Individual Reports', () => {
         expect(screen.getByText('John Smith')).toBeInTheDocument();
       });
 
-      // Find and toggle the option
+      // Event percentiles are a group comparison: unavailable until comparison is on
       const percentileCheckbox = screen.getByRole('checkbox', { name: /event percentiles/i });
+      expect(percentileCheckbox).toBeDisabled();
+      await user.click(screen.getByRole('checkbox', { name: /compare to a group/i }));
+      expect(percentileCheckbox).toBeEnabled();
       expect(percentileCheckbox).toBeChecked(); // Default on
 
       await user.click(percentileCheckbox);
@@ -316,9 +320,66 @@ describe('EventReportsTab - Individual Reports', () => {
           data: expect.objectContaining({
             reportType: 'individual',
             athleteIds: expect.arrayContaining(['user-1', 'user-2']),
-            includeEventPercentiles: true,
+            groupComparison: false,
+            includeEventPercentiles: false,
           }),
         });
+      });
+    });
+
+    it('should send groupComparison true and event percentiles when comparison is turned on', async () => {
+      mockCreateReportMutation.mutateAsync.mockResolvedValue({ id: 'report-new', name: 'Individual Report' });
+
+      render(
+        <EventReportsTab
+          eventId="event-123"
+          eventName="Spring Combine 2025"
+        />,
+        { wrapper: createWrapper() }
+      );
+
+      const user = userEvent.setup();
+      await user.click(screen.getByText(/individual/i).closest('button')!);
+      await waitFor(() => {
+        expect(screen.getByText('John Smith')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByLabelText(/Remove John Smith/i));
+      await user.click(screen.getByRole('checkbox', { name: /compare to a group/i }));
+      await user.click(screen.getByRole('button', { name: /generate.*report/i }));
+
+      await waitFor(() => {
+        expect(mockCreateReportMutation.mutateAsync).toHaveBeenCalledWith({
+          eventId: 'event-123',
+          data: expect.objectContaining({ groupComparison: true, includeEventPercentiles: true }),
+        });
+      });
+    });
+
+    it('should start the next report with comparison off after one was generated with it on', async () => {
+      mockCreateReportMutation.mutateAsync.mockResolvedValue({ id: 'report-new', name: 'Individual Report' });
+
+      render(
+        <EventReportsTab
+          eventId="event-123"
+          eventName="Spring Combine 2025"
+        />,
+        { wrapper: createWrapper() }
+      );
+
+      const user = userEvent.setup();
+      await user.click(screen.getByText(/individual/i).closest('button')!);
+      await waitFor(() => {
+        expect(screen.getByText('John Smith')).toBeInTheDocument();
+      });
+      await user.click(screen.getByLabelText(/Remove John Smith/i));
+      await user.click(screen.getByRole('checkbox', { name: /compare to a group/i }));
+      await user.click(screen.getByRole('button', { name: /generate.*report/i }));
+      await waitFor(() => expect(mockCreateReportMutation.mutateAsync).toHaveBeenCalled());
+
+      await user.click(screen.getByText(/individual/i).closest('button')!);
+      await waitFor(() => {
+        expect(screen.getByRole('checkbox', { name: /compare to a group/i })).not.toBeChecked();
       });
     });
 
@@ -405,6 +466,50 @@ describe('EventReportsTab - Individual Reports', () => {
 
       // Button should show loading
       expect(screen.getByRole('button', { name: /generating/i })).toBeInTheDocument();
+    });
+  });
+
+  describe('PDF export', () => {
+    let createObjectURL: typeof window.URL.createObjectURL;
+    let revokeObjectURL: typeof window.URL.revokeObjectURL;
+
+    beforeEach(() => {
+      ({ createObjectURL, revokeObjectURL } = window.URL);
+    });
+
+    afterEach(() => {
+      vi.mocked(useEventReports).mockReturnValue({ data: [], isLoading: false, error: null } as never);
+      window.URL.createObjectURL = createObjectURL;
+      window.URL.revokeObjectURL = revokeObjectURL;
+    });
+
+    const report = (reportType: string, config: object) => ({
+      id: 'report-1',
+      name: 'Grace Diaz Eval - Individual Reports - Grace Diaz',
+      reportType,
+      organizationId: 'org-1',
+      config,
+      createdAt: '2025-01-15T09:00:00Z',
+      createdBy: 'coach-1',
+    });
+
+    const clickDownload = async (r: ReturnType<typeof report>) => {
+      vi.mocked(useEventReports).mockReturnValue({ data: [r], isLoading: false, error: null } as never);
+      mockExportPDFMutation.mutateAsync.mockResolvedValue(new Blob());
+      window.URL.createObjectURL = vi.fn(() => 'blob:x');
+      window.URL.revokeObjectURL = vi.fn();
+      render(<EventReportsTab eventId="event-123" eventName="Spring Combine 2025" />, { wrapper: createWrapper() });
+      await userEvent.setup().click(screen.getByRole('button', { name: /download .* as pdf/i }));
+    };
+
+    it('sends the athlete of an individual report', async () => {
+      await clickDownload(report('individual', { athleteId: 'user-1' }));
+      expect(mockExportPDFMutation.mutateAsync).toHaveBeenCalledWith({ reportId: 'report-1', athleteId: 'user-1' });
+    });
+
+    it('sends no athlete for a team report', async () => {
+      await clickDownload(report('team', {}));
+      expect(mockExportPDFMutation.mutateAsync).toHaveBeenCalledWith({ reportId: 'report-1', athleteId: undefined });
     });
   });
 

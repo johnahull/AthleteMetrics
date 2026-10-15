@@ -411,16 +411,18 @@ export function registerEventRoutes(app: Express) {
         return res.status(404).json({ message: "Event not found" });
       }
 
-      // Permission check: only org_admin can delete events
-      if (existingEvent.organizationId) {
-        if (!isSiteAdmin(user)) {
-          const roles = await storage.getUserRoles(user.id, existingEvent.organizationId);
-          const isOrgAdmin = roles.includes('org_admin');
-          if (!isOrgAdmin) {
-            return res.status(403).json({
-              message: "Access denied - only org admins can delete events"
-            });
-          }
+      // Permission check: site admin, or org_admin of the event's organization.
+      // An event without an organization can only be deleted by a site admin.
+      if (!isSiteAdmin(user)) {
+        const roles = existingEvent.organizationId
+          ? await storage.getUserRoles(user.id, existingEvent.organizationId)
+          : [];
+        if (!roles.includes('org_admin')) {
+          return res.status(403).json({
+            message: existingEvent.organizationId
+              ? "Access denied - only org admins can delete events"
+              : "Access denied - only site admins can delete events without an organization"
+          });
         }
       }
 

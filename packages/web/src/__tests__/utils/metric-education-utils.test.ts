@@ -48,7 +48,8 @@ describe('metric-education-utils', () => {
       const metrics = [
         'FLY10_TIME',
         'VERTICAL_JUMP',
-        'AGILITY_505',
+        'AGILITY_505_M',
+        'AGILITY_505_YD',
         'AGILITY_5105',
         'T_TEST',
         'DASH_40YD',
@@ -67,6 +68,31 @@ describe('metric-education-utils', () => {
         expect(education.unit).toBeDefined();
         expect(typeof education.lowerIsBetter).toBe('boolean');
       });
+    });
+
+    it('describes the 5-0-5 meters and yards protocols separately', () => {
+      const m = getMetricEducation('AGILITY_505_M');
+      const yd = getMetricEducation('AGILITY_505_YD');
+      expect(m.name).toBe('5-0-5 Agility (m)');
+      expect(m.description).toMatch(/5 meters/);
+      expect(yd.name).toBe('5-0-5 Agility (yd)');
+      expect(yd.description).toMatch(/5 yards/);
+      expect(yd.description).not.toMatch(/meters/);
+    });
+
+    it('retires the protocol-less AGILITY_505 education entry', () => {
+      expect(getMetricEducation('AGILITY_505')).toBeNull();
+    });
+
+    it('formats both 5-0-5 protocols as seconds', () => {
+      expect(formatMetricValue(2.456, 'AGILITY_505_M')).toBe('2.46s');
+      expect(formatMetricValue(2.244, 'AGILITY_505_YD')).toBe('2.24s');
+    });
+
+    it('keeps percentile thresholds for AGILITY_505_M and omits them for AGILITY_505_YD until calibrated', () => {
+      expect(getPercentileRanking(2.3, 'AGILITY_505_M', undefined, 'male')).not.toBeNull();
+      expect(getPercentileRanking(2.1, 'AGILITY_505_YD', undefined, 'male')).toBeNull();
+      expect(getPercentileRanking(2.1, 'AGILITY_505_YD', undefined, 'female')).toBeNull();
     });
 
     it('should return null for unknown metric', () => {
@@ -95,7 +121,8 @@ describe('metric-education-utils', () => {
   describe('isLowerBetterMetric', () => {
     it('should return true for time-based metrics', () => {
       expect(isLowerBetterMetric('FLY10_TIME')).toBe(true);
-      expect(isLowerBetterMetric('AGILITY_505')).toBe(true);
+      expect(isLowerBetterMetric('AGILITY_505_M')).toBe(true);
+      expect(isLowerBetterMetric('AGILITY_505_YD')).toBe(true);
       expect(isLowerBetterMetric('AGILITY_5105')).toBe(true);
       expect(isLowerBetterMetric('T_TEST')).toBe(true);
       expect(isLowerBetterMetric('DASH_40YD')).toBe(true);

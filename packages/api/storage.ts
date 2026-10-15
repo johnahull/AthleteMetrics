@@ -32,10 +32,14 @@ import {
   securityEvents,
   type SecurityEvent,
 } from "@shared/schema";
+import { parentAthleteLinks } from "@shared/schema/tables/coppa";
 import type { WellnessTrend } from "@shared/wellness-types";
+import { validateMeasurementValue, MeasurementValueValidationError } from "@shared/measurement-value-validation";
+import { isMovementQualityMetric } from "@shared/peer-comparison-exclusions";
+import { assertFlyInDistanceMatches, assertFlyInDistanceOnUpdate } from "@shared/fly-run-in";
 import { db } from "./db";
 import { wellnessRepository, type WellnessTrend as RepoWellnessTrend } from "./repositories/wellness-repository";
-import { eq, desc, asc, and, gte, lte, gt, inArray, sql, arrayContains, or, isNull, isNotNull, exists, ne, SQL } from "drizzle-orm";
+import { eq, desc, asc, and, gte, lte, gt, inArray, sql, arrayContains, or, isNull, isNotNull, exists, notExists, ne, SQL } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { hashToken } from "./lib/token-hash";
@@ -50,6 +54,57 @@ import { getPgErrorCode, PG_UNIQUE_VIOLATION } from "./lib/pg-error";
  */
 function whereUserNotDeleted(): SQL {
   return sql`${users.deletedAt} IS NULL`;
+}
+
+/** InsertMeasurement omits `units`; import callers may supply it to override the metric's configured unit. */
+export type CreateMeasurementInput = InsertMeasurement & { units?: string | null };
+
+/** Optional behavior of storage.createMeasurement (the storage-based import paths). */
+export interface CreateMeasurementOptions {
+  /**
+   * The submitter's role in the organization the caller authorized the import against (an import route has
+   * already checked it). When given it decides auto-verification instead of a lookup on the row's organization.
+   */
+  submitterRole?: string;
+  /**
+   * The organization the caller authorized this import against (their role there is `submitterRole`). The
+   * athlete's team is then taken only from that organization, like event writes, so a row can never be
+   * attributed to (and auto-verified in) another organization where the caller has no such role: an athlete
+   * who belongs to the authorized organization but whose only team is in another one gets no team context.
+   */
+  authorizedOrganizationId?: string;
+  /**
+   * The site_metrics row of measurement.metric, fetched ONCE by a bulk import (getMetricWriteConfigs) instead of
+   * once per row (issue #527). null means "looked up, no such metric"; undefined means "not prefetched", and the
+   * row is looked up here as before.
+   */
+  metricConfig?: MetricWriteConfig | null;
+  /** The submitting user, fetched once by a bulk import (null: looked up, not found); undefined: look it up here. */
+  submitter?: User | null;
+}
+
+/** The part of a site_metrics row that a measurement write needs (validation range, precision, unit, derived flag). */
+export type MetricWriteConfig = Pick<
+  SiteMetric,
+  'validationMin' | 'validationMax' | 'decimalPrecision' | 'auxiliaryInputConfig' | 'isDerived' | 'unit'
+>;
+
+export interface LoginAttemptReservation {
+  /** false when the account is locked: the caller must not compare the password */
+  allowed: boolean;
+  attempts: number;
+  lockedUntil: Date | null;
+}
+
+export interface UnaffiliatedUser {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  username: string | null;
+  emails: string[] | null;
+  isActive: boolean;
+  createdAt: Date;
+  isParent: boolean;
 }
 
 export interface IStorage {
@@ -70,6 +125,9 @@ export interface IStorage {
   deleteUser(id: string): Promise<void>;
   hardDeleteUser(id: string): Promise<void>;
   getUserOrganizations(userId: string): Promise<(UserOrganization & { organization: Organization })[]>;
+  getUnaffiliatedUsers(): Promise<UnaffiliatedUser[]>;
+  isParentAccount(userId: string): Promise<boolean>;
+  assignUnaffiliatedUser(userId: string, organizationId: string, role: string, auditLog: InsertAuditLog): Promise<UserOrganization | null>;
   getUserTeams(userId: string): Promise<(UserTeam & { team: Team & { organization: Organization } })[]>;
 
   // Organizations
@@ -235,6 +293,7 @@ export interface IStorage {
   // Measurements
   getMeasurements(filters?: {
     userId?: string;
+    eventId?: string;
     teamIds?: string[];
     organizationId?: string;
     metric?: string;
@@ -254,7 +313,10 @@ export interface IStorage {
     verifiedBy?: User;
   })[]>;
   getMeasurement(id: string): Promise<Measurement | undefined>;
-  createMeasurement(measurement: InsertMeasurement, submittedBy: string, eventContext?: { eventId: string; eventNameSnapshot: string; eventDateSnapshot: string; }): Promise<Measurement>;
+  createMeasurement(measurement: CreateMeasurementInput, submittedBy: string, eventContext?: { eventId: string; eventNameSnapshot: string; eventDateSnapshot: string; organizationId?: string | null; }, options?: CreateMeasurementOptions): Promise<Measurement>;
+  getMetricWriteConfig(code: string): Promise<MetricWriteConfig | null>;
+  getMetricWriteConfigs(codes: string[]): Promise<Map<string, MetricWriteConfig | null>>;
+  getActiveUserById(id: string): Promise<User | undefined>;
   updateMeasurement(id: string, measurement: Partial<InsertMeasurement>): Promise<Measurement>;
   deleteMeasurement(id: string): Promise<void>;
   verifyMeasurement(id: string, verifiedBy: string): Promise<Measurement>;
@@ -280,7 +342,8 @@ export interface IStorage {
     totalTeams: number;
     bestFLY10_TIMELast30Days?: { value: number; userName: string };
     bestVERTICAL_JUMPLast30Days?: { value: number; userName: string };
-    bestAGILITY_505Last30Days?: { value: number; userName: string };
+    bestAGILITY_505_MLast30Days?: { value: number; userName: string };
+    bestAGILITY_505_YDLast30Days?: { value: number; userName: string };
     bestAGILITY_5105Last30Days?: { value: number; userName: string };
     bestT_TESTLast30Days?: { value: number; userName: string };
     bestDASH_40YDLast30Days?: { value: number; userName: string };
@@ -290,8 +353,8 @@ export interface IStorage {
   // Enhanced Authentication Methods
   findUserById(userId: string): Promise<User | null>;
   resetLoginAttempts(userId: string): Promise<void>;
-  incrementLoginAttempts(userId: string, attempts: number): Promise<void>;
-  lockAccount(userId: string, lockUntil: Date): Promise<void>;
+  registerLoginAttempt(userId: string, maxAttempts: number, lockoutMs: number): Promise<LoginAttemptReservation>;
+  releaseLoginAttempt(userId: string, maxAttempts: number): Promise<void>;
   updateLastLogin(userId: string): Promise<void>;
   createLoginSession(session: any): Promise<void>;
   findLoginSession(token: string): Promise<any>;
@@ -879,6 +942,52 @@ export class DatabaseStorage implements IStorage {
 
       // HARD DELETE: Permanently remove user record
       await tx.delete(users).where(eq(users.id, id));
+    });
+  }
+
+  // Users in no organization (parents included, flagged), for site admins to assign
+  async getUnaffiliatedUsers(): Promise<UnaffiliatedUser[]> {
+    return db.select({
+      id: users.id,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      username: users.username,
+      emails: users.emails,
+      isActive: users.isActive,
+      createdAt: users.createdAt,
+      isParent: sql<boolean>`${exists(
+        db.select({ one: sql`1` }).from(parentAthleteLinks).where(and(
+          eq(parentAthleteLinks.parentUserId, users.id),
+          eq(parentAthleteLinks.isActive, true)
+        ))
+      )}`,
+    })
+      .from(users)
+      .where(and(
+        whereUserNotDeleted(),
+        eq(users.isSiteAdmin, false),
+        notExists(db.select({ one: sql`1` }).from(userOrganizations).where(eq(userOrganizations.userId, users.id)))
+      ))
+      .orderBy(asc(users.lastName), asc(users.firstName));
+  }
+
+  async isParentAccount(userId: string): Promise<boolean> {
+    const [link] = await db.select({ id: parentAthleteLinks.id }).from(parentAthleteLinks)
+      .where(and(eq(parentAthleteLinks.parentUserId, userId), eq(parentAthleteLinks.isActive, true))).limit(1);
+    return !!link;
+  }
+
+  // Locks the user row so two concurrent assigns cannot both see "no membership"; null = already a member
+  async assignUnaffiliatedUser(userId: string, organizationId: string, role: string, auditLog: InsertAuditLog): Promise<UserOrganization | null> {
+    return db.transaction(async (tx: any) => {
+      await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).for('update');
+      const existing = await tx.select({ id: userOrganizations.id }).from(userOrganizations)
+        .where(eq(userOrganizations.userId, userId)).limit(1);
+      if (existing.length > 0) return null;
+
+      const membership = await this.addUserToOrganization(userId, organizationId, role, tx);
+      await tx.insert(auditLogs).values(auditLog);
+      return membership;
     });
   }
 
@@ -3399,6 +3508,7 @@ export class DatabaseStorage implements IStorage {
   async getMeasurements(filters?: {
     userId?: string;
     athleteId?: string;
+    eventId?: string;
     teamIds?: string[];
     organizationId?: string;
     metric?: string;
@@ -3430,7 +3540,12 @@ export class DatabaseStorage implements IStorage {
       units: measurements.units,
       flyInDistance: measurements.flyInDistance,
       notes: measurements.notes,
+      mediaUrl: measurements.mediaUrl,
+      organizationId: measurements.organizationId,
       createdAt: measurements.createdAt,
+      // Derived-row markers (the event grid skips rows computed from other rows)
+      isCalculated: measurements.isCalculated,
+      calculatedFromMeasurementIds: measurements.calculatedFromMeasurementIds,
       // Event context fields
       eventId: measurements.eventId,
       eventNameSnapshot: measurements.eventNameSnapshot,
@@ -3461,6 +3576,9 @@ export class DatabaseStorage implements IStorage {
       if (targetUserId) {
         conditions.push(eq(measurements.userId, targetUserId));
       }
+    }
+    if (filters?.eventId) {
+      conditions.push(eq(measurements.eventId, filters.eventId));
     }
     if (filters?.metric) {
       conditions.push(eq(measurements.metric, filters.metric));
@@ -3550,7 +3668,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     const result = await finalQuery
-      .orderBy(desc(measurements.date), desc(measurements.createdAt));
+      .orderBy(desc(measurements.date), desc(measurements.createdAt), desc(measurements.id));
 
     // If no measurements found, return empty array
     if (result.length === 0) {
@@ -3706,15 +3824,88 @@ export class DatabaseStorage implements IStorage {
     return activeTeams;
   }
 
+  /** The site_metrics columns a measurement write needs, for one metric code (null: no such metric). */
+  async getMetricWriteConfig(code: string): Promise<MetricWriteConfig | null> {
+    return (await this.getMetricWriteConfigs([code])).get(code) ?? null;
+  }
+
+  /**
+   * The same for many codes in ONE query (a bulk import calls this once, not once per row).
+   * The map has an entry for EVERY requested code: the config, or null when no such metric exists. So
+   * `map.get(code) === undefined` can only mean "this code was never requested", and createMeasurement then
+   * looks the metric up itself; a caller must pass `map.get(code)` as is, never turn undefined into null.
+   */
+  async getMetricWriteConfigs(codes: string[]): Promise<Map<string, MetricWriteConfig | null>> {
+    const unique = [...new Set(codes)];
+    const found = new Map<string, MetricWriteConfig | null>(unique.map((code) => [code, null]));
+    if (unique.length === 0) return found;
+    const rows = await db
+      .select({
+        code: siteMetrics.code,
+        validationMin: siteMetrics.validationMin,
+        validationMax: siteMetrics.validationMax,
+        decimalPrecision: siteMetrics.decimalPrecision,
+        auxiliaryInputConfig: siteMetrics.auxiliaryInputConfig,
+        isDerived: siteMetrics.isDerived,
+        unit: siteMetrics.unit,
+      })
+      .from(siteMetrics)
+      .where(inArray(siteMetrics.code, unique));
+    for (const { code, ...config } of rows) found.set(code, config);
+    return found;
+  }
+
+  /** A user that exists and is not soft-deleted (the submitter of a measurement). */
+  async getActiveUserById(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(and(eq(users.id, id), isNull(users.deletedAt)));
+    return user;
+  }
+
   async createMeasurement(
-    measurement: InsertMeasurement,
+    measurement: CreateMeasurementInput,
     submittedBy: string,
     eventContext?: {
       eventId: string;
       eventNameSnapshot: string;
       eventDateSnapshot: string;  // String in 'YYYY-MM-DD' format for Drizzle's date() type
-    }
+      // The event's organization: an event measurement always belongs to it, and
+      // team context is only taken from the athlete's teams in that organization.
+      organizationId?: string | null;
+    },
+    options: CreateMeasurementOptions = {}
   ): Promise<Measurement> {
+    // Trust boundary: this method validates values only and performs NO role
+    // check. Callers must enforce who may enter a metric (Movement Quality is
+    // coach/admin-only) before calling: today the only callers are the CSV/OCR
+    // import routes, which call assertCanEnterMetric per row (other
+    // writes go through MeasurementService, which enforces it itself).
+    //
+    // Value validation (CSV/OCR imports and other callers write through here
+    // without the service). Every metric must be a finite number. The
+    // metric-aware range rule (0-3 scores) applies to MQ metrics only: this path
+    // did no range/zero validation before AM-FEAT-015, so other metrics keep
+    // accepting 0 and negative values. Paired-input metrics validate their own inputs.
+    // Prefetched once per import by the bulk callers (issue #527); a single write looks it up here.
+    const metricConfig = options.metricConfig !== undefined
+      ? options.metricConfig
+      : await this.getMetricWriteConfig(measurement.metric);
+    // MQ totals (MQI_TOTAL, MQ_TRANSITION_TOTAL) are only ever calculated from
+    // the base scores; a manual entry would shadow the calculated total.
+    if (metricConfig?.isDerived && isMovementQualityMetric(measurement.metric)) {
+      throw new MeasurementValueValidationError(
+        `${measurement.metric} is calculated automatically and cannot be entered manually`
+      );
+    }
+    if (!Number.isFinite(Number(measurement.value))) {
+      throw new MeasurementValueValidationError('Value must be a finite number');
+    }
+    if (isMovementQualityMetric(measurement.metric) && !metricConfig?.auxiliaryInputConfig) {
+      const valueError = validateMeasurementValue(measurement.value, metricConfig ?? undefined, measurement.metric);
+      if (valueError) throw new MeasurementValueValidationError(valueError);
+    }
+
+    assertFlyInDistanceMatches(measurement.metric, measurement.flyInDistance);
+
     // Calculate age and units based on metric
     const user = await this.getUser(measurement.userId);
     if (!user) throw new Error("User not found");
@@ -3733,8 +3924,17 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    const units = measurement.metric === "FLY10_TIME" || measurement.metric === "T_TEST" || measurement.metric === "DASH_40YD" ? "s" :
-                  measurement.metric === "RSI" ? "ratio" : "in";
+    // Units: caller-supplied (non-empty) > site_metrics.unit (non-empty) > legacy hard-coded mapping.
+    // Exception: an MQ score always takes its configured unit ('score'); import
+    // callers fill a missing unit with a non-MQ default (e.g. 's' on review approval).
+    const callerUnits = measurement.units?.trim() ? measurement.units : "";
+    const configuredUnit = metricConfig?.unit || "";
+    const units =
+      (isMovementQualityMetric(measurement.metric) && configuredUnit) ||
+      callerUnits ||
+      configuredUnit ||
+      (measurement.metric === "FLY10_TIME" || measurement.metric === "T_TEST" || measurement.metric === "DASH_40YD" ? "s" :
+       measurement.metric === "RSI" ? "ratio" : "in");
 
     // Auto-populate team context if not explicitly provided
     let teamId = measurement.teamId;
@@ -3742,10 +3942,13 @@ export class DatabaseStorage implements IStorage {
     let teamContextAuto = true;
     let teamNameSnapshot: string | null = null;
     let organizationId: string | null = null;
+    const eventOrganizationId = eventContext?.organizationId ?? null;
 
     if (!teamId || teamId.trim() === "") {
-      // Get athlete's active teams at measurement date
-      const activeTeams = await this.getAthleteActiveTeamsAtDate(measurement.userId, measurementDate);
+      // Get athlete's active teams at measurement date (only the event's org for event writes)
+      const activeTeams = (await this.getAthleteActiveTeamsAtDate(measurement.userId, measurementDate))
+        .filter(t => !eventOrganizationId || t.organizationId === eventOrganizationId)
+        .filter(t => !options.authorizedOrganizationId || t.organizationId === options.authorizedOrganizationId);
 
       if (activeTeams.length === 1) {
         // Single team - auto-assign
@@ -3778,20 +3981,29 @@ export class DatabaseStorage implements IStorage {
         teamNameSnapshot = team.name;
         organizationId = team.organizationId;
       }
+      if (options.authorizedOrganizationId && organizationId && organizationId !== options.authorizedOrganizationId) {
+        throw new Error('The team belongs to a different organization than the one this import is authorized for');
+      }
     }
 
     // Get submitter info to determine if auto-verify
-    const [submitter] = await db.select().from(users).where(
-      and(
-        eq(users.id, submittedBy),
-        isNull(users.deletedAt)
-      )
-    );
+    const submitter = options.submitter !== undefined
+      ? options.submitter ?? undefined
+      : await this.getActiveUserById(submittedBy);
 
-    // Check if submitter is site admin or has coach/org_admin role in any organization
+    // Auto-verify (issue #514). Being a coach in some OTHER organization must not verify a row: a user who
+    // coaches in one organization and is only an athlete in another would otherwise get verified rows in both.
+    const rowOrganizationId = eventOrganizationId || organizationId || null;
     let isCoach = submitter?.isSiteAdmin === true;
-    if (!isCoach && submitter) {
-      const submitterRoles = await this.getUserRoles(submitter.id);
+    if (!isCoach && options.submitterRole !== undefined) {
+      // The caller (an import route) already established the submitter's role in the organization it matched
+      // the athlete in. The row's own organization can still be null (an athlete on no team), so that role,
+      // not a lookup on the row, decides.
+      isCoach = ['site_admin', 'coach', 'org_admin'].includes(options.submitterRole);
+    } else if (!isCoach && submitter && rowOrganizationId) {
+      // Otherwise: coach / org_admin in the organization the row belongs to. A row with no organization has no
+      // role to check, so only a site admin verifies it.
+      const submitterRoles = await this.getUserRoles(submitter.id, rowOrganizationId);
       isCoach = submitterRoles.includes("coach") || submitterRoles.includes("org_admin");
     }
 
@@ -3802,6 +4014,7 @@ export class DatabaseStorage implements IStorage {
       metric: measurement.metric,
       value: measurement.value.toString(),
       notes: measurement.notes,
+      mediaUrl: measurement.mediaUrl ?? null,
       flyInDistance: measurement.flyInDistance?.toString(),
       age,
       units,
@@ -3809,10 +4022,10 @@ export class DatabaseStorage implements IStorage {
       verifiedBy: isCoach ? submittedBy : undefined,
       teamId: teamId || null,
       teamNameSnapshot: teamNameSnapshot || null,
-      organizationId: organizationId || null,
+      organizationId: rowOrganizationId,
       season: season || null,
       teamContextAuto: teamContextAuto,
-      // Event context (for measurements taken at events)
+      // Event context (for measurements taken at events), passed by EventMeasurementsService
       eventId: eventContext?.eventId ?? null,
       eventNameSnapshot: eventContext?.eventNameSnapshot ?? null,
       eventDateSnapshot: eventContext?.eventDateSnapshot ?? null,
@@ -3822,6 +4035,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateMeasurement(id: string, measurement: Partial<InsertMeasurement>): Promise<Measurement> {
+    // Trust boundary: this method performs NO role check (no Movement Quality
+    // or clip guard) and has no callers today. Measurement edits go through
+    // MeasurementService.updateMeasurement, which enforces assertCanEnterMetric
+    // and assertCanAttachClip itself; any new caller must enforce them first.
+    if (measurement.metric || measurement.flyInDistance !== undefined) {
+      const [existing] = await db
+        .select({ metric: measurements.metric, flyInDistance: measurements.flyInDistance })
+        .from(measurements)
+        .where(eq(measurements.id, id));
+      if (existing) assertFlyInDistanceOnUpdate(existing, measurement);
+    }
+
     const updateData: any = {};
     if (measurement.userId) updateData.userId = measurement.userId;
     // submittedBy cannot be updated after creation
@@ -3829,6 +4054,7 @@ export class DatabaseStorage implements IStorage {
     if (measurement.metric) updateData.metric = measurement.metric;
     if (measurement.value !== undefined) updateData.value = measurement.value.toString();
     if (measurement.notes !== undefined) updateData.notes = measurement.notes;
+    if (measurement.mediaUrl !== undefined) updateData.mediaUrl = measurement.mediaUrl;
     if (measurement.flyInDistance !== undefined) updateData.flyInDistance = measurement.flyInDistance?.toString();
 
     const [updated] = await db.update(measurements).set(updateData).where(eq(measurements.id, id)).returning();
@@ -3936,7 +4162,8 @@ export class DatabaseStorage implements IStorage {
     totalTeams: number;
     bestFLY10_TIMELast30Days?: { value: number; userName: string };
     bestVERTICAL_JUMPLast30Days?: { value: number; userName: string };
-    bestAGILITY_505Last30Days?: { value: number; userName: string };
+    bestAGILITY_505_MLast30Days?: { value: number; userName: string };
+    bestAGILITY_505_YDLast30Days?: { value: number; userName: string };
     bestAGILITY_5105Last30Days?: { value: number; userName: string };
     bestT_TESTLast30Days?: { value: number; userName: string };
     bestDASH_40YDLast30Days?: { value: number; userName: string };
@@ -3967,7 +4194,8 @@ export class DatabaseStorage implements IStorage {
     const metrics = [
       { key: 'FLY10_TIME', lowerIsBetter: true },
       { key: 'VERTICAL_JUMP', lowerIsBetter: false },
-      { key: 'AGILITY_505', lowerIsBetter: true },
+      { key: 'AGILITY_505_M', lowerIsBetter: true },
+      { key: 'AGILITY_505_YD', lowerIsBetter: true },
       { key: 'AGILITY_5105', lowerIsBetter: true },
       { key: 'T_TEST', lowerIsBetter: true },
       { key: 'DASH_40YD', lowerIsBetter: true },
@@ -4018,15 +4246,55 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, userId));
   }
 
-  async incrementLoginAttempts(userId: string, attempts: number): Promise<void> {
-    await db.update(users)
-      .set({ loginAttempts: attempts })
-      .where(eq(users.id, userId));
+  /**
+   * Reserve one password attempt for a user, atomically, BEFORE the password is compared.
+   *
+   * One UPDATE: the row lock serialises concurrent callers and Postgres re-evaluates the WHERE clause
+   * against the latest committed row, so each caller sees the count and lock left by the previous one.
+   * - Not locked (locked_until is NULL or has passed): the attempt is reserved. An expired lock restarts the
+   *   count at 1; reaching `maxAttempts` sets locked_until. The attempt that reaches the limit is still
+   *   allowed (that is the 5th guess); every later caller is refused until the lock expires.
+   * - Locked: no row matches, nothing is changed, and the existing lock is returned with allowed = false.
+   */
+  async registerLoginAttempt(userId: string, maxAttempts: number, lockoutMs: number): Promise<LoginAttemptReservation> {
+    const now = new Date();
+    const lockUntil = new Date(now.getTime() + lockoutMs).toISOString();
+    const attemptsBefore = sql`CASE WHEN ${users.lockedUntil} IS NULL THEN COALESCE(${users.loginAttempts}, 0) ELSE 0 END`;
+
+    const [reserved] = await db.update(users)
+      .set({
+        loginAttempts: sql`${attemptsBefore} + 1`,
+        lockedUntil: sql`CASE WHEN ${attemptsBefore} + 1 >= ${maxAttempts} THEN ${lockUntil}::timestamp ELSE NULL END`,
+      })
+      .where(and(
+        eq(users.id, userId),
+        or(isNull(users.lockedUntil), lte(users.lockedUntil, now)),
+      ))
+      .returning({ loginAttempts: users.loginAttempts, lockedUntil: users.lockedUntil });
+
+    if (reserved) {
+      return { allowed: true, attempts: reserved.loginAttempts ?? 0, lockedUntil: reserved.lockedUntil };
+    }
+
+    const [current] = await db.select({ loginAttempts: users.loginAttempts, lockedUntil: users.lockedUntil })
+      .from(users).where(eq(users.id, userId));
+    return { allowed: false, attempts: current?.loginAttempts ?? 0, lockedUntil: current?.lockedUntil ?? null };
   }
 
-  async lockAccount(userId: string, lockUntil: Date): Promise<void> {
+  /**
+   * Give back one reserved attempt (the password was correct but the login did not complete for a reason
+   * that is not a wrong credential, e.g. an MFA code is still to come).
+   *
+   * If that attempt was the one that reached the limit and set the lock, the lock is undone too: requests
+   * refused while locked never increment, so the count equals maxAttempts only when the attempt being
+   * given back caused the lock. A lower count means no lock is set; a higher one is never produced.
+   */
+  async releaseLoginAttempt(userId: string, maxAttempts: number): Promise<void> {
     await db.update(users)
-      .set({ lockedUntil: lockUntil })
+      .set({
+        lockedUntil: sql`CASE WHEN COALESCE(${users.loginAttempts}, 0) <= ${maxAttempts} THEN NULL ELSE ${users.lockedUntil} END`,
+        loginAttempts: sql`GREATEST(COALESCE(${users.loginAttempts}, 0) - 1, 0)`,
+      })
       .where(eq(users.id, userId));
   }
 

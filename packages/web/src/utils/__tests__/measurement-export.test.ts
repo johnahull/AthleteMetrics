@@ -242,7 +242,7 @@ describe('measurementsToCSVString', () => {
     const metricTypes = [
       'FLY10_TIME',
       'VERTICAL_JUMP',
-      'AGILITY_505',
+      'AGILITY_505_YD',
       'AGILITY_5105',
       'T_TEST',
       'DASH_40YD',
@@ -253,7 +253,7 @@ describe('measurementsToCSVString', () => {
     const metricLabels: Record<string, string> = {
       FLY10_TIME: '10-Yard Fly Time',
       VERTICAL_JUMP: 'Vertical Jump',
-      AGILITY_505: '5-0-5 Agility',
+      AGILITY_505_YD: '5-0-5 Agility',
       AGILITY_5105: '5-10-5 Agility',
       T_TEST: 'T-Test',
       DASH_40YD: '40-Yard Dash',

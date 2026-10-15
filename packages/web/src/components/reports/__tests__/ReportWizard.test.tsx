@@ -42,6 +42,13 @@ vi.mock('@/lib/benchmarks-api', () => ({
   useOrganizationBenchmarks: (...args: any[]) => mockUseOrganizationBenchmarks(...args),
 }));
 
+// Selector stub: one button picks an athlete so an individual report can be submitted
+vi.mock('@/components/ui/team-athlete-selector', () => ({
+  TeamAthleteSelector: ({ onSelectionChange }: { onSelectionChange: (ids: string[]) => void }) => (
+    <button type="button" onClick={() => onSelectionChange(['ath-1'])}>pick-athlete</button>
+  ),
+}));
+
 describe('ReportWizard Component', () => {
   let queryClient: QueryClient;
   const mockOnClose = vi.fn();
@@ -819,6 +826,71 @@ describe('ReportWizard Component', () => {
       await waitFor(() => {
         expect(screen.getByText(/No enabled benchmarks available/i)).toBeInTheDocument();
       });
+    });
+  });
+  describe('Group comparison switch', () => {
+    const next = () => fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+
+    // Walks to step 7 (filters). Individual: type -> athletes -> name -> timeframe -> metrics -> benchmarks -> filters.
+    const goToFilters = async (type: 'individual' | 'team') => {
+      await waitFor(() => expect(screen.getByText('Individual Report')).toBeInTheDocument());
+      fireEvent.click(screen.getByLabelText(new RegExp(`${type} Report`, 'i'), { exact: false }));
+      next();
+      if (type === 'individual') {
+        fireEvent.click(screen.getByText('pick-athlete'));
+        next();
+      }
+      await waitFor(() => fireEvent.change(screen.getByLabelText(/Report Name/i), { target: { value: 'GC Test' } }));
+      next();
+      next();
+      await waitFor(() => fireEvent.click(screen.getAllByRole('checkbox')[0]));
+      next();
+      next();
+    };
+
+    const submit = async () => {
+      next();
+      fireEvent.click(screen.getByRole('button', { name: /Create Report/i }));
+      await waitFor(() => expect(mockCreateReportMutate).toHaveBeenCalled());
+      return mockCreateReportMutate.mock.calls[0][0];
+    };
+
+    it('individual report defaults to no comparison: explicit false, no filters, hidden filter inputs', async () => {
+      renderWithQueryClient(<ReportWizard open={true} onClose={mockOnClose} onSuccess={mockOnSuccess} />);
+      await goToFilters('individual');
+
+      expect(screen.getByRole('switch', { name: /Compare to a group/i })).not.toBeChecked();
+      expect(screen.queryByLabelText('Gender')).not.toBeInTheDocument();
+
+      const payload = await submit();
+      expect(payload.config.groupComparison).toBe(false);
+      expect(payload.config).not.toHaveProperty('filters');
+      expect(payload.config.charts.radar).toBe(false);
+      expect(payload.config.charts.distribution).toBe(false);
+    });
+
+    it('individual report with the switch on sends groupComparison: true and shows filters', async () => {
+      renderWithQueryClient(<ReportWizard open={true} onClose={mockOnClose} onSuccess={mockOnSuccess} />);
+      await goToFilters('individual');
+
+      fireEvent.click(screen.getByRole('switch', { name: /Compare to a group/i }));
+      await waitFor(() => expect(screen.getByText('Gender')).toBeInTheDocument());
+
+      const payload = await submit();
+      expect(payload.config.groupComparison).toBe(true);
+    });
+
+    it('team report has no switch, keeps filters and sends no groupComparison', async () => {
+      renderWithQueryClient(<ReportWizard open={true} onClose={mockOnClose} onSuccess={mockOnSuccess} />);
+      await goToFilters('team');
+
+      expect(screen.queryByRole('switch', { name: /Compare to a group/i })).not.toBeInTheDocument();
+      await waitFor(() => expect(screen.getByLabelText('Team A')).toBeInTheDocument());
+      fireEvent.click(screen.getByLabelText('Team A'));
+
+      const payload = await submit();
+      expect(payload.config.filters).toMatchObject({ teamIds: ['team-1'] });
+      expect(payload.config).not.toHaveProperty('groupComparison');
     });
   });
 });

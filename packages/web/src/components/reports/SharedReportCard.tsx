@@ -8,7 +8,7 @@ interface SharedReportCardProps {
   shareId: string;
   reportId: string;
   reportName: string;
-  reportType: "team" | "individual";
+  reportType: "team" | "individual" | "eval";
   sharedBy: { firstName: string; lastName: string } | null;
   message?: string;
   createdAt: string;
@@ -43,6 +43,11 @@ export function SharedReportCard({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <h3 className="font-medium truncate">{reportName}</h3>
+              {reportType === "eval" && (
+                <Badge variant="outline" className="shrink-0" data-testid="eval-report-badge">
+                  Eval report
+                </Badge>
+              )}
               {isNew && (
                 <Badge variant="default" className="shrink-0" data-testid="new-report-badge">
                   New

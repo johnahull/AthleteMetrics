@@ -121,7 +121,7 @@ export function ConsentRecoveryBanner({
           </Button>
         ) : (
           <div className="space-y-3 pt-1">
-            <div className="space-y-1">
+            <div className="grid gap-y-1">
               <Label htmlFor="reInitiateEmail" className="text-xs text-amber-800">
                 Parent / Guardian Email
               </Label>

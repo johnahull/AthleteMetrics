@@ -3,7 +3,7 @@
  * Tests for dynamic CSV template endpoints that show valid metrics/sports/positions
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import { db } from '../../db';
 import { siteMetrics, siteSports, sitePositions } from '@shared/schema';
 import { eq } from 'drizzle-orm';
@@ -11,6 +11,7 @@ import express from 'express';
 import request from 'supertest';
 import session from 'express-session';
 import { registerImportExportRoutes } from '../import-export-routes';
+import { importValidationService } from '../../services/import-validation-service';
 
 // Create test app
 const createTestApp = () => {
@@ -236,6 +237,24 @@ describe('Import Template API', () => {
   });
 
   describe('GET /api/import/templates/measurements', () => {
+    // The route shows only the first 30 active metrics (in unspecified DB order), so on a
+    // fully migrated DB the TEST_ metrics can fall off the list. Keep the real DB load (so
+    // is_active filtering is still exercised) but narrow the metrics to this file's fixtures.
+    beforeEach(() => {
+      const realLoad = importValidationService.loadValidationContext.bind(importValidationService);
+      vi.spyOn(importValidationService, 'loadValidationContext').mockImplementation(async () => {
+        const ctx = await realLoad();
+        const metrics = new Map(
+          Array.from(ctx.metrics.entries()).filter(([code]) => code.startsWith('TEST_'))
+        );
+        return { ...ctx, metrics };
+      });
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
     it('should return CSV template with valid metrics and units', async () => {
       const response = await request(app)
         .get('/api/import/templates/measurements')

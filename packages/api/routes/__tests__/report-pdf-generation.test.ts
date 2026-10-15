@@ -313,7 +313,7 @@ describe('PDF Generation - Team Reports', () => {
 
   describe('Helper Functions', () => {
     it('should identify lower-is-better metrics correctly', () => {
-      const lowerBetterMetrics = ['FLY10_TIME', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD'];
+      const lowerBetterMetrics = ['FLY10_TIME', 'AGILITY_505_YD', 'AGILITY_5105', 'T_TEST', 'DASH_40YD'];
       const higherBetterMetrics = ['VERTICAL_JUMP', 'RSI'];
 
       // FLY10_TIME should be lower-is-better

@@ -11,6 +11,8 @@ import { apiRequest } from "@/lib/queryClient";
 import { insertMeasurementSchema, type InsertMeasurement } from "@shared/schema";
 import { Save } from "lucide-react";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
+import { useAuth } from "@/lib/auth";
+import { isMovementQualityMetric } from "@shared/peer-comparison-exclusions";
 import { PairedInputFields } from "@/components/measurement/PairedInputFields";
 import { LastSetContextLine } from "@/components/measurement/LastSetContextLine";
 import { parseFieldError } from "@/lib/parse-field-error";
@@ -24,8 +26,11 @@ interface AthleteMeasurementFormProps {
 
 // Create dynamic measurement schema that accepts any metric string
 // Backend will validate against org-enabled metrics
-const dynamicMeasurementSchema = insertMeasurementSchema.omit({ metric: true }).extend({
+export const dynamicMeasurementSchema = insertMeasurementSchema.omit({ metric: true }).extend({
   metric: z.string().min(1, "Metric is required"),
+  // The shared schema allows 0 for MQ 0-3 scores (entered via the event MQ panel);
+  // this general form keeps the positive() rule so its default 0 is never submitted.
+  value: z.number().positive("Value must be positive"),
 });
 
 type DynamicInsertMeasurement = z.infer<typeof dynamicMeasurementSchema>;
@@ -34,8 +39,14 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Get available metrics using centralized hook (filters by active+enabled)
-  const { metrics: availableMetrics } = useAvailableMetrics();
+  const { user } = useAuth();
+
+  // Get available metrics using centralized hook (filters by active+enabled).
+  // Movement Quality scores are coach-entered: athletes are not offered them.
+  const { metrics: enabledMetrics } = useAvailableMetrics();
+  const availableMetrics = user?.role === "athlete"
+    ? enabledMetrics.filter((m) => !isMovementQualityMetric(m.code))
+    : enabledMetrics;
 
   const firstMetricCode = "FLY10_TIME";
 
@@ -46,7 +57,6 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
       date: new Date().toISOString().split('T')[0],
       metric: firstMetricCode,
       value: 0,
-      flyInDistance: undefined,
       notes: "",
     },
   });
@@ -71,7 +81,6 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
       // values, then return focus to the primary input field.
       form.resetField("value", { defaultValue: 0 });
       form.resetField("auxiliaryValue", { defaultValue: undefined });
-      form.resetField("flyInDistance", { defaultValue: undefined });
       form.resetField("notes", { defaultValue: "" });
       form.clearErrors();
       setTimeout(() => form.setFocus("value"), 0);
@@ -228,39 +237,6 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
                 )}
               />
             )}
-
-            {/* Fly-In Distance (only for FLY10_TIME) */}
-            {metric === "FLY10_TIME" && (
-              <FormField
-                control={form.control}
-                name="flyInDistance"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Fly-In Distance (Optional)</FormLabel>
-                    <div className="flex">
-                      <FormControl>
-                        <Input 
-                          {...field}
-                          type="number"
-                          step="0.1"
-                          placeholder="Enter distance"
-                          disabled={createMeasurementMutation.isPending}
-                          className="rounded-r-none"
-                          data-testid="input-fly-in-distance"
-                          onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
-                          value={field.value || ''}
-                        />
-                      </FormControl>
-                      <div className="px-4 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600 text-sm">
-                        yd
-                      </div>
-                    </div>
-                    <p className="text-xs text-gray-500">Distance from start of acceleration to timing gate</p>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
           </div>
 
           {/* Notes */}
@@ -286,7 +262,7 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
           />
 
           {/* Submit Button */}
-          <div className="flex justify-end space-x-3 pt-4">
+          <div className="flex justify-end gap-x-3 pt-4">
             <Button 
               type="submit" 
               disabled={createMeasurementMutation.isPending}

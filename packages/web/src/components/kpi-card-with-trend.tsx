@@ -126,7 +126,7 @@ export function KPICardWithTrend({
 
             {trend && (
               <div
-                className={`flex items-center space-x-1 mt-1 text-sm font-medium ${trendColor}`}
+                className={`flex items-center gap-x-1 mt-1 text-sm font-medium ${trendColor}`}
                 aria-label={getTrendLabel(trend)}
               >
                 {TrendIcon && <TrendIcon className="h-4 w-4" />}

@@ -203,7 +203,7 @@ export function MetricEducationCard({
                     key={index}
                     className="flex items-start gap-2 text-sm text-gray-600"
                   >
-                    <span className="bg-green-100 text-green-800 rounded-full w-5 h-5 flex items-center justify-center text-xs flex-shrink-0 mt-0.5">
+                    <span className="bg-green-100 text-green-800 rounded-full w-5 h-5 flex items-center justify-center text-xs shrink-0 mt-0.5">
                       {index + 1}
                     </span>
                     {tip}

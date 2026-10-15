@@ -38,7 +38,7 @@ vi.mock('../csv', () => ({
 // Mock html2canvas at module level to avoid test pollution
 // Each test can customize the mock behavior using mockImplementation
 const mockHtml2Canvas = vi.fn();
-vi.mock('html2canvas', () => ({
+vi.mock('html2canvas-pro', () => ({
   default: mockHtml2Canvas
 }));
 

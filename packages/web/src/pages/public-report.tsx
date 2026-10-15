@@ -27,7 +27,7 @@ import { PercentileRadarSection } from "@/components/reports/PercentileRadarSect
 import { DistributionSection } from "@/components/reports/DistributionSection";
 import { FvProfileSection } from "@/components/reports/FvProfileSection";
 import type { ReportFvProfile } from "@shared/report-fv-types";
-import { resolveChartSelection, resolveTeamChartSelection } from "@shared/report-charts";
+import { isGroupComparisonOn, resolveChartSelection, resolveTeamChartSelection } from "@shared/report-charts";
 import { TierProgressChart } from "@/components/charts/TierProgressChart";
 import { BenchmarkStandingBar } from "@/components/charts/BenchmarkStandingBar";
 import { TeamTrendSection } from "@/components/reports/TeamTrendSection";
@@ -39,6 +39,7 @@ import { calculateTierDistributions } from "@shared/benchmark-utils";
 import type { MetricExplanation as MetricExplanationData } from "@shared/metric-explanations";
 import type { ReportTrends, TeamReportTrends, TeamReportDistributions } from "@shared/report-trends-types";
 import type { TeamReportConfig, AthleteRanking } from "@/types/report-types";
+import { EvalReportBody } from "@/components/reports/EvalReportView";
 
 export default function PublicReport() {
   const labels = useContextualLabels();
@@ -81,13 +82,14 @@ export default function PublicReport() {
   const { generatedAt } = snapshotData;
   // `reportType` is a TOP-LEVEL field on the stored snapshot (the verbatim return
   // of generateTeamReport / generateIndividualReport). It is NOT on reportConfig.
-  const reportType = snapshotData.reportType as 'team' | 'individual' | undefined;
+  const reportType = snapshotData.reportType as 'team' | 'individual' | 'eval' | undefined;
   const metricExplanations = (snapshotData.metricExplanations ?? {}) as Record<string, MetricExplanationData>;
   const metricLabels = (snapshotData.metricLabels ?? {}) as Record<string, string>;
   const metricUnits = (snapshotData.metricUnits ?? {}) as Record<string, string>;
   const trends = snapshotData.trends as ReportTrends | undefined;
   const fvProfile = snapshotData.fvProfile as ReportFvProfile | undefined;
   const sel = resolveChartSelection(snapshotData.reportConfig);
+  const showComparison = isGroupComparisonOn(snapshotData.reportConfig as { groupComparison?: boolean } | undefined);
   // Team charts: separate resolver + payload fields (mirrors TeamReportView).
   // Does NOT touch the individual `sel` computation above.
   const teamSel = resolveTeamChartSelection(snapshotData.reportConfig as TeamReportConfig);
@@ -153,6 +155,26 @@ export default function PublicReport() {
     } finally {
       setIsPdfDownloading(false);
     }
+  }
+
+  // AM-FEAT-019: an eval snapshot is {reportType: 'eval', model}; it has no generatedAt or team/individual payload
+  if (reportType === 'eval' && snapshotData.model) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="container mx-auto py-8 space-y-6">
+          <div className="flex justify-between items-center border-b pb-4">
+            <h1 className="text-2xl font-bold">AthleteMetrics — Eval Report</h1>
+            <div className="flex items-center gap-3">
+              <Button variant="outline" size="sm" onClick={handleDownloadPdf} disabled={isPdfDownloading}>
+                {isPdfDownloading ? 'Downloading…' : 'Download PDF'}
+              </Button>
+              <Badge variant="outline">AthleteMetrics</Badge>
+            </div>
+          </div>
+          <EvalReportBody model={snapshotData.model} />
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -396,8 +418,8 @@ export default function PublicReport() {
                       <TableRow>
                         <TableHead>Metric</TableHead>
                         <TableHead>Best Result</TableHead>
-                        <TableHead>{labels.team} Average</TableHead>
-                        <TableHead>Percentile</TableHead>
+                        {showComparison && <TableHead>{labels.team} Average</TableHead>}
+                        {showComparison && <TableHead>Percentile</TableHead>}
                         <TableHead>Benchmark Comparisons</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -424,20 +446,24 @@ export default function PublicReport() {
                                     : `${value.toFixed(2)}${unit ? ` ${unit}` : ''}`)
                                 : "N/A"}
                             </TableCell>
-                            <TableCell>
-                              {typeof teamAverage === 'number'
-                                ? (isFly10Metric(metricCode)
-                                    ? formatFly10Dual(teamAverage)
-                                    : `${teamAverage.toFixed(2)}${unit ? ` ${unit}` : ''}`)
-                                : "N/A"}
-                            </TableCell>
-                            <TableCell>
-                              {typeof percentile === 'number' ? (
-                                <Badge>{percentile.toFixed(1)}th percentile</Badge>
-                              ) : (
-                                "N/A"
-                              )}
-                            </TableCell>
+                            {showComparison && (
+                              <TableCell>
+                                {typeof teamAverage === 'number'
+                                  ? (isFly10Metric(metricCode)
+                                      ? formatFly10Dual(teamAverage)
+                                      : `${teamAverage.toFixed(2)}${unit ? ` ${unit}` : ''}`)
+                                  : "N/A"}
+                              </TableCell>
+                            )}
+                            {showComparison && (
+                              <TableCell>
+                                {typeof percentile === 'number' ? (
+                                  <Badge>{percentile.toFixed(1)}th percentile</Badge>
+                                ) : (
+                                  "N/A"
+                                )}
+                              </TableCell>
+                            )}
                             <TableCell>
                               {benchmarks.length > 0 ? (
                                 <div className="space-y-2">

@@ -33,7 +33,8 @@ const TESTING_URL = process.env.TESTING_URL || process.env.STAGING_URL || 'http:
 const METRIC_CODES = [
   'FLY10_TIME',
   'VERTICAL_JUMP',
-  'AGILITY_505',
+  'AGILITY_505_M',
+  'AGILITY_505_YD',
   'AGILITY_5105',
   'T_TEST',
   'DASH_40YD',

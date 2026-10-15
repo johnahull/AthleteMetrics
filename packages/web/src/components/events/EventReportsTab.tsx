@@ -21,6 +21,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
+import { extractAthleteId } from "@/components/reports/report-utils";
 import {
   Dialog,
   DialogContent,
@@ -61,6 +62,7 @@ export function EventReportsTab({
 
   // Individual report dialog state
   const [selectedAthletes, setSelectedAthletes] = useState<string[]>([]);
+  const [groupComparison, setGroupComparison] = useState(false);
   const [includeEventPercentiles, setIncludeEventPercentiles] = useState(true);
   const [generateAiInsights, setGenerateAiInsights] = useState(false);
 
@@ -119,7 +121,8 @@ export function EventReportsTab({
           name: `${eventName} - Individual Reports`,
           reportType: 'individual',
           athleteIds: selectedAthletes,
-          includeEventPercentiles,
+          groupComparison,
+          includeEventPercentiles: groupComparison && includeEventPercentiles,
           generateAiInsights,
         },
       });
@@ -131,6 +134,7 @@ export function EventReportsTab({
 
       // Reset and close
       setSelectedAthletes([]);
+      setGroupComparison(false);
       setShowCreateModal(false);
     } catch (error: any) {
       toast({
@@ -160,9 +164,10 @@ export function EventReportsTab({
   };
 
   // Handle PDF export
-  const handleExportPDF = async (reportId: string, reportName: string) => {
+  const handleExportPDF = async (report: EventReport) => {
+    const reportName = report.name;
     try {
-      const blob = await exportPDF.mutateAsync({ reportId });
+      const blob = await exportPDF.mutateAsync({ reportId: report.id, athleteId: extractAthleteId(report.config) });
       // Create download link
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -304,7 +309,7 @@ export function EventReportsTab({
                 {/* Athlete Selection */}
                 <div className="space-y-4">
                   {/* Select All */}
-                  <div className="flex items-center space-x-2 pb-2 border-b">
+                  <div className="flex items-center gap-x-2 pb-2 border-b">
                     <Checkbox
                       id="select-all"
                       checked={selectedAthletes.length === eligibleAthletes.length && eligibleAthletes.length > 0}
@@ -324,7 +329,7 @@ export function EventReportsTab({
                           key={registration.id}
                           className="flex items-center justify-between py-2 border-b last:border-b-0"
                         >
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center gap-x-2">
                             <Checkbox
                               id={`athlete-${registration.userId}`}
                               checked={selectedAthletes.includes(registration.userId)}
@@ -352,10 +357,22 @@ export function EventReportsTab({
 
                   {/* Options */}
                   <div className="space-y-3 pt-2 border-t">
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center gap-x-2">
+                      <Checkbox
+                        id="group-comparison"
+                        checked={groupComparison}
+                        onCheckedChange={(checked) => setGroupComparison(checked === true)}
+                        aria-label="Compare to a group"
+                      />
+                      <Label htmlFor="group-comparison">
+                        Compare to a group
+                      </Label>
+                    </div>
+                    <div className="flex items-center gap-x-2">
                       <Checkbox
                         id="event-percentiles"
-                        checked={includeEventPercentiles}
+                        checked={groupComparison && includeEventPercentiles}
+                        disabled={!groupComparison}
                         onCheckedChange={(checked) => setIncludeEventPercentiles(checked === true)}
                         aria-label="Include Event Percentiles"
                       />
@@ -363,7 +380,7 @@ export function EventReportsTab({
                         Include Event Percentiles
                       </Label>
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center gap-x-2">
                       <Checkbox
                         id="ai-insights"
                         checked={generateAiInsights}
@@ -426,7 +443,7 @@ export function EventReportsTab({
             <div>
               <p className="font-medium">Event Reports Include</p>
               <ul className="text-sm text-muted-foreground mt-1 space-y-1">
-                <li>• <strong>Event Percentiles:</strong> Compare athletes within this event</li>
+                <li>• <strong>Event Percentiles:</strong> Compare athletes within this event (when Compare to a group is on)</li>
                 <li>• <strong>AI Insights:</strong> Personalized coaching recommendations</li>
                 <li>• <strong>Team Statistics:</strong> Averages, medians, and rankings</li>
                 <li>• <strong>PDF Export:</strong> Share reports with athletes and parents</li>
@@ -458,7 +475,7 @@ export function EventReportsTab({
                 <ReportCard
                   key={report.id}
                   report={report}
-                  onExportPDF={() => handleExportPDF(report.id, report.name)}
+                  onExportPDF={() => handleExportPDF(report)}
                   onShare={() => handleShareReport(report.id, report.name)}
                   isPDFExporting={exportPDF.isPending}
                 />
@@ -483,6 +500,7 @@ interface ReportCardProps {
 
 function ReportCard({ report, onExportPDF, onShare, isPDFExporting }: ReportCardProps) {
   const isTeamReport = report.reportType === 'team';
+  const isEvalReport = report.reportType === 'eval';
   const hasAiInsights = !!report.coachingInsights;
 
   return (
@@ -511,7 +529,7 @@ function ReportCard({ report, onExportPDF, onShare, isPDFExporting }: ReportCard
             )}
           </div>
           <p className="text-xs text-muted-foreground">
-            {isTeamReport ? 'Team Report' : 'Individual Report'} •{' '}
+            {isTeamReport ? 'Team Report' : isEvalReport ? 'Eval report' : 'Individual Report'} •{' '}
             {format(new Date(report.createdAt), "MMM d, yyyy 'at' h:mm a")}
           </p>
         </div>

@@ -291,12 +291,24 @@ describe('Migration 0130: Yo-Yo IR1 Benchmark Seeding', () => {
       }
     });
 
-    it('8 benchmark_set_items linkage rows exist', async () => {
+    it('the 8 linkage rows created by 0130 exist', async () => {
+      // Later migrations (0133: DII/DIII) add more bsi-*yyir1* rows, so assert on
+      // the exact ids 0130 owns rather than a LIKE-pattern total.
+      const ids = [
+        'bsi-d1-soc-yyir1-hs-avg',
+        'bsi-d1-soc-yyir1-d1-avg',
+        'bsi-d1-soc-yyir1-d1-top25',
+        'bsi-d1-soc-yyir1-elite',
+        'bsi-hs-ms-soc-yyir1',
+        'bsi-hs-jv-soc-yyir1',
+        'bsi-hs-var-soc-yyir1-avg',
+        'bsi-hs-var-soc-yyir1-top25',
+      ];
       try {
         const r = await db.execute(sql`
           SELECT COUNT(*)::integer AS count
             FROM benchmark_set_items
-           WHERE id LIKE 'bsi-%yyir1%'
+           WHERE id IN (${sql.join(ids.map((i) => sql`${i}`), sql`, `)})
         `);
         const rows = rowsOf(r);
         const count = Number(rows[0]?.count ?? 0);

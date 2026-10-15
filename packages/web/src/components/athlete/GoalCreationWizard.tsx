@@ -403,7 +403,7 @@ export function GoalCreationWizard({
             <h3 className="text-lg font-medium">Set Target</h3>
 
             {/* Target Value Input */}
-            <div className="space-y-2">
+            <div className="grid gap-y-2">
               <Label htmlFor="target-value">{getTargetInputLabel()}</Label>
               <Input
                 id="target-value"
@@ -442,7 +442,7 @@ export function GoalCreationWizard({
               )}
 
             {/* Target Date Input */}
-            <div className="space-y-2">
+            <div className="grid gap-y-2">
               <Label htmlFor="target-date">Target Date</Label>
               <Input
                 id="target-date"

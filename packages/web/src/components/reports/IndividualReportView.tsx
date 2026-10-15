@@ -29,7 +29,7 @@ import { TrendSection } from "@/components/reports/TrendSection";
 import { PercentileRadarSection } from "@/components/reports/PercentileRadarSection";
 import { DistributionSection } from "@/components/reports/DistributionSection";
 import { FvProfileSection } from "@/components/reports/FvProfileSection";
-import { resolveChartSelection } from "@shared/report-charts";
+import { isGroupComparisonOn, resolveChartSelection } from "@shared/report-charts";
 import { TierProgressChart } from "@/components/charts/TierProgressChart";
 import { BenchmarkStandingBar } from "@/components/charts/BenchmarkStandingBar";
 import { format } from "date-fns";
@@ -118,6 +118,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
   const { athlete, metricLabels, metricUnits, metricExplanations, trends, distributions } = reportData;
   const measurementCodes = athlete?.measurements ? Object.keys(athlete.measurements) : [];
   const sel = resolveChartSelection(reportData.reportConfig);
+  const showComparison = isGroupComparisonOn(reportData.reportConfig);
 
   return (
     <div className="space-y-6">
@@ -185,14 +186,21 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
         </CardHeader>
       </Card>
 
-      {/* Coaching Insights */}
-      <CoachingInsightsCard
-        reportId={report.id}
-        initialInsights={report.coachingInsights}
-        generatedAt={report.coachingInsightsGeneratedAt}
-        model={report.coachingInsightsModel}
-        aiEnabled={aiEnabled || false}
-      />
+      {measurementCodes.length === 0 ? (
+        <Card>
+          <CardContent className="py-10 text-center text-muted-foreground">
+            No measurements recorded for this athlete in this report yet.
+          </CardContent>
+        </Card>
+      ) : (
+        <CoachingInsightsCard
+          reportId={report.id}
+          initialInsights={report.coachingInsights}
+          generatedAt={report.coachingInsightsGeneratedAt}
+          model={report.coachingInsightsModel}
+          aiEnabled={aiEnabled || false}
+        />
+      )}
 
       {/* Performance Table */}
       {athlete.measurements && Object.keys(athlete.measurements).length > 0 && (
@@ -206,8 +214,8 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                 <TableRow>
                   <TableHead>Metric</TableHead>
                   <TableHead>Best Result</TableHead>
-                  <TableHead>Group Average</TableHead>
-                  <TableHead>Percentile</TableHead>
+                  {showComparison && <TableHead>Group Average</TableHead>}
+                  {showComparison && <TableHead>Percentile</TableHead>}
                   <TableHead>Benchmark Comparisons</TableHead>
                 </TableRow>
               </TableHeader>
@@ -234,20 +242,24 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                               : `${value.toFixed(2)}${unit ? ` ${unit}` : ''}`)
                           : "N/A"}
                       </TableCell>
-                      <TableCell>
-                        {teamAverage !== undefined
-                          ? (isFly10Metric(metricCode)
-                              ? formatFly10Dual(teamAverage)
-                              : `${teamAverage.toFixed(2)}${unit ? ` ${unit}` : ''}`)
-                          : "N/A"}
-                      </TableCell>
-                      <TableCell>
-                        {percentile !== undefined ? (
-                          <Badge>{percentile.toFixed(1)}th percentile</Badge>
-                        ) : (
-                          "N/A"
-                        )}
-                      </TableCell>
+                      {showComparison && (
+                        <TableCell>
+                          {teamAverage !== undefined
+                            ? (isFly10Metric(metricCode)
+                                ? formatFly10Dual(teamAverage)
+                                : `${teamAverage.toFixed(2)}${unit ? ` ${unit}` : ''}`)
+                            : "N/A"}
+                        </TableCell>
+                      )}
+                      {showComparison && (
+                        <TableCell>
+                          {percentile !== undefined ? (
+                            <Badge>{percentile.toFixed(1)}th percentile</Badge>
+                          ) : (
+                            "N/A"
+                          )}
+                        </TableCell>
+                      )}
                       <TableCell>
                         {benchmarks.length > 0 ? (
                           <div className="space-y-2">
@@ -366,7 +378,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
         <FvProfileSection athleteName={athlete.userName} fvProfile={reportData.fvProfile} />
       )}
 
-      {metricExplanations && (
+      {metricExplanations && measurementCodes.length > 0 && (
         <ReportMetricsGlossary
           explanations={metricExplanations}
           metricOrder={measurementCodes}
@@ -378,6 +390,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
           reportId={report.id}
           open={showShareDialog}
           onClose={() => setShowShareDialog(false)}
+          athleteShareBlockedUnder13={athlete?.shareBlockedUnder13}
         />
       )}
 
@@ -390,6 +403,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
           athleteId={athleteId}
           athleteName={athlete.userName || 'Athlete'}
           athleteEmail={athlete.email}
+          shareBlockedUnder13={athlete.shareBlockedUnder13}
         />
       )}
     </div>

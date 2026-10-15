@@ -35,22 +35,24 @@ import {
   Lock,
   AlertCircle,
 } from "lucide-react";
+import { SaveEvalTemplateDialog } from "./SaveEvalTemplateDialog";
 import type { EventMetric, SiteMetric } from "@shared/schema";
+import { getEventMetricDisplay } from "@/lib/event-metric-display";
 
 interface EventMetricsTabProps {
   eventId: string;
   organizationId?: string;
   isFrozen?: boolean;
+  /** Coach, org admin or site admin: shows "Save metrics as template" */
+  canSaveTemplate?: boolean;
 }
 
-// Extended metric type with details from site_metrics
+// Event metric with its site metric, as the server returns it (includeDetails=true)
 interface EventMetricWithDetails extends EventMetric {
-  label?: string;
-  category?: string;
-  units?: string;
+  metricDetails?: Pick<SiteMetric, "label" | "unit" | "category"> | null;
 }
 
-export function EventMetricsTab({ eventId, organizationId, isFrozen = false }: EventMetricsTabProps) {
+export function EventMetricsTab({ eventId, organizationId, isFrozen = false, canSaveTemplate = false }: EventMetricsTabProps) {
   const { toast } = useToast();
   const [selectedMetric, setSelectedMetric] = useState<string>("");
 
@@ -71,7 +73,7 @@ export function EventMetricsTab({ eventId, organizationId, isFrozen = false }: E
   // Filter out already-added metrics from available list
   const addedMetricCodes = new Set(typedEventMetrics.map((m) => m.metricCode));
   const availableMetrics = (siteMetrics || []).filter(
-    (m: SiteMetric) => !addedMetricCodes.has(m.code)
+    (m: SiteMetric) => !addedMetricCodes.has(m.code) && !m.isDerived
   );
 
   // Handle add metric
@@ -195,6 +197,12 @@ export function EventMetricsTab({ eventId, organizationId, isFrozen = false }: E
               {typedEventMetrics.length > 0 && ` ${typedEventMetrics.length} metrics configured.`}
             </CardDescription>
           </div>
+          <SaveEvalTemplateDialog
+            eventId={eventId}
+            organizationId={organizationId}
+            canSave={canSaveTemplate}
+            hasMetrics={typedEventMetrics.length > 0}
+          />
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -258,7 +266,8 @@ export function EventMetricsTab({ eventId, organizationId, isFrozen = false }: E
           ) : (
             typedEventMetrics
               .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
-              .map((metric, index) => (
+              .map((metric) => [metric, getEventMetricDisplay(metric)] as const)
+              .map(([metric, display], index) => (
                 <div
                   key={metric.id}
                   className="flex items-center justify-between p-3 border rounded-lg bg-white hover:bg-gray-50 transition-colors"
@@ -276,17 +285,15 @@ export function EventMetricsTab({ eventId, organizationId, isFrozen = false }: E
 
                     {/* Metric info */}
                     <div>
-                      <p className="font-medium">
-                        {metric.customLabel || metric.label || metric.metricCode}
-                      </p>
+                      <p className="font-medium">{display.label}</p>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <span className="font-mono text-xs">{metric.metricCode}</span>
-                        {metric.category && (
+                        {display.category && (
                           <Badge variant="outline" className="text-xs">
-                            {metric.category}
+                            {display.category}
                           </Badge>
                         )}
-                        {metric.units && <span>({metric.units})</span>}
+                        {display.unit && <span>({display.unit})</span>}
                       </div>
                     </div>
                   </div>

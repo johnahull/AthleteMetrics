@@ -9,6 +9,11 @@ interface AuthContextType {
   isLoading: boolean;
   organizationContext: string | null;
   userOrganizations: UserOrganization[] | null;
+  /** True while the signed-in user's organization memberships are being fetched */
+  organizationsLoading: boolean;
+  /** True when fetching the memberships failed (userOrganizations stays null) */
+  organizationsError: boolean;
+  refetchOrganizations: () => Promise<void>;
   setOrganizationContext: (orgId: string | null) => void;
   login: (username: string, password: string) => Promise<{ success: boolean; redirectUrl?: string; message?: string }>;
   logout: () => void;
@@ -25,6 +30,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [organizationContext, setOrganizationContext] = useState<string | null>(null);
   const [userOrganizations, setUserOrganizations] = useState<UserOrganization[] | null>(null);
+  const [organizationsLoading, setOrganizationsLoading] = useState(false);
+  const [organizationsError, setOrganizationsError] = useState(false);
   const [impersonationStatus, setImpersonationStatus] = useState<ImpersonationStatus | null>(null);
   const [, setLocation] = useLocation();
 
@@ -42,6 +49,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const fetchUserOrganizations = async () => {
+    setOrganizationsLoading(true);
+    setOrganizationsError(false);
     try {
       const response = await fetch('/api/auth/me/organizations', {
         credentials: 'include'
@@ -51,10 +60,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUserOrganizations(data);
       } else {
         setUserOrganizations(null);
+        setOrganizationsError(true);
       }
     } catch (error) {
       console.error('Failed to fetch user organizations:', error);
       setUserOrganizations(null);
+      setOrganizationsError(true);
+    } finally {
+      setOrganizationsLoading(false);
     }
   };
 
@@ -211,6 +224,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isLoading,
       organizationContext,
       userOrganizations,
+      organizationsLoading,
+      organizationsError,
+      refetchOrganizations: fetchUserOrganizations,
       setOrganizationContext,
       impersonationStatus,
       startImpersonation,

@@ -19,7 +19,7 @@ export function TextQuestionInput({
   const currentLength = value?.length || 0;
 
   return (
-    <div className="space-y-2" data-testid="question-text">
+    <div className="grid gap-y-2" data-testid="question-text">
       <Label className="text-base font-medium">
         {question.label}
         {question.required && <span className="text-destructive ml-1">*</span>}

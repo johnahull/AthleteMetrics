@@ -17,6 +17,7 @@ import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { storage } from "../../storage";
 import { registerDashboardTrendsRoutes } from "../dashboard-trends";
+import { purgeTestRows } from "../../../../tests/helpers/purge-test-rows";
 
 // Mock session data for testing
 let mockSessionUser: any = null;
@@ -143,15 +144,10 @@ describe("GET /api/dashboard/trends - Timeframe Filter", () => {
   });
 
   afterAll(async () => {
-    // Cleanup test data
-    try {
-      if (testAthleteId) await storage.deleteUser(testAthleteId).catch(e => console.error("Error:", e));
-      if (testCoachId) await storage.deleteUser(testCoachId).catch(e => console.error("Error:", e));
-      if (testTeamId) await storage.deleteTeam(testTeamId).catch(e => console.error("Error:", e));
-      if (testOrgId) await storage.deleteOrganization(testOrgId).catch(e => console.error("Error:", e));
-    } catch (error) {
-      console.error("Cleanup error:", error);
-    }
+    await purgeTestRows({
+      userIds: [testAthleteId, testCoachId].filter((id): id is string => !!id),
+      orgIds: [testOrgId].filter((id): id is string => !!id),
+    });
   });
 
   beforeEach(() => {

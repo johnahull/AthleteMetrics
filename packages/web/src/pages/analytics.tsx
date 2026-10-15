@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
-import { isSiteAdmin, hasRole, type EnhancedUser } from "@/lib/types/user";
+import { getOrgRole } from "@/lib/org-roles";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -21,6 +21,7 @@ import ScatterChart from "@/components/charts/scatter-chart";
 import { StatisticsSummaryCard } from "@/components/analytics/StatisticsSummaryCard";
 import { getMetricUnits, getMetricColor } from "@/lib/metrics";
 import { Gender, SoccerPosition, type Team, type Measurement } from "@shared/schema";
+import { isLowerIsBetterMetric } from "@shared/analytics-types";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { useMetricLabels } from "@/hooks/use-metric-labels";
 
@@ -35,7 +36,6 @@ const editMeasurementSchema = z.object({
     (val) => !isNaN(Number(val)) && Number(val) >= 10 && Number(val) <= 25,
     "Age must be between 10 and 25"
   ),
-  flyInDistance: z.string().optional(),
   notes: z.string().optional(),
 });
 
@@ -59,25 +59,23 @@ export default function Analytics() {
 
   const effectiveOrganizationId = getEffectiveOrganizationId();
 
-  // Role-based routing: redirect coaches/org_admins to appropriate analytics page
+  // Role-based routing: redirect by the role in the organization this page shows
+  // (site admins: 'site_admin'), not the session role. Waits for memberships to load.
+  const orgRole = getOrgRole(user, userOrganizations, effectiveOrganizationId);
+  const membershipsLoaded = Array.isArray(userOrganizations);
   useEffect(() => {
-    if (user) {
-      const userRole = user?.role;
-      const isUserSiteAdmin = isSiteAdmin(user);
-
-      // Coaches and org admins should use the coach analytics dashboard
-      if (isUserSiteAdmin || hasRole(user as EnhancedUser, 'coach') || hasRole(user as EnhancedUser, 'org_admin')) {
-        setLocation('/coach-analytics');
-        return;
-      }
-      
-      // Athletes should use the athlete analytics dashboard
-      if (hasRole(user as EnhancedUser, 'athlete')) {
-        setLocation('/athlete-analytics');
-        return;
-      }
+    // Coaches and org admins should use the coach analytics dashboard
+    if (orgRole === 'site_admin' || orgRole === 'coach' || orgRole === 'org_admin') {
+      setLocation('/coach-analytics');
+      return;
     }
-  }, [user, setLocation]);
+
+    // Athletes should use the athlete analytics dashboard
+    // Also when memberships have loaded and the user has no role in scope (none at all).
+    if (orgRole === 'athlete' || (membershipsLoaded && !orgRole)) {
+      setLocation('/athlete-analytics');
+    }
+  }, [orgRole, membershipsLoaded, setLocation]);
   
   // State for edit/delete functionality
   const [editingMeasurement, setEditingMeasurement] = useState<any>(null);
@@ -105,7 +103,6 @@ export default function Analytics() {
       value: "",
       date: "",
       age: "",
-      flyInDistance: "",
       notes: "",
     },
   });
@@ -258,7 +255,6 @@ export default function Analytics() {
       value: measurement.value.toString(),
       date: measurement.date,
       age: measurement.age.toString(),
-      flyInDistance: measurement.flyInDistance?.toString() || "",
       notes: measurement.notes || "",
     });
     setShowEditDialog(true);
@@ -281,7 +277,6 @@ export default function Analytics() {
       value: parseFloat(values.value),
       date: values.date,
       age: parseInt(values.age),
-      flyInDistance: values.flyInDistance ? parseFloat(values.flyInDistance) : null,
       notes: values.notes || null,
     };
     
@@ -298,7 +293,7 @@ export default function Analytics() {
     if (data.length === 0) return { p25: 0, p50: 0, p75: 0, p90: 0 };
 
     // For time-based metrics, lower values are better, so we need to reverse the percentile logic
-    const isTimeBased = ["FLY10_TIME", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD"].includes(metric);
+    const isTimeBased = isLowerIsBetterMetric(metric);
     const sorted = [...data].sort((a, b) => a - b);
 
     const getPercentile = (p: number) => {
@@ -445,7 +440,8 @@ export default function Analytics() {
                   <SelectItem value="all">All Metrics</SelectItem>
                   <SelectItem value="FLY10_TIME">Fly-10 Time</SelectItem>
                   <SelectItem value="VERTICAL_JUMP">Vertical Jump</SelectItem>
-                  <SelectItem value="AGILITY_505">5-0-5 Agility Test</SelectItem>
+                  <SelectItem value="AGILITY_505_M">5-0-5 Agility (m)</SelectItem>
+                  <SelectItem value="AGILITY_505_YD">5-0-5 Agility (yd)</SelectItem>
                   <SelectItem value="AGILITY_5105">5-10-5 Agility Test</SelectItem>
                   <SelectItem value="T_TEST">T-Test</SelectItem>
                   <SelectItem value="DASH_40YD">40-Yard Dash</SelectItem>
@@ -520,9 +516,9 @@ export default function Analytics() {
           </div>
 
           <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center gap-x-4">
               <span className="text-sm text-gray-600">Applied filters:</span>
-              <div className="flex space-x-2">
+              <div className="flex gap-x-2">
                 {filters.teamIds.length > 0 && (
                   <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
                     {filters.teamIds.length} {filters.teamIds.length === 1 ? labels.team : labels.teams}
@@ -607,7 +603,7 @@ export default function Analytics() {
                 <div className="space-y-2">
                   {leaderboards.fly10.map((measurement: any, index: number) => (
                     <div key={measurement.id} className="flex items-center justify-between py-2">
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center gap-x-3">
                         <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
                           index === 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'
                         }`}>
@@ -638,7 +634,7 @@ export default function Analytics() {
                 <div className="space-y-2">
                   {leaderboards.vertical.map((measurement: any, index: number) => (
                     <div key={measurement.id} className="flex items-center justify-between py-2">
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center gap-x-3">
                         <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
                           index === 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'
                         }`}>
@@ -746,7 +742,7 @@ export default function Analytics() {
                   {measurements.map((measurement: any, index: number) => (
                     <tr key={`${measurement.id}-${index}`} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
-                        <div className="flex items-center space-x-3">
+                        <div className="flex items-center gap-x-3">
                           <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
                             <span className="text-white font-medium text-xs">
                               {measurement.user.fullName.split(' ').map((n: string) => n[0]).join('')}
@@ -787,7 +783,7 @@ export default function Analytics() {
                         {new Date(measurement.date).toLocaleDateString()}
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center gap-x-2">
                           <Button
                             variant="ghost"
                             size="sm"
@@ -881,26 +877,6 @@ export default function Analytics() {
                   </FormItem>
                 )}
               />
-              {editingMeasurement?.metric === 'FLY10_TIME' && (
-                <FormField
-                  control={editForm.control}
-                  name="flyInDistance"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Fly In Distance (yards)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          placeholder="Optional"
-                          {...field}
-                          data-testid="input-edit-fly-distance"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
               <FormField
                 control={editForm.control}
                 name="notes"
@@ -918,7 +894,7 @@ export default function Analytics() {
                   </FormItem>
                 )}
               />
-              <div className="flex justify-end space-x-2">
+              <div className="flex justify-end gap-x-2">
                 <Button
                   type="button"
                   variant="outline"

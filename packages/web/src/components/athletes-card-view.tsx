@@ -88,7 +88,7 @@ export function AthletesCardView({ athletes, onAthleteClick, getSportName }: Ath
                     data-testid="athlete-name"
                     className="text-lg flex items-center gap-2"
                   >
-                    <User className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                    <User className="h-5 w-5 text-muted-foreground shrink-0" />
                     <span className="truncate">{athlete.fullName}</span>
                   </CardTitle>
                   <CardDescription data-testid="athlete-info" className="mt-1">
@@ -102,7 +102,7 @@ export function AthletesCardView({ athletes, onAthleteClick, getSportName }: Ath
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="flex-shrink-0"
+                    className="shrink-0"
                     aria-label={`View ${athlete.fullName}'s profile`}
                   >
                     <ChevronRight className="h-5 w-5" />
@@ -115,7 +115,7 @@ export function AthletesCardView({ athletes, onAthleteClick, getSportName }: Ath
               {/* Team Information */}
               {athlete.teamName && (
                 <div className="flex items-center gap-2 text-sm">
-                  <School className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <School className="h-4 w-4 text-muted-foreground shrink-0" />
                   <span className="truncate">{athlete.teamName}</span>
                 </div>
               )}
@@ -123,7 +123,7 @@ export function AthletesCardView({ athletes, onAthleteClick, getSportName }: Ath
               {/* Graduation Year */}
               {athlete.graduationYear && (
                 <div className="flex items-center gap-2 text-sm">
-                  <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
                   <span>Class of {athlete.graduationYear}</span>
                 </div>
               )}
@@ -131,7 +131,7 @@ export function AthletesCardView({ athletes, onAthleteClick, getSportName }: Ath
               {/* Contact Info */}
               {athlete.emails && athlete.emails.length > 0 && (
                 <div className="flex items-center gap-2 text-sm">
-                  <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
                   <a
                     href={`mailto:${athlete.emails[0]}`}
                     className="text-primary hover:underline truncate"
@@ -143,7 +143,7 @@ export function AthletesCardView({ athletes, onAthleteClick, getSportName }: Ath
 
               {athlete.phones && athlete.phones.length > 0 && (
                 <div className="flex items-center gap-2 text-sm">
-                  <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
                   <a
                     href={`tel:${athlete.phones[0]}`}
                     className="text-primary hover:underline"

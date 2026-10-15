@@ -228,7 +228,7 @@ export function EventResultsTab({
         </div>
 
         {/* Visibility Mode Selector */}
-        <div className="space-y-3">
+        <div className="grid gap-y-3">
           <label className="text-sm font-medium">Results Visibility Mode</label>
           <Select
             value={visibility}

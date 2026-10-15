@@ -6,10 +6,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useKeyboardShortcuts } from '../useKeyboardShortcuts';
-import type { EnhancedUser } from '@/lib/types/user';
+import type { EnhancedUser, UserOrganization } from '@/lib/types/user';
+
+const membership = (
+  role: UserOrganization['role'],
+  organizationId = 'org1'
+): UserOrganization => ({ organizationId, organizationName: 'Test Org', role, createdAt: '' });
 
 describe('useKeyboardShortcuts', () => {
   let mockUser: EnhancedUser | null;
+  let mockOrgs: UserOrganization[] | null;
   let mockOnMeasurement: ReturnType<typeof vi.fn>;
   let mockOnHelp: ReturnType<typeof vi.fn>;
 
@@ -17,6 +23,7 @@ describe('useKeyboardShortcuts', () => {
     mockOnMeasurement = vi.fn();
     mockOnHelp = vi.fn();
     mockUser = null;
+    mockOrgs = null;
   });
 
   afterEach(() => {
@@ -31,16 +38,13 @@ describe('useKeyboardShortcuts', () => {
         email: 'coach@test.com',
         firstName: 'Coach',
         lastName: 'User',
-        isSiteAdmin: false,
-        currentOrganization: {
-          id: 'org1',
-          name: 'Test Org',
-          role: 'coach'
-        }
+        isSiteAdmin: false
       };
+      mockOrgs = [membership('coach')];
 
       renderHook(() => useKeyboardShortcuts({
         user: mockUser,
+        userOrganizations: mockOrgs,
         onMeasurement: mockOnMeasurement,
         onHelp: mockOnHelp,
       }));
@@ -63,16 +67,13 @@ describe('useKeyboardShortcuts', () => {
         email: 'admin@test.com',
         firstName: 'Admin',
         lastName: 'User',
-        isSiteAdmin: false,
-        currentOrganization: {
-          id: 'org1',
-          name: 'Test Org',
-          role: 'org_admin'
-        }
+        isSiteAdmin: false
       };
+      mockOrgs = [membership('org_admin')];
 
       renderHook(() => useKeyboardShortcuts({
         user: mockUser,
+        userOrganizations: mockOrgs,
         onMeasurement: mockOnMeasurement,
         onHelp: mockOnHelp,
       }));
@@ -101,6 +102,7 @@ describe('useKeyboardShortcuts', () => {
 
       renderHook(() => useKeyboardShortcuts({
         user: mockUser,
+        userOrganizations: mockOrgs,
         onMeasurement: mockOnMeasurement,
         onHelp: mockOnHelp,
       }));
@@ -123,16 +125,13 @@ describe('useKeyboardShortcuts', () => {
         email: 'athlete@test.com',
         firstName: 'Athlete',
         lastName: 'User',
-        isSiteAdmin: false,
-        currentOrganization: {
-          id: 'org1',
-          name: 'Test Org',
-          role: 'athlete'
-        }
+        isSiteAdmin: false
       };
+      mockOrgs = [membership('athlete')];
 
       renderHook(() => useKeyboardShortcuts({
         user: mockUser,
+        userOrganizations: mockOrgs,
         onMeasurement: mockOnMeasurement,
         onHelp: mockOnHelp,
       }));
@@ -165,6 +164,58 @@ describe('useKeyboardShortcuts', () => {
 
       expect(mockOnMeasurement).not.toHaveBeenCalled();
     });
+
+    const pressCtrlM = () =>
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'm', ctrlKey: true, bubbles: true }));
+    const memberUser: EnhancedUser = {
+      id: '1',
+      username: 'multi',
+      email: 'multi@test.com',
+      firstName: 'Multi',
+      lastName: 'Org',
+      isSiteAdmin: false,
+    };
+
+    it('should trigger Ctrl+M for a coach in one organization and athlete in another, in either order', () => {
+      for (const orgs of [
+        [membership('coach', 'org-a'), membership('athlete', 'org-b')],
+        [membership('athlete', 'org-b'), membership('coach', 'org-a')],
+      ]) {
+        mockOnMeasurement.mockClear();
+        const { unmount } = renderHook(() => useKeyboardShortcuts({
+          user: memberUser,
+          userOrganizations: orgs,
+          onMeasurement: mockOnMeasurement,
+        }));
+        pressCtrlM();
+        expect(mockOnMeasurement).toHaveBeenCalledTimes(1);
+        unmount();
+      }
+    });
+
+    it('should NOT trigger Ctrl+M from the session role when no membership grants it', () => {
+      // The session role is the role in the alphabetically-first org; it must not decide.
+      for (const orgs of [[membership('athlete', 'org-b')], null]) {
+        const { unmount } = renderHook(() => useKeyboardShortcuts({
+          user: { ...memberUser, role: 'coach' },
+          userOrganizations: orgs,
+          onMeasurement: mockOnMeasurement,
+        }));
+        pressCtrlM();
+        unmount();
+      }
+      expect(mockOnMeasurement).not.toHaveBeenCalled();
+    });
+
+    it('should trigger Ctrl+M for a site admin without any membership', () => {
+      renderHook(() => useKeyboardShortcuts({
+        user: { ...memberUser, isSiteAdmin: true },
+        userOrganizations: null,
+        onMeasurement: mockOnMeasurement,
+      }));
+      pressCtrlM();
+      expect(mockOnMeasurement).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('Ctrl+M and Cmd+M (Mac) Support', () => {
@@ -175,18 +226,15 @@ describe('useKeyboardShortcuts', () => {
         email: 'coach@test.com',
         firstName: 'Coach',
         lastName: 'User',
-        isSiteAdmin: false,
-        currentOrganization: {
-          id: 'org1',
-          name: 'Test Org',
-          role: 'coach'
-        }
+        isSiteAdmin: false
       };
+      mockOrgs = [membership('coach')];
     });
 
     it('should trigger on Ctrl+M (Windows/Linux)', () => {
       renderHook(() => useKeyboardShortcuts({
         user: mockUser,
+        userOrganizations: mockOrgs,
         onMeasurement: mockOnMeasurement,
         onHelp: mockOnHelp,
       }));
@@ -205,6 +253,7 @@ describe('useKeyboardShortcuts', () => {
     it('should trigger on Cmd+M (Mac)', () => {
       renderHook(() => useKeyboardShortcuts({
         user: mockUser,
+        userOrganizations: mockOrgs,
         onMeasurement: mockOnMeasurement,
         onHelp: mockOnHelp,
       }));
@@ -223,6 +272,7 @@ describe('useKeyboardShortcuts', () => {
     it('should NOT trigger on M without modifier', () => {
       renderHook(() => useKeyboardShortcuts({
         user: mockUser,
+        userOrganizations: mockOrgs,
         onMeasurement: mockOnMeasurement,
         onHelp: mockOnHelp,
       }));
@@ -241,6 +291,7 @@ describe('useKeyboardShortcuts', () => {
     it('should NOT trigger on Shift+M', () => {
       renderHook(() => useKeyboardShortcuts({
         user: mockUser,
+        userOrganizations: mockOrgs,
         onMeasurement: mockOnMeasurement,
         onHelp: mockOnHelp,
       }));
@@ -266,18 +317,15 @@ describe('useKeyboardShortcuts', () => {
         email: 'coach@test.com',
         firstName: 'Coach',
         lastName: 'User',
-        isSiteAdmin: false,
-        currentOrganization: {
-          id: 'org1',
-          name: 'Test Org',
-          role: 'coach'
-        }
+        isSiteAdmin: false
       };
+      mockOrgs = [membership('coach')];
     });
 
     it('should NOT trigger when typing in input field', () => {
       renderHook(() => useKeyboardShortcuts({
         user: mockUser,
+        userOrganizations: mockOrgs,
         onMeasurement: mockOnMeasurement,
         onHelp: mockOnHelp,
       }));
@@ -301,6 +349,7 @@ describe('useKeyboardShortcuts', () => {
     it('should NOT trigger when typing in textarea', () => {
       renderHook(() => useKeyboardShortcuts({
         user: mockUser,
+        userOrganizations: mockOrgs,
         onMeasurement: mockOnMeasurement,
         onHelp: mockOnHelp,
       }));
@@ -324,6 +373,7 @@ describe('useKeyboardShortcuts', () => {
     it('should NOT trigger when typing in select', () => {
       renderHook(() => useKeyboardShortcuts({
         user: mockUser,
+        userOrganizations: mockOrgs,
         onMeasurement: mockOnMeasurement,
         onHelp: mockOnHelp,
       }));
@@ -347,6 +397,7 @@ describe('useKeyboardShortcuts', () => {
     it('should NOT trigger when typing in contenteditable', () => {
       renderHook(() => useKeyboardShortcuts({
         user: mockUser,
+        userOrganizations: mockOrgs,
         onMeasurement: mockOnMeasurement,
         onHelp: mockOnHelp,
       }));
@@ -371,6 +422,7 @@ describe('useKeyboardShortcuts', () => {
     it('should trigger when not in input field', () => {
       renderHook(() => useKeyboardShortcuts({
         user: mockUser,
+        userOrganizations: mockOrgs,
         onMeasurement: mockOnMeasurement,
         onHelp: mockOnHelp,
       }));
@@ -400,18 +452,15 @@ describe('useKeyboardShortcuts', () => {
         email: 'coach@test.com',
         firstName: 'Coach',
         lastName: 'User',
-        isSiteAdmin: false,
-        currentOrganization: {
-          id: 'org1',
-          name: 'Test Org',
-          role: 'coach'
-        }
+        isSiteAdmin: false
       };
+      mockOrgs = [membership('coach')];
     });
 
     it('should trigger help dialog on ? key', () => {
       renderHook(() => useKeyboardShortcuts({
         user: mockUser,
+        userOrganizations: mockOrgs,
         onMeasurement: mockOnMeasurement,
         onHelp: mockOnHelp,
       }));
@@ -429,6 +478,7 @@ describe('useKeyboardShortcuts', () => {
     it('should NOT trigger help dialog when typing ? in input', () => {
       renderHook(() => useKeyboardShortcuts({
         user: mockUser,
+        userOrganizations: mockOrgs,
         onMeasurement: mockOnMeasurement,
         onHelp: mockOnHelp,
       }));
@@ -456,16 +506,13 @@ describe('useKeyboardShortcuts', () => {
         email: 'athlete@test.com',
         firstName: 'Athlete',
         lastName: 'User',
-        isSiteAdmin: false,
-        currentOrganization: {
-          id: 'org1',
-          name: 'Test Org',
-          role: 'athlete'
-        }
+        isSiteAdmin: false
       };
+      mockOrgs = [membership('athlete')];
 
       renderHook(() => useKeyboardShortcuts({
         user: athleteUser,
+        userOrganizations: mockOrgs,
         onMeasurement: mockOnMeasurement,
         onHelp: mockOnHelp,
       }));
@@ -489,16 +536,13 @@ describe('useKeyboardShortcuts', () => {
         email: 'coach@test.com',
         firstName: 'Coach',
         lastName: 'User',
-        isSiteAdmin: false,
-        currentOrganization: {
-          id: 'org1',
-          name: 'Test Org',
-          role: 'coach'
-        }
+        isSiteAdmin: false
       };
+      mockOrgs = [membership('coach')];
 
       const { unmount } = renderHook(() => useKeyboardShortcuts({
         user: mockUser,
+        userOrganizations: mockOrgs,
         onMeasurement: mockOnMeasurement,
         onHelp: mockOnHelp,
       }));
@@ -527,18 +571,15 @@ describe('useKeyboardShortcuts', () => {
         email: 'coach@test.com',
         firstName: 'Coach',
         lastName: 'User',
-        isSiteAdmin: false,
-        currentOrganization: {
-          id: 'org1',
-          name: 'Test Org',
-          role: 'coach'
-        }
+        isSiteAdmin: false
       };
+      mockOrgs = [membership('coach')];
     });
 
     it('should work with lowercase m', () => {
       renderHook(() => useKeyboardShortcuts({
         user: mockUser,
+        userOrganizations: mockOrgs,
         onMeasurement: mockOnMeasurement,
         onHelp: mockOnHelp,
       }));
@@ -556,6 +597,7 @@ describe('useKeyboardShortcuts', () => {
     it('should work with uppercase M', () => {
       renderHook(() => useKeyboardShortcuts({
         user: mockUser,
+        userOrganizations: mockOrgs,
         onMeasurement: mockOnMeasurement,
         onHelp: mockOnHelp,
       }));
@@ -579,18 +621,15 @@ describe('useKeyboardShortcuts', () => {
         email: 'coach@test.com',
         firstName: 'Coach',
         lastName: 'User',
-        isSiteAdmin: false,
-        currentOrganization: {
-          id: 'org1',
-          name: 'Test Org',
-          role: 'coach'
-        }
+        isSiteAdmin: false
       };
+      mockOrgs = [membership('coach')];
     });
 
     it('should preventDefault when handling Ctrl+M', () => {
       renderHook(() => useKeyboardShortcuts({
         user: mockUser,
+        userOrganizations: mockOrgs,
         onMeasurement: mockOnMeasurement,
         onHelp: mockOnHelp,
       }));
@@ -610,6 +649,7 @@ describe('useKeyboardShortcuts', () => {
     it('should preventDefault when handling ?', () => {
       renderHook(() => useKeyboardShortcuts({
         user: mockUser,
+        userOrganizations: mockOrgs,
         onMeasurement: mockOnMeasurement,
         onHelp: mockOnHelp,
       }));

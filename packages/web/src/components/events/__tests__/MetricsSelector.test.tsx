@@ -33,7 +33,7 @@ beforeAll(() => {
 const mockSiteMetrics = [
   { code: 'FLY10_TIME', label: '10-Yard Fly', category: 'Speed', units: 'seconds' },
   { code: 'VERTICAL_JUMP', label: 'Vertical Jump', category: 'Power', units: 'inches' },
-  { code: 'AGILITY_505', label: '5-0-5 Agility', category: 'Agility', units: 'seconds' },
+  { code: 'AGILITY_505_YD', label: '5-0-5 Agility', category: 'Agility', units: 'seconds' },
   { code: 'DASH_40YD', label: '40-Yard Dash', category: 'Speed', units: 'seconds' },
   { code: 'T_TEST', label: 'T-Test', category: 'Agility', units: 'seconds' },
 ];
@@ -228,7 +228,7 @@ describe('MetricsSelector', () => {
       const selectedMetrics: SelectedMetric[] = [
         { code: 'FLY10_TIME', label: '10-Yard Fly', isRequired: false },
         { code: 'VERTICAL_JUMP', label: 'Vertical Jump', isRequired: true },
-        { code: 'AGILITY_505', label: '5-0-5 Agility', isRequired: false },
+        { code: 'AGILITY_505_YD', label: '5-0-5 Agility', isRequired: false },
       ];
 
       render(
@@ -344,9 +344,11 @@ describe('MetricsSelector', () => {
         { wrapper: createWrapper() }
       );
 
-      // Should have move buttons
-      expect(screen.getAllByRole('button', { name: /move up/i })).toHaveLength(2);
-      expect(screen.getAllByRole('button', { name: /move down/i })).toHaveLength(2);
+      // Should have move buttons, each named after its metric (screen readers hear which one moves)
+      expect(screen.getAllByRole('button', { name: /^move .+ up$/i })).toHaveLength(2);
+      expect(screen.getAllByRole('button', { name: /^move .+ down$/i })).toHaveLength(2);
+      expect(screen.getByRole('button', { name: 'Move 10-Yard Fly up' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Move Vertical Jump down' })).toBeInTheDocument();
     });
 
     it('should move metric up when up button clicked', async () => {
@@ -366,7 +368,7 @@ describe('MetricsSelector', () => {
 
       // Find the row for "Vertical Jump" (second item) and click move up
       const vjRow = screen.getByText('Vertical Jump').closest('[data-metric-row]');
-      const moveUpButton = within(vjRow as HTMLElement).getByRole('button', { name: /move up/i });
+      const moveUpButton = within(vjRow as HTMLElement).getByRole('button', { name: /^move .+ up$/i });
       await user.click(moveUpButton);
 
       // Should call onMetricsChange with reordered metrics (VJ now first)
@@ -393,7 +395,7 @@ describe('MetricsSelector', () => {
 
       // Find the row for "10-Yard Fly" (first item) and click move down
       const flyRow = screen.getByText('10-Yard Fly').closest('[data-metric-row]');
-      const moveDownButton = within(flyRow as HTMLElement).getByRole('button', { name: /move down/i });
+      const moveDownButton = within(flyRow as HTMLElement).getByRole('button', { name: /^move .+ down$/i });
       await user.click(moveDownButton);
 
       // Should call onMetricsChange with reordered metrics (FLY10 now second)
@@ -419,7 +421,7 @@ describe('MetricsSelector', () => {
 
       // First item's move up should be disabled
       const flyRow = screen.getByText('10-Yard Fly').closest('[data-metric-row]');
-      const moveUpButton = within(flyRow as HTMLElement).getByRole('button', { name: /move up/i });
+      const moveUpButton = within(flyRow as HTMLElement).getByRole('button', { name: /^move .+ up$/i });
       expect(moveUpButton).toBeDisabled();
     });
 
@@ -439,7 +441,7 @@ describe('MetricsSelector', () => {
 
       // Last item's move down should be disabled
       const vjRow = screen.getByText('Vertical Jump').closest('[data-metric-row]');
-      const moveDownButton = within(vjRow as HTMLElement).getByRole('button', { name: /move down/i });
+      const moveDownButton = within(vjRow as HTMLElement).getByRole('button', { name: /^move .+ down$/i });
       expect(moveDownButton).toBeDisabled();
     });
   });
@@ -518,5 +520,19 @@ describe('MetricsSelector', () => {
       // Should call onMetricsChange with empty array
       expect(onMetricsChange).toHaveBeenCalledWith([]);
     });
+  });
+
+  it('does not offer a derived metric (computed, nothing to enter) for hand-picking', async () => {
+    const { useSiteMetrics } = await import('@/lib/metrics-api');
+    vi.mocked(useSiteMetrics).mockReturnValueOnce({
+      data: [...mockSiteMetrics, { code: 'MOMENTUM', label: 'Momentum', category: 'Power', unit: 'kg*m/s', isDerived: true }],
+      isLoading: false,
+      error: null,
+    } as any);
+    const user = userEvent.setup();
+    render(<MetricsSelector selectedMetrics={[]} onMetricsChange={vi.fn()} organizationId="org-1" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole('combobox'));
+    expect(screen.getByRole('option', { name: /T-Test/ })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Momentum/ })).not.toBeInTheDocument();
   });
 });

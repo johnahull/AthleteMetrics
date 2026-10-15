@@ -139,7 +139,7 @@ export function AthleteSidebar({
               >
                 <Icon
                   className={cn(
-                    'h-5 w-5 flex-shrink-0',
+                    'h-5 w-5 shrink-0',
                     active ? 'text-blue-600' : 'text-gray-400'
                   )}
                 />

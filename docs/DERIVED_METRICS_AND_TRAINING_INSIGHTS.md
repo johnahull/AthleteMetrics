@@ -192,6 +192,22 @@ Relative Speed = 10m Speed / Body Height (for age comparison)
 - Specific training needs clarity
 - Position optimization insights
 
+**Shipped: Sayers peak power (migration 0158, AM-FEAT-021)**
+
+| Code | Unit | Formula (stored in `site_metrics.formula`) |
+|------|------|--------------------------------------------|
+| `PEAK_POWER_W` | W | `60.7 * jump_cmj_hoh * 2.54 + 45.3 * weight_lbs * 0.45359237 - 2055` |
+| `PEAK_POWER_REL` | W/kg | the same expression divided by `(weight_lbs * 0.45359237)`, written out in full |
+
+- Jump height is stored in inches and body weight in pounds; the constants 2.54 (cm per inch) and 0.45359237 (kg per lb) are inlined in the formula. Example: 20 in and 150 lb give 4110.72 W and 60.42 W/kg (68.0389 kg).
+- **Only `JUMP_CMJ_HOH` (the restricted, hands-on-hips CMJ) is a source.** The equation is validated on the restricted CMJ only. HF-CMJ, squat jump, single-leg CMJs and the legacy `VERTICAL_JUMP` are not sources.
+- Weight source: the athlete's `WEIGHT_LBS` closest in date to the jump within 45 days (two weights the same day: the lowest is used). No weight in the window means no value. A weight of 0 gives no `PEAK_POWER_REL` value.
+- The value is dated to the jump and exists only on dates with a verified direct `JUMP_CMJ_HOH`. Two CMJs on one day: the highest is used.
+- Organizations: the weight must be in the CMJ's organization or personal; another organization's weight is never used. The derived row takes the CMJ's organization.
+- Both are `tracking` metrics (no direction, no tiers). The Sayers equation was fitted on adults, so **youth values are estimates**. A **negative value is bad data** (a tiny jump or weight entered wrongly); it is stored as computed, not clamped. Validation bounds (W 200-9000, W/kg 10-100) are metadata only.
+- Backfill after deploy, once per code: `POST /api/admin/recalculate-derived-metrics?metricCode=PEAK_POWER_W`, then again with `?metricCode=PEAK_POWER_REL` (site admin; the parameters are query-string parameters, not a JSON body). The anchored backfill runs one transaction per row (fault isolation, prompt lock release), so a large first backfill such as `metricCode=MOMENTUM` is slow: run it off-peak. Omitting `metricCode` recalculates every derived metric site-wide, and the route allows 5 bulk recalculations per hour. Rows are created only on CMJ dates, in the organization of the athlete's best CMJ that day. Existing anchored rows (MOMENTUM) written before the organization rule may carry the wrong organization or team: run the same backfill for `metricCode=MOMENTUM` after deploy to correct them. That backfill relocates rows to the organization of the best anchor whose organization or personal sources are complete, and deletes rows that mixed organizations and have no such anchor (reported as `deleted` in the response; a dry run counts them too, including rows removed only because a direct measurement of the derived metric exists). An organization-scoped run (`/api/organizations/:id/recalculate-derived-metrics`) leaves a date alone when the anchor used belongs to another organization.
+- Not in the eval report PDF, eval templates or the UI beyond the generic derived-metric display.
+
 **Implementation Priority**: MEDIUM-HIGH
 **Technical Complexity**: LOW
 **User Value**: HIGH

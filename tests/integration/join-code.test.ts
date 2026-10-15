@@ -6,36 +6,21 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { db } from '../../packages/api/db';
 import { organizations } from '@shared/schema';
-import { eq } from 'drizzle-orm';
 import { storage } from '../../packages/api/storage';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 
 // Test organization for join code tests
 let testOrgId: string;
-let originalJoinCode: string | null;
 
 describe('Custom Join Code Feature', () => {
   beforeAll(async () => {
-    // Find an existing organization to test with
-    const [org] = await db.select()
-      .from(organizations)
-      .where(eq(organizations.isActive, true))
-      .limit(1);
-
-    if (!org) {
-      throw new Error('No active organization found for testing');
-    }
-
+    // Own organization: relying on a pre-existing one only worked while other tests leaked orgs (#539)
+    const [org] = await db.insert(organizations).values({ name: `JoinCode Test Org ${Date.now()}` }).returning();
     testOrgId = org.id;
-    originalJoinCode = org.joinCode;
   });
 
   afterAll(async () => {
-    // Restore original join code if it existed
-    if (testOrgId && originalJoinCode) {
-      await db.update(organizations)
-        .set({ joinCode: originalJoinCode })
-        .where(eq(organizations.id, testOrgId));
-    }
+    await purgeTestRows({ orgIds: [testOrgId] });
   });
 
   describe('regenerateJoinCode - Random Generation', () => {

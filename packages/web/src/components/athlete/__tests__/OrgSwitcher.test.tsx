@@ -38,6 +38,9 @@ const createMockUseAuth = (overrides = {}) => ({
   startImpersonation: vi.fn(),
   stopImpersonation: vi.fn(),
   checkImpersonationStatus: vi.fn(),
+  organizationsLoading: false,
+  organizationsError: false,
+  refetchOrganizations: vi.fn(),
   ...overrides,
 });
 

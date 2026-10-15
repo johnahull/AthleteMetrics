@@ -22,12 +22,14 @@ import {
   type ReportSnapshot,
   type ReportBenchmark,
 } from '@shared/schema';
+import { isUnder13OrUnknownDob } from '@shared/coppa-utils';
 import { eq, and, gte, lte, inArray, desc, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { quantileRank, median, mean, min, max, standardDeviation } from 'simple-statistics';
 import { BaseService } from './base-service';
 import { evaluateTierBenchmark as evaluateTierBenchmarkPure } from './benchmark-tiers';
 import { type MetricExplanation } from '@shared/metric-explanations';
+import { isPeerComparisonExcludedMetric } from '@shared/peer-comparison-exclusions';
 import { getMetricExplanationsMap } from './metric-explanation-service';
 import { assembleTrends } from './report-trends';
 import { computeDistribution } from './report-distributions';
@@ -36,10 +38,12 @@ import { buildCohortLabel } from './cohort-label';
 import { pickLatestInWindow, toReportFvProfile } from './report-fv';
 import { SprintFvService } from './sprint-fv-service';
 import { checkSprintFvEnabled } from '../middleware/require-sprint-fv-enabled';
-import { resolveChartSelection, resolveTeamChartSelection, type ChartSelection } from '@shared/report-charts';
+import { stripMediaUrlDeep } from '../utils/measurement-redaction';
+import { isGroupComparisonOn, resolveChartSelection, resolveTeamChartSelection, type ChartSelection } from '@shared/report-charts';
 import type { ReportTrends, ReportDistributions, TeamReportTrends, TeamReportDistributions } from '@shared/report-trends-types';
 import type { ReportFvProfile } from '@shared/report-fv-types';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
+import { wasUnder13At } from '@shared/coppa-utils';
 
 interface TimeframeConfig {
   type: 'preset' | 'custom';
@@ -62,6 +66,7 @@ interface ReportFilters {
 interface ReportConfig {
   eventId?: string; // Filter measurements to specific event
   includeEventPercentiles?: boolean; // Compare against event participants
+  groupComparison?: boolean; // false = no peer comparison; missing = compare
   timeframe: TimeframeConfig;
   metrics: string[];
   benchmarks?: {
@@ -85,6 +90,7 @@ interface AthletePerformance {
   gender?: 'Male' | 'Female' | 'Not Specified';
   positions?: string[];
   age?: number;
+  shareBlockedUnder13?: boolean; // derived from the date of birth; the DOB itself is never sent
   sports?: string[];
   teams?: string[];
   measurements: Record<string, number>;
@@ -162,6 +168,32 @@ interface IndividualReportData {
 
 // Read-only lookups of stored F-V profiles (same pattern as sprint-fv-routes.ts).
 const sprintFvService = new SprintFvService();
+
+/**
+ * AM-FEAT-019: an eval snapshot is restricted unless the athlete is a known adult-or-teen (not isMinor, has a
+ * parseable birth date, and was 13+ at the EVENT date). Fails closed on any error.
+ * TODO: dedupe with P4's isUnder13OrUnknownDob once that branch lands (this one uses the event date).
+ */
+export async function isEvalSnapshotRestricted(athleteId: unknown, eventDate: unknown): Promise<boolean> {
+  try {
+    if (typeof athleteId !== 'string' || typeof eventDate !== 'string') return true;
+    const [athlete] = await db
+      .select({ isMinor: users.isMinor, birthDate: users.birthDate })
+      .from(users)
+      .where(eq(users.id, athleteId))
+      .limit(1);
+    if (!athlete || athlete.isMinor === true || !athlete.birthDate) return true;
+    // Deliberately a LOCAL calendar date: wasUnder13At parses the birth date as a LOCAL calendar date too
+    // (coppa-utils.ts), so both sides share the same calendar semantics. Do not switch only one of them to UTC.
+    const [y, m, d] = eventDate.split('-').map(Number);
+    const eventAt = new Date(y, m - 1, d);
+    if (Number.isNaN(eventAt.getTime())) return true;
+    return wasUnder13At(athlete.birthDate, eventAt);
+  } catch (err) {
+    console.error('[COPPA] Failed to check eval snapshot minor status:', err);
+    return true;
+  }
+}
 
 export class ReportService extends BaseService {
   // Cache for metric info to prevent N+1 queries
@@ -484,20 +516,23 @@ export class ReportService extends BaseService {
     // (narrowed by config.filters — team/gender/positions — or the whole org when
     // no filters are set). eventId is intentionally NOT passed: the cohort spans
     // all events so the athlete is ranked against every comparable performance.
-    const { percentiles, teamAverages, peerValues } = await this.calculatePercentilesAndAverages(
-      athleteId,
-      report.organizationId,
-      config.metrics,
-      bestPerformances,
-      startDate,
-      endDate,
-      undefined, // eventId intentionally not passed - cohort spans all events
-      config.filters
-    );
+    const groupComparison = isGroupComparisonOn(config);
+    const { percentiles, teamAverages, peerValues } = groupComparison
+      ? await this.calculatePercentilesAndAverages(
+        athleteId,
+        report.organizationId,
+        config.metrics,
+        bestPerformances,
+        startDate,
+        endDate,
+        undefined, // eventId intentionally not passed - cohort spans all events
+        config.filters
+      )
+      : { percentiles: {}, teamAverages: {}, peerValues: {} };
 
-    // Calculate event percentiles if requested
+    // Calculate event percentiles if requested (also a group comparison)
     let eventPercentiles: Record<string, number> | undefined;
-    if (config.includeEventPercentiles && config.eventId) {
+    if (groupComparison && config.includeEventPercentiles && config.eventId) {
       const { percentiles: evtPercentiles } = await this.calculateEventPercentiles(
         athleteId,
         config.eventId,
@@ -577,7 +612,9 @@ export class ReportService extends BaseService {
 
     // Human label for the peer cohort (names the group in the "Where You Stand"
     // caption). Undefined when no filter narrows the cohort → frontend says "your group".
-    const comparisonLabel = await this.resolveComparisonLabel(report.organizationId, config.filters);
+    const comparisonLabel = groupComparison
+      ? await this.resolveComparisonLabel(report.organizationId, config.filters)
+      : undefined;
 
     const athletePerformance: AthletePerformance = {
       userId: athlete.id,
@@ -587,6 +624,7 @@ export class ReportService extends BaseService {
       age: athlete.birthYear
         ? new Date().getFullYear() - athlete.birthYear
         : undefined,
+      shareBlockedUnder13: isUnder13OrUnknownDob(athlete.birthDate),
       sports: athlete.sports || undefined,
       teams: teamNames.length > 0 ? teamNames : undefined,
       measurements: bestPerformances,
@@ -658,6 +696,8 @@ export class ReportService extends BaseService {
     let weightedSum = 0;
 
     for (const [metric, weight] of Object.entries(weights)) {
+      // MQ ordinal scores never feed peer-based composites (AM-FEAT-015 D7)
+      if (isPeerComparisonExcludedMetric(metric)) continue;
       if (percentiles[metric] !== undefined) {
         totalWeight += weight;
         weightedSum += percentiles[metric] * weight;
@@ -698,7 +738,8 @@ export class ReportService extends BaseService {
     );
 
     for (const metric of metrics) {
-      if (athletePerformances[metric] === undefined) {
+      // MQ ordinal scores are excluded from peer percentiles/averages (AM-FEAT-015 D7)
+      if (athletePerformances[metric] === undefined || isPeerComparisonExcludedMetric(metric)) {
         continue;
       }
 
@@ -762,7 +803,8 @@ export class ReportService extends BaseService {
     const percentiles: Record<string, number> = {};
 
     for (const metric of metrics) {
-      if (athletePerformances[metric] === undefined) {
+      // MQ ordinal scores are excluded from peer percentiles (AM-FEAT-015 D7)
+      if (athletePerformances[metric] === undefined || isPeerComparisonExcludedMetric(metric)) {
         continue;
       }
 
@@ -1040,8 +1082,13 @@ export class ReportService extends BaseService {
     }
 
     // Generate report data
-    let snapshotData: TeamReportData | IndividualReportData;
-    if (report.reportType === 'team') {
+    let snapshotData: TeamReportData | IndividualReportData | { reportType: 'eval'; model: unknown; orgBranding?: unknown };
+    if (report.reportType === 'eval') {
+      // AM-FEAT-019: an eval report snapshots its frozen model; it never goes through the individual generator
+      const model = (report.config as any)?.model;
+      if (!model) throw new Error('Eval report has no saved model');
+      snapshotData = { reportType: 'eval', model };
+    } else if (report.reportType === 'team') {
       snapshotData = await this.generateTeamReport(reportId, userId);
     } else {
       // For individual reports, we need an athleteId
@@ -1074,6 +1121,16 @@ export class ReportService extends BaseService {
       },
     };
 
+    // Decision 12: defense in depth - media links never appear in a public snapshot
+    snapshotData = stripMediaUrlDeep(snapshotData);
+
+    // shareBlockedUnder13 is a coach-UI flag derived from the date of birth; never freeze it into a public snapshot
+    // Known snapshot paths carrying this flag: snapshotData.athlete and snapshotData.athletes[]. If a new snapshot
+    // shape embeds athletes elsewhere, extend this strip; the integration test's JSON.stringify assertion is the safety net.
+    const snapshotAthletes = snapshotData as any;
+    const athletesArray: any[] = [snapshotAthletes.athlete, ...(snapshotAthletes.athletes ?? [])];
+    for (const a of athletesArray) if (a) delete (a as any).shareBlockedUnder13;
+
     // Generate secure token
     const publicToken = nanoid(21);
 
@@ -1086,33 +1143,40 @@ export class ReportService extends BaseService {
     // NOT current age — because we need age-at-collection, not current age.
     // This flag is immutable after snapshot creation.
     let containsMinorData = false;
-    try {
-      const data = snapshotData as any;
-      const athleteIds: string[] = [];
+    if (report.reportType === 'eval') {
+      containsMinorData = await isEvalSnapshotRestricted(
+        (report.config as any)?.athleteId,
+        (snapshotData as any).model?.eventDate
+      );
+    } else {
+      try {
+        const data = snapshotData as any;
+        const athleteIds: string[] = [];
 
-      // Collect athlete IDs from team or individual report
-      if (report.reportType === 'individual') {
-        const config = report.config as any;
-        if (config?.athleteId) athleteIds.push(config.athleteId);
-      } else if (data?.athleteRankings) {
-        for (const a of data.athleteRankings) {
-          if (a?.userId) athleteIds.push(a.userId);
+        // Collect athlete IDs from team or individual report
+        if (report.reportType === 'individual') {
+          const config = report.config as any;
+          if (config?.athleteId) athleteIds.push(config.athleteId);
+        } else if (data?.athleteRankings) {
+          for (const a of data.athleteRankings) {
+            if (a?.userId) athleteIds.push(a.userId);
+          }
         }
-      }
 
-      if (athleteIds.length > 0) {
-        const minorCheck = await db
-          .select({ isMinor: users.isMinor })
-          .from(users)
-          .where(inArray(users.id, athleteIds));
-        containsMinorData = minorCheck.some(u => u.isMinor === true);
+        if (athleteIds.length > 0) {
+          const minorCheck = await db
+            .select({ isMinor: users.isMinor })
+            .from(users)
+            .where(inArray(users.id, athleteIds));
+          containsMinorData = minorCheck.some(u => u.isMinor === true);
+        }
+      } catch (err) {
+        // Fail-closed: if we can't determine whether the snapshot contains minor
+        // data, conservatively restrict public access. Better to over-restrict
+        // than to expose COPPA-protected data publicly.
+        console.error('[COPPA] Failed to check minor data in snapshot:', err);
+        containsMinorData = true;
       }
-    } catch (err) {
-      // Fail-closed: if we can't determine whether the snapshot contains minor
-      // data, conservatively restrict public access. Better to over-restrict
-      // than to expose COPPA-protected data publicly.
-      console.error('[COPPA] Failed to check minor data in snapshot:', err);
-      containsMinorData = true;
     }
 
     // Create snapshot
@@ -1511,6 +1575,9 @@ export class ReportService extends BaseService {
     const athletes = Array.from(athleteMap.values());
 
     for (const metric of metrics) {
+      // MQ ordinal scores are excluded from peer percentiles/rankings (AM-FEAT-015 D7)
+      if (isPeerComparisonExcludedMetric(metric)) continue;
+
       const values = athletes
         .filter((a) => a.measurements[metric] !== undefined)
         .map((a) => a.measurements[metric]);

@@ -180,6 +180,7 @@ export class DataParser {
           } as ExtractedMeasurementData);
           
           console.log(`Found ${metric}: ${value} (confidence: ${config.confidence}%)`);
+          break; // One row per metric per line: overlapping patterns would otherwise duplicate it (#585)
         }
       }
     }
@@ -198,35 +199,42 @@ export class DataParser {
       timePattern.lastIndex = 0;
       const match = timePattern.exec(line);
       
-      if (match && match[1]) {
+      // The patterns overlap ("4.52" matches both decimal patterns), so keep one row per value
+      if (match && match[1] && !measurements.some(m => m.value === match[1])) {
         const value = match[1];
         let metric = 'UNKNOWN';
         let confidence = 40; // Lower confidence for inferred measurements
         
-        // Try to infer measurement type from context
-        if (lowerLine.includes('40') || lowerLine.includes('forty')) {
+        // Try to infer measurement type from context.
+        // Agility drills come first: their names contain digits ('5-10-5', 'T-test 10.2') that the generic
+        // 40 / 10 / sprint checks below would otherwise claim. A drill is filed under the 5-0-5 only when the
+        // line says 5-0-5 (a bare "agility" is any agility drill), so the meters/yards prompt never asks users
+        // to confirm a label the text does not support.
+        const isTTest = /\bt[\s-]?test\b/.test(lowerLine);
+        const is5105 = lowerLine.includes('5105') || /\b5[\s-]10[\s-]5\b/.test(lowerLine);
+        const isProAgility = /\bpro[\s-]agility\b/.test(lowerLine); // the pro agility drill is the 5-10-5
+        const is505 = lowerLine.includes('505') || /\b5[\s-]0[\s-]5\b/.test(lowerLine);
+
+        if (isTTest) {
+          metric = 'T_TEST';
+          confidence = 65;
+        } else if (is5105 || isProAgility) {
+          metric = 'AGILITY_5105';
+          confidence = is5105 ? 65 : 55;
+        } else if (is505) {
+          metric = 'AGILITY_505_UNRESOLVED';
+          confidence = 65;
+        } else if (lowerLine.includes('40') || lowerLine.includes('forty')) {
           metric = 'DASH_40YD';
           confidence = 60;
-        } else if (lowerLine.includes('10') || lowerLine.includes('ten')) {
-          metric = 'FLY10_TIME';
+        } else if ((/(?<![\d.,])10(?![.,]?\d)/.test(lowerLine) || lowerLine.includes('ten')) && /\bfly(ing)?\b/.test(lowerLine)) {
+          // Only a line that says "fly" is a fly reading. A bare "10" is often a date or part of the value
+          // ("10/05 2.45", "2.10"), and a guess here forces a run-in prompt (422) on the whole photo.
+          metric = 'FLY10_TIME_UNRESOLVED';
           confidence = 60;
         } else if (lowerLine.includes('sprint') || lowerLine.includes('dash')) {
           metric = 'DASH_40YD';
           confidence = 50;
-        } else if (lowerLine.includes('agility') || lowerLine.includes('505') || lowerLine.includes('5105')) {
-          if (lowerLine.includes('505')) {
-            metric = 'AGILITY_505';
-            confidence = 65;
-          } else if (lowerLine.includes('5105')) {
-            metric = 'AGILITY_5105';
-            confidence = 65;
-          } else {
-            metric = 'AGILITY_505'; // Default agility test
-            confidence = 45;
-          }
-        } else if (lowerLine.includes('t-test') || lowerLine.includes('t test')) {
-          metric = 'T_TEST';
-          confidence = 65;
         }
         
         if (metric !== 'UNKNOWN') {

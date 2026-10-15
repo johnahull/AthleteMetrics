@@ -32,6 +32,7 @@ import {
   reportSnapshots,
 } from '@shared/schema';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
+import { BUILT_IN_METRIC_CODES } from '@shared/metric-explanations';
 
 vi.mock('../../packages/api/vite.js', () => ({
   setupVite: vi.fn().mockResolvedValue(undefined),
@@ -164,13 +165,16 @@ afterAll(async () => {
 });
 
 describe('GET /api/admin/metric-explanations', () => {
-  it('returns all 8 built-in metrics with hasOverride=false', async () => {
+  it('returns every built-in metric with hasOverride=false', async () => {
     const res = await request(app)
       .get('/api/admin/metric-explanations')
       .set('Cookie', siteAdminCookie);
 
     expect(res.status).toBe(200);
-    expect(res.body.metrics).toHaveLength(8);
+    // Derive the expectation from the source list so adding a built-in (e.g. the
+    // 5-0-5 m/yd split and COD deficits) does not silently break this test.
+    expect(res.body.metrics).toHaveLength(BUILT_IN_METRIC_CODES.length);
+    expect(res.body.metrics.map((m: any) => m.code).sort()).toEqual([...BUILT_IN_METRIC_CODES].sort());
 
     const fly = res.body.metrics.find((m: any) => m.code === 'FLY10_TIME');
     expect(fly).toBeDefined();

@@ -111,3 +111,18 @@ export async function fetchLogoBase64(url: string): Promise<LogoFetchResult | nu
     return null;
   }
 }
+
+/** Safe ASCII filename for Content-Disposition: strips traversal, control and non-ASCII characters. */
+export function sanitizeFilename(filename: string): string {
+  return filename
+    .normalize('NFKD') // Unicode normalization to prevent homograph attacks
+    .replace(/[\u0300-\u036f]/g, '') // Remove combining diacritical marks
+    .replace(/[\u200B-\u200D\uFEFF]/g, '') // Remove zero-width characters
+    .replace(/[\u202A-\u202E]/g, '') // Remove bidirectional text overrides (RTL attacks)
+    .replace(/[/\\?%*:|"<>\x00-\x1f]/g, '_') // Remove dangerous characters
+    .replace(/[^\x20-\x7e]/g, '_') // Non-ASCII (e.g. the en dash in eval report names) makes Content-Disposition throw
+    .replace(/^\.+/, '_') // Prevent hidden files
+    .replace(/\.+$/, '') // Remove trailing dots (Windows security issue)
+    .substring(0, 200) // Limit length to prevent issues
+    .trim() || 'report'; // Fallback for empty names
+}

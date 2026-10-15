@@ -571,7 +571,7 @@ export default function SportsManagementPage() {
           </DialogHeader>
           <form onSubmit={sportForm.handleSubmit(handleSportSubmit)}>
             <div className="space-y-4 py-4">
-              <div className="space-y-2">
+              <div className="grid gap-y-2">
                 <Label htmlFor="code">Code *</Label>
                 <Input
                   id="code"
@@ -587,7 +587,7 @@ export default function SportsManagementPage() {
                   Unique identifier (uppercase letters, numbers, underscores)
                 </p>
               </div>
-              <div className="space-y-2">
+              <div className="grid gap-y-2">
                 <Label htmlFor="name">Name *</Label>
                 <Input
                   id="name"
@@ -599,7 +599,7 @@ export default function SportsManagementPage() {
                   <p className="text-sm text-destructive">{sportForm.formState.errors.name.message}</p>
                 )}
               </div>
-              <div className="space-y-2">
+              <div className="grid gap-y-2">
                 <Label htmlFor="description">Description</Label>
                 <Textarea
                   id="description"
@@ -645,7 +645,7 @@ export default function SportsManagementPage() {
           </DialogHeader>
           <form onSubmit={positionForm.handleSubmit(handlePositionSubmit)}>
             <div className="space-y-4 py-4">
-              <div className="space-y-2">
+              <div className="grid gap-y-2">
                 <Label htmlFor="posCode">Code *</Label>
                 <Input
                   id="posCode"
@@ -658,7 +658,7 @@ export default function SportsManagementPage() {
                   <p className="text-sm text-destructive">{positionForm.formState.errors.code.message}</p>
                 )}
               </div>
-              <div className="space-y-2">
+              <div className="grid gap-y-2">
                 <Label htmlFor="posName">Name *</Label>
                 <Input
                   id="posName"
@@ -670,7 +670,7 @@ export default function SportsManagementPage() {
                   <p className="text-sm text-destructive">{positionForm.formState.errors.name.message}</p>
                 )}
               </div>
-              <div className="space-y-2">
+              <div className="grid gap-y-2">
                 <Label htmlFor="shortName">Short Name</Label>
                 <Input
                   id="shortName"
@@ -679,7 +679,7 @@ export default function SportsManagementPage() {
                   {...positionForm.register("shortName")}
                 />
               </div>
-              <div className="space-y-2">
+              <div className="grid gap-y-2">
                 <Label htmlFor="posDescription">Description</Label>
                 <Textarea
                   id="posDescription"

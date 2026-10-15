@@ -241,11 +241,11 @@ User2,B,Concurrent Team`;
 
   describe('CSRF Protection', () => {
     it('should require CSRF token for non-multipart import endpoints', async () => {
-      // TODO: Test /api/import/review-decision endpoint
-      // This endpoint should require CSRF token since it's not multipart
+      // TODO: Test any non-multipart /api/import/* endpoint
+      // Such an endpoint should require CSRF token since it's not multipart
 
       // await expect(
-      //   fetch('/api/import/review-decision', {
+      //   fetch('/api/import/<non-multipart-endpoint>', {
       //     method: 'POST',
       //     body: JSON.stringify({ action: 'confirm' })
       //     // Missing X-CSRF-Token header
@@ -262,7 +262,7 @@ User2,B,Concurrent Team`;
     });
 
     it('should NOT skip CSRF for non-upload import endpoints', async () => {
-      // Verify that endpoints like review-decision still require CSRF
+      // Verify that endpoints that are not multipart still require CSRF
       // even though they're under /import/
 
       // This ensures the narrow CSRF bypass (only for multipart) is working

@@ -15,6 +15,7 @@ process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'TestPassword123!';
 process.env.BYPASS_GENERAL_RATE_LIMIT = 'true'; // Bypass rate limits for these tests
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 import request from 'supertest';
 import express, { type Express } from 'express';
 import { db } from '../../packages/api/db';
@@ -77,8 +78,9 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // Note: Do not delete the admin user created by initializeDefaultUser()
-  // It may be used by other tests
+  // Do not delete the admin user created by initializeDefaultUser(): other tests may use it.
+  // Every other row was left behind: beforeEach creates an organization (and some tests a user) per test.
+  await purgeTestRows({ usernameLike: ['test-user-%'], orgNameLike: ['Test Org %'] });
 });
 
 beforeEach(async () => {

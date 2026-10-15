@@ -3,7 +3,7 @@
  * Allows coaches to enter measurements for checked-in athletes at an event
  */
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import {
   useEvent,
@@ -11,15 +11,60 @@ import {
   useEventMetrics,
   useEventMeasurements,
   useCreateEventMeasurementsBulk,
+  useSaveEventMovementQuality,
+  useInvalidateAfterMovementQualitySave,
+  MovementQualitySaveError,
   type EventRegistrationWithUser,
   type CreateEventMeasurementInput,
+  type BulkMeasurementResult,
 } from "@/lib/events-api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
+import { useHorizontalScrollState } from "@/hooks/use-horizontal-scroll-state";
+import { useGridKeyboardNav } from "@/hooks/use-grid-keyboard-nav";
+import { useMovementQualitySheetCells, type MqSaveOutcome } from "@/hooks/use-movement-quality-sheet-cells";
+import { mqSaveRequests } from "@/lib/mq-sheet-cells";
+import { useAuth } from "@/lib/auth";
+import { canManageEvent } from "@/lib/event-permissions";
+import { getEventMetricDisplay, type EventMetricWithSiteDetails } from "@/lib/event-metric-display";
+import { canAddTrial } from "@/lib/event-grid-cell-state";
+import { chunkBulkItems, saveSummary, savedCellPatch } from "@/lib/event-grid-save";
+import {
+  buildRecordingSheet,
+  downloadRecordingSheet,
+  readSheetFile,
+  sheetExclusionReason,
+  sheetIgnoredMetrics,
+  sheetMqMetrics,
+} from "@/lib/recording-sheet";
+import {
+  applyImportPlan,
+  discardImport,
+  emptyImportPlan,
+  planSheetImport,
+  resolveConflict,
+  type PlannedCell,
+  type SheetImportPlan,
+} from "@/lib/recording-sheet-import";
+import { RecordingSheetActions } from "@/components/events/RecordingSheetActions";
+import { EventGridCell } from "@/components/events/EventGridCell";
+import { MovementQualityGridCell } from "@/components/events/MovementQualityGridCell";
+import { RecordingSheetImportSummary, sheetImportAnnouncement } from "@/components/events/RecordingSheetImportSummary";
+import {
+  MovementQualityPanel,
+  type MovementQualitySaveInput,
+} from "@/components/events/MovementQualityPanel";
+import {
+  MQI_PATTERNS,
+  MQI_TRANSITIONS,
+  MQI_TOTAL_CODE,
+  MQI_TRANSITION_TOTAL_CODE,
+  computeMqiTotal,
+} from "@shared/mqi-entry-schema";
 import {
   ArrowLeft,
   Save,
@@ -30,15 +75,18 @@ import {
   Lock,
   Loader2,
   RefreshCw,
+  MoveHorizontal,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { format } from "date-fns";
+import { EVENT_DATA_ENTRY_REGISTRATION_STATUSES } from "@shared/schema";
 import type { EventMetric, Measurement } from "@shared/schema";
+import { toCalendarDate } from "@/utils/date-utils";
 
-// Extended metric type with details from site_metrics
+// Event metric with its site metric, as the server returns it (includeDetails=true)
 interface EventMetricWithDetails extends EventMetric {
-  label?: string;
-  category?: string;
-  units?: string;
+  metricDetails?: EventMetricWithSiteDetails["metricDetails"];
 }
 
 // Cell data type for the measurement grid
@@ -47,9 +95,22 @@ interface MeasurementCell {
   metricCode: string;
   value: string;
   originalValue?: number;
+  /** Newest saved row of this cell; a retype replaces it when it is the only one */
+  savedMeasurementId?: string;
+  /** Saved rows (trials) of this cell */
+  savedCount: number;
   isDirty: boolean;
   error?: string;
+  /** Value from an uploaded sheet that differs from the saved one, waiting for a choice */
+  importedValue?: string;
+  /** The unsaved value came from an uploaded sheet */
+  fromImport?: boolean;
 }
+
+// Pinned Athlete column. Opaque backgrounds that match the row and header tints, so
+// cells scrolled under it do not show through; the box-shadow draws its right edge.
+const ATHLETE_COL_WIDTH = "w-32 min-w-32 max-w-32 sm:w-44 sm:min-w-44 sm:max-w-44";
+const PINNED_CELL = "sticky left-0 shadow-[1px_0_0_var(--border)]";
 
 // Grid row type (one row per athlete)
 interface AthleteRow {
@@ -60,14 +121,39 @@ interface AthleteRow {
   measurements: Record<string, MeasurementCell>;
 }
 
+// Movement Quality scores are entered in a per-athlete panel (or loaded from a sheet), not in the numeric grid
+const MQ_BASE_CODES = new Set([...MQI_PATTERNS, ...MQI_TRANSITIONS].map((m) => m.code));
+const MQ_CODES = new Set([...MQ_BASE_CODES, MQI_TOTAL_CODE, MQI_TRANSITION_TOTAL_CODE]);
+
+// A dirty cell with a number, also one the server rejected last time (its error is cleared on send)
+const isSendable = (cell: Pick<MeasurementCell, "isDirty" | "value">) =>
+  cell.isDirty && cell.value !== "" && !isNaN(Number(cell.value));
+
+const GRID_SCROLLER_ID = "event-data-entry-grid";
+const GRID_KEYS = "ArrowUp ArrowDown ArrowLeft ArrowRight Enter";
+const MQ_SAVE_BLOCKED =
+  "This athlete has unsaved scores from a sheet. Save the page or discard the file values first.";
+
+// Stable empty list so consumers' memoized prefill does not re-run on every render
+const EMPTY_MEASUREMENTS: Measurement[] = [];
+
 export default function EventDataEntry() {
   const { eventId } = useParams<{ eventId: string }>();
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { user, userOrganizations, organizationsError, refetchOrganizations } = useAuth();
 
   // State for the measurement grid
   const [gridData, setGridData] = useState<Record<string, AthleteRow>>({});
   const [isSaving, setIsSaving] = useState(false);
+  const [mqAthleteId, setMqAthleteId] = useState<string | null>(null);
+  const [mqServerErrors, setMqServerErrors] = useState<Record<string, string> | undefined>();
+  const [sheetImport, setSheetImport] = useState<{ fileName: string; plan: SheetImportPlan; skipped: PlannedCell[] } | null>(null);
+  /** Name of the uploaded sheet being read; Upload, Save and Discard are off meanwhile */
+  const [readingSheet, setReadingSheet] = useState<string | null>(null);
+  // The grid as last rendered, for applying a sheet after its (async) read without losing cells typed meanwhile
+  const gridRef = useRef(gridData);
+  gridRef.current = gridData;
 
   // Fetch event details
   const { data: event, isLoading: eventLoading } = useEvent(eventId);
@@ -80,19 +166,24 @@ export default function EventDataEntry() {
   const { data: eventMetrics, isLoading: metricsLoading } = useEventMetrics(eventId);
 
   // Fetch existing measurements
-  const { data: existingMeasurements, isLoading: measurementsLoading, refetch: refetchMeasurements } =
-    useEventMeasurements(eventId);
+  const {
+    data: existingMeasurements,
+    isLoading: measurementsLoading,
+    isError: measurementsError,
+    refetch: refetchMeasurements,
+  } = useEventMeasurements(eventId);
+  const savedMeasurements = existingMeasurements ?? EMPTY_MEASUREMENTS;
 
   // Mutation for bulk save
   const bulkCreate = useCreateEventMeasurementsBulk();
+  const saveMovementQuality = useSaveEventMovementQuality();
+  const invalidateAfterMovementQualitySave = useInvalidateAfterMovementQualitySave();
 
-  // Filter to only checked-in athletes
+  // Athletes the server accepts results for (same statuses as the recording sheet and device import)
   const checkedInAthletes = useMemo(() => {
     if (!registrations) return [];
-    return registrations.filter(
-      (r: EventRegistrationWithUser) =>
-        r.status === "checked_in" || r.status === "approved"
-    );
+    const statuses: readonly string[] = EVENT_DATA_ENTRY_REGISTRATION_STATUSES;
+    return registrations.filter((r: EventRegistrationWithUser) => statuses.includes(r.status));
   }, [registrations]);
 
   // Sort metrics by display order
@@ -103,15 +194,52 @@ export default function EventDataEntry() {
     );
   }, [eventMetrics]);
 
-  // Initialize grid data when data loads
-  useMemo(() => {
+  // Numeric grid columns exclude Movement Quality metrics (entered via the MQ panel)
+  const gridMetrics = useMemo(
+    () => sortedMetrics.filter((m) => !MQ_CODES.has(m.metricCode)),
+    [sortedMetrics]
+  );
+  const mqEnabledCodes = useMemo(
+    () => sortedMetrics.map((m) => m.metricCode).filter((c) => MQ_BASE_CODES.has(c)),
+    [sortedMetrics]
+  );
+  const hasMovementQuality = mqEnabledCodes.length > 0;
+  // Movement Quality columns of the recording sheet, and their scores loaded from an uploaded sheet
+  const mqSheetMetrics = useMemo(() => sheetMqMetrics(mqEnabledCodes), [mqEnabledCodes]);
+  const mqSheetCodes = useMemo(() => mqSheetMetrics.map((m) => m.code), [mqSheetMetrics]);
+  const athleteIds = useMemo(() => checkedInAthletes.map((r) => r.userId), [checkedInAthletes]);
+  const mqCells = useMovementQualitySheetCells(existingMeasurements, athleteIds, mqSheetCodes);
+  const { mqGrid } = mqCells;
+  const metricColumnCount = gridMetrics.length + (hasMovementQuality ? 1 : 0);
+  const displayByCode = useMemo(
+    () => new Map(gridMetrics.map((m) => [m.metricCode, getEventMetricDisplay(m)])),
+    [gridMetrics]
+  );
+  const gridScroll = useHorizontalScrollState();
+  const onGridKeyDown = useGridKeyboardNav();
+  // The pinned Athlete column: a scroll page is the visible width less this column
+  const athleteHeaderRef = useRef<HTMLTableCellElement>(null);
+  const scrollGrid = (direction: -1 | 1) => gridScroll.scrollByPage(direction, athleteHeaderRef.current?.offsetWidth ?? 0);
+  // MQI_TOTAL / MQ_TRANSITION_TOTAL enabled without any base score to enter them from
+  const hasOnlyMqTotals =
+    !hasMovementQuality &&
+    sortedMetrics.some((m) => m.metricCode === MQI_TOTAL_CODE || m.metricCode === MQI_TRANSITION_TOTAL_CODE);
+
+  // Initialize grid data when data loads. A refetch (e.g. after saving Movement Quality
+  // scores) must not erase unsaved grid edits: dirty cells keep their typed value.
+  useEffect(() => {
     if (!checkedInAthletes.length || !sortedMetrics.length) return;
 
-    // Build lookup of existing measurements
-    const measurementLookup = new Map<string, Measurement>();
+    // Rows come newest first (date, then createdAt): the first row per athlete+metric is the
+    // cell's value, the rest are earlier trials. Rows derived from other rows are not typed values:
+    // the server's rule, isCalculated unless the source list is empty (a paired-input row).
+    const measurementLookup = new Map<string, { latest: Measurement; count: number }>();
     existingMeasurements?.forEach((m: Measurement) => {
+      if (m.isCalculated && !(Array.isArray(m.calculatedFromMeasurementIds) && m.calculatedFromMeasurementIds.length === 0)) return;
       const key = `${m.userId}-${m.metric}`;
-      measurementLookup.set(key, m);
+      const entry = measurementLookup.get(key);
+      if (entry) entry.count++;
+      else measurementLookup.set(key, { latest: m, count: 1 });
     });
 
     // Build grid data
@@ -121,15 +249,18 @@ export default function EventDataEntry() {
       const userId = reg.userId;
       const measurements: Record<string, MeasurementCell> = {};
 
-      sortedMetrics.forEach((metric: EventMetricWithDetails) => {
+      gridMetrics.forEach((metric: EventMetricWithDetails) => {
         const key = `${userId}-${metric.metricCode}`;
-        const existing = measurementLookup.get(key);
+        const saved = measurementLookup.get(key);
+        const existing = saved?.latest;
 
         measurements[metric.metricCode] = {
           userId,
           metricCode: metric.metricCode,
           value: existing?.value?.toString() || "",
           originalValue: existing?.value ? Number(existing.value) : undefined,
+          savedMeasurementId: existing?.id,
+          savedCount: saved?.count ?? 0,
           isDirty: false,
         };
       });
@@ -143,8 +274,28 @@ export default function EventDataEntry() {
       };
     });
 
-    setGridData(newGridData);
-  }, [checkedInAthletes, sortedMetrics, existingMeasurements]);
+    setGridData((prev) => {
+      for (const [userId, row] of Object.entries(newGridData)) {
+        for (const [metricCode, cell] of Object.entries(row.measurements)) {
+          const previous = prev[userId]?.measurements[metricCode];
+          if (previous?.isDirty) {
+            row.measurements[metricCode] = {
+              ...cell,
+              value: previous.value,
+              error: previous.error,
+              // Numeric: "1.60" typed and 1.6 saved (e.g. by a request whose response was lost) is clean
+              isDirty: previous.value === "" ? cell.originalValue !== undefined : Number(previous.value) !== cell.originalValue,
+              fromImport: previous.fromImport,
+            };
+          } else if (previous?.importedValue !== undefined) {
+            // A conflict from an uploaded sheet waits for its choice
+            row.measurements[metricCode] = { ...cell, importedValue: previous.importedValue };
+          }
+        }
+      }
+      return newGridData;
+    });
+  }, [checkedInAthletes, sortedMetrics, gridMetrics, existingMeasurements]);
 
   // Handle cell value change
   const handleCellChange = useCallback(
@@ -176,6 +327,9 @@ export default function EventDataEntry() {
                 value,
                 isDirty,
                 error,
+                // A typed value wins over a pending file value
+                importedValue: undefined,
+                fromImport: false,
               },
             },
           },
@@ -185,18 +339,140 @@ export default function EventDataEntry() {
     []
   );
 
-  // Calculate dirty count
-  const dirtyCount = useMemo(() => {
-    let count = 0;
-    Object.values(gridData).forEach((row) => {
-      Object.values(row.measurements).forEach((cell) => {
-        if (cell.isDirty && cell.value !== "" && !cell.error) {
-          count++;
-        }
+  // Calculate dirty count (grid cells and Movement Quality scores from a sheet)
+  const { dirtyCount, conflictCount, hasUnsavedEdits, hasPendingImport } = useMemo(() => {
+    const mq = Object.values(mqGrid).flatMap((row) => Object.values(row.measurements));
+    const cells = [...Object.values(gridData).flatMap((row) => Object.values(row.measurements)), ...mq];
+    return {
+      dirtyCount: cells.filter(isSendable).length,
+      conflictCount: cells.filter((c) => c.importedValue !== undefined).length,
+      hasUnsavedEdits: cells.some((c) => c.isDirty || c.importedValue !== undefined),
+      hasPendingImport: cells.some((c) => c.importedValue !== undefined || (c.isDirty && c.fromImport)),
+    };
+  }, [gridData, mqGrid]);
+
+  const updateCells = (update: (cell: MeasurementCell) => MeasurementCell, userId?: string, metricCode?: string) =>
+    setGridData((prev) => {
+      const next = { ...prev };
+      Object.values(prev).forEach((row) => {
+        if (userId && row.userId !== userId) return;
+        const measurements = { ...row.measurements };
+        Object.entries(measurements).forEach(([code, cell]) => {
+          if (!metricCode || code === metricCode) measurements[code] = update(cell);
+        });
+        next[row.userId] = { ...row, measurements };
       });
+      return next;
     });
-    return count;
-  }, [gridData]);
+
+  // Apply patches to the cells they were computed for; a cell gone from the grid meanwhile is skipped
+  const patchCells = (patches: Map<MeasurementCell, (current: MeasurementCell) => Partial<MeasurementCell>>) =>
+    setGridData((prev) => {
+      const next = { ...prev };
+      patches.forEach((patch, sent) => {
+        const row = next[sent.userId];
+        const current = row?.measurements[sent.metricCode];
+        if (!current) return;
+        next[sent.userId] = {
+          ...row,
+          measurements: { ...row.measurements, [sent.metricCode]: { ...current, ...patch(current) } },
+        };
+      });
+      return next;
+    });
+
+  const measurementItem = (cell: MeasurementCell): CreateEventMeasurementInput => ({
+    userId: cell.userId,
+    metric: cell.metricCode,
+    value: Number(cell.value),
+    date: event?.startDate ? new Date(event.startDate).toISOString() : new Date().toISOString(),
+  });
+
+  const importMetricLabels = useMemo(
+    () => new Map([...[...displayByCode].map(([code, d]) => [code, d.label] as const), ...mqSheetMetrics.map((m) => [m.code, m.label] as const)]),
+    [displayByCode, mqSheetMetrics],
+  );
+  const importAthleteNames = useMemo(
+    () => new Map(Object.values(gridData).map((row) => [row.userId, row.fullName])),
+    [gridData],
+  );
+
+  // Recording sheet: grid athletes x metrics that can be typed plus the Movement Quality scores, with saved
+  // values (never unsaved edits) pre-printed
+  const recordingSheet = () =>
+    buildRecordingSheet({
+      event: event!,
+      metrics: sortedMetrics,
+      athletes: Object.values(gridData).map((row) => {
+        const saved = Object.values(row.measurements).filter((c) => c.originalValue !== undefined);
+        const savedMq = Object.values(mqGrid[row.userId]?.measurements ?? {}).filter((c) => c.originalValue !== undefined);
+        return {
+          userId: row.userId,
+          name: row.fullName,
+          ...(saved.length + savedMq.length > 0
+            ? {
+                values: Object.fromEntries([...saved, ...savedMq].map((c) => [c.metricCode, String(c.originalValue)])),
+                trials: Object.fromEntries(saved.map((c) => [c.metricCode, c.savedCount])),
+              }
+            : {}),
+        };
+      }),
+    });
+
+  const handleSheetUpload = async (file: File) => {
+    if (readingSheet || !event) return;
+    setReadingSheet(file.name);
+    let plan: SheetImportPlan;
+    try {
+      // Snapshot before awaiting: the event or metrics may change (or vanish) while the file is read
+      const sheetMetrics = recordingSheet().metrics;
+      const ignoredMetrics = sheetIgnoredMetrics(sortedMetrics);
+      const sheet = await readSheetFile(file);
+      // Saved values are read after the file is parsed: a refetch landing meanwhile must not cause false conflicts
+      plan = planSheetImport({
+        ...sheet,
+        eventId: eventId!,
+        athletes: Object.values(gridRef.current).map((row) => ({
+          userId: row.userId,
+          name: row.fullName,
+          saved: Object.fromEntries(
+            [...Object.values(row.measurements), ...Object.values(mqCells.mqGridRef.current[row.userId]?.measurements ?? {})].map(
+              (c) => [c.metricCode, c.originalValue],
+            ),
+          ),
+        })),
+        metrics: sheetMetrics,
+        ignoredMetrics,
+      });
+    } catch (error) {
+      plan = emptyImportPlan(error instanceof Error ? error.message : "The file could not be read.");
+    }
+    // Cells typed while the file was read keep the typed value (reported as skipped). Each grid holds its own codes.
+    const applied = plan.fileError ? { grid: gridRef.current, skipped: [] } : applyImportPlan(gridRef.current, plan);
+    const appliedMq = plan.fileError ? { grid: mqCells.mqGridRef.current, skipped: [] } : applyImportPlan(mqCells.mqGridRef.current, plan);
+    setGridData(applied.grid);
+    mqCells.setMqGrid(appliedMq.grid);
+    setSheetImport({ fileName: file.name, plan, skipped: [...applied.skipped, ...appliedMq.skipped] });
+    setReadingSheet(null);
+  };
+
+  const handleSheetDownload = async (format: "csv" | "xlsx" | "pdf") => {
+    try {
+      await downloadRecordingSheet(recordingSheet(), format);
+    } catch {
+      toast({
+        title: "Could not create the sheet",
+        description: "Check your connection and try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const sheetAnnouncement = readingSheet
+    ? { status: `Reading ${readingSheet}…`, alert: "" }
+    : sheetImport
+      ? sheetImportAnnouncement(sheetImport.plan, sheetImport.skipped)
+      : { status: "", alert: "" };
 
   // Calculate completion stats
   const completionStats = useMemo(() => {
@@ -206,7 +482,14 @@ export default function EventDataEntry() {
     let requiredFilled = 0;
 
     const requiredMetrics = new Set(
-      sortedMetrics.filter((m) => m.isRequired).map((m) => m.metricCode)
+      gridMetrics.filter((m) => m.isRequired).map((m) => m.metricCode)
+    );
+    // Required Movement Quality scores are entered in the panel, not the grid
+    const requiredMqCodes = sortedMetrics
+      .filter((m) => m.isRequired && MQ_BASE_CODES.has(m.metricCode))
+      .map((m) => m.metricCode);
+    const savedMq = new Set(
+      savedMeasurements.filter((m) => MQ_BASE_CODES.has(m.metric)).map((m) => `${m.userId}-${m.metric}`)
     );
 
     Object.values(gridData).forEach((row) => {
@@ -218,6 +501,10 @@ export default function EventDataEntry() {
           if (cell.value !== "") requiredFilled++;
         }
       });
+      requiredMqCodes.forEach((code) => {
+        required++;
+        if (savedMq.has(`${row.userId}-${code}`)) requiredFilled++;
+      });
     });
 
     return {
@@ -228,10 +515,11 @@ export default function EventDataEntry() {
       percentage: total > 0 ? Math.round((filled / total) * 100) : 0,
       requiredPercentage: required > 0 ? Math.round((requiredFilled / required) * 100) : 0,
     };
-  }, [gridData, sortedMetrics]);
+  }, [gridData, gridMetrics, sortedMetrics, savedMeasurements]);
 
   // Handle save
   const handleSave = async () => {
+    if (conflictCount > 0) return;
     if (event?.isFrozen) {
       toast({
         variant: "destructive",
@@ -241,25 +529,28 @@ export default function EventDataEntry() {
       return;
     }
 
-    // Collect all dirty cells with valid values
+    // Collect all dirty cells with valid values; cellsToSave[i] is the cell of measurementsToSave[i]
     const measurementsToSave: CreateEventMeasurementInput[] = [];
+    const cellsToSave: MeasurementCell[] = [];
 
     Object.values(gridData).forEach((row) => {
       Object.values(row.measurements).forEach((cell) => {
-        if (cell.isDirty && cell.value !== "" && !cell.error) {
+        if (isSendable(cell)) {
+          cellsToSave.push(cell);
           measurementsToSave.push({
-            userId: cell.userId,
-            metric: cell.metricCode,
-            value: Number(cell.value),
-            date: event?.startDate
-              ? new Date(event.startDate).toISOString()
-              : new Date().toISOString(),
+            ...measurementItem(cell),
+            // One saved row: the retype corrects it. Several (trials): the retype is a new trial.
+            ...(cell.savedCount === 1 && cell.savedMeasurementId
+              ? { replaceMeasurementId: cell.savedMeasurementId }
+              : {}),
           });
         }
       });
     });
 
-    if (measurementsToSave.length === 0) {
+    // Movement Quality scores from a sheet: one request per athlete, after the grid
+    const mqAthletes = mqSaveRequests(mqGrid).length;
+    if (measurementsToSave.length === 0 && mqAthletes === 0) {
       toast({
         title: "No Changes",
         description: "No measurements to save.",
@@ -267,38 +558,200 @@ export default function EventDataEntry() {
       return;
     }
 
+    // A server error on a cell is cleared when the cell is sent again
+    setGridData((prev) => {
+      const next = { ...prev };
+      cellsToSave.forEach((sent) => {
+        const row = next[sent.userId];
+        const current = row?.measurements[sent.metricCode];
+        if (!current?.error) return;
+        next[sent.userId] = {
+          ...row,
+          measurements: { ...row.measurements, [sent.metricCode]: { ...current, error: undefined } },
+        };
+      });
+      return next;
+    });
+
+    // Apply one request's per-item results to the cells it sent. A cell edited again while
+    // the request was in flight keeps its new value and stays dirty.
+    const applyResult = (offset: number, result: BulkMeasurementResult) => {
+      const patches = new Map<MeasurementCell, (current: MeasurementCell) => Partial<MeasurementCell>>();
+      const savedRows = [
+        ...result.created.map((row) => ({ row, replaced: false })),
+        ...result.replaced.map((row) => ({ row, replaced: true })),
+      ];
+      savedRows.forEach(({ row, replaced }) => {
+        const sent = cellsToSave[offset + row.index];
+        if (!sent) return;
+        patches.set(sent, (current) => savedCellPatch(sent, current, row.id, replaced));
+      });
+      result.errors.forEach(({ index, error }) => {
+        const sent = cellsToSave[offset + index];
+        if (sent) patches.set(sent, (current) => (current.value === sent.value ? { error } : {}));
+      });
+      patchCells(patches);
+      return { saved: savedRows.length, failed: result.errors.length };
+    };
+
+    // Requests of <= 200 items and well under 100 kB, sent one after another; stop at the first
+    // request that fails as a whole. Saved cells are clean, so a retry cannot send them twice.
+    let savedCount = 0;
+    let failedCount = 0;
+    let failure: string | undefined;
+    let mq: MqSaveOutcome | undefined;
+    setIsSaving(true);
+    try {
+      let offset = 0;
+      for (const chunk of chunkBulkItems(measurementsToSave)) {
+        // No per-request refetch: the one at the end reloads the grid after the last request
+        const result = await bulkCreate.mutateAsync({ eventId: eventId!, measurements: chunk, invalidateMeasurements: false });
+        const counts = applyResult(offset, result);
+        savedCount += counts.saved;
+        failedCount += counts.failed;
+        offset += chunk.length;
+      }
+    } catch (error: any) {
+      failure = error?.message || "Failed to save measurements.";
+    }
+    try {
+      // Not after a grid request failed as a whole: the next request would likely fail too
+      if (!failure && mqAthletes > 0) {
+        mq = await mqCells.save((userId, upserts) =>
+          saveMovementQuality.mutateAsync({ eventId: eventId!, userId, upserts, deletes: [], invalidateMeasurements: false }),
+        );
+      }
+    } catch (error: any) {
+      mq = { athletes: mqAthletes, saved: 0, failed: 0, stopped: { message: error?.message || "Failed to save Movement Quality scores.", rateLimited: false } };
+    } finally {
+      setIsSaving(false);
+      // Refetch whatever happened: earlier requests may have saved rows
+      await refetchMeasurements();
+      if (mq && mq.saved > 0) invalidateAfterMovementQualitySave(eventId!);
+    }
+
+    toast(
+      saveSummary({
+        grid: { total: measurementsToSave.length, saved: savedCount, failed: failedCount, failure },
+        mq: mqAthletes > 0 ? (mq ?? { athletes: mqAthletes, saved: 0, failed: 0, notSent: true }) : undefined,
+      }),
+    );
+  };
+
+  // Save one cell's value now as an extra trial (never replaces a saved row); focus goes back to the input
+  const handleAddTrial = async (cell: MeasurementCell, label: string, athleteName: string) => {
+    if (isSaving || readingSheet || event?.isFrozen || !canAddTrial(cell)) return;
+    const inputId = `cell-input-${cell.userId}-${cell.metricCode}`;
+    const button = document.activeElement;
+    let failure: string | undefined;
     setIsSaving(true);
     try {
       const result = await bulkCreate.mutateAsync({
         eventId: eventId!,
-        measurements: measurementsToSave,
+        measurements: [measurementItem(cell)],
+        invalidateMeasurements: false,
       });
-
-      if (result.errors?.length > 0) {
-        toast({
-          variant: "destructive",
-          title: "Partial Save",
-          description: `Saved ${result.created.length} measurements. ${result.errors.length} errors occurred.`,
-        });
+      const [created] = result.created;
+      if (created) {
+        patchCells(new Map([[cell, (current) => savedCellPatch(cell, current, created.id, false)]]));
+        toast({ title: "Trial saved", description: `${label} for ${athleteName} (${cell.savedCount + 1} trials)` });
       } else {
-        toast({
-          title: "Saved Successfully",
-          description: `${result.created.length} measurements saved.`,
-        });
+        const error = result.errors[0]?.error ?? "The trial was not saved.";
+        patchCells(new Map([[cell, (current) => (current.value === cell.value ? { error } : {})]]));
       }
-
-      // Refetch measurements to update the grid
-      await refetchMeasurements();
     } catch (error: any) {
+      failure = error?.message || "Failed to save the trial.";
+    } finally {
+      setIsSaving(false);
+      // Refetch whatever happened: the row may have been saved before the response was lost. The refetch
+      // then shows it as the cell's saved value, so the cell is clean and a retry cannot add it again.
+      const refetched = await refetchMeasurements();
+      if (failure) {
+        const savedNow = (refetched?.data ?? []).filter(
+          (m: Measurement) => m.userId === cell.userId && m.metric === cell.metricCode,
+        ).length;
+        // The response was lost but the server kept the trial: no failure toast over a saved cell
+        if (savedNow > cell.savedCount) {
+          toast({ title: "Trial saved", description: `${label} for ${athleteName} (${savedNow} trials)` });
+        } else {
+          toast({ variant: "destructive", title: "Trial not saved", description: failure });
+        }
+      }
+      // Back to the input unless the user has moved on meanwhile (the hidden + button drops focus to body)
+      requestAnimationFrame(() => {
+        if (document.activeElement === document.body || document.activeElement === button) {
+          document.getElementById(inputId)?.focus();
+        }
+      });
+    }
+  };
+
+  // Per-athlete Movement Quality summary for the grid buttons (one pass over the measurements)
+  const mqSummaryByUser = useMemo(() => {
+    const scoresByUser = new Map<string, Record<string, number>>();
+    savedMeasurements.forEach((m: Measurement) => {
+      if (!MQ_BASE_CODES.has(m.metric)) return;
+      const scores = scoresByUser.get(m.userId) ?? {};
+      scores[m.metric] = Number(m.value);
+      scoresByUser.set(m.userId, scores);
+    });
+    const summaries = new Map<string, string>();
+    scoresByUser.forEach((scores, userId) => {
+      const scored = MQI_PATTERNS.filter((p) => scores[p.code] !== undefined).length;
+      const total = computeMqiTotal(scores);
+      summaries.set(userId, total !== null ? `${total} / 24` : scored > 0 ? `${scored} of 8 scored` : "Not scored");
+    });
+    return summaries;
+  }, [savedMeasurements]);
+
+  const openMovementQuality = (userId: string) => {
+    setMqServerErrors(undefined);
+    setMqAthleteId(userId);
+  };
+
+  // Save one athlete's Movement Quality scores in one atomic request (upserts + deletes)
+  const handleSaveMovementQuality = async ({ upserts, deletes }: MovementQualitySaveInput) => {
+    if (event?.isFrozen) {
+      toast({
+        variant: "destructive",
+        title: "Event is Frozen",
+        description: "Cannot modify measurements for a frozen event.",
+      });
+      return;
+    }
+    if (!mqAthleteId) return;
+    if (upserts.length === 0 && deletes.length === 0) {
+      toast({ title: "No Changes", description: "No scores to save." });
+      setMqAthleteId(null);
+      return;
+    }
+
+    setIsSaving(true);
+    setMqServerErrors(undefined);
+    try {
+      await saveMovementQuality.mutateAsync({
+        eventId: eventId!,
+        userId: mqAthleteId,
+        upserts: upserts.map(({ metric, value, notes, mediaUrl }) => ({ metric, value, notes, mediaUrl })),
+        deletes,
+      });
+      toast({ title: "Scores Saved", description: "Movement Quality scores saved." });
+      setMqAthleteId(null);
+    } catch (error: any) {
+      if (error instanceof MovementQualitySaveError) {
+        setMqServerErrors(Object.fromEntries(error.errors.map((e) => [e.metric, e.error])));
+      }
       toast({
         variant: "destructive",
         title: "Save Failed",
-        description: error.message || "Failed to save measurements.",
+        description: error.message || "Failed to save scores.",
       });
     } finally {
       setIsSaving(false);
     }
   };
+
+  const mqAthlete = mqAthleteId ? gridData[mqAthleteId] : undefined;
 
   // Handle refresh
   const handleRefresh = async () => {
@@ -309,8 +762,31 @@ export default function EventDataEntry() {
     });
   };
 
-  // Loading state
-  if (eventLoading || registrationsLoading || metricsLoading || measurementsLoading) {
+  // Organization memberships could not be loaded: offer a retry instead of an endless skeleton
+  const organizationsMissing = !!user && !user.isSiteAdmin && userOrganizations === null;
+  if (organizationsMissing && organizationsError) {
+    return (
+      <div className="container mx-auto py-6">
+        <Card>
+          <CardContent className="py-12 text-center">
+            <AlertCircle className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+            <h2 className="text-xl font-semibold mb-2">Could not load your organizations</h2>
+            <p className="text-muted-foreground mb-4">
+              Your organization memberships are needed to check access to this event.
+            </p>
+            <Button variant="outline" onClick={() => refetchOrganizations()}>
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Loading state (auth and organization memberships included, so managers never
+  // see a flash of Access Denied while they load)
+  const authLoading = !user || organizationsMissing;
+  if (authLoading || eventLoading || registrationsLoading || metricsLoading || measurementsLoading) {
     return (
       <div className="container mx-auto py-6 space-y-6">
         <Skeleton className="h-8 w-64" />
@@ -330,6 +806,28 @@ export default function EventDataEntry() {
             <Button variant="outline" onClick={() => navigate("/events")}>
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Events
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Event managers only (coach, org_admin, site_admin), same rule as the event page:
+  // athletes cannot enter Movement Quality scores or attach clips (AM-FEAT-015)
+  if (!canManageEvent(user, userOrganizations, event)) {
+    return (
+      <div className="container mx-auto py-6">
+        <Card>
+          <CardContent className="py-12 text-center">
+            <AlertCircle className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+            <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
+            <p className="text-muted-foreground mb-4">
+              Only coaches and organization admins can enter data for this event.
+            </p>
+            <Button variant="outline" onClick={() => navigate(`/events/${eventId}`)}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Event
             </Button>
           </CardContent>
         </Card>
@@ -396,7 +894,7 @@ export default function EventDataEntry() {
   return (
     <div className="container mx-auto py-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" onClick={() => navigate(`/events/${eventId}`)}>
             <ArrowLeft className="h-4 w-4 mr-2" />
@@ -413,20 +911,43 @@ export default function EventDataEntry() {
               )}
             </h1>
             <p className="text-muted-foreground">
-              {format(new Date(event.startDate), "MMM d, yyyy")}
+              {format(toCalendarDate(event.startDate)!, "MMM d, yyyy")}
               {event.location && ` • ${event.location}`}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-start gap-3">
+          <RecordingSheetActions
+            disabledReason={
+              event.isFrozen
+                ? "This event is frozen, so results cannot be entered from a sheet."
+                : measurementsError
+                  // Without them every file value would look new: no conflicts, and saved rows would be duplicated
+                  ? "Saved results could not be loaded. Refresh before uploading a sheet."
+                  : undefined
+            }
+            uploadBlockedReason={
+              readingSheet
+                ? `Reading ${readingSheet}…`
+                : isSaving
+                  ? "Wait for the save to finish before uploading a sheet."
+                  : conflictCount > 0
+                    ? "Resolve all conflicts (or discard the import) before uploading a new sheet."
+                    : hasUnsavedEdits
+                      ? "Save or discard your unsaved changes before uploading a sheet."
+                      : undefined
+            }
+            onDownload={handleSheetDownload}
+            onUpload={handleSheetUpload}
+          />
           <Button variant="outline" size="sm" onClick={handleRefresh}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
           <Button
             onClick={handleSave}
-            disabled={dirtyCount === 0 || isSaving || event.isFrozen}
+            disabled={dirtyCount === 0 || conflictCount > 0 || isSaving || !!readingSheet || event.isFrozen}
           >
             {isSaving ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -449,7 +970,7 @@ export default function EventDataEntry() {
         <Card>
           <CardContent className="py-3">
             <div className="text-sm text-muted-foreground">Metrics</div>
-            <div className="text-2xl font-bold">{sortedMetrics.length}</div>
+            <div className="text-2xl font-bold">{metricColumnCount}</div>
           </CardContent>
         </Card>
         <Card>
@@ -486,6 +1007,25 @@ export default function EventDataEntry() {
         </div>
       )}
 
+      {hasOnlyMqTotals && (
+        <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg text-blue-700">
+          <AlertCircle className="h-4 w-4" />
+          <span className="text-sm">
+            MQI total is calculated from the 8 Movement Quality pattern scores. Add those metrics
+            to this event to enter scores.
+          </span>
+        </div>
+      )}
+
+      {hasMovementQuality && measurementsError && (
+        <div role="alert" className="flex items-center gap-2 p-3 bg-red-50 rounded-lg text-red-700">
+          <AlertCircle className="h-4 w-4" />
+          <span className="text-sm">
+            Could not load saved scores. Movement Quality entry is disabled until you refresh.
+          </span>
+        </div>
+      )}
+
       {/* Unsaved changes warning */}
       {dirtyCount > 0 && !event.isFrozen && (
         <div className="flex items-center gap-2 p-3 bg-yellow-50 rounded-lg text-yellow-700">
@@ -496,98 +1036,259 @@ export default function EventDataEntry() {
         </div>
       )}
 
+      {conflictCount > 0 && (
+        <div className="flex items-center gap-2 p-3 bg-orange-50 rounded-lg text-orange-800">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span className="text-sm">
+            {conflictCount} {conflictCount === 1 ? "conflict" : "conflicts"} to resolve before saving: choose
+            Keep saved or Use file value on the outlined cells.
+          </span>
+        </div>
+      )}
+
+      {/* Mounted at all times so screen readers announce changes (a region added with its text often is not read) */}
+      <div data-testid="recording-sheet-status" role="status" aria-live="polite" className="sr-only">
+        {sheetAnnouncement.status}
+      </div>
+      <div data-testid="recording-sheet-alert" role="alert" className="sr-only">
+        {sheetAnnouncement.alert}
+      </div>
+
+      {sheetImport && (
+        <RecordingSheetImportSummary
+          fileName={sheetImport.fileName}
+          plan={sheetImport.plan}
+          skipped={sheetImport.skipped}
+          busy={isSaving || !!readingSheet}
+          conflictsLeft={conflictCount}
+          hasPendingImport={hasPendingImport}
+          metricLabels={importMetricLabels}
+          athleteNames={importAthleteNames}
+          onResolveAll={(choice) => {
+            updateCells((c) => resolveConflict(c, choice));
+            mqCells.update((c) => resolveConflict(c, choice));
+          }}
+          onDiscard={() => {
+            updateCells(discardImport);
+            mqCells.update(discardImport);
+            setSheetImport(null);
+          }}
+          onClose={() => setSheetImport(null)}
+        />
+      )}
+
       {/* Data Entry Grid */}
       <Card>
         <CardHeader>
           <CardTitle>Measurement Entry</CardTitle>
           <CardDescription>
-            Enter measurements for each athlete. Tab or click between cells. Required metrics are
-            marked with *.
+            Enter measurements for each athlete. Arrow keys, Enter or Tab move between cells. Required
+            metrics are marked with *.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="border-b bg-muted/50">
-                  <th className="p-3 text-left font-medium sticky left-0 bg-muted/50 min-w-[200px]">
-                    Athlete
-                  </th>
-                  {sortedMetrics.map((metric: EventMetricWithDetails) => (
-                    <th
-                      key={metric.metricCode}
-                      className="p-3 text-center font-medium min-w-[120px]"
-                    >
-                      <div className="flex flex-col items-center gap-1">
-                        <span>
-                          {metric.customLabel || metric.label || metric.metricCode}
-                          {metric.isRequired && <span className="text-red-500 ml-1">*</span>}
-                        </span>
-                        {metric.units && (
-                          <span className="text-xs text-muted-foreground">({metric.units})</span>
-                        )}
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {Object.values(gridData).map((row) => (
-                  <tr key={row.userId} className="border-b hover:bg-muted/30">
-                    <td className="p-3 sticky left-0 bg-white">
-                      <div className="font-medium">{row.fullName}</div>
-                      <div className="text-xs text-muted-foreground capitalize">
-                        {row.status === "checked_in" ? (
-                          <span className="flex items-center gap-1 text-green-600">
-                            <CheckCircle className="h-3 w-3" />
-                            Checked In
-                          </span>
-                        ) : (
-                          row.status
-                        )}
-                      </div>
-                    </td>
-                    {sortedMetrics.map((metric: EventMetricWithDetails) => {
-                      const cell = row.measurements[metric.metricCode];
-                      if (!cell) return <td key={metric.metricCode} className="p-1" />;
-
-                      return (
-                        <td key={metric.metricCode} className="p-1">
-                          <Input
-                            type="text"
-                            inputMode="decimal"
-                            value={cell.value}
-                            onChange={(e) =>
-                              handleCellChange(row.userId, metric.metricCode, e.target.value)
-                            }
-                            disabled={event.isFrozen}
-                            className={`text-center ${
-                              cell.error
-                                ? "border-red-500 focus:ring-red-500"
-                                : cell.isDirty
-                                  ? "border-yellow-500 bg-yellow-50"
-                                  : cell.originalValue !== undefined
-                                    ? "bg-green-50"
-                                    : ""
-                            }`}
-                            placeholder="-"
-                          />
-                          {cell.error && (
-                            <div className="text-xs text-red-500 text-center mt-1">{cell.error}</div>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
+        <CardContent className="px-3 sm:px-6">
+          {gridScroll.hasOverflow && (
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <MoveHorizontal className="h-4 w-4 shrink-0" aria-hidden="true" />
+                {metricColumnCount} metric {metricColumnCount === 1 ? "column" : "columns"} · scroll sideways to see {metricColumnCount === 1 ? "it" : "them all"}
+              </p>
+              <div className="flex shrink-0 gap-1">
+                {([-1, 1] as const).map((direction) => (
+                  <Button
+                    key={direction}
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-11 w-11 sm:h-9 sm:w-9"
+                    onClick={() => scrollGrid(direction)}
+                    disabled={direction < 0 ? !gridScroll.canScrollLeft : !gridScroll.canScrollRight}
+                    aria-label={direction < 0 ? "Scroll metrics left" : "Scroll metrics right"}
+                    aria-controls={GRID_SCROLLER_ID}
+                  >
+                    {direction < 0 ? <ChevronLeft aria-hidden="true" /> : <ChevronRight aria-hidden="true" />}
+                  </Button>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            </div>
+          )}
+          <div className="relative">
+            <div
+              id={GRID_SCROLLER_ID}
+              ref={gridScroll.ref}
+              className="relative overflow-x-auto scrollbar-always-visible scroll-pl-32 sm:scroll-pl-44"
+            >
+              <TooltipProvider delayDuration={300}>
+                <table className="w-max min-w-full border-collapse" onKeyDown={onGridKeyDown}>
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th
+                        ref={athleteHeaderRef}
+                        scope="col"
+                        className={`${PINNED_CELL} ${ATHLETE_COL_WIDTH} z-20 p-2 sm:p-3 text-left font-medium bg-[color-mix(in_srgb,var(--muted)_50%,var(--card))]`}
+                      >
+                        Athlete
+                      </th>
+                      {gridMetrics.map((metric: EventMetricWithDetails) => {
+                        const display = displayByCode.get(metric.metricCode) ?? getEventMetricDisplay(metric);
+                        return (
+                          <th
+                            key={metric.metricCode}
+                            scope="col"
+                            className="w-[104px] min-w-[104px] p-1.5 text-center align-bottom font-medium"
+                          >
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span className="flex items-start justify-center gap-0.5 text-xs sm:text-sm leading-tight">
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span
+                                      className="line-clamp-3 break-words"
+                                      title={`${display.label} (${display.code})`}
+                                    >
+                                      {display.label}
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <div>{display.label}</div>
+                                    <div className="font-mono text-xs text-muted-foreground">{display.code}</div>
+                                  </TooltipContent>
+                                </Tooltip>
+                                {metric.isRequired && (
+                                  <>
+                                    <span className="text-red-500" aria-hidden="true">*</span>
+                                    <span className="sr-only">(required)</span>
+                                  </>
+                                )}
+                              </span>
+                              {display.unit && (
+                                <span className="text-xs font-normal text-muted-foreground">({display.unit})</span>
+                              )}
+                            </div>
+                          </th>
+                        );
+                      })}
+                      {hasMovementQuality && (
+                        <th scope="col" className="min-w-[136px] p-1.5 text-center align-bottom font-medium">
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className="text-xs sm:text-sm leading-tight">Movement Quality</span>
+                            <span className="text-xs font-normal text-muted-foreground">(MQI, 0-24)</span>
+                          </div>
+                        </th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.values(gridData).map((row, rowIndex) => (
+                      <tr key={row.userId} className="group border-b hover:bg-muted/30">
+                        <th
+                          scope="row"
+                          className={`${PINNED_CELL} ${ATHLETE_COL_WIDTH} z-10 p-2 sm:p-3 text-left font-normal bg-card group-hover:bg-[color-mix(in_srgb,var(--muted)_30%,var(--card))]`}
+                        >
+                          <div className="font-medium break-words">{row.fullName}</div>
+                          <div className="text-xs text-muted-foreground capitalize">
+                            {row.status === "checked_in" ? (
+                              <span className="flex items-center gap-1 text-green-600">
+                                <CheckCircle className="h-3 w-3" />
+                                Checked In
+                              </span>
+                            ) : (
+                              row.status
+                            )}
+                          </div>
+                        </th>
+                        {gridMetrics.map((metric: EventMetricWithDetails, colIndex) => {
+                          const cell = row.measurements[metric.metricCode];
+                          if (!cell) return <td key={metric.metricCode} className="p-1" />;
+                          const label = (displayByCode.get(metric.metricCode) ?? getEventMetricDisplay(metric)).label;
+                          return (
+                            <td key={metric.metricCode} className="p-1">
+                              <EventGridCell
+                                cell={cell}
+                                cellKey={`${row.userId}-${metric.metricCode}`}
+                                metricLabel={label}
+                                athleteName={row.fullName}
+                                isRequired={metric.isRequired ?? false}
+                                disabled={!!event.isFrozen}
+                                onChange={(value) => handleCellChange(row.userId, metric.metricCode, value)}
+                                onResolve={(choice) =>
+                                  updateCells((c) => resolveConflict(c, choice), row.userId, metric.metricCode)
+                                }
+                                onAddTrial={
+                                  sheetExclusionReason(metric) === null ? () => handleAddTrial(cell, label, row.fullName) : undefined
+                                }
+                                addTrialDisabled={isSaving || !!readingSheet}
+                                inputProps={{ "data-grid-row": rowIndex, "data-grid-col": colIndex, "aria-keyshortcuts": GRID_KEYS }}
+                              />
+                            </td>
+                          );
+                        })}
+                        {hasMovementQuality && (
+                          <td className="p-1 text-center">
+                            <MovementQualityGridCell
+                              userId={row.userId}
+                              athleteName={row.fullName}
+                              summary={mqSummaryByUser.get(row.userId) ?? "Not scored"}
+                              cells={Object.values(mqGrid[row.userId]?.measurements ?? {})}
+                              labels={importMetricLabels}
+                              disabled={measurementsError}
+                              onOpen={() => openMovementQuality(row.userId)}
+                              onResolve={(code, choice) => mqCells.update((c) => resolveConflict(c, choice), row.userId, code)}
+                              onResolveAll={(choice) => mqCells.update((c) => resolveConflict(c, choice), row.userId)}
+                              onDiscard={() => mqCells.update(discardImport, row.userId)}
+                              buttonProps={{ "data-grid-row": rowIndex, "data-grid-col": gridMetrics.length }}
+                            />
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </TooltipProvider>
+            </div>
+            {/* Edge fades: show that more columns are hidden even where the OS hides scrollbars.
+                The left one reads as a shadow cast by the pinned Athlete column. */}
+            {gridScroll.canScrollLeft && (
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute top-0 bottom-4 left-32 sm:left-44 z-10 w-3 bg-linear-to-r from-foreground/10 to-transparent"
+              />
+            )}
+            {gridScroll.canScrollRight && (
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute top-0 bottom-4 right-0 z-10 w-10 bg-linear-to-l from-card to-transparent"
+              />
+            )}
           </div>
         </CardContent>
       </Card>
 
+      {hasMovementQuality && mqAthlete && (
+        <MovementQualityPanel
+          open={!!mqAthleteId}
+          onOpenChange={(open) => !open && setMqAthleteId(null)}
+          athleteName={mqAthlete.fullName}
+          userId={mqAthlete.userId}
+          eventDate={new Date(event.startDate).toISOString()}
+          enabledMetricCodes={mqEnabledCodes}
+          measurements={savedMeasurements}
+          disabled={event.isFrozen}
+          isSaving={isSaving}
+          serverErrors={mqServerErrors}
+          // One writer at a time: the sheet's unsaved scores for this athlete would be overwritten or lost
+          saveBlockedReason={
+            Object.values(mqGrid[mqAthlete.userId]?.measurements ?? {}).some(
+              (c) => c.importedValue !== undefined || (c.isDirty && c.fromImport),
+            )
+              ? MQ_SAVE_BLOCKED
+              : undefined
+          }
+          onSave={handleSaveMovementQuality}
+        />
+      )}
+
       {/* Legend */}
-      <div className="flex items-center gap-6 text-sm text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded bg-green-50 border border-green-200" />
           <span>Saved</span>
@@ -595,6 +1296,14 @@ export default function EventDataEntry() {
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded bg-yellow-50 border border-yellow-500" />
           <span>Unsaved changes</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 rounded bg-sky-50 border border-sky-500" />
+          <span>From sheet (unsaved)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 rounded bg-orange-50 border-2 border-orange-500" />
+          <span>Conflict with saved value</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded bg-white border border-gray-300" />

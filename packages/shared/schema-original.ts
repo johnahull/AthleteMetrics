@@ -6,6 +6,7 @@ import { z } from "zod";
 import { PASSWORD_REQUIREMENTS, PASSWORD_REGEX } from "./password-requirements";
 import { validateUsername } from "./username-validation";
 import { isSafePublicUrl } from "./url-safety";
+import type { DerivedCalculationConfig } from "./schema/tables/metrics";
 import { DEFAULT_AI_MODEL_KEY, SELECTABLE_AI_MODEL_KEYS } from "./ai-models";
 
 // AI Coaching Insights constants
@@ -191,12 +192,7 @@ export const siteMetrics = pgTable("site_metrics", {
   isDerived: boolean("is_derived").default(false).notNull(), // Whether this metric is calculated from other metrics
   formula: text("formula"), // Formula for calculation (e.g., "10 / fly10_time * 2.045")
   dependentMetrics: text("dependent_metrics").array(), // Metric codes this formula depends on
-  calculationConfig: jsonb("calculation_config").$type<{
-    dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
-    maxDateDifference?: number;
-    missingSourceBehavior: 'skip' | 'error';
-    constants?: Record<string, number>;
-  }>(),
+  calculationConfig: jsonb("calculation_config").$type<DerivedCalculationConfig>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }), // Site admin who created
   updatedAt: timestamp("updated_at"),
@@ -277,8 +273,8 @@ export const siteBenchmarks = pgTable("site_benchmarks", {
   benchmarkValue: decimal("benchmark_value", { precision: 10, scale: 3 }),
   comparisonOperator: varchar("comparison_operator", { length: 10 }).default('lte').notNull(), // 'lte', 'gte', 'eq', 'range'
   // Range-based benchmark fields (migration 0076)
-  minValue: decimal("min_value", { precision: 10, scale: 2 }),
-  maxValue: decimal("max_value", { precision: 10, scale: 2 }),
+  minValue: decimal("min_value", { precision: 10, scale: 3 }),
+  maxValue: decimal("max_value", { precision: 10, scale: 3 }),
   // Tier grouping fields (migration 0077)
   tierGroupId: uuid("tier_group_id"),
   tierOrder: integer("tier_order"),
@@ -335,8 +331,8 @@ export const customBenchmarks = pgTable("custom_benchmarks", {
   benchmarkValue: decimal("benchmark_value", { precision: 10, scale: 3 }),
   comparisonOperator: varchar("comparison_operator", { length: 10 }).default('lte').notNull(), // 'lte', 'gte', 'eq', 'range'
   // Range-based benchmark fields (migration 0076)
-  minValue: decimal("min_value", { precision: 10, scale: 2 }),
-  maxValue: decimal("max_value", { precision: 10, scale: 2 }),
+  minValue: decimal("min_value", { precision: 10, scale: 3 }),
+  maxValue: decimal("max_value", { precision: 10, scale: 3 }),
   // Tier grouping fields (migration 0077)
   tierGroupId: uuid("tier_group_id"),
   tierOrder: integer("tier_order"),
@@ -398,11 +394,13 @@ export const measurements = pgTable("measurements", {
   isVerified: boolean("is_verified").default(false).notNull(),
   date: date("date").notNull(),
   age: integer("age").notNull(), // User's age at time of measurement
-  metric: text("metric").notNull(), // "FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD", "RSI", "TOP_SPEED"
+  metric: text("metric").notNull(), // "FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505_M", "AGILITY_505_YD", "AGILITY_5105", "T_TEST", "DASH_40YD", "RSI", "TOP_SPEED"
   value: decimal("value", { precision: 10, scale: 3 }).notNull(),
   units: text("units").notNull(), // "s" or "in"
   flyInDistance: decimal("fly_in_distance", { precision: 10, scale: 3 }), // Optional yards for FLY10_TIME
   notes: text("notes"),
+  // Optional https media link (AM-FEAT-015). Mirrors schema/tables/measurements.ts; never exported publicly.
+  mediaUrl: text("media_url"),
   // Team context fields - immutable snapshot of team at time of measurement
   // IMPORTANT: teamId is historical reference WITHOUT foreign key constraint
   // This allows measurements to retain team context even after team deletion/rename
@@ -1611,6 +1609,44 @@ export const insertInvitationSchema = createInsertSchema(invitations).omit({
   parentEmail: z.string().email("Invalid parent email format").trim().toLowerCase().optional().nullable(),
 });
 
+/** Max length of measurements.media_url (AM-FEAT-015 Phase 2). */
+export const MEDIA_URL_MAX_LENGTH = 2048;
+
+export const hasUrlCredentials = (u: string): boolean => {
+  try {
+    const parsed = new URL(u);
+    return parsed.username !== "" || parsed.password !== "";
+  } catch {
+    // Fail closed: an unparseable URL is treated as carrying credentials
+    return true;
+  }
+};
+
+/**
+ * Optional media link on a measurement: https only, public host, <= 2048 chars.
+ * Empty / whitespace-only string is normalized to null (clears the link).
+ * Rejects embedded whitespace/control characters and credentials
+ * (e.g. https://youtube.com@evil.com), and stores the canonical WHATWG form
+ * (lowercased host, percent-encoded path) rather than the raw input.
+ */
+export const mediaUrlSchema = z
+  .preprocess(
+    (val) => (typeof val === "string" ? (val.trim() === "" ? null : val.trim()) : val),
+    z
+      .string()
+      .max(MEDIA_URL_MAX_LENGTH, `Media URL cannot exceed ${MEDIA_URL_MAX_LENGTH} characters`)
+      .regex(/^[^\s\x00-\x1f\x7f]+$/, "Media URL must not contain spaces or control characters")
+      .refine((u) => isSafePublicUrl(u), "Media URL must be a public HTTPS URL")
+      .refine((u) => !hasUrlCredentials(u), "Media URL must not contain a username or password")
+      .transform((u) => new URL(u).href)
+      .refine(
+        (href) => href.length <= MEDIA_URL_MAX_LENGTH,
+        `Media URL cannot exceed ${MEDIA_URL_MAX_LENGTH} characters`,
+      )
+      .nullable(),
+  )
+  .optional();
+
 export const insertMeasurementSchema = createInsertSchema(measurements).omit({
   id: true,
   age: true, // Age is calculated automatically
@@ -1620,21 +1656,57 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
   isVerified: true,
   submittedBy: true, // Backend handles this automatically based on session
   teamContextAuto: true, // Managed by system
+  // Set by the server only: event context by the event routes (storage eventContext),
+  // organization from the team / event. Never accepted from a request body.
+  eventId: true,
+  eventNameSnapshot: true,
+  eventDateSnapshot: true,
+  organizationId: true,
 }).extend({
   userId: z.string().min(1, "User is required"), // Changed from playerId to userId
   date: z.string().date("Date must be in YYYY-MM-DD format"), // Strict date validation
   // Accept any metric code - validation against active metrics happens at API level
   // This allows derived metrics and custom metrics to be recorded
   metric: z.string().min(1, "Metric is required").regex(/^[A-Z0-9_]+$/, "Invalid metric code format"),
-  value: z.number().positive("Value must be positive"),
+  // Non-negative here; the metric-aware rule (0 only for metrics whose
+  // validation_min <= 0, positive otherwise) is enforced in MeasurementService
+  // via validateMeasurementValue().
+  value: z.number().nonnegative("Value must not be negative"),
   flyInDistance: z.number().positive().optional(),
   // Auxiliary input for paired-input metrics (e.g., reps for 1RM-est metrics).
   // Server validates against the metric's auxiliaryInputConfig at insert time.
   auxiliaryValue: z.number().nullable().optional(),
   notes: z.string().max(1000, "Notes cannot exceed 1000 characters").optional(),
+  mediaUrl: mediaUrlSchema,
   // Optional team context - will be auto-populated if not provided
   teamId: z.string().optional(),
   season: z.string().optional(),
+});
+
+// An anchored derived metric (calculationConfig.anchorMetric) must anchor on one of its own sources.
+// Checked only when the payload carries both fields (a partial PATCH cannot be checked here).
+function addAnchorMetricIssue(
+  data: { dependentMetrics?: string[] | null; calculationConfig?: { anchorMetric?: string } | null },
+  ctx: z.RefinementCtx
+) {
+  const anchor = data.calculationConfig?.anchorMetric;
+  if (!anchor || !data.dependentMetrics) return;
+  if (!data.dependentMetrics.some((d) => d.toUpperCase() === anchor.toUpperCase())) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "anchorMetric must be one of the dependent metrics",
+      path: ['calculationConfig', 'anchorMetric'],
+    });
+  }
+}
+
+// Shape of a derived metric's calculationConfig; the metric form dialog extends it.
+export const derivedCalculationConfigSchema = z.object({
+  dateMatchStrategy: z.enum(['same_date', 'latest_before', 'closest']),
+  maxDateDifference: z.number().int().positive().optional(),
+  missingSourceBehavior: z.enum(['skip', 'error']),
+  sourceSelection: z.enum(['latest_event']).optional(),
+  anchorMetric: z.string().max(50).optional(),
 });
 
 export const insertSiteMetricSchema = createInsertSchema(siteMetrics).omit({
@@ -1670,12 +1742,9 @@ export const insertSiteMetricSchema = createInsertSchema(siteMetrics).omit({
   isDerived: z.boolean().default(false),
   formula: z.string().max(1000, "Formula must be 1000 characters or less").optional(),
   dependentMetrics: z.array(z.string()).optional(),
-  calculationConfig: z.object({
-    dateMatchStrategy: z.enum(['same_date', 'latest_before', 'closest']),
-    maxDateDifference: z.number().int().positive().optional(),
-    missingSourceBehavior: z.enum(['skip', 'error']),
-  }).optional(),
+  calculationConfig: derivedCalculationConfigSchema.optional(),
 }).superRefine((data, ctx) => {
+  addAnchorMetricIssue(data, ctx);
   // Cross-field validation: If isDerived is true, formula is required
   if (data.isDerived === true) {
     if (!data.formula || data.formula.trim() === '') {
@@ -1726,12 +1795,9 @@ export const updateSiteMetricSchema = z.object({
   isDerived: z.boolean().optional(),
   formula: z.string().max(1000, "Formula must be 1000 characters or less").optional(),
   dependentMetrics: z.array(z.string()).nullable().optional(),
-  calculationConfig: z.object({
-    dateMatchStrategy: z.enum(['same_date', 'latest_before', 'closest']),
-    maxDateDifference: z.number().int().positive().optional(),
-    missingSourceBehavior: z.enum(['skip', 'error']),
-  }).nullable().optional(),
+  calculationConfig: derivedCalculationConfigSchema.nullable().optional(),
 }).superRefine((data, ctx) => {
+  addAnchorMetricIssue(data, ctx);
   // Cross-field validation: If isDerived is being set to true, formula should be provided
   if (data.isDerived === true) {
     if (data.formula !== undefined && (!data.formula || data.formula.trim() === '')) {
@@ -2224,6 +2290,10 @@ export const insertReportSchema = createInsertSchema(reports).omit({
       gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
       positions: z.array(z.string()).optional(),
     }).optional(),
+    // Event scoping: the event report list and ReportService filter on config.eventId
+    eventId: z.string().uuid().optional(),
+    includeEventPercentiles: z.boolean().optional(),
+    groupComparison: z.boolean().optional(),
     // Individual report athlete identifiers
     athleteIds: z.array(z.string()).optional(), // Array of athlete IDs (used in creation)
     athleteId: z.string().optional(), // Single athlete ID (stored in database)
@@ -2274,6 +2344,10 @@ export const updateReportSchema = z.object({
       gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
       positions: z.array(z.string()).optional(),
     }).optional(),
+    // Event scoping: the event report list and ReportService filter on config.eventId
+    eventId: z.string().uuid().optional(),
+    includeEventPercentiles: z.boolean().optional(),
+    groupComparison: z.boolean().optional(),
     // Individual report athlete identifiers
     athleteIds: z.array(z.string()).optional(), // Array of athlete IDs (used in creation)
     athleteId: z.string().optional(), // Single athlete ID (stored in database)
@@ -2537,7 +2611,8 @@ export type OrganizationBenchmarkWithDetails = OrganizationBenchmark & {
 export const MetricType = {
   FLY10_TIME: "FLY10_TIME",
   VERTICAL_JUMP: "VERTICAL_JUMP",
-  AGILITY_505: "AGILITY_505",
+  AGILITY_505_M: "AGILITY_505_M",
+  AGILITY_505_YD: "AGILITY_505_YD",
   AGILITY_5105: "AGILITY_5105",
   T_TEST: "T_TEST",
   DASH_40YD: "DASH_40YD",
@@ -2550,7 +2625,8 @@ export const MetricType = {
 export const VALID_METRICS = [
   { key: 'FLY10_TIME', metricType: 'lower_is_better' },
   { key: 'VERTICAL_JUMP', metricType: 'higher_is_better' },
-  { key: 'AGILITY_505', metricType: 'lower_is_better' },
+  { key: 'AGILITY_505_M', metricType: 'lower_is_better' },
+  { key: 'AGILITY_505_YD', metricType: 'lower_is_better' },
   { key: 'AGILITY_5105', metricType: 'lower_is_better' },
   { key: 'T_TEST', metricType: 'lower_is_better' },
   { key: 'DASH_40YD', metricType: 'lower_is_better' },

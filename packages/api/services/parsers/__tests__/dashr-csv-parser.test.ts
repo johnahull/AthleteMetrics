@@ -135,12 +135,12 @@ describe('DashrCsvParser.parse (real sample)', () => {
     expect(fly!.value).toBe(1.13);
   });
 
-  it('parses 505 agility without direction as AGILITY_505', () => {
+  it('parses 505 agility without direction as AGILITY_505_YD (fixture row is Imperial)', () => {
     const buffer = loadFixture('valid-multi-session.csv');
     const result = parser.parse(buffer, '2022-06-06');
 
     const christian = result.athletes[0];
-    const agility = christian.drills.find(d => d.metric === 'AGILITY_505');
+    const agility = christian.drills.find(d => d.metric === 'AGILITY_505_YD');
     expect(agility).toBeDefined();
     expect(agility!.value).toBe(3.76);
   });
@@ -194,20 +194,20 @@ describe('drill type mapping', () => {
     expect(dash!.value).toBe(5.2);
   });
 
-  it('maps 505 with Direction=L to AGILITY_505_L', () => {
+  it('maps 505 with Direction=L (Imperial) to AGILITY_505_YD_L', () => {
     const csv = makeCsv([
       '01/01/2025 10:00:00,Jane,,Doe,505 Agility Test,,Imperial,,,,,,,,,,,,,,,,,,,,2.500000,,,,,L,,,,,,,,,,,,,,,,,,,,,,,,,,',
     ]);
     const result = parser.parse(csv);
-    expect(result.athletes[0]?.drills[0]?.metric).toBe('AGILITY_505_L');
+    expect(result.athletes[0]?.drills[0]?.metric).toBe('AGILITY_505_YD_L');
   });
 
-  it('maps 505 with Direction=R to AGILITY_505_R', () => {
+  it('maps 505 with Direction=R (Imperial) to AGILITY_505_YD_R', () => {
     const csv = makeCsv([
       '01/01/2025 10:00:00,Jane,,Doe,505 Agility Test,,Imperial,,,,,,,,,,,,,,,,,,,,2.500000,,,,,R,,,,,,,,,,,,,,,,,,,,,,,,,,',
     ]);
     const result = parser.parse(csv);
-    expect(result.athletes[0]?.drills[0]?.metric).toBe('AGILITY_505_R');
+    expect(result.athletes[0]?.drills[0]?.metric).toBe('AGILITY_505_YD_R');
   });
 
   it('maps Pro Agility to AGILITY_5105', () => {
@@ -538,5 +538,282 @@ describe('DashrCsvParser — Metric units', () => {
     const metrics = result.athletes[0].drills.map(d => d.metric);
     expect(metrics).toContain('DASH_40YD');
     expect(metrics).not.toContain('DASH_40M');
+  });
+});
+
+// ============================================================================
+// 5-0-5 protocol (AM-FEAT-016): the Units column picks the metric (_M) or yard (_YD) code
+// ============================================================================
+
+describe('5-0-5 protocol from the Units column', () => {
+  // `direction` fills the Direction column; an empty string means no direction
+  function row505(units: string, direction: string, time = '2.500000'): string {
+    return `01/01/2025 10:00:00,Jane,,Doe,505 Agility Test,,${units},,,,,,,,,,,,,,,,,,,,${time},,,,,${direction},,,,,,,,,,,,,,,,,,,,,,,,,,`;
+  }
+
+  function firstMetric(units: string, direction: string): string | undefined {
+    return parser.parse(makeCsv([row505(units, direction)])).athletes[0]?.drills[0]?.metric;
+  }
+
+  it.each([
+    ['Imperial', '', 'AGILITY_505_YD'],
+    ['Imperial', 'L', 'AGILITY_505_YD_L'],
+    ['Imperial', 'R', 'AGILITY_505_YD_R'],
+    ['Metric', '', 'AGILITY_505_M'],
+    ['Metric', 'L', 'AGILITY_505_M_L'],
+    ['Metric', 'R', 'AGILITY_505_M_R'],
+    ['Metric', 'LEFT', 'AGILITY_505_M_L'],
+    ['Metric', 'RIGHT', 'AGILITY_505_M_R'],
+  ])('Units=%s Direction=%s maps to %s', (units, direction, expected) => {
+    expect(firstMetric(units, direction)).toBe(expected);
+  });
+
+  function warnings505(units: string): string[] {
+    return parser.parse(makeCsv([row505(units, '')])).warnings.filter(w => w.includes('5-0-5'));
+  }
+
+  it.each([
+    ['blank Units', ''],
+    ['unrecognized Units', 'Furlongs'],
+    ['Units=Meters', 'Meters'],
+    ['Units=m', 'm'],
+  ])('%s defaults to the yard protocol (Decision #2) and warns', (_label, units) => {
+    expect(firstMetric(units, '')).toBe('AGILITY_505_YD');
+    expect(firstMetric(units, 'L')).toBe('AGILITY_505_YD_L');
+    expect(warnings505(units)).toEqual([
+      '1 5-0-5 row(s) had missing/unrecognized Units; saved as yards (_YD)',
+    ]);
+  });
+
+  it('emits ONE warning per file with a count, however many rows have bad Units', () => {
+    const rows = [
+      row505('', 'L'),
+      row505('Furlongs', 'R'),
+      row505('Meters', ''),
+      row505('Metric', 'L'),
+    ];
+    const w = parser.parse(makeCsv(rows)).warnings.filter(x => x.includes('Units'));
+    expect(w).toEqual(['3 5-0-5 row(s) had missing/unrecognized Units; saved as yards (_YD)']);
+  });
+
+  it('keeps a Metric and an Imperial 5-0-5 from the same athlete/date/leg as separate attempts', () => {
+    const drills = parser
+      .parse(makeCsv([row505('Metric', 'L', '2.600000'), row505('Imperial', 'L', '2.500000')]))
+      .athletes[0].drills.map(d => d.metric)
+      .sort();
+    expect(drills).toEqual(['AGILITY_505_M_L', 'AGILITY_505_YD_L']);
+  });
+
+  it('still picks the fastest of two attempts with the same Units', () => {
+    const drills = parser
+      .parse(makeCsv([row505('Metric', 'L', '2.700000'), row505('Metric', 'L', '2.500000')]))
+      .athletes[0].drills;
+    expect(drills).toHaveLength(1);
+    expect(drills[0].value).toBe(2.5);
+  });
+
+  it.each(['Imperial', 'imperial', 'IMPERIAL', 'Metric', 'metric', 'METRIC', ' Metric '])(
+    'Units=%j produces no 5-0-5 protocol warning',
+    (units) => {
+      expect(warnings505(units)).toEqual([]);
+    },
+  );
+
+  it('does not add unit warnings for non-505 rows with blank Units', () => {
+    const csv = makeCsv([
+      '01/01/2025 10:00:00,John,,Doe,Dash,,,,,,,,,,,,,,,,,,,,,5.200000,40.000000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,',
+    ]);
+    expect(parser.parse(csv).warnings.filter(w => w.includes('Units'))).toEqual([]);
+  });
+
+  it('never emits the retired 5-0-5 codes', () => {
+    const retired = ['AGILITY_505', 'AGILITY_505_L', 'AGILITY_505_R'];
+    for (const units of ['Imperial', 'Metric', '', 'Furlongs']) {
+      for (const direction of ['', 'L', 'R']) {
+        expect(retired).not.toContain(firstMetric(units, direction));
+      }
+    }
+  });
+
+  describe('outlier ranges per protocol', () => {
+    function drill(units: string, direction: string, time: string) {
+      return parser.parse(makeCsv([row505(units, direction, time)])).athletes[0]?.drills[0];
+    }
+
+    it('flags 1.4s as unusually fast for the metric protocol (min 1.5)', () => {
+      expect(drill('Metric', '', '1.400000')?.isOutlier).toBe(true);
+    });
+
+    it('does not flag 1.4s for the yard protocol (min 1.3)', () => {
+      expect(drill('Imperial', '', '1.400000')?.isOutlier).toBeFalsy();
+    });
+
+    it('flags 1.2s as unusually fast for the yard protocol', () => {
+      const d = drill('Imperial', '', '1.200000');
+      expect(d?.isOutlier).toBe(true);
+      expect(d?.outlierReason).toContain('unusually fast');
+    });
+
+    it('flags 4.8s as unusually slow for the yard protocol (max 4.6) but not the metric one (max 5.0)', () => {
+      expect(drill('Imperial', '', '4.800000')?.isOutlier).toBe(true);
+      expect(drill('Metric', '', '4.800000')?.isOutlier).toBeFalsy();
+    });
+
+    it('applies the protocol range to the left and right legs too', () => {
+      expect(drill('Metric', 'L', '1.400000')?.isOutlier).toBe(true);
+      expect(drill('Imperial', 'R', '1.400000')?.isOutlier).toBeFalsy();
+    });
+
+    it('does not flag a normal time in either protocol', () => {
+      expect(drill('Metric', '', '2.500000')?.isOutlier).toBeFalsy();
+      expect(drill('Imperial', '', '2.300000')?.isOutlier).toBeFalsy();
+    });
+  });
+});
+
+
+// ============================================================================
+// ============================================================================
+// FLY10 run-in variants (AM-FEAT-017)
+// ============================================================================
+
+describe('FLY10 run-in variants', () => {
+  const HEADER = 'Date,First Name,Middle Name,Last Name,Type,Lane ID,Units,Start Distance,Split Time 1,Split Distance 1,Split Speed 1,Start Time 2,Split Distance 2,Split Speed 2,Start Time 3,Split Distance 3,Split Speed 3,Start Time 4,Split Distance 4,Split Speed 4,Start Time 5,Split Distance 5,Split Speed 5,Start Time 6,Split Distance 6,Split Speed 6,Final Time,Final Distance,Final Speed,Jump Distance,Reaction Time,Direction'.split(',');
+
+  function row(opts: {
+    type: string;
+    start?: string;
+    units?: string;
+    time: number;
+    dist: number;
+    date?: string;
+    split1?: [number, number];
+  }): string {
+    const f = new Array(HEADER.length).fill('');
+    const set = (h: string, v: string) => (f[HEADER.indexOf(h)] = v);
+    set('Date', `${opts.date ?? '01/01/2025'} 10:00:00`);
+    set('First Name', 'John');
+    set('Last Name', 'Doe');
+    set('Type', opts.type);
+    set('Units', opts.units ?? 'Imperial');
+    if (opts.start !== undefined) set('Start Distance', opts.start);
+    if (opts.split1) {
+      set('Split Time 1', opts.split1[0].toFixed(6));
+      set('Split Distance 1', opts.split1[1].toFixed(6));
+    }
+    set('Final Time', opts.time.toFixed(6));
+    set('Final Distance', opts.dist.toFixed(6));
+    return f.join(',');
+  }
+  const csv = (rows: string[]) => Buffer.from([HEADER.join(','), ...rows].join('\n'));
+  const drills = (rows: string[]) => parser.parse(csv(rows));
+
+  it.each([
+    ['5.000000', 'FLY10_TIME_RI5'],
+    ['10.000000', 'FLY10_TIME_RI10'],
+    ['15.000000', 'FLY10_TIME_RI15'],
+    ['20.000000', 'FLY10_TIME'],
+    ['30.000000', 'FLY10_TIME_RI30'],
+  ])('maps yard Flying with Start Distance %s to %s', (start, code) => {
+    const result = drills([row({ type: 'Flying', start, time: 1.2, dist: 10 })]);
+    expect(result.athletes[0].drills.map(d => d.metric)).toEqual([code]);
+  });
+
+  it('a Start 10 fly never lands in FLY10_TIME', () => {
+    const result = drills([row({ type: 'Flying', start: '10', time: 1.4, dist: 10 })]);
+    expect(result.athletes[0].drills.some(d => d.metric === 'FLY10_TIME')).toBe(false);
+  });
+
+  it.each(['25', '0', ''])('skips yard Flying with Start Distance "%s" with a specific warning', (start) => {
+    const result = drills([row({ type: 'Flying', start, time: 1.2, dist: 10 })]);
+    expect(result.athletes.flatMap(a => a.drills)).toHaveLength(0);
+    expect(result.warnings.some(w => /Flying 10.*Start Distance/.test(w))).toBe(true);
+    expect(result.warnings.some(w => /Unsupported drill type/.test(w))).toBe(false);
+  });
+
+  it('keeps metric (meter) rows on FLY10M_TIME regardless of Start Distance', () => {
+    for (const start of ['5', '10', '20', '']) {
+      const result = drills([row({ type: 'Flying', start, units: 'Metric', time: 1.2, dist: 10 })]);
+      expect(result.athletes[0].drills.map(d => d.metric)).toEqual(['FLY10M_TIME']);
+    }
+  });
+
+  it('emits one file-level warning when the Start Distance column is absent', () => {
+    const cols = HEADER.filter(h => h !== 'Start Distance');
+    const mk = (time: string) => {
+      const f = new Array(cols.length).fill('');
+      const set = (h: string, v: string) => (f[cols.indexOf(h)] = v);
+      set('Date', '01/01/2025 10:00:00');
+      set('First Name', 'John');
+      set('Last Name', 'Doe');
+      set('Type', 'Flying');
+      set('Units', 'Imperial');
+      set('Final Time', time);
+      set('Final Distance', '10.000000');
+      return f.join(',');
+    };
+    const buffer = Buffer.from([cols.join(','), mk('1.2'), mk('1.3')].join('\n'));
+    // two rows on the same day collapse to one best attempt
+    const result = parser.parse(buffer);
+    const startWarnings = result.warnings.filter(w => /Start Distance/.test(w));
+    expect(startWarnings).toHaveLength(1);
+    expect(startWarnings[0]).toMatch(/column/i);
+  });
+
+  it('keeps two same-day flies with different Start Distance separate', () => {
+    const result = drills([
+      row({ type: 'Flying', start: '10', time: 1.4, dist: 10 }),
+      row({ type: 'Flying', start: '20', time: 1.2, dist: 10 }),
+    ]);
+    expect(result.athletes[0].drills.map(d => d.metric).sort()).toEqual(['FLY10_TIME', 'FLY10_TIME_RI10']);
+  });
+
+  it('collapses two same-day metric flies with different Start Distance to the fastest FLY10M_TIME', () => {
+    const result = drills([
+      row({ type: 'Flying', start: '10', units: 'Metric', time: 1.4, dist: 10 }),
+      row({ type: 'Flying', start: '20', units: 'Metric', time: 1.2, dist: 10 }),
+    ]);
+    const m = result.athletes[0].drills.filter(d => d.metric === 'FLY10M_TIME');
+    expect(m).toHaveLength(1);
+    expect(m[0].value).toBe(1.2);
+  });
+
+  it('flags outliers for the new codes using the 0.8-3.0 range', () => {
+    const result = drills([row({ type: 'Flying', start: '5', time: 3.5, dist: 10 })]);
+    expect(result.athletes[0].drills[0].metric).toBe('FLY10_TIME_RI5');
+    expect(result.athletes[0].drills[0].isOutlier).toBe(true);
+  });
+
+  describe('derivation', () => {
+    it('derives FLY10_TIME_RI10 from a 20yd dash with a 10yd split', () => {
+      const result = drills([row({ type: 'Dash', time: 3.2, dist: 20, split1: [1.87, 10] })]);
+      const ri10 = result.athletes[0].drills.find(d => d.metric === 'FLY10_TIME_RI10');
+      expect(ri10?.value).toBe(1.33);
+      expect(ri10?.derivedFrom).toContain('DASH_20YD');
+    });
+
+    it('a direct FLY10_TIME_RI10 suppresses the derived RI10', () => {
+      const result = drills([
+        row({ type: 'Flying', start: '10', time: 1.4, dist: 10 }),
+        row({ type: 'Dash', time: 3.2, dist: 20, split1: [1.87, 10] }),
+      ]);
+      const ri10 = result.athletes[0].drills.filter(d => d.metric === 'FLY10_TIME_RI10');
+      expect(ri10).toHaveLength(1);
+      expect(ri10[0].value).toBe(1.4);
+      expect(ri10[0].derivedFrom).toBeUndefined();
+    });
+
+    it('a direct FLY10_TIME does not suppress the derived RI10 (per run-in only)', () => {
+      const result = drills([
+        row({ type: 'Flying', start: '20', time: 1.2, dist: 10 }),
+        row({ type: 'Dash', time: 3.2, dist: 20, split1: [1.87, 10] }),
+      ]);
+      expect(result.athletes[0].drills.some(d => d.metric === 'FLY10_TIME_RI10')).toBe(true);
+    });
+
+    it('does not derive RI10 from a 20m dash', () => {
+      const result = drills([row({ type: 'Dash', units: 'Metric', time: 3.2, dist: 20, split1: [1.87, 10] })]);
+      expect(result.athletes[0].drills.some(d => d.metric.startsWith('FLY10_TIME_RI'))).toBe(false);
+    });
   });
 });

@@ -8,6 +8,7 @@ import { MetricService } from "../services/metric-service";
 import { BenchmarkService } from "../services/benchmark-service";
 import { db } from "../db";
 import { organizations, siteMetrics, siteBenchmarks } from "@shared/schema";
+import { purgeTestRows } from "../../../tests/helpers/purge-test-rows";
 
 describe("Organization Type Service Logic", () => {
   let metricService: MetricService;
@@ -59,10 +60,7 @@ describe("Organization Type Service Logic", () => {
   });
 
   afterAll(async () => {
-    // Clean up organization after all tests
-    if (testOrgId) {
-      await db.delete(organizations).where({ id: testOrgId });
-    }
+    await purgeTestRows({ orgIds: testOrgId ? [testOrgId] : [] });
   });
 
   describe("MetricService Organization Type Filtering", () => {

@@ -16,7 +16,7 @@ vi.mock('@/hooks/use-available-metrics', () => ({
     metrics: [
       { code: 'FLY10_TIME', label: '10-Yard Fly', unit: 's', metricType: 'lower_is_better', lowerIsBetter: true, isDerived: false },
       { code: 'VERTICAL_JUMP', label: 'Vertical Jump', unit: 'in', metricType: 'higher_is_better', lowerIsBetter: false, isDerived: false },
-      { code: 'AGILITY_505', label: '5-0-5 Agility', unit: 's', metricType: 'lower_is_better', lowerIsBetter: true, isDerived: false },
+      { code: 'AGILITY_505_YD', label: '5-0-5 Agility', unit: 's', metricType: 'lower_is_better', lowerIsBetter: true, isDerived: false },
       { code: 'AGILITY_5105', label: '5-10-5 Agility', unit: 's', metricType: 'lower_is_better', lowerIsBetter: true, isDerived: false },
       { code: 'T_TEST', label: 'T-Test', unit: 's', metricType: 'lower_is_better', lowerIsBetter: true, isDerived: false },
       { code: 'DASH_40YD', label: '40-Yard Dash', unit: 's', metricType: 'lower_is_better', lowerIsBetter: true, isDerived: false },

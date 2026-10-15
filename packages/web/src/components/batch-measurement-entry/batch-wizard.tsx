@@ -265,7 +265,7 @@ function StepMetrics({ selectedMetrics, onSelectionChange }: StepMetricsProps) {
           {availableMetrics.map((metric) => (
             <div
               key={metric.code}
-              className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+              className="flex items-start gap-x-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors"
             >
               <Checkbox
                 id={`metric-${metric.code}`}

@@ -7,7 +7,7 @@ import {
   globalAthletes, userGlobalAthleteLinks, globalAthleteAuditLog,
   users, measurements, userOrganizations, organizations,
   globalAthleteClaims,
-  type GlobalAthlete, type UserGlobalAthleteLink, type GlobalAthleteClaim
+  type GlobalAthlete, type UserGlobalAthleteLink, type GlobalAthleteClaim, type Measurement
 } from "@shared/schema";
 import crypto from "crypto";
 import { hashToken } from "../lib/token-hash";
@@ -15,6 +15,7 @@ import { eq, and, inArray, desc, ne, isNull, isNotNull, count, sql, ilike, or } 
 import { BaseService } from "./base-service";
 import { emailService } from "./email-service";
 import { getPgErrorCode, getPgError, PG_UNIQUE_VIOLATION } from "../lib/pg-error";
+import { omitMediaUrlFromRows } from "../utils/measurement-redaction";
 
 export interface PrivacySettings {
   allowCrossOrgLinking?: boolean;
@@ -323,9 +324,10 @@ export class GlobalAthleteService extends BaseService {
   }
 
   /**
-   * Get unified measurements across all linked accounts for a user
+   * Get unified measurements across all linked accounts for a user.
+   * Rows never include mediaUrl (AM-FEAT-015 Decision 12).
    */
-  async getUnifiedMeasurements(userId: string): Promise<any[]> {
+  async getUnifiedMeasurements(userId: string): Promise<Array<Omit<Measurement, "mediaUrl">>> {
     const link = await this.getUserGlobalAthleteLink(userId);
 
     if (!link || link.linkStatus !== "confirmed") {
@@ -345,10 +347,14 @@ export class GlobalAthleteService extends BaseService {
     const linkedUserIds = linkedUsers.map((l) => l.userId);
 
     // Query measurements for all linked users
-    return db.select()
+    const rows = await db.select()
       .from(measurements)
       .where(inArray(measurements.userId, linkedUserIds))
       .orderBy(desc(measurements.date));
+
+    // Decision 12: the unified (cross-organization) view never exposes media links,
+    // not even for the current user's own organization
+    return omitMediaUrlFromRows(rows);
   }
 
   /**

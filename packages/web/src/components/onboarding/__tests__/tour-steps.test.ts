@@ -29,8 +29,8 @@ describe('Tour Steps Definitions', () => {
       });
     });
 
-    it('first step has disableBeacon: true', () => {
-      expect(athleteSteps[0].disableBeacon).toBe(true);
+    it('first step has skipBeacon: true', () => {
+      expect(athleteSteps[0].skipBeacon).toBe(true);
     });
 
     it('last step targets body (center modal)', () => {
@@ -65,8 +65,8 @@ describe('Tour Steps Definitions', () => {
       });
     });
 
-    it('first step has disableBeacon: true', () => {
-      expect(coachSteps[0].disableBeacon).toBe(true);
+    it('first step has skipBeacon: true', () => {
+      expect(coachSteps[0].skipBeacon).toBe(true);
     });
 
     it('last step targets body (center modal)', () => {
@@ -102,8 +102,8 @@ describe('Tour Steps Definitions', () => {
       });
     });
 
-    it('first step has disableBeacon: true', () => {
-      expect(orgAdminSteps[0].disableBeacon).toBe(true);
+    it('first step has skipBeacon: true', () => {
+      expect(orgAdminSteps[0].skipBeacon).toBe(true);
     });
 
     it('last step targets body (center modal)', () => {
@@ -165,7 +165,7 @@ describe('Tour Steps Definitions', () => {
       // First step should target body or have center placement (welcome modal)
       [athleteSteps, coachSteps, orgAdminSteps].forEach((steps) => {
         const firstStep = steps[0];
-        expect(firstStep.disableBeacon).toBe(true);
+        expect(firstStep.skipBeacon).toBe(true);
       });
     });
 

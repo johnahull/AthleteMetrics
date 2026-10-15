@@ -55,6 +55,10 @@ export interface AvailableMetric {
  *
  * @returns Array of available metrics with custom labels applied
  */
+/** Alphabetical, case/accent-insensitive, numbers compared by value. */
+export const compareMetricLabels = (a: { label: string }, b: { label: string }) =>
+  a.label.localeCompare(b.label, undefined, { sensitivity: 'base', numeric: true });
+
 export function useAvailableMetrics(): {
   metrics: AvailableMetric[];
   isLoading: boolean;
@@ -192,10 +196,9 @@ export function useAvailableMetrics(): {
     // Sort alphabetically by label so every dropdown that consumes this hook
     // (e.g. /publish, measurement forms, analytics selectors) shows metrics
     // in a consistent, predictable order. `sensitivity: 'base'` makes the
-    // sort case- and accent-insensitive.
-    return result.sort((a, b) =>
-      a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
-    );
+    // sort case- and accent-insensitive; `numeric: true` orders embedded numbers
+    // by value (5, 10, 15, 20, 30 yd run-ins rather than 10, 15, 20, 30, 5).
+    return result.sort(compareMetricLabels);
   }, [currentOrgId, orgMetrics, customOrgMetrics, siteMetrics, loadingOrg, loadingCustom, loadingSite]);
 
   return {

@@ -19,7 +19,7 @@ import { SelectMetricsStep } from '../SelectMetricsStep';
 const mockMetrics = [
   { code: 'FLY10_TIME', label: '10-Yard Fly Time', unit: 's', category: 'Speed', description: 'Speed measurement' },
   { code: 'VERTICAL_JUMP', label: 'Vertical Jump', unit: 'in', category: 'Power', description: 'Jump height' },
-  { code: 'AGILITY_505', label: '5-0-5 Agility', unit: 's', category: 'Agility', description: 'Agility test' },
+  { code: 'AGILITY_505_YD', label: '5-0-5 Agility (yd)', unit: 's', category: 'Agility', description: 'Agility test' },
   { code: 'DASH_40YD', label: '40-Yard Dash', unit: 's', category: 'Speed', description: 'Sprint time' },
 ];
 
@@ -79,7 +79,7 @@ describe('SelectMetricsStep', () => {
 
       expect(screen.getByText('10-Yard Fly Time')).toBeInTheDocument();
       expect(screen.getByText('Vertical Jump')).toBeInTheDocument();
-      expect(screen.getByText('5-0-5 Agility')).toBeInTheDocument();
+      expect(screen.getByText('5-0-5 Agility (yd)')).toBeInTheDocument();
       expect(screen.getByText('40-Yard Dash')).toBeInTheDocument();
     });
 
@@ -113,7 +113,7 @@ describe('SelectMetricsStep', () => {
       render(<SelectMetricsStep {...defaultProps} />);
 
       // Click on metric row
-      fireEvent.click(screen.getByText('5-0-5 Agility'));
+      fireEvent.click(screen.getByText('5-0-5 Agility (yd)'));
 
       // Should show selection count (common metrics are pre-selected)
       const selectedText = screen.getByText(/\d+ selected/);
@@ -123,7 +123,7 @@ describe('SelectMetricsStep', () => {
     it('should toggle metric selection when checkbox clicked', () => {
       render(<SelectMetricsStep {...defaultProps} />);
 
-      const checkbox = screen.getByRole('checkbox', { name: /5-0-5 Agility/i });
+      const checkbox = screen.getByRole('checkbox', { name: /5-0-5 Agility \(yd\)/i });
       fireEvent.click(checkbox);
 
       expect(checkbox).toBeChecked();
@@ -139,7 +139,7 @@ describe('SelectMetricsStep', () => {
 
   describe('Bulk Actions', () => {
     it('should select common metrics when Common Metrics clicked', () => {
-      render(<SelectMetricsStep {...defaultProps} selectedMetricCodes={['AGILITY_505']} />);
+      render(<SelectMetricsStep {...defaultProps} selectedMetricCodes={['AGILITY_505_YD']} />);
 
       fireEvent.click(screen.getByText('Common Metrics'));
 
@@ -156,7 +156,7 @@ describe('SelectMetricsStep', () => {
     });
 
     it('should disable Select All when all metrics selected', () => {
-      render(<SelectMetricsStep {...defaultProps} selectedMetricCodes={['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'DASH_40YD']} />);
+      render(<SelectMetricsStep {...defaultProps} selectedMetricCodes={['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505_YD', 'DASH_40YD']} />);
 
       expect(screen.getByRole('button', { name: 'Select All' })).toBeDisabled();
     });

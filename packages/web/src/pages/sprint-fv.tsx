@@ -11,6 +11,7 @@ import { SprintFvLongitudinal } from '@/components/sprint-fv/SprintFvLongitudina
 import { UnitSystemToggle } from '@/components/sprint-fv/UnitSystemToggle';
 import { UnitSystemProvider } from '@/contexts/UnitSystemContext';
 import { useAuth } from '@/lib/auth';
+import { getOrgRole } from '@/lib/org-roles';
 import { useQuery } from '@tanstack/react-query';
 import { useEligibleSummary } from '@/lib/sprint-fv-api';
 import type { SiteSettings, Organization } from '@shared/schema';
@@ -44,15 +45,15 @@ export default function SprintFvPage() {
   const isEnabled = (siteSettings?.sprintFvEnabled ?? false)
     && (user?.isSiteAdmin || (organization?.sprintFvEnabled ?? false));
 
-  // Determine user role
-  const orgRole = user?.currentOrganization?.role || user?.role || 'athlete';
-  const isCoachOrAdmin = user?.isSiteAdmin || orgRole === 'org_admin' || orgRole === 'coach';
-
   // Get effective org ID
   const effectiveOrgId = organizationContext
     || (Array.isArray(userOrganizations) && userOrganizations.length > 0
       ? userOrganizations[0].organizationId
       : null);
+
+  // Role in the organization this page shows (site admins: 'site_admin'), not the session role
+  const orgRole = getOrgRole(user, userOrganizations, effectiveOrgId);
+  const isCoachOrAdmin = orgRole === 'site_admin' || orgRole === 'org_admin' || orgRole === 'coach';
 
   // Fetch org athletes and eligibility summary in parallel
   const { data: athletes } = useQuery<OrgAthlete[]>({
@@ -230,8 +231,8 @@ export default function SprintFvPage() {
           </CardContent>
         </Card>
       ) : (
-        <Tabs defaultValue="generate" className="space-y-6">
-          <TabsList>
+        <Tabs defaultValue="generate" className="flex flex-col gap-y-6 [&>[role=tabpanel]]:mt-0">
+          <TabsList className="self-start">
             <TabsTrigger value="generate" className="flex items-center gap-2">
               <Zap className="h-4 w-4" />
               Generate

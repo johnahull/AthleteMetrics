@@ -38,6 +38,7 @@ import { eq } from 'drizzle-orm';
 import crypto from 'crypto';
 import type { WellnessTemplateConfig } from '@shared/wellness-types';
 import { emailService } from '../../packages/api/services/email-service';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 
 // Mock email service
 vi.mock('../../packages/api/services/email-service', () => ({
@@ -231,72 +232,12 @@ afterAll(async () => {
   }
   createdTemplateIds.length = 0;
 
-  // Clean up test data (order matters due to FK constraints)
-  // 1. Remove user from team first to avoid FK constraint issues
-  if (testAthlete && testTeam) {
-    try {
-      await storage.removeUserFromTeam(testAthlete.id, testTeam.id);
-    } catch (e) {
-      // Ignore if already removed
-    }
-  }
-
-  // 2. Delete team (must be before removing users from org)
-  if (testTeam) {
-    try {
-      await db.delete(teams).where(eq(teams.id, testTeam.id));
-    } catch (e) {
-      // Ignore if already deleted
-    }
-  }
-
-  // 3. Remove users from organization (must be before deleting users)
-  if (testAthlete && testOrg) {
-    try {
-      await storage.removeUserFromOrganization(testAthlete.id, testOrg.id);
-    } catch (e) {
-      // Ignore if already removed
-    }
-  }
-  if (testUser && testOrg) {
-    try {
-      await storage.removeUserFromOrganization(testUser.id, testOrg.id);
-    } catch (e) {
-      // Ignore if already removed
-    }
-  }
-
-  // 4. Delete users
-  if (testAthlete) {
-    try {
-      await db.delete(users).where(eq(users.id, testAthlete.id));
-    } catch (e) {
-      // Ignore if already deleted
-    }
-  }
-  if (testUser) {
-    try {
-      await db.delete(users).where(eq(users.id, testUser.id));
-    } catch (e) {
-      // Ignore if already deleted
-    }
-  }
-  if (siteAdmin) {
-    try {
-      await db.delete(users).where(eq(users.id, siteAdmin.id));
-    } catch (e) {
-      // Ignore if already deleted
-    }
-  }
-
-  // 5. Delete organization (last)
-  if (testOrg) {
-    try {
-      await db.delete(organizations).where(eq(organizations.id, testOrg.id));
-    } catch (e) {
-      // Ignore if already deleted
-    }
-  }
+  await purgeTestRows({
+    userIds: [testAthlete?.id, testUser?.id, siteAdmin?.id].filter((id): id is string => !!id),
+    orgIds: testOrg ? [testOrg.id] : [],
+    // users created inside individual tests
+    usernameLike: ['dashboard_athlete%', 'org2_coach_%'],
+  });
 });
 
 describe('Wellness Template Routes', () => {
@@ -1076,30 +1017,7 @@ describe('Wellness Dashboard Routes', () => {
     }
 
     // Clean up other resources
-    if (athlete1) {
-      try {
-        if (team1) await storage.removeUserFromTeam(athlete1.id, team1.id);
-        await storage.removeUserFromOrganization(athlete1.id, testOrg.id);
-        await db.delete(users).where(eq(users.id, athlete1.id));
-      } catch (e) {}
-    }
-    if (athlete2) {
-      try {
-        if (team2) await storage.removeUserFromTeam(athlete2.id, team2.id);
-        await storage.removeUserFromOrganization(athlete2.id, testOrg.id);
-        await db.delete(users).where(eq(users.id, athlete2.id));
-      } catch (e) {}
-    }
-    if (team1) {
-      try {
-        await db.delete(teams).where(eq(teams.id, team1.id));
-      } catch (e) {}
-    }
-    if (team2) {
-      try {
-        await db.delete(teams).where(eq(teams.id, team2.id));
-      } catch (e) {}
-    }
+    await purgeTestRows({ userIds: [athlete1?.id, athlete2?.id], teamIds: [team1?.id, team2?.id] });
   });
 
   it('GET /api/organizations/:organizationId/wellness/dashboard - returns templateAggregates array', async () => {
@@ -1278,33 +1196,10 @@ describe('Authorization & Cross-Organization Access', () => {
   });
 
   afterAll(async () => {
-    // Clean up org2 (order matters due to FK constraints)
-    // 1. Remove user from organization first
-    if (org2Coach && org2) {
-      try {
-        await storage.removeUserFromOrganization(org2Coach.id, org2.id);
-      } catch (e) {
-        // Ignore if already removed
-      }
-    }
-
-    // 2. Delete user
-    if (org2Coach) {
-      try {
-        await db.delete(users).where(eq(users.id, org2Coach.id));
-      } catch (e) {
-        // Ignore if already deleted
-      }
-    }
-
-    // 3. Delete organization (last)
-    if (org2) {
-      try {
-        await db.delete(organizations).where(eq(organizations.id, org2.id));
-      } catch (e) {
-        // Ignore if already deleted
-      }
-    }
+    await purgeTestRows({
+      userIds: org2Coach ? [org2Coach.id] : [],
+      orgIds: org2 ? [org2.id] : [],
+    });
   });
 
   it('should prevent cross-organization template access', async () => {

@@ -484,6 +484,57 @@ describe('AchievementService', () => {
     });
   });
 
+  describe('checkAllAroundPR (5-0-5 protocol split)', () => {
+    const baseMetrics = ['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'TOP_SPEED', 'RSI'];
+
+    const measurementsFor = (metrics: string[]) =>
+      metrics.map((metric, i) => ({
+        id: `m-${i}`,
+        userId: mockUserId,
+        metric,
+        value: '1.0',
+        units: 's',
+        date: new Date().toISOString(),
+        age: 16,
+        isVerified: true,
+        createdAt: new Date(),
+      })) as any;
+
+    it('is earned when the 5-0-5 slot is filled by AGILITY_505_M', async () => {
+      vi.mocked(storage.getMeasurements).mockResolvedValue(measurementsFor([...baseMetrics, 'AGILITY_505_M']));
+      const result = await service.checkAllAroundPR(mockUserId, mockOrgId);
+      expect(result.map(a => a.code)).toEqual(['ALL_AROUND_PR']);
+    });
+
+    it('is earned when the 5-0-5 slot is filled by AGILITY_505_YD', async () => {
+      vi.mocked(storage.getMeasurements).mockResolvedValue(measurementsFor([...baseMetrics, 'AGILITY_505_YD']));
+      const result = await service.checkAllAroundPR(mockUserId, mockOrgId);
+      expect(result.map(a => a.code)).toEqual(['ALL_AROUND_PR']);
+    });
+
+    it('is earned with a mix of both protocols', async () => {
+      vi.mocked(storage.getMeasurements).mockResolvedValue(
+        measurementsFor([...baseMetrics, 'AGILITY_505_M', 'AGILITY_505_YD']),
+      );
+      const result = await service.checkAllAroundPR(mockUserId, mockOrgId);
+      expect(result.map(a => a.code)).toEqual(['ALL_AROUND_PR']);
+    });
+
+    it('is not earned without any 5-0-5 protocol, and the retired code does not count', async () => {
+      vi.mocked(storage.getMeasurements).mockResolvedValue(measurementsFor([...baseMetrics, 'AGILITY_505']));
+      const result = await service.checkAllAroundPR(mockUserId, mockOrgId);
+      expect(result).toEqual([]);
+    });
+
+    it('is not earned when another slot is missing', async () => {
+      vi.mocked(storage.getMeasurements).mockResolvedValue(
+        measurementsFor(['FLY10_TIME', 'AGILITY_505_M', 'AGILITY_505_YD']),
+      );
+      const result = await service.checkAllAroundPR(mockUserId, mockOrgId);
+      expect(result).toEqual([]);
+    });
+  });
+
   describe('checkAchievements (orchestrator)', () => {
     it('should run all achievement checks and return newly unlocked achievements', async () => {
       const mockMeasurement = {

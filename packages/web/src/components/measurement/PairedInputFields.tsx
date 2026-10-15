@@ -338,7 +338,7 @@ export function PairedInputFields({
             className="mt-3 flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5"
             data-testid="reps-warn-chip"
           >
-            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
+            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
             <span>
               Estimate accuracy decreases above 12 reps. The number is shown for reference but
               should be interpreted with caution.

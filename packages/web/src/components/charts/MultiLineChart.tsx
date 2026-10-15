@@ -475,9 +475,9 @@ export function MultiLineChart({
                 {multiLineData.athletesToShow.map((athlete, index) => {
                   const color = getAthleteColor(index);
                   return (
-                    <div key={athlete.athleteId} className="flex items-center space-x-2">
+                    <div key={athlete.athleteId} className="flex items-center gap-x-2">
                       <div
-                        className="w-4 h-3 rounded flex-shrink-0"
+                        className="w-4 h-3 rounded shrink-0"
                         style={{ backgroundColor: color }}
                         aria-label={`Color indicator for ${athlete.athleteName}`}
                       />
@@ -506,8 +506,8 @@ export function MultiLineChart({
                 const style = getMetricStyle(index);
 
                 return (
-                  <div key={metric} className="flex items-center space-x-3">
-                    <div className="flex items-center space-x-2 min-w-0 flex-1">
+                  <div key={metric} className="flex items-center gap-x-3">
+                    <div className="flex items-center gap-x-2 min-w-0 flex-1">
                       <LegendLine
                         color={isSingleAthlete ? 'rgba(59, 130, 246, 1)' : 'rgba(75, 85, 99, 1)'}
                         dashPattern={[...style.dash]}

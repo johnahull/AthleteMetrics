@@ -16,6 +16,7 @@ import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { UserPlus, Trash2, Link as LinkIcon, User, CheckCircle, XCircle, Clock, UserCheck, Eye, EyeOff, ChevronDown, ChevronRight } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
+import { UnaffiliatedUsersSection } from "@/components/users/UnaffiliatedUsersSection";
 
 type Organization = {
   id: string;
@@ -571,7 +572,7 @@ export default function UserManagement() {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-x-2">
                 <UserPlus className="h-5 w-5 text-primary" />
                 <CardTitle>Add New User</CardTitle>
               </div>
@@ -721,7 +722,7 @@ export default function UserManagement() {
                           </FormItem>
                         )}
                       />
-                      <div className="flex justify-end space-x-2">
+                      <div className="flex justify-end gap-x-2">
                         <Button
                           type="button"
                           variant="outline"
@@ -832,7 +833,7 @@ export default function UserManagement() {
                                       />
                                       <button
                                         type="button"
-                                        className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 focus:text-gray-600 focus:outline-none"
+                                        className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 focus:text-gray-600 focus:outline-hidden"
                                         onClick={() => setShowPassword(!showPassword)}
                                         tabIndex={-1}
                                         aria-label={showPassword ? "Hide password" : "Show password"}
@@ -853,7 +854,7 @@ export default function UserManagement() {
                                 </FormItem>
                               )}
                             />
-                            <div className="flex justify-end space-x-2">
+                            <div className="flex justify-end gap-x-2">
                               <Button
                                 type="button"
                                 variant="outline"
@@ -936,6 +937,11 @@ export default function UserManagement() {
               </div>
               )}
 
+              {/* Users in no organization (site admin only; they have no role to filter by) */}
+              {isSiteAdmin && roleFilter === "all" && (
+                <UnaffiliatedUsersSection organizations={organizations ?? []} />
+              )}
+
               {/* Users by Organization */}
               {organizations?.map((org: Organization) => {
                 const isExpanded = expandedOrgs.has(org.id);
@@ -951,7 +957,7 @@ export default function UserManagement() {
                 return (
                   <div key={org.id} className="space-y-3 border-b pb-6">
                     <div
-                      className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-2 rounded -m-2 transition-colors select-none"
+                      className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-2 rounded -mx-2 -mt-2 -mb-2 transition-colors select-none"
                       onClick={() => toggleOrgExpansion(org.id)}
                       role="button"
                       tabIndex={0}

@@ -28,7 +28,7 @@ describe('METRIC_CONFIG - Empty Configuration', () => {
     const previousMetrics = [
       'FLY10_TIME',
       'VERTICAL_JUMP',
-      'AGILITY_505',
+      'AGILITY_505_YD',
       'AGILITY_5105',
       'T_TEST',
       'DASH_40YD',

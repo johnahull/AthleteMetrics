@@ -25,7 +25,7 @@ export default function Welcome() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 to-slate-100">
+    <div className="min-h-screen flex flex-col bg-linear-to-br/srgb from-slate-50 to-slate-100">
       <div className="flex-1 flex items-center justify-center">
         <Card className="w-full max-w-md mx-4 shadow-lg" role="main">
         <CardContent className="pt-12 pb-8 px-8 space-y-6">

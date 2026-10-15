@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useId } from "react";
 import { useForm, FormProvider, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -27,8 +27,11 @@ import { parseFieldError } from "@/lib/parse-field-error";
 
 // Create dynamic measurement schema that accepts any metric string
 // Backend will validate against org-enabled metrics
-const dynamicMeasurementSchema = insertMeasurementSchema.omit({ metric: true }).extend({
+export const dynamicMeasurementSchema = insertMeasurementSchema.omit({ metric: true }).extend({
   metric: z.string().min(1, "Metric is required"),
+  // The shared schema allows 0 for MQ 0-3 scores (entered via the event MQ panel);
+  // this general form keeps the positive() rule so its default 0 is never submitted.
+  value: z.number().positive("Value must be positive"),
 });
 
 type DynamicInsertMeasurement = z.infer<typeof dynamicMeasurementSchema>;
@@ -70,7 +73,6 @@ export default function MeasurementForm() {
       date: new Date().toISOString().split('T')[0],
       metric: firstMetricCode,
       value: 0,
-      flyInDistance: undefined,
       auxiliaryValue: undefined,
       notes: "",
       teamId: "",
@@ -126,12 +128,11 @@ export default function MeasurementForm() {
       // Batch-entry preservation per plan §6: keep athlete + metric + date +
       // team + season after a successful submit so a coach can log the next
       // working set without re-picking everything. Clear only the inputs that
-      // belong to "this set" (value / auxiliary / fly-in / notes), and return
+      // belong to "this set" (value / auxiliary / notes), and return
       // focus to the primary value input. To start a totally fresh entry,
       // coach changes the athlete/metric explicitly.
       form.resetField("value", { defaultValue: 0 });
       form.resetField("auxiliaryValue", { defaultValue: undefined });
-      form.resetField("flyInDistance", { defaultValue: undefined });
       form.resetField("notes", { defaultValue: "" });
       form.clearErrors();
       setOverrideCalculated(false);
@@ -196,7 +197,7 @@ export default function MeasurementForm() {
   const selectedMetric = availableMetrics.find(m => m.code === metric);
 
   // Query for calculation preview for derived metrics
-  const { data: calculationPreview } = useQuery({
+  const { data: calculationPreview, isFetching: isPreviewFetching } = useQuery({
     queryKey: ['calculation-preview', selectedAthlete?.id, metric, date],
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -219,6 +220,14 @@ export default function MeasurementForm() {
     enabled: !!selectedAthlete?.id && !!selectedMetric?.isDerived && !!date,
     staleTime: 0, // Always refetch for real-time preview
   });
+
+  // A derived value the calculator computes from the source measurements: nothing to post
+  const usesCalculatedValue =
+    !!selectedMetric?.isDerived && !overrideCalculated && calculationPreview?.calculatedValue != null;
+  // Until the preview answers, Save could post a leftover value as a direct row
+  const isPreviewPending =
+    !!selectedMetric?.isDerived && !overrideCalculated && isPreviewFetching && !usesCalculatedValue;
+  const autoCalculatedMessageId = useId();
 
   // Watch for date changes and refetch active teams
   useEffect(() => {
@@ -247,29 +256,17 @@ export default function MeasurementForm() {
       return;
     }
 
+    // The calculator already stores the calculated value; a posted copy would be saved
+    // as a direct entry and block recalculation (#579). Only an override posts a row.
+    if (usesCalculatedValue || isPreviewPending) {
+      return;
+    }
+
     // Prepare measurement data
-    let measurementData: any = {
+    const measurementData: any = {
       ...data,
       userId: selectedAthlete.id,
     };
-
-    // For derived metrics without override, use calculated value and add metadata
-    if (selectedMetric?.isDerived && !overrideCalculated && calculationPreview?.calculatedValue !== null && calculationPreview !== undefined) {
-      measurementData = {
-        ...measurementData,
-        value: calculationPreview.calculatedValue,
-        isCalculated: true,
-        calculatedFromMeasurementIds: calculationPreview.sourceMeasurementIds || [],
-        calculationMetadata: {
-          formula: calculationPreview.formula || '',
-          sourceValues: (calculationPreview.sourceMetrics || []).reduce((acc, sm) => {
-            acc[sm.code.toLowerCase()] = sm.value;
-            return acc;
-          }, {} as Record<string, number>),
-          calculatedAt: new Date().toISOString(),
-        },
-      };
-    }
 
     // CODE QUALITY FIX: Remove production console.log
     // console.log("Submitting measurement data:", measurementData);
@@ -286,7 +283,6 @@ export default function MeasurementForm() {
       date: new Date().toISOString().split('T')[0],
       metric: firstMetricCode,
       value: 0,
-      flyInDistance: undefined,
       notes: "",
       teamId: "",
       season: "",
@@ -419,6 +415,17 @@ export default function MeasurementForm() {
                     Based on: {calculationPreview.sourceMetrics.map(m => `${m.label}: ${m.value} ${m.unit}`).join(', ')}
                   </p>
                 )}
+                {!overrideCalculated && (
+                  <p
+                    id={autoCalculatedMessageId}
+                    role="status"
+                    className="text-sm text-blue-700 dark:text-blue-300 mt-2"
+                    data-testid="derived-auto-calculated"
+                  >
+                    This value is calculated automatically from the source measurements, so there is nothing to save.
+                    To record a directly measured value instead, check the box below.
+                  </p>
+                )}
                 <div className="flex items-center gap-2 mt-3">
                   <Checkbox
                     id="override-calculated"
@@ -429,6 +436,15 @@ export default function MeasurementForm() {
                     Override with direct measurement
                   </label>
                 </div>
+              </div>
+            ) : isPreviewPending ? (
+              <div
+                role="status"
+                className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex items-center gap-2"
+                data-testid="derived-preview-loading"
+              >
+                <Calculator className="h-4 w-4 text-blue-600" />
+                <span className="text-sm text-blue-800 dark:text-blue-200">Calculating…</span>
               </div>
             ) : (
               <div className="bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
@@ -525,39 +541,6 @@ export default function MeasurementForm() {
               )}
             />
           ))}
-
-          {/* Fly-In Distance (only for FLY10_TIME) */}
-          {metric === "FLY10_TIME" && (
-            <FormField
-              control={form.control}
-              name="flyInDistance"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Fly-In Distance (Optional)</FormLabel>
-                  <div className="flex">
-                    <FormControl>
-                      <Input 
-                        {...field}
-                        type="number"
-                        step="0.1"
-                        placeholder="Enter distance"
-                        disabled={createMeasurementMutation.isPending}
-                        className="rounded-r-none"
-                        data-testid="input-fly-in-distance"
-                        onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
-                        value={field.value || ''}
-                      />
-                    </FormControl>
-                    <div className="px-4 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600 text-sm">
-                      yd
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-500">Distance from start of acceleration to timing gate</p>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
         </div>
 
         {/* Notes */}
@@ -685,7 +668,7 @@ export default function MeasurementForm() {
 
         {/* Quick Add Athlete */}
         <div className="border-t border-gray-200 pt-6">
-          <div className="flex items-center space-x-2 mb-4">
+          <div className="flex items-center gap-x-2 mb-4">
             <Checkbox 
               id="quick-add-athlete" 
               checked={showQuickAdd}
@@ -832,7 +815,7 @@ export default function MeasurementForm() {
         </div>
 
         {/* Submit Button */}
-        <div className="flex justify-end space-x-3">
+        <div className="flex justify-end gap-x-3">
           <Button 
             type="button" 
             variant="outline"
@@ -844,7 +827,8 @@ export default function MeasurementForm() {
           </Button>
           <Button
             type="submit"
-            disabled={createMeasurementMutation.isPending || !selectedAthlete}
+            disabled={createMeasurementMutation.isPending || !selectedAthlete || usesCalculatedValue || isPreviewPending}
+            aria-describedby={usesCalculatedValue ? autoCalculatedMessageId : undefined}
             data-testid="submit-measurement"
           >
             <Save className="h-4 w-4 mr-2" />

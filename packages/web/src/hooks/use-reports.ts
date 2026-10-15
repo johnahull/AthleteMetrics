@@ -52,7 +52,7 @@ interface ReportsResponse {
 interface GeneratedReport {
   reportId: string;
   organizationId: string;
-  reportType: "team" | "individual";
+  reportType: "team" | "individual" | "eval";
   config: CreateReportData["config"];
   generatedAt: string;
   data: any;

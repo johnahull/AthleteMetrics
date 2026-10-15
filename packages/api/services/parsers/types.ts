@@ -5,7 +5,7 @@
  */
 
 export interface ParsedDrillResult {
-  metric: string;       // e.g. 'DASH_30YD', 'FLY10_TIME', 'AGILITY_505'
+  metric: string;       // e.g. 'DASH_30YD', 'FLY10_TIME', 'AGILITY_505_M'
   value: number;        // Final time or score
   units: string;        // 's', 'in', 'mph', etc.
   splits?: ParsedSplit[];

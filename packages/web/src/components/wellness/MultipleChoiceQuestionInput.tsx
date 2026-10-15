@@ -37,7 +37,7 @@ export function MultipleChoiceQuestionInput({
   };
 
   return (
-    <div className="space-y-4" data-testid="question-multiple-choice">
+    <div className="grid gap-y-4" data-testid="question-multiple-choice">
       <Label className="text-base font-medium">
         {question.label}
         {question.required && <span className="text-destructive ml-1">*</span>}
@@ -54,7 +54,7 @@ export function MultipleChoiceQuestionInput({
             const isChecked = Array.isArray(value) && value.includes(option);
 
             return (
-              <div key={option} className="flex items-center space-x-3">
+              <div key={option} className="flex items-center gap-x-3">
                 <Checkbox
                   id={`${question.id}-${option}`}
                   checked={isChecked}
@@ -78,7 +78,7 @@ export function MultipleChoiceQuestionInput({
           onValueChange={handleRadioChange}
         >
           {question.options.map((option) => (
-            <div key={option} className="flex items-center space-x-3">
+            <div key={option} className="flex items-center gap-x-3">
               <RadioGroupItem
                 value={option}
                 id={`${question.id}-${option}`}

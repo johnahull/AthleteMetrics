@@ -27,7 +27,7 @@ export function NavigationMenu({ navigation, currentLocation, onNavigate }: Navi
           <Link key={item.name} href={item.href}>
             <div
               className={cn(
-                "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors cursor-pointer",
+                "flex items-center gap-x-3 px-3 py-2 rounded-lg transition-colors cursor-pointer",
                 isActive
                   ? "bg-primary text-white"
                   : "text-gray-700 hover:bg-gray-100"

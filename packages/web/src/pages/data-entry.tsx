@@ -385,7 +385,7 @@ export default function DataEntry() {
             <div className="space-y-4">
               {recentMeasurements?.slice(0, 10).map((measurement) => (
                 <div key={measurement.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <div className="flex items-center space-x-4">
+                  <div className="flex items-center gap-x-4">
                     <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
                       <span className="text-white text-sm font-medium">
                         {measurement.user.firstName.charAt(0)}{measurement.user.lastName.charAt(0)}
@@ -393,7 +393,7 @@ export default function DataEntry() {
                     </div>
                     <div>
                       <p className="font-medium text-gray-900">{measurement.user.fullName}</p>
-                      <div className="flex items-center space-x-4 text-sm text-gray-600">
+                      <div className="flex items-center gap-x-4 text-sm text-gray-600">
                         <span>
                           {getLabel(measurement.metric)}: {measurement.value}{measurement.units}
                         </span>
@@ -408,7 +408,7 @@ export default function DataEntry() {
                       </div>
                     </div>
                   </div>
-                  <div className="flex space-x-2">
+                  <div className="flex gap-x-2">
                     <Button variant="ghost" size="sm">
                       <i className="fas fa-edit"></i>
                     </Button>

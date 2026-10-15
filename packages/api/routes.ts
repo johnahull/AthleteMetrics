@@ -14,13 +14,13 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer } from "http";
 import session from "express-session";
 import passport from "passport";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import { isSessionProbe } from "./utils/rate-limit-utils";
 import helmet from "helmet";
 import csrf from "csrf";
 import DOMPurify from "isomorphic-dompurify";
 import { storage } from "./storage";
 import { PermissionChecker } from "./permissions";
-import { shouldSkipRateLimiting } from "./utils/rate-limit-utils";
 import { isSiteAdmin } from "@shared/auth-utils";
 import { z } from "zod";
 import bcrypt from "bcrypt";
@@ -841,30 +841,20 @@ export async function registerRoutes(app: Express) {
   const { requestCacheMiddleware } = await import("./middleware/request-cache");
   app.use(requestCacheMiddleware);
 
-  // Rate limiting for authentication endpoints
-  const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    limit: 5, // Limit each IP to 5 requests per windowMs
-    message: {
-      error: "Too many authentication attempts, please try again in 15 minutes"
-    },
-    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-    skip: (req) => shouldSkipRateLimiting(req, 'auth')
-  });
-
   // Rate limiting for API endpoints (general usage)
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    limit: 100, // Limit each IP to 100 requests per windowMs
+    limit: 100, // Limit each signed-in user (anonymous: each IP) to 100 requests per windowMs
+    // Per user, so users behind one IP (a team on shared Wi-Fi) do not share a budget
+    keyGenerator: (req) => req.session?.user?.id ?? ipKeyGenerator(req.ip ?? "unknown"),
     message: {
       error: "Too many requests, please try again later"
     },
     standardHeaders: true,
     legacyHeaders: false,
     skip: (req) => {
-      // Skip rate limiting for local development
-      return req.ip === '127.0.0.1' || req.ip === '::1';
+      // Skip local development and the session probes (/auth/me), so a spent budget cannot log users out
+      return req.ip === '127.0.0.1' || req.ip === '::1' || isSessionProbe(req);
     }
   });
 

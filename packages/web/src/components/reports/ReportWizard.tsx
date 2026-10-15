@@ -23,6 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -57,6 +58,8 @@ const reportConfigSchema = z.object({
   positions: z.array(z.string()).optional(),
   audience: z.enum(["coach", "athlete", "parent"]).default("coach"),
   enableCompositeIndex: z.boolean().default(false),
+  // Individual reports only: compare the athlete to a group (percentiles, radar, distribution)
+  groupComparison: z.boolean().default(false),
   charts: z.object({
     radar: z.boolean().default(true),
     benchmarkStanding: z.boolean().default(true),
@@ -116,6 +119,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       teamIds: [],
       positions: [],
       enableCompositeIndex: false,
+      groupComparison: false,
       charts: DEFAULT_CHART_SELECTION,
     },
   });
@@ -139,6 +143,10 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const selectedMetrics = watch("metrics");
   const enableCompositeIndex = watch("enableCompositeIndex");
   const charts = watch("charts");
+  const groupComparison = watch("groupComparison");
+  // Radar and distribution are group comparisons: unavailable on an individual report without one
+  const comparisonChartOff = (key: string) =>
+    reportType === "individual" && !groupComparison && (key === "radar" || key === "distribution");
 
   // Fetch organization's enabled metrics using standardized hook
   const { data: metrics, isLoading: metricsLoading, error: metricsError } = useOrganizationMetrics(
@@ -227,7 +235,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
           const allSelected = tierIds.every(id => selectedIds.includes(id));
           const someSelected = !allSelected && tierIds.some(id => selectedIds.includes(id));
           return (
-            <div key={groupId} className="flex items-center space-x-2">
+            <div key={groupId} className="flex items-center gap-x-2">
               <Checkbox
                 id={`${idPrefix}-group-${groupId}`}
                 checked={someSelected ? 'indeterminate' : allSelected}
@@ -247,7 +255,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
           );
         })}
         {individualBenchmarks.map((benchmark: any) => (
-          <div key={benchmark.id} className="flex items-center space-x-2">
+          <div key={benchmark.id} className="flex items-center gap-x-2">
             <Checkbox
               id={`${idPrefix}-${benchmark.id}`}
               checked={watch(fieldName)?.includes(benchmark.benchmarkId)}
@@ -294,8 +302,9 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const renderChartCheckboxes = (items: ReadonlyArray<readonly [ChartItemKey, string, string]>) => (
     <>
       {items.map(([key, title, desc]) => (
-        <div key={key} className="flex items-start space-x-2">
-          <Checkbox id={`chart-${key}`} checked={charts?.[key] ?? true}
+        <div key={key} className="flex items-start gap-x-2">
+          <Checkbox id={`chart-${key}`} checked={!comparisonChartOff(key) && (charts?.[key] ?? true)}
+            disabled={comparisonChartOff(key)}
             onCheckedChange={(v) => setValue(`charts.${key}` as const, v as boolean)} className="mt-1" />
           <div>
             <Label htmlFor={`chart-${key}`} className="cursor-pointer font-medium">{title}</Label>
@@ -363,6 +372,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       metrics: data.metrics,
       athleteIds: data.athleteIds,
       audience: data.audience,
+      ...(data.reportType === "individual" && { groupComparison: data.groupComparison }),
     };
 
     // Handle benchmarks - either from set or individual selection
@@ -408,15 +418,17 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
           tierDistribution: data.charts.tierDistribution,
         }
       : {
-          radar: data.charts.radar,
+          radar: data.groupComparison && data.charts.radar,
           benchmarkStanding: data.charts.benchmarkStanding,
           trends: data.charts.trends,
-          distribution: data.charts.distribution,
+          distribution: data.groupComparison && data.charts.distribution,
           // Never persist true while the sprint-FV feature is off for this org.
           fvProfile: fvEnabled ? data.charts.fvProfile : false,
         };
 
-    if (data.teamIds?.length || data.gender || data.positions?.length) {
+    // An individual report without group comparison has no cohort to filter
+    const hasCohort = data.reportType === "team" || data.groupComparison;
+    if (hasCohort && (data.teamIds?.length || data.gender || data.positions?.length)) {
       config.filters = {
         teamIds: data.teamIds,
         gender: data.gender,
@@ -481,13 +493,13 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
         >
           {/* Step 1: Report Type */}
           {step === 1 && (
-            <div className="space-y-4">
+            <div className="grid gap-y-4">
               <Label>Report Type</Label>
               <RadioGroup
                 value={reportType}
                 onValueChange={(value) => setValue("reportType", value as any)}
               >
-                <div className="flex items-center space-x-2 border rounded-lg p-4 cursor-pointer hover:bg-accent">
+                <div className="flex items-center gap-x-2 border rounded-lg p-4 cursor-pointer hover:bg-accent">
                   <RadioGroupItem value="team" id="team" />
                   <Label htmlFor="team" className="cursor-pointer flex-1">
                     <div className="font-semibold">{labels.team} Report</div>
@@ -496,7 +508,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                     </div>
                   </Label>
                 </div>
-                <div className="flex items-center space-x-2 border rounded-lg p-4 cursor-pointer hover:bg-accent">
+                <div className="flex items-center gap-x-2 border rounded-lg p-4 cursor-pointer hover:bg-accent">
                   <RadioGroupItem value="individual" id="individual" />
                   <Label htmlFor="individual" className="cursor-pointer flex-1">
                     <div className="font-semibold">Individual Report</div>
@@ -514,7 +526,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
 
           {/* Step 2: Athlete Selection (Individual Reports Only) */}
           {step === 2 && reportType === "individual" && (
-            <div className="space-y-4">
+            <div className="grid gap-y-4">
               <Label>Select {labels.athletes}</Label>
               <p className="text-sm text-muted-foreground">
                 Choose individual {labels.athletes.toLowerCase()} or select entire {labels.teams.toLowerCase()}. One report will be created for each {labels.athlete.toLowerCase()}.
@@ -569,17 +581,17 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
 
           {/* Step 4: Timeframe */}
           {step === 4 && (
-            <div className="space-y-4">
+            <div className="grid gap-y-4">
               <Label>Timeframe</Label>
               <RadioGroup
                 value={timeframeType}
                 onValueChange={(value) => setValue("timeframeType", value as any)}
               >
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-x-2">
                   <RadioGroupItem value="preset" id="preset" />
                   <Label htmlFor="preset">Preset</Label>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center gap-x-2">
                   <RadioGroupItem value="custom" id="custom" />
                   <Label htmlFor="custom">Custom Date Range</Label>
                 </div>
@@ -622,7 +634,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
 
           {/* Step 5: Metrics Selection */}
           {step === 5 && (
-            <div className="space-y-4">
+            <div className="grid gap-y-4">
               <Label>Select Metrics *</Label>
               {metricsLoading ? (
                 <div className="flex justify-center py-8">
@@ -646,7 +658,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                     const metricCode = metric.metricCode;
                     const displayName = metric.customLabel || metric.siteMetric.label;
                     return (
-                      <div key={metricCode} className="flex items-center space-x-2">
+                      <div key={metricCode} className="flex items-center gap-x-2">
                         <Checkbox
                           id={metricCode}
                           checked={selectedMetrics?.includes(metricCode)}
@@ -671,7 +683,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
 
           {/* Step 6: Benchmarks (Optional) */}
           {step === 6 && (
-            <div className="space-y-4">
+            <div className="grid gap-y-4">
               <Label>Benchmarks (Optional)</Label>
               <p className="text-sm text-muted-foreground">
                 Select benchmarks to compare against in the report
@@ -808,7 +820,24 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
 
           {/* Step 7: Filters (Optional) */}
           {step === 7 && (
-            <div className="space-y-4">
+            <div className="grid gap-y-4">
+              {reportType === "individual" && (
+                <div className="flex items-start gap-x-3 border rounded-lg p-4">
+                  <Switch
+                    id="group-comparison"
+                    checked={groupComparison}
+                    onCheckedChange={(v) => setValue("groupComparison", v)}
+                  />
+                  <div>
+                    <Label htmlFor="group-comparison" className="cursor-pointer font-medium">Compare to a group</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Show group average, percentile, radar and distribution. Off: results and benchmarks only.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {(reportType === "team" || groupComparison) && (<>
               <Label>Filters (Optional)</Label>
               <p className="text-sm text-muted-foreground">
                 Filter athletes included in the report
@@ -831,7 +860,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                 ) : (
                   <div className="space-y-2 border rounded-lg p-4 max-h-48 overflow-y-auto">
                     {teams.map((team: any) => (
-                      <div key={team.id} className="flex items-center space-x-2">
+                      <div key={team.id} className="flex items-center gap-x-2">
                         <Checkbox
                           id={`team-${team.id}`}
                           checked={watch("teamIds")?.includes(team.id)}
@@ -870,12 +899,13 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                   </SelectContent>
                 </Select>
               </div>
+              </>)}
             </div>
           )}
 
           {/* Step 8: Audience + Composite Index (Team Reports) / Audience + Review (Individual) */}
           {step === 8 && (
-            <div className="space-y-4 mb-4">
+            <div className="grid gap-y-4 mb-4">
               <Label className="flex items-center gap-2">
                 <Users className="h-4 w-4" />
                 Who will read this report?
@@ -884,7 +914,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                 value={watch("audience")}
                 onValueChange={(value) => setValue("audience", value as "coach" | "athlete" | "parent", { shouldDirty: true })}
               >
-                <div className="flex items-center space-x-2 border rounded-lg p-3 cursor-pointer hover:bg-accent">
+                <div className="flex items-center gap-x-2 border rounded-lg p-3 cursor-pointer hover:bg-accent">
                   <RadioGroupItem value="coach" id="audience-coach" />
                   <Label htmlFor="audience-coach" className="cursor-pointer flex-1">
                     <div className="font-semibold">Coach</div>
@@ -896,7 +926,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                 {/* Athlete and Parent audiences only apply to individual reports */}
                 {reportType === "individual" && (
                   <>
-                    <div className="flex items-center space-x-2 border rounded-lg p-3 cursor-pointer hover:bg-accent">
+                    <div className="flex items-center gap-x-2 border rounded-lg p-3 cursor-pointer hover:bg-accent">
                       <RadioGroupItem value="athlete" id="audience-athlete" />
                       <Label htmlFor="audience-athlete" className="cursor-pointer flex-1">
                         <div className="font-semibold">Athlete</div>
@@ -905,7 +935,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                         </div>
                       </Label>
                     </div>
-                    <div className="flex items-center space-x-2 border rounded-lg p-3 cursor-pointer hover:bg-accent">
+                    <div className="flex items-center gap-x-2 border rounded-lg p-3 cursor-pointer hover:bg-accent">
                       <RadioGroupItem value="parent" id="audience-parent" />
                       <Label htmlFor="audience-parent" className="cursor-pointer flex-1">
                         <div className="font-semibold">Parent</div>
@@ -923,11 +953,11 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
           {step === 8 && reportType === "team" && (
             <div className="space-y-4">
               <Separator />
-              <Label>Composite Index (Optional)</Label>
+              <Label className="block">Composite Index (Optional)</Label>
               <p className="text-sm text-muted-foreground mb-4">
                 Create a weighted composite score across multiple metrics to rank athletes
               </p>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-x-2">
                 <Checkbox
                   id="enableCompositeIndex"
                   checked={enableCompositeIndex}
@@ -975,7 +1005,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
               )}
 
               <Separator />
-              <div className="border rounded-lg p-4 bg-muted/30 space-y-4">
+              <div className="border rounded-lg p-4 bg-muted/30 grid gap-y-4">
                 <Label className="font-medium">Charts to include</Label>
                 {renderChartCheckboxes(teamChartItems)}
               </div>
@@ -984,7 +1014,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
 
           {/* Step 8 for Individual Reports - Summary */}
           {step === 8 && reportType === "individual" && (
-            <div className="space-y-4">
+            <div className="grid gap-y-4">
               <Label>Review</Label>
               <div className="border rounded-lg p-4 space-y-2">
                 <p className="text-sm">
@@ -1005,7 +1035,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                   Click "Create Report" to finish
                 </p>
               </div>
-              <div className="border rounded-lg p-4 bg-muted/30 space-y-4">
+              <div className="border rounded-lg p-4 bg-muted/30 grid gap-y-4">
                 <Label className="font-medium">Charts to include</Label>
                 {renderChartCheckboxes(individualChartItems)}
               </div>

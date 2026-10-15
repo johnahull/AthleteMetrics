@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export function KPICardSkeleton() {
   return (
     <Card aria-busy="true">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardHeader className="flex flex-row items-center justify-between gap-y-0 pb-2">
         <Skeleton className="h-4 w-24" />
         <Skeleton className="h-4 w-4 rounded-full" />
       </CardHeader>

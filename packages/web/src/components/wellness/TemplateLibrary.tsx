@@ -203,7 +203,7 @@ export default function TemplateLibrary({ organizationId }: TemplateLibraryProps
                 </CardDescription>
               </CardHeader>
 
-              <CardContent className="flex-1 flex flex-col space-y-4">
+              <CardContent className="flex-1 flex flex-col gap-y-4">
                 {/* Category Badge */}
                 {template.category && (
                   <div>

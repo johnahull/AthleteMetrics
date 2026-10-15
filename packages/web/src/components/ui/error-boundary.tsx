@@ -84,7 +84,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         <Card className="bg-red-50 border-red-200 max-w-2xl mx-auto mt-8">
           <CardContent className="pt-6">
             <div className="flex items-start gap-4">
-              <AlertCircle className="h-6 w-6 text-red-600 flex-shrink-0 mt-1" />
+              <AlertCircle className="h-6 w-6 text-red-600 shrink-0 mt-1" />
               <div className="flex-1 space-y-4">
                 <div>
                   <h2 className="text-lg font-semibold text-red-900 mb-2">

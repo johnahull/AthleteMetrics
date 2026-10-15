@@ -185,7 +185,7 @@ Pre-selected by default for measurements:
 - FLY10_TIME (10-yard fly)
 - VERTICAL_JUMP
 - DASH_40YD (40-yard dash)
-- AGILITY_505 (5-0-5 agility)
+- AGILITY_505_YD (5-0-5 agility, yards protocol)
 - TOP_SPEED
 
 ## Styling

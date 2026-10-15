@@ -13,7 +13,7 @@ process.env.ADMIN_USER = process.env.ADMIN_USER || 'admin';
 process.env.ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@test.com';
 process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'TestPassword123!';
 
-import { describe, it, expect, beforeAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, vi, afterAll } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import { storage } from '../../packages/api/storage';
@@ -25,6 +25,7 @@ vi.mock('../../packages/api/vite.js', () => ({
 }));
 
 import { registerRoutes } from '../../packages/api/routes';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 
 const PASSWORD = 'TestPass123!';
 
@@ -49,6 +50,10 @@ describe('Login account lockout and MFA', () => {
     app.use(express.json());
     app.use(express.urlencoded({ extended: false }));
     await registerRoutes(app);
+  });
+
+  afterAll(async () => {
+    await purgeTestRows({ usernameLike: ['wave2lock%'] });
   });
 
   it('locks the account after 5 failed attempts, blocking even a correct password', async () => {

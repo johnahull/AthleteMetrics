@@ -186,7 +186,15 @@ describe('ImportValidationService', () => {
     });
 
     it('should include list of valid alternatives in warning message', async () => {
-      const context = await service.loadValidationContext();
+      const fullContext = await service.loadValidationContext();
+      // The warning lists only the first 20 codes (in unspecified DB order), so narrow the
+      // context to this test's metric rather than depending on how many real metrics exist.
+      const context = {
+        ...fullContext,
+        metrics: new Map(
+          Array.from(fullContext.metrics.entries()).filter(([code]) => code === `TEST_METRIC_${uniqueSuffix}`)
+        ),
+      };
       const result = service.validateMetricCode('INVALID_METRIC', context);
 
       expect(result.valid).toBe(false);

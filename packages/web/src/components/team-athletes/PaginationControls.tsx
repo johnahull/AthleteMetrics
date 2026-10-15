@@ -22,7 +22,7 @@ export function PaginationControls({
   }
 
   return (
-    <nav aria-label={ariaLabel} className="flex items-center justify-center space-x-2 py-4">
+    <nav aria-label={ariaLabel} className="flex items-center justify-center gap-x-2 py-4">
       <Button
         variant="outline"
         size="sm"

@@ -26,6 +26,7 @@ import {
   validateAnalyticsFilters,
   parseDecimalValue
 } from "@shared/analytics-utils";
+import { isPeerComparisonExcludedMetric } from "@shared/peer-comparison-exclusions";
 import DOMPurify from "isomorphic-dompurify";
 
 // Type for the database query result
@@ -323,10 +324,12 @@ export class AnalyticsService {
       return [];
     }
 
-    // Calculate percentile ranks for each metric
+    // Calculate percentile ranks for each metric. MQ scores are ordinal rubric
+    // values and are never ranked against peers (AM-FEAT-015).
+    const rankedMetrics = metrics.filter(metric => !isPeerComparisonExcludedMetric(metric));
     const metricPercentiles: Record<string, Record<string, number>> = {};
 
-    metrics.forEach(metric => {
+    rankedMetrics.forEach(metric => {
       const values = completeAthletes.map(athlete => athlete.measurements[metric]);
       const sortedValues = [...values].sort((a, b) => a - b);
 
@@ -346,7 +349,7 @@ export class AnalyticsService {
       athleteName: athlete.athleteName,
       metrics: athlete.measurements,
       percentileRanks: Object.fromEntries(
-        metrics.map(metric => [metric, metricPercentiles[metric][athlete.athleteId]])
+        rankedMetrics.map(metric => [metric, metricPercentiles[metric][athlete.athleteId]])
       )
     }));
 

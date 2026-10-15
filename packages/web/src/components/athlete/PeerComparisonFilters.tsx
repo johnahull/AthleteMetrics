@@ -160,7 +160,7 @@ export function PeerComparisonFilters({
           <Label className="text-sm font-medium text-gray-700 mb-2 block">Select Teams</Label>
           <div className="space-y-2 max-h-40 overflow-y-auto border rounded-md p-3">
             {teams.map((team: any) => (
-              <div key={team.id} className="flex items-center space-x-2">
+              <div key={team.id} className="flex items-center gap-x-2">
                 <Checkbox
                   id={`team-${team.id}`}
                   checked={filters.teamIds?.includes(team.id) || false}

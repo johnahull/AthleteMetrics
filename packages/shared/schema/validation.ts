@@ -24,6 +24,8 @@ export {
   insertUserTeamSchema,
   insertInvitationSchema,
   insertMeasurementSchema,
+  mediaUrlSchema,
+  MEDIA_URL_MAX_LENGTH,
   insertSiteMetricSchema,
   updateSiteMetricSchema,
   insertOrganizationMetricSchema,

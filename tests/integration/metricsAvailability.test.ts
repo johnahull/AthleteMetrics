@@ -79,7 +79,7 @@ describe.skip('Metrics Availability', () => {
       { metric: 'FLY10_TIME', count: 10 },
       { metric: 'VERTICAL_JUMP', count: 5 },
       { metric: 'DASH_40YD', count: 3 },
-      // RSI, AGILITY_505, AGILITY_5105, T_TEST, TOP_SPEED will have 0
+      // RSI, AGILITY_505_YD, AGILITY_5105, T_TEST, TOP_SPEED will have 0
     ];
 
     for (const m of measurementsToInsert) {
@@ -136,7 +136,7 @@ describe.skip('Metrics Availability', () => {
     expect(availability.VERTICAL_JUMP).toBe(5);
     expect(availability.DASH_40YD).toBe(3);
     expect(availability.RSI).toBe(0);
-    expect(availability.AGILITY_505).toBe(0);
+    expect(availability.AGILITY_505_YD).toBe(0);
     expect(availability.AGILITY_5105).toBe(0);
     expect(availability.T_TEST).toBe(0);
     expect(availability.TOP_SPEED).toBe(0);

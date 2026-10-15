@@ -6,6 +6,7 @@
 import { useState, useMemo } from "react";
 import { useParams, Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
+import { canManageEvent as canUserManageEvent, canDeleteEvent as canUserDeleteEvent } from "@/lib/event-permissions";
 import { Eye } from "lucide-react";
 import {
   useEvent,
@@ -18,6 +19,7 @@ import {
   useCancelInvitation,
   useCancelRegistration,
   useMyEventRegistration,
+  useDeleteEvent,
 } from "@/lib/events-api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,8 +35,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
-import { EventStatusBadge, EventMetricsTab, EventResultsTab, EventReportsTab, CheckInTab, InviteAthletesModal } from "@/components/events";
+import { EventStatusBadge, EventMetricsTab, EventResultsTab, EventReportsTab, EventEvalReportsCard, CheckInTab, InviteAthletesModal, AddAthletesModal } from "@/components/events";
 import {
   ArrowLeft,
   Calendar,
@@ -50,9 +64,11 @@ import {
   CheckCircle,
   Edit,
   ExternalLink,
+  Trash2,
 } from "lucide-react";
-import { format, formatDistanceToNow, isPast, isFuture } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import type { EventRegistration, EventInvitation } from "@shared/schema";
+import { toCalendarDate, isCalendarDatePast, isCalendarDateFuture } from "@/utils/date-utils";
 
 type TabValue = "overview" | "registrations" | "checkin" | "metrics" | "results" | "reports" | "settings";
 
@@ -72,6 +88,7 @@ export default function EventDetail() {
   const { toast } = useToast();
   const [selectedTab, setSelectedTab] = useState<TabValue>("overview");
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [addAthletesModalOpen, setAddAthletesModalOpen] = useState(false);
   const [declineDialog, setDeclineDialog] = useState<{ open: boolean; registrationId: string | null }>({ open: false, registrationId: null });
   const [declineReason, setDeclineReason] = useState("");
   const [cancelInvitationDialog, setCancelInvitationDialog] = useState<{ open: boolean; invitationId: string | null }>({ open: false, invitationId: null });
@@ -93,6 +110,7 @@ export default function EventDetail() {
   const declineMutation = useDeclineRegistration();
   const cancelInvitationMutation = useCancelInvitation();
   const cancelRegistrationMutation = useCancelRegistration();
+  const deleteMutation = useDeleteEvent();
 
   // Fetch athlete's own registration (for athlete view)
   const { data: myRegistration } = useMyEventRegistration(eventId);
@@ -201,6 +219,25 @@ export default function EventDetail() {
     navigate(`/events/${eventId}/edit`);
   };
 
+  // Handle delete event - the API refuses frozen events (409), so show its message
+  const handleDeleteEvent = async () => {
+    if (!eventId) return;
+    try {
+      await deleteMutation.mutateAsync(eventId);
+      toast({
+        title: "Event Deleted",
+        description: "The event has been deleted.",
+      });
+      navigate("/events");
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete event.",
+      });
+    }
+  };
+
   // Calculate stats
   const typedRegistrations = (registrations as RegistrationWithUser[]) || [];
   const approvedCount = typedRegistrations.filter((r) => r.status === "approved" || r.status === "checked_in").length;
@@ -209,16 +246,16 @@ export default function EventDetail() {
   const pendingCount = typedRegistrations.filter((r) => r.status === "pending").length;
 
   // Determine if user can manage this event (coach, org_admin, or site_admin)
-  const canManageEvent = useMemo(() => {
-    if (!event || !user) return false;
-    if (user.isSiteAdmin) return true;
-    if (!event.organizationId) return false;
+  const canManageEvent = useMemo(
+    () => canUserManageEvent(user, userOrganizations, event),
+    [event, user, userOrganizations]
+  );
 
-    return userOrganizations?.some(
-      (org) => org.organizationId === event.organizationId &&
-               (org.role === "org_admin" || org.role === "coach")
-    ) ?? false;
-  }, [event, user, userOrganizations]);
+  // Only an org admin of the event's organization (or a site admin) can delete it
+  const canDeleteEvent = useMemo(
+    () => canUserDeleteEvent(user, userOrganizations, event),
+    [event, user, userOrganizations]
+  );
 
   // Copy event code to clipboard
   const copyEventCode = () => {
@@ -273,8 +310,8 @@ export default function EventDetail() {
   // Format date range
   const formatDateRange = () => {
     if (!event) return "";
-    const startDate = new Date(event.startDate);
-    const endDate = event.endDate ? new Date(event.endDate) : null;
+    const startDate = toCalendarDate(event.startDate)!;
+    const endDate = toCalendarDate(event.endDate);
 
     if (!endDate || format(startDate, "yyyy-MM-dd") === format(endDate, "yyyy-MM-dd")) {
       return format(startDate, "EEEE, MMMM d, yyyy");
@@ -285,11 +322,10 @@ export default function EventDetail() {
   // Time status
   const getTimeStatus = () => {
     if (!event) return null;
-    const startDate = new Date(event.startDate);
-    const endDate = event.endDate ? new Date(event.endDate) : startDate;
+    const startDate = toCalendarDate(event.startDate)!;
 
-    if (isPast(endDate)) return { label: "Completed", variant: "secondary" as const };
-    if (isFuture(startDate)) return { label: `In ${formatDistanceToNow(startDate)}`, variant: "default" as const };
+    if (isCalendarDatePast(event.endDate || event.startDate)) return { label: "Completed", variant: "secondary" as const };
+    if (isCalendarDateFuture(event.startDate)) return { label: `In ${formatDistanceToNow(startDate)}`, variant: "default" as const };
     return { label: "In Progress", variant: "default" as const };
   };
 
@@ -354,7 +390,7 @@ export default function EventDetail() {
             </div>
           </div>
           {canManageEvent && (
-            <div className="flex gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
               <Button variant="outline" onClick={handleToggleFreeze} disabled={freezeMutation.isPending || unfreezeMutation.isPending}>
                 {event.isFrozen ? (
                   <>
@@ -372,6 +408,41 @@ export default function EventDetail() {
                 <Edit className="h-4 w-4 mr-2" />
                 Edit Event
               </Button>
+              {canDeleteEvent && (
+                <AlertDialog>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span tabIndex={event.isFrozen ? 0 : -1}>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="destructive" disabled={event.isFrozen || deleteMutation.isPending}>
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete Event
+                            </Button>
+                          </AlertDialogTrigger>
+                        </span>
+                      </TooltipTrigger>
+                      {event.isFrozen && <TooltipContent>Unfreeze to delete</TooltipContent>}
+                    </Tooltip>
+                  </TooltipProvider>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete "{event.name}"?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This cannot be undone. Registrations, invitations and the metric set are deleted. Recorded
+                        measurements stay in athlete history under the event's name, saved eval reports are kept,
+                        and import records lose their event link.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={handleDeleteEvent}>
+                        Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
             </div>
           )}
         </div>
@@ -405,8 +476,8 @@ export default function EventDetail() {
       </div>
 
       {/* Tabs */}
-      <Tabs value={selectedTab} onValueChange={(v) => setSelectedTab(v as TabValue)} className="space-y-6">
-        <TabsList>
+      <Tabs value={selectedTab} onValueChange={(v) => setSelectedTab(v as TabValue)} className="flex flex-col gap-y-6 [&>[role=tabpanel]]:mt-0">
+        <TabsList className="self-start">
           <TabsTrigger value="overview" data-testid="tab-overview">
             Overview
           </TabsTrigger>
@@ -716,7 +787,12 @@ export default function EventDetail() {
                     {approvedCount + pendingCount + waitlistCount} total registrations
                   </CardDescription>
                 </div>
-                <Button onClick={handleInviteAthletes}>Invite Athletes</Button>
+                <div className="flex flex-wrap gap-2">
+                  {event.organizationId && event.status !== 'cancelled' && !event.isFrozen && (
+                    <Button variant="outline" onClick={() => setAddAthletesModalOpen(true)}>Add athletes</Button>
+                  )}
+                  <Button onClick={handleInviteAthletes}>Invite Athletes</Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -817,6 +893,7 @@ export default function EventDetail() {
             eventId={eventId!}
             organizationId={event.organizationId || undefined}
             isFrozen={event.isFrozen}
+            canSaveTemplate={canManageEvent}
           />
         </TabsContent>
         )}
@@ -837,8 +914,14 @@ export default function EventDetail() {
 
         {/* Reports Tab - Admin Only */}
         {canManageEvent && (
-        <TabsContent value="reports">
+        <TabsContent value="reports" className="space-y-6">
+          <EventEvalReportsCard
+            eventId={eventId!}
+            organizationId={event.organizationId || undefined}
+            canManage={canManageEvent}
+          />
           <EventReportsTab
+            key={eventId}
             eventId={eventId!}
             eventName={event.name}
             isFrozen={event.isFrozen}
@@ -903,6 +986,15 @@ export default function EventDetail() {
         organizationId={event.organizationId || ""}
         isOpen={inviteModalOpen}
         onClose={() => setInviteModalOpen(false)}
+      />
+
+      {/* Add Athletes Modal (direct add, managers only: the Registrations tab is manager-only) */}
+      <AddAthletesModal
+        eventId={eventId!}
+        eventName={event.name}
+        organizationId={event.organizationId || ""}
+        isOpen={addAthletesModalOpen}
+        onClose={() => setAddAthletesModalOpen(false)}
       />
 
       {/* Decline Reason Dialog */}

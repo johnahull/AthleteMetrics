@@ -64,28 +64,28 @@ router.post('/login', enhancedAuthLimiter, async (req: Request, res: Response) =
       }
     }
 
-    // Check for account lockout
-    const lockCheck = await AuthSecurity.checkAccountLock(user.emails?.[0] || '');
-    if (lockCheck.isLocked) {
-      return res.status(423).json({
-        success: false,
-        accountLocked: true,
-        lockUntil: lockCheck.lockUntil?.toISOString(),
-        message: `Account locked due to multiple failed attempts. Try again after ${lockCheck.lockUntil?.toLocaleTimeString()}.`
-      });
-    }
-
-    // Verify password (OAuth users may not have password set)
-    // SECURITY: Use generic error message to prevent account enumeration
+    // SECURITY: Use generic error message to prevent account enumeration (OAuth users may not have a password)
     if (!user.password) {
       return res.status(401).json({
         success: false,
         message: 'Invalid username or password'
       });
     }
+
+    // Account lockout keyed on the user id: reserve the attempt atomically BEFORE comparing the password
+    const reservation = await AuthSecurity.reserveLoginAttempt(user, ipAddress, userAgent);
+    if (!reservation.allowed) {
+      return res.status(423).json({
+        success: false,
+        accountLocked: true,
+        lockUntil: reservation.lockUntil.toISOString(),
+        message: `Account locked due to multiple failed attempts. Try again after ${reservation.lockUntil.toLocaleTimeString()}.`
+      });
+    }
+
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      await AuthSecurity.recordFailedLogin(user.emails?.[0] || '', ipAddress, userAgent);
+      await AuthSecurity.recordFailedLogin(user, ipAddress, userAgent);
       return res.status(401).json({
         success: false,
         message: 'Invalid username or password'
@@ -94,6 +94,7 @@ router.post('/login', enhancedAuthLimiter, async (req: Request, res: Response) =
 
     // Check if email verification is required
     if (user.isEmailVerified === false) {
+      await AuthSecurity.releaseLoginAttempt(user);
       return res.status(403).json({
         success: false,
         requiresEmailVerification: true,
@@ -104,6 +105,7 @@ router.post('/login', enhancedAuthLimiter, async (req: Request, res: Response) =
     // Check for MFA requirement
     if (user.mfaEnabled === true) {
       if (!mfaToken) {
+        await AuthSecurity.releaseLoginAttempt(user);
         return res.status(200).json({
           requiresMFA: true,
           message: 'Multi-factor authentication required'
@@ -116,7 +118,7 @@ router.post('/login', enhancedAuthLimiter, async (req: Request, res: Response) =
         // Try backup codes
         const isBackupValid = await AuthSecurity.verifyBackupCode(user.id, mfaToken);
         if (!isBackupValid) {
-          await AuthSecurity.recordFailedLogin(user.emails?.[0] || '', ipAddress, userAgent);
+          await AuthSecurity.recordFailedLogin(user, ipAddress, userAgent);
           return res.status(401).json({
             success: false,
             message: 'Invalid authentication code'

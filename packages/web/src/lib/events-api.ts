@@ -3,7 +3,8 @@
  * Provides type-safe API calls and data fetching hooks for event management
  */
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCallback } from "react";
+import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type {
   Event,
   InsertEvent,
@@ -25,7 +26,8 @@ import { STALE_TIME } from "@/lib/queryClient";
 async function getErrorMessage(response: Response, fallback: string): Promise<string> {
   try {
     const error = await response.json();
-    return error.message || fallback;
+    // Most routes answer { message }, the event measurement routes { error }
+    return error.message || error.error || fallback;
   } catch {
     // Response might not be JSON (e.g., network errors, CORS errors)
     return fallback;
@@ -173,7 +175,7 @@ export async function updateEvent(eventId: string, data: Partial<UpdateEvent>): 
 /**
  * Delete an event
  */
-export async function deleteEvent(eventId: string): Promise<{ success: boolean }> {
+export async function deleteEvent(eventId: string): Promise<void> {
   const response = await fetch(`/api/events/${eventId}`, {
     method: 'DELETE',
   });
@@ -182,8 +184,7 @@ export async function deleteEvent(eventId: string): Promise<{ success: boolean }
     const message = await getErrorMessage(response, 'Failed to delete event');
     throw new Error(message);
   }
-
-  return response.json();
+  // 204 No Content: there is no body to parse
 }
 
 /**
@@ -264,6 +265,35 @@ export async function fetchEventRegistrations(eventId: string): Promise<EventReg
     const message = await getErrorMessage(response, 'Failed to fetch registrations');
     throw new Error(message);
   }
+  return response.json();
+}
+
+export interface AddEventAthletesResult {
+  added: string[];
+  updated: string[];
+  alreadyOnEvent: string[];
+  rejected: Array<{ userId: string; reason: string }>;
+  overCapacity?: boolean;
+}
+
+/**
+ * Add organization athletes to an event directly (silent: no invitation, no notification)
+ */
+export async function addEventAthletes(
+  eventId: string,
+  data: { userIds: string[]; checkIn?: boolean }
+): Promise<AddEventAthletesResult> {
+  const response = await fetch(`/api/events/${eventId}/registrations/bulk-add`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const message = await getErrorMessage(response, 'Failed to add athletes');
+    throw new Error(message);
+  }
+
   return response.json();
 }
 
@@ -453,6 +483,35 @@ export async function addEventMetric(
 
   if (!response.ok) {
     const message = await getErrorMessage(response, 'Failed to add metric');
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
+export interface BulkAddEventMetricsResult {
+  /** Codes this request inserted */
+  added: string[];
+  alreadyPresent: string[];
+  /** Codes that can not be event metrics: no such metric, switched off, computed from other tests, or not offered to the organization's type */
+  skipped: Array<{ metricCode: string; reason: 'unknown' | 'inactive' | 'derived' | 'unavailable' }>;
+}
+
+/**
+ * Add a whole metric list to an event in ONE request (one rate-limit hit, however many metrics)
+ */
+export async function addEventMetricsBulk(
+  eventId: string,
+  metrics: Array<{ metricCode: string; displayOrder?: number; isRequired?: boolean; customLabel?: string }>
+): Promise<BulkAddEventMetricsResult> {
+  const response = await fetch(`/api/events/${eventId}/metrics/bulk`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ metrics }),
+  });
+
+  if (!response.ok) {
+    const message = await getErrorMessage(response, 'Failed to add metrics');
     throw new Error(message);
   }
 
@@ -767,7 +826,9 @@ export function useDeleteEvent() {
 
   return useMutation({
     mutationFn: deleteEvent,
-    onSuccess: () => {
+    onSuccess: (_data, eventId) => {
+      // Drop the deleted event's own queries first so an open detail page does not refetch into a 404
+      queryClient.removeQueries({ queryKey: ['events', eventId] });
       queryClient.invalidateQueries({ queryKey: ['events'] });
     },
   });
@@ -843,6 +904,23 @@ export function useEventRegistrations(eventId: string | undefined) {
     queryFn: () => fetchEventRegistrations(eventId!),
     enabled: !!eventId,
     staleTime: STALE_TIME.REALTIME,
+  });
+}
+
+/**
+ * Hook to add athletes to an event directly
+ */
+export function useAddEventAthletes() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ eventId, userIds, checkIn }: { eventId: string; userIds: string[]; checkIn?: boolean }) =>
+      addEventAthletes(eventId, { userIds, checkIn }),
+    onSuccess: (_, { eventId }) => {
+      queryClient.invalidateQueries({ queryKey: ['events', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['events', eventId, 'registrations'] });
+      queryClient.invalidateQueries({ queryKey: ['events', 'my-registrations'] });
+    },
   });
 }
 
@@ -1196,6 +1274,8 @@ export function useUpdateResultsVisibility() {
  * Event measurement with user details for display
  */
 export interface EventMeasurementWithDetails extends Measurement {
+  /** The athlete, as returned by GET /api/events/:eventId/measurements */
+  user?: { id: string; fullName?: string; firstName?: string; lastName?: string };
   userFullName?: string;
   userEmail?: string;
   metricLabel?: string;
@@ -1223,18 +1303,20 @@ export interface CreateEventMeasurementInput {
   value: number;
   date: string;
   notes?: string;
+  /** Optional https link (e.g. video clip). Empty string or null clears. */
+  mediaUrl?: string | null;
+  /** Update this saved row (same event, athlete and metric) instead of appending a new one */
+  replaceMeasurementId?: string;
 }
 
 /**
- * Result from bulk measurement creation
+ * Result from bulk measurement creation. `index` is the item's position in the request array.
  */
 export interface BulkMeasurementResult {
-  success: boolean;
-  created: Measurement[];
-  errors: Array<{
-    index: number;
-    message: string;
-  }>;
+  created: Array<Measurement & { index: number }>;
+  /** Rows updated in place through replaceMeasurementId */
+  replaced: Array<Measurement & { index: number }>;
+  errors: Array<{ index: number; error: string }>;
 }
 
 /**
@@ -1314,6 +1396,58 @@ export async function createEventMeasurementsBulk(
   return response.json();
 }
 
+export interface MovementQualityScoreWrite {
+  metric: string;
+  value: number;
+  notes?: string;
+  mediaUrl?: string | null;
+}
+
+/** Thrown when some Movement Quality scores were rejected; nothing was saved */
+export class MovementQualitySaveError extends Error {
+  constructor(
+    message: string,
+    public readonly errors: Array<{ metric: string; error: string }>,
+    public readonly status?: number
+  ) {
+    super(message);
+    this.name = 'MovementQualitySaveError';
+  }
+}
+
+/**
+ * Save one athlete's Movement Quality scores for an event in one atomic request
+ * (upserts + deletes of cleared scores; all or nothing).
+ */
+export async function saveEventMovementQuality(
+  eventId: string,
+  userId: string,
+  input: { upserts: MovementQualityScoreWrite[]; deletes: string[] }
+): Promise<{ saved: Measurement[]; deleted: string[] }> {
+  const response = await fetch(`/api/events/${eventId}/athletes/${userId}/movement-quality`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    let body: any = null;
+    try {
+      body = await response.json();
+    } catch {
+      // non-JSON error body
+    }
+    const message = body?.error || body?.message || 'Failed to save Movement Quality scores';
+    if (Array.isArray(body?.errors)) {
+      throw new MovementQualitySaveError(message, body.errors, response.status);
+    }
+    // status: callers saving several athletes stop on 429 / 403 / 5xx but not on an athlete-specific 400
+    throw Object.assign(new Error(message), { status: response.status, code: body?.code });
+  }
+
+  return response.json();
+}
+
 // ============================================================================
 // React Query Hooks - Event Measurements
 // ============================================================================
@@ -1379,12 +1513,60 @@ export function useCreateEventMeasurementsBulk() {
     }: {
       eventId: string;
       measurements: CreateEventMeasurementInput[];
+      /** false: the caller refetches the measurements itself (e.g. once after several requests) */
+      invalidateMeasurements?: boolean;
     }) => createEventMeasurementsBulk(eventId, measurements),
-    onSuccess: (_, { eventId }) => {
-      queryClient.invalidateQueries({ queryKey: ['events', eventId, 'measurements'] });
+    onSuccess: (_, { eventId, invalidateMeasurements = true }) => {
+      if (invalidateMeasurements) {
+        queryClient.invalidateQueries({ queryKey: ['events', eventId, 'measurements'] });
+      }
       queryClient.invalidateQueries({ queryKey: ['events', eventId, 'results'] });
     },
   });
+}
+
+/**
+ * Hook to save one athlete's Movement Quality scores for an event
+ */
+export function useSaveEventMovementQuality() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      eventId,
+      userId,
+      upserts,
+      deletes,
+    }: {
+      eventId: string;
+      userId: string;
+      upserts: MovementQualityScoreWrite[];
+      deletes: string[];
+      /** false: no invalidation at all; the caller saves several athletes, then refetches and calls useInvalidateAfterMovementQualitySave once */
+      invalidateMeasurements?: boolean;
+    }) => saveEventMovementQuality(eventId, userId, { upserts, deletes }),
+    onSuccess: (_, { eventId, invalidateMeasurements = true }) => {
+      if (!invalidateMeasurements) return;
+      queryClient.invalidateQueries({ queryKey: ['events', eventId, 'measurements'] });
+      invalidateAfterMovementQualitySave(queryClient, eventId);
+    },
+  });
+}
+
+/** Views that show Movement Quality results; MQI_TOTAL is recalculated server-side (event measurements not included) */
+function invalidateAfterMovementQualitySave(queryClient: QueryClient, eventId: string) {
+  queryClient.invalidateQueries({ queryKey: ['events', eventId, 'results'] });
+  queryClient.invalidateQueries({ queryKey: ['/api/measurements'] });
+  queryClient.invalidateQueries({ queryKey: ['measurements'] });
+  queryClient.invalidateQueries({ queryKey: ['/api/athletes'] });
+  queryClient.invalidateQueries({ queryKey: ['athletes'] });
+  queryClient.invalidateQueries({ queryKey: ['/api/analytics/dashboard'] });
+}
+
+/** For callers that saved Movement Quality with invalidateMeasurements: false (and refetch the event measurements themselves) */
+export function useInvalidateAfterMovementQualitySave() {
+  const queryClient = useQueryClient();
+  return useCallback((eventId: string) => invalidateAfterMovementQualitySave(queryClient, eventId), [queryClient]);
 }
 
 // ============================================================================
@@ -1397,11 +1579,12 @@ export function useCreateEventMeasurementsBulk() {
 export interface EventReport {
   id: string;
   name: string;
-  reportType: 'team' | 'individual';
+  reportType: 'team' | 'individual' | 'eval';
   organizationId: string;
   config: {
     eventId?: string;
     includeEventPercentiles?: boolean;
+    groupComparison?: boolean;
     metrics?: string[];
     athleteId?: string;
     athleteIds?: string[];
@@ -1426,6 +1609,7 @@ export interface CreateEventReportInput {
   reportType: 'team' | 'individual';
   athleteIds?: string[];
   includeEventPercentiles?: boolean;
+  groupComparison?: boolean;
   generateAiInsights?: boolean;
   metrics?: string[];
 }
@@ -1488,7 +1672,7 @@ export async function fetchEventReports(eventId: string): Promise<EventReport[]>
 export async function createEventReport(
   eventId: string,
   data: CreateEventReportInput
-): Promise<EventReport> {
+): Promise<EventReport | { reports: EventReport[] }> {
   const response = await fetch(`/api/events/${eventId}/reports`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

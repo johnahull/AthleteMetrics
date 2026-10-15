@@ -61,6 +61,7 @@ import { registerRoutes } from '../../packages/api/routes';
 // ============================================================================
 
 import { exactlyAge } from '../shared/age-helpers';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 
 /** Birthday `daysOffset` days from now, born `years` ago. +1 → still (years-1). */
 function ageWithOffset(years: number, daysOffset: number): string {
@@ -125,11 +126,12 @@ async function seedInvitation(params: {
 
 /** Base accept payload; birthDate/parentEmail supplied per-test. */
 function acceptPayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  const ts = Date.now() + Math.floor(Math.random() * 1000);
+  // UUID-based: Date.now() + a small random offset can collide across tests.
+  const suffix = crypto.randomUUID().replace(/-/g, '').slice(0, 12);
   return {
     firstName: 'Invited',
     lastName: 'Athlete',
-    username: `invacc${ts}`,
+    username: `invacc${suffix}`,
     password: 'ValidPass1!!',
     legalAcceptedAt: validLegalAcceptedAt(),
     ...overrides,
@@ -186,24 +188,21 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // Delete children first (FK order): consents/links → invitations → users → org
-  try {
-    const allUsers = await db.select({ id: users.id }).from(users)
-      .where(like(users.username, 'invacc%'));
-    const ids = [...createdUserIds, ...allUsers.map(u => u.id)];
-    if (ids.length > 0) {
-      await db.delete(parentalConsents).where(inArray(parentalConsents.athleteUserId, ids));
-      await db.delete(parentAthleteLinks).where(inArray(parentAthleteLinks.athleteUserId, ids));
-    }
-    await db.delete(invitations).where(eq(invitations.organizationId, testOrgId));
-    if (ids.length > 0) {
-      await db.delete(users).where(inArray(users.id, ids));
-    }
-    await db.delete(users).where(like(users.username, 'invexist%'));
-    await db.delete(organizations).where(eq(organizations.id, testOrgId));
-  } catch {
-    // best-effort cleanup
+  // Consents and links first, then purgeTestRows removes the rows that block deleting users and the org
+  // (user_teams, user_organizations, athlete_profiles, invitations). A bare catch here used to hide the
+  // foreign-key error and leave the users and the organization behind.
+  const allUsers = await db.select({ id: users.id }).from(users)
+    .where(like(users.username, 'invacc%'));
+  const ids = [...createdUserIds, ...allUsers.map(u => u.id)];
+  if (ids.length > 0) {
+    await db.delete(parentalConsents).where(inArray(parentalConsents.athleteUserId, ids));
+    await db.delete(parentAthleteLinks).where(inArray(parentAthleteLinks.athleteUserId, ids));
   }
+  await purgeTestRows({
+    userIds: ids,
+    orgIds: [testOrgId],
+    usernameLike: ['invacc%', 'invexist%', 'invcoppainviter%'],
+  });
 });
 
 // ============================================================================
@@ -313,7 +312,7 @@ describe('POST /api/invitations/:token/accept — COPPA age gate', () => {
       .post(`/api/invitations/${token}/accept`)
       .send(payload);
 
-    expect(res.status).toBe(200);
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.requiresParentalConsent).toBeFalsy();
     expect(hasSessionCookie(res)).toBe(true);

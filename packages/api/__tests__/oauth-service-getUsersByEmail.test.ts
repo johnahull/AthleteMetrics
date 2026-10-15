@@ -10,6 +10,7 @@ import { db } from "../db";
 import { users, accountLinkingTokens } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { OAuthService } from "../services/oauth-service";
+import { purgeTestRows } from "../../../tests/helpers/purge-test-rows";
 
 // Mock EmailService to avoid sending actual emails
 vi.mock("../services/email-service", () => {
@@ -37,6 +38,8 @@ describe("OAuth Service - getUsersByEmail Integration", () => {
       await db.delete(users).where(eq(users.id, userId));
     }
     createdUserIds.length = 0;
+    // The new-account test lets OAuthService create the user itself, so sweep it by its unique username prefix
+    await purgeTestRows({ usernameLike: [`new-oauth-${timestamp}%`] });
   });
 
   it("should handle single user with matching email (backwards compatibility)", async () => {

@@ -62,6 +62,7 @@ function uid() {
 
 // Date-of-birth helpers are shared to keep the timezone-safe logic in one place.
 import { exactlyAge, minorBirthDate, adultBirthDate } from '../shared/age-helpers';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 
 async function createUser(
   suffix: string,
@@ -151,19 +152,14 @@ afterAll(async () => {
     .where(like(parentAthleteLinks.parentEmail, `${TEST_PREFIX}%`))
     .catch(() => {});
 
-  // Clean up users
-  for (const id of createdUserIds) {
-    await db.delete(users).where(eq(users.id, id)).catch(() => {});
-  }
-  await db
-    .delete(users)
-    .where(like(users.username, `${TEST_PREFIX}%`))
-    .catch(() => {});
-
-  // Clean up orgs
-  for (const id of createdOrgIds) {
-    await db.delete(organizations).where(eq(organizations.id, id)).catch(() => {});
-  }
+  // Users and orgs: memberships, athlete profiles and teams block these deletes, and the old
+  // `.catch(() => {})` swallowed that error, leaving the rows behind
+  await purgeTestRows({
+    userIds: createdUserIds,
+    orgIds: createdOrgIds,
+    usernameLike: [`${TEST_PREFIX}%`],
+    orgNameLike: [`${TEST_PREFIX}org_%`],
+  });
 });
 
 // ============================================================================

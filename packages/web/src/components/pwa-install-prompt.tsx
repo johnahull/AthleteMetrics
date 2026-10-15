@@ -95,7 +95,7 @@ export function PWAInstallPrompt() {
     <div className="fixed bottom-20 md:bottom-4 left-4 right-4 md:left-auto md:right-4 md:max-w-sm z-50 animate-in slide-in-from-bottom duration-300">
       <div className="bg-card border border-border rounded-lg shadow-lg p-4">
         <div className="flex items-start gap-3">
-          <div className="flex-shrink-0 mt-0.5">
+          <div className="shrink-0 mt-0.5">
             <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
               <Download className="h-5 w-5 text-primary-foreground" />
             </div>
@@ -130,7 +130,7 @@ export function PWAInstallPrompt() {
 
           <button
             onClick={handleDismiss}
-            className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+            className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
             aria-label="Close"
           >
             <X className="h-4 w-4" />

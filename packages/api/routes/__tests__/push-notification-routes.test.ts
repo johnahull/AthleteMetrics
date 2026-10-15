@@ -50,6 +50,7 @@ vi.mock("express-rate-limit", () => ({
 }));
 
 import { registerPushNotificationRoutes } from "../push-notification-routes";
+import { purgeTestRows } from "../../../../tests/helpers/purge-test-rows";
 
 // Mock session data for testing
 let mockSessionUser: any = null;
@@ -117,17 +118,7 @@ describe("Push Notification API Routes", () => {
   });
 
   afterAll(async () => {
-    // Clean up test data in reverse dependency order
-    try {
-      // First remove user from org, then delete user, then delete org
-      if (testUserId && testOrgId) {
-        await storage.removeUserFromOrganization(testUserId, testOrgId);
-      }
-      if (testUserId) await storage.deleteUser(testUserId);
-      if (testOrgId) await storage.deleteOrganization(testOrgId);
-    } catch (error) {
-      console.error("Cleanup error in push-notification-routes.test.ts:", error);
-    }
+    await purgeTestRows({ userIds: [testUserId].filter((id): id is string => !!id), orgIds: [testOrgId].filter((id): id is string => !!id) });
   });
 
   beforeEach(() => {

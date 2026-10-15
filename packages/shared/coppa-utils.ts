@@ -93,6 +93,26 @@ export function isUnder13(birthDate: string | Date): boolean {
 }
 
 /**
+ * Fail-closed variant of isUnder13 for sharing guards: returns true when the person is under 13
+ * OR the date of birth is missing, unparseable, implausible or in the future (anything that makes isUnder13
+ * throw). Strings must be a real calendar date in YYYY-MM-DD form with year >= 1900. Uses CURRENT age. Never throws.
+ */
+export function isUnder13OrUnknownDob(birthDate: string | Date | null | undefined): boolean {
+  try {
+    if (birthDate == null) return true;
+    if (typeof birthDate === 'string') {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) return true;
+      const [y, m, d] = birthDate.split('-').map(Number);
+      const parsed = new Date(y, m - 1, d);
+      if (y < 1900 || parsed.getFullYear() !== y || parsed.getMonth() !== m - 1 || parsed.getDate() !== d) return true;
+    }
+    return isUnder13(birthDate as string | Date);
+  } catch {
+    return true;
+  }
+}
+
+/**
  * Returns true if the person was under 13 at a specific reference date.
  *
  * Used for retroactive COPPA scans where age-at-collection (e.g. account

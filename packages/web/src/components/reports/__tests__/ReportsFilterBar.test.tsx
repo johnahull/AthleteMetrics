@@ -15,7 +15,7 @@ const mockTeams = [
 const mockMetrics = [
   { code: 'FLY10_TIME', name: '10-Yard Fly Time' },
   { code: 'VERTICAL_JUMP', name: 'Vertical Jump' },
-  { code: 'AGILITY_505', name: '5-0-5 Agility' },
+  { code: 'AGILITY_505_YD', name: '5-0-5 Agility' },
 ];
 
 const mockUseTeams = vi.fn();
@@ -385,7 +385,7 @@ describe('ReportsFilterBar', () => {
         reportType: 'all',
         dateFrom: undefined,
         dateTo: undefined,
-        metrics: ['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505'],
+        metrics: ['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505_YD'],
         teamIds: [],
         pinned: undefined,
       },
@@ -398,7 +398,7 @@ describe('ReportsFilterBar', () => {
       ...defaultProps,
       filters: {
         ...defaultFilters,
-        metrics: ['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505'],
+        metrics: ['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505_YD'],
       },
       activeFilterCount: 1,
     };

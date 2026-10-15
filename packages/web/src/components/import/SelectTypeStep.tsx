@@ -27,7 +27,7 @@ export function SelectTypeStep({ onSelect }: SelectTypeStepProps) {
         <Card
           className={cn(
             'cursor-pointer transition-all hover:shadow-md hover:border-primary',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
+            'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
           )}
           onClick={() => onSelect('athletes')}
           onKeyDown={(e) => {
@@ -65,7 +65,7 @@ export function SelectTypeStep({ onSelect }: SelectTypeStepProps) {
         <Card
           className={cn(
             'cursor-pointer transition-all hover:shadow-md hover:border-primary',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
+            'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
           )}
           onClick={() => onSelect('measurements')}
           onKeyDown={(e) => {

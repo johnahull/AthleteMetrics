@@ -21,7 +21,7 @@ import { loginAsAthlete } from './helpers/auth';
 
 const BASE_URL = process.env.TESTING_URL || process.env.STAGING_URL || 'http://localhost:5000';
 
-const METRIC_CODES = ['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'TOP_SPEED', 'RSI'];
+const METRIC_CODES = ['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505_M', 'AGILITY_505_YD', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'TOP_SPEED', 'RSI'];
 
 async function hasAnyVisibleMetricCard(page: Page): Promise<boolean> {
   const cards = page.locator('[data-testid="metric-progress-card"]');

@@ -91,7 +91,7 @@ export function CustomBenchmarkList({ organizationId }: CustomBenchmarkListProps
       <Card className="mb-6 bg-blue-50 border-blue-200">
         <CardContent className="pt-6">
           <div className="flex gap-3">
-            <AlertCircle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+            <AlertCircle className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
             <div>
               <p className="text-sm font-medium text-blue-900">Organization-Specific Benchmarks</p>
               <p className="text-sm text-blue-700 mt-1">

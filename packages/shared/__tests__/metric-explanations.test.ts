@@ -47,12 +47,15 @@ describe('getMetricExplanation — built-in metrics', () => {
     expect(result.unitNote.length).toBeGreaterThan(0);
   });
 
-  it('exposes BUILT_IN_METRIC_CODES with all 8 documented metrics', () => {
+  it('exposes BUILT_IN_METRIC_CODES with all 11 documented metrics', () => {
     expect(BUILT_IN_METRIC_CODES).toEqual(
       expect.arrayContaining([
         'FLY10_TIME',
         'VERTICAL_JUMP',
-        'AGILITY_505',
+        'AGILITY_505_M',
+        'AGILITY_505_YD',
+        'AGILITY_COD_DEFICIT_M',
+        'AGILITY_COD_DEFICIT_YD',
         'AGILITY_5105',
         'T_TEST',
         'DASH_40YD',
@@ -60,10 +63,34 @@ describe('getMetricExplanation — built-in metrics', () => {
         'RSI',
       ]),
     );
-    expect(BUILT_IN_METRIC_CODES).toHaveLength(8);
+    expect(BUILT_IN_METRIC_CODES).toHaveLength(11);
   });
 
-  it.each(['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'TOP_SPEED', 'RSI'])(
+  it('describes the 5-0-5 meters protocol in meters and the yards protocol in yards', () => {
+    const m = getMetricExplanation('AGILITY_505_M');
+    const yd = getMetricExplanation('AGILITY_505_YD');
+    expect(m.title).toMatch(/\(m\)/);
+    expect(m.whatItMeasures).toMatch(/meters/i);
+    expect(m.whatItMeasures).not.toMatch(/yards/i);
+    expect(yd.title).toMatch(/\(yd\)/);
+    expect(yd.whatItMeasures).toMatch(/yards/i);
+    expect(yd.whatItMeasures).not.toMatch(/meters/i);
+    expect(m.directionOfBetter).toBe('lower');
+    expect(yd.directionOfBetter).toBe('lower');
+  });
+
+  it('has lower-is-better COD deficit explanations for both protocols', () => {
+    for (const code of ['AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD']) {
+      const e = getMetricExplanation(code);
+      expect(e.directionOfBetter).toBe('lower');
+      expect(e.unitNote).toMatch(/second/i);
+      expect(e.whatItMeasures).toMatch(/10/);
+    }
+    expect(getMetricExplanation('AGILITY_COD_DEFICIT_M').whatItMeasures).toMatch(/meters/i);
+    expect(getMetricExplanation('AGILITY_COD_DEFICIT_YD').whatItMeasures).toMatch(/yards/i);
+  });
+
+  it.each(['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505_M', 'AGILITY_505_YD', 'AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'TOP_SPEED', 'RSI'])(
     '%s has all required fields populated',
     (code) => {
       const result = getMetricExplanation(code);

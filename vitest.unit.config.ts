@@ -25,6 +25,7 @@ export default mergeConfig(
         'tests/server/**/*.{test,spec}.{ts,tsx}', // Server unit tests (startup, error handling, etc.)
         'tests/import/csv-parsing.test.ts', // Parsing logic only
         'tests/auth/site-admin.test.ts', // Logic tests
+        'tests/helpers/**/*.test.ts', // Pure helpers (leak-check diff, forbidden DB url guard); no DB needed
       ],
       exclude: [
         '**/node_modules/**',
@@ -44,6 +45,11 @@ export default mergeConfig(
         // API integration tests that require database
         'packages/api/__tests__/organization-type-api.test.ts',
         'packages/api/__tests__/site-benchmark-sets.test.ts',
+
+        // The global-athlete-* files delete whole tables (global_athletes and its audit/claim tables) in
+        // beforeAll/afterAll, so they race when files run in parallel (maxForks 2) and flake with FK violations
+        // (issue #538). vitest.integration.config.ts runs them serially (fileParallelism: false), also in CI.
+        'packages/api/__tests__/global-athlete-*.test.ts',
       ],
     },
   })

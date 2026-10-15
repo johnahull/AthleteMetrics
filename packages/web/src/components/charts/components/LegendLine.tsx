@@ -40,7 +40,7 @@ export const LegendLine = React.memo(function LegendLine({
     <svg
       width={width}
       height={height}
-      className={`flex-shrink-0 ${className}`}
+      className={`shrink-0 ${className}`}
       aria-hidden="true"
     >
       <line

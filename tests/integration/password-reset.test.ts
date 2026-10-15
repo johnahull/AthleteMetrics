@@ -40,6 +40,7 @@ vi.mock('../../packages/api/services/email-service', () => ({
 import { registerRoutes } from '../../packages/api/routes';
 import { emailService } from '../../packages/api/services/email-service';
 import { PasswordResetService } from '../../packages/api/auth/password-reset';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 
 const OLD_PASSWORD = 'OldPass123!';
 const NEW_PASSWORD = 'BrandNewPass456!';
@@ -75,8 +76,8 @@ describe('Password reset flow', () => {
   });
 
   afterAll(async () => {
-    // beforeEach users are cleaned up individually below via afterAll sweep not
-    // needed; each test deletes its own user.
+    // Tests delete their own user on the happy path; this sweeps the ones a failed assertion skipped.
+    await purgeTestRows({ usernameLike: ['wave2reset%'] });
   });
 
   it('completes request -> reset -> login with the new password', async () => {

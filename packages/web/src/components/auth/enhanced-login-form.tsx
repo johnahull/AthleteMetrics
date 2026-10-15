@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Eye, EyeOff, Shield, Mail, Lock, AlertCircle, CheckCircle, Clock } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { OAuthButtons } from "./oauth-buttons";
+import { safeRedirectPath } from "@/utils/safe-redirect";
 
 interface LoginFormData {
   username: string;  // Can be username or email - backend accepts both
@@ -199,8 +200,9 @@ export function EnhancedLoginForm() {
         setError(null);
       } else if (result.user) {
         // Login successful - backend returns user object on success
-        // Redirect based on backend-provided URL or default to dashboard
-        window.location.href = result.redirectUrl || '/dashboard';
+        // An explicit, same-origin ?redirect (e.g. /join/CODE) wins over the backend's role-based default
+        const requested = safeRedirectPath(new URLSearchParams(window.location.search).get('redirect'));
+        window.location.href = requested || result.redirectUrl || '/dashboard';
       } else {
         // Handle various error types
         if (result.accountLocked) {
@@ -297,7 +299,7 @@ export function EnhancedLoginForm() {
         <form onSubmit={handleSubmit} className="space-y-4">
           {step === 'credentials' && (
             <>
-              <div className="space-y-2">
+              <div className="grid gap-y-2">
                 <Label htmlFor="username">Username or Email</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
@@ -343,7 +345,7 @@ export function EnhancedLoginForm() {
                 )}
               </div>
 
-              <div className="space-y-2">
+              <div className="grid gap-y-2">
                 <Label htmlFor="password">Password</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
@@ -380,7 +382,7 @@ export function EnhancedLoginForm() {
               </div>
 
               <div className="flex items-center justify-between">
-                <label className="flex items-center space-x-2 cursor-pointer">
+                <label className="flex items-center gap-x-2 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={formData.rememberMe}
@@ -412,7 +414,7 @@ export function EnhancedLoginForm() {
                 </p>
               </div>
               
-              <div className="space-y-2">
+              <div className="grid gap-y-2">
                 <Label htmlFor="mfaToken">Authentication Code</Label>
                 <Input
                   id="mfaToken"

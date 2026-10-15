@@ -56,7 +56,7 @@ export default function RecentAthletesWidget({
           <div className="space-y-3">
             {[...Array(3)].map((_, i) => (
               <div key={i} className="flex items-center justify-between animate-pulse">
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center gap-x-3">
                   <div className="w-10 h-10 bg-gray-200 rounded-full"></div>
                   <div>
                     <div className="h-4 bg-gray-200 rounded w-32 mb-2"></div>
@@ -138,7 +138,7 @@ export default function RecentAthletesWidget({
               key={athlete.id}
               className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors"
             >
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center gap-x-3">
                 {/* Avatar or initials */}
                 {athlete.avatar ? (
                   <img
@@ -160,7 +160,7 @@ export default function RecentAthletesWidget({
                   <p className="text-sm font-medium text-gray-900">
                     {athlete.firstName} {athlete.lastName}
                   </p>
-                  <div className="flex items-center space-x-2 text-xs text-gray-500">
+                  <div className="flex items-center gap-x-2 text-xs text-gray-500">
                     <span>{getMetricLabel(athlete.lastMeasurementType)}</span>
                     <span>•</span>
                     <span>

@@ -3,6 +3,7 @@
  * Extracted from routes.ts for better maintainability
  */
 
+import { parseFlyInInput, parseFlyRunInChoice, FLY10_CODE_BY_RUN_IN_YD, OCR_FLY10_NEUTRAL_METRIC } from "@shared/fly-run-in";
 import type { Express, Request, Response } from "express";
 import multer from "multer";
 import rateLimit from "express-rate-limit";
@@ -11,9 +12,9 @@ import { requireAuth } from "../middleware";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { sanitizeCSVValue } from "../utils/csv-utils";
 import { ocrService } from "../ocr/ocr-service";
-import { reviewQueue } from "../review-queue";
 import { findBestAthleteMatch, type MatchingCriteria, type MatchResult } from "../athlete-matching";
 import { isSiteAdmin } from "@shared/auth-utils";
+import { OCR_REQUIRED_CHOICE_MESSAGES, type OcrRequiredChoice } from "@shared/ocr-types";
 import { METRIC_CONFIG } from "@shared/analytics-types";
 import { COMMON_METRICS, type ImportResult } from "@shared/import-types";
 import { globalAthleteService } from "../services/global-athlete-service";
@@ -24,9 +25,31 @@ import { getPgErrorCode, PG_UNIQUE_VIOLATION } from "../lib/pg-error";
 import { importValidationService, type ValidationContext } from "../services/import-validation-service";
 import { logAuthorizationFailure } from "../helpers/audit-logging";
 import { getCachedUserOrganizations } from "../helpers/cached-org-access";
-import type { SiteMetric } from "@shared/schema";
+import { eq } from "drizzle-orm";
+import { users, userTeams, userOrganizations, type SiteMetric } from "@shared/schema";
 import { DerivedMetricCalculator } from "../services/derived-metric-calculator";
+import { assertCanEnterMetric, MovementQualityPermissionError } from "../services/measurement-service";
+import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
 import { db } from "../db";
+
+/**
+ * Remove an athlete that a CSV row auto-created (create_athletes) when the same row then failed, so a failed
+ * row leaves nothing behind. The athlete has no measurements yet (the write is what failed); only the team and
+ * organization links added during creation exist. Best effort: a cleanup failure is logged, not thrown, so it
+ * cannot mask the row's own error.
+ */
+async function removeAutoCreatedAthlete(userId: string): Promise<void> {
+  try {
+    // One transaction: either the athlete and its links are all removed, or none of them are
+    await db.transaction(async (tx) => {
+      await tx.delete(userTeams).where(eq(userTeams.userId, userId));
+      await tx.delete(userOrganizations).where(eq(userOrganizations.userId, userId));
+      await tx.delete(users).where(eq(users.id, userId));
+    });
+  } catch (cleanupError) {
+    console.warn(`[CSV IMPORT] Could not remove auto-created athlete ${userId} after a failed row:`, cleanupError);
+  }
+}
 
 /**
  * Tenant-isolation guard for imports. A client-supplied organizationId must be
@@ -232,6 +255,8 @@ const imageUpload = multer({
   }
 });
 
+const OCR_505_NEUTRAL_METRIC = 'AGILITY_505_UNRESOLVED';
+
 export function registerImportExportRoutes(app: Express) {
   // Photo OCR upload route (must come before generic import route)
   app.post("/api/import/photo", uploadLimiter, requireAuth, imageUpload.single('file'), async (req, res) => {
@@ -241,11 +266,6 @@ export function registerImportExportRoutes(app: Express) {
 
       if (!currentUser?.id) {
         return res.status(401).json({ message: "User not authenticated" });
-      }
-
-      // Athletes cannot upload photos for import
-      if (currentUser?.role === "athlete") {
-        return res.status(403).json({ message: "Athletes cannot import measurement data" });
       }
 
       if (!file) {
@@ -269,11 +289,46 @@ export function registerImportExportRoutes(app: Express) {
       const measurementMode = options.measurementMode || 'match_only';
       const teamHandling = options.teamHandling || 'auto_create_confirm';
 
+      // AM-FEAT-016: 5-0-5 protocol (meters or yards). Optional unless the photo contains a
+      // 5-0-5 reading (then 422 below, before anything is saved). A supplied but invalid value is a 400.
+      const protocol505 = options.protocol505;
+      if (protocol505 !== undefined && protocol505 !== 'M' && protocol505 !== 'YD') {
+        return res.status(400).json({ message: "Invalid protocol505: must be 'M' or 'YD'" });
+      }
+
+      // AM-FEAT-017: run-in distance (5|10|15|20|30 yd) for 10-yard fly readings. Same contract as protocol505:
+      // optional unless the photo has a fly reading (422 below), a supplied but invalid value is a 400.
+      const flyRunIn = parseFlyRunInChoice(options.flyRunIn);
+      if (options.flyRunIn !== undefined && flyRunIn === undefined) {
+        return res.status(400).json({ message: "Invalid flyRunIn: must be 5, 10, 15, 20 or 30 (yards)" });
+      }
+
       // Tenant isolation: reject a client-supplied organizationId the caller
       // does not belong to before any org-scoped read or write.
       const photoOrgAccessError = await checkImportOrgAccess(currentUser, options.organizationId);
       if (photoOrgAccessError) {
         return res.status(403).json({ message: photoOrgAccessError });
+      }
+
+      // Athlete lookup and creation are scoped to one organization: the validated
+      // client-supplied one, else the caller's first membership (same default as CSV import).
+      let photoOrganizationId: string | undefined = options.organizationId;
+      if (!photoOrganizationId) {
+        const photoUserOrgs = await storage.getUserOrganizations(currentUser.id);
+        photoOrganizationId = photoUserOrgs[0]?.organizationId;
+      }
+      if (!photoOrganizationId) {
+        return res.status(400).json({ message: "An organization is required to import measurements from a photo" });
+      }
+
+      // SECURITY (issue #514): the caller's role in the organization being imported into decides, not the
+      // session role (their role in their first organization). Only a coach / org_admin there, or a site
+      // admin, may import; this also stops guest and parent members, which the old athlete-only check let through.
+      const photoRole = await getOrgRole(currentUser, photoOrganizationId);
+      if (!isMeasurementWriterRole(photoRole)) {
+        return res.status(403).json({
+          message: photoRole === 'athlete' ? "Athletes cannot import measurement data" : "Your role cannot import measurement data"
+        });
       }
 
       // Debug logging removed for production: Processing OCR for file
@@ -283,6 +338,45 @@ export function registerImportExportRoutes(app: Express) {
 
       // Debug logging removed for production: OCR completed with confidence and extracted measurements
 
+      // All-or-nothing: a 5-0-5 reading needs the protocol and a 10-yard fly reading needs its run-in. Reject the
+      // whole photo BEFORE any athlete lookup/creation or measurement write, so a retry can never duplicate data.
+      // ONE 422 lists every missing choice (each retry re-runs OCR): `code` stays the first missing one for older
+      // clients, `required` names them all.
+      const required: OcrRequiredChoice[] = [];
+      if (!protocol505 && ocrResult.extractedData.some(d => d.metric === OCR_505_NEUTRAL_METRIC)) {
+        required.push('protocol505');
+      }
+      if (flyRunIn === undefined && ocrResult.extractedData.some(d => d.metric === OCR_FLY10_NEUTRAL_METRIC)) {
+        required.push('flyRunIn');
+      }
+      if (required.length > 0) {
+        return res.status(422).json(
+          required[0] === 'protocol505'
+            ? { message: OCR_REQUIRED_CHOICE_MESSAGES.protocol505, code: 'PROTOCOL_505_REQUIRED', required }
+            : { message: OCR_REQUIRED_CHOICE_MESSAGES.flyRunIn, code: 'FLY10_RUN_IN_REQUIRED', required }
+        );
+      }
+
+      // The protocol is known here (guard above), so the neutral 5-0-5 token resolves to a concrete code and can
+      // never reach storage or a response. One function for the prefetch below and the row loop, so the metric
+      // that is looked up is always the metric that is written.
+      const resolveOcrMetric = (metric: string | undefined): string | undefined =>
+        metric === OCR_505_NEUTRAL_METRIC
+          ? (protocol505 === 'M' ? 'AGILITY_505_M' : 'AGILITY_505_YD')
+          : metric === OCR_FLY10_NEUTRAL_METRIC
+            ? FLY10_CODE_BY_RUN_IN_YD[flyRunIn!] // defined: the 422 above rejects a neutral fly row without it
+            : metric;
+
+      // Looked up once for the whole photo, not once per extracted row (issue #527)
+      const photoMetricConfigs = await storage.getMetricWriteConfigs([
+        ...new Set(
+          ocrResult.extractedData
+            .map(d => resolveOcrMetric(d.metric))
+            .filter((m): m is string => typeof m === 'string' && m !== '')
+        ),
+      ]);
+      const photoSubmitter = (await storage.getActiveUserById(currentUser.id)) ?? null;
+
       // Convert extracted data to the same format as CSV import
       const processedData: any[] = [];
       const errors: any[] = [];
@@ -290,8 +384,11 @@ export function registerImportExportRoutes(app: Express) {
       const createdAthletes: any[] = [];
 
       for (let i = 0; i < ocrResult.extractedData.length; i++) {
-        const extracted = ocrResult.extractedData[i];
+        const raw = ocrResult.extractedData[i];
         const rowNum = i + 1;
+        const extracted = { ...raw, metric: resolveOcrMetric(raw.metric) };
+        // The athlete this row auto-created, until its measurement is saved (rolled back if the row fails)
+        let rowAutoCreated: { id: string; name: string } | null = null;
 
         try {
           if (!extracted.firstName || !extracted.lastName || !extracted.metric || !extracted.value) {
@@ -314,8 +411,12 @@ export function registerImportExportRoutes(app: Express) {
             continue;
           }
 
+          // Only coaches and admins may enter MQ scores; checked before any athlete matching/creation
+          assertCanEnterMetric(photoRole, extracted.metric);
+
           // Find or create the athlete
           const athletes = await storage.getAthletes({
+            organizationId: photoOrganizationId,
             search: `${extracted.firstName} ${extracted.lastName}`
           });
 
@@ -352,15 +453,13 @@ export function registerImportExportRoutes(app: Express) {
 
               userId = newAthlete.id;
               athleteCreated = true;
-              createdAthletes.push({ id: newAthlete.id, name: `${newAthlete.firstName} ${newAthlete.lastName}` });
+              rowAutoCreated = { id: newAthlete.id, name: `${newAthlete.firstName} ${newAthlete.lastName}` };
 
-              // Add to organization if specified
-              if (options.organizationId) {
-                try {
-                  await storage.addUserToOrganization(userId, options.organizationId, 'athlete');
-                } catch (error) {
-                  console.warn(`Could not add athlete ${userId} to organization ${options.organizationId}:`, error);
-                }
+              // Add to the selected organization so a repeat import finds this athlete
+              try {
+                await storage.addUserToOrganization(userId, photoOrganizationId, 'athlete');
+              } catch (error) {
+                console.warn(`Could not add athlete ${userId} to organization ${photoOrganizationId}:`, error);
               }
             } else {
               // Match-only mode - error if not found
@@ -394,14 +493,25 @@ export function registerImportExportRoutes(app: Express) {
           const measurementData = {
             userId: userId,
             date: measurementDate,
-            metric: extracted.metric as any,
+            metric: extracted.metric,
             value: numericValue,
             age: age || 18, // Default age if we can't determine it
             notes: `OCR Import - Raw: ${extracted.rawText} (Confidence: ${extracted.confidence}%)`
           };
 
           // Create the measurement
-          const measurement = await storage.createMeasurement(measurementData, currentUser.id);
+          const measurement = await storage.createMeasurement(measurementData, currentUser.id, undefined, {
+            submitterRole: photoRole,
+            authorizedOrganizationId: photoOrganizationId,
+            metricConfig: photoMetricConfigs.get(extracted.metric as string),
+            submitter: photoSubmitter,
+          });
+
+          // The athlete auto-created for this row now has its measurement: keep it and report it
+          if (rowAutoCreated) {
+            createdAthletes.push(rowAutoCreated);
+            rowAutoCreated = null;
+          }
 
           // DERIVED METRICS: Trigger automatic calculation of derived metrics
           try {
@@ -435,6 +545,14 @@ export function registerImportExportRoutes(app: Express) {
           });
 
         } catch (error) {
+          // The row failed after its athlete was auto-created: do not leave an orphan behind
+          if (rowAutoCreated) {
+            await removeAutoCreatedAthlete(rowAutoCreated.id);
+          }
+          if (error instanceof MovementQualityPermissionError) {
+            errors.push({ row: rowNum, error: error.message, data: extracted });
+            continue;
+          }
           console.error(`Error processing measurement ${rowNum}:`, error);
           errors.push({
             row: rowNum,
@@ -557,6 +675,22 @@ export function registerImportExportRoutes(app: Express) {
         return res.status(400).json({ message: "Invalid import type. Use 'athletes' or 'measurements'" });
       }
 
+      // SECURITY: Measurement import is limited to coach, org_admin and site_admin (matches /api/import/photo).
+      // A user needs that role in at least one organization to get here; which organization a row is written
+      // to, and whether the role there is enough, is decided per row from the role in THAT organization
+      // (issue #514), not from session.user.role (their role in their first organization).
+      if (type === 'measurements') {
+        if (!req.session.user?.id) {
+          return res.status(401).json({ message: "User not authenticated" });
+        }
+        if (!isSiteAdmin(req.session.user)) {
+          const importMemberships = (await storage.getUserOrganizations(req.session.user.id)) ?? [];
+          if (!importMemberships.some((m: any) => m.role === 'coach' || m.role === 'org_admin')) {
+            return res.status(403).json({ message: "Your role cannot import measurement data" });
+          }
+        }
+      }
+
       // Parse import options
       let options;
       try {
@@ -570,6 +704,11 @@ export function registerImportExportRoutes(app: Express) {
       } catch (error) {
         console.error('JSON parse error for CSV import options:', error);
         return res.status(400).json({ message: "Invalid options JSON format" });
+      }
+
+      // The manual review queue was removed; stale clients must not fall through to a direct import.
+      if (options.measurementMode === 'review_all' || options.measurementMode === 'review_low_confidence') {
+        return res.status(400).json({ message: `Import mode '${options.measurementMode}' is no longer supported: the manual review queue was removed. Use 'match_only' or 'create_athletes'.` });
       }
 
       // Tenant isolation: reject a client-supplied organizationId the caller
@@ -1075,10 +1214,42 @@ export function registerImportExportRoutes(app: Express) {
           );
         }
 
+        // Looked up once per import instead of once per row (issue #527): the site_metrics rows of every distinct
+        // metric in the file (one query), the submitting user, and the caller's primary organization (the
+        // fallback for a row whose team name matches none of their teams).
+        const importMetricConfigs = await storage.getMetricWriteConfigs([
+          ...new Set(csvData.map((r: any) => r?.metric).filter((m: unknown): m is string => typeof m === 'string' && m !== '')),
+        ]);
+        const importSubmitter = (await storage.getActiveUserById(measurementImportUser.id)) ?? null;
+        let primaryOrganizationLookup: Promise<string | undefined> | undefined;
+        const primaryOrganizationId = () =>
+          (primaryOrganizationLookup ??= storage
+            .getUserOrganizations(measurementImportUser.id)
+            .then((orgs) => orgs[0]?.organizationId)
+            .catch((error) => {
+              // Do not cache a failure: the next row retries, as it did before the lookup was memoized
+              primaryOrganizationLookup = undefined;
+              throw error;
+            }));
+
+        // The caller's role in each organization a row can belong to, looked up once per organization (#514)
+        const importRoleCache = new Map<string, string | undefined>();
+        const importRoleFor = async (orgId: string | undefined) => {
+          const key = orgId ?? '';
+          if (!importRoleCache.has(key)) importRoleCache.set(key, await getOrgRole(measurementImportUser, orgId));
+          return importRoleCache.get(key);
+        };
+
+        // Athletes auto-created earlier in THIS import (create_athletes), so later rows for the same
+        // name reuse them instead of creating a duplicate per row.
+        const autoCreatedAthletes = new Map<string, any>();
+
         // Process measurements import
         for (let i = 0; i < csvData.length; i++) {
           const row = csvData[i];
           const rowNum = i + 2; // Account for header row
+          // The athlete this row auto-created, until its measurement is written (rolled back if the row fails)
+          let rowAutoCreated: { id: string; key: string; name: string; createdTeamName?: string } | null = null;
           try {
             const { firstName, lastName, teamName, date, age, metric, value, units, flyInDistance, notes, gender } = row;
 
@@ -1105,10 +1276,19 @@ export function registerImportExportRoutes(app: Express) {
               teamId = team?.id; // Store teamId for measurement
             }
             if (!organizationId) {
-              // Fallback to current user's primary organization
-              const userOrgs = await storage.getUserOrganizations(currentUser.id);
-              organizationId = userOrgs[0]?.organizationId;
+              // Fallback to current user's primary organization (looked up once per import)
+              organizationId = await primaryOrganizationId();
             }
+
+            // SECURITY (issue #514): the role in THIS row's organization decides, not the session role. Only a
+            // coach / org_admin there (or a site admin) may import; Movement Quality scores are checked with the
+            // same role, before any athlete matching or creation.
+            const rowRole = await importRoleFor(organizationId);
+            if (!isMeasurementWriterRole(rowRole)) {
+              errors.push({ row: rowNum, error: "Your role in this organization cannot import measurement data" });
+              continue;
+            }
+            assertCanEnterMetric(rowRole, metric);
 
             // Use simplified athlete matching system with organization filtering
             const athletes = await storage.getAthletes({
@@ -1132,73 +1312,87 @@ export function registerImportExportRoutes(app: Express) {
             if (matchResult.type === 'none') {
               // No suitable match found
               if (measurementMode === 'create_athletes') {
-                // Auto-create athlete
-                const baseUsername = `${firstName.toLowerCase()}${lastName.toLowerCase()}`.replace(/[^a-z0-9]/g, '');
-                let username = baseUsername;
-                let counter = 1;
-                while (await storage.getUserByUsername(username)) {
-                  username = `${baseUsername}${counter}`;
-                  counter++;
-                }
+                const athleteKey = `${organizationId ?? ''}:${firstName.toLowerCase().trim()}:${lastName.toLowerCase().trim()}`;
+                const alreadyCreated = autoCreatedAthletes.get(athleteKey);
 
-                const newAthlete = await storage.createUser({
-                  username,
-                  firstName,
-                  lastName,
-                  emails: [`${username}@temp.local`],
-                  phoneNumbers: [],
-                  gender: gender || 'Not Specified',
-                  password: 'INVITATION_PENDING',
-                  isActive: false,
-                  role: 'athlete'
-                } as any);
+                if (alreadyCreated) {
+                  // Created by an earlier row of this import: reuse it rather than creating a duplicate
+                  matchedAthlete = alreadyCreated;
+                } else {
+                  // Auto-create athlete
+                  const baseUsername = `${firstName.toLowerCase()}${lastName.toLowerCase()}`.replace(/[^a-z0-9]/g, '');
+                  let username = baseUsername;
+                  let counter = 1;
+                  while (await storage.getUserByUsername(username)) {
+                    username = `${baseUsername}${counter}`;
+                    counter++;
+                  }
 
-                matchedAthlete = newAthlete;
-                createdAthletes.push({
-                  id: newAthlete.id,
-                  name: `${firstName} ${lastName}`
-                });
+                  const newAthlete = await storage.createUser({
+                    username,
+                    firstName,
+                    lastName,
+                    emails: [`${username}@temp.local`],
+                    phoneNumbers: [],
+                    gender: gender || 'Not Specified',
+                    password: 'INVITATION_PENDING',
+                    isActive: false,
+                    role: 'athlete'
+                  } as any);
 
-                // Add to team if specified
-                if (teamName) {
-                  const teams = await storage.getTeams();
-                  let team = teams.find(t => t.name?.toLowerCase().trim() === teamName.toLowerCase().trim());
+                  matchedAthlete = newAthlete;
+                  rowAutoCreated = { id: newAthlete.id, key: athleteKey, name: `${firstName} ${lastName}` };
+                  autoCreatedAthletes.set(athleteKey, newAthlete);
 
-                  // Handle team creation if needed
-                  if (!team && organizationId &&
-                      (options.teamHandling === 'auto_create_silent' ||
-                       options.teamHandling === 'auto_create_confirm')) {
-                    const newTeam = await storage.createTeam({
-                      organizationId,
-                      name: teamName,
-                      level: undefined,
-                      notes: 'Auto-created during measurement import'
-                    });
-                    team = newTeam as any;
+                  // Add to team if specified. Tenant isolation: only teams the caller may use
+                  // (allTeamsForMeasurements), never the unfiltered storage.getTeams().
+                  if (teamName) {
+                    let team = allTeamsForMeasurements.find(t => t.name?.toLowerCase().trim() === teamName.toLowerCase().trim());
 
-                    if (!createdTeams.has(teamName)) {
-                      createdTeams.set(teamName, {
-                        id: newTeam.id,
-                        name: newTeam.name,
-                        athleteCount: 0
+                    // Handle team creation if needed
+                    if (!team && organizationId &&
+                        (options.teamHandling === 'auto_create_silent' ||
+                         options.teamHandling === 'auto_create_confirm')) {
+                      const newTeam = await storage.createTeam({
+                        organizationId,
+                        name: teamName,
+                        level: undefined,
+                        notes: 'Auto-created during measurement import'
                       });
+                      team = newTeam as any;
+                      // Later rows for this team name must find the team created here
+                      allTeamsForMeasurements.push({ ...newTeam, organization: { id: organizationId } } as any);
+
+                      if (!createdTeams.has(teamName)) {
+                        createdTeams.set(teamName, {
+                          id: newTeam.id,
+                          name: newTeam.name,
+                          athleteCount: 0
+                        });
+                      }
+                      createdTeams.get(teamName)!.athleteCount++;
+                      rowAutoCreated.createdTeamName = teamName;
                     }
-                    createdTeams.get(teamName)!.athleteCount++;
+
+                    if (team) {
+                      try {
+                        await storage.addUserToTeam(newAthlete.id, team.id);
+                      } catch (error) {
+                        console.warn(`Could not add athlete to team:`, error);
+                      }
+                    }
                   }
 
-                  if (team) {
+                  // The row's organization (the team's, or the caller's fallback) owns the new athlete; an
+                  // auto-created team has no .organization, so do not depend on it.
+                  if (organizationId) {
                     try {
-                      await storage.addUserToTeam(newAthlete.id, team.id);
-                      if (team.organization?.id) {
-                        await storage.addUserToOrganization(newAthlete.id, team.organization.id, 'athlete');
-                      }
+                      await storage.addUserToOrganization(newAthlete.id, organizationId, 'athlete');
                     } catch (error) {
-                      console.warn(`Could not add athlete to team:`, error);
+                      console.warn(`Could not add athlete to organization:`, error);
                     }
                   }
                 }
-
-                warnings.push(`Row ${rowNum}: Created new athlete ${firstName} ${lastName}`);
 
               } else {
                 // match_only mode - fail if not found
@@ -1221,45 +1415,15 @@ export function registerImportExportRoutes(app: Express) {
               }
             }
 
-            // Handle review queue based on mode
-            const shouldReview = measurementMode === 'review_all' ||
-                                (measurementMode === 'review_low_confidence' &&
-                                 (matchResult.requiresManualReview || matchResult.confidence < 75));
+            // Keep the athlete auto-created above (a 'none' match has no candidate)
+            matchedAthlete = matchedAthlete ?? matchResult.candidate;
 
-            if (shouldReview && matchResult.candidate) {
-              // Add to review queue instead of processing immediately
-              const reviewItem = reviewQueue.addItem({
-                type: 'measurement',
-                originalData: row,
-                matchingCriteria,
-                suggestedMatch: matchResult.candidate ? {
-                  id: matchResult.candidate.id,
-                  firstName: matchResult.candidate.firstName,
-                  lastName: matchResult.candidate.lastName,
-                  confidence: matchResult.confidence,
-                  reason: matchResult.candidate.matchReason
-                } : undefined,
-                alternatives: matchResult.alternatives?.map(alt => ({
-                  id: alt.id,
-                  firstName: alt.firstName,
-                  lastName: alt.lastName,
-                  confidence: alt.matchScore,
-                  reason: alt.matchReason
-                })),
-                createdBy: req.session.user!.id
-              });
-
-              results.push({
-                action: 'pending_review',
-                reviewItem: {
-                  id: reviewItem.id,
-                  reason: `Low confidence match (${matchResult.confidence}%) requires manual review`
-                }
-              });
+            // Careful Import: hold ambiguous matches back instead of writing to a guessed athlete
+            if (options.holdAmbiguousMatches && matchResult.type !== 'none' &&
+                (matchResult.requiresManualReview || matchResult.confidence < 75)) {
+              errors.push({ row: rowNum, error: `Ambiguous athlete match for ${firstName} ${lastName} (confidence: ${matchResult.confidence}%): resolve and re-import` });
               continue;
             }
-
-            matchedAthlete = matchResult.candidate;
 
             if (!matchedAthlete) {
               errors.push({ row: rowNum, error: `No valid athlete match found for ${firstName} ${lastName}` });
@@ -1267,7 +1431,8 @@ export function registerImportExportRoutes(app: Express) {
             }
 
             // Add warning for medium-confidence matches that were auto-approved
-            if (matchResult.confidence < 90) {
+            // (not for an athlete created above: a 'none' match has no matchReason)
+            if (matchResult.type !== 'none' && matchResult.confidence < 90) {
               const warningMsg = `${firstName} ${lastName} matched to ${matchedAthlete.firstName} ${matchedAthlete.lastName} ` +
                 `(confidence: ${matchResult.confidence}%, reason: ${matchedAthlete.matchReason})`;
               warnings.push(warningMsg);
@@ -1280,13 +1445,25 @@ export function registerImportExportRoutes(app: Express) {
               metric,
               value: parseFloat(value),
               units: units || getDefaultUnit(metric, validationContext.metrics),
-              flyInDistance: flyInDistance && !isNaN(parseInt(flyInDistance)) ? parseInt(flyInDistance) : undefined,
+              flyInDistance: parseFlyInInput(metric, flyInDistance),
               notes: notes || undefined,
               teamId: teamId || undefined, // Pass teamId from CSV teamName lookup
               isVerified: "false"
             };
 
-            const measurement = await storage.createMeasurement(measurementData, req.session.user!.id);
+            const measurement = await storage.createMeasurement(measurementData, req.session.user!.id, undefined, {
+              submitterRole: rowRole,
+              authorizedOrganizationId: organizationId,
+              metricConfig: importMetricConfigs.get(metric),
+              submitter: importSubmitter,
+            });
+
+            // The athlete auto-created for this row now has its measurement: keep it and report it
+            if (rowAutoCreated) {
+              createdAthletes.push({ id: rowAutoCreated.id, name: rowAutoCreated.name });
+              warnings.push(`Row ${rowNum}: Created new athlete ${rowAutoCreated.name}`);
+              rowAutoCreated = null;
+            }
 
             // DERIVED METRICS: Trigger automatic calculation of derived metrics
             // This ensures metrics like BLOCK_REACH (=BLOCK_JUMP + STANDING_REACH) get calculated on import
@@ -1326,12 +1503,18 @@ export function registerImportExportRoutes(app: Express) {
             });
           } catch (error) {
             console.error('Error processing measurement row:', error);
+            // The row failed after its athlete was auto-created: do not leave an orphan behind
+            if (rowAutoCreated) {
+              autoCreatedAthletes.delete(rowAutoCreated.key);
+              await removeAutoCreatedAthlete(rowAutoCreated.id);
+              // The team stays (the CSV asked for it) but must not report an athlete that no longer exists
+              const reportedTeam = rowAutoCreated.createdTeamName ? createdTeams.get(rowAutoCreated.createdTeamName) : undefined;
+              if (reportedTeam && reportedTeam.athleteCount > 0) reportedTeam.athleteCount--;
+            }
             errors.push({ row: rowNum, error: error instanceof Error ? error.message : 'Unknown error' });
           }
         }
       }
-
-      const pendingReviewCount = results.filter(r => r.action === 'pending_review').length;
 
       // Count different action types for summary
       createdCount = results.filter(r => r.action === 'created').length;
@@ -1356,8 +1539,7 @@ export function registerImportExportRoutes(app: Express) {
           matched: matchedCount,
           failed: errors.length,
           warnings: warnings.length,
-          skipped: skippedCount,
-          pendingReview: pendingReviewCount
+          skipped: skippedCount
         },
         options
       };
@@ -1376,131 +1558,6 @@ export function registerImportExportRoutes(app: Express) {
     } catch (error) {
       console.error('Import error:', error);
       res.status(500).json({ message: "Import failed", error: error instanceof Error ? error.message : 'Unknown error' });
-    }
-  });
-
-  // Review Queue endpoints
-  app.get("/api/import/review-queue", requireAuth, async (req, res) => {
-    try {
-      const currentUser = req.session.user;
-      if (!currentUser?.id) {
-        return res.status(401).json({ message: "User not authenticated" });
-      }
-
-      // Get organization context for filtering (if needed)
-      const organizationId = (currentUser as any)?.organizationId || '';
-
-      const queue = reviewQueue.getPendingItems(organizationId);
-      res.json(queue);
-    } catch (error) {
-      console.error('Review queue error:', error);
-      res.status(500).json({ message: "Failed to fetch review queue", error: error instanceof Error ? error.message : 'Unknown error' });
-    }
-  });
-
-  app.post("/api/import/review-decision", requireAuth, async (req, res) => {
-    try {
-      const currentUser = req.session.user;
-      if (!currentUser?.id) {
-        return res.status(401).json({ message: "User not authenticated" });
-      }
-
-      const { itemId, action, selectedAthleteId, notes } = req.body;
-
-      if (!itemId || !action) {
-        return res.status(400).json({ message: "Item ID and action are required" });
-      }
-
-      // Validate action parameter
-      if (!['approve', 'reject', 'select_alternative'].includes(action)) {
-        return res.status(400).json({ message: "Invalid action. Must be 'approve', 'reject', or 'select_alternative'" });
-      }
-
-      if (action === 'select_alternative' && !selectedAthleteId) {
-        return res.status(400).json({ message: "Selected athlete ID is required for select_alternative action" });
-      }
-
-      const decision = {
-        itemId,
-        action,
-        selectedAthleteId,
-        notes
-      };
-
-      const updatedItem = reviewQueue.processDecision(decision, currentUser.id);
-
-      if (!updatedItem) {
-        return res.status(404).json({ message: "Review item not found" });
-      }
-
-      // If approved, process the measurement
-      if (updatedItem.status === 'approved') {
-        try {
-          const originalData = updatedItem.originalData;
-          const athleteId = selectedAthleteId || updatedItem.suggestedMatch?.id;
-
-          if (athleteId && updatedItem.type === 'measurement') {
-            const measurementData = {
-              userId: athleteId,
-              date: originalData.date,
-              age: originalData.age && !isNaN(parseInt(originalData.age)) ? parseInt(originalData.age) : undefined,
-              metric: originalData.metric,
-              value: parseFloat(originalData.value),
-              units: originalData.units || getDefaultUnit(originalData.metric),
-              flyInDistance: originalData.flyInDistance && !isNaN(parseInt(originalData.flyInDistance)) ? parseInt(originalData.flyInDistance) : undefined,
-              notes: originalData.notes || `Approved from review queue by ${currentUser.firstName} ${currentUser.lastName}`,
-              isVerified: "false"
-            };
-
-            const measurement = await storage.createMeasurement(measurementData, currentUser.id);
-
-            // DERIVED METRICS: Trigger automatic calculation of derived metrics
-            try {
-              const calculator = new DerivedMetricCalculator(db);
-              await calculator.processNewMeasurement(measurement, {
-                event: 'bulk_import',
-                userId: currentUser.id,
-                sourceMeasurementId: measurement.id,
-              });
-            } catch (derivedError) {
-              console.warn(`[REVIEW QUEUE] Derived metric calculation failed for measurement ${measurement.id}:`, derivedError);
-            }
-
-            // PROFILE SYNC: Update user profile weight/height when physical metrics are imported
-            try {
-              await syncPhysicalMetricToProfile(
-                athleteId,
-                measurement.metric,
-                parseFloat(measurement.value),
-                measurement.units || '',
-              );
-            } catch (syncError) {
-              console.warn(`[REVIEW QUEUE] Profile sync failed for measurement ${measurement.id}:`, syncError);
-            }
-
-            res.json({
-              success: true,
-              item: updatedItem,
-              measurement: {
-                id: measurement.id,
-                metric: measurement.metric,
-                value: measurement.value,
-                date: measurement.date
-              }
-            });
-          } else {
-            res.json({ success: true, item: updatedItem });
-          }
-        } catch (error) {
-          console.error('Error processing approved measurement:', error);
-          res.status(500).json({ message: "Failed to process approved measurement", error: error instanceof Error ? error.message : 'Unknown error' });
-        }
-      } else {
-        res.json({ success: true, item: updatedItem });
-      }
-    } catch (error) {
-      console.error('Review decision error:', error);
-      res.status(500).json({ message: "Failed to process review decision", error: error instanceof Error ? error.message : 'Unknown error' });
     }
   });
 

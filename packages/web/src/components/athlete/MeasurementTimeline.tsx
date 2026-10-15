@@ -172,7 +172,7 @@ export function MeasurementTimeline({
                   aria-label={`${displayName} measurement on ${formatDay(date)}`}
                 >
                   {/* Timeline dot */}
-                  <div className="absolute -left-[21px] top-6 w-3 h-3 rounded-full bg-primary border-2 border-background" />
+                  <div className="absolute left-[-21px] top-6 w-3 h-3 rounded-full bg-primary border-2 border-background" />
 
                   {/* Measurement card */}
                   <Card className="ml-4">

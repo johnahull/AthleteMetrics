@@ -19,6 +19,7 @@ import {
   MAX_ROWS_PER_BATCH,
   MAX_SAFE_FILE_SIZE
 } from "@/lib/csv";
+import { MEASUREMENTS_SAMPLE_CSV } from "@/components/import/sample-templates";
 import { PhotoUpload } from "@/components/photo-upload";
 import { ColumnMappingDialog } from "@/components/import/ColumnMappingDialog";
 import { PreviewTableDialog } from "@/components/import/PreviewTableDialog";
@@ -56,6 +57,7 @@ export default function ImportExportPanel() {
   // New import mode states
   const [athleteMode, setAthleteMode] = useState<AthleteImportMode>("smart_import");
   const [measurementMode, setMeasurementMode] = useState<MeasurementImportMode>("match_only");
+  const [holdAmbiguousMatches, setHoldAmbiguousMatches] = useState(false); // set only by the Careful Import preset
   const [teamHandling, setTeamHandling] = useState<TeamHandlingMode>("auto_create_confirm");
 
   // Additional options
@@ -378,6 +380,7 @@ export default function ImportExportPanel() {
     const options: ImportOptions = {
       athleteMode: importType === 'athletes' ? athleteMode : undefined,
       measurementMode: importType === 'measurements' ? measurementMode : undefined,
+      holdAmbiguousMatches: importType === 'measurements' && holdAmbiguousMatches ? true : undefined,
       teamHandling,
       updateExisting,
       skipDuplicates,
@@ -881,16 +884,7 @@ Mia,Chen,2009-03-15,2009,2027,Female,"mia.chen@email.com,mia.chen.athlete@gmail.
 Elise,Ramos,2008-08-22,2008,2026,Female,elise.ramos@email.com,512-555-0234,Soccer,64,118,Anderson HS,Thunder Elite
 Jordan,Williams,2009-01-10,2009,2027,Male,"jordan.williams@email.com,j.williams@school.edu","512-555-0345,512-555-6789","Track & Field,Basketball",68,140,Lake Travis HS,Lightning 08G`;
 
-  const measurementsTemplate = `firstName,lastName,gender,teamName,date,age,metric,value,units,flyInDistance,notes
-Mia,Chen,Female,FIERCE 08G,2025-01-20,15,FLY10_TIME,1.26,s,20,Electronic gates - outdoor track
-Elise,Ramos,Female,Thunder Elite,2025-01-19,16,VERTICAL_JUMP,21.5,in,,Jump mat measurement
-Jordan,Williams,Male,Lightning 08G,2025-01-18,15,FLY10_TIME,1.31,s,15,Manual timing - indoor facility
-Alex,Johnson,Male,FIERCE 08G,2025-01-17,17,VERTICAL_JUMP,24.2,in,,Approach jump
-Taylor,Rodriguez,Female,Thunder Elite,2025-01-16,16,AGILITY_505,2.45,s,,Left foot turn
-Morgan,Lee,Male,Lightning 08G,2025-01-15,15,T_TEST,9.8,s,,Standard protocol
-Casey,Thompson,Female,FIERCE 08G,2025-01-14,17,DASH_40YD,5.2,s,,Hand timed
-Jamie,Anderson,Not Specified,Thunder Elite,2025-01-13,16,RSI,2.1,,,Drop jump test
-Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with radar gun`;
+  const measurementsTemplate = MEASUREMENTS_SAMPLE_CSV;
 
   const copyToClipboard = (text: string, name: string) => {
     navigator.clipboard.writeText(text);
@@ -955,7 +949,7 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
                 role="button"
                 tabIndex={0}
                 aria-label={`Upload ${importType} CSV file. Press Enter or Space to browse files, or drag and drop files here`}
-                className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+                className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-primary focus:border-primary"
                 onClick={() => document.getElementById('file-upload')?.click()}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -1074,6 +1068,7 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
                         setSkipDuplicates(false);
                       } else {
                         setMeasurementMode('create_athletes');
+                        setHoldAmbiguousMatches(false);
                         setTeamHandling('auto_create_silent');
                       }
                     }}
@@ -1092,7 +1087,8 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
                         setUpdateExisting(true);
                         setSkipDuplicates(false);
                       } else {
-                        setMeasurementMode('review_low_confidence');
+                        setMeasurementMode('match_only');
+                        setHoldAmbiguousMatches(true);
                         setTeamHandling('auto_create_confirm');
                       }
                     }}
@@ -1112,6 +1108,7 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
                         setSkipDuplicates(true);
                       } else {
                         setMeasurementMode('match_only');
+                        setHoldAmbiguousMatches(false);
                         setTeamHandling('require_existing');
                       }
                     }}
@@ -1131,6 +1128,7 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
                         setSkipDuplicates(false);
                       } else {
                         setMeasurementMode('create_athletes');
+                        setHoldAmbiguousMatches(false);
                         setTeamHandling('auto_create_silent');
                       }
                     }}
@@ -1147,7 +1145,7 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
               <div className="space-y-4">
                 {/* Column Mapping Toggle */}
                 <div className="pb-3 border-b">
-                  <label className="flex items-center space-x-3 cursor-pointer">
+                  <label className="flex items-center gap-x-3 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={useColumnMapping}
@@ -1205,7 +1203,7 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
                     </label>
                     <Select
                       value={measurementMode}
-                      onValueChange={(value) => setMeasurementMode(value as MeasurementImportMode)}
+                      onValueChange={(value) => { setMeasurementMode(value as MeasurementImportMode); setHoldAmbiguousMatches(false); }}
                     >
                       <SelectTrigger data-testid="select-measurement-mode">
                         <SelectValue />
@@ -1266,7 +1264,7 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
                 {showAdvancedOptions && (
                   <div className="space-y-3 pl-4 border-l-2 border-gray-200">
                     {athleteMode !== 'create_only' && importType === "athletes" && (
-                      <label className="flex items-center space-x-2">
+                      <label className="flex items-center gap-x-2">
                         <input
                           type="checkbox"
                           checked={updateExisting}
@@ -1280,7 +1278,7 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
                       </label>
                     )}
 
-                    <label className="flex items-center space-x-2">
+                    <label className="flex items-center gap-x-2">
                       <input
                         type="checkbox"
                         checked={skipDuplicates}
@@ -1572,7 +1570,7 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
               </div>
               <div className="mt-3 flex justify-between items-center">
                 <span className="text-xs text-gray-500">
-                  <span className="font-medium">Required:</span> firstName, lastName, teamName, date (YYYY-MM-DD), metric (FLY10_TIME, VERTICAL_JUMP, AGILITY_505, AGILITY_5105, T_TEST, DASH_40YD, RSI), value (positive number) •
+                  <span className="font-medium">Required:</span> firstName, lastName, teamName, date (YYYY-MM-DD), metric (FLY10_TIME, VERTICAL_JUMP, AGILITY_505_M, AGILITY_505_YD, AGILITY_5105, T_TEST, DASH_40YD, RSI), value (positive number) •
                   <span className="font-medium">Optional:</span> age (10-25), units (s/in), flyInDistance, notes
                 </span>
                 <Button
@@ -1589,15 +1587,15 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
           </div>
 
           <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-            <div className="flex items-start space-x-3">
-              <Info className="h-5 w-5 text-blue-600 mt-1 flex-shrink-0" />
+            <div className="flex items-start gap-x-3">
+              <Info className="h-5 w-5 text-blue-600 mt-1 shrink-0" />
               <div className="text-sm text-blue-800">
                 <p className="font-medium mb-1">Import Guidelines:</p>
                 <ul className="space-y-1 text-xs">
                   <li>• <strong>Smart Contact Detection:</strong> Emails and phone numbers are automatically validated and placed in correct fields regardless of which column they're in</li>
                   <li>• Metric values: FLY10_TIME (seconds) or VERTICAL_JUMP (inches)</li>
                   <li>• Units will be auto-detected if missing (s for FLY10_TIME, in for VERTICAL_JUMP)</li>
-                  <li>• FlyInDistance optional field (in yards) for FLY10_TIME measurements only</li>
+                  <li>• FLY10 run-in: the metric code sets it (FLY10_TIME_RI5/RI10/RI15/RI30, FLY10_TIME = 20 yd). flyInDistance is optional and, if supplied, must match the code</li>
                   <li>• Date format: YYYY-MM-DD</li>
                   <li>• Athlete matching is case-sensitive</li>
                   <li>• Phone numbers support US format: (555) 123-4567, 555-123-4567, or 5551234567</li>
@@ -1676,8 +1674,8 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
           </div>
 
           <div className="mt-6 p-4 bg-yellow-50 rounded-lg">
-            <div className="flex items-start space-x-3">
-              <AlertTriangle className="h-5 w-5 text-yellow-600 mt-1 flex-shrink-0" />
+            <div className="flex items-start gap-x-3">
+              <AlertTriangle className="h-5 w-5 text-yellow-600 mt-1 shrink-0" />
               <div className="text-sm text-yellow-800">
                 <p className="font-medium mb-1">Export Notes:</p>
                 <ul className="space-y-1 text-xs">

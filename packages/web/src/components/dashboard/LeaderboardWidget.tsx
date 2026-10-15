@@ -111,7 +111,7 @@ export function LeaderboardWidget({
 
             {/* Rankings skeleton */}
             {[...Array(5)].map((_, i) => (
-              <div key={i} className="flex items-center space-x-3 animate-pulse">
+              <div key={i} className="flex items-center gap-x-3 animate-pulse">
                 <div className="w-8 h-8 bg-gray-200 rounded-full"></div>
                 <div className="flex-1">
                   <div className="h-4 bg-gray-200 rounded w-32 mb-2"></div>
@@ -275,7 +275,7 @@ export function LeaderboardWidget({
             <button
               key={entry.athleteId}
               type="button"
-              className="w-full flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer text-left"
+              className="w-full flex items-center gap-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer text-left"
               onClick={() => handleAthleteClick(entry.athleteId)}
               aria-label={`View profile for ${entry.athleteName}, ranked ${entry.rank}${entry.isPersonalBest ? ', personal best' : ''}`}
             >

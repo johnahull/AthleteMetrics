@@ -19,6 +19,7 @@ import { registerMetricRoutes } from "../metric-routes";
 import { db } from "../../db";
 import { siteMetrics } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { purgeTestRows } from "../../../../tests/helpers/purge-test-rows";
 
 // Mock session data for testing
 let mockSessionUser: any = null;
@@ -130,26 +131,9 @@ describe("GET /api/metrics/active", () => {
   });
 
   afterAll(async () => {
-    // Cleanup test data
-    try {
-      if (activeMetricCode) {
-        await db.delete(siteMetrics).where(eq(siteMetrics.code, activeMetricCode));
-      }
-      if (inactiveMetricCode) {
-        await db.delete(siteMetrics).where(eq(siteMetrics.code, inactiveMetricCode));
-      }
-      if (testSiteAdminId) {
-        await storage.deleteUser(testSiteAdminId);
-      }
-      if (testRegularUserId) {
-        await storage.deleteUser(testRegularUserId);
-      }
-      if (testAthleteId) {
-        await storage.deleteUser(testAthleteId);
-      }
-    } catch (error) {
-      console.error("Cleanup error:", error);
-    }
+    if (activeMetricCode) await db.delete(siteMetrics).where(eq(siteMetrics.code, activeMetricCode));
+    if (inactiveMetricCode) await db.delete(siteMetrics).where(eq(siteMetrics.code, inactiveMetricCode));
+    await purgeTestRows({ userIds: [testSiteAdminId, testRegularUserId, testAthleteId].filter((id): id is string => !!id) });
   });
 
   beforeEach(() => {

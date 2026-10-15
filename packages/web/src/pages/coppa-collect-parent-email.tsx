@@ -107,7 +107,7 @@ export default function CoppaCollectParentEmail() {
           </Alert>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
+            <div className="grid gap-y-2">
               <Label htmlFor="parentEmail">
                 Parent or Guardian Email <span className="text-red-500">*</span>
               </Label>

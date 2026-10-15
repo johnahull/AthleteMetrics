@@ -322,13 +322,13 @@ export function MeasurementProgressChart({
               onValueChange={(value) => onShowBestOnlyChange(value === 'best')}
               className="flex gap-4"
             >
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-x-2">
                 <RadioGroupItem value="best" id="show-best" />
                 <Label htmlFor="show-best" className="text-sm cursor-pointer">
                   Best per date
                 </Label>
               </div>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-x-2">
                 <RadioGroupItem value="all" id="show-all" />
                 <Label htmlFor="show-all" className="text-sm cursor-pointer">
                   All entries

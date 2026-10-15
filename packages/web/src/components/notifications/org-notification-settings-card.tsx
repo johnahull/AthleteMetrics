@@ -174,7 +174,7 @@ export function OrgNotificationSettingsCard({ organizationId }: OrgNotificationS
         <CardContent className="space-y-6">
           {/* Master Toggle */}
           <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
+            <div className="grid gap-y-0.5">
               <Label htmlFor="org-push-enabled">Enable Push Notifications</Label>
               <p className="text-sm text-muted-foreground">
                 Allow push notifications for users in this organization
@@ -274,7 +274,7 @@ export function OrgNotificationSettingsCard({ organizationId }: OrgNotificationS
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
+            <div className="grid gap-y-2">
               <Label htmlFor="digest-time">Delivery Time</Label>
               <Input
                 id="digest-time"
@@ -284,7 +284,7 @@ export function OrgNotificationSettingsCard({ organizationId }: OrgNotificationS
                 disabled={!orgSettings.wellnessDigestEnabled}
               />
             </div>
-            <div className="space-y-2">
+            <div className="grid gap-y-2">
               <Label htmlFor="digest-timezone">Timezone</Label>
               <Select
                 value={orgSettings.digestTimezone}
@@ -306,7 +306,7 @@ export function OrgNotificationSettingsCard({ organizationId }: OrgNotificationS
           </div>
 
           <div className="flex items-center justify-between pt-2">
-            <div className="space-y-0.5">
+            <div className="grid gap-y-0.5">
               <Label htmlFor="skip-weekends">Skip Weekends</Label>
               <p className="text-sm text-muted-foreground">
                 Don't send digest on Saturdays and Sundays

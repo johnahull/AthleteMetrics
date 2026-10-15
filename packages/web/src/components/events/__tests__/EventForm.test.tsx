@@ -29,12 +29,28 @@ beforeAll(() => {
 
 // Mock MetricsSelector component
 vi.mock('../MetricsSelector', () => ({
-  MetricsSelector: ({ onSelectionChange }: { onSelectionChange?: (metrics: any[]) => void }) => (
+  MetricsSelector: ({ selectedMetrics, onMetricsChange }: { selectedMetrics: any[]; onMetricsChange: (metrics: any[]) => void }) => (
     <div data-testid="metrics-selector">
-      <button type="button" onClick={() => onSelectionChange?.([{ code: 'VERTICAL_JUMP', order: 0 }])}>
+      <span data-testid="selected-codes">{selectedMetrics.map((m) => m.code).join(',')}</span>
+      <button type="button" onClick={() => onMetricsChange([...selectedMetrics, { code: 'VERTICAL_JUMP', label: 'Vertical jump', isRequired: false }])}>
         Add Metric
       </button>
     </div>
+  ),
+}));
+
+// Mock the eval template picker (AM-FEAT-019 P5)
+vi.mock('../EvalTemplatePicker', () => ({
+  EvalTemplatePicker: ({ onChange, onSelectedMetricsChange }: { onChange: (v: unknown) => void; onSelectedMetricsChange: (f: (l: any[]) => any[]) => void }) => (
+    <button
+      type="button"
+      onClick={() => {
+        onChange({ templateId: 'tpl-1', includeOptional: [] });
+        onSelectedMetricsChange((list) => [{ code: 'DASH_10YD', label: '10-yard dash', isRequired: true, fromTemplate: true }, ...list]);
+      }}
+    >
+      Pick template
+    </button>
   ),
 }));
 
@@ -259,6 +275,56 @@ describe('EventForm', () => {
       render(<EventForm {...defaultProps} />, { wrapper: createWrapper() });
 
       expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
+    });
+  });
+
+  describe('Eval template', () => {
+    async function goToMetricsStep(user: ReturnType<typeof userEvent.setup>) {
+      await user.type(screen.getByLabelText(/event name/i), 'Test Event');
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      await user.type(screen.getByLabelText(/start date/i), tomorrow.toISOString().split('T')[0]);
+      await user.click(screen.getByRole('button', { name: /next/i }));
+      await waitFor(() => expect(screen.getByText('Registration Settings')).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /next/i }));
+      await waitFor(() => expect(screen.getByText('Event Metrics')).toBeInTheDocument());
+    }
+
+    it('offers the template picker on the metrics step when creating', async () => {
+      const user = userEvent.setup();
+      render(<EventForm {...defaultProps} />, { wrapper: createWrapper() });
+      await goToMetricsStep(user);
+      expect(screen.getByRole('button', { name: 'Pick template' })).toBeInTheDocument();
+    });
+
+    it('shows the template\'s tests in the metrics list and submits the final list, not the template choice', async () => {
+      const user = userEvent.setup();
+      const onSubmit = vi.fn();
+      render(<EventForm {...defaultProps} onSubmit={onSubmit} />, { wrapper: createWrapper() });
+      await goToMetricsStep(user);
+      await user.click(screen.getByRole('button', { name: 'Add Metric' }));
+      await user.click(screen.getByRole('button', { name: 'Pick template' }));
+      expect(screen.getByTestId('selected-codes')).toHaveTextContent('DASH_10YD,VERTICAL_JUMP');
+      await user.click(screen.getByRole('button', { name: /next/i }));
+      await waitFor(() => expect(screen.getByText('Results Visibility')).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /create event|publish/i }));
+
+      await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+      const data = onSubmit.mock.calls[0][0];
+      expect(data.selectedMetrics.map((m: any) => m.code)).toEqual(['DASH_10YD', 'VERTICAL_JUMP']);
+      expect(data).not.toHaveProperty('evalTemplate');
+    });
+
+    it('keeps the list when the user steps away from the metrics step and back', async () => {
+      const user = userEvent.setup();
+      render(<EventForm {...defaultProps} />, { wrapper: createWrapper() });
+      await goToMetricsStep(user);
+      await user.click(screen.getByRole('button', { name: 'Pick template' }));
+      await user.click(screen.getByRole('button', { name: /next/i }));
+      await waitFor(() => expect(screen.getByText('Results Visibility')).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: /previous|back/i }));
+      await waitFor(() => expect(screen.getByText('Event Metrics')).toBeInTheDocument());
+      expect(screen.getByTestId('selected-codes')).toHaveTextContent('DASH_10YD');
     });
   });
 

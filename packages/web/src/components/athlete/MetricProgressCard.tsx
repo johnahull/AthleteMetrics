@@ -64,6 +64,8 @@ interface MetricProgressCardProps {
   /** Map of metric code → human label, used to render the derived-metric footer. */
   dependentMetricLabels?: Record<string, string>;
   explanation?: MetricExplanation;
+  /** 'tracking' metrics have no better/worse direction, so no improving/declining trend is shown. */
+  metricType?: 'lower_is_better' | 'higher_is_better' | 'tracking';
 }
 
 /**
@@ -104,13 +106,15 @@ export function MetricProgressCard({
   dependentMetrics = [],
   dependentMetricLabels,
   explanation,
+  metricType,
 }: MetricProgressCardProps) {
   const confettiTriggered = useRef(false);
   const { getLabel: getMetricLabel } = useMetricLabels();
+  const isTracking = metricType === 'tracking';
 
   // Trigger confetti for recent PRs
   useEffect(() => {
-    if (showConfetti && !confettiTriggered.current && personalRecord?.isRecent) {
+    if (showConfetti && !isTracking && !confettiTriggered.current && personalRecord?.isRecent) {
       confettiTriggered.current = true;
       try {
         confetti({
@@ -123,7 +127,7 @@ export function MetricProgressCard({
         console.warn('Failed to trigger confetti:', error);
       }
     }
-  }, [personalRecord?.isRecent, showConfetti, personalRecord]);
+  }, [showConfetti, personalRecord, isTracking]);
 
   // Filter to best measurement per date for sparkline and trend
   const filteredMeasurements = useMemo(
@@ -133,8 +137,8 @@ export function MetricProgressCard({
 
   // Calculate trend data using filtered measurements
   const trendData = useMemo(
-    () => calculateMetricTrend(filteredMeasurements, metric),
-    [filteredMeasurements, metric]
+    () => (metricType === 'tracking' ? null : calculateMetricTrend(filteredMeasurements, metric)),
+    [filteredMeasurements, metric, metricType]
   );
 
   // Get sparkline data (last 10 measurements, filtered to best per date)
@@ -165,7 +169,7 @@ export function MetricProgressCard({
   // Best-in-last-90-days: client-side comparison from already-fetched history.
   // Promoted from Phase 2 during design review — coaches care about recent PRs.
   const isBestInLast90Days = useMemo(() => {
-    if (!mostRecentMeasurement) return false;
+    if (!mostRecentMeasurement || isTracking) return false;
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
@@ -186,7 +190,7 @@ export function MetricProgressCard({
       const mNum = parseFloat(String(m.value));
       return lowerIsBetter ? currentNum <= mNum : currentNum >= mNum;
     });
-  }, [measurements, metric, mostRecentMeasurement]);
+  }, [measurements, metric, mostRecentMeasurement, isTracking]);
 
   const bestValue = useMemo(
     () => getBestValue(measurements, metric),
@@ -353,7 +357,9 @@ export function MetricProgressCard({
               </p>
             )}
 
-          {/* PR Display - uses personalRecord if available, otherwise bestValue */}
+          {/* PR Display - uses personalRecord if available, otherwise bestValue.
+              Hidden for tracking metrics: they have no "best" direction. */}
+          {!isTracking && (
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1.5">
               <Trophy className="h-4 w-4 text-yellow-600" />
@@ -377,7 +383,7 @@ export function MetricProgressCard({
                 ({new Date(personalRecord.date).toLocaleDateString()})
               </span>
             )}
-            {personalRecord?.isRecent && (
+            {personalRecord?.isRecent && !isTracking && (
               <Badge
                 data-testid="new-pr-badge"
                 className="bg-green-500 text-white text-xs"
@@ -386,9 +392,10 @@ export function MetricProgressCard({
               </Badge>
             )}
           </div>
+          )}
 
           {/* Improvement text */}
-          {personalRecord?.improvementText && (
+          {personalRecord?.improvementText && !isTracking && (
             <p className="text-sm text-green-600 font-medium mt-1 ml-6">
               {personalRecord.improvementText}
             </p>

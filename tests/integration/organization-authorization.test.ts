@@ -25,6 +25,7 @@ vi.mock('../../packages/api/vite.js', () => ({
 }));
 
 import { registerRoutes } from '../../packages/api/routes';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 
 const PASSWORD = 'TestPass123!';
 
@@ -84,10 +85,7 @@ describe('Organization route authorization (org-admin gate)', () => {
   });
 
   afterAll(async () => {
-    for (const id of trackedUserIds) {
-      try { await storage.deleteUser(id); } catch { /* ignore */ }
-    }
-    try { await storage.deleteOrganization(org.id); } catch { /* ignore */ }
+    await purgeTestRows({ userIds: trackedUserIds, orgIds: [org?.id] });
   });
 
   describe('POST /api/organizations/:id/users', () => {

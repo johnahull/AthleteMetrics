@@ -85,7 +85,7 @@ export function LastSetContextLine({ athleteId, metric }: LastSetContextLineProp
       className="w-full text-left text-xs text-gray-500 hover:text-gray-800 hover:bg-gray-50 rounded px-2 py-1.5 -mx-1 flex items-center gap-2 transition-colors"
       title="Click to copy these values into the form"
     >
-      <History className="h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
+      <History className="h-3.5 w-3.5 shrink-0 text-gray-400" />
       <span>
         Last{" "}
         <span className="font-medium text-gray-700">{metric.label}</span>:{" "}

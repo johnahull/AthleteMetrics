@@ -23,6 +23,8 @@ import { validatePassword, getPasswordRequirementsText } from '@shared/password-
 import { validateUsername, getUsernameRequirementsText } from '@shared/username-validation';
 import { OAuthButtons } from '@/components/auth/oauth-buttons';
 import { isUnder13, isMinorAge } from '@shared/coppa-utils';
+import { joinCodeFromRedirect } from '@/utils/safe-redirect';
+import { joinOrganizationByCode, type JoinResult } from '@/lib/join-by-code';
 
 interface PasswordRequirement {
   label: string;
@@ -45,6 +47,8 @@ export default function Register() {
   // access logs from the SAME browsing session.
   const prefilledEmail = searchParams.get('email') || '';
   const prefilledRef = searchParams.get('ref') || '';
+  // /join/:code sends logged-out visitors here with ?redirect=/join/CODE
+  const joinCode = isParentMode ? null : joinCodeFromRedirect(searchParams.get('redirect'));
 
   // Dead-end gate: parent mode without any valid context (no email invite, no consent link)
   const parentModeBlocked = isParentMode && !prefilledEmail && !prefilledRef;
@@ -52,6 +56,8 @@ export default function Register() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState(false);
+  const [joinResult, setJoinResult] = useState<JoinResult | null>(null);
+  const [joinError, setJoinError] = useState('');
   const [consentEmailSent, setConsentEmailSent] = useState(false);
   const [consentParentEmail, setConsentParentEmail] = useState('');
 
@@ -270,6 +276,16 @@ export default function Register() {
         return;
       }
 
+      // The API opened a session, so the join page's membership request can be made now.
+      // A failure must not undo the account: show it and link back to the join page.
+      if (joinCode) {
+        try {
+          setJoinResult(await joinOrganizationByCode(joinCode));
+        } catch (joinErr) {
+          setJoinError(joinErr instanceof Error ? joinErr.message : 'Could not join the organization');
+        }
+      }
+
       // Success!
       setSuccess(true);
       toast({
@@ -365,6 +381,27 @@ export default function Register() {
             <p className="text-sm text-muted-foreground text-center">
               Click the link in the email to verify your account and start using AthleteMetrics.
             </p>
+            {joinResult && (
+              <Alert>
+                <CheckCircle2 className="h-4 w-4" />
+                <AlertDescription>
+                  {joinResult.status === 'approved'
+                    ? `You've joined ${joinResult.organizationName}.`
+                    : `Your request to join ${joinResult.organizationName} was submitted and is pending approval.`}
+                </AlertDescription>
+              </Alert>
+            )}
+            {joinError && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  {joinError}{' '}
+                  <a href={`/join/${joinCode}`} className="underline">
+                    Try joining again
+                  </a>
+                </AlertDescription>
+              </Alert>
+            )}
             <p className="text-xs text-muted-foreground text-center">
               Didn't receive the email? Check your spam folder or{' '}
               <button
@@ -452,7 +489,7 @@ export default function Register() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Name fields */}
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
+              <div className="grid gap-y-2">
                 <Label htmlFor="firstName">First Name</Label>
                 <Input
                   id="firstName"
@@ -463,7 +500,7 @@ export default function Register() {
                   required
                 />
               </div>
-              <div className="space-y-2">
+              <div className="grid gap-y-2">
                 <Label htmlFor="lastName">Last Name</Label>
                 <Input
                   id="lastName"
@@ -478,7 +515,7 @@ export default function Register() {
 
             {/* Date of Birth — required for COPPA age gate (athlete mode only) */}
             {!isParentMode && (
-              <div className="space-y-2">
+              <div className="grid gap-y-2">
                 <Label htmlFor="birthDate">Date of Birth</Label>
                 <Input
                   id="birthDate"
@@ -493,7 +530,7 @@ export default function Register() {
 
             {/* Parent/Guardian Email — shown for all minor athletes (under-18) */}
             {!isParentMode && minor && (
-              <div className="space-y-2">
+              <div className="grid gap-y-2">
                 <Label htmlFor="parentEmail">
                   Parent or Guardian Email {under13 && <span className="text-red-500">*</span>}
                 </Label>
@@ -522,7 +559,7 @@ export default function Register() {
             )}
 
             {/* Email field */}
-            <div className="space-y-2">
+            <div className="grid gap-y-2">
               <Label htmlFor="email">Email</Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
@@ -552,7 +589,7 @@ export default function Register() {
             </div>
 
             {/* Username field */}
-            <div className="space-y-2">
+            <div className="grid gap-y-2">
               <Label htmlFor="username">Username</Label>
               <div className="relative">
                 <User className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
@@ -582,7 +619,7 @@ export default function Register() {
             </div>
 
             {/* Password field */}
-            <div className="space-y-2">
+            <div className="grid gap-y-2">
               <Label htmlFor="password">Password</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
@@ -624,7 +661,7 @@ export default function Register() {
             </div>
 
             {/* Confirm Password field */}
-            <div className="space-y-2">
+            <div className="grid gap-y-2">
               <Label htmlFor="confirmPassword">Confirm Password</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
@@ -651,7 +688,7 @@ export default function Register() {
             </div>
 
             {/* Legal Acceptance Checkbox */}
-            <div className="flex items-start space-x-2">
+            <div className="flex items-start gap-x-2">
               <Checkbox
                 id="termsAccepted"
                 checked={formData.termsAccepted}

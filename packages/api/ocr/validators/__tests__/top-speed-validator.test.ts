@@ -150,7 +150,7 @@ describe('Validation consistency across metrics', () => {
     const timeMetrics = [
       { metric: 'FLY10_TIME', lowValue: '0.9', highValue: '2.6' },
       { metric: 'DASH_40YD', lowValue: '3.9', highValue: '6.1' },
-      { metric: 'AGILITY_505', lowValue: '1.9', highValue: '3.6' },
+      { metric: 'AGILITY_505_UNRESOLVED', lowValue: '1.9', highValue: '3.6' },
       { metric: 'T_TEST', lowValue: '7.9', highValue: '12.1' }
     ];
 

@@ -14,6 +14,10 @@ export default defineConfig({
     globals: true,
     environment: 'happy-dom',
     setupFiles: ['./tests/setup/integration-setup.ts'],
+    // Fails the run when an integration test leaves organizations, users, teams or measurements behind (issue #539).
+    // Covers this lane only: packages/api/__tests__ and packages/api/routes/__tests__ run in the unit lane.
+    // SKIP_LEAK_CHECK=1 opts out; see tests/setup/leak-check-global.ts.
+    globalSetup: ['./tests/setup/leak-check-global.ts'],
     hookTimeout: 30000,
     testTimeout: 10000,
     clearMocks: true,
@@ -41,6 +45,8 @@ export default defineConfig({
       'tests/migration/**/*.{test,spec}.{ts,tsx}',
 
       // Other tests that require real database
+      // global-athlete-*: whole-table deletes, so they must not run in parallel (issue #538)
+      'packages/api/__tests__/global-athlete-*.test.ts',
       'tests/import/import-flow-integration.test.ts',
       'tests/import/import-security.test.ts',
       'tests/email/**/*.{test,spec}.{ts,tsx}',

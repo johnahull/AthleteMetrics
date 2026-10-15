@@ -366,7 +366,7 @@ export function BenchmarkSetDetail({ organizationId, setId }: BenchmarkSetDetail
       {isSiteSet && (
         <Card className="bg-blue-50 border-blue-200">
           <CardContent className="flex items-center gap-3 py-4">
-            <Info className="h-5 w-5 text-blue-600 flex-shrink-0" />
+            <Info className="h-5 w-5 text-blue-600 shrink-0" />
             <p className="text-sm text-blue-800">
               This is a site-level benchmark set managed by site administrators.
               You can view the benchmarks in this set, but editing is not available.

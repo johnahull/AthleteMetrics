@@ -15,6 +15,7 @@ import {
   eventRegistrations,
   eventMetrics,
   siteMetrics,
+  EVENT_DATA_ENTRY_REGISTRATION_STATUSES,
   type Measurement,
 } from '@shared/schema';
 import { eq, and, inArray, isNull, sql, desc, ne, or, gt } from 'drizzle-orm';
@@ -747,7 +748,7 @@ export class DeviceImportService {
       .where(and(
         eq(eventRegistrations.eventId, eventId),
         eq(events.organizationId, organizationId), // Verify event belongs to this org
-        inArray(eventRegistrations.status, ['approved', 'checked_in', 'completed']),
+        inArray(eventRegistrations.status, [...EVENT_DATA_ENTRY_REGISTRATION_STATUSES]),
       ));
 
     return registrations;

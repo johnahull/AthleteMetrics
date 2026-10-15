@@ -14,6 +14,7 @@
  */
 
 import { format } from 'date-fns';
+import { toCalendarDate } from '@/utils/date-utils';
 import type { TimeframeConfig, AthleteRanking } from '@/types/report-types';
 
 // ============================================================================
@@ -76,7 +77,8 @@ function resolveFallbackLabel(metric: string): string {
     FLY10_TIME: '10-Yard Fly Time',
     VERTICAL_JUMP: 'Vertical Jump',
     DASH_40YD: '40-Yard Dash',
-    AGILITY_505: '5-0-5 Agility',
+    AGILITY_505_M: '5-0-5 Agility (m)',
+    AGILITY_505_YD: '5-0-5 Agility (yd)',
     AGILITY_5105: '5-10-5 Agility',
     T_TEST: 'T-Test Agility',
     TOP_SPEED: 'Top Speed',
@@ -97,13 +99,12 @@ function resolveFallbackLabel(metric: string): string {
  */
 export function formatDateRange(timeframe: TimeframeConfig): string {
   if (timeframe.type === 'custom') {
-    const start = timeframe.customStart
-      ? format(new Date(timeframe.customStart), 'MMM d, yyyy')
-      : '';
-    const end = timeframe.customEnd
-      ? format(new Date(timeframe.customEnd), 'MMM d, yyyy')
-      : '';
-    return `${start} - ${end}`;
+    // customStart/customEnd are calendar dates (YYYY-MM-DD), not instants
+    const fmt = (value?: string) => {
+      const day = toCalendarDate(value);
+      return day ? format(day, 'MMM d, yyyy') : '';
+    };
+    return `${fmt(timeframe.customStart)} - ${fmt(timeframe.customEnd)}`;
   }
 
   switch (timeframe.preset) {

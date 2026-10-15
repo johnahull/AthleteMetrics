@@ -57,7 +57,7 @@ test.describe('Measurement Entry Tests', () => {
     // Select measurement type
     const metricSelect = page.locator('[data-testid="select-metric"], select[name="metric"], [placeholder*="Select metric" i]');
     await metricSelect.click();
-    await page.click('text="FLY10_TIME", text="10-Yard Fly"').catch(() => {
+    await page.getByRole('option', { name: '10-Yard Fly, 20 yd run-in', exact: true }).click().catch(() => {
       // Fallback selector
       page.locator('option:has-text("FLY10")').click();
     });
@@ -104,7 +104,7 @@ test.describe('Measurement Entry Tests', () => {
 
     const metricSelect = page.locator('[data-testid="select-metric"], select[name="metric"]');
     await metricSelect.click();
-    await page.click('text="FLY10_TIME", text="10-Yard Fly"').catch(() => page.locator('option:has-text("FLY10")').click());
+    await page.getByRole('option', { name: '10-Yard Fly, 20 yd run-in', exact: true }).click().catch(() => page.locator('option:has-text("FLY10")').click());
 
     await page.fill('[data-testid="input-value"], input[name="value"]', testMeasurement.value.toString());
 

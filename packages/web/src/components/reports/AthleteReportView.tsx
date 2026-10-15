@@ -23,6 +23,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { ReportLoadingState } from "./ReportLoadingState";
 import { ReportErrorState } from "./ReportErrorState";
+import { EvalReportView } from "./EvalReportView";
 import {
   Table,
   TableBody,
@@ -59,7 +60,8 @@ import {
 } from "./report-utils";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { useTeams } from "@/hooks/use-teams";
-import type { Report, TeamReportData, TeamStatistic, AthleteRanking, PdfFormat, IndividualReportData, BenchmarkComparison } from "@/types/report-types";
+import type { Report, TeamReportData, TeamStatistic, AthleteRanking, PdfFormat, IndividualReportData, BenchmarkComparison, TeamReportConfig } from "@/types/report-types";
+import { isGroupComparisonOn } from "@shared/report-charts";
 
 interface AthleteReportViewProps {
   report: Report;
@@ -69,6 +71,10 @@ export function AthleteReportView({ report }: AthleteReportViewProps) {
   // Render appropriate view based on report type
   if (report.reportType === "team") {
     return <AthleteTeamReportView report={report} />;
+  }
+  // AM-FEAT-019: an eval renders from its saved model (the PDF route is coach-only, so no download here)
+  if (report.reportType === "eval") {
+    return <EvalReportView report={report} showDownload={false} />;
   }
   return <AthleteIndividualReportView report={report} />;
 }
@@ -137,6 +143,7 @@ function AthleteIndividualReportView({ report }: { report: Report }) {
   }
 
   const { athlete, metricLabels, metricUnits } = reportData;
+  const showComparison = isGroupComparisonOn(reportData.reportConfig);
   // Backstop label resolution with the org's currently-active metric labels —
   // see the matching block in AthleteTeamReportView below for rationale.
   const { getLabel } = useMetricLabels();
@@ -212,8 +219,8 @@ function AthleteIndividualReportView({ report }: { report: Report }) {
                 <TableRow>
                   <TableHead>Metric</TableHead>
                   <TableHead>Best Result</TableHead>
-                  <TableHead>Group Average</TableHead>
-                  <TableHead>Percentile</TableHead>
+                  {showComparison && <TableHead>Group Average</TableHead>}
+                  {showComparison && <TableHead>Percentile</TableHead>}
                   <TableHead>Benchmark Comparisons</TableHead>
                 </TableRow>
               </TableHeader>
@@ -235,20 +242,24 @@ function AthleteIndividualReportView({ report }: { report: Report }) {
                               : `${value.toFixed(2)}${unit ? ` ${unit}` : ""}`)
                           : "N/A"}
                       </TableCell>
-                      <TableCell>
-                        {teamAverage !== undefined
-                          ? (isFly10Metric(metricCode)
-                              ? formatFly10Dual(teamAverage)
-                              : `${teamAverage.toFixed(2)}${unit ? ` ${unit}` : ""}`)
-                          : "N/A"}
-                      </TableCell>
-                      <TableCell>
-                        {percentile !== undefined ? (
-                          <Badge>{percentile.toFixed(1)}th percentile</Badge>
-                        ) : (
-                          "N/A"
-                        )}
-                      </TableCell>
+                      {showComparison && (
+                        <TableCell>
+                          {teamAverage !== undefined
+                            ? (isFly10Metric(metricCode)
+                                ? formatFly10Dual(teamAverage)
+                                : `${teamAverage.toFixed(2)}${unit ? ` ${unit}` : ""}`)
+                            : "N/A"}
+                        </TableCell>
+                      )}
+                      {showComparison && (
+                        <TableCell>
+                          {percentile !== undefined ? (
+                            <Badge>{percentile.toFixed(1)}th percentile</Badge>
+                          ) : (
+                            "N/A"
+                          )}
+                        </TableCell>
+                      )}
                       <TableCell>
                         {benchmarks.length > 0 ? (
                           <div className="space-y-1">
@@ -419,7 +430,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-muted-foreground">{labels.teams}</p>
-                <p className="text-base font-semibold mt-1 break-words">{getTeamNames(report.config as { filters?: { teamIds?: string[] } }, teams, labels.teams)}</p>
+                <p className="text-base font-semibold mt-1 wrap-break-word">{getTeamNames(report.config as { filters?: { teamIds?: string[] } }, teams, labels.teams)}</p>
               </div>
             </div>
 
@@ -429,7 +440,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-muted-foreground">Testing Period</p>
-                <p className="text-base font-semibold mt-1">{formatDateRange(report.config.timeframe)}</p>
+                <p className="text-base font-semibold mt-1">{formatDateRange((report.config as TeamReportConfig).timeframe)}</p>
               </div>
             </div>
 
@@ -451,7 +462,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-muted-foreground">Metrics</p>
-                <p className="text-base font-semibold mt-1 break-words">{getMetricsList(teamStatistics, metricLabels)}</p>
+                <p className="text-base font-semibold mt-1 wrap-break-word">{getMetricsList(teamStatistics, metricLabels)}</p>
               </div>
             </div>
           </div>

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { TeamService } from '../team-service';
 import { db } from '../../db';
-import { teams, organizations, userTeams, users } from '@shared/schema';
+import { teams, organizations, userTeams, users, userOrganizations } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 
 describe('TeamService', () => {
@@ -46,6 +46,7 @@ describe('TeamService', () => {
     try {
       if (testUserId) {
         await db.delete(userTeams).where(eq(userTeams.userId, testUserId));
+        await db.delete(userOrganizations).where(eq(userOrganizations.userId, testUserId));
       }
       if (testOrgId) {
         await db.delete(teams).where(eq(teams.organizationId, testOrgId));
@@ -491,6 +492,77 @@ describe('TeamService', () => {
       expect(result.id).toBe(historical.id);
       expect(result.isActive).toBe(true);
       expect(result.leftAt).toBeNull();
+    });
+
+    describe('requireAthleteRole option', () => {
+      const setup = async (role: string) => {
+        const [team] = await db.insert(teams).values({
+          name: `Athlete Role Test ${role}`,
+          organizationId: testOrgId,
+        }).returning();
+        await db.insert(userOrganizations).values({ userId: testUserId, organizationId: testOrgId, role });
+        return team;
+      };
+
+      it('rejects a user whose role in the organization is not athlete', async () => {
+        const team = await setup('coach');
+
+        await expect(
+          teamService.addUserToTeam(testUserId, team.id, testOrgId, { requireAthleteRole: true })
+        ).rejects.toThrow('Access denied - user is not an athlete in this organization');
+
+        const memberships = await db.select().from(userTeams).where(eq(userTeams.teamId, team.id));
+        expect(memberships).toHaveLength(0);
+      });
+
+      it('adds an athlete', async () => {
+        const team = await setup('athlete');
+
+        const result = await teamService.addUserToTeam(testUserId, team.id, testOrgId, { requireAthleteRole: true });
+
+        expect(result.isActive).toBe(true);
+      });
+
+      it('adds a non-athlete when the option is not set', async () => {
+        const team = await setup('coach');
+
+        const result = await teamService.addUserToTeam(testUserId, team.id, testOrgId);
+
+        expect(result.isActive).toBe(true);
+      });
+    });
+
+    // The bulk route also refuses archived teams up front; this is the authoritative check on the locked team row
+    describe('rejectArchivedTeam option', () => {
+      const setupArchived = async () => {
+        const [team] = await db.insert(teams).values({
+          name: 'Archived Team Test',
+          organizationId: testOrgId,
+          isArchived: true,
+          archivedAt: new Date(),
+        }).returning();
+        await db.insert(userOrganizations).values({ userId: testUserId, organizationId: testOrgId, role: 'athlete' });
+        return team;
+      };
+
+      it('rejects an archived team inside the transaction', async () => {
+        const team = await setupArchived();
+
+        await expect(
+          teamService.addUserToTeam(testUserId, team.id, testOrgId, { rejectArchivedTeam: true })
+        ).rejects.toThrow('Cannot add athletes to an archived team');
+
+        const memberships = await db.select().from(userTeams).where(eq(userTeams.teamId, team.id));
+        expect(memberships).toHaveLength(0);
+      });
+
+      it('adds to an archived team when the option is not set', async () => {
+        const team = await setupArchived();
+
+        const result = await teamService.addUserToTeam(testUserId, team.id, testOrgId);
+
+        expect(result.isActive).toBe(true);
+      });
     });
   });
 

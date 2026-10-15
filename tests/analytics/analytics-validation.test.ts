@@ -12,7 +12,7 @@ describe('Analytics Validation Logic', () => {
         'FLY10_TIME',
         'VERTICAL_JUMP',
         'DASH_40YD',
-        'AGILITY_505',
+        'AGILITY_505_YD',
         'AGILITY_5105',
         'T_TEST',
         'RSI'

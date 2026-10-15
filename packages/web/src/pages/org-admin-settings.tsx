@@ -597,7 +597,7 @@ export default function OrgAdminSettings() {
                 name="aiEnabled"
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
+                    <div className="grid gap-y-0.5">
                       <FormLabel className="text-base">Enable Coaching Insights</FormLabel>
                       <FormDescription>
                         Use AI-powered coaching insights in reports
@@ -619,7 +619,7 @@ export default function OrgAdminSettings() {
                 name="aiPromptContext"
                 render={({ field }) => (
                   <FormItem className="rounded-lg border p-4">
-                    <div className="space-y-0.5">
+                    <div className="grid gap-y-0.5">
                       <FormLabel className="text-base">AI Prompt Context</FormLabel>
                       <FormDescription>
                         Customize how AI generates coaching insights for your reports. Describe your training philosophy, methodology, or any context the AI should consider.
@@ -683,7 +683,7 @@ export default function OrgAdminSettings() {
                 name="wellnessEnabled"
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
+                    <div className="grid gap-y-0.5">
                       <FormLabel className="text-base">Enable Wellness Module</FormLabel>
                       <FormDescription>
                         Allow users to create and complete wellness questionnaires
@@ -705,7 +705,7 @@ export default function OrgAdminSettings() {
                 name="eventsEnabled"
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
+                    <div className="grid gap-y-0.5">
                       <FormLabel className="text-base">Enable Events Module</FormLabel>
                       <FormDescription>
                         Enable event management for combines, camps, and testing days

@@ -114,7 +114,7 @@ interface Sample { metric: string; units: string; values: number[] }
 const SAMPLES: Sample[] = [
   { metric: 'FLY10_TIME', units: 's', values: [1.42, 1.39, 1.37, 1.35, 1.33] },
   { metric: 'VERTICAL_JUMP', units: 'in', values: [24.5, 25.0, 25.5, 26.0, 26.5] },
-  { metric: 'AGILITY_505', units: 's', values: [2.55, 2.52, 2.50, 2.48, 2.46] },
+  { metric: 'AGILITY_505_M', units: 's', values: [2.55, 2.52, 2.50, 2.48, 2.46] },
   { metric: 'DASH_40YD', units: 's', values: [5.10, 5.05, 4.98, 4.92, 4.88] },
 ];
 

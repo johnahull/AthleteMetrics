@@ -20,6 +20,7 @@ import {
 } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { ReportService } from "../services/report-service";
+import { purgeTestRows } from "../../../tests/helpers/purge-test-rows";
 
 describe("Event Reports", () => {
   const timestamp = Date.now().toString();
@@ -283,38 +284,12 @@ describe("Event Reports", () => {
       await db.delete(events).where(eq(events.id, testEventId));
     }
 
-    // Clean up non-event measurements
-    if (testOrgId) {
-      await db.delete(measurements).where(
-        and(
-          eq(measurements.organizationId, testOrgId),
-          eq(measurements.eventId, null as any)
-        )
-      );
-    }
-
-    if (testAthlete1Id) {
-      await db.delete(userOrganizations).where(eq(userOrganizations.userId, testAthlete1Id));
-      await db.delete(users).where(eq(users.id, testAthlete1Id));
-    }
-    if (testAthlete2Id) {
-      await db.delete(userOrganizations).where(eq(userOrganizations.userId, testAthlete2Id));
-      await db.delete(users).where(eq(users.id, testAthlete2Id));
-    }
-    if (testAthlete3Id) {
-      await db.delete(userOrganizations).where(eq(userOrganizations.userId, testAthlete3Id));
-      await db.delete(users).where(eq(users.id, testAthlete3Id));
-    }
-
-    if (testCoachId) {
-      await db.delete(userOrganizations).where(eq(userOrganizations.userId, testCoachId));
-      await db.delete(users).where(eq(users.id, testCoachId));
-    }
-
-    if (testOrgId) {
-      await db.delete(organizationMetrics).where(eq(organizationMetrics.organizationId, testOrgId));
-      await db.delete(organizations).where(eq(organizations.id, testOrgId));
-    }
+    // purgeTestRows also removes the measurements of these users and of the org (the old cleanup compared
+    // eventId to null with eq(), which never matches, so non-event measurements stayed behind)
+    await purgeTestRows({
+      userIds: [testAthlete1Id, testAthlete2Id, testAthlete3Id, testCoachId].filter((id): id is string => !!id),
+      orgIds: testOrgId ? [testOrgId] : [],
+    });
   });
 
   describe("Team Report with Event Filter", () => {

@@ -122,7 +122,7 @@ export function PasswordStrengthMeter({
           <ul className="space-y-1">
             {strength.feedback.map((feedback, index) => (
               <li key={index} className="flex items-center gap-2 text-sm text-amber-600">
-                <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                <AlertCircle className="w-3 h-3 shrink-0" />
                 {feedback}
               </li>
             ))}
@@ -140,9 +140,9 @@ export function PasswordStrengthMeter({
               return (
                 <li key={index} className="flex items-center gap-2 text-sm">
                   {isMet ? (
-                    <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                    <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
                   ) : (
-                    <X className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <X className="w-4 h-4 text-gray-400 shrink-0" />
                   )}
                   <span className={isMet ? 'text-green-700' : 'text-gray-600'}>
                     {requirement}

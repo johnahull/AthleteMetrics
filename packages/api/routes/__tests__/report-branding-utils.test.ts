@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { hexToRgb, isSafeLogoUrl, fetchLogoBase64 } from '../report-branding-utils';
+import { ServerResponse, IncomingMessage } from 'http';
+import { Socket } from 'net';
+import { hexToRgb, isSafeLogoUrl, fetchLogoBase64, sanitizeFilename } from '../report-branding-utils';
 
 describe('hexToRgb', () => {
   it('converts a valid 6-digit hex color', () => {
@@ -363,5 +365,45 @@ describe('fetchLogoBase64', () => {
   it('returns null when fetch throws (e.g. redirect error or timeout)', async () => {
     vi.stubGlobal('fetch', () => Promise.reject(new Error('redirect')));
     expect(await fetchLogoBase64('https://example.com/logo.png')).toBeNull();
+  });
+});
+
+describe('sanitizeFilename', () => {
+  it('leaves a plain ASCII name unchanged', () => {
+    expect(sanitizeFilename('Sam Rivera - Eval Report - 2026-05-01')).toBe('Sam Rivera - Eval Report - 2026-05-01');
+  });
+
+  it('replaces an en dash and CJK characters so Content-Disposition cannot throw', () => {
+    const out = sanitizeFilename('Sam – Eval – 山田');
+    expect(out).toMatch(/^[\x20-\x7e]+$/);
+    expect(out).toContain('Sam');
+  });
+
+  it('removes CR/LF, quotes and path characters', () => {
+    const out = sanitizeFilename('a\r\nb"c/../d');
+    expect(out).not.toMatch(/[\r\n"/]/);
+  });
+
+  it('folds accents and replaces the en dash so the header is valid (José – Team Report)', () => {
+    const out = sanitizeFilename('José – Team Report');
+    expect(out).toMatch(/^[\x20-\x7e]+$/);
+    expect(out.startsWith('Jose')).toBe(true);
+    expect(out).toContain('Team Report');
+    expect(out).not.toContain('–');
+  });
+
+  it('folds accents in Müller and builds a Content-Disposition header Node accepts', () => {
+    const out = sanitizeFilename('Müller');
+    expect(out).toBe('Muller');
+    const res = new ServerResponse(new IncomingMessage(new Socket()));
+    for (const name of ['José – Team Report', 'Müller', 'Plain Name']) {
+      expect(() =>
+        res.setHeader('Content-Disposition', `attachment; filename="${sanitizeFilename(name)}.pdf"`),
+      ).not.toThrow();
+    }
+  });
+
+  it('falls back to "report" for an empty name', () => {
+    expect(sanitizeFilename('')).toBe('report');
   });
 });

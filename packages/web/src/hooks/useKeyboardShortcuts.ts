@@ -4,12 +4,18 @@
  */
 
 import { useEffect } from 'react';
-import type { EnhancedUser } from '@/lib/types/user';
-import { hasPermission } from '@shared/role-types';
+import type { EnhancedUser, UserOrganization } from '@/lib/types/user';
+import { anyOrgGrants } from '@/lib/org-roles';
 import { shouldIgnoreEvent } from '@/lib/hotkeys';
 
 export interface UseKeyboardShortcutsOptions {
   user: EnhancedUser | null;
+  /**
+   * The user's memberships (useAuth().userOrganizations); they decide CREATE_MEASUREMENTS.
+   * Optional, but omitting it (or passing null) fails closed: no org-gated shortcut fires
+   * (site admins excepted).
+   */
+  userOrganizations?: UserOrganization[] | null;
   onMeasurement?: () => void;
   onHelp?: () => void;
   onEscape?: () => void;
@@ -25,7 +31,7 @@ export interface UseKeyboardShortcutsOptions {
  * Automatically ignores events when typing in input fields
  */
 export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): void {
-  const { user, onMeasurement, onHelp, onEscape } = options;
+  const { user, userOrganizations, onMeasurement, onHelp, onEscape } = options;
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -39,7 +45,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): void
       // Ctrl+M or Cmd+M - Open measurement modal
       if ((event.ctrlKey || event.metaKey) && key === 'm') {
         // Check if user has CREATE_MEASUREMENTS permission
-        if (user && hasUserPermission(user, 'CREATE_MEASUREMENTS')) {
+        if (user && hasUserPermission(user, userOrganizations, 'CREATE_MEASUREMENTS')) {
           event.preventDefault();
           onMeasurement?.();
         }
@@ -67,24 +73,18 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): void
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [user, onMeasurement, onHelp, onEscape]);
+  }, [user, userOrganizations, onMeasurement, onHelp, onEscape]);
 }
 
 /**
- * Helper function to check if user has a specific permission
- * Works with both site admins and role-based users
+ * Whether the user has the permission in at least one of their organizations (site admins
+ * always do). No single organization is in scope for an app-wide shortcut, so this asks every
+ * membership rather than the session role; the API checks the row's org.
  */
-function hasUserPermission(user: EnhancedUser, permission: 'CREATE_MEASUREMENTS'): boolean {
-  // Site admins have all permissions
-  if (user.isSiteAdmin) {
-    return true;
-  }
-
-  // Check role-based permissions
-  const role = user.currentOrganization?.role || user.role;
-  if (!role) {
-    return false;
-  }
-
-  return hasPermission(role, permission);
+function hasUserPermission(
+  user: EnhancedUser,
+  userOrganizations: UserOrganization[] | null | undefined,
+  permission: 'CREATE_MEASUREMENTS'
+): boolean {
+  return anyOrgGrants(user, userOrganizations, permission);
 }

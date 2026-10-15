@@ -307,6 +307,7 @@ describe('MeasurementService - FilterMode', () => {
         filterMode: 'all',
         orgIds: testOrg1Id,
         includeUnverified: true,
+        personalOwnerId: testAthleteId, // non-admin: personal rows are bound to the requester
       }, false); // Non-admin context
 
       // Should return measurements from org1 + personal
@@ -368,10 +369,19 @@ describe('MeasurementService - FilterMode', () => {
         filterMode: 'all',
         orgIds: `${testOrg1Id},${testOrg2Id}`, // Both valid orgs
         includeUnverified: true,
+        personalOwnerId: testAthleteId, // non-admin: personal rows are bound to the requester
       }, false); // Non-admin context
 
       // Should return measurements from both orgs + personal
       expect(result.measurements).toHaveLength(3);
+    });
+  });
+
+  describe('Security: personal rows are bound to the requester', () => {
+    it('requires personalOwnerId for a non-admin filterMode query', async () => {
+      await expect(
+        measurementService.getMeasurements({ filterMode: 'personal', includeUnverified: true }, false),
+      ).rejects.toThrow(/personalOwnerId is required/);
     });
   });
 

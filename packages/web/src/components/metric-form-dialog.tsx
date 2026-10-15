@@ -34,7 +34,7 @@ import { useCreateSiteMetric, useUpdateSiteMetric } from "@/lib/metrics-api";
 import type { SiteMetric } from "@shared/schema";
 import { OrganizationTypeMultiSelect } from "@/components/organization-type-multi-select";
 import { SportMultiSelect } from "@/components/sport-multi-select";
-import { organizationTypeEnum, metricTypeEnum } from "@shared/schema";
+import { organizationTypeEnum, metricTypeEnum, derivedCalculationConfigSchema } from "@shared/schema";
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -64,7 +64,7 @@ const metricFormSchema = z.object({
   sportAssociations: z.array(z.string()).optional(),
   isDerived: z.boolean().default(false),
   formula: z.string().max(500).optional(),
-  calculationConfig: z.object({
+  calculationConfig: derivedCalculationConfigSchema.extend({
     dateMatchStrategy: z.enum(['same_date', 'latest_before', 'closest']).default('same_date'),
     maxDateDifference: z.number().int().min(1).max(365).optional(),
     missingSourceBehavior: z.enum(['skip', 'error']).default('skip'),
@@ -552,7 +552,7 @@ export default function MetricFormDialog({
                 name="isDerived"
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
+                    <div className="grid gap-y-0.5">
                       <FormLabel className="text-base">Derived Metric</FormLabel>
                       <FormDescription>
                         Calculate this metric's value from other metrics

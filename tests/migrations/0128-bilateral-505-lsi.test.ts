@@ -3,15 +3,19 @@
  *
  * Three layers of validation:
  *   1. Static SQL file analysis  — runs unconditionally, no DB needed
- *   2. Live DB row inspection    — gracefully skips if migration not applied
- *   3. Formula evaluation        — verifies LSI formula via evaluateFormula()
+ *   2. Formula evaluation        — verifies LSI formula via evaluateFormula()
+ *   3. DB state inspection       — self-contained: runs inside a rolled-back
+ *      transaction on the canonical pre-0144 fixture (helpers/pre0144-fixture.ts),
+ *      once as-is (pre-0144) and once with the exact 0144 up file applied. It never
+ *      depends on ambient DB contents and FAILS (never silently returns) when a
+ *      row is missing. Skipped only when DATABASE_URL is unset.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { db } from '../../packages/api/db';
-import { sql } from 'drizzle-orm';
+import postgres from 'postgres';
+import { ensurePre0144State, benchmarkMinMaxScale } from './helpers/pre0144-fixture';
 import { evaluateFormula, validateFormula } from '../../packages/api/services/formula-service';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -20,8 +24,14 @@ const projectRoot = path.resolve(__dirname, '../..');
 
 const UP_SQL_PATH = path.join(projectRoot, 'migrations', '0128_add_bilateral_505_lsi_metrics.sql');
 const DOWN_SQL_PATH = path.join(projectRoot, 'migrations', '0128_add_bilateral_505_lsi_metrics_down.sql');
+const UP_0144_PATH = path.join(projectRoot, 'migrations', '0144_split_505_by_protocol.sql');
+const DOWN_0144_PATH = path.join(projectRoot, 'migrations', '0144_split_505_by_protocol_down.sql');
+const DATABASE_URL = process.env.DATABASE_URL;
+const SCREENING_SET_ID = 'set-screening-female-bilateral-asymmetry';
 
 const LSI_FORMULA = '(min(AGILITY_505_L, AGILITY_505_R) / max(AGILITY_505_L, AGILITY_505_R)) * 100';
+// After migration 0144 the LSI metric lives under the metric-protocol code (AM-FEAT-016).
+const LSI_FORMULA_M = '(min(AGILITY_505_M_L, AGILITY_505_M_R) / max(AGILITY_505_M_L, AGILITY_505_M_R)) * 100';
 const LSI_TIER_GROUP_UUID = 'a505a505-0128-4505-9151-aaaaaaaaaaaa';
 
 describe('Migration 0128: Bilateral 5-0-5 + LSI Screening', () => {
@@ -226,144 +236,182 @@ describe('Migration 0128: Bilateral 5-0-5 + LSI Screening', () => {
       expect(lsi).toBeGreaterThanOrEqual(95);
     });
   });
+});
 
-  // ==========================================================================
-  // Layer 3 — Live DB inspection (skips if migration not applied)
-  // ==========================================================================
-  describe('Database state (when migration is applied)', () => {
-    it('AGILITY_505_LSI is registered as a derived metric', async () => {
-      let result;
-      try {
-        result = await db.execute(sql`
-          SELECT code, is_derived, formula, dependent_metrics, calculation_config, metric_type, unit
-            FROM site_metrics
-           WHERE code = 'AGILITY_505_LSI'
-        `);
-      } catch (error) {
-        console.warn('DB query failed (DB may not be reachable):', (error as Error).message);
-        return;
-      }
-      if (!result.rows || result.rows.length === 0) {
-        console.warn('AGILITY_505_LSI not found - migration 0128 may not have been applied');
-        return;
-      }
-      const row = result.rows[0] as any;
-      expect(row.is_derived).toBe(true);
-      expect(row.formula).toBe(LSI_FORMULA);
-      expect(row.dependent_metrics).toEqual(['AGILITY_505_L', 'AGILITY_505_R']);
-      expect(row.calculation_config).toMatchObject({ dateMatchStrategy: 'same_date' });
-      expect(row.metric_type).toBe('higher_is_better');
-      expect(row.unit).toBe('%');
+// ============================================================================
+// Layer 3 — DB state, self-contained (rolled-back transaction per test)
+// ============================================================================
+class Rollback extends Error {}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Tx = any;
+
+describe.skipIf(!DATABASE_URL)('Migration 0128: database state (self-contained fixture, rolled back)', () => {
+  let pg: postgres.Sql;
+  let up0144: string;
+  let down0144: string;
+
+  beforeAll(async () => {
+    up0144 = fs.readFileSync(UP_0144_PATH, 'utf-8');
+    down0144 = fs.readFileSync(DOWN_0144_PATH, 'utf-8');
+    pg = postgres(DATABASE_URL as string, {
+      max: 1,
+      connect_timeout: 10,
+      onnotice: () => {},
+      ssl: DATABASE_URL!.includes('localhost') ? false : 'require',
     });
+    // Unreachable DB -> throws -> every test in this block fails (never a silent pass).
+    await pg`select 1`;
+  }, 30000);
+
+  afterAll(async () => {
+    if (pg) await pg.end({ timeout: 5 });
+  });
+
+  /**
+   * Run fn on the canonical pre-0144 fixture ('pre-0144') or on that fixture with the
+   * exact 0144 up file applied ('post-0144'). Always rolled back.
+   * NOTE: postgres-js returns an array from a query (no `.rows`).
+   */
+  async function inState(
+    state: 'pre-0144' | 'post-0144',
+    fn: (tx: Tx) => Promise<void>,
+    seed?: (tx: Tx) => Promise<void>,
+  ) {
+    try {
+      await pg.begin(async (tx) => {
+        await ensurePre0144State(tx, down0144);
+        if (seed) await seed(tx); // extra rows on the old codes, before 0144 repoints them
+        if (state === 'post-0144') await tx.unsafe(up0144);
+        await fn(tx);
+        throw new Rollback();
+      });
+    } catch (e) {
+      if (!(e instanceof Rollback)) throw e;
+    }
+  }
+
+  const TIMEOUT = 60000;
+
+  describe.each(['pre-0144', 'post-0144'] as const)('state: %s', (state) => {
+    const post = state === 'post-0144';
+    const lsiCode = post ? 'AGILITY_505_M_LSI' : 'AGILITY_505_LSI';
+    const lsiFormula = post ? LSI_FORMULA_M : LSI_FORMULA;
+    const legs = post ? ['AGILITY_505_M_L', 'AGILITY_505_M_R'] : ['AGILITY_505_L', 'AGILITY_505_R'];
+
+    it('the LSI metric is registered as a derived metric under the code of this state', async () => {
+      await inState(state, async (tx) => {
+        const [oldN] = await tx`select count(*)::int as n from site_metrics where code = 'AGILITY_505_LSI'`;
+        const [newN] = await tx`select count(*)::int as n from site_metrics where code = 'AGILITY_505_M_LSI'`;
+        expect(oldN.n).toBe(post ? 0 : 1);
+        expect(newN.n).toBe(post ? 1 : 0);
+        const rows = await tx`
+          select code, is_derived, formula, dependent_metrics, calculation_config, metric_type, unit
+            from site_metrics where code = ${lsiCode}`;
+        expect(rows).toHaveLength(1);
+        const row = rows[0];
+        expect(row.is_derived).toBe(true);
+        expect(row.formula).toBe(lsiFormula);
+        expect(row.dependent_metrics).toEqual(legs);
+        expect(row.calculation_config).toMatchObject({ dateMatchStrategy: 'same_date' });
+        expect(row.metric_type).toBe('higher_is_better');
+        expect(row.unit).toBe('%');
+      });
+    }, TIMEOUT);
 
     it('screening benchmark set exists with Female gender', async () => {
-      let result;
-      try {
-        result = await db.execute(sql`
-          SELECT id, gender, is_template, is_active
-            FROM benchmark_sets
-           WHERE id = 'set-screening-female-bilateral-asymmetry'
-        `);
-      } catch (error) {
-        console.warn('DB query failed:', (error as Error).message);
-        return;
-      }
-      if (!result.rows || result.rows.length === 0) {
-        console.warn('Screening set not found - migration 0128 may not have been applied');
-        return;
-      }
-      const row = result.rows[0] as any;
-      expect(row.gender).toBe('Female');
-      expect(row.is_template).toBe(true);
-      expect(row.is_active).toBe(true);
-    });
+      await inState(state, async (tx) => {
+        const rows = await tx`select id, gender, is_template, is_active from benchmark_sets where id = ${SCREENING_SET_ID}`;
+        expect(rows).toHaveLength(1);
+        expect(rows[0].gender).toBe('Female');
+        expect(rows[0].is_template).toBe(true);
+        expect(rows[0].is_active).toBe(true);
+      });
+    }, TIMEOUT);
 
     it('exactly 3 LSI tier rows share the LSI tier_group_id', async () => {
-      let result;
-      try {
-        result = await db.execute(sql`
-          SELECT tier_name, tier_order, min_value, max_value, tier_color
-            FROM site_benchmarks
-           WHERE tier_group_id = ${LSI_TIER_GROUP_UUID}::uuid
-           ORDER BY tier_order
-        `);
-      } catch (error) {
-        console.warn('DB query failed:', (error as Error).message);
-        return;
-      }
-      if (!result.rows || result.rows.length === 0) {
-        console.warn('LSI tier rows not found - migration 0128 may not have been applied');
-        return;
-      }
-      expect(result.rows).toHaveLength(3);
+      await inState(state, async (tx) => {
+        const rows = await tx`
+          select tier_name, tier_order, min_value, max_value, tier_color
+            from site_benchmarks
+           where tier_group_id = ${LSI_TIER_GROUP_UUID}::uuid
+           order by tier_order`;
+        expect(rows).toHaveLength(3);
+        const [normal, monitor, elevated] = rows;
+        expect(normal.tier_name).toBe('Normal');
+        expect(normal.tier_color).toBe('green');
+        expect(Number(normal.min_value)).toBe(95);
+        expect(Number(normal.max_value)).toBe(100);
 
-      const [normal, monitor, elevated] = result.rows as any[];
-      expect(normal.tier_name).toBe('Normal');
-      expect(normal.tier_color).toBe('green');
-      expect(Number(normal.min_value)).toBe(95);
-      expect(Number(normal.max_value)).toBe(100);
+        expect(monitor.tier_name).toBe('Monitor');
+        expect(monitor.tier_color).toBe('yellow');
+        expect(Number(monitor.min_value)).toBe(90);
+        // min/max are numeric(10,3) on migration-built DBs but numeric(10,2) on a drizzle-push DB
+        // (schema.ts drift), where 94.999 / 89.999 store as 95 / 90.
+        const scale = await benchmarkMinMaxScale(tx);
+        expect(Number(monitor.max_value)).toBe(scale === 3 ? 94.999 : 95);
 
-      expect(monitor.tier_name).toBe('Monitor');
-      expect(monitor.tier_color).toBe('yellow');
-      expect(Number(monitor.min_value)).toBe(90);
-      expect(Number(monitor.max_value)).toBe(94.999);
+        expect(elevated.tier_name).toBe('Elevated Risk');
+        expect(elevated.tier_color).toBe('red');
+        expect(Number(elevated.min_value)).toBe(0);
+        expect(Number(elevated.max_value)).toBe(scale === 3 ? 89.999 : 90);
+      });
+    }, TIMEOUT);
 
-      expect(elevated.tier_name).toBe('Elevated Risk');
-      expect(elevated.tier_color).toBe('red');
-      expect(Number(elevated.min_value)).toBe(0);
-      expect(Number(elevated.max_value)).toBe(89.999);
-    });
+    it(`LSI tiers are wired into the screening set (${post ? '3 metric + 3 yard twin' : '3'} benchmark_set_items)`, async () => {
+      await inState(state, async (tx) => {
+        const [{ n: hasMLsi }] = await tx`select count(*)::int as n from site_metrics where code = 'AGILITY_505_M_LSI'`;
+        const rows = await tx`
+          select benchmark_id, benchmark_type, display_order
+            from benchmark_set_items
+           where set_id = ${SCREENING_SET_ID}
+           order by display_order, benchmark_id`;
+        // 0144 adds a yard-protocol twin (<id>-yd) of each tier to the same set
+        expect(rows).toHaveLength(hasMLsi > 0 ? 6 : 3);
+        const ids = rows.map((r: { benchmark_id: string }) => r.benchmark_id);
+        for (const t of ['normal', 'monitor', 'elevated']) {
+          expect(ids).toContain(`bench-screening-asym-lsi-${t}`);
+          if (hasMLsi > 0) expect(ids).toContain(`bench-screening-asym-lsi-${t}-yd`);
+        }
+      });
+    }, TIMEOUT);
 
-    it('LSI tiers are wired into the screening set (3 benchmark_set_items)', async () => {
-      let result;
-      try {
-        result = await db.execute(sql`
-          SELECT bsi.benchmark_id, bsi.benchmark_type, bsi.display_order
-            FROM benchmark_set_items bsi
-           WHERE bsi.set_id = 'set-screening-female-bilateral-asymmetry'
-           ORDER BY bsi.display_order
-        `);
-      } catch (error) {
-        console.warn('DB query failed:', (error as Error).message);
-        return;
-      }
-      if (!result.rows || result.rows.length === 0) {
-        console.warn('Screening set items not found - migration 0128 may not have been applied');
-        return;
-      }
-      expect(result.rows).toHaveLength(3);
-      const ids = result.rows.map((r: any) => r.benchmark_id);
-      expect(ids).toContain('bench-screening-asym-lsi-normal');
-      expect(ids).toContain('bench-screening-asym-lsi-monitor');
-      expect(ids).toContain('bench-screening-asym-lsi-elevated');
-    });
-
-    it('per-leg AGILITY_505_L / _R rows match AGILITY_505 row count (when AM-FEAT-007 applied)', async () => {
-      let result;
-      try {
-        result = await db.execute(sql`
-          SELECT metric_code, COUNT(*)::int AS n
-            FROM site_benchmarks
-           WHERE metric_code IN ('AGILITY_505', 'AGILITY_505_L', 'AGILITY_505_R')
-             AND tier_group_id IS NOT NULL
-           GROUP BY metric_code
-        `);
-      } catch (error) {
-        console.warn('DB query failed:', (error as Error).message);
-        return;
-      }
-      if (!result.rows || result.rows.length === 0) {
-        console.warn('No AGILITY_505 tier rows found - AM-FEAT-007 may not have been applied');
-        return;
-      }
-      const counts = Object.fromEntries(
-        (result.rows as any[]).map((r) => [r.metric_code, r.n]),
-      );
-      // If AM-FEAT-007 is applied, _L and _R counts must match the AGILITY_505 count
-      if (counts['AGILITY_505']) {
-        expect(counts['AGILITY_505_L']).toBe(counts['AGILITY_505']);
-        expect(counts['AGILITY_505_R']).toBe(counts['AGILITY_505']);
-      }
-    });
+    it('per-leg tier rows match the plain 5-0-5 tier row count (0128 Block E projection)', async () => {
+      const seed = async (tx: Tx) => {
+        // Seed a balanced tiered set on the plain code plus its per-leg copies exactly as
+        // 0128 Block E projects them; for post-0144 the exact 0144 up file then repoints them.
+        // Ambient rows are included in the counts, so the equality below can never be vacuous.
+        const plain = 'AGILITY_505';
+        const tg = '00000000-0128-4000-8000-000000000001';
+        await tx.unsafe(`
+          insert into site_benchmarks (id, metric_code, name, description, comparison_operator, min_value, max_value,
+            tier_group_id, tier_order, tier_name, tier_color, gender, is_system_default, is_active, display_order) values
+            ('fx128-t1', '${plain}', 'FX 128 Tier One', 'one', 'range', 2.300, 2.499, '${tg}'::uuid, 1, 'Elite', 'green', 'Female', true, true, 905),
+            ('fx128-t2', '${plain}', 'FX 128 Tier Two', 'two', 'range', 2.500, 2.800, '${tg}'::uuid, 2, 'Good', 'yellow', 'Female', true, true, 906);
+          insert into site_benchmarks (id, metric_code, name, description, comparison_operator, min_value, max_value,
+            tier_group_id, tier_order, tier_name, tier_color, gender, is_system_default, is_active, display_order)
+          select src.id || '-l', 'AGILITY_505_L', src.name || ' (Left)', src.description, src.comparison_operator, src.min_value, src.max_value,
+            md5(src.tier_group_id::text || '-l')::uuid, src.tier_order, src.tier_name, src.tier_color, src.gender,
+            src.is_system_default, src.is_active, src.display_order
+          from site_benchmarks src where src.id in ('fx128-t1', 'fx128-t2');
+          insert into site_benchmarks (id, metric_code, name, description, comparison_operator, min_value, max_value,
+            tier_group_id, tier_order, tier_name, tier_color, gender, is_system_default, is_active, display_order)
+          select src.id || '-r', 'AGILITY_505_R', src.name || ' (Right)', src.description, src.comparison_operator, src.min_value, src.max_value,
+            md5(src.tier_group_id::text || '-r')::uuid, src.tier_order, src.tier_name, src.tier_color, src.gender,
+            src.is_system_default, src.is_active, src.display_order
+          from site_benchmarks src where src.id in ('fx128-t1', 'fx128-t2');`);
+      };
+      await inState(state, async (tx) => {
+        const codes = post ? ['AGILITY_505_M', 'AGILITY_505_M_L', 'AGILITY_505_M_R'] : ['AGILITY_505', 'AGILITY_505_L', 'AGILITY_505_R'];
+        const rows = await tx`
+          select metric_code, count(*)::int as n
+            from site_benchmarks
+           where metric_code = any(${codes}) and tier_group_id is not null
+           group by metric_code`;
+        const counts = Object.fromEntries(rows.map((r: { metric_code: string; n: number }) => [r.metric_code, r.n]));
+        expect(counts[codes[0]]).toBeGreaterThanOrEqual(2);
+        expect(counts[codes[1]]).toBe(counts[codes[0]]);
+        expect(counts[codes[2]]).toBe(counts[codes[0]]);
+      }, seed);
+    }, TIMEOUT);
   });
 });

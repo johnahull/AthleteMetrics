@@ -16,7 +16,8 @@ describe('metric-trend-utils', () => {
     it('should identify time-based metrics as lower is better', () => {
       expect(isLowerIsBetter('FLY10_TIME')).toBe(true);
       expect(isLowerIsBetter('DASH_40YD')).toBe(true);
-      expect(isLowerIsBetter('AGILITY_505')).toBe(true);
+      expect(isLowerIsBetter('AGILITY_505_M')).toBe(true);
+      expect(isLowerIsBetter('AGILITY_505_YD')).toBe(true);
       expect(isLowerIsBetter('T_TEST')).toBe(true);
     });
 

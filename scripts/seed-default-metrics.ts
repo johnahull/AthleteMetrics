@@ -25,14 +25,74 @@ async function seedMetrics() {
     const metrics = [
       {
         code: 'FLY10_TIME',
-        label: '10-Yard Fly Time',
+        label: '10-Yard Fly, 20 yd run-in',
         category: 'speed',
         unit: 's',
         metricType: 'lower_is_better' as const,
         isSystemDefault: true,
         isActive: true,
         displayOrder: 1,
-        description: 'Time to cover 10 yards after a flying start, measuring maximum velocity.',
+        description: 'Time to cover 10 yards after a 20-yard run-in, measuring maximum velocity. Fly times from other run-in distances are separate metrics and are not comparable.',
+        sportAssociations: null, // Available to all sports
+        decimalPrecision: 3,
+        color: 'blue',
+        icon: 'Clock',
+      },
+      {
+        code: 'FLY10_TIME_RI5',
+        label: '10-Yard Fly, 5 yd run-in',
+        category: 'speed',
+        unit: 's',
+        metricType: 'lower_is_better' as const,
+        isSystemDefault: true,
+        isActive: true,
+        displayOrder: 1,
+        description: 'Time to cover 10 yards after a 5-yard run-in. A shorter run-in means the athlete is still accelerating, so this time is not comparable to fly times from other run-in distances.',
+        sportAssociations: null, // Available to all sports
+        decimalPrecision: 3,
+        color: 'blue',
+        icon: 'Clock',
+      },
+      {
+        code: 'FLY10_TIME_RI10',
+        label: '10-Yard Fly, 10 yd run-in',
+        category: 'speed',
+        unit: 's',
+        metricType: 'lower_is_better' as const,
+        isSystemDefault: true,
+        isActive: true,
+        displayOrder: 1,
+        description: 'Time to cover 10 yards after a 10-yard run-in. A shorter run-in means the athlete is still accelerating, so this time is not comparable to fly times from other run-in distances.',
+        sportAssociations: null, // Available to all sports
+        decimalPrecision: 3,
+        color: 'blue',
+        icon: 'Clock',
+      },
+      {
+        code: 'FLY10_TIME_RI15',
+        label: '10-Yard Fly, 15 yd run-in',
+        category: 'speed',
+        unit: 's',
+        metricType: 'lower_is_better' as const,
+        isSystemDefault: true,
+        isActive: true,
+        displayOrder: 1,
+        description: 'Time to cover 10 yards after a 15-yard run-in. A shorter run-in means the athlete is still accelerating, so this time is not comparable to fly times from other run-in distances.',
+        sportAssociations: null, // Available to all sports
+        decimalPrecision: 3,
+        color: 'blue',
+        icon: 'Clock',
+      },
+      {
+        code: 'FLY10_TIME_RI30',
+        label: '10-Yard Fly, 30 yd run-in',
+        category: 'speed',
+        unit: 's',
+        metricType: 'lower_is_better' as const,
+        isSystemDefault: true,
+        isActive: true,
+        displayOrder: 1,
+        description: 'Time to cover 10 yards after a 30-yard run-in. A shorter run-in means the athlete is still accelerating, so this time is not comparable to fly times from other run-in distances.',
         sportAssociations: null, // Available to all sports
         decimalPrecision: 3,
         color: 'blue',
@@ -41,7 +101,7 @@ async function seedMetrics() {
       {
         code: 'VERTICAL_JUMP',
         label: 'Vertical Jump',
-        category: 'power',
+        category: 'Power',
         unit: 'in',
         metricType: 'higher_is_better' as const,
         isSystemDefault: true,
@@ -54,8 +114,23 @@ async function seedMetrics() {
         icon: 'ArrowUp',
       },
       {
-        code: 'AGILITY_505',
-        label: '5-0-5 Agility',
+        code: 'AGILITY_505_M',
+        label: '5-0-5 Agility (m)',
+        category: 'agility',
+        unit: 's',
+        metricType: 'lower_is_better' as const,
+        isSystemDefault: true,
+        isActive: true,
+        displayOrder: 3,
+        description: '5-0-5 agility test: sprint 5 meters, turn 180 degrees, sprint 5 meters back.',
+        sportAssociations: null, // Available to all sports
+        decimalPrecision: 3,
+        color: 'green',
+        icon: 'Zap',
+      },
+      {
+        code: 'AGILITY_505_YD',
+        label: '5-0-5 Agility (yd)',
         category: 'agility',
         unit: 's',
         metricType: 'lower_is_better' as const,
@@ -116,8 +191,8 @@ async function seedMetrics() {
       {
         code: 'RSI',
         label: 'Reactive Strength Index',
-        category: 'power',
-        unit: '',
+        category: 'Power',
+        unit: 'ratio',
         metricType: 'higher_is_better' as const,
         isSystemDefault: true,
         isActive: true,
@@ -168,7 +243,7 @@ async function seedMetrics() {
         });
     }
 
-    console.log('✅ Successfully seeded 8 default metrics');
+    console.log(`✅ Successfully seeded ${metrics.length} default metrics`);
     await client.end();
     process.exit(0);
   } catch (error) {

@@ -147,6 +147,14 @@ describe('TemplateGeneratorService', () => {
       expect(row).toHaveProperty('gender');
     });
 
+    it.each(['FLY10_TIME', 'FLY10_TIME_RI10', 'FLY10_TIME_RI30', 'FLY10M_TIME'])(
+      'leaves flyInDistance blank for %s (the metric code carries the run-in)',
+      (code) => {
+        const row = templateGeneratorService.generateMeasurementExample('A', 'B', 'T', { code, unit: 's' });
+        expect(row.flyInDistance).toBe('');
+      },
+    );
+
     it('should use metric-specific sample values', () => {
       const row1 = templateGeneratorService.generateMeasurementExample(
         'Taylor',

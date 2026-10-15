@@ -49,8 +49,8 @@ export default function OrganizationBenchmarksPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="benchmarks" className="space-y-6">
-        <TabsList>
+      <Tabs defaultValue="benchmarks" className="flex flex-col gap-y-6 [&>[role=tabpanel]]:mt-0">
+        <TabsList className="self-start">
           <TabsTrigger value="benchmarks" className="flex items-center gap-2">
             <Target className="h-4 w-4" />
             Benchmarks

@@ -14,7 +14,7 @@
  */
 
 import crypto from 'crypto';
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, and, inArray, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { BaseService } from './base-service';
 import { EmailService } from './email-service';
@@ -28,6 +28,7 @@ import { measurements } from '@shared/schema/tables/measurements';
 import { wellnessResponses } from '@shared/schema/tables/wellness';
 import { eventRegistrations } from '@shared/schema/tables/events';
 import { reportSnapshots, reports, reportShares } from '@shared/schema/tables/reports';
+import { EVAL_REPORT_TYPE } from '@shared/eval-report-config';
 import { COPPA_ACTIONS, getAuditRetentionDate } from '@shared/coppa-utils';
 
 // ============================================================================
@@ -103,6 +104,14 @@ export interface ExportBundle {
     expiresAt: Date;
     containsMinorData: boolean;
     publicAccessRestricted: boolean;
+  }>;
+  /** Saved eval reports for this athlete (config includes the frozen model) */
+  evalReports: Array<{
+    id: string;
+    organizationId: string;
+    name: string;
+    createdAt: Date;
+    config: unknown;
   }>;
 }
 
@@ -324,6 +333,7 @@ export class CoppaExportService extends BaseService {
    * - Wellness responses (metadata only, not raw answers for privacy)
    * - Event participations
    * - Report snapshots (metadata, not full PDF/data blobs)
+   * - Eval reports (full config including the frozen model)
    */
   private async buildExportBundle(athleteUserId: string): Promise<ExportBundle> {
     const athlete = await this.storage.getUser(athleteUserId);
@@ -398,6 +408,21 @@ export class CoppaExportService extends BaseService {
         .where(inArray(reportSnapshots.reportId, sharedReportIds.map(r => r.reportId)));
     }
 
+    // Eval reports name the athlete only in config.athleteId. Selected by that id alone (like every other
+    // section here, not by organization), so another athlete's eval is never included.
+    const athleteEvalReports = await db.select({
+      id: reports.id,
+      organizationId: reports.organizationId,
+      name: reports.name,
+      createdAt: reports.createdAt,
+      config: reports.config,
+    })
+      .from(reports)
+      .where(and(
+        eq(reports.reportType, EVAL_REPORT_TYPE),
+        sql`${reports.config}->>'athleteId' = ${athleteUserId}`,
+      ));
+
     return {
       exportedAt: new Date().toISOString(),
       athlete: {
@@ -417,6 +442,7 @@ export class CoppaExportService extends BaseService {
       wellnessResponses: athleteWellness,
       eventParticipations: athleteEvents,
       reportSnapshots: athleteReportSnapshots,
+      evalReports: athleteEvalReports,
     };
   }
 

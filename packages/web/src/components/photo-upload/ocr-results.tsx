@@ -25,6 +25,7 @@ interface OCRResult {
     errors: Array<{
       row: number;
       error: string;
+      code?: string;
       data: any;
     }>;
     warnings: string[];

@@ -7,7 +7,12 @@
 
 import type { Express, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
-import { EventMetricsService, type AddMetricOptions, type UpdateMetricOptions } from "../services/event-metrics-service";
+import { z } from "zod";
+import { EventMetricsService, EventMetricsFrozenError, type AddMetricOptions, type UpdateMetricOptions } from "../services/event-metrics-service";
+import { bulkAddEventMetrics } from "../services/event-metrics-bulk";
+import { EventNotFoundError } from "../services/event-registration-service";
+import { fetchEligibilityRows, ineligibleReason, INELIGIBLE_MESSAGE } from "../services/event-metric-eligibility";
+import { orgTypeOf } from "../services/eval-template-service";
 import { requireAuth } from "../middleware";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { storage } from "../storage";
@@ -31,12 +36,41 @@ const eventMetricsMutationLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+/** No control characters (newlines, tabs, NUL ...) in a label that ends up on screens and PDFs */
+const customLabelSchema = z.string().trim().min(1).max(100).regex(/^[^\p{Cc}]*$/u, "Label must not contain control characters");
+const metricCodeSchema = z.string().trim().min(1).max(50).regex(/^[A-Za-z0-9_]+$/, "Metric code may only contain letters, digits and underscores");
+
+const singleAddSchema = z.object({
+  metricCode: metricCodeSchema,
+  isRequired: z.boolean().optional(),
+  displayOrder: z.number().int().min(0).max(9999).optional(),
+  customLabel: customLabelSchema.nullish().transform((v) => v ?? undefined),
+});
+
+const bulkAddSchema = z.object({
+  metrics: z
+    .array(
+      z.object({
+        metricCode: metricCodeSchema,
+        isRequired: z.boolean().optional(),
+        displayOrder: z.number().int().min(0).max(9999).optional(),
+        customLabel: customLabelSchema.nullish().transform((v) => v ?? undefined),
+      })
+    )
+    .max(100),
+});
+
 /**
  * Check if user has permission to manage events for an organization
  */
-async function canManageOrgEvents(user: SessionUser, organizationId: string): Promise<boolean> {
+async function canManageOrgEvents(user: SessionUser, organizationId: string | null): Promise<boolean> {
   if (isSiteAdmin(user)) {
     return true;
+  }
+
+  // An event with no organization can be managed by site admins only
+  if (!organizationId) {
+    return false;
   }
 
   // Check if user has org_admin or coach role in this organization
@@ -94,6 +128,9 @@ export function registerEventMetricsRoutes(app: Express) {
   /**
    * Add a metric to an event
    * POST /api/events/:eventId/metrics
+   *
+   * Rejects (400) a metric that is derived, inactive or not offered to the organization's type; the bulk route
+   * skips those instead. A frozen event answers 400 here (kept for existing clients) but 409 on the bulk route.
    */
   app.post(
     "/api/events/:eventId/metrics",
@@ -102,11 +139,14 @@ export function registerEventMetricsRoutes(app: Express) {
     async (req: Request, res: Response) => {
       try {
         const { eventId } = req.params;
-        const { metricCode, displayOrder, isRequired, customLabel } = req.body;
-
-        if (!metricCode) {
+        if (!req.body?.metricCode) {
           return res.status(400).json({ error: "metricCode is required" });
         }
+        const body = singleAddSchema.safeParse(req.body);
+        if (!body.success) {
+          return res.status(400).json({ error: body.error.issues[0]?.message ?? "Invalid request", details: body.error.flatten() });
+        }
+        const { metricCode, displayOrder, isRequired, customLabel } = body.data;
 
         // Get the event to check permissions
         const event = await storage.getEvent(eventId);
@@ -123,6 +163,12 @@ export function registerEventMetricsRoutes(app: Express) {
         const hasAccess = await canManageOrgEvents(user, event.organizationId);
         if (!hasAccess) {
           return res.status(403).json({ error: "Access denied" });
+        }
+
+        const reason = ineligibleReason((await fetchEligibilityRows([metricCode])).get(metricCode), await orgTypeOf(event.organizationId));
+        // An unknown code falls through on purpose: EventMetricsService rejects it with a 400 ("not found").
+        if (reason && reason !== "unknown") {
+          return res.status(400).json({ error: INELIGIBLE_MESSAGE[reason](metricCode) });
         }
 
         const options: AddMetricOptions = {
@@ -156,6 +202,53 @@ export function registerEventMetricsRoutes(app: Express) {
         return res.status(500).json({
           error: error instanceof Error ? error.message : "Failed to add metric to event"
         });
+      }
+    }
+  );
+
+  /**
+   * Add a whole list of metrics to an event in one request (one limiter hit).
+   * Derived, inactive and unknown codes are skipped and reported, not errors.
+   * POST /api/events/:eventId/metrics/bulk
+   */
+  app.post(
+    "/api/events/:eventId/metrics/bulk",
+    requireAuth,
+    eventMetricsMutationLimiter,
+    async (req: Request, res: Response) => {
+      try {
+        const { eventId } = req.params;
+
+        const event = await storage.getEvent(eventId);
+        if (!event) {
+          return res.status(404).json({ error: "Event not found" });
+        }
+
+        const user = req.user as SessionUser;
+        // Permission first: a caller who may not manage the event must not learn whether it has an organization
+        const hasAccess = await canManageOrgEvents(user, event.organizationId);
+        if (!hasAccess) {
+          return res.status(403).json({ error: "Access denied" });
+        }
+        if (!event.organizationId) {
+          return res.status(400).json({ error: "Event has no organization" });
+        }
+
+        const parsed = bulkAddSchema.safeParse(req.body);
+        if (!parsed.success) {
+          return res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
+        }
+
+        return res.json(await bulkAddEventMetrics(eventId, user.id, parsed.data.metrics));
+      } catch (error) {
+        if (error instanceof EventMetricsFrozenError) {
+          return res.status(409).json({ error: error.message });
+        }
+        if (error instanceof EventNotFoundError) {
+          return res.status(404).json({ error: "Event not found" });
+        }
+        console.error("Error bulk adding metrics to event:", error);
+        return res.status(500).json({ error: "Failed to add metrics to event" });
       }
     }
   );

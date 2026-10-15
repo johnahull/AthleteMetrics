@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -9,6 +9,10 @@ import { FileUpload } from "./photo-upload/file-upload";
 import { UploadControls } from "./photo-upload/upload-controls";
 import { ProgressIndicator } from "./photo-upload/progress-indicator";
 import { OCRResults } from "./photo-upload/ocr-results";
+import { Protocol505Picker, type Protocol505, type Protocol505PickerHandle } from "./photo-upload/protocol-505-picker";
+import { FlyRunInPicker, type FlyRunInPickerHandle } from "./photo-upload/fly-run-in-picker";
+import type { FlyRunInYd } from "@shared/fly-run-in";
+import { OCR_REQUIRED_CHOICE_MESSAGES, type OcrRequiredChoice } from "@shared/ocr-types";
 import { useAuth } from "@/lib/auth";
 import type {
   MeasurementImportMode,
@@ -46,6 +50,20 @@ interface OCRResult {
   };
 }
 
+const PROTOCOL_505_REQUIRED_CODE = 'PROTOCOL_505_REQUIRED';
+const FLY10_RUN_IN_REQUIRED_CODE = 'FLY10_RUN_IN_REQUIRED';
+
+/**
+ * Server answered 422: the photo has a 5-0-5 and/or a 10-yard fly reading and the matching choice(s) were not
+ * sent. `required` lists every missing choice so one retry can carry them all. Nothing was saved.
+ */
+class ChoicesRequiredError extends Error {
+  constructor(readonly required: OcrRequiredChoice[], message: string) {
+    super(message);
+    this.name = 'ChoicesRequiredError';
+  }
+}
+
 const ALLOWED_FILE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf'];
 const MAX_FILE_SIZE_MB = 10;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
@@ -59,20 +77,31 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
   // Import mode options
   const [measurementMode, setMeasurementMode] = useState<MeasurementImportMode>('create_athletes');
   const [showAdvanced, setShowAdvanced] = useState(false);
+  // 5-0-5 protocol: deliberately no default; only sent after the user chooses.
+  const [protocol505, setProtocol505] = useState<Protocol505 | undefined>(undefined);
+
+  const [protocolError, setProtocolError] = useState<string | undefined>(undefined);
+  const pickerRef = useRef<Protocol505PickerHandle>(null);
+  // Fly-10 run-in (AM-FEAT-017): same contract, deliberately no default.
+  const [flyRunIn, setFlyRunIn] = useState<FlyRunInYd | undefined>(undefined);
+  const [flyRunInError, setFlyRunInError] = useState<string | undefined>(undefined);
+  const flyPickerRef = useRef<FlyRunInPickerHandle>(null);
 
   const { toast } = useToast();
   const { userOrganizations } = useAuth();
   const queryClient = useQueryClient();
 
   const uploadMutation = useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async ({ file, protocol505: protocol, flyRunIn: runIn }: { file: File; protocol505?: Protocol505; flyRunIn?: FlyRunInYd }) => {
       const formData = new FormData();
       formData.append('file', file);
 
       // Add import options
       const options = {
         measurementMode,
-        organizationId: userOrganizations?.[0]?.organizationId
+        organizationId: userOrganizations?.[0]?.organizationId,
+        ...(protocol ? { protocol505: protocol } : {}),
+        ...(runIn ? { flyRunIn: runIn } : {})
       };
       formData.append('options', JSON.stringify(options));
 
@@ -86,6 +115,20 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
         body: formData,
         credentials: 'include',
       });
+
+      if (response.status === 422) {
+        const body = await response.json().catch(() => null);
+        const code = body?.code;
+        if (code === PROTOCOL_505_REQUIRED_CODE || code === FLY10_RUN_IN_REQUIRED_CODE) {
+          // Older servers send only `code`; newer ones also list every missing choice in `required`.
+          const listed = Array.isArray(body.required)
+            ? body.required.filter((r: unknown): r is OcrRequiredChoice => r === 'protocol505' || r === 'flyRunIn')
+            : [];
+          const required: OcrRequiredChoice[] =
+            listed.length > 0 ? listed : [code === PROTOCOL_505_REQUIRED_CODE ? 'protocol505' : 'flyRunIn'];
+          throw new ChoicesRequiredError(required, body.message);
+        }
+      }
 
       if (!response.ok) {
         throw new Error(`Upload failed: ${response.statusText}`);
@@ -109,6 +152,10 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
       setOcrResult(data);
       
       if (data.results.successful > 0) {
+        // Measurements were saved: drop the file so the same photo cannot be re-imported by accident.
+        setSelectedFile(null);
+        setPreview(null);
+
         toast({
           title: "Photo Import Successful!",
           description: `Successfully imported ${data.results.successful} measurements with ${Math.round(data.results.ocrConfidence)}% OCR confidence`,
@@ -128,6 +175,23 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
       }
     },
     onError: (error: any) => {
+      if (error instanceof ChoicesRequiredError) {
+        // Nothing was saved, so retrying the same file is safe. No toast: the inline alerts are the message.
+        setOcrResult(null);
+        const nothingSaved = '. Nothing was saved; choose below and upload again.';
+        if (error.required.includes('protocol505')) {
+          // A single-choice response carries the server's own wording; a combined one uses each picker's text.
+          const message = error.required.length === 1 ? error.message : OCR_REQUIRED_CHOICE_MESSAGES.protocol505;
+          setProtocolError(`${message}${nothingSaved}`);
+        }
+        if (error.required.includes('flyRunIn')) {
+          const message = error.required.length === 1 ? error.message : OCR_REQUIRED_CHOICE_MESSAGES.flyRunIn;
+          setFlyRunInError(`${message}${nothingSaved}`);
+        }
+        // Focus the first missing picker (5-0-5 comes first on the form)
+        setTimeout(() => (error.required.includes('protocol505') ? pickerRef : flyPickerRef).current?.focus(), 0);
+        return;
+      }
       console.error('Photo upload failed:', error);
       toast({
         title: "Upload Failed",
@@ -160,6 +224,10 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
 
     setSelectedFile(file);
     setOcrResult(null); // Clear previous results
+    setProtocol505(undefined); // The choice belongs to the photo it was made for
+    setProtocolError(undefined);
+    setFlyRunIn(undefined);
+    setFlyRunInError(undefined);
     
     // Create preview for images
     if (file.type.startsWith('image/')) {
@@ -175,13 +243,19 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
 
   const handleUpload = () => {
     if (!selectedFile) return;
-    uploadMutation.mutate(selectedFile);
+    setProtocolError(undefined);
+    setFlyRunInError(undefined);
+    uploadMutation.mutate({ file: selectedFile, protocol505, flyRunIn });
   };
 
   const handleClear = () => {
     setSelectedFile(null);
     setPreview(null);
     setOcrResult(null);
+    setProtocol505(undefined);
+    setProtocolError(undefined);
+    setFlyRunIn(undefined);
+    setFlyRunInError(undefined);
   };
 
 
@@ -207,6 +281,28 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
             maxSizeMB={MAX_FILE_SIZE_MB}
           />
 
+          <Protocol505Picker
+            ref={pickerRef}
+            value={protocol505}
+            onChange={(v) => {
+              setProtocol505(v);
+              setProtocolError(undefined);
+            }}
+            disabled={uploadMutation.isPending}
+            error={protocolError}
+          />
+
+          <FlyRunInPicker
+            ref={flyPickerRef}
+            value={flyRunIn}
+            onChange={(v) => {
+              setFlyRunIn(v);
+              setFlyRunInError(undefined);
+            }}
+            disabled={uploadMutation.isPending}
+            error={flyRunInError}
+          />
+
           {/* Import Options */}
           <div className="space-y-3 pt-2 border-t">
             <div className="flex items-center justify-between">
@@ -221,7 +317,7 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
             </div>
 
             {/* Quick Toggles */}
-            <div className="space-y-2">
+            <div className="grid gap-y-2">
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <input
                   type="checkbox"
@@ -237,7 +333,7 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
             {/* Advanced Options */}
             {showAdvanced && (
               <div className="space-y-3 pt-3 border-t">
-                <div className="space-y-2">
+                <div className="grid gap-y-2">
                   <label className="text-sm font-medium">Measurement Import Mode</label>
                   <Select value={measurementMode} onValueChange={(value) => setMeasurementMode(value as MeasurementImportMode)}>
                     <SelectTrigger>
@@ -274,7 +370,9 @@ export function PhotoUpload({ onSuccess }: PhotoUploadProps) {
         </CardContent>
       </Card>
 
-      {ocrResult && <OCRResults result={ocrResult} />}
+      {ocrResult && (
+        <OCRResults result={ocrResult} />
+      )}
     </div>
   );
 }

@@ -71,3 +71,27 @@ describe('insertReportSchema / updateReportSchema — config.charts', () => {
     expect(result.config?.charts).toEqual({ fvProfile: false });
   });
 });
+
+describe('insertReportSchema / updateReportSchema — config.groupComparison', () => {
+  const base = { organizationId: 'org-1', name: 'R', reportType: 'individual' as const };
+  const timeframe = { type: 'preset' as const, preset: 'season' as const };
+
+  it('insertReportSchema keeps groupComparison: false', () => {
+    const result = insertReportSchema.parse({
+      ...base,
+      config: { timeframe, metrics: ['VERTICAL_JUMP'], groupComparison: false },
+    });
+    expect(result.config.groupComparison).toBe(false);
+  });
+
+  it('updateReportSchema keeps groupComparison', () => {
+    expect(updateReportSchema.parse({ config: { groupComparison: false } }).config?.groupComparison).toBe(false);
+  });
+
+  it('rejects a non-boolean groupComparison', () => {
+    expect(() => insertReportSchema.parse({
+      ...base,
+      config: { timeframe, metrics: ['VERTICAL_JUMP'], groupComparison: 'no' },
+    })).toThrow();
+  });
+});

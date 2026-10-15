@@ -504,3 +504,26 @@ describe('ShareReportDialog Component', () => {
     });
   });
 });
+
+describe('ShareReportDialog under-13 note', () => {
+  const renderDialog = (extra: Record<string, unknown> = {}) => {
+    mockUseCreateSnapshot.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    mockUseReportSnapshots.mockReturnValue({ data: [], isLoading: false });
+    mockUseRevokeSnapshot.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    return render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ShareReportDialog reportId="r1" open={true} onClose={vi.fn()} {...extra} />
+      </QueryClientProvider>
+    );
+  };
+
+  it('explains that the PDF or parent link is how the family receives the report', () => {
+    renderDialog({ athleteShareBlockedUnder13: true });
+    expect(screen.getByTestId('under-13-link-note')).toHaveTextContent(/parent/i);
+  });
+
+  it('shows no note by default', () => {
+    renderDialog();
+    expect(screen.queryByTestId('under-13-link-note')).not.toBeInTheDocument();
+  });
+});
