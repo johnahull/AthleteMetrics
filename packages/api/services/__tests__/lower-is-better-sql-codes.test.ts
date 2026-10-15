@@ -1,7 +1,8 @@
 /**
- * AM-FEAT-016: the SQL decline-direction code list must treat both 5-0-5 protocols
- * and both COD deficit metrics as lower-is-better (otherwise a rising time is
- * reported as an improvement). It derives from the shared single source of truth.
+ * Decline detection decides "rising is worse" from each measurement's own metric row: site_metrics, else the
+ * custom org metric of the measurement's organization. It used to bind a hard-coded list of codes, which missed
+ * custom org metrics and ignored admin edits of a built-in metric's type. The DB-backed behaviour is covered by
+ * tests/integration/at-risk-decline-direction.test.ts; this checks the shape of the SQL.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { PgDialect } from 'drizzle-orm/pg-core';
@@ -17,52 +18,29 @@ vi.mock('../../utils/athlete-filters', () => ({
   getAthleteIdsForScope: vi.fn().mockResolvedValue(['a1']),
 }));
 
-import { AnalyticsService, LOWER_IS_BETTER_SQL_CODES } from '../analytics-service';
-import { LOWER_IS_BETTER_METRICS } from '@shared/analytics-types';
+import * as analyticsService from '../analytics-service';
 
-// The list this constant held before it was derived from the shared one.
-const PREVIOUS_SQL_LIST = [
-  'FLY10_TIME',
-  'AGILITY_505_M',
-  'AGILITY_505_YD',
-  'AGILITY_COD_DEFICIT_M',
-  'AGILITY_COD_DEFICIT_YD',
-  'AGILITY_5105',
-  'T_TEST',
-  'DASH_40YD',
-];
+async function declineSql(): Promise<string> {
+  execute.mockResolvedValue([]);
+  await new analyticsService.AnalyticsService().getAtRiskAthletes('org-1');
+  return new PgDialect().sqlToQuery(execute.mock.calls[0][0]).sql;
+}
 
-describe('LOWER_IS_BETTER_SQL_CODES', () => {
-  it('is derived from the shared LOWER_IS_BETTER_METRICS (single source of truth)', () => {
-    expect([...LOWER_IS_BETTER_SQL_CODES]).toEqual([...LOWER_IS_BETTER_METRICS]);
+describe('decline detection direction', () => {
+  it('no longer exports a hard-coded list of lower-is-better codes', () => {
+    expect(analyticsService).not.toHaveProperty('LOWER_IS_BETTER_SQL_CODES');
   });
 
-  it('is a superset of the previous SQL list and drops the retired code', () => {
-    for (const code of PREVIOUS_SQL_LIST) {
-      expect(LOWER_IS_BETTER_SQL_CODES as readonly string[]).toContain(code);
-    }
-    expect(LOWER_IS_BETTER_SQL_CODES as readonly string[]).not.toContain('AGILITY_505');
+  it('resolves the direction per row from site_metrics, then the row organization\'s custom metric', async () => {
+    const sqlText = (await declineSql()).replace(/\s+/g, ' ');
+    expect(sqlText).toContain('LEFT JOIN site_metrics sm ON sm.code = m.metric');
+    expect(sqlText).toContain(
+      'LEFT JOIN custom_org_metrics com ON com.code = m.metric AND com.organization_id = m.organization_id',
+    );
+    expect(sqlText).toContain("COALESCE(sm.metric_type, com.metric_type) = 'lower_is_better'");
   });
 
-  it('now includes DASH_10YD (intended fix: correct decline sign for DASH_10YD)', () => {
-    expect(LOWER_IS_BETTER_SQL_CODES as readonly string[]).toContain('DASH_10YD');
-  });
-
-  it('only contains plain metric codes', () => {
-    for (const code of LOWER_IS_BETTER_SQL_CODES) {
-      expect(code).toMatch(/^[A-Z0-9_]+$/);
-    }
-  });
-
-  it('is passed to the decline-detection SQL as bound parameters, not interpolated text', async () => {
-    execute.mockResolvedValue([]);
-    await new AnalyticsService().getAtRiskAthletes('org-1');
-
-    const { sql: decliningSql, params } = new PgDialect().sqlToQuery(execute.mock.calls[0][0]);
-    for (const code of LOWER_IS_BETTER_SQL_CODES) {
-      expect(params).toContain(code);
-      expect(decliningSql).not.toContain(`'${code}'`);
-    }
-    expect(decliningSql).toMatch(/metric IN \(\$\d+(, \$\d+)+\)/);
+  it('binds no list of metric codes', async () => {
+    expect(await declineSql()).not.toMatch(/metric IN \(/);
   });
 });

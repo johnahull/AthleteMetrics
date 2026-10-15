@@ -8,7 +8,6 @@ import { measurements, teams, organizations, users, userTeams, siteMetrics, orga
 import { isPeerComparisonExcludedMetric, PeerComparisonExcludedMetricError } from '@shared/peer-comparison-exclusions';
 import { eq, and, gte, lte, lt, ne, desc, inArray, sql } from 'drizzle-orm';
 import { getAthleteIdsForScope } from '../utils/athlete-filters';
-import { LOWER_IS_BETTER_METRICS } from '@shared/analytics-types';
 
 /**
  * Dashboard statistics time window
@@ -16,16 +15,6 @@ import { LOWER_IS_BETTER_METRICS } from '@shared/analytics-types';
  * @default 30 days
  */
 const DASHBOARD_STATS_WINDOW_DAYS = 30;
-
-/**
- * Metric codes where a rising value is a decline (time-based, lower is better).
- * Used by the SQL decline-direction logic below. Derived from the shared single source of
- * truth. NOTE: this intentionally now includes DASH_10YD, which the old local copy lacked
- * (a bug fix: decline detection used the wrong sign for DASH_10YD). Fixed code literals only.
- */
-export const LOWER_IS_BETTER_SQL_CODES = LOWER_IS_BETTER_METRICS;
-
-const lowerIsBetterSqlList = () => sql.join(LOWER_IS_BETTER_SQL_CODES.map(c => sql`${c}`), sql`, `);
 
 interface AthleteStats {
   bestFly10?: number;
@@ -1082,21 +1071,36 @@ export class AnalyticsService {
       previousValue: number;
       currentValue: number;
     }>`
-      WITH ranked_measurements AS (
+      WITH typed_measurements AS (
+        -- Direction from the row's own metric: the site metric, else the custom metric of the row's organization
+        SELECT
+          m.user_id,
+          m.metric,
+          m.value,
+          m.date,
+          COALESCE(COALESCE(sm.metric_type, com.metric_type) = 'lower_is_better', false) as lower_is_better
+        FROM measurements m
+        LEFT JOIN site_metrics sm ON sm.code = m.metric
+        LEFT JOIN custom_org_metrics com ON com.code = m.metric AND com.organization_id = m.organization_id
+        WHERE m.user_id = ANY(${sql.raw(`ARRAY[${athleteIds.map(id => `'${id}'`).join(',')}]::text[]`)})
+          AND m.is_verified = true
+      ),
+      ranked_measurements AS (
         SELECT
           user_id as athlete_id,
           metric,
+          lower_is_better,
           CAST(value AS NUMERIC) as value,
           date,
-          ROW_NUMBER() OVER (PARTITION BY user_id, metric ORDER BY date DESC) as row_num
-        FROM measurements
-        WHERE user_id = ANY(${sql.raw(`ARRAY[${athleteIds.map(id => `'${id}'`).join(',')}]::text[]`)})
-          AND is_verified = true
+          -- Same custom code in two organizations with opposite directions: separate series
+          ROW_NUMBER() OVER (PARTITION BY user_id, metric, lower_is_better ORDER BY date DESC) as row_num
+        FROM typed_measurements
       ),
       recent_measurements AS (
         SELECT
           athlete_id,
           metric,
+          lower_is_better,
           value,
           row_num
         FROM ranked_measurements
@@ -1106,18 +1110,19 @@ export class AnalyticsService {
         SELECT
           athlete_id,
           metric,
+          lower_is_better,
           AVG(CASE WHEN row_num <= 3 THEN value END) as current_avg,
           AVG(CASE WHEN row_num BETWEEN 4 AND 6 THEN value END) as previous_avg,
           COUNT(DISTINCT row_num) as total_measurements
         FROM recent_measurements
-        GROUP BY athlete_id, metric
+        GROUP BY athlete_id, metric, lower_is_better
         HAVING COUNT(DISTINCT row_num) >= 6
       )
       SELECT
         athlete_id::text as "athleteId",
         metric,
         CASE
-          WHEN metric IN (${lowerIsBetterSqlList()})
+          WHEN lower_is_better
             THEN ((current_avg - previous_avg) / NULLIF(previous_avg, 0)) * 100
           ELSE ((previous_avg - current_avg) / NULLIF(previous_avg, 0)) * 100
         END as "declinePercent",
@@ -1128,7 +1133,7 @@ export class AnalyticsService {
         previous_avg > 0
         AND (
           CASE
-            WHEN metric IN (${lowerIsBetterSqlList()})
+            WHEN lower_is_better
               THEN ((current_avg - previous_avg) / previous_avg) * 100
             ELSE ((previous_avg - current_avg) / previous_avg) * 100
           END
