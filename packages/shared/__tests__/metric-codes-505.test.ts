@@ -78,7 +78,6 @@ describe('repo guard: retired 5-0-5 tokens', () => {
     'tests/integration/data-generators-import.test.ts': 'asserts the generators never emit the retired codes (opt-in, GENERATORS_DIR)',
     'packages/api/routes/__tests__/benchmark-analytics-metric-codes.test.ts': 'asserts the API rejects the retired code with 400',
     'packages/api/ocr/processors/__tests__/data-parser.test.ts': 'asserts OCR metric lists no longer contain the retired code',
-    'packages/api/services/__tests__/lower-is-better-sql-codes.test.ts': 'asserts the SQL lower-is-better list dropped the retired code',
     'packages/api/services/__tests__/template-generator-sample-values.test.ts': 'asserts no sample value exists for the retired code',
     'packages/api/services/__tests__/achievement-service.test.ts': 'asserts the retired code does not count toward the all-around PR',
     'packages/web/src/__tests__/utils/metric-education-utils.test.ts': 'asserts the retired education entry is gone',
