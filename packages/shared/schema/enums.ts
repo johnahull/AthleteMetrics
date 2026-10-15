@@ -20,6 +20,12 @@ export const organizationTypeEnum = ['youth', 'high_school', 'college', 'club', 
 export const metricTypeEnum = ['lower_is_better', 'higher_is_better', 'tracking'] as const;
 
 /**
+ * How a metric's values are entered and shown. 'duration' metrics are stored in seconds (unit 's') and
+ * entered/shown as mm:ss.
+ */
+export const displayFormatEnum = ['decimal', 'duration'] as const;
+
+/**
  * Sport code enum for metric sport associations
  * These codes correspond to the 'code' field in the site_sports table
  */

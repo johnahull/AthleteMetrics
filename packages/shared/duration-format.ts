@@ -5,6 +5,14 @@
 
 export type DisplayFormat = 'decimal' | 'duration';
 
+/** Duration metrics are stored in seconds, so their unit must be 's'. */
+export const DURATION_UNIT_ERROR = "Unit 's' is required for duration (mm:ss) metrics";
+
+/** True when a metric (the existing row merged with a patch) is duration with a unit other than 's'. */
+export function violatesDurationUnit(metric: { unit?: string | null; displayFormat?: DisplayFormat | null }): boolean {
+  return metric.displayFormat === 'duration' && metric.unit !== 's';
+}
+
 const PLAIN_SECONDS = /^\d+(\.\d+)?$/;
 const MIN_SEC = /^(\d+):([0-5]\d)(\.\d+)?$/;
 const HOUR_MIN_SEC = /^(\d+):([0-5]\d):([0-5]\d)(\.\d+)?$/;
