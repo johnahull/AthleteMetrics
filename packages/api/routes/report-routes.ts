@@ -36,6 +36,7 @@ import { coppaService } from "../services/coppa-service";
 import { parentalConsents, parentAthleteLinks } from "@shared/schema/tables/coppa";
 import { COPPA_ACTIONS, isUnder13OrUnknownDob } from "@shared/coppa-utils";
 import { isGroupComparisonOn } from "@shared/report-charts";
+import { formatMeasurement } from "@shared/duration-format";
 import type { MetricExplanation } from "@shared/metric-explanations";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { jsPDF } from "jspdf";
@@ -3964,6 +3965,11 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
 
   const reportName = report.name || 'Performance Report';
   const pageWidth = doc.internal.pageSize.getWidth();
+  // mm:ss for a duration metric; null for any other metric, which keeps its existing format
+  const durationText = (code: string, value: number): string | null => {
+    const f = reportData.metricFormats?.[code];
+    return f ? formatMeasurement(value, f) : null;
+  };
 
   // --- Cover page for individual reports ---
   if (reportData.reportType === 'individual') {
@@ -4126,10 +4132,10 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     if (reportData.teamStatistics && reportData.teamStatistics.length > 0) {
       const statsRows = reportData.teamStatistics.map((stat: any) => [
         stat.metric,
-        stat.average !== null ? stat.average.toFixed(2) : "N/A",
-        stat.median !== null ? stat.median.toFixed(2) : "N/A",
-        stat.min !== null ? stat.min.toFixed(2) : "N/A",
-        stat.max !== null ? stat.max.toFixed(2) : "N/A",
+        stat.average !== null ? (durationText(stat.metric, stat.average) ?? stat.average.toFixed(2)) : "N/A",
+        stat.median !== null ? (durationText(stat.metric, stat.median) ?? stat.median.toFixed(2)) : "N/A",
+        stat.min !== null ? (durationText(stat.metric, stat.min) ?? stat.min.toFixed(2)) : "N/A",
+        stat.max !== null ? (durationText(stat.metric, stat.max) ?? stat.max.toFixed(2)) : "N/A",
         stat.topPerformer?.userName || "N/A",
       ]);
 
@@ -4168,7 +4174,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
         const benchmarkRows = benchmarkAchievements.map((achievement: any) => [
           achievement.metric,
           achievement.benchmarkName,
-          `${achievement.benchmarkValue.toFixed(2)} ${achievement.units}`,
+          durationText(achievement.metric, achievement.benchmarkValue) ?? `${achievement.benchmarkValue.toFixed(2)} ${achievement.units}`,
           achievement.count.toString(),
           `${achievement.percentage.toFixed(0)}%`,
         ]);
@@ -4294,7 +4300,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
             return [
               (idx + 1).toString(),
               athlete.userName,
-              value !== null && value !== undefined ? `${value.toFixed(2)} ${stat.units || ''}` : "N/A",
+              value !== null && value !== undefined ? (durationText(stat.metric, value) ?? `${value.toFixed(2)} ${stat.units || ''}`) : "N/A",
               percentile !== undefined ? `${percentile.toFixed(0)}th` : "N/A",
               benchmarkLabel || "-",
             ];
@@ -4407,7 +4413,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
         ([metric, value]: [string, any]) => {
           const label = reportData.metricLabels?.[metric] || metric;
           const unit = reportData.metricUnits?.[metric] || '';
-          const formatted = `${value.toFixed(2)}${unit ? ` ${unit}` : ''}`;
+          const formatted = durationText(metric, value) ?? `${value.toFixed(2)}${unit ? ` ${unit}` : ''}`;
           return showPercentile
             ? [label, formatted, athlete.percentiles[metric]?.toFixed(1) || "N/A"]
             : [label, formatted];
@@ -4449,7 +4455,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
                 const dist = comp.distanceToNextTier < 1
                   ? comp.distanceToNextTier.toFixed(2)
                   : comp.distanceToNextTier.toFixed(1);
-                tierLabel += ` (${dist}${unit ? ` ${unit}` : ''} to ${comp.nextTierName})`;
+                tierLabel += ` (${durationText(metric, comp.distanceToNextTier) ?? `${dist}${unit ? ` ${unit}` : ''}`} to ${comp.nextTierName})`;
               }
               // Prefix with rank indicator
               const rankPrefix = comp.tierOrder ? `#${comp.tierOrder} ` : '';
@@ -4464,7 +4470,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
                   label,
                   comp.tierGroupName || comp.benchmarkName,
                   tierCellText,
-                  `${comp.athleteValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
+                  durationText(metric, comp.athleteValue) ?? `${comp.athleteValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
                 ],
                 tierColor: comp.tierColor || 'gray',
                 tierOrder: comp.tierOrder || 99,
@@ -4474,8 +4480,8 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
               singleValueRows.push([
                 label,
                 comp.benchmarkName,
-                `${comp.benchmarkValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
-                `${comp.athleteValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
+                durationText(metric, comp.benchmarkValue) ?? `${comp.benchmarkValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
+                durationText(metric, comp.athleteValue) ?? `${comp.athleteValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
                 comp.meetsOrExceeds ? "Yes" : "No",
               ]);
             }

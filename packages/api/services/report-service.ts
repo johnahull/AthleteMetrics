@@ -44,6 +44,7 @@ import type { ReportTrends, ReportDistributions, TeamReportTrends, TeamReportDis
 import type { ReportFvProfile } from '@shared/report-fv-types';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
 import { wasUnder13At } from '@shared/coppa-utils';
+import type { MeasurementFormat } from '@shared/duration-format';
 
 interface TimeframeConfig {
   type: 'preset' | 'custom';
@@ -142,6 +143,8 @@ interface TeamReportData {
   athleteCount: number;
   metricLabels: Record<string, string>;
   metricUnits: Record<string, string>;
+  /** Duration (mm:ss) metrics only; absent on data generated before it existed */
+  metricFormats?: Record<string, MeasurementFormat>;
   metricExplanations: Record<string, MetricExplanation>;
   eventContext?: EventContext; // Present when eventId filter is used
   orgBranding?: OrgBranding;
@@ -157,6 +160,8 @@ interface IndividualReportData {
   generatedAt: string;
   metricLabels: Record<string, string>;
   metricUnits: Record<string, string>;
+  /** Duration (mm:ss) metrics only; absent on data generated before it existed */
+  metricFormats?: Record<string, MeasurementFormat>;
   metricExplanations: Record<string, MetricExplanation>;
   eventContext?: EventContext; // Present when eventId filter is used
   orgBranding?: OrgBranding;
@@ -205,9 +210,11 @@ export class ReportService extends BaseService {
   async getMetricLabelsAndUnits(metricCodes: string[]): Promise<{
     labels: Record<string, string>;
     units: Record<string, string>;
+    formats: Record<string, MeasurementFormat>;
   }> {
     const labels: Record<string, string> = {};
     const units: Record<string, string> = {};
+    const formats: Record<string, MeasurementFormat> = {};
 
     // Fetch all metrics in one query
     const metrics = await db
@@ -215,6 +222,8 @@ export class ReportService extends BaseService {
         code: siteMetrics.code,
         label: siteMetrics.label,
         unit: siteMetrics.unit,
+        displayFormat: siteMetrics.displayFormat,
+        decimalPrecision: siteMetrics.decimalPrecision,
       })
       .from(siteMetrics)
       .where(inArray(siteMetrics.code, metricCodes));
@@ -222,6 +231,9 @@ export class ReportService extends BaseService {
     for (const metric of metrics) {
       labels[metric.code] = metric.label;
       units[metric.code] = metric.unit || '';
+      if (metric.displayFormat === 'duration') {
+        formats[metric.code] = { unit: metric.unit, displayFormat: 'duration', decimalPrecision: metric.decimalPrecision };
+      }
     }
 
     // Fallback to code for any missing labels
@@ -234,7 +246,7 @@ export class ReportService extends BaseService {
       }
     }
 
-    return { labels, units };
+    return { labels, units, formats };
   }
 
   /**
@@ -307,7 +319,7 @@ export class ReportService extends BaseService {
     );
 
     // Get metric display labels and units
-    const { labels: metricLabels, units: metricUnits } = await this.getMetricLabelsAndUnits(config.metrics);
+    const { labels: metricLabels, units: metricUnits, formats: metricFormats } = await this.getMetricLabelsAndUnits(config.metrics);
     const metricExplanations = await getMetricExplanationsMap(
       config.metrics,
       report.organizationId,
@@ -405,6 +417,7 @@ export class ReportService extends BaseService {
       athleteCount: athleteRankings.length,
       metricLabels,
       metricUnits,
+      metricFormats,
       metricExplanations,
       metricDirections,
       eventContext,
@@ -635,7 +648,7 @@ export class ReportService extends BaseService {
     };
 
     // Get metric display labels and units
-    const { labels: metricLabels, units: metricUnits } = await this.getMetricLabelsAndUnits(config.metrics);
+    const { labels: metricLabels, units: metricUnits, formats: metricFormats } = await this.getMetricLabelsAndUnits(config.metrics);
     const metricExplanations = await getMetricExplanationsMap(
       config.metrics,
       report.organizationId,
@@ -675,6 +688,7 @@ export class ReportService extends BaseService {
       generatedAt: new Date().toISOString(),
       metricLabels,
       metricUnits,
+      metricFormats,
       metricExplanations,
       eventContext,
       trends,
