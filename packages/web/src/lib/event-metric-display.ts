@@ -7,7 +7,7 @@ import type { EventMetric, SiteMetric } from "@shared/schema";
 export type EventMetricWithSiteDetails = Pick<EventMetric, "metricCode"> & {
   customLabel?: string | null;
   metricDetails?:
-    | (Pick<SiteMetric, "label" | "unit" | "category"> & Partial<Pick<SiteMetric, "isDerived" | "auxiliaryInputConfig">>)
+    | (Pick<SiteMetric, "label" | "unit" | "category"> & Partial<Pick<SiteMetric, "isDerived" | "auxiliaryInputConfig" | "displayFormat">>)
     | null;
 };
 
