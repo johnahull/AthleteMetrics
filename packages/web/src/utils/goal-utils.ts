@@ -10,6 +10,7 @@
  */
 
 import { isLowerBetterMetric, formatMetricValue, getMetricEducation } from './metric-education-utils';
+import { formatMeasurement, type MeasurementFormat } from '@shared/duration-format';
 
 /**
  * Types of goals athletes can set
@@ -155,12 +156,13 @@ export function getGoalStatusColor(status: GoalStatus): string {
 /**
  * Format goal target for display
  */
-export function formatGoalTarget(goal: Goal): string {
+export function formatGoalTarget(goal: Goal, format?: MeasurementFormat): string {
   const { goalType, targetValue, metric } = goal;
 
   switch (goalType) {
     case GoalType.TARGET_VALUE:
-      return formatMetricValue(targetValue, metric);
+      // A duration (mm:ss) metric's target prints as m:ss
+      return format?.displayFormat === 'duration' ? formatMeasurement(targetValue, format) : formatMetricValue(targetValue, metric);
 
     case GoalType.IMPROVEMENT_PERCENTAGE:
       return `${targetValue}% improvement`;

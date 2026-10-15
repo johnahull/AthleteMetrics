@@ -6,6 +6,7 @@ import { AlertCircle, CheckCircle, Eye } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useState } from "react";
 import { useMetricLabels } from "@/hooks/use-metric-labels";
+import { formatMeasurement } from "@shared/duration-format";
 
 interface OCRResult {
   success: boolean;
@@ -38,7 +39,7 @@ interface OCRResultsProps {
 
 export function OCRResults({ result }: OCRResultsProps) {
   const [showExtractedText, setShowExtractedText] = useState(false);
-  const { getLabel } = useMetricLabels();
+  const { getLabel, formats } = useMetricLabels();
 
   const getConfidenceColor = (confidence: number) => {
     if (confidence >= 80) return 'text-green-600';
@@ -137,7 +138,10 @@ export function OCRResults({ result }: OCRResultsProps) {
                   <div className="flex-1">
                     <div className="font-medium">{item.athlete}</div>
                     <div className="text-sm text-gray-600">
-                      {getLabel(item.measurement.metric)}: {item.measurement.value}
+                      {getLabel(item.measurement.metric)}:{" "}
+                      {formats[item.measurement.metric]
+                        ? formatMeasurement(Number(item.measurement.value), formats[item.measurement.metric])
+                        : item.measurement.value}
                       {item.measurement.date && ` | Date: ${item.measurement.date}`}
                     </div>
                     {item.rawText && (
