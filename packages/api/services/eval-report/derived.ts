@@ -18,6 +18,8 @@ export function cmjAsymmetryPercent(left: number, right: number): number | null 
 
 /** 10 m as a fraction of the 10 yd to 20 yd split: (10 - 9.144) / 9.144 (migration 0161). */
 const TEN_M_INTERP = 0.0936;
+/** site_metrics validation_max for AGILITY_COD_DEFICIT_M_INTERP (migration 0161), in seconds. */
+const MAX_COD_DEFICIT = 2.0;
 
 /** Stored derived totals the report does not recompute (other protocols); never shown, never offered. */
 const UNRECOMPUTED_DERIVED = ["AGILITY_505_YD_LSI", "AGILITY_COD_DEFICIT_YD", "AGILITY_COD_DEFICIT_M"];
@@ -52,8 +54,11 @@ export function recomputeDerived(bests: ReadonlyMap<string, number>): Map<string
   const dash10 = get("DASH_10");
   const dash20 = get("DASH_20");
   // Best 10 yd and best 20 yd can come from different reps (same known limit as migration 0161)
-  const tenMetre = both(dash10, dash20, (d10, d20) => d10 + TEN_M_INTERP * (d20 - d10));
-  set("COD_DEFICIT", both(fasterLeg ?? undefined, tenMetre ?? undefined, (leg, tenM) => leg - tenM));
+  // Splits out of order (20 yd not slower than 10 yd) give no 10 m time
+  const tenMetre = both(dash10, dash20, (d10, d20) => (d20 > d10 ? d10 + TEN_M_INTERP * (d20 - d10) : null));
+  const deficit = both(fasterLeg ?? undefined, tenMetre ?? undefined, (leg, tenM) => leg - tenM);
+  // Outside the site_metrics validation range (0-2.0 s) the deficit is dropped, not shown
+  set("COD_DEFICIT", deficit !== null && deficit >= 0 && deficit <= MAX_COD_DEFICIT ? deficit : null);
 
   const direct = get("505");
   if (fasterLeg !== null) set("505", direct === undefined ? fasterLeg : Math.min(direct, fasterLeg));

@@ -15,7 +15,7 @@ const CODES: Array<[string, string, string, string]> = [
   ['DASH_10', 'DASH_10YD', '10-yard dash', 's'],
   ['FLY_10', 'FLY10_TIME', 'Fly 10', 's'],
   ['CMJ_HOH', 'JUMP_CMJ_HOH', 'Jump height', 'in'],
-  ['505', 'AGILITY_505_M', '5-0-5 agility (faster leg)', 's'],
+  ['505', 'AGILITY_505_M', '5-0-5 agility, meters (faster leg)', 's'],
   ['SQUAT_JUMP', 'JUMP_SJ_HEIGHT', 'Squat jump height', 'in'],
   ['EUR', 'POWER_EUR', 'Elastic use ratio', ''],
   ['DASH_20', 'DASH_20YD', '20-yard dash', 's'],

@@ -6,6 +6,7 @@ import type { ResolvedEvalTemplateMetric } from "@/hooks/use-eval-report";
 import type { SelectedMetric } from "@/components/events/MetricsSelector";
 import { bothSingleLegRequired, SINGLE_LEG_CMJ_CODES, duplicateMetrics, toEditorState, toTemplateMetrics } from "../eval-template-editor";
 import { TEMPLATE_METRIC_CODES } from "../../../../api/services/eval-report/template-keys";
+import { templateKeyLabel } from "../eval-template-labels";
 import { SINGLE_LEG_CMJ_KEYS } from "../eval-template-labels";
 
 const r = (metricKey: string, code: string, extra: Partial<ResolvedEvalTemplateMetric> = {}): ResolvedEvalTemplateMetric => ({
@@ -108,5 +109,11 @@ describe("single-leg CMJ", () => {
     expect(bothSingleLegRequired([m(left, true), m(right, false)])).toBe(false);
     expect(bothSingleLegRequired([m(left, false), m(right, false)])).toBe(false);
     expect(bothSingleLegRequired([m(left, true)])).toBe(false);
+  });
+});
+
+describe("template key labels", () => {
+  it("names the meter protocol for the 5-0-5 headline key", () => {
+    expect(templateKeyLabel("505")).toBe("5-0-5 agility, meters (faster leg)");
   });
 });

@@ -93,6 +93,20 @@ describe('recomputeDerived: EUR, COD deficit and the headline 5-0-5', () => {
     }
   });
 
+  it('drops an implausible COD deficit: negative, above 2.0 s, or from inverted splits', () => {
+    const deficit = (l: number, r: number, d10: number, d20: number) =>
+      recomputeDerived(new Map([
+        ['AGILITY_505_M_L', l], ['AGILITY_505_M_R', r], ['DASH_10YD', d10], ['DASH_20YD', d20],
+        ['AGILITY_COD_DEFICIT_M_INTERP', 9],
+      ])).get('AGILITY_COD_DEFICIT_M_INTERP');
+    expect(deficit(1.5, 1.6, 1.8, 3.05)).toBeUndefined(); // negative
+    expect(deficit(4.5, 4.6, 1.8, 3.05)).toBeUndefined(); // 2.583 > 2.0
+    expect(deficit(2.85, 2.8, 1.8, 1.8)).toBeUndefined(); // 20 yd not slower than 10 yd
+    expect(deficit(2.85, 2.8, 3.05, 1.8)).toBeUndefined(); // swapped splits
+    expect(deficit(2.85, 2.8, 1.8, 3.05)).toBeCloseTo(0.883, 6); // spec fixture
+    expect(deficit(1.92, 1.95, 1.8, 3.05)).toBeCloseTo(0.003, 6); // just above 0 is kept
+  });
+
   it('never derives a yard code from meter data', () => {
     const bests = new Map([['AGILITY_505_M_L', 2.85], ['AGILITY_505_M_R', 2.8], ['DASH_10YD', 1.8], ['DASH_20YD', 3.05]]);
     const codes = [...recomputeDerived(bests).keys()];

@@ -17,7 +17,7 @@ export const TEMPLATE_KEY_LABELS: Record<string, string> = {
   CMJ_SL_LEFT: "Single-leg jump height (left)",
   CMJ_SL_RIGHT: "Single-leg jump height (right)",
   CMJ_SL_ASYM: "Single-leg jump difference",
-  "505": "5-0-5 agility (faster leg)",
+  "505": "5-0-5 agility, meters (faster leg)",
   "505_LEFT": "5-0-5 agility (left turn)",
   "505_RIGHT": "5-0-5 agility (right turn)",
   "505_LSI": "Left-right balance",

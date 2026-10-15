@@ -108,6 +108,7 @@ describe('eval report routes', () => {
     const neededMetrics: Array<[code: string, category: string, unit: string, metricType: string]> = [
       ['DASH_10YD', 'speed', 's', 'lower_is_better'],
       ['DASH_20YD', 'speed', 's', 'lower_is_better'],
+      ['AGILITY_COD_DEFICIT_M_INTERP', 'agility', 's', 'lower_is_better'],
       ['TOP_SPEED', 'speed', 'mph', 'higher_is_better'],
       ['JUMP_BROAD', 'power', 'in', 'higher_is_better'],
       ['JUMP_CMJ_HOH', 'power', 'in', 'higher_is_better'],
@@ -422,6 +423,7 @@ describe('eval report routes', () => {
     expect(Object.keys(byCode)).toEqual(['AGILITY_505_M', 'AGILITY_COD_DEFICIT_M_INTERP']);
     expect(byCode.AGILITY_505_M.value).toBe(2.8);
     expect(byCode.AGILITY_COD_DEFICIT_M_INTERP.value).toBeCloseTo(0.883, 6);
+    expect(byCode.AGILITY_COD_DEFICIT_M_INTERP.unit).toBe('s');
     expect(JSON.stringify(res.body.model)).not.toMatch(/AGILITY_[A-Z0-9_]*_YD/);
 
     const withSplit = await preview('coachA', eventA, u.meterBattery.id, { selection: { metricKeys: ['DASH_20', 'COD_DEFICIT'] } });
