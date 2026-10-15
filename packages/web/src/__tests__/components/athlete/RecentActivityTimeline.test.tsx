@@ -249,4 +249,14 @@ describe('RecentActivityTimeline', () => {
       });
     });
   });
+
+  it('shows a duration activity by its mm:ss displayValue', () => {
+    render(
+      <RecentActivityTimeline
+        activities={[{ id: 'd', date: '2024-01-15', metric: 'MILE_RUN', displayName: 'Mile Run', value: 402.5, displayValue: '6:42.5', units: 's', insight: null, insightType: null }]}
+      />
+    );
+    expect(screen.getByText('6:42.5')).toBeInTheDocument();
+    expect(screen.queryByText(/402\.5/)).toBeNull();
+  });
 });

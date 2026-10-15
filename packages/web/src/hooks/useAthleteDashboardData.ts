@@ -97,7 +97,7 @@ export function useAthleteDashboardData(
   const measurementsQuery = useAthleteMeasurements(athleteId, { enabled, includeUnverified });
 
   // Resolve metric codes to user-facing labels
-  const { getLabel, labels: metricLabels } = useMetricLabels();
+  const { getLabel, labels: metricLabels, formats: metricFormats } = useMetricLabels();
 
   // Calculate dashboard data from measurements
   // Group measurements by metric inline to avoid duplicate API calls
@@ -131,10 +131,10 @@ export function useAthleteDashboardData(
     const lastMeasurementDate = getLastMeasurementDate(measurements);
 
     // Calculate personal records
-    const personalRecords = calculatePersonalRecords(measurements, metricLabels);
+    const personalRecords = calculatePersonalRecords(measurements, metricLabels, metricFormats);
 
     // Generate activity timeline
-    const activityTimeline = generateActivityTimeline(measurements, metricLabels);
+    const activityTimeline = generateActivityTimeline(measurements, metricLabels, metricFormats);
 
     // Calculate metric progress for each metric
     const metricProgress: MetricProgress[] = availableMetrics.map((metric) => {
@@ -177,7 +177,7 @@ export function useAthleteDashboardData(
       measurements,
       availableMetrics,
     };
-  }, [measurementsQuery.data, athleteQuery.data, getLabel, metricLabels]);
+  }, [measurementsQuery.data, athleteQuery.data, getLabel, metricLabels, metricFormats]);
 
   return {
     data: dashboardData,

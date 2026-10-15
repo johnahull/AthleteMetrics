@@ -27,6 +27,7 @@ import { AthleteMetricExplanation } from './AthleteMetricExplanation';
 import { isLowerBetter } from '@/constants/metrics';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
 import type { MetricExplanation } from '@shared/metric-explanations';
+import { formatMeasurement } from '@shared/duration-format';
 
 // Chart.js is already registered globally in App.tsx via chart-setup.ts
 
@@ -109,7 +110,8 @@ export function MetricProgressCard({
   metricType,
 }: MetricProgressCardProps) {
   const confettiTriggered = useRef(false);
-  const { getLabel: getMetricLabel } = useMetricLabels();
+  const { getLabel: getMetricLabel, formats } = useMetricLabels();
+  const durationFormat = formats[metric];
   const isTracking = metricType === 'tracking';
 
   // Trigger confetti for recent PRs
@@ -246,7 +248,8 @@ export function MetricProgressCard({
       tooltip: {
         enabled: true,
         callbacks: {
-          label: (context: TooltipItem<'line'>) => `${context.parsed.y}${units}`,
+          label: (context: TooltipItem<'line'>) =>
+            durationFormat && context.parsed.y != null ? formatMeasurement(context.parsed.y, durationFormat) : `${context.parsed.y}${units}`,
         },
       },
     },
@@ -308,8 +311,14 @@ export function MetricProgressCard({
                 data-testid="current-value"
                 className="text-2xl sm:text-3xl font-bold text-gray-900"
               >
-                {currentValue?.toFixed(2)}
-                {units}
+                {durationFormat && currentValue != null ? (
+                  formatMeasurement(currentValue, durationFormat)
+                ) : (
+                  <>
+                    {currentValue?.toFixed(2)}
+                    {units}
+                  </>
+                )}
               </span>
             </MetricContextTooltip>
             {/* Platform-wide convention: small "est." chip on every isCalculated measurement.
@@ -374,8 +383,14 @@ export function MetricProgressCard({
                 data-testid="pr-value"
                 className="text-xl font-semibold text-yellow-700"
               >
-                {personalRecord?.value?.toFixed(2) ?? bestValue?.toFixed(2)}
-                {units}
+                {durationFormat && (personalRecord?.value ?? bestValue) != null ? (
+                  formatMeasurement((personalRecord?.value ?? bestValue)!, durationFormat)
+                ) : (
+                  <>
+                    {personalRecord?.value?.toFixed(2) ?? bestValue?.toFixed(2)}
+                    {units}
+                  </>
+                )}
               </span>
             </MetricContextTooltip>
             {personalRecord && (

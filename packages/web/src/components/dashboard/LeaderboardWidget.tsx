@@ -25,6 +25,7 @@ import { Trophy, AlertCircle, RefreshCw, Award, TrendingUp } from "lucide-react"
 import { useLeaderboard } from "@/hooks/useLeaderboard";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
 import { formatMetricValue } from "@/lib/metrics";
+import { formatMeasurement } from "@shared/duration-format";
 import type { TimeframePreset } from "@shared/dashboard-timeframe";
 
 interface LeaderboardWidgetProps {
@@ -71,6 +72,8 @@ export function LeaderboardWidget({
     dateTo,
     limit,
   });
+
+  const shownMetric = metrics.find((m) => m.code === (leaderboardData?.metric || effectiveMetric));
 
   const isLoading = metricsLoading || leaderboardLoading;
   const rankings = leaderboardData?.rankings || [];
@@ -306,7 +309,9 @@ export function LeaderboardWidget({
                   {entry.teamName && <span>{entry.teamName}</span>}
                   <span>•</span>
                   <span className="font-medium">
-                    {formatMetricValue(leaderboardData?.metric || effectiveMetric, entry.value)}
+                    {shownMetric?.displayFormat === "duration"
+                      ? formatMeasurement(entry.value, shownMetric)
+                      : formatMetricValue(leaderboardData?.metric || effectiveMetric, entry.value)}
                   </span>
                 </div>
 

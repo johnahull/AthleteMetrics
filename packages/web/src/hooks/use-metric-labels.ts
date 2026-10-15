@@ -1,9 +1,12 @@
 import { useCallback, useMemo } from 'react';
 import { useAvailableMetrics } from './use-available-metrics';
+import type { MeasurementFormat } from '@shared/duration-format';
 
 export interface UseMetricLabelsResult {
   labels: Record<string, string>;
   getLabel: (code: string) => string;
+  /** Duration (mm:ss) metrics only, ready for formatMeasurement; other metrics keep their own display */
+  formats: Record<string, MeasurementFormat>;
   isLoading: boolean;
 }
 
@@ -52,5 +55,15 @@ export function useMetricLabels(): UseMetricLabelsResult {
     [labels],
   );
 
-  return { labels, getLabel, isLoading };
+  const formats = useMemo(
+    () =>
+      Object.fromEntries(
+        metrics
+          .filter((m) => m.displayFormat === 'duration')
+          .map((m) => [m.code, { unit: m.unit, displayFormat: m.displayFormat, decimalPrecision: m.decimalPrecision }]),
+      ),
+    [metrics],
+  );
+
+  return { labels, getLabel, formats, isLoading };
 }

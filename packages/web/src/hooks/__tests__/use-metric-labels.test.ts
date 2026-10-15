@@ -93,4 +93,15 @@ describe('useMetricLabels', () => {
 
     expect(result.current.getLabel('FLY10_TIME')).toBe('My Org Fly Time');
   });
+
+  it('lists the display format of duration (mm:ss) metrics only', () => {
+    mockAvailableMetrics.metrics = [
+      { ...fixture('MILE', 'Mile'), unit: 's', displayFormat: 'duration', decimalPrecision: 1 },
+      { ...fixture('FLY10_TIME', 'Fly'), unit: 's', displayFormat: 'decimal' },
+    ];
+
+    const { result } = renderHook(() => useMetricLabels());
+
+    expect(result.current.formats).toEqual({ MILE: { unit: 's', displayFormat: 'duration', decimalPrecision: 1 } });
+  });
 });

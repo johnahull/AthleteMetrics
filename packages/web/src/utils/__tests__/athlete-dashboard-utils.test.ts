@@ -92,3 +92,26 @@ describe('athlete-dashboard-utils — metricLabels parameter', () => {
     });
   });
 });
+
+describe('athlete-dashboard-utils — duration (mm:ss) metrics', () => {
+  // A known lower-is-better code, so the PR direction does not depend on the name fallback
+  const formats = { DASH_40YD: { unit: 's', displayFormat: 'duration' as const, decimalPrecision: 1 } };
+  const runs = [m('DASH_40YD', 406.7, '2024-01-01'), m('DASH_40YD', 402.5, '2024-02-01')];
+
+  it('calculatePersonalRecords gives an mm:ss value and improvement', () => {
+    const [pr] = calculatePersonalRecords(runs, undefined, formats);
+    expect(pr.displayValue).toBe('6:42.5');
+    expect(pr.improvementText).toBe('↑ 0:04.2 better than last best');
+  });
+
+  it('generateActivityTimeline gives an mm:ss value', () => {
+    const timeline = generateActivityTimeline(runs, undefined, formats);
+    expect(timeline.map((t) => t.displayValue)).toEqual(['6:42.5', '6:46.7']);
+  });
+
+  it('leaves decimal metrics without a displayValue and the improvement text unchanged', () => {
+    const [pr] = calculatePersonalRecords([m('FLY10_TIME', 1.5, '2024-01-01'), m('FLY10_TIME', 1.6, '2024-02-01')], undefined, formats);
+    expect(pr.displayValue).toBeUndefined();
+    expect(pr.improvementText).toBe('↑ 0.10s better than last best');
+  });
+});

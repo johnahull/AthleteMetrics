@@ -4,6 +4,7 @@
 
 import { differenceInDays, startOfMonth, endOfMonth } from 'date-fns';
 import { isLowerIsBetter } from '@/lib/metrics';
+import { formatMeasurement, type MeasurementFormat } from '@shared/duration-format';
 
 interface Measurement {
   id: string;
@@ -48,10 +49,14 @@ export function getLastMeasurementDate(measurements: Measurement[]): Date | null
  * Pass `metricLabels` (from `useMetricLabels().labels`) to surface custom org
  * metrics and per-org label overrides. Falls back to a built-in name map for
  * unmigrated callers, then to the raw code.
+ *
+ * Pass `metricFormats` (from `useMetricLabels().formats`) so duration metrics get an
+ * mm:ss `displayValue` and improvement text.
  */
 export function calculatePersonalRecords(
   measurements: Measurement[],
   metricLabels?: Record<string, string>,
+  metricFormats?: Record<string, MeasurementFormat>,
 ) {
   const metricGroups: Record<string, Measurement[]> = {};
 
@@ -94,10 +99,13 @@ export function calculatePersonalRecords(
       const secondBestValue = parseFloat(String(secondBest.value));
       improvement = Math.abs(bestValue - secondBestValue);
 
-      const units = bestMeasurement.units || '';
-      const formattedImprovement = isLowerBetter
-        ? improvement.toFixed(2)
-        : improvement.toFixed(1);
+      const durationFormat = metricFormats?.[metric];
+      const units = durationFormat ? '' : bestMeasurement.units || '';
+      const formattedImprovement = durationFormat
+        ? formatMeasurement(improvement, durationFormat)
+        : isLowerBetter
+          ? improvement.toFixed(2)
+          : improvement.toFixed(1);
 
       if (isLowerBetter) {
         improvementText = `↑ ${formattedImprovement}${units} better than last best`;
@@ -110,6 +118,7 @@ export function calculatePersonalRecords(
       metric,
       displayName: metricLabels?.[metric] ?? getMetricDisplayName(metric),
       value: bestValue,
+      displayValue: metricFormats?.[metric] ? formatMeasurement(bestValue, metricFormats[metric]) : undefined,
       units: bestMeasurement.units,
       date: bestMeasurement.date,
       isRecent,
@@ -130,6 +139,7 @@ export function calculatePersonalRecords(
 export function generateActivityTimeline(
   measurements: Measurement[],
   metricLabels?: Record<string, string>,
+  metricFormats?: Record<string, MeasurementFormat>,
 ) {
   // Get last 5 measurements sorted by date
   const recentMeasurements = [...measurements]
@@ -185,6 +195,7 @@ export function generateActivityTimeline(
       metric: measurement.metric,
       displayName: metricLabels?.[measurement.metric] ?? getMetricDisplayName(measurement.metric),
       value,
+      displayValue: metricFormats?.[measurement.metric] ? formatMeasurement(value, metricFormats[measurement.metric]) : undefined,
       units: measurement.units,
       insight,
       insightType,
