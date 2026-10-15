@@ -1737,14 +1737,25 @@ export function registerImportExportRoutes(app: Express) {
 
       // display_value: mm:ss for duration metrics (site or custom), otherwise the same as value
       const exportedCodes = [...new Set(measurements.map(m => m.metric).filter(Boolean))];
+      // Site metrics are keyed by code; custom codes are unique per organization only, so by `${organizationId}:${code}`
       const durationFormats = new Map<string, { displayFormat: 'duration'; decimalPrecision: number }>();
+      const exportedOrgIds = [...new Set(measurements.map(m => m.organizationId).filter(Boolean))];
       if (exportedCodes.length > 0) {
-        for (const table of [siteMetrics, customOrgMetrics]) {
-          const rows = await db
-            .select({ code: table.code, decimalPrecision: table.decimalPrecision })
-            .from(table)
-            .where(and(inArray(table.code, exportedCodes), eq(table.displayFormat, 'duration')));
-          for (const r of rows) durationFormats.set(r.code, { displayFormat: 'duration', decimalPrecision: r.decimalPrecision });
+        const siteRows = await db
+          .select({ code: siteMetrics.code, decimalPrecision: siteMetrics.decimalPrecision })
+          .from(siteMetrics)
+          .where(and(inArray(siteMetrics.code, exportedCodes), eq(siteMetrics.displayFormat, 'duration')));
+        for (const r of siteRows) durationFormats.set(r.code, { displayFormat: 'duration', decimalPrecision: r.decimalPrecision });
+        if (exportedOrgIds.length > 0) {
+          const customRows = await db
+            .select({ organizationId: customOrgMetrics.organizationId, code: customOrgMetrics.code, decimalPrecision: customOrgMetrics.decimalPrecision })
+            .from(customOrgMetrics)
+            .where(and(
+              inArray(customOrgMetrics.code, exportedCodes),
+              inArray(customOrgMetrics.organizationId, exportedOrgIds),
+              eq(customOrgMetrics.displayFormat, 'duration'),
+            ));
+          for (const r of customRows) durationFormats.set(`${r.organizationId}:${r.code}`, { displayFormat: 'duration', decimalPrecision: r.decimalPrecision });
         }
       }
 
@@ -1756,6 +1767,8 @@ export function registerImportExportRoutes(app: Express) {
         const user = measurement.user;
         // Export first team only as "teamName" (singular) to match import format
         const teamName = user?.teams && user.teams.length > 0 ? user.teams[0].name : '';
+        const durationFormat = durationFormats.get(measurement.metric)
+          ?? durationFormats.get(`${measurement.organizationId}:${measurement.metric}`);
 
         return [
           user?.firstName || '',
@@ -1769,8 +1782,8 @@ export function registerImportExportRoutes(app: Express) {
           measurement.units || '',
           measurement.flyInDistance || '',
           measurement.notes || '',
-          durationFormats.has(measurement.metric) && measurement.value
-            ? formatMeasurement(Number(measurement.value), durationFormats.get(measurement.metric)!)
+          durationFormat && measurement.value
+            ? formatMeasurement(Number(measurement.value), durationFormat)
             : measurement.value || ''
         ].map(field => {
           // SECURITY: Sanitize for formula injection, then escape for CSV format
