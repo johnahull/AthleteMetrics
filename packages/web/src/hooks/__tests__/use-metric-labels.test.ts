@@ -104,4 +104,15 @@ describe('useMetricLabels', () => {
 
     expect(result.current.formats).toEqual({ MILE: { unit: 's', displayFormat: 'duration', decimalPrecision: 1 } });
   });
+
+  it('lists the metric type of every metric', () => {
+    mockAvailableMetrics.metrics = [
+      { ...fixture('MILE_RUN', 'Mile Run'), metricType: 'lower_is_better', lowerIsBetter: true },
+      fixture('VERTICAL_JUMP', 'Vertical Jump'),
+    ];
+
+    const { result } = renderHook(() => useMetricLabels());
+
+    expect(result.current.types).toEqual({ MILE_RUN: 'lower_is_better', VERTICAL_JUMP: 'higher_is_better' });
+  });
 });

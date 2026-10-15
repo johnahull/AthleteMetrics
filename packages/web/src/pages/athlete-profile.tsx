@@ -59,7 +59,7 @@ export default function AthleteProfile() {
   const { user, organizationContext } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { getLabel, formats: metricFormats } = useMetricLabels();
+  const { getLabel, formats: metricFormats, types: metricTypes } = useMetricLabels();
   const { metrics: metricConfigs } = useAvailableMetrics();
 
   const [showEditModal, setShowEditModal] = useState(false);
@@ -193,12 +193,12 @@ export default function AthleteProfile() {
     [measurements]
   );
   const personalRecords = useMemo(
-    () => calculatePersonalRecords(measurements, undefined, metricFormats),
-    [measurements, metricFormats]
+    () => calculatePersonalRecords(measurements, undefined, metricFormats, metricTypes),
+    [measurements, metricFormats, metricTypes]
   );
   const activityTimeline = useMemo(
-    () => generateActivityTimeline(measurements, undefined, metricFormats),
-    [measurements, metricFormats]
+    () => generateActivityTimeline(measurements, undefined, metricFormats, metricTypes),
+    [measurements, metricFormats, metricTypes]
   );
 
   // Group measurements by metric for progress cards

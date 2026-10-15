@@ -71,11 +71,10 @@ interface MetricProgressCardProps {
 
 /**
  * Filter measurements to keep only the best value per date.
- * Uses isLowerBetter to determine what "best" means for the metric.
+ * `lowerIsBetter` decides what "best" means for the metric.
  */
-function filterBestPerDate(measurements: Measurement[], metric: string): Measurement[] {
+function filterBestPerDate(measurements: Measurement[], lowerIsBetter: boolean): Measurement[] {
   const bestByDate = new Map<string, Measurement>();
-  const lowerIsBetter = isLowerBetter(metric);
 
   for (const m of measurements) {
     const existing = bestByDate.get(m.date);
@@ -113,6 +112,8 @@ export function MetricProgressCard({
   const { getLabel: getMetricLabel, formats } = useMetricLabels();
   const durationFormat = formats[metric];
   const isTracking = metricType === 'tracking';
+  // The metric list knows new and custom metrics; the built-in list is the fallback
+  const lowerIsBetter = metricType ? metricType === 'lower_is_better' : isLowerBetter(metric);
 
   // Trigger confetti for recent PRs
   useEffect(() => {
@@ -133,13 +134,13 @@ export function MetricProgressCard({
 
   // Filter to best measurement per date for sparkline and trend
   const filteredMeasurements = useMemo(
-    () => filterBestPerDate(measurements, metric),
-    [measurements, metric]
+    () => filterBestPerDate(measurements, lowerIsBetter),
+    [measurements, lowerIsBetter]
   );
 
   // Calculate trend data using filtered measurements
   const trendData = useMemo(
-    () => (metricType === 'tracking' ? null : calculateMetricTrend(filteredMeasurements, metric)),
+    () => (metricType === 'tracking' ? null : calculateMetricTrend(filteredMeasurements, metric, metricType)),
     [filteredMeasurements, metric, metricType]
   );
 
@@ -184,7 +185,6 @@ export function MetricProgressCard({
     if (mostRecentDate < ninetyDaysAgo) return false;
 
     const currentNum = parseFloat(String(mostRecentMeasurement.value));
-    const lowerIsBetter = isLowerBetter(metric);
     return measurements.every((m) => {
       const mDate = new Date(m.date);
       if (mDate < ninetyDaysAgo) return true;
@@ -192,11 +192,11 @@ export function MetricProgressCard({
       const mNum = parseFloat(String(m.value));
       return lowerIsBetter ? currentNum <= mNum : currentNum >= mNum;
     });
-  }, [measurements, metric, mostRecentMeasurement, isTracking]);
+  }, [measurements, lowerIsBetter, mostRecentMeasurement, isTracking]);
 
   const bestValue = useMemo(
-    () => getBestValue(measurements, metric),
-    [measurements, metric]
+    () => getBestValue(measurements, metric, metricType),
+    [measurements, metric, metricType]
   );
 
   // Handle empty measurements

@@ -115,3 +115,26 @@ describe('athlete-dashboard-utils — duration (mm:ss) metrics', () => {
     expect(pr.improvementText).toBe('↑ 0.10s better than last best');
   });
 });
+
+describe('athlete-dashboard-utils — metric direction from the metric list', () => {
+  // MILE_RUN is not in the hard-coded lower-is-better list, so only the supplied type knows it is a time
+  const types = { MILE_RUN: 'lower_is_better' as const };
+  const runs = [m('MILE_RUN', 360, '2024-01-01'), m('MILE_RUN', 420, '2024-02-01'), m('MILE_RUN', 400, '2024-03-01')];
+
+  it('calculatePersonalRecords takes the fastest time as the PR for a lower-is-better metric', () => {
+    const [pr] = calculatePersonalRecords(runs, undefined, undefined, types);
+    expect(pr.value).toBe(360);
+  });
+
+  it('generateActivityTimeline detects an improvement for a lower-is-better metric', () => {
+    const timeline = generateActivityTimeline(runs, undefined, undefined, types);
+    const march = timeline.find((t) => t.date === '2024-03-01');
+    expect(march?.insightType).toBe('improvement');
+    expect(timeline.find((t) => t.date === '2024-01-01')?.insightType).toBe('pr');
+  });
+
+  it('keeps the built-in direction when the metric is missing from the supplied types', () => {
+    const [pr] = calculatePersonalRecords([m('FLY10_TIME', 1.5, '2024-01-01'), m('FLY10_TIME', 1.6, '2024-02-01')], undefined, undefined, types);
+    expect(pr.value).toBe(1.5);
+  });
+});
