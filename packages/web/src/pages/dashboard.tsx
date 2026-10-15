@@ -8,6 +8,7 @@ import { getMetricColor, getMetricIcon, formatMetricValue, getMetricUnits } from
 import { useAuth } from "@/lib/auth";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
 import { useMetricLabels } from "@/hooks/use-metric-labels";
+import { formatMeasurement } from "@shared/duration-format";
 import { useAthleteDashboardData } from "@/hooks/useAthleteDashboardData";
 import { MetricProgressCard } from "@/components/athlete/MetricProgressCard";
 import { useDashboardTrends } from "@/hooks/use-dashboard-trends";
@@ -84,7 +85,7 @@ export default function Dashboard() {
 
   // Get available metrics for the organization
   const { metrics: availableMetrics, isLoading: metricsLoading } = useAvailableMetrics();
-  const { getLabel: getMetricLabel } = useMetricLabels();
+  const { getLabel: getMetricLabel, formats: metricFormats } = useMetricLabels();
 
   // Use role from user session data
   const userRole = user?.role || 'athlete';
@@ -491,7 +492,11 @@ export default function Dashboard() {
                       Best {metric.label} ({scope.timeframe})
                     </p>
                     <p className="text-2xl font-bold text-gray-900" data-testid={`stat-best-${metricCode.toLowerCase()}`}>
-                      {isBestMetricResult(bestResult) ? formatMetricValue(metricCode, parseFloat(bestResult.value)) : "N/A"}
+                      {isBestMetricResult(bestResult)
+                        ? metricFormats[metricCode]
+                          ? formatMeasurement(parseFloat(bestResult.value), metricFormats[metricCode])
+                          : formatMetricValue(metricCode, parseFloat(bestResult.value))
+                        : "N/A"}
                     </p>
                     <p className="text-sm text-gray-500 mt-1" data-testid={`stat-best-${metricCode.toLowerCase()}-athlete`}>
                       {isBestMetricResult(bestResult) ? bestResult.userName : "No data"}
@@ -675,7 +680,9 @@ export default function Dashboard() {
                     <td className="py-3 font-mono">
                       {measurement.metric === "FLY10_TIME" ?
                         formatFly10TimeWithSpeed(parseFloat(measurement.value)) :
-                        `${measurement.value}${measurement.units}`
+                        metricFormats[measurement.metric]
+                          ? formatMeasurement(parseFloat(measurement.value), metricFormats[measurement.metric])
+                          : `${measurement.value}${measurement.units}`
                       }
                     </td>
                     <td className="py-3 text-gray-600">{measurement.date}</td>

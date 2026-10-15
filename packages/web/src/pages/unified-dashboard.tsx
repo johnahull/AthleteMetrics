@@ -16,6 +16,7 @@ import { Loader2, AlertCircle, Link2, Building2, BarChart3, Shield, ArrowRight }
 import { Redirect, Link } from 'wouter';
 import { getMetricUnits } from '@/lib/metrics';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
+import { formatMeasurement } from '@shared/duration-format';
 import { formatDistanceToNow } from 'date-fns';
 
 export default function UnifiedDashboardPage() {
@@ -23,7 +24,7 @@ export default function UnifiedDashboardPage() {
   const { data: profile, isLoading: profileLoading, error: profileError } = useGlobalAthleteProfile();
   const { data: dashboard, isLoading: dashboardLoading } = useUnifiedDashboard();
   const { data: measurements, isLoading: measurementsLoading } = useUnifiedMeasurements();
-  const { getLabel: getMetricLabel } = useMetricLabels();
+  const { getLabel: getMetricLabel, formats: metricFormats } = useMetricLabels();
 
   // Redirect if not logged in
   if (!authLoading && !user) {
@@ -242,10 +243,16 @@ export default function UnifiedDashboardPage() {
                   </div>
                   <div className="text-right">
                     <div className="font-bold">
-                      {m.value}
-                      <span className="text-sm font-normal text-muted-foreground ml-1">
-                        {m.units}
-                      </span>
+                      {metricFormats[m.metric] ? (
+                        formatMeasurement(Number(m.value), metricFormats[m.metric])
+                      ) : (
+                        <>
+                          {m.value}
+                          <span className="text-sm font-normal text-muted-foreground ml-1">
+                            {m.units}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
