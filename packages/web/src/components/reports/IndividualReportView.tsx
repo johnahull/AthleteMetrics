@@ -186,14 +186,21 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
         </CardHeader>
       </Card>
 
-      {/* Coaching Insights */}
-      <CoachingInsightsCard
-        reportId={report.id}
-        initialInsights={report.coachingInsights}
-        generatedAt={report.coachingInsightsGeneratedAt}
-        model={report.coachingInsightsModel}
-        aiEnabled={aiEnabled || false}
-      />
+      {measurementCodes.length === 0 ? (
+        <Card>
+          <CardContent className="py-10 text-center text-muted-foreground">
+            No measurements recorded for this athlete in this report yet.
+          </CardContent>
+        </Card>
+      ) : (
+        <CoachingInsightsCard
+          reportId={report.id}
+          initialInsights={report.coachingInsights}
+          generatedAt={report.coachingInsightsGeneratedAt}
+          model={report.coachingInsightsModel}
+          aiEnabled={aiEnabled || false}
+        />
+      )}
 
       {/* Performance Table */}
       {athlete.measurements && Object.keys(athlete.measurements).length > 0 && (
@@ -371,7 +378,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
         <FvProfileSection athleteName={athlete.userName} fvProfile={reportData.fvProfile} />
       )}
 
-      {metricExplanations && (
+      {metricExplanations && measurementCodes.length > 0 && (
         <ReportMetricsGlossary
           explanations={metricExplanations}
           metricOrder={measurementCodes}
