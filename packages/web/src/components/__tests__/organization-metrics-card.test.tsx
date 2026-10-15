@@ -25,18 +25,21 @@ const orgRow = (metricCode: string, isEnabled: boolean) => ({ id: `om-${metricCo
 
 let fetchMock: ReturnType<typeof vi.fn>;
 let savedA = false;
+let savedC: boolean | null = null; // null = no org_metrics row yet
 
 beforeEach(() => {
   savedA = false;
+  savedC = null;
   fetchMock = vi.fn(async (input: any, init?: any) => {
     const u = String(input);
     const json = (b: unknown) => ({ ok: true, json: async () => b }) as any;
     if (u.includes('/metrics/bulk-update')) {
       const body = JSON.parse(init.body);
+      if (body.enable.includes('C')) savedC = true;
       return json([...body.enable.map((c: string) => orgRow(c, true)), ...body.disable.map((c: string) => orgRow(c, false))]);
     }
     if (u.startsWith('/api/metrics')) return json([site('A'), site('B'), site('C')]);
-    if (u.includes('/metrics')) return json([orgRow('A', savedA), orgRow('B', true), orgRow('C', false)].map((r) => ({ ...r, siteMetric: site(r.metricCode) })));
+    if (u.includes('/metrics')) return json([orgRow('A', savedA), orgRow('B', true), ...(savedC === null ? [] : [orgRow('C', savedC)])].map((r) => ({ ...r, siteMetric: site(r.metricCode) })));
     return json([]);
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -100,5 +103,28 @@ describe('OrganizationMetricsCard staged toggles', () => {
     await qc.invalidateQueries({ queryKey: ['organizationMetrics'] });
 
     await waitFor(() => expect(screen.queryByTestId('save-metric-changes')).not.toBeInTheDocument());
+  });
+
+  it('keeps a newly enabled metric on after Save when it had no saved row', async () => {
+    renderCard();
+    const c = await screen.findByTestId('toggle-metric-C');
+    fireEvent.click(c);
+    fireEvent.click(screen.getByTestId('save-metric-changes'));
+    await waitFor(() => expect(screen.queryByTestId('save-metric-changes')).not.toBeInTheDocument());
+    expect(c).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('does not carry staged changes over to another organization', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const ui = (id: string) => (
+      <QueryClientProvider client={qc}>
+        <OrganizationMetricsCard key={id} organizationId={id} canEdit />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(ui(ORG));
+    fireEvent.click(await screen.findByTestId('toggle-metric-A'));
+    rerender(ui('22222222-2222-2222-2222-222222222222'));
+    await screen.findByTestId('toggle-metric-A');
+    expect(screen.queryByTestId('save-metric-changes')).not.toBeInTheDocument();
   });
 });

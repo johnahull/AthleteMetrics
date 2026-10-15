@@ -75,7 +75,7 @@ const metricModifyLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-const metricCodeSchema = z.string().regex(/^[A-Z0-9_]+$/);
+const metricCodeSchema = z.string().max(50).regex(/^[A-Z0-9_]+$/);
 const uniqueCodes = z.array(metricCodeSchema).max(200).default([]).transform((codes) => [...new Set(codes)]);
 const bulkUpdateMetricsSchema = z
   .object({

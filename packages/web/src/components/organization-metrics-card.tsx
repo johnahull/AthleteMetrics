@@ -176,9 +176,11 @@ export default function OrganizationMetricsCard({
     });
   };
 
-  // Staged entries the saved state has caught up with (a refetch after another admin's edit) are no-ops
+  // Staged entries the saved state has caught up with (a refetch after another admin's edit) are no-ops,
+  // and a metric deactivated since staging is gone from the table, so it cannot be saved
+  const knownCodes = new Set(siteMetrics?.map((m) => m.code));
   const effectivePending = Object.fromEntries(
-    Object.entries(pending).filter(([code, wanted]) => wanted !== isMetricEnabled(code))
+    Object.entries(pending).filter(([code, wanted]) => knownCodes.has(code) && wanted !== isMetricEnabled(code))
   );
   const pendingCount = Object.keys(effectivePending).length;
 
