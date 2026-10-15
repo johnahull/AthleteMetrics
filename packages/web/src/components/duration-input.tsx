@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Input } from "@/components/ui/input";
-import { formatDuration, parseDuration } from "@shared/duration-format";
+import { formatDuration, formatDurationExact, parseDuration } from "@shared/duration-format";
 
 const MINUTES_DOT_SECONDS = /^(\d+)\.([0-5]\d)$/;
 const PLAIN_NUMBER = /^\d+(\.\d+)?$/;
@@ -18,9 +18,6 @@ export function durationTypoWarning(text: string): string | null {
   return `${trimmed} is read as ${trimmed} seconds (${formatDuration(seconds, 1)}). For minutes, type m:ss, e.g. 6:42.`;
 }
 
-/** m:ss with up to 3 decimals and no trailing zeros, so a prefilled value is never rounded */
-const toText = (seconds: number) => formatDuration(seconds, 3).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
-
 /** 0, NaN and empty all mean "no value" */
 const asValue = (n: number | null | undefined) => (n && Number.isFinite(n) ? n : undefined);
 
@@ -36,13 +33,13 @@ type DurationInputProps = Omit<React.ComponentProps<"input">, "value" | "onChang
  */
 export const DurationInput = React.forwardRef<HTMLInputElement, DurationInputProps>(
   ({ value, onValueChange, onBlur, placeholder = "m:ss, e.g. 6:42.5", ...props }, ref) => {
-    const [text, setText] = React.useState(() => (asValue(value) ? toText(value as number) : ""));
+    const [text, setText] = React.useState(() => (asValue(value) ? formatDurationExact(value as number) : ""));
     const [touched, setTouched] = React.useState(false);
 
     // Follow outside changes (form reset, suggestion) without overwriting what is being typed
     React.useEffect(() => {
       const incoming = asValue(value);
-      if (incoming !== asValue(parseDuration(text))) setText(incoming ? toText(incoming) : "");
+      if (incoming !== asValue(parseDuration(text))) setText(incoming ? formatDurationExact(incoming) : "");
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [value]);
 

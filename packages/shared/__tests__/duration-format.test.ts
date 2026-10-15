@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseDuration, formatDuration, formatMeasurement, parseImportValue } from '../duration-format';
+import { parseDuration, formatDuration, formatMeasurement, parseImportValue, formatDurationExact } from '../duration-format';
 
 describe('parseDuration', () => {
   it.each([
@@ -82,5 +82,15 @@ describe('parseImportValue', () => {
     expect(parseImportValue('6:60')).toBeNull();
     expect(parseImportValue('abc')).toBeNull();
     expect(parseImportValue('')).toBeNull();
+  });
+});
+
+describe('formatDurationExact', () => {
+  it('keeps up to 3 decimals and drops trailing zeros', () => {
+    expect(formatDurationExact(402.5)).toBe('6:42.5');
+    expect(formatDurationExact(435)).toBe('7:15');
+    expect(formatDurationExact(400)).toBe('6:40');
+    expect(formatDurationExact(402.125)).toBe('6:42.125');
+    expect(formatDurationExact(3605)).toBe('1:00:05');
   });
 });

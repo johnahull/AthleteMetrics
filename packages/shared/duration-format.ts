@@ -51,6 +51,11 @@ export function formatDuration(seconds: number, decimals: number): string {
     : `${sign}${minutes}:${secText}`;
 }
 
+/** m:ss with up to 3 decimals and no trailing zeros (402.5 -> "6:42.5", 435 -> "7:15"), for editing: never rounds a stored value */
+export function formatDurationExact(seconds: number): string {
+  return formatDuration(seconds, 3).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+}
+
 export interface MeasurementFormat {
   unit?: string | null;
   displayFormat?: DisplayFormat | null;
