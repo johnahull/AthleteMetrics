@@ -13,8 +13,8 @@ vi.mock('@/lib/auth', () => ({ useAuth: () => ({ user: { role: 'coach' } }) }));
 vi.mock('@/components/athletes/LlmExportButton', () => ({ LlmExportButton: () => null }));
 vi.mock('../ShareReportDialog', () => ({ ShareReportDialog: () => null }));
 vi.mock('../SendReportToAthleteDialog', () => ({ SendReportToAthleteDialog: () => null }));
-vi.mock('../CoachingInsightsCard', () => ({ CoachingInsightsCard: () => null }));
-vi.mock('../ReportMetricsGlossary', () => ({ ReportMetricsGlossary: () => null }));
+vi.mock('../CoachingInsightsCard', () => ({ CoachingInsightsCard: () => <div data-testid="insights" /> }));
+vi.mock('../ReportMetricsGlossary', () => ({ ReportMetricsGlossary: () => <div data-testid="glossary" /> }));
 vi.mock('../MetricExplanation', () => ({ MetricExplanation: ({ label }: { label: string }) => <span>{label}</span> }));
 vi.mock('@/components/reports/TrendSection', () => ({ TrendSection: () => null }));
 vi.mock('@/components/reports/PercentileRadarSection', () => ({ PercentileRadarSection: () => null }));
@@ -32,17 +32,18 @@ const report = {
   config: { athleteId: 'ath-1', timeframe: { type: 'preset', preset: 'all_time' }, metrics: ['VERTICAL_JUMP'] },
 } as unknown as Report;
 
-function renderWith(reportConfig: Record<string, unknown>) {
+function renderWith(reportConfig: Record<string, unknown>, measurements: Record<string, number> = { VERTICAL_JUMP: 27.5 }) {
   const data = {
     reportType: 'individual',
     reportConfig: { metrics: ['VERTICAL_JUMP'], ...reportConfig },
     generatedAt: '2024-03-15T00:00:00Z',
     metricLabels: { VERTICAL_JUMP: 'Vertical Jump' },
     metricUnits: { VERTICAL_JUMP: 'in' },
+    metricExplanations: { VERTICAL_JUMP: { whatItMeasures: 'x' } },
     athlete: {
       userId: 'ath-1',
       userName: 'Test Athlete',
-      measurements: { VERTICAL_JUMP: 27.5 },
+      measurements,
       percentiles: { VERTICAL_JUMP: 80 },
       teamAverages: { VERTICAL_JUMP: 24 },
       benchmarkComparisons: {},
@@ -75,5 +76,21 @@ describe('IndividualReportView — group comparison columns', () => {
     expect(screen.getByText('Group Average')).toBeInTheDocument();
     expect(screen.getByText('Percentile')).toBeInTheDocument();
     expect(screen.getByText('80.0th percentile')).toBeInTheDocument();
+  });
+});
+
+describe('IndividualReportView — no measurements', () => {
+  it('shows an empty state instead of insights and glossary', () => {
+    renderWith({}, {});
+    expect(screen.getByText(/no measurements recorded/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('insights')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('glossary')).not.toBeInTheDocument();
+  });
+
+  it('shows insights and glossary when there are measurements', () => {
+    renderWith({});
+    expect(screen.queryByText(/no measurements recorded/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId('insights')).toBeInTheDocument();
+    expect(screen.getByTestId('glossary')).toBeInTheDocument();
   });
 });
