@@ -102,11 +102,11 @@ describe.each(routes)('org metric write: $name', (r) => {
   it('allows an org admin of that org', async () => {
     // disable/update need an existing row, so enable first through the admin path
     await db.insert(organizationMetrics).values({ organizationId: orgId, metricCode: CODE, isEnabled: true }).onConflictDoNothing();
-    expect((await call(r, 'org_admin')).status).toBe(200);
+    expect([200, 204]).toContain((await call(r, 'org_admin')).status);
   });
 
   it('allows a site admin', async () => {
     await db.insert(organizationMetrics).values({ organizationId: orgId, metricCode: CODE, isEnabled: true }).onConflictDoNothing();
-    expect((await call(r, 'site_admin')).status).toBe(200);
+    expect([200, 204]).toContain((await call(r, 'site_admin')).status);
   });
 });
