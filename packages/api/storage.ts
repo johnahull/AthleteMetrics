@@ -5080,53 +5080,17 @@ export class DatabaseStorage implements IStorage {
       );
     }
 
-    // Enable each metric (upsert to handle existing records)
-    const results: OrganizationMetric[] = [];
-    for (const metricCode of metricCodes) {
-      // Check if already exists
-      const [existing] = await tx
-        .select()
-        .from(organizationMetrics)
-        .where(
-          and(
-            eq(organizationMetrics.organizationId, organizationId),
-            eq(organizationMetrics.metricCode, metricCode)
-          )
-        )
-        .limit(1);
-
-      if (existing) {
-        // Update to enabled if it exists
-        const [updated] = await tx
-          .update(organizationMetrics)
-          .set({
-            isEnabled: true,
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(organizationMetrics.organizationId, organizationId),
-              eq(organizationMetrics.metricCode, metricCode)
-            )
-          )
-          .returning();
-        results.push(updated);
-      } else {
-        // Create new entry
-        const [created] = await tx
-          .insert(organizationMetrics)
-          .values({
-            organizationId,
-            metricCode,
-            isEnabled: true,
-            createdAt: new Date(),
-          })
-          .returning();
-        results.push(created);
-      }
-    }
-
-    return results;
+    // One upsert for all codes: creates missing rows, re-enables existing ones (other settings kept)
+    if (metricCodes.length === 0) return [];
+    const now = new Date();
+    return await tx
+      .insert(organizationMetrics)
+      .values(metricCodes.map((metricCode) => ({ organizationId, metricCode, isEnabled: true, createdAt: now })))
+      .onConflictDoUpdate({
+        target: [organizationMetrics.organizationId, organizationMetrics.metricCode],
+        set: { isEnabled: true, updatedAt: now },
+      })
+      .returning();
   }
 
   // ========================================================================
