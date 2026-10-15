@@ -107,6 +107,14 @@ describe('duration metrics in exports', () => {
     expect(byMetric[JUMP]).toEqual({ value: '24.500', display: '24.500' });
   });
 
+  it('LLM export markdown shows mm:ss for duration site and custom org metrics', async () => {
+    const res = await request(app).get(`/api/athletes/${athlete.id}/llm-export`).set('Cookie', cookie);
+    expect(res.status, res.text).toBe(200);
+    expect(res.text).toContain('6:42.5');
+    expect(res.text).toContain('7:15.0');
+    expect(res.text).not.toContain('435.00');
+  });
+
   it('COPPA data export stays raw seconds with units s', async () => {
     const bundle = await (new CoppaExportService() as any).buildExportBundle(athlete.id);
     const mile = bundle.measurements.find((m: any) => m.metric === MILE);

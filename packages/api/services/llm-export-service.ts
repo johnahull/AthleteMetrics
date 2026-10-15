@@ -16,6 +16,7 @@ import {
   athleteProfiles,
   organizations,
   siteMetrics,
+  customOrgMetrics,
 } from '@shared/schema';
 import { goals } from '@shared/schema/tables/gamification';
 import { wellnessResponses } from '@shared/schema/tables/wellness';
@@ -434,6 +435,7 @@ export function renderJson(d: AthleteExportData): AthleteLlmExport {
 
 async function loadMetricGlossary(
   codes: string[],
+  organizationIds: string[],
 ): Promise<Record<string, MetricGlossaryEntry>> {
   if (!codes.length) return {};
   const rows = await db
@@ -467,9 +469,43 @@ async function loadMetricGlossary(
       ...(r.displayFormat === 'duration' ? { displayFormat: r.displayFormat, decimalPrecision: r.decimalPrecision } : {}),
     };
   }
-  // Codes absent from site_metrics still deserve a glossary entry from static explanations.
+  // Custom org metric codes are unique only per organization, so look them up in the measurements' organizations.
+  const customCodes = codes.filter((c) => !siteCodes.has(c));
+  const customRows = customCodes.length && organizationIds.length
+    ? await db
+        .select({
+          code: customOrgMetrics.code,
+          label: customOrgMetrics.label,
+          unit: customOrgMetrics.unit,
+          whatItMeasures: customOrgMetrics.whatItMeasures,
+          shortDescription: customOrgMetrics.shortDescription,
+          description: customOrgMetrics.description,
+          displayFormat: customOrgMetrics.displayFormat,
+          decimalPrecision: customOrgMetrics.decimalPrecision,
+        })
+        .from(customOrgMetrics)
+        .where(and(inArray(customOrgMetrics.code, customCodes), inArray(customOrgMetrics.organizationId, organizationIds)))
+    : [];
+  for (const r of customRows) {
+    const existing = out[r.code];
+    if (existing) {
+      // Same code in two of the athlete's organizations: print mm:ss only if both are duration
+      if (existing.displayFormat !== r.displayFormat) {
+        delete existing.displayFormat;
+        delete existing.decimalPrecision;
+      }
+      continue;
+    }
+    out[r.code] = {
+      label: r.label,
+      units: r.unit ?? '',
+      explanation: r.whatItMeasures ?? r.shortDescription ?? r.description ?? 'No explanation available.',
+      ...(r.displayFormat === 'duration' ? { displayFormat: r.displayFormat, decimalPrecision: r.decimalPrecision } : {}),
+    };
+  }
+  // Codes absent from site_metrics and custom metrics still deserve a glossary entry from static explanations.
   for (const code of codes) {
-    if (siteCodes.has(code)) continue;
+    if (siteCodes.has(code) || out[code]) continue;
     const expl = explanationMap[code];
     if (!expl) continue;
     out[code] = {
@@ -669,7 +705,7 @@ export async function gatherAthleteExportData(
   const metricCodes = Object.keys(history);
   const glossary = await safe(
     'Metric glossary',
-    () => loadMetricGlossary(metricCodes),
+    () => loadMetricGlossary(metricCodes, [...new Set(measurementRows.map((m) => m.organizationId).filter((id): id is string => !!id))]),
     {} as Record<string, MetricGlossaryEntry>,
   );
 
