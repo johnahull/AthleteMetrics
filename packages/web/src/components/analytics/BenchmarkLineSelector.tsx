@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useBenchmarksForMetric } from '@/lib/benchmarks-api';
 import { useMetricConfig } from '@/hooks/use-metric-config';
+import { formatMeasurement } from '@shared/duration-format';
 import { BenchmarkSetQuickLoad } from '@/components/benchmark-sets';
 
 interface BenchmarkLineSelectorProps {
@@ -37,7 +38,10 @@ export const BenchmarkLineSelector = React.memo(function BenchmarkLineSelector({
   const { getMetricConfig } = useMetricConfig();
 
   const metricConfig = getMetricConfig(metricCode);
-  const unit = metricConfig?.unit || '';
+  const durationConfig = metricConfig?.displayFormat === 'duration' ? metricConfig : null;
+  // A duration target prints as m:ss, which carries no unit
+  const unit = durationConfig ? '' : metricConfig?.unit || '';
+  const target = (v: number | string) => (durationConfig ? formatMeasurement(Number(v), durationConfig) : v);
   const metricLabel = metricConfig?.label || metricCode;
 
   // Build the display label
@@ -250,9 +254,9 @@ export const BenchmarkLineSelector = React.memo(function BenchmarkLineSelector({
                 >
                   <span className="text-sm text-muted-foreground">
                     {benchmark.comparisonOperator === 'range' && benchmark.minValue != null && benchmark.maxValue != null
-                      ? `Target: ${benchmark.minValue} - ${benchmark.maxValue}${unit}`
+                      ? `Target: ${target(benchmark.minValue)} - ${target(benchmark.maxValue)}${unit}`
                       : benchmark.benchmarkValue != null
-                        ? `Target: ${benchmark.benchmarkValue}${unit} (${benchmark.comparisonOperator === 'lte' ? '≤' : benchmark.comparisonOperator === 'gte' ? '≥' : '='})`
+                        ? `Target: ${target(benchmark.benchmarkValue)}${unit} (${benchmark.comparisonOperator === 'lte' ? '≤' : benchmark.comparisonOperator === 'gte' ? '≥' : '='})`
                         : 'Range benchmark'
                     }
                   </span>
