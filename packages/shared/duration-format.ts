@@ -11,7 +11,7 @@ const HOUR_MIN_SEC = /^(\d+):([0-5]\d):([0-5]\d)(\.\d+)?$/;
 
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
 
-/** Seconds from "402.5", "6:42.5" or "1:00:05"; null when empty or not a valid time. */
+/** Seconds from "402.5", "6:42.5" or "1:00:05"; null when empty or not a valid time. Plain seconds must be digits or D.D (".5" is rejected). */
 export function parseDuration(input: string): number | null {
   const text = input.trim();
   if (!text) return null;
