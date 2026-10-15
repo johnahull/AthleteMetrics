@@ -47,6 +47,7 @@ import {
 } from "./report-utils";
 import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from "@/lib/report-utils";
 import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
+import { formatMeasurement } from "@shared/duration-format";
 import type { Report, TeamReportData, TeamStatistic, AthleteRanking, PdfFormat, TeamReportConfig } from "@/types/report-types";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { resolveTeamChartSelection } from "@shared/report-charts";
@@ -144,7 +145,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
     );
   }
 
-  const { teamStatistics, athleteRankings, generatedAt, metricLabels, metricUnits, metricExplanations, teamTrends, teamDistributions } = reportData;
+  const { teamStatistics, athleteRankings, generatedAt, metricLabels, metricUnits, metricFormats, metricExplanations, teamTrends, teamDistributions } = reportData;
   const resolveLabel = (code: string) => metricLabels?.[code] ?? getLabel(code);
   const teamMetricCodes = Array.isArray(teamStatistics) ? teamStatistics.map((s: TeamStatistic) => s.metric) : [];
   const sel = resolveTeamChartSelection(report.config as TeamReportConfig);
@@ -329,7 +330,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                         {stat.average !== null && stat.average !== undefined
                           ? (isFly10Metric(stat.metric)
                               ? formatFly10Dual(stat.average)
-                              : `${stat.average.toFixed(2)} ${stat.units || ''}`)
+                              : (metricFormats?.[stat.metric] ? formatMeasurement(stat.average, metricFormats[stat.metric]) : `${stat.average.toFixed(2)} ${stat.units || ''}`))
                           : "N/A"}
                       </TableCell>
                       {benchmarkColumns.map((benchmarkName) => {
@@ -342,7 +343,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                           return (
                             <TableCell key={benchmarkName}>
                               <span style={benchmarkData.tierColor ? { color: benchmarkData.tierColor } : undefined}>
-                                {`${benchmarkData.minValue.toFixed(2)} - ${benchmarkData.maxValue.toFixed(2)} ${stat.units || ''}`}
+                                {(metricFormats?.[stat.metric] ? `${formatMeasurement(benchmarkData.minValue, metricFormats[stat.metric])} - ${formatMeasurement(benchmarkData.maxValue, metricFormats[stat.metric])}` : `${benchmarkData.minValue.toFixed(2)} - ${benchmarkData.maxValue.toFixed(2)} ${stat.units || ''}`)}
                               </span>
                             </TableCell>
                           );
@@ -351,7 +352,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                         if (benchmarkData.value != null) {
                           return (
                             <TableCell key={benchmarkName}>
-                              {`${benchmarkData.value.toFixed(2)} ${stat.units || ''}`}
+                              {(metricFormats?.[stat.metric] ? formatMeasurement(benchmarkData.value, metricFormats[stat.metric]) : `${benchmarkData.value.toFixed(2)} ${stat.units || ''}`)}
                             </TableCell>
                           );
                         }
@@ -365,7 +366,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                               {stat.topPerformer.value !== null && stat.topPerformer.value !== undefined
                                 ? (isFly10Metric(stat.metric)
                                     ? formatFly10Dual(stat.topPerformer.value)
-                                    : `${stat.topPerformer.value.toFixed(2)} ${stat.units || ''}`)
+                                    : (metricFormats?.[stat.metric] ? formatMeasurement(stat.topPerformer.value, metricFormats[stat.metric]) : `${stat.topPerformer.value.toFixed(2)} ${stat.units || ''}`))
                                 : "N/A"}
                             </div>
                           </div>
@@ -377,7 +378,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                         {stat.min !== null && stat.min !== undefined && stat.max !== null && stat.max !== undefined
                           ? (isFly10Metric(stat.metric)
                               ? `${formatFly10Dual(stat.min)} - ${formatFly10Dual(stat.max)}`
-                              : `${stat.min.toFixed(2)} - ${stat.max.toFixed(2)} ${stat.units || ''}`)
+                              : (metricFormats?.[stat.metric] ? `${formatMeasurement(stat.min, metricFormats[stat.metric])} - ${formatMeasurement(stat.max, metricFormats[stat.metric])}` : `${stat.min.toFixed(2)} - ${stat.max.toFixed(2)} ${stat.units || ''}`))
                           : "N/A"}
                       </TableCell>
                     </TableRow>
@@ -518,8 +519,8 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                 <CardHeader>
                   <CardTitle>{resolveLabel(stat.metric)}</CardTitle>
                   <CardDescription>
-                    {labels.team} Average: {stat.average !== null ? `${stat.average.toFixed(2)} ${stat.units || ''}` : 'N/A'}
-                    {stat.standardDeviation !== null && ` | SD: ±${stat.standardDeviation.toFixed(2)} ${stat.units || ''}`}
+                    {labels.team} Average: {stat.average !== null ? (metricFormats?.[stat.metric] ? formatMeasurement(stat.average, metricFormats[stat.metric]) : `${stat.average.toFixed(2)} ${stat.units || ''}`) : 'N/A'}
+                    {stat.standardDeviation !== null && ` | SD: ±${metricFormats?.[stat.metric] ? formatMeasurement(stat.standardDeviation, metricFormats[stat.metric]) : `${stat.standardDeviation.toFixed(2)} ${stat.units || ''}`}`}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -588,7 +589,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                               {value !== null && value !== undefined
                                 ? (isFly10Metric(stat.metric)
                                     ? formatFly10Dual(value)
-                                    : `${value.toFixed(2)} ${stat.units || ''}`)
+                                    : (metricFormats?.[stat.metric] ? formatMeasurement(value, metricFormats[stat.metric]) : `${value.toFixed(2)} ${stat.units || ''}`))
                                 : "N/A"}
                             </TableCell>
                             <TableCell>
@@ -610,7 +611,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                             <TableCell>
                               {deviation !== null && percentDiff !== null ? (
                                 <span className={`font-semibold ${deviationColor}`}>
-                                  {deviation > 0 ? '+' : ''}{deviation.toFixed(2)} {stat.units || ''}
+                                  {deviation > 0 ? '+' : ''}{metricFormats?.[stat.metric] ? formatMeasurement(deviation, metricFormats[stat.metric]) : `${deviation.toFixed(2)} ${stat.units || ''}`}
                                   <span className="text-xs ml-1">
                                     ({percentDiff > 0 ? '+' : ''}{percentDiff.toFixed(1)}%)
                                   </span>
@@ -646,6 +647,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
           teamStatistics={teamStatistics}
           metricLabels={metricLabels}
           metricUnits={metricUnits}
+          metricFormats={metricFormats}
           metricDirections={reportData.metricDirections}
           athleteRankings={athleteRankings}
           timeframe={(report.config as TeamReportConfig).timeframe}
@@ -653,7 +655,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
       )}
 
       {sel.trends && teamTrends && Object.keys(teamTrends).length > 0 && (
-        <TeamTrendSection trends={teamTrends} metricLabels={metricLabels} metricUnits={metricUnits} />
+        <TeamTrendSection trends={teamTrends} metricLabels={metricLabels} metricUnits={metricUnits} metricFormats={metricFormats} />
       )}
 
       {sel.boxSwarm && teamDistributions && Object.keys(teamDistributions).length > 0 && (

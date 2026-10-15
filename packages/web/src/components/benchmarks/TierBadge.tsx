@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Trophy, Medal, Award, Target, ArrowUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatMeasurement, type MeasurementFormat } from "@shared/duration-format";
 
 interface TierBadgeProps {
   tierName: string;
@@ -9,6 +10,8 @@ interface TierBadgeProps {
   nextTierName?: string | null;
   distanceToNextTier?: number | null;
   unit?: string;
+  /** Duration (mm:ss) metric format: the distance prints as m:ss with no unit */
+  format?: MeasurementFormat;
   lowerIsBetter?: boolean;
   showProgress?: boolean;
 }
@@ -46,6 +49,7 @@ export function TierBadge({
   nextTierName,
   distanceToNextTier,
   unit = "",
+  format,
   lowerIsBetter = true,
   showProgress = true,
 }: TierBadgeProps) {
@@ -53,6 +57,7 @@ export function TierBadge({
 
   // Format distance for display
   const formatDistance = (distance: number): string => {
+    if (format?.displayFormat === "duration") return formatMeasurement(distance, format);
     if (Math.abs(distance) < 0.01) {
       return distance.toFixed(3);
     }
@@ -79,7 +84,7 @@ export function TierBadge({
           <ArrowUp className="h-3 w-3" />
           <span>
             {formatDistance(distanceToNextTier)}
-            {unit && ` ${unit}`} to {nextTierName}
+            {unit && format?.displayFormat !== "duration" && ` ${unit}`} to {nextTierName}
           </span>
         </div>
       )}
