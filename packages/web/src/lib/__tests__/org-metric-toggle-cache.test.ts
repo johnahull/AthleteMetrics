@@ -21,7 +21,7 @@ function seeded() {
 describe('applyOrgMetricUpdate', () => {
   it('merges the response into the full list, keeping the joined siteMetric', () => {
     const qc = seeded();
-    applyOrgMetricUpdate(qc, ORG, { id: 'om-A', organizationId: ORG, metricCode: 'A', isEnabled: true } as any);
+    applyOrgMetricUpdate(qc, ORG, [{ id: 'om-A', organizationId: ORG, metricCode: 'A', isEnabled: true } as any]);
     const list = qc.getQueryData<any[]>(['organizationMetrics', ORG, false])!;
     expect(list.find((m) => m.metricCode === 'A')).toMatchObject({ isEnabled: true, siteMetric: { code: 'A' } });
     expect(list.find((m) => m.metricCode === 'B')!.isEnabled).toBe(true);
@@ -29,20 +29,20 @@ describe('applyOrgMetricUpdate', () => {
 
   it('keeps the patched full list fresh across mounts', () => {
     const qc = seeded();
-    applyOrgMetricUpdate(qc, ORG, { id: 'om-A', organizationId: ORG, metricCode: 'A', isEnabled: true } as any);
+    applyOrgMetricUpdate(qc, ORG, [{ id: 'om-A', organizationId: ORG, metricCode: 'A', isEnabled: true } as any]);
     expect(qc.getQueryState(['organizationMetrics', ORG, false])!.isInvalidated).toBe(false);
   });
 
   it('does not throw when nothing is cached yet', () => {
     const qc = new QueryClient();
     expect(() =>
-      applyOrgMetricUpdate(qc, ORG, { id: 'om-A', organizationId: ORG, metricCode: 'A', isEnabled: true } as any)
+      applyOrgMetricUpdate(qc, ORG, [{ id: 'om-A', organizationId: ORG, metricCode: 'A', isEnabled: true } as any])
     ).not.toThrow();
   });
 
   it('does not refetch unmounted queries, only marks the enabledOnly variant stale', () => {
     const qc = seeded();
-    applyOrgMetricUpdate(qc, ORG, { id: 'om-A', organizationId: ORG, metricCode: 'A', isEnabled: true } as any);
+    applyOrgMetricUpdate(qc, ORG, [{ id: 'om-A', organizationId: ORG, metricCode: 'A', isEnabled: true } as any]);
     expect(qc.isFetching()).toBe(0);
     expect(qc.getQueryState(['organizationMetrics', ORG, true])!.isInvalidated).toBe(true);
   });
@@ -56,14 +56,26 @@ describe('applyOrgMetricUpdate', () => {
       staleTime: Infinity,
     }).subscribe(() => {});
     fetches = 0;
-    applyOrgMetricUpdate(qc, ORG, { id: 'om-A', organizationId: ORG, metricCode: 'A', isEnabled: true } as any);
+    applyOrgMetricUpdate(qc, ORG, [{ id: 'om-A', organizationId: ORG, metricCode: 'A', isEnabled: true } as any]);
     await vi.waitFor(() => expect(fetches).toBe(1));
     unsubscribe();
   });
 
+  it('patches several rows from one bulk response', () => {
+    const qc = seeded();
+    applyOrgMetricUpdate(qc, ORG, [
+      { id: 'om-A', organizationId: ORG, metricCode: 'A', isEnabled: true } as any,
+      { id: 'om-B', organizationId: ORG, metricCode: 'B', isEnabled: false } as any,
+    ]);
+    const list = qc.getQueryData<any[]>(['organizationMetrics', ORG, false])!;
+    expect(list.map((m) => [m.metricCode, m.isEnabled])).toEqual([['A', true], ['B', false]]);
+    expect(list[0].siteMetric).toEqual({ code: 'A' });
+    expect(qc.getQueryState(['organizationMetrics', ORG, false])!.isInvalidated).toBe(false);
+  });
+
   it('falls back to a refetch when the metric is not in the cached list', () => {
     const qc = seeded();
-    applyOrgMetricUpdate(qc, ORG, { id: 'om-Z', organizationId: ORG, metricCode: 'Z', isEnabled: true } as any);
+    applyOrgMetricUpdate(qc, ORG, [{ id: 'om-Z', organizationId: ORG, metricCode: 'Z', isEnabled: true } as any]);
     expect(qc.getQueryState(['organizationMetrics', ORG, false])!.isInvalidated).toBe(true);
   });
 });

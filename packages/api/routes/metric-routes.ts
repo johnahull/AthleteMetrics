@@ -4,13 +4,14 @@
  */
 
 import type { Express, Request, Response } from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { MetricService } from "../services/metric-service";
 import { requireAuth, requireSiteAdmin, requireOrganizationAccess } from "../middleware";
 import { validateOrgTypeQuery } from "../middleware/organization-type-middleware";
 import { insertSiteMetricSchema, updateSiteMetricSchema, updateOrganizationMetricSchema, siteSports, siteMetrics } from "@shared/schema";
 import { db } from "../db";
 import { eq, sql } from "drizzle-orm";
+import { z } from "zod";
 import { validateFormula, detectCircularDependencies } from "../services/formula-service";
 
 const metricService = new MetricService();
@@ -67,8 +68,23 @@ const metricCreateLimiter = rateLimit({
 const metricModifyLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 50,
+  // Per user, so admins behind one IP (shared Wi-Fi) do not share a budget
+  keyGenerator: (req) => req.session?.user?.id ?? ipKeyGenerator(req.ip ?? "unknown"),
   message: { message: "Too many metric modification attempts" },
+  standardHeaders: true,
+  legacyHeaders: false,
 });
+
+const metricCodeSchema = z.string().regex(/^[A-Z0-9_]+$/);
+const bulkUpdateMetricsSchema = z
+  .object({
+    enable: z.array(metricCodeSchema).max(200).default([]),
+    disable: z.array(metricCodeSchema).max(200).default([]),
+  })
+  .refine((v) => v.enable.length + v.disable.length > 0, { message: "No metric changes given" })
+  .refine((v) => !v.enable.some((c) => v.disable.includes(c)), {
+    message: "A metric cannot be both enabled and disabled",
+  });
 
 export function registerMetricRoutes(app: Express) {
   // ========================================================================
@@ -444,6 +460,39 @@ export function registerMetricRoutes(app: Express) {
       } catch (error) {
         console.error("POST /api/organizations/:id/metrics/bulk-enable error:", error);
         res.status(400).json({ message: sanitizeError(error, "Failed to bulk enable metrics") });
+      }
+    }
+  );
+
+  // Enable and disable many metrics for an organization in one request
+  app.post("/api/organizations/:organizationId/metrics/bulk-update",
+    metricModifyLimiter,
+    requireAuth,
+    requireOrganizationAccess(),
+    async (req: Request, res: Response) => {
+      try {
+        const { organizationId } = req.params;
+        const userId = req.session.user!.id;
+
+        if (!organizationId.match(/^[a-f0-9-]{36}$/i)) {
+          return res.status(400).json({ message: "Invalid organization ID format" });
+        }
+
+        const parsed = bulkUpdateMetricsSchema.safeParse(req.body);
+        if (!parsed.success) {
+          return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid request body" });
+        }
+
+        const metrics = await metricService.bulkUpdateMetricsForOrganization(organizationId, parsed.data, userId);
+        res.json(metrics);
+      } catch (error) {
+        console.error("POST /api/organizations/:id/metrics/bulk-update error:", error);
+
+        if (error instanceof Error && error.message.includes('Unauthorized')) {
+          return res.status(403).json({ message: error.message });
+        }
+
+        res.status(400).json({ message: sanitizeError(error, "Failed to update metrics") });
       }
     }
   );

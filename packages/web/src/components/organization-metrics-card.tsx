@@ -24,8 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   useSiteMetrics,
   useOrganizationMetrics,
-  useEnableMetricForOrganization,
-  useDisableMetricForOrganization,
+  useBulkUpdateOrganizationMetrics,
   useUpdateOrganizationMetric,
 } from "@/lib/metrics-api";
 import { useSports } from "@/lib/sports-api";
@@ -55,6 +54,8 @@ export default function OrganizationMetricsCard({
   const [editingMetric, setEditingMetric] = useState<string | null>(null);
   const [customLabel, setCustomLabel] = useState("");
   const [selectedSport, setSelectedSport] = useState<string>("ALL");
+  // Staged switch flips (metric code -> wanted state), sent together by Save
+  const [pending, setPending] = useState<Record<string, boolean>>({});
 
   // Fetch all site metrics (active only)
   // Pass organizationId to allow org admins to access metrics via /api/metrics endpoint
@@ -79,8 +80,7 @@ export default function OrganizationMetricsCard({
   const { data: sports } = useSports();
 
   // Site metrics mutations
-  const enableMutation = useEnableMetricForOrganization();
-  const disableMutation = useDisableMetricForOrganization();
+  const bulkMutation = useBulkUpdateOrganizationMetrics();
   const updateMutation = useUpdateOrganizationMetric();
 
   // Custom metrics mutations
@@ -164,32 +164,36 @@ export default function OrganizationMetricsCard({
     );
   }, [getSportName]);
 
-  const handleToggle = async (metric: SiteMetric, enabled: boolean) => {
+  // Staging costs no request, so flipping many switches cannot hit the rate limits
+  const handleToggle = (metric: SiteMetric, enabled: boolean) => {
     if (!canEdit) return;
 
+    setPending((prev) => {
+      const next = { ...prev };
+      if (enabled === isMetricEnabled(metric.code)) delete next[metric.code];
+      else next[metric.code] = enabled;
+      return next;
+    });
+  };
+
+  const pendingCount = Object.keys(pending).length;
+
+  const handleSaveChanges = async () => {
+    if (!canEdit || pendingCount === 0) return;
+
+    const enable = Object.keys(pending).filter((code) => pending[code]);
+    const disable = Object.keys(pending).filter((code) => !pending[code]);
+
     try {
-      if (enabled) {
-        await enableMutation.mutateAsync({
-          organizationId,
-          metricCode: metric.code,
-        });
-        toast({
-          title: "Metric enabled",
-          description: `${metric.label} is now available for your organization.`,
-        });
-      } else {
-        await disableMutation.mutateAsync({
-          organizationId,
-          metricCode: metric.code,
-        });
-        toast({
-          title: "Metric disabled",
-          description: `${metric.label} has been disabled for your organization.`,
-        });
-      }
+      await bulkMutation.mutateAsync({ organizationId, enable, disable });
+      setPending({});
+      toast({
+        title: "Metrics updated",
+        description: `${enable.length} enabled, ${disable.length} disabled.`,
+      });
     } catch (error) {
       toast({
-        title: "Failed to update metric",
+        title: "Failed to update metrics",
         description: error instanceof Error ? error.message : "An error occurred",
         variant: "destructive",
       });
@@ -347,6 +351,32 @@ export default function OrganizationMetricsCard({
         </div>
       </CardHeader>
       <CardContent>
+        {pendingCount > 0 && (
+          <div className="mb-4 flex items-center justify-between gap-2 rounded-md border bg-muted/50 p-3">
+            <span className="text-sm">
+              {pendingCount} unsaved {pendingCount === 1 ? "change" : "changes"}
+            </span>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setPending({})}
+                disabled={bulkMutation.isPending}
+                data-testid="discard-metric-changes"
+              >
+                Discard
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleSaveChanges}
+                disabled={bulkMutation.isPending}
+                data-testid="save-metric-changes"
+              >
+                Save changes
+              </Button>
+            </div>
+          </div>
+        )}
         <Table>
           <TableHeader>
             <TableRow>
@@ -360,7 +390,8 @@ export default function OrganizationMetricsCard({
           </TableHeader>
           <TableBody>
             {filteredMetrics.map((metric) => {
-              const isEnabled = isMetricEnabled(metric.code);
+              const savedEnabled = isMetricEnabled(metric.code);
+              const isEnabled = pending[metric.code] ?? savedEnabled;
               const customLabelValue = getCustomLabel(metric.code);
               const isEditing = editingMetric === metric.code;
 
@@ -422,12 +453,12 @@ export default function OrganizationMetricsCard({
                       <button
                         onClick={() => handleStartEdit(metric.code)}
                         className="text-left hover:underline"
-                        disabled={!canEdit || !isEnabled}
+                        disabled={!canEdit || !savedEnabled}
                         data-testid={`edit-custom-label-${metric.code}`}
                       >
                         {customLabelValue || (
                           <span className="text-muted-foreground italic">
-                            {canEdit && isEnabled ? "Set custom label..." : "-"}
+                            {canEdit && savedEnabled ? "Set custom label..." : "-"}
                           </span>
                         )}
                       </button>
@@ -437,7 +468,7 @@ export default function OrganizationMetricsCard({
                     <Switch
                       checked={isEnabled}
                       onCheckedChange={(checked) => handleToggle(metric, checked)}
-                      disabled={!canEdit || enableMutation.isPending || disableMutation.isPending}
+                      disabled={!canEdit || bulkMutation.isPending}
                       data-testid={`toggle-metric-${metric.code}`}
                     />
                   </TableCell>
