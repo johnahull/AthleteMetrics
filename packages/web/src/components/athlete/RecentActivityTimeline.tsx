@@ -12,6 +12,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Clock } from 'lucide-react';
 import { getMetricIcon } from '@/utils/athlete-metric-icons';
+import { formatValueWithUnit } from "@/lib/metrics";
 
 interface TimelineActivity {
   id: string;
@@ -156,7 +157,7 @@ export function RecentActivityTimeline({
                       </div>
                       <div className="text-right">
                         <span className="text-lg font-bold text-gray-900">
-                          {activity.value}{activity.units}
+                          {formatValueWithUnit(activity.value, activity.units)}
                         </span>
                       </div>
                     </div>

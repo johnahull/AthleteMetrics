@@ -6,7 +6,7 @@
 import React, { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { calculateStatistics } from '@shared/analytics-utils';
-import { getMetricUnits, getMetricType } from '@/lib/metrics';
+import { getMetricType, formatValueWithUnit } from '@/lib/metrics';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
 import type { MetricType } from '@shared/analytics-types';
 
@@ -43,7 +43,7 @@ export function StatisticsSummaryCard({
   distributionMode = 'quartiles',
   metricType: metricTypeOverride,
 }: StatisticsSummaryCardProps) {
-  const { getLabel } = useMetricLabels();
+  const { getLabel, getUnit } = useMetricLabels();
   // Resolve metric direction: DB override > fallback chain
   const metricDirection = metricTypeOverride || getMetricType(metric);
   // Extract numeric values from measurements (already filtered by caller)
@@ -54,7 +54,7 @@ export function StatisticsSummaryCard({
   }, [measurements]);
 
   // Get units for this metric
-  const units = getMetricUnits(metric);
+  const units = getUnit(metric);
   const displayTitle = title || `${getLabel(metric)} Statistics`;
 
   // Handle empty state
@@ -140,26 +140,26 @@ export function StatisticsSummaryCard({
           {/* Mean */}
           <div className="space-y-1">
             <div className="text-sm text-muted-foreground">Mean</div>
-            <div className="text-2xl font-bold">{formatNumber(stats.mean, 2)}{units}</div>
+            <div className="text-2xl font-bold">{formatValueWithUnit(formatNumber(stats.mean, 2), units)}</div>
           </div>
 
           {/* Median */}
           <div className="space-y-1">
             <div className="text-sm text-muted-foreground">Median</div>
-            <div className="text-2xl font-bold">{formatNumber(stats.median, 2)}{units}</div>
+            <div className="text-2xl font-bold">{formatValueWithUnit(formatNumber(stats.median, 2), units)}</div>
           </div>
 
           {/* Standard Deviation */}
           <div className="space-y-1">
             <div className="text-sm text-muted-foreground">Std Dev</div>
-            <div className="text-2xl font-bold">{formatNumber(stats.std, 2)}{units}</div>
+            <div className="text-2xl font-bold">{formatValueWithUnit(formatNumber(stats.std, 2), units)}</div>
           </div>
 
           {/* Range */}
           <div className="space-y-1">
             <div className="text-sm text-muted-foreground">Range</div>
             <div className="text-2xl font-bold">
-              {formatNumber(stats.min, 2)}{units} - {formatNumber(stats.max, 2)}{units}
+              {formatValueWithUnit(formatNumber(stats.min, 2), units)} - {formatValueWithUnit(formatNumber(stats.max, 2), units)}
             </div>
           </div>
 
@@ -175,7 +175,7 @@ export function StatisticsSummaryCard({
                 item.tag === 'best' ? 'text-green-600' :
                 item.tag === 'worst' ? 'text-red-600' : ''
               }`}>
-                {formatNumber(item.value, 2)}{units}
+                {formatValueWithUnit(formatNumber(item.value, 2), units)}
               </div>
             </div>
           ))}

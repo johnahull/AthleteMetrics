@@ -14,7 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Download, RotateCcw, Trash2, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
-import { getMetricUnits, getMetricColor } from "@/lib/metrics";
+import { formatValueWithUnit } from "@/lib/metrics";
 import { Gender } from "@shared/schema";
 import { isLowerIsBetterMetric } from "@shared/analytics-types";
 import { DATE_CONSTANTS } from "@shared/constants";
@@ -429,7 +429,7 @@ export default function Publish() {
       pdf.text(`${index + 1}`, 20, yPos);
       pdf.text(measurement.user.fullName, 40, yPos);
       pdf.text(teamNames, 100, yPos);
-      pdf.text(`${measurement.value}${getMetricUnits(filters.metric)}`, 140, yPos);
+      pdf.text(formatValueWithUnit(measurement.value, measurement.units), 140, yPos);
       pdf.text(new Date(measurement.date).toLocaleDateString(), 170, yPos);
 
       yPos += 12;
@@ -942,9 +942,9 @@ export default function Publish() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-gray-900">
-                            {measurement.value}{getMetricUnits(filters.metric)}
+                            {formatValueWithUnit(measurement.value, measurement.units)}
                           </span>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getMetricColor(filters.metric)}`}>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800`}>
                             {getMetricLabel(filters.metric)}
                           </span>
                         </div>
@@ -1017,7 +1017,7 @@ export default function Publish() {
                       <li key={m.id} className="flex items-center justify-between py-1 border-b border-gray-200 last:border-0">
                         <span className="font-medium text-gray-900">{m.user.fullName}</span>
                         <span className="text-gray-600">
-                          {m.value}{getMetricUnits(filters.metric)} • {new Date(m.date).toLocaleDateString()}
+                          {formatValueWithUnit(m.value, m.units)} • {new Date(m.date).toLocaleDateString()}
                         </span>
                       </li>
                     ))

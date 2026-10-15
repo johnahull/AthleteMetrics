@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Target, CheckCircle2, XCircle, Clock, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useMetricLabels } from '@/hooks/use-metric-labels';
 import {
   Goal,
   GoalStatus,
@@ -41,6 +42,8 @@ export function GoalProgressCard({
   onAbandon,
   compact = false,
 }: GoalProgressCardProps) {
+  const { getUnit } = useMetricLabels();
+  const unit = getUnit(goal.metric);
   const progress = calculateGoalProgress(goal);
   const daysRemaining = getDaysRemaining(goal.targetDate);
   const achieved = isGoalAchieved(goal);
@@ -99,7 +102,7 @@ export function GoalProgressCard({
     if (goal.goalType === GoalType.CONSISTENCY) {
       return String(goal.currentValue);
     }
-    return formatMetricValue(goal.currentValue, goal.metric);
+    return formatMetricValue(goal.currentValue, goal.metric, unit);
   };
 
   // Format days remaining text
@@ -151,7 +154,7 @@ export function GoalProgressCard({
           <div>
             <p className="text-sm text-gray-500">Target</p>
             <p data-testid="goal-target" className="text-xl font-bold text-gray-900">
-              {formatGoalTarget(goal)}
+              {formatGoalTarget(goal, unit)}
             </p>
           </div>
           <div className="text-right">

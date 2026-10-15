@@ -148,7 +148,7 @@ describe('MeasurementService', () => {
           .from(siteMetrics)
           .where(eq(siteMetrics.code, metric));
 
-        const expectedUnits = metricConfig?.unit ?? ''; // Empty string matches getMetricUnits() fallback behavior
+        const expectedUnits = metricConfig?.unit ?? ''; // Empty string when the metric has no unit
 
         const result = await measurementService.createMeasurement(
           {

@@ -19,7 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import DistributionChart from "@/components/charts/distribution-chart";
 import ScatterChart from "@/components/charts/scatter-chart";
 import { StatisticsSummaryCard } from "@/components/analytics/StatisticsSummaryCard";
-import { getMetricUnits, getMetricColor } from "@/lib/metrics";
+import { formatValueWithUnit } from "@/lib/metrics";
 import { Gender, SoccerPosition, type Team, type Measurement } from "@shared/schema";
 import { isLowerIsBetterMetric } from "@shared/analytics-types";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
@@ -768,13 +768,13 @@ export default function Analytics() {
                       <td className="px-4 py-3 text-gray-600">{measurement.user.sport || "N/A"}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          getMetricColor(measurement.metric)
+                          "bg-gray-100 text-gray-800"
                         }`}>
                           {getMetricLabel(measurement.metric)}
                         </span>
                       </td>
                       <td className="px-4 py-3 font-mono text-gray-900">
-                        {measurement.value}{getMetricUnits(measurement.metric)}
+                        {formatValueWithUnit(measurement.value, measurement.units)}
                       </td>
                       <td className="px-4 py-3 text-gray-600 font-mono">
                         {measurement.age}

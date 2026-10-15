@@ -24,6 +24,7 @@ import { calculateBoxPlotStatistics, safeParseDate, generateDeterministicJitter 
 import { resolveLabelCollisions } from './utils/labelCollisionResolver';
 import type { AthleteDataPoint, ChartDataPoint, LabelPosition, ChartInstance, TooltipItem, ChartContext, ChartScale } from './types/timeSeriesChartTypes';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
+import { formatValueWithUnit } from '@/lib/metrics';
 
 // Register Chart.js components
 
@@ -337,7 +338,7 @@ export function TimeSeriesBoxSwarmChart({
               // Format value with dual display for FLY10_TIME
               const formattedValue = isFly10Metric(metric)
                 ? formatFly10Dual(value, 'time-first')
-                : `${value}${unit}`;
+                : formatValueWithUnit(value, unit);
 
               // Build the tooltip line with athlete name, value, and personal best indicator
               let label = `${datasetLabel}: ${formattedValue}`;

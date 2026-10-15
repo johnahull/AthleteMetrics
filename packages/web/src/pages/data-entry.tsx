@@ -27,6 +27,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
 import { RESPONSIVE_BREAKPOINTS } from '@shared/constants';
 import type { UserOrganization } from '@shared/schema';
+import { formatValueWithUnit } from "@/lib/metrics";
 
 // Lazy load the Import/Export panel to keep initial page load fast
 const ImportExportPanel = lazy(() => import('@/components/import/ImportExportPanel'));
@@ -395,7 +396,7 @@ export default function DataEntry() {
                       <p className="font-medium text-gray-900">{measurement.user.fullName}</p>
                       <div className="flex items-center gap-x-4 text-sm text-gray-600">
                         <span>
-                          {getLabel(measurement.metric)}: {measurement.value}{measurement.units}
+                          {getLabel(measurement.metric)}: {formatValueWithUnit(measurement.value, measurement.units)}
                         </span>
                         <span>•</span>
                         <span>{measurement.date}</span>

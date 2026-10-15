@@ -24,7 +24,8 @@ import {
   type PeerFilterCriteria,
 } from '@/hooks/usePeerComparison';
 import { DistributionBoxPlot } from '@/components/charts/DistributionBoxPlot';
-import { getMetricUnits } from '@/lib/metrics';
+import { formatValueWithUnit } from '@/lib/metrics';
+import { useMetricLabels } from '@/hooks/use-metric-labels';
 import { AthleteMetricExplanation } from './AthleteMetricExplanation';
 import type { MetricExplanation } from '@shared/metric-explanations';
 
@@ -100,7 +101,8 @@ export function PeerMetricCard({
   );
 
   const displayName = explanation?.title ?? result.metric;
-  const units = getMetricUnits(result.metric);
+  const { getUnit } = useMetricLabels();
+  const units = getUnit(result.metric);
   const percentileLabel = getPercentileLabel(result.percentile);
 
   // Safe formatting helper for numeric values
@@ -117,7 +119,7 @@ export function PeerMetricCard({
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-medium text-gray-900">{displayName}</h3>
             <span className="text-sm text-gray-500">
-              {formatValue(result.athleteValue)} {units}
+              {formatValueWithUnit(formatValue(result.athleteValue), units)}
             </span>
           </div>
           <div className="text-sm text-gray-400 text-center py-4">
@@ -144,7 +146,7 @@ export function PeerMetricCard({
             />
           </div>
           <span className="text-lg font-semibold text-gray-800 whitespace-nowrap">
-            {formatValue(result.athleteValue)} {units}
+            {formatValueWithUnit(formatValue(result.athleteValue), units)}
           </span>
         </div>
 
@@ -190,7 +192,7 @@ export function PeerMetricCard({
                 </Badge>
               </div>
               <p className="text-xs text-gray-500">
-                Target: {formatValue(benchmark.targetValue)} {units}
+                Target: {formatValueWithUnit(formatValue(benchmark.targetValue), units)}
               </p>
             </div>
             {benchmark.isMet ? (

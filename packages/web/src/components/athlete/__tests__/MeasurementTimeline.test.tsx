@@ -201,15 +201,13 @@ describe('MeasurementTimeline', () => {
     });
 
     it('should display value with units', () => {
-      // NOTE: formatMetricValue now returns raw values as fallback.
-      // Unit formatting should come from API response in production.
       render(<MeasurementTimeline measurements={mockMeasurements} />);
 
-      // Values displayed - use exact: false because value and unit are separate text nodes
-      expect(screen.getByText('1.52', { exact: false })).toBeInTheDocument();
-      expect(screen.getByText('28.5', { exact: false })).toBeInTheDocument();
-      expect(screen.getByText('4.85', { exact: false })).toBeInTheDocument();
-      expect(screen.getByText('9.32', { exact: false })).toBeInTheDocument();
+      // Each value is followed by its own unit
+      expect(screen.getByText('1.52 s')).toBeInTheDocument();
+      expect(screen.getByText('28.5 in')).toBeInTheDocument();
+      expect(screen.getByText('4.85 s')).toBeInTheDocument();
+      expect(screen.getByText('9.32 s')).toBeInTheDocument();
     });
 
     it('should display date in day format', () => {

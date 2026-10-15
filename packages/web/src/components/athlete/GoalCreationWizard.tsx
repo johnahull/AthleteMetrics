@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
+import { useMetricLabels } from '@/hooks/use-metric-labels';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,6 +42,7 @@ interface Measurement {
   metric: string;
   value: number | string;
   date: string;
+  units?: string | null;
 }
 
 interface GoalCreationData {
@@ -68,6 +70,8 @@ export function GoalCreationWizard({
 }: GoalCreationWizardProps) {
   const [currentStep, setCurrentStep] = useState<WizardStep>(1);
   const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
+  const { getUnit } = useMetricLabels();
+  const selectedUnit = selectedMetric ? getUnit(selectedMetric) : '';
   const [selectedGoalType, setSelectedGoalType] = useState<GoalType | null>(null);
   const [targetValue, setTargetValue] = useState<string>('');
   const [targetDate, setTargetDate] = useState<string>('');
@@ -311,7 +315,7 @@ export function GoalCreationWizard({
                 <p className="text-sm text-blue-800">
                   Current best:{' '}
                   <span className="font-bold">
-                    {formatMetricValue(currentPerformance.best, selectedMetric)}
+                    {formatMetricValue(currentPerformance.best, selectedMetric, selectedUnit)}
                   </span>
                   {' '}({currentPerformance.count} measurements)
                 </p>
@@ -436,7 +440,7 @@ export function GoalCreationWizard({
                 >
                   Target will be:{' '}
                   <span className="font-bold">
-                    {formatMetricValue(calculatedTarget, selectedMetric)}
+                    {formatMetricValue(calculatedTarget, selectedMetric, selectedUnit)}
                   </span>
                 </div>
               )}

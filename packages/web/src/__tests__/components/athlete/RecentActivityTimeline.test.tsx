@@ -114,9 +114,9 @@ describe('RecentActivityTimeline', () => {
     it('should display values with units', () => {
       render(<RecentActivityTimeline activities={mockActivities} />);
 
-      expect(screen.getByText('1.45s')).toBeInTheDocument();
-      expect(screen.getByText('32.5in')).toBeInTheDocument();
-      expect(screen.getByText('5.1s')).toBeInTheDocument();
+      expect(screen.getByText('1.45 s')).toBeInTheDocument();
+      expect(screen.getByText('32.5 in')).toBeInTheDocument();
+      expect(screen.getByText('5.1 s')).toBeInTheDocument();
     });
 
     it('should handle empty activities list', () => {

@@ -26,6 +26,7 @@ import { MetricContextTooltip } from './MetricContextTooltip';
 import { AthleteMetricExplanation } from './AthleteMetricExplanation';
 import { isLowerBetter } from '@/constants/metrics';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
+import { formatValueWithUnit } from '@/lib/metrics';
 import type { MetricExplanation } from '@shared/metric-explanations';
 
 // Chart.js is already registered globally in App.tsx via chart-setup.ts
@@ -246,7 +247,7 @@ export function MetricProgressCard({
       tooltip: {
         enabled: true,
         callbacks: {
-          label: (context: TooltipItem<'line'>) => `${context.parsed.y}${units}`,
+          label: (context: TooltipItem<'line'>) => formatValueWithUnit(context.parsed.y ?? '', units),
         },
       },
     },
@@ -308,8 +309,7 @@ export function MetricProgressCard({
                 data-testid="current-value"
                 className="text-2xl sm:text-3xl font-bold text-gray-900"
               >
-                {currentValue?.toFixed(2)}
-                {units}
+                {currentValue == null ? undefined : formatValueWithUnit(currentValue.toFixed(2), units)}
               </span>
             </MetricContextTooltip>
             {/* Platform-wide convention: small "est." chip on every isCalculated measurement.
@@ -374,8 +374,7 @@ export function MetricProgressCard({
                 data-testid="pr-value"
                 className="text-xl font-semibold text-yellow-700"
               >
-                {personalRecord?.value?.toFixed(2) ?? bestValue?.toFixed(2)}
-                {units}
+                {formatValueWithUnit(personalRecord?.value?.toFixed(2) ?? bestValue?.toFixed(2) ?? '', units)}
               </span>
             </MetricContextTooltip>
             {personalRecord && (

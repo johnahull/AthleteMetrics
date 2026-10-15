@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Users, UsersRound, Clock, ArrowUp, Activity } from "lucide-react";
 import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
-import { getMetricColor, getMetricIcon, formatMetricValue, getMetricUnits } from "@/lib/metrics";
+import { formatValueWithUnit } from "@/lib/metrics";
 import { useAuth } from "@/lib/auth";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
 import { useMetricLabels } from "@/hooks/use-metric-labels";
@@ -84,7 +84,7 @@ export default function Dashboard() {
 
   // Get available metrics for the organization
   const { metrics: availableMetrics, isLoading: metricsLoading } = useAvailableMetrics();
-  const { getLabel: getMetricLabel } = useMetricLabels();
+  const { getLabel: getMetricLabel, getUnit } = useMetricLabels();
 
   // Use role from user session data
   const userRole = user?.role || 'athlete';
@@ -474,9 +474,7 @@ export default function Dashboard() {
           .map((metric) => {
           const metricCode = metric.code;
           const bestResult = stats[`best${metricCode}Last30Days`];
-          const MetricIcon = getMetricIcon(metricCode);
-          const metricColor = getMetricColor(metricCode);
-
+          
           // Type guard to check if bestResult is a BestMetricResult object
           const isBestMetricResult = (value: number | BestMetricResult | null): value is BestMetricResult => {
             return value !== null && typeof value === 'object' && 'value' in value && 'userName' in value;
@@ -491,21 +489,20 @@ export default function Dashboard() {
                       Best {metric.label} ({scope.timeframe})
                     </p>
                     <p className="text-2xl font-bold text-gray-900" data-testid={`stat-best-${metricCode.toLowerCase()}`}>
-                      {isBestMetricResult(bestResult) ? formatMetricValue(metricCode, parseFloat(bestResult.value)) : "N/A"}
+                      {isBestMetricResult(bestResult) ? formatValueWithUnit(parseFloat(bestResult.value), metric.unit) : "N/A"}
                     </p>
                     <p className="text-sm text-gray-500 mt-1" data-testid={`stat-best-${metricCode.toLowerCase()}-athlete`}>
                       {isBestMetricResult(bestResult) ? bestResult.userName : "No data"}
                     </p>
                   </div>
-                  <div className={`w-12 h-12 ${metricColor.replace('text-', 'bg-').replace('800', '100')} rounded-lg flex items-center justify-center`}>
-                    <MetricIcon className={`h-6 w-6 ${metricColor.replace('bg-', 'text-').replace('100', '600')}`} />
+                  <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                    <Clock className="h-6 w-6 text-gray-800" />
                   </div>
                 </div>
               </CardContent>
             </Card>
           );
         })}
-        
         {/* Loading state for metrics */}
         {metricsLoading && (
           <>
@@ -556,7 +553,7 @@ export default function Dashboard() {
               metric={metric}
               displayName={getMetricLabel(metric)}
               measurements={athleteMeasurementsByMetric[metric] || []}
-              units={getMetricUnits(metric)}
+              units={getUnit(metric)}
               personalRecord={athleteDashboardData.personalRecords.find(pr => pr.metric === metric)}
               showConfetti={false}
               metricType={availableMetrics.find(m => m.code === metric)?.metricType}
@@ -668,14 +665,14 @@ export default function Dashboard() {
                       }
                     </td>
                     <td className="py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs ${getMetricColor(measurement.metric)}`}>
+                      <span className={`px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-800`}>
                         {getMetricLabel(measurement.metric)}
                       </span>
                     </td>
                     <td className="py-3 font-mono">
                       {measurement.metric === "FLY10_TIME" ?
                         formatFly10TimeWithSpeed(parseFloat(measurement.value)) :
-                        `${measurement.value}${measurement.units}`
+                        formatValueWithUnit(measurement.value, measurement.units)
                       }
                     </td>
                     <td className="py-3 text-gray-600">{measurement.date}</td>

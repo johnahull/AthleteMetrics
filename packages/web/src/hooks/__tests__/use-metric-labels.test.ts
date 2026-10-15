@@ -93,4 +93,17 @@ describe('useMetricLabels', () => {
 
     expect(result.current.getLabel('FLY10_TIME')).toBe('My Org Fly Time');
   });
+
+  it('getUnit returns the configured unit, and "" for unknown codes', () => {
+    mockAvailableMetrics.metrics = [
+      { ...fixture('FLY10_TIME', '10-Yard Fly Time'), unit: 's' },
+      { ...fixture('CUSTOM_X', 'Custom X'), unit: 'kg', isCustom: true },
+    ];
+
+    const { result } = renderHook(() => useMetricLabels());
+
+    expect(result.current.getUnit('FLY10_TIME')).toBe('s');
+    expect(result.current.getUnit('CUSTOM_X')).toBe('kg');
+    expect(result.current.getUnit('ARCHIVED_METRIC')).toBe('');
+  });
 });

@@ -33,6 +33,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { VerificationBadge } from './VerificationBadge';
 import type { Measurement } from '@shared/schema';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
+import { formatValueWithUnit } from "@/lib/metrics";
 
 export interface MeasurementTimelineProps {
   measurements: Measurement[];
@@ -209,7 +210,7 @@ export function MeasurementTimeline({
                         {/* Value */}
                         <div className="text-right">
                           <span className="text-2xl font-bold text-foreground">
-                            {measurement.value}{measurement.units}
+                            {formatValueWithUnit(measurement.value, measurement.units)}
                           </span>
                         </div>
                       </div>

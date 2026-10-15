@@ -6,6 +6,7 @@
  */
 
 import { isLowerIsBetterMetric } from '@shared/analytics-types';
+import { formatValueWithUnit } from '@/lib/metrics';
 
 // ============================================================================
 // Types
@@ -346,11 +347,11 @@ export function isLowerBetterMetric(metric: string): boolean {
 }
 
 /**
- * Format a metric value with appropriate units and precision
+ * Format a metric value with the metric's precision. The unit comes from the
+ * caller (metric config or the measurement row), never from this module.
  */
-export function formatMetricValue(value: number, metric: string): string {
-  const education = METRIC_EDUCATION[metric];
-  if (!education) return value.toString();
+export function formatMetricValue(value: number, metric: string, unit?: string | null): string {
+  if (!METRIC_EDUCATION[metric]) return formatValueWithUnit(value.toString(), unit);
 
   switch (metric) {
     case 'FLY10_TIME':
@@ -359,15 +360,13 @@ export function formatMetricValue(value: number, metric: string): string {
     case 'AGILITY_5105':
     case 'T_TEST':
     case 'DASH_40YD':
-      return `${value.toFixed(2)}s`;
-    case 'VERTICAL_JUMP':
-      return `${value.toFixed(1)}"`;
-    case 'TOP_SPEED':
-      return `${value.toFixed(1)} mph`;
     case 'RSI':
-      return value.toFixed(2);
+      return formatValueWithUnit(value.toFixed(2), unit);
+    case 'VERTICAL_JUMP':
+    case 'TOP_SPEED':
+      return formatValueWithUnit(value.toFixed(1), unit);
     default:
-      return value.toString();
+      return formatValueWithUnit(value.toString(), unit);
   }
 }
 

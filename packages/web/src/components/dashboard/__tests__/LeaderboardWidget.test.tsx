@@ -528,8 +528,6 @@ describe("LeaderboardWidget", () => {
     });
 
     it("should display metric values with correct formatting", async () => {
-      // NOTE: formatMetricValue now returns raw values as fallback.
-      // Unit formatting should come from API response in production.
       render(
         <LeaderboardWidget
           organizationId="org-123"
@@ -539,8 +537,8 @@ describe("LeaderboardWidget", () => {
       );
 
       await waitFor(() => {
-        // Raw values displayed (formatMetricValue returns value without unit)
-        expect(screen.getByText(/1\.15/)).toBeInTheDocument();
+        // Value carries the metric's configured unit
+        expect(screen.getByText(/1\.15 s/)).toBeInTheDocument();
       });
     });
 
@@ -765,8 +763,6 @@ describe("LeaderboardWidget", () => {
 
   describe("Metric Value Formatting", () => {
     it("should format lower_is_better metrics (time)", async () => {
-      // NOTE: formatMetricValue now returns raw values as fallback.
-      // Unit formatting should come from API response in production.
       (global.fetch as any).mockImplementation((url: string) => {
         if (url.includes("/api/organizations/org-123/metrics")) {
           return Promise.resolve({
@@ -820,14 +816,12 @@ describe("LeaderboardWidget", () => {
       );
 
       await waitFor(() => {
-        // Raw values displayed (formatMetricValue returns value without unit)
-        expect(screen.getByText(/1\.15/)).toBeInTheDocument();
+        // Values carry the metric's configured unit
+        expect(screen.getByText(/1\.15 s/)).toBeInTheDocument();
       });
     });
 
     it("should format higher_is_better metrics (distance)", async () => {
-      // NOTE: formatMetricValue now returns raw values as fallback.
-      // Unit formatting should come from API response in production.
       (global.fetch as any).mockImplementation((url: string) => {
         if (url.includes("/api/organizations/org-123/metrics")) {
           return Promise.resolve({
@@ -881,8 +875,8 @@ describe("LeaderboardWidget", () => {
       );
 
       await waitFor(() => {
-        // Raw values displayed (formatMetricValue returns value without unit)
-        expect(screen.getByText(/36/)).toBeInTheDocument();
+        // Values carry the metric's configured unit
+        expect(screen.getByText(/36 in/)).toBeInTheDocument();
       });
     });
   });

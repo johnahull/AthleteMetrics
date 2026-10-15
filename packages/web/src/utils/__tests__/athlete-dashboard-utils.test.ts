@@ -17,6 +17,15 @@ function m(metric: string, value: number, date: string) {
 
 describe('athlete-dashboard-utils — metricLabels parameter', () => {
   describe('calculatePersonalRecords', () => {
+    it('puts a space between the improvement and the record\'s unit', () => {
+      const prs = calculatePersonalRecords([
+        m('FLY10_TIME', 1.5, '2024-01-01'),
+        m('FLY10_TIME', 1.45, '2024-01-02'),
+      ]);
+
+      expect(prs[0].improvementText).toBe('↑ 0.05 s better than last best');
+    });
+
     it('prefers labels from the supplied map over the built-in fallback', () => {
       const labels = { FLY10_TIME: 'Custom Org Fly Label' };
       const measurements = [m('FLY10_TIME', 1.5, '2024-01-01')];

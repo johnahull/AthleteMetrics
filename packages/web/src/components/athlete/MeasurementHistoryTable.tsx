@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
 import { AthleteOrgContext } from '@/lib/athlete-org-context';
 import { Link } from 'wouter';
+import { formatValueWithUnit } from "@/lib/metrics";
 
 export interface MeasurementHistoryTableProps {
   measurements: Measurement[];
@@ -265,12 +266,12 @@ export function MeasurementHistoryTable({
                   }}
                   tabIndex={0}
                   aria-expanded={isExpanded}
-                  aria-label={`${getLabel(measurement.metric)}: ${measurement.value} ${measurement.units}. Press Enter to ${isExpanded ? 'collapse' : 'expand'} notes.`}
+                  aria-label={`${getLabel(measurement.metric)}: ${formatValueWithUnit(measurement.value, measurement.units)}. Press Enter to ${isExpanded ? 'collapse' : 'expand'} notes.`}
                 >
                   <TableCell>{formatDate(measurement.date)}</TableCell>
                   <TableCell>{getLabel(measurement.metric)}</TableCell>
                   <TableCell>
-                    {measurement.value} {measurement.units}
+                    {formatValueWithUnit(measurement.value, measurement.units)}
                   </TableCell>
                   {showOrgColumn && (
                     <TableCell>

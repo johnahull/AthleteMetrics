@@ -4,6 +4,8 @@ import { useAvailableMetrics } from './use-available-metrics';
 export interface UseMetricLabelsResult {
   labels: Record<string, string>;
   getLabel: (code: string) => string;
+  /** Configured unit for a code; "" when the metric is unknown (use a row's own `units` when one is at hand). */
+  getUnit: (code: string) => string;
   isLoading: boolean;
 }
 
@@ -52,5 +54,12 @@ export function useMetricLabels(): UseMetricLabelsResult {
     [labels],
   );
 
-  return { labels, getLabel, isLoading };
+  const units = useMemo(
+    () => Object.fromEntries(metrics.map((m) => [m.code, m.unit])),
+    [metrics],
+  );
+
+  const getUnit = useCallback((code: string) => units[code] ?? '', [units]);
+
+  return { labels, getLabel, getUnit, isLoading };
 }

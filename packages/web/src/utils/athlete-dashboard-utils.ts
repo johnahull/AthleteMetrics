@@ -3,7 +3,7 @@
  */
 
 import { differenceInDays, startOfMonth, endOfMonth } from 'date-fns';
-import { isLowerIsBetter } from '@/lib/metrics';
+import { isLowerIsBetter, formatValueWithUnit } from '@/lib/metrics';
 
 interface Measurement {
   id: string;
@@ -99,11 +99,7 @@ export function calculatePersonalRecords(
         ? improvement.toFixed(2)
         : improvement.toFixed(1);
 
-      if (isLowerBetter) {
-        improvementText = `↑ ${formattedImprovement}${units} better than last best`;
-      } else {
-        improvementText = `↑ ${formattedImprovement}${units} better than last best`;
-      }
+      improvementText = `↑ ${formatValueWithUnit(formattedImprovement, units)} better than last best`;
     }
 
     personalRecords.push({

@@ -197,7 +197,7 @@ describe('goal-utils', () => {
         status: GoalStatus.ACTIVE,
         createdAt: '2024-01-01',
       };
-      expect(formatGoalTarget(goal)).toBe('1.05s');
+      expect(formatGoalTarget(goal, 's')).toBe('1.05 s');
     });
 
     it('should format target value goal for distance metric', () => {
@@ -213,7 +213,7 @@ describe('goal-utils', () => {
         status: GoalStatus.ACTIVE,
         createdAt: '2024-01-01',
       };
-      expect(formatGoalTarget(goal)).toBe('36.0"');
+      expect(formatGoalTarget(goal, 'in')).toBe('36.0 in');
     });
 
     it('should format improvement percentage goal', () => {
@@ -264,6 +264,14 @@ describe('goal-utils', () => {
       expect(suggestions[0]).toHaveProperty('goalType');
       expect(suggestions[0]).toHaveProperty('targetValue');
       expect(suggestions[0]).toHaveProperty('description');
+    });
+
+    it("uses the measurements' own unit in suggestion descriptions", () => {
+      const withUnits = measurements.map(m => ({ ...m, units: m.metric === 'FLY10_TIME' ? 's' : 'in' }));
+      const suggestions = suggestGoals(withUnits as any, 'FLY10_TIME');
+      const valueGoals = suggestions.filter(s => s.goalType === GoalType.TARGET_VALUE);
+      expect(valueGoals.length).toBeGreaterThan(0);
+      expect(valueGoals.every(s => /\d s\b/.test(s.description))).toBe(true);
     });
 
     it('should suggest appropriate targets for lower-is-better metrics', () => {
