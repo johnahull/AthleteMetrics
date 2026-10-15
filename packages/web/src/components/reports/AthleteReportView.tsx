@@ -358,7 +358,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
   // Backstop label resolution with the org's currently-active metric labels in
   // case the report payload omits a code (e.g. custom org metric added after
   // the report ran but before it rendered).
-  const { getLabel } = useMetricLabels();
+  const { getLabel, types: metricTypes } = useMetricLabels();
   const resolveLabel = (code: string) => metricLabels?.[code] ?? getLabel(code);
 
   // Collect all unique benchmark names
@@ -657,7 +657,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
         <div className="space-y-6">
           <h2 className="text-xl font-semibold">Individual Performance by Metric</h2>
           {teamStatistics.map((stat: TeamStatistic) => {
-            const sortedAthletes = sortAthletesByMetric(athleteRankings, stat.metric);
+            const sortedAthletes = sortAthletesByMetric(athleteRankings, stat.metric, metricTypes?.[stat.metric]);
             if (sortedAthletes.length === 0) return null;
 
             return (
@@ -689,8 +689,8 @@ function AthleteTeamReportView({ report }: { report: Report }) {
                         const quartileBadge = getQuartileBadge(percentile);
 
                         // Get benchmark label and metric direction
-                        const benchmarkLabel = getBenchmarkLabel(athlete, stat.metric);
-                        const lowerIsBetter = isLowerBetter(stat.metric);
+                        const benchmarkLabel = getBenchmarkLabel(athlete, stat.metric, metricTypes?.[stat.metric]);
+                        const lowerIsBetter = isLowerBetter(stat.metric, metricTypes?.[stat.metric]);
 
                         // Calculate deviation statistics
                         const { deviation, percentDiff, zScore, deviationColor, zScoreColor } =

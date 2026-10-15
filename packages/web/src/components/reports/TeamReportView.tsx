@@ -129,7 +129,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
   // only ran once reportData was loaded, so the hook count changed between
   // the "loading" and "loaded" renders and React threw "Rendered more hooks
   // than during the previous render."
-  const { getLabel } = useMetricLabels();
+  const { getLabel, types: metricTypes } = useMetricLabels();
 
   if (generateReport.isPending || !reportData) {
     return <ReportLoadingState message="Generating report..." />;
@@ -510,7 +510,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
         <div className="space-y-6">
           <h2 className="text-xl font-semibold">Individual Performance by Metric</h2>
           {teamStatistics.map((stat: TeamStatistic) => {
-            const sortedAthletes = sortAthletesByMetric(athleteRankings, stat.metric);
+            const sortedAthletes = sortAthletesByMetric(athleteRankings, stat.metric, metricTypes?.[stat.metric]);
 
             if (sortedAthletes.length === 0) return null;
 
@@ -543,8 +543,8 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                         const quartileBadge = getQuartileBadge(percentile);
 
                         // Get benchmark label and metric direction
-                        const benchmarkLabel = getBenchmarkLabel(athlete, stat.metric);
-                        const lowerIsBetter = isLowerBetter(stat.metric);
+                        const benchmarkLabel = getBenchmarkLabel(athlete, stat.metric, metricTypes?.[stat.metric]);
+                        const lowerIsBetter = isLowerBetter(stat.metric, metricTypes?.[stat.metric]);
 
                         // Calculate deviation statistics
                         const { deviation, percentDiff, zScore, deviationColor, zScoreColor } =

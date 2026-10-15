@@ -3,14 +3,15 @@
  * Extracted from TeamReportView to follow DRY principles
  */
 
-import { getMetricTypeWithFallback } from '@shared/analytics-types';
+import { getMetricTypeWithFallback, type MetricType } from '@shared/analytics-types';
 
 /**
  * Determine if lower values are better for a metric
- * Uses the canonical fallback logic from analytics-types
+ * Uses the metric's type from the metric list when given, otherwise the
+ * canonical fallback logic from analytics-types
  */
-export function isLowerBetter(metricCode: string): boolean {
-  return getMetricTypeWithFallback(metricCode) === 'lower_is_better';
+export function isLowerBetter(metricCode: string, metricType?: MetricType): boolean {
+  return (metricType ?? getMetricTypeWithFallback(metricCode)) === 'lower_is_better';
 }
 
 /**
@@ -26,10 +27,11 @@ export function isTrackingMetric(metricCode: string): boolean {
  */
 export function sortAthletesByMetric<T extends { measurements: Record<string, number | undefined> }>(
   athletes: T[],
-  metricCode: string
+  metricCode: string,
+  metricType?: MetricType
 ): T[] {
   if (!Array.isArray(athletes)) return [];
-  const lowerIsBetter = isLowerBetter(metricCode);
+  const lowerIsBetter = isLowerBetter(metricCode, metricType);
   return [...athletes]
     .filter(athlete => athlete?.measurements?.[metricCode] !== undefined)
     .sort((a, b) => {
@@ -48,13 +50,14 @@ export function sortAthletesByMetric<T extends { measurements: Record<string, nu
  */
 export function getBenchmarkLabel<T extends { benchmarkComparisons?: Record<string, Array<{ benchmarkName: string; benchmarkValue: number; meetsOrExceeds: boolean }>> }>(
   athlete: T,
-  metricCode: string
+  metricCode: string,
+  metricType?: MetricType
 ): string | null {
   const comparisons = athlete.benchmarkComparisons?.[metricCode];
   if (!comparisons || comparisons.length === 0) return null;
 
   // Find the highest tier benchmark the athlete meets or exceeds
-  const lowerIsBetter = isLowerBetter(metricCode);
+  const lowerIsBetter = isLowerBetter(metricCode, metricType);
   const sortedComparisons = [...comparisons].sort((a, b) => {
     // Sort by benchmark value (higher tier benchmarks are more stringent)
     return lowerIsBetter ? a.benchmarkValue - b.benchmarkValue : b.benchmarkValue - a.benchmarkValue;
