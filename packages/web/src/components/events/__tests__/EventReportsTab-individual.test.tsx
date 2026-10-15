@@ -410,7 +410,12 @@ describe('EventReportsTab - Individual Reports', () => {
   });
 
   describe('PDF export', () => {
-    const { createObjectURL, revokeObjectURL } = window.URL;
+    let createObjectURL: typeof window.URL.createObjectURL;
+    let revokeObjectURL: typeof window.URL.revokeObjectURL;
+
+    beforeEach(() => {
+      ({ createObjectURL, revokeObjectURL } = window.URL);
+    });
 
     afterEach(() => {
       vi.mocked(useEventReports).mockReturnValue({ data: [], isLoading: false, error: null } as never);
