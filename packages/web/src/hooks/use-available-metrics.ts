@@ -35,6 +35,7 @@ export interface AvailableMetric {
   dependentMetrics?: string[];
   isCustom?: boolean; // True if this is an organization-specific custom metric
   displayFormat?: DisplayFormat; // 'duration': stored in seconds, entered and shown as mm:ss
+  decimalPrecision?: number;
   // Paired-input metric config — when set, the metric expects (primary, auxiliary)
   // inputs and the server computes the stored value via auxiliaryInputConfig.computeFormula.
   // See packages/api/services/paired-input-compute.ts for the server-side flow.
@@ -112,6 +113,7 @@ export function useAvailableMetrics(): {
     dependentMetrics?: string[] | null;
     auxiliaryInputConfig?: AuxiliaryInputConfig | null;
     displayFormat?: DisplayFormat;
+    decimalPrecision?: number;
   }>>({
     queryKey: ['activeMetrics'],
     queryFn: async () => {
@@ -152,6 +154,7 @@ export function useAvailableMetrics(): {
           dependentMetrics: om.siteMetric.dependentMetrics || undefined,
           isCustom: false,
           displayFormat: om.siteMetric.displayFormat ?? 'decimal',
+          decimalPrecision: om.siteMetric.decimalPrecision ?? undefined,
           auxiliaryInputConfig: om.siteMetric.auxiliaryInputConfig || undefined,
         }));
       result.push(...siteMetricsList);
@@ -173,6 +176,7 @@ export function useAvailableMetrics(): {
             dependentMetrics: cm.dependentMetrics || undefined,
             isCustom: true,
             displayFormat: cm.displayFormat ?? 'decimal',
+            decimalPrecision: cm.decimalPrecision ?? undefined,
             auxiliaryInputConfig: cm.auxiliaryInputConfig || undefined,
           }));
         result.push(...customMetricsList);
@@ -194,6 +198,7 @@ export function useAvailableMetrics(): {
           dependentMetrics: sm.dependentMetrics || undefined,
           isCustom: false,
           displayFormat: sm.displayFormat ?? 'decimal',
+          decimalPrecision: sm.decimalPrecision ?? undefined,
           auxiliaryInputConfig: sm.auxiliaryInputConfig || undefined,
         }));
       result.push(...fallback);

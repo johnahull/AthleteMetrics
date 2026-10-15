@@ -484,7 +484,7 @@ describe('useAvailableMetrics', () => {
         createMockOrgMetric({ metricCode: 'FLY10_TIME' }),
       ];
       mockCustomOrgMetrics.data = [
-        { code: 'ROW', label: 'Row', unit: 's', metricType: 'lower_is_better', isActive: true, displayFormat: 'duration' },
+        { code: 'ROW', label: 'Row', unit: 's', metricType: 'lower_is_better', isActive: true, displayFormat: 'duration', decimalPrecision: 2 },
       ];
 
       const { result } = renderHook(() => useAvailableMetrics(), { wrapper });
@@ -492,6 +492,8 @@ describe('useAvailableMetrics', () => {
 
       const byCode = Object.fromEntries(result.current.metrics.map(m => [m.code, m.displayFormat]));
       expect(byCode).toEqual({ MILE: 'duration', FLY10_TIME: 'decimal', ROW: 'duration' });
+      const row = result.current.metrics.find(m => m.code === 'ROW');
+      expect(row?.decimalPrecision).toBe(2);
     });
 
     it('carries displayFormat from the site fallback', async () => {
@@ -499,12 +501,13 @@ describe('useAvailableMetrics', () => {
       mockAuthState.userOrganizations = [];
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => [createMockSiteMetric({ code: 'MILE', displayFormat: 'duration' })],
+        json: async () => [createMockSiteMetric({ code: 'MILE', displayFormat: 'duration', decimalPrecision: 1 })],
       });
 
       const { result } = renderHook(() => useAvailableMetrics(), { wrapper });
       await waitFor(() => expect(result.current.metrics).toHaveLength(1));
       expect(result.current.metrics[0].displayFormat).toBe('duration');
+      expect(result.current.metrics[0].decimalPrecision).toBe(1);
     });
   });
 });

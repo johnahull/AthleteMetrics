@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseDuration, formatDuration, formatMeasurement, parseImportValue, formatDurationExact } from '../duration-format';
+import { parseDuration, formatDuration, formatMeasurement, parseImportValue, formatDurationExact, durationTickStep } from '../duration-format';
 
 describe('parseDuration', () => {
   it.each([
@@ -92,5 +92,25 @@ describe('formatDurationExact', () => {
     expect(formatDurationExact(400)).toBe('6:40');
     expect(formatDurationExact(402.125)).toBe('6:42.125');
     expect(formatDurationExact(3605)).toBe('1:00:05');
+  });
+});
+
+describe('durationTickStep', () => {
+  it('picks the smallest round step that keeps ticks at or under the limit', () => {
+    expect(durationTickStep(20)).toBe(5);
+    expect(durationTickStep(45)).toBe(10);
+    expect(durationTickStep(80)).toBe(15);
+    expect(durationTickStep(150)).toBe(30);
+    expect(durationTickStep(300)).toBe(60);
+    expect(durationTickStep(1500)).toBe(300);
+  });
+
+  it('falls back to multiples of 5 minutes for very wide ranges', () => {
+    expect(durationTickStep(3600)).toBe(600);
+  });
+
+  it('honours a custom tick limit and handles an empty range', () => {
+    expect(durationTickStep(60, 3)).toBe(30);
+    expect(durationTickStep(0)).toBe(5);
   });
 });
