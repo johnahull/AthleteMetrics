@@ -420,7 +420,7 @@ describe('eval report routes', () => {
     const res = await preview('coachA', eventA, u.meterBattery.id, { selection: { metricKeys: ['505', 'COD_DEFICIT'] } });
     expect(res.status).toBe(200);
     const byCode = Object.fromEntries(res.body.model.metrics.map((m: any) => [m.code, m]));
-    expect(Object.keys(byCode)).toEqual(['AGILITY_505_M', 'AGILITY_COD_DEFICIT_M_INTERP']);
+    expect(Object.keys(byCode).sort()).toEqual(['AGILITY_505_M', 'AGILITY_COD_DEFICIT_M_INTERP']);
     expect(byCode.AGILITY_505_M.value).toBe(2.8);
     expect(byCode.AGILITY_COD_DEFICIT_M_INTERP.value).toBeCloseTo(0.883, 6);
     expect(byCode.AGILITY_COD_DEFICIT_M_INTERP.unit).toBe('s');

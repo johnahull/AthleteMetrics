@@ -115,5 +115,6 @@ describe("single-leg CMJ", () => {
 describe("template key labels", () => {
   it("names the meter protocol for the 5-0-5 headline key", () => {
     expect(templateKeyLabel("505")).toBe("5-0-5 agility, meters (faster leg)");
+    expect(templateKeyLabel("505_LEFT")).toBe("5-0-5 agility, meters (left turn)");
   });
 });

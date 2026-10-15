@@ -45,5 +45,7 @@ describe('labels', () => {
 describe('5-0-5 label names the protocol', () => {
   it('says meters, like the yard extras say yards', () => {
     expect(metricLabel('505')).toBe('5-0-5 agility, meters (faster leg)');
+    expect(metricLabel('505_LEFT')).toBe('5-0-5 agility, meters (left turn)');
+    expect(metricLabel('505_RIGHT')).toBe('5-0-5 agility, meters (right turn)');
   });
 });
