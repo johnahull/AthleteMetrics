@@ -195,7 +195,10 @@ export default function OrganizationMetricsCard({
       setPending({});
       toast({
         title: "Metrics updated",
-        description: `${enable.length} enabled, ${disable.length} disabled.`,
+        description: [
+          enable.length > 0 && `${enable.length} enabled`,
+          disable.length > 0 && `${disable.length} disabled`,
+        ].filter(Boolean).join(", ") + ".",
       });
     } catch (error) {
       toast({
