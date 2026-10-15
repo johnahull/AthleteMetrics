@@ -21,6 +21,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
+import { extractAthleteId } from "@/components/reports/report-utils";
 import {
   Dialog,
   DialogContent,
@@ -163,9 +164,10 @@ export function EventReportsTab({
   };
 
   // Handle PDF export
-  const handleExportPDF = async (reportId: string, reportName: string) => {
+  const handleExportPDF = async (report: EventReport) => {
+    const reportName = report.name;
     try {
-      const blob = await exportPDF.mutateAsync({ reportId });
+      const blob = await exportPDF.mutateAsync({ reportId: report.id, athleteId: extractAthleteId(report.config) });
       // Create download link
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -473,7 +475,7 @@ export function EventReportsTab({
                 <ReportCard
                   key={report.id}
                   report={report}
-                  onExportPDF={() => handleExportPDF(report.id, report.name)}
+                  onExportPDF={() => handleExportPDF(report)}
                   onShare={() => handleShareReport(report.id, report.name)}
                   isPDFExporting={exportPDF.isPending}
                 />
