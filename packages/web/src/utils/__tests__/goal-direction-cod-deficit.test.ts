@@ -3,7 +3,7 @@ import { isLowerBetterMetric } from '../metric-education-utils';
 import { calculateGoalProgress, isGoalAchieved, GoalType, GoalStatus, type Goal } from '../goal-utils';
 
 describe('COD deficit goals run lower-is-better', () => {
-  it.each(['AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD'])(
+  it.each(['AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD', 'AGILITY_COD_DEFICIT_M_INTERP'])(
     'isLowerBetterMetric(%s) is true',
     (code) => {
       expect(isLowerBetterMetric(code)).toBe(true);

@@ -17,6 +17,7 @@
 > 0158 (Sayers peak power derived metrics PEAK_POWER_W / PEAK_POWER_REL, AM-FEAT-021) is provisional: renumber at merge if another branch lands 0158 first (file, `_down`, test, tracking row, this line).
 > 0159 (athlete-facing explanations for 55 site metrics that had none) is provisional: renumber at merge if another branch lands 0159 first (file, `_down`, test, tracking row, this line).
 > 0160 (descriptions, RSI unit and category spellings for site metrics) is provisional: renumber at merge if another branch lands 0160 first (file, `_down`, test, tracking row, this line).
+> 0161 (AGILITY_COD_DEFICIT_M_INTERP, metric 5-0-5 minus a 10 m time interpolated from the 10 / 20 yd splits, AM-FEAT-016 revision) is provisional: renumber at merge if another branch lands 0161 first (file, `_down`, test, tracking row, this line).
 
 ## Current State (2025-10-30)
 

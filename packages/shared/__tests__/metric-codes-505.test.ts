@@ -14,7 +14,7 @@ const M_YD_CODES = [
   'AGILITY_505_YD_L',
   'AGILITY_505_YD_R',
 ];
-const DEFICIT_CODES = ['AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD'];
+const DEFICIT_CODES = ['AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD', 'AGILITY_COD_DEFICIT_M_INTERP'];
 
 describe('AM-FEAT-016 metric codes', () => {
   const validKeys = VALID_METRICS.map((m) => m.key as string);
@@ -37,6 +37,7 @@ describe('AM-FEAT-016 metric codes', () => {
   it('MetricType exposes the deficit codes', () => {
     expect((MetricType as Record<string, string>).AGILITY_COD_DEFICIT_M).toBe('AGILITY_COD_DEFICIT_M');
     expect((MetricType as Record<string, string>).AGILITY_COD_DEFICIT_YD).toBe('AGILITY_COD_DEFICIT_YD');
+    expect((MetricType as Record<string, string>).AGILITY_COD_DEFICIT_M_INTERP).toBe('AGILITY_COD_DEFICIT_M_INTERP');
   });
 
   it('LOWER_IS_BETTER_METRICS has AGILITY_505_M/_YD and the deficit codes, not the retired code', () => {
