@@ -11,6 +11,7 @@ import { validateOrgTypeQuery } from "../middleware/organization-type-middleware
 import { insertSiteMetricSchema, updateSiteMetricSchema, updateOrganizationMetricSchema, siteSports, siteMetrics } from "@shared/schema";
 import { db } from "../db";
 import { eq, sql } from "drizzle-orm";
+import { DURATION_UNIT_ERROR } from "@shared/duration-format";
 import { validateFormula, detectCircularDependencies } from "../services/formula-service";
 
 const metricService = new MetricService();
@@ -49,7 +50,7 @@ function sanitizeError(error: unknown, fallback: string): string {
   if (!(error instanceof Error)) return fallback;
 
   const isProduction = process.env.NODE_ENV === 'production';
-  const safeErrors = ['Unauthorized', 'not found', 'already exists', 'Cannot delete', 'Cannot disable', 'not active', 'Invalid sport codes'];
+  const safeErrors = ['Unauthorized', 'not found', 'already exists', 'Cannot delete', 'Cannot disable', 'not active', 'Invalid sport codes', DURATION_UNIT_ERROR];
 
   if (isProduction) {
     return safeErrors.some(safe => error.message.includes(safe)) ? error.message : fallback;

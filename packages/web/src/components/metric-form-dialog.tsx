@@ -411,6 +411,7 @@ export default function MetricFormDialog({
                       onCheckedChange={(checked) => {
                         field.onChange(checked ? 'duration' : 'decimal');
                         if (checked) form.setValue('unit', 's');
+                        form.setValue('decimalPrecision', checked ? DURATION_DECIMAL_PRECISION : DEFAULT_DECIMAL_PRECISION);
                       }}
                       data-testid="metric-duration-switch"
                     />
