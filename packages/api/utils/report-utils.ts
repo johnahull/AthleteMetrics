@@ -3,50 +3,13 @@
  * These helpers are used for PDF report generation and metric analysis
  */
 
-import { db } from '../db';
-import { and, eq } from 'drizzle-orm';
-import { customOrgMetrics, siteMetrics } from '@shared/schema';
+import { isLowerBetter } from './metric-type';
 
 // Re-export from shared package — single source of truth
 export { deriveTierGroupName } from '@shared/benchmark-utils';
 
-// Cache for metric types to avoid repeated DB queries.
-// Keyed by organization too: custom org metric codes are unique per organization only.
-const metricTypeCache = new Map<string, string>();
-
-/**
- * Determines if lower values are better for a given metric
- * Queries siteMetrics, then the organization's custom metrics, as source of truth
- * @param metricCode - The metric code to check
- * @param organizationId - The report's organization, to resolve its custom metrics
- * @returns true if lower values are better (e.g., times), false otherwise
- */
-export async function isLowerBetter(metricCode: string, organizationId?: string): Promise<boolean> {
-  const cacheKey = `${organizationId ?? ''}:${metricCode}`;
-  // Check cache first
-  if (metricTypeCache.has(cacheKey)) {
-    return metricTypeCache.get(cacheKey) === 'lower_is_better';
-  }
-
-  // Query database for metric type
-  const [metric] = await db
-    .select({ metricType: siteMetrics.metricType })
-    .from(siteMetrics)
-    .where(eq(siteMetrics.code, metricCode));
-
-  let customMetric: { metricType: string } | undefined;
-  if (!metric && organizationId) {
-    [customMetric] = await db
-      .select({ metricType: customOrgMetrics.metricType })
-      .from(customOrgMetrics)
-      .where(and(eq(customOrgMetrics.code, metricCode), eq(customOrgMetrics.organizationId, organizationId)));
-  }
-
-  const metricType = metric?.metricType || customMetric?.metricType || 'higher_is_better';
-  metricTypeCache.set(cacheKey, metricType);
-
-  return metricType === 'lower_is_better';
-}
+// Direction comes from the metric's own row (site metric, else the organization's custom metric)
+export { isLowerBetter };
 
 /**
  * Sorts athletes by their performance in a specific metric
