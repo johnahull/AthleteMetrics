@@ -43,9 +43,10 @@ export function GoalProgressCard({
   onAbandon,
   compact = false,
 }: GoalProgressCardProps) {
-  const progress = calculateGoalProgress(goal);
+  const { formats, types: metricTypes } = useMetricLabels();
+  const progress = calculateGoalProgress(goal, metricTypes?.[goal.metric]);
   const daysRemaining = getDaysRemaining(goal.targetDate);
-  const achieved = isGoalAchieved(goal);
+  const achieved = isGoalAchieved(goal, metricTypes?.[goal.metric]);
   const education = getMetricEducation(goal.metric);
   const metricName = education?.name || goal.metric;
 
@@ -97,7 +98,6 @@ export function GoalProgressCard({
   };
 
   // Format current value display (m:ss for a duration metric)
-  const { formats } = useMetricLabels();
   const formatCurrentDisplay = () => {
     if (goal.goalType === GoalType.CONSISTENCY) {
       return String(goal.currentValue);

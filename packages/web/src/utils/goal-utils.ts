@@ -11,6 +11,7 @@
 
 import { isLowerBetterMetric, formatMetricValue, getMetricEducation } from './metric-education-utils';
 import { formatMeasurement, type MeasurementFormat } from '@shared/duration-format';
+import type { MetricType } from '@shared/analytics-types';
 
 /**
  * Types of goals athletes can set
@@ -77,13 +78,14 @@ interface Measurement {
 
 /**
  * Calculate progress towards a goal (0-100%)
+ * @param metricType - The metric's type from the metric list; without it the built-in lists decide
  */
-export function calculateGoalProgress(goal: Goal): number {
+export function calculateGoalProgress(goal: Goal, metricType?: MetricType): number {
   const { goalType, targetValue, baselineValue, currentValue, metric } = goal;
 
   switch (goalType) {
     case GoalType.TARGET_VALUE: {
-      const lowerIsBetter = isLowerBetterMetric(metric);
+      const lowerIsBetter = isLowerBetterMetric(metric, metricType);
 
       if (lowerIsBetter) {
         // For time metrics: baseline > target (lower is better)
@@ -109,7 +111,7 @@ export function calculateGoalProgress(goal: Goal): number {
     case GoalType.IMPROVEMENT_PERCENTAGE: {
       // Target is a percentage improvement (e.g., 10%)
       // currentValue represents current performance
-      const lowerIsBetter = isLowerBetterMetric(metric);
+      const lowerIsBetter = isLowerBetterMetric(metric, metricType);
 
       // Calculate current improvement percentage
       let currentImprovementPct: number;
@@ -276,13 +278,14 @@ export function suggestGoals(measurements: Measurement[], metric: string): GoalS
 
 /**
  * Check if a goal has been achieved
+ * @param metricType - The metric's type from the metric list; without it the built-in lists decide
  */
-export function isGoalAchieved(goal: Goal): boolean {
+export function isGoalAchieved(goal: Goal, metricType?: MetricType): boolean {
   const { goalType, targetValue, currentValue, metric } = goal;
 
   switch (goalType) {
     case GoalType.TARGET_VALUE: {
-      const lowerIsBetter = isLowerBetterMetric(metric);
+      const lowerIsBetter = isLowerBetterMetric(metric, metricType);
       if (lowerIsBetter) {
         return currentValue <= targetValue;
       } else {
@@ -293,7 +296,7 @@ export function isGoalAchieved(goal: Goal): boolean {
     case GoalType.IMPROVEMENT_PERCENTAGE: {
       // Calculate current improvement percentage
       const { baselineValue } = goal;
-      const lowerIsBetter = isLowerBetterMetric(metric);
+      const lowerIsBetter = isLowerBetterMetric(metric, metricType);
 
       let currentImprovementPct: number;
       if (lowerIsBetter) {

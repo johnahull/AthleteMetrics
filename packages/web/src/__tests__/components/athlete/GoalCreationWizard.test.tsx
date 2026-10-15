@@ -390,4 +390,39 @@ describe('GoalCreationWizard', () => {
       expect(onCreateGoal).toHaveBeenCalledWith(expect.objectContaining({ metric: 'MILE_RUN', targetValue: 435 }));
     });
   });
+
+  describe('direction from the metric list', () => {
+    it('takes the fastest time as the baseline for a lower-is-better metric outside the built-in list', async () => {
+      const onCreateGoal = vi.fn();
+      const user = userEvent.setup();
+      render(
+        <GoalCreationWizard
+          measurements={[
+            { metric: 'MILE_RUN', value: 420, date: '2024-01-01' },
+            { metric: 'MILE_RUN', value: 410, date: '2024-02-01' },
+          ]}
+          availableMetrics={['MILE_RUN']}
+          durationMetrics={['MILE_RUN']}
+          metricTypes={{ MILE_RUN: 'lower_is_better' }}
+          onCreateGoal={onCreateGoal}
+          onCancel={vi.fn()}
+        />
+      );
+
+      await user.click(screen.getByRole('button', { name: /MILE_RUN/ }));
+      await user.click(screen.getByText(/target value/i));
+      await user.type(screen.getByLabelText(/target value/i), '6:30');
+
+      const futureDate = new Date();
+      futureDate.setMonth(futureDate.getMonth() + 3);
+      const dateInput = screen.getByLabelText(/target date/i);
+      await user.clear(dateInput);
+      await user.type(dateInput, futureDate.toISOString().split('T')[0]);
+      await user.click(screen.getByRole('button', { name: /create goal/i }));
+
+      expect(onCreateGoal).toHaveBeenCalledWith(
+        expect.objectContaining({ metric: 'MILE_RUN', targetValue: 390, baselineValue: 410 })
+      );
+    });
+  });
 });
