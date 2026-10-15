@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/auth';
 import { useOrganizationMetrics } from '@/lib/metrics-api';
 import { useCustomOrgMetrics } from '@/lib/custom-metrics-api';
 import type { MetricType } from '@shared/analytics-types';
+import type { DisplayFormat } from '@shared/duration-format';
 
 export interface AuxiliaryInputConfig {
   label: string;              // Auxiliary input label (e.g., "Reps")
@@ -33,6 +34,7 @@ export interface AvailableMetric {
   formula?: string;
   dependentMetrics?: string[];
   isCustom?: boolean; // True if this is an organization-specific custom metric
+  displayFormat?: DisplayFormat; // 'duration': stored in seconds, entered and shown as mm:ss
   // Paired-input metric config — when set, the metric expects (primary, auxiliary)
   // inputs and the server computes the stored value via auxiliaryInputConfig.computeFormula.
   // See packages/api/services/paired-input-compute.ts for the server-side flow.
@@ -109,6 +111,7 @@ export function useAvailableMetrics(): {
     formula?: string | null;
     dependentMetrics?: string[] | null;
     auxiliaryInputConfig?: AuxiliaryInputConfig | null;
+    displayFormat?: DisplayFormat;
   }>>({
     queryKey: ['activeMetrics'],
     queryFn: async () => {
@@ -148,6 +151,7 @@ export function useAvailableMetrics(): {
           formula: om.siteMetric.formula || undefined,
           dependentMetrics: om.siteMetric.dependentMetrics || undefined,
           isCustom: false,
+          displayFormat: om.siteMetric.displayFormat ?? 'decimal',
           auxiliaryInputConfig: om.siteMetric.auxiliaryInputConfig || undefined,
         }));
       result.push(...siteMetricsList);
@@ -168,6 +172,7 @@ export function useAvailableMetrics(): {
             formula: cm.formula || undefined,
             dependentMetrics: cm.dependentMetrics || undefined,
             isCustom: true,
+            displayFormat: cm.displayFormat ?? 'decimal',
             auxiliaryInputConfig: cm.auxiliaryInputConfig || undefined,
           }));
         result.push(...customMetricsList);
@@ -188,6 +193,7 @@ export function useAvailableMetrics(): {
           formula: sm.formula || undefined,
           dependentMetrics: sm.dependentMetrics || undefined,
           isCustom: false,
+          displayFormat: sm.displayFormat ?? 'decimal',
           auxiliaryInputConfig: sm.auxiliaryInputConfig || undefined,
         }));
       result.push(...fallback);

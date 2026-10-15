@@ -474,4 +474,37 @@ describe('useAvailableMetrics', () => {
       expect(jumpMetric?.lowerIsBetter).toBe(false);
     });
   });
+
+  describe('displayFormat', () => {
+    it('carries displayFormat from org site metrics and custom metrics, defaulting to decimal', async () => {
+      mockAuthState.user = { id: 'user-1', isSiteAdmin: false };
+      mockAuthState.organizationContext = 'org-123';
+      mockOrgMetrics.data = [
+        createMockOrgMetric({ metricCode: 'MILE', siteMetric: { ...createMockSiteMetric(), code: 'MILE', label: 'Mile', displayFormat: 'duration' } }),
+        createMockOrgMetric({ metricCode: 'FLY10_TIME' }),
+      ];
+      mockCustomOrgMetrics.data = [
+        { code: 'ROW', label: 'Row', unit: 's', metricType: 'lower_is_better', isActive: true, displayFormat: 'duration' },
+      ];
+
+      const { result } = renderHook(() => useAvailableMetrics(), { wrapper });
+      await waitFor(() => expect(result.current.metrics).toHaveLength(3));
+
+      const byCode = Object.fromEntries(result.current.metrics.map(m => [m.code, m.displayFormat]));
+      expect(byCode).toEqual({ MILE: 'duration', FLY10_TIME: 'decimal', ROW: 'duration' });
+    });
+
+    it('carries displayFormat from the site fallback', async () => {
+      mockAuthState.user = { id: 'athlete-1', isSiteAdmin: false };
+      mockAuthState.userOrganizations = [];
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [createMockSiteMetric({ code: 'MILE', displayFormat: 'duration' })],
+      });
+
+      const { result } = renderHook(() => useAvailableMetrics(), { wrapper });
+      await waitFor(() => expect(result.current.metrics).toHaveLength(1));
+      expect(result.current.metrics[0].displayFormat).toBe('duration');
+    });
+  });
 });

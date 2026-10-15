@@ -3,6 +3,8 @@
  * Comprehensive type system for sophisticated analytics and charting
  */
 
+import type { DisplayFormat } from './duration-format';
+
 // Core analysis types
 export type AnalysisType = 'individual' | 'intra_group' | 'multi_group';
 export type TimeframeType = 'best' | 'trends';
@@ -429,6 +431,7 @@ export interface DynamicMetricConfig {
   isDerived?: boolean;
   formula?: string;
   dependentMetrics?: string[];
+  displayFormat?: DisplayFormat;
 }
 
 // Organization-specific metric configuration

@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/auth';
 import { useOrganizationMetrics } from '@/lib/metrics-api';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 import type { DynamicMetricConfig, MetricType } from '@shared/analytics-types';
+import type { DisplayFormat } from '@shared/duration-format';
 
 interface MetricConfigLookup {
   /**
@@ -21,6 +22,7 @@ interface MetricConfigLookup {
     metricType: MetricType;
     lowerIsBetter: boolean; // Derived from metricType for backward compatibility
     category?: string;
+    displayFormat: DisplayFormat;
   } | null;
 
   /**
@@ -67,6 +69,7 @@ export function useMetricConfig(): MetricConfigLookup {
     description: string | null;
     isActive: boolean;
     isSystemDefault: boolean;
+    displayFormat?: DisplayFormat;
   }>>({
     queryKey: ['siteMetrics', false],
     queryFn: async () => {
@@ -98,6 +101,7 @@ export function useMetricConfig(): MetricConfigLookup {
               metricType: om.siteMetric.metricType,
               isActive: om.siteMetric.isActive,
               isSystemDefault: om.siteMetric.isSystemDefault,
+              displayFormat: om.siteMetric.displayFormat ?? 'decimal',
             }
           ])
       );
@@ -113,6 +117,7 @@ export function useMetricConfig(): MetricConfigLookup {
             metricType: sm.metricType,
             isActive: sm.isActive,
             isSystemDefault: sm.isSystemDefault,
+            displayFormat: sm.displayFormat ?? 'decimal',
           }
         ])
       );
@@ -133,6 +138,7 @@ export function useMetricConfig(): MetricConfigLookup {
           metricType: dynamicConfig.metricType,
           lowerIsBetter: dynamicConfig.metricType === 'lower_is_better',
           category: dynamicConfig.category,
+          displayFormat: dynamicConfig.displayFormat ?? 'decimal',
         };
       }
 
@@ -144,6 +150,7 @@ export function useMetricConfig(): MetricConfigLookup {
           unit: staticConfig.unit,
           metricType: staticConfig.metricType,
           lowerIsBetter: staticConfig.metricType === 'lower_is_better',
+          displayFormat: 'decimal' as const,
         };
       }
 
