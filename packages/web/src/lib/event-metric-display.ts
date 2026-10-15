@@ -20,14 +20,14 @@ export interface EventMetricDisplay {
 
 /**
  * Readable name for an event metric: event custom label > site metric label > metric code.
- * Unit and category come from the site metric.
+ * Unit and category come from the site metric; a time (duration) metric's unit is mm:ss.
  */
 export function getEventMetricDisplay(metric: EventMetricWithSiteDetails): EventMetricDisplay {
   const details = metric.metricDetails;
   return {
     code: metric.metricCode,
     label: metric.customLabel?.trim() || details?.label || metric.metricCode,
-    unit: details?.unit?.trim() || undefined,
+    unit: details?.displayFormat === "duration" ? "mm:ss" : details?.unit?.trim() || undefined,
     category: details?.category || undefined,
   };
 }
