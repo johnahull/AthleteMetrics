@@ -115,6 +115,14 @@ describe('POST /api/organizations/:id/metrics/bulk-update', () => {
     expect(await enabledMap()).toEqual({ [A]: true, [B]: false, [C]: true });
   });
 
+  it('re-enables an existing row and keeps its custom label', async () => {
+    await db.update(organizationMetrics).set({ customLabel: 'Keep me' })
+      .where(and(eq(organizationMetrics.organizationId, orgId), eq(organizationMetrics.metricCode, B)));
+    const res = await post({ enable: [B] });
+    expect(res.status).toBe(200);
+    expect(res.body[0]).toMatchObject({ metricCode: B, isEnabled: true, customLabel: 'Keep me' });
+  });
+
   it('treats disabling a metric that has no row as a no-op', async () => {
     await db.delete(organizationMetrics).where(and(eq(organizationMetrics.organizationId, orgId), eq(organizationMetrics.metricCode, C)));
     const res = await post({ enable: [], disable: [C] });
