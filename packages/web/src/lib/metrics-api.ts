@@ -316,7 +316,7 @@ export function applyOrgMetricUpdate(
   queryClient: QueryClient,
   organizationId: string,
   updates: OrganizationMetric[]
-) {
+): Promise<void> {
   const fullKey = ['organizationMetrics', organizationId, false];
   const cached = queryClient.getQueryData<(OrganizationMetric & { siteMetric: SiteMetric })[]>(fullKey);
   const byCode = new Map(updates.map((u) => [u.metricCode, u]));
@@ -327,10 +327,9 @@ export function applyOrgMetricUpdate(
       fullKey,
       cached!.map((m) => (byCode.has(m.metricCode) ? { ...m, ...byCode.get(m.metricCode)! } : m))
     );
-    queryClient.invalidateQueries({ queryKey: ['organizationMetrics', organizationId, true], refetchType: 'active' });
-  } else {
-    queryClient.invalidateQueries({ queryKey: ['organizationMetrics', organizationId] });
+    return queryClient.invalidateQueries({ queryKey: ['organizationMetrics', organizationId, true], refetchType: 'active' });
   }
+  return queryClient.invalidateQueries({ queryKey: ['organizationMetrics', organizationId] });
 }
 
 /**
@@ -363,9 +362,10 @@ export function useBulkUpdateOrganizationMetrics() {
   return useMutation({
     mutationFn: ({ organizationId, enable, disable }: { organizationId: string; enable: string[]; disable: string[] }) =>
       bulkUpdateOrganizationMetrics(organizationId, { enable, disable }),
-    onSuccess: (updated, variables) => {
-      applyOrgMetricUpdate(queryClient, variables.organizationId, updated);
-    },
+    // Returned so mutateAsync waits for the refetch: the card clears its staged state right after,
+    // and the switches must not fall back to stale saved state in between
+    onSuccess: (updated, variables) =>
+      applyOrgMetricUpdate(queryClient, variables.organizationId, updated),
   });
 }
 

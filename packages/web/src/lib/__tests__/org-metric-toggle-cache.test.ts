@@ -78,4 +78,17 @@ describe('applyOrgMetricUpdate', () => {
     applyOrgMetricUpdate(qc, ORG, [{ id: 'om-Z', organizationId: ORG, metricCode: 'Z', isEnabled: true } as any]);
     expect(qc.getQueryState(['organizationMetrics', ORG, false])!.isInvalidated).toBe(true);
   });
+
+  it('returns a promise that settles after the fallback refetch, so callers can wait for fresh data', async () => {
+    const qc = seeded();
+    
+    const unsubscribe = new QueryObserver(qc, {
+      queryKey: ['organizationMetrics', ORG, false],
+      queryFn: async () => { await new Promise((r) => setTimeout(r, 20)); return [row('A', true), row('Z', true)]; },
+      staleTime: Infinity,
+    }).subscribe(() => {});
+    await applyOrgMetricUpdate(qc, ORG, [{ id: 'om-Z', organizationId: ORG, metricCode: 'Z', isEnabled: true } as any]);
+    expect(qc.getQueryData<any[]>(['organizationMetrics', ORG, false])!.map((m) => m.metricCode)).toEqual(['A', 'Z']);
+    unsubscribe();
+  });
 });

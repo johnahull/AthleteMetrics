@@ -24,8 +24,10 @@ const site = (code: string) => ({ code, label: code, isActive: true, sportAssoci
 const orgRow = (metricCode: string, isEnabled: boolean) => ({ id: `om-${metricCode}`, organizationId: ORG, metricCode, isEnabled });
 
 let fetchMock: ReturnType<typeof vi.fn>;
+let savedA = false;
 
 beforeEach(() => {
+  savedA = false;
   fetchMock = vi.fn(async (input: any, init?: any) => {
     const u = String(input);
     const json = (b: unknown) => ({ ok: true, json: async () => b }) as any;
@@ -34,7 +36,7 @@ beforeEach(() => {
       return json([...body.enable.map((c: string) => orgRow(c, true)), ...body.disable.map((c: string) => orgRow(c, false))]);
     }
     if (u.startsWith('/api/metrics')) return json([site('A'), site('B'), site('C')]);
-    if (u.includes('/metrics')) return json([orgRow('A', false), orgRow('B', true), orgRow('C', false)].map((r) => ({ ...r, siteMetric: site(r.metricCode) })));
+    if (u.includes('/metrics')) return json([orgRow('A', savedA), orgRow('B', true), orgRow('C', false)].map((r) => ({ ...r, siteMetric: site(r.metricCode) })));
     return json([]);
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -42,11 +44,12 @@ beforeEach(() => {
 
 function renderCard() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const utils = render(
     <QueryClientProvider client={qc}>
       <OrganizationMetricsCard organizationId={ORG} canEdit />
     </QueryClientProvider>
   );
+  return { ...utils, qc };
 }
 const posts = () => fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST');
 
@@ -86,5 +89,16 @@ describe('OrganizationMetricsCard staged toggles', () => {
     fireEvent.click(screen.getByTestId('discard-metric-changes'));
     expect(a).toHaveAttribute('aria-checked', 'false');
     expect(posts()).toHaveLength(0);
+  });
+
+  it('drops a staged change once a refetch shows the server already has that state', async () => {
+    const { qc } = renderCard();
+    fireEvent.click(await screen.findByTestId('toggle-metric-A'));
+    expect(screen.getByText(/1 unsaved change/i)).toBeInTheDocument();
+
+    savedA = true; // another admin enabled A
+    await qc.invalidateQueries({ queryKey: ['organizationMetrics'] });
+
+    await waitFor(() => expect(screen.queryByTestId('save-metric-changes')).not.toBeInTheDocument());
   });
 });

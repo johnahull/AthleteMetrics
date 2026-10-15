@@ -76,10 +76,11 @@ const metricModifyLimiter = rateLimit({
 });
 
 const metricCodeSchema = z.string().regex(/^[A-Z0-9_]+$/);
+const uniqueCodes = z.array(metricCodeSchema).max(200).default([]).transform((codes) => [...new Set(codes)]);
 const bulkUpdateMetricsSchema = z
   .object({
-    enable: z.array(metricCodeSchema).max(200).default([]),
-    disable: z.array(metricCodeSchema).max(200).default([]),
+    enable: uniqueCodes,
+    disable: uniqueCodes,
   })
   .refine((v) => v.enable.length + v.disable.length > 0, { message: "No metric changes given" })
   .refine((v) => !v.enable.some((c) => v.disable.includes(c)), {

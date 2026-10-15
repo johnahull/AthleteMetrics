@@ -176,13 +176,17 @@ export default function OrganizationMetricsCard({
     });
   };
 
-  const pendingCount = Object.keys(pending).length;
+  // Staged entries the saved state has caught up with (a refetch after another admin's edit) are no-ops
+  const effectivePending = Object.fromEntries(
+    Object.entries(pending).filter(([code, wanted]) => wanted !== isMetricEnabled(code))
+  );
+  const pendingCount = Object.keys(effectivePending).length;
 
   const handleSaveChanges = async () => {
     if (!canEdit || pendingCount === 0) return;
 
-    const enable = Object.keys(pending).filter((code) => pending[code]);
-    const disable = Object.keys(pending).filter((code) => !pending[code]);
+    const enable = Object.keys(effectivePending).filter((code) => effectivePending[code]);
+    const disable = Object.keys(effectivePending).filter((code) => !effectivePending[code]);
 
     try {
       await bulkMutation.mutateAsync({ organizationId, enable, disable });
@@ -391,7 +395,7 @@ export default function OrganizationMetricsCard({
           <TableBody>
             {filteredMetrics.map((metric) => {
               const savedEnabled = isMetricEnabled(metric.code);
-              const isEnabled = pending[metric.code] ?? savedEnabled;
+              const isEnabled = effectivePending[metric.code] ?? savedEnabled;
               const customLabelValue = getCustomLabel(metric.code);
               const isEditing = editingMetric === metric.code;
 

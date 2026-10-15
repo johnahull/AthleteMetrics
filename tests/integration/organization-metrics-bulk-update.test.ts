@@ -97,6 +97,12 @@ describe('POST /api/organizations/:id/metrics/bulk-update', () => {
     expect((await post({ enable: ['lower-case'] })).status).toBe(400);
   });
 
+  it('accepts duplicate codes in one array', async () => {
+    const res = await post({ enable: [A, A] });
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+  });
+
   it('rejects more than 200 codes in one array', async () => {
     const many = Array.from({ length: 201 }, (_, i) => `M_${i}`);
     expect((await post({ enable: many })).status).toBe(400);
