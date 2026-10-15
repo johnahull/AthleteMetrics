@@ -6,7 +6,7 @@
 --
 -- For athletes who run the 5-0-5 on the metric protocol but sprint with yard splits
 -- (no DASH_10M), the 10 m time is interpolated linearly between the 10 yd (9.144 m)
--- and 20 yd (18.288 m) splits: (10 - 9.144) / 9.144 = 0.0936.
+-- and 20 yd (18.288 m) splits: (10 - 9.144) / (18.288 - 9.144) = 0.0936.
 --
 --   AGILITY_COD_DEFICIT_M_INTERP = min(AGILITY_505_M_L, AGILITY_505_M_R)
 --                                  - (DASH_10YD + 0.0936 * (DASH_20YD - DASH_10YD))
