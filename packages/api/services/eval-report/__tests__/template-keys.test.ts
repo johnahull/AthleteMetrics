@@ -3,9 +3,10 @@ import { resolveTemplateKey, keyForCode, isLogicalKey, TEMPLATE_METRIC_CODES } f
 
 describe('template key resolution', () => {
   it('resolves a logical key through the protocol-aware map', () => {
-    expect(resolveTemplateKey('505')).toBe('AGILITY_505_YD');
+    expect(resolveTemplateKey('505')).toBe('AGILITY_505_M');
     expect(resolveTemplateKey('FLY_10')).toBe('FLY10_TIME');
-    expect(resolveTemplateKey('505_LEFT')).toBe('AGILITY_505_YD_L');
+    expect(resolveTemplateKey('505_LEFT')).toBe('AGILITY_505_M_L');
+    expect(resolveTemplateKey('COD_DEFICIT')).toBe('AGILITY_COD_DEFICIT_M_INTERP');
   });
   it('resolves the template-only logical keys', () => {
     expect(resolveTemplateKey('BODY_HEIGHT')).toBe('HEIGHT_IN');
@@ -28,7 +29,8 @@ describe('template key resolution', () => {
     }
   });
   it('keyForCode is the reverse: mapped codes give the logical key, others stay literal', () => {
-    expect(keyForCode('AGILITY_505_YD')).toBe('505');
+    expect(keyForCode('AGILITY_505_M')).toBe('505');
+    expect(keyForCode('AGILITY_505_YD')).toBe('AGILITY_505_YD'); // a yard 5-0-5 is no longer a logical key
     expect(keyForCode('MQ_LIN_ACCEL')).toBe('PATTERN_LIN_ACCEL');
     expect(keyForCode('SOMETHING_ELSE')).toBe('SOMETHING_ELSE');
   });

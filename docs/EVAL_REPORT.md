@@ -12,6 +12,7 @@ Scope of this tree: P1, P2, P3a-d, P4 (#560) and P5.
 
 - Uses only the chosen event's **verified** measurements for that athlete in the event's organization. Best value per metric honors `lower_is_better`. The report date is the event's calendar date, and age is taken at that date.
 - Derived values (5-0-5 LSI, EUR, COD deficit, single-leg CMJ asymmetry) are recomputed from the event's per-leg bests, never read from stored totals.
+- The 5-0-5 is the meter protocol for every organization (`AGILITY_505_M`, `_M_L`, `_M_R`, `_M_LSI`); sprints stay yard splits. The COD deficit (`AGILITY_COD_DEFICIT_M_INTERP`) is the faster 5-0-5 leg minus a 10 m time interpolated from the splits: `min(L, R) - (DASH_10YD + 0.0936 x (DASH_20YD - DASH_10YD))` (migration 0161). It is dropped when either leg or either split is missing. The 20 yd split is used for this even when it is not selected; it is shown only when selected. Yard 5-0-5 rows (`AGILITY_505_YD*`) are not mapped to any report key.
 - Compares each metric with the athlete's age-group average (above or below), optionally with a college standard marker. When no set applies (males, ages under 11 or over 18, some metrics, missing gender or birth date) it shows value and unit with no gauge.
 - Fresh & Healthy panel: Load (coach pick), Balance (5-0-5 LSI wording), Movement (MQI band word). No survey data, no injury wording, no placement recommendation.
 - Presets (Middle school, High school, Senior) are chosen from graduation year, then age, else High school.
