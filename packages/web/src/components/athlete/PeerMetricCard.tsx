@@ -242,6 +242,7 @@ export function PeerMetricCard({
                   metricName={displayName}
                   lowerIsBetter={lowerIsBetter}
                   height={100}
+                  format={durationFormat}
                 />
               ) : (
                 <div className="h-20 flex items-center justify-center text-sm text-gray-400">

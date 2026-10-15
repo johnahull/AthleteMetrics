@@ -37,3 +37,21 @@ describe('PeerMetricCard: duration (mm:ss) metrics', () => {
     expect(screen.getByText(/1\.23/)).toBeInTheDocument();
   });
 });
+
+import { DistributionBoxPlot } from '@/components/charts/DistributionBoxPlot';
+
+describe('DistributionBoxPlot: duration (mm:ss) metric', () => {
+  it('labels the percentiles as m:ss', () => {
+    render(
+      <DistributionBoxPlot
+        distribution={{ p10: 390, p25: 395, p50: 402.5, p75: 410, p90: 420, mean: 403, sampleSize: 30 } as any}
+        athleteValue={402.5}
+        metricName="Mile"
+        lowerIsBetter
+        format={{ unit: 's', displayFormat: 'duration', decimalPrecision: 1 }}
+      />
+    );
+    expect(screen.getByText('6:30.0')).toBeInTheDocument();
+    expect(screen.getByText('7:00.0')).toBeInTheDocument();
+  });
+});
