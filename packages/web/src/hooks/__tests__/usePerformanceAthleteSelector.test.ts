@@ -117,6 +117,15 @@ describe('usePerformanceAthleteSelector', () => {
     expect(result.current.athleteOptions.map(a => a.bestValue).slice(0, 2)).toEqual([1.5, 1.8]);
   });
 
+  it('never displays an infinite best value for an athlete with no usable data', () => {
+    for (const metric of ['FLY10_TIME', 'VERTICAL_JUMP']) {
+      const { result } = render(metric, [trend('none', 'None', metric, [Number.NaN])]);
+      const best = result.current.athleteOptions[0].bestValue;
+      expect(Number.isFinite(best)).toBe(false);
+      expect(result.current.formatValue(best)).toBe('\u2014');
+    }
+  });
+
   it('reports whether the metric list has loaded', () => {
     expect(render('FLY10_TIME', []).result.current.isMetricConfigLoaded).toBe(true);
     metricConfigState.loaded = false;

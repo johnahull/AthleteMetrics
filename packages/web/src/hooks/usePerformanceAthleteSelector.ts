@@ -106,8 +106,11 @@ export function usePerformanceAthleteSelector({
   const isDuration = metricConfig?.displayFormat === 'duration';
   const unit = isDuration ? '' : metricConfig?.unit ?? '';
   const metricLabel = metricConfig?.label ?? metric;
+  // A non-finite best value (athlete with no usable data) sorts last but is never shown
   const formatValue = (value: number) =>
-    metricConfig
+    !Number.isFinite(value)
+      ? '\u2014'
+      : metricConfig
       ? formatMeasurement(value, { ...metricConfig, decimalPrecision: metricConfig.decimalPrecision ?? (isDuration ? 1 : 2) })
       : value.toFixed(2);
 
