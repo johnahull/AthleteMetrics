@@ -17,6 +17,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Benchmark sport/position filter bugs
 
+## [0.26.0] - 2026-10-16
+
+### Added
+- **Duration (mm:ss) metrics** - metrics can use a `duration` display format, set by an admin toggle (new `display_format` column on `site_metrics` and `custom_org_metrics`). Coaches enter `6:42.5`; values show as mm:ss in grids, charts, leaderboards, reports and the eval report. Storage and analysis stay in seconds. CSV export gains a last `display_value` column (#625, #629, #630)
+- `AGILITY_COD_DEFICIT_M_INTERP` derived metric: change-of-direction deficit for evals that run the 5-0-5 in meters and the sprint in yards (#624)
+
+### Changed
+- Eval report uses the meter 5-0-5 and the interpolated COD deficit for every organization; yard 5-0-5 rows are no longer offered (#628)
+- Metric units now show on dashboards, with uniform spacing (`1.10 s`) (#631)
+- Lower-is-better is resolved from the metric's own type, with one shared resolver on server and web; empty `METRIC_CONFIG` removed (#632, #633, #637)
+- Org metric toggles are staged and saved in one request (#626)
+
+### Fixed
+- Calendar dates show on the correct day west of UTC (#636)
+- Reports show selected site benchmarks when the organization has no enablement row (#635)
+- Achievement history is scoped to the measurement's organization; report metric info is org-aware; goal update checks direction (#634)
+- Athlete selector ranks time metrics fastest first (#638)
+- CSV/OCR import of mm:ss times (#625)
+
+### Security
+- Org metric write routes are restricted to org admins (#627)
+
+### Deploy notes
+- New migrations 0161 and 0162; run `npm run db:migrate:all`
+
 ## [0.15.1] - 2026-01-23
 
 ### Security
