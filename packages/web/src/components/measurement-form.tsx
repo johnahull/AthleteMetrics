@@ -1,4 +1,5 @@
 import { useState, useEffect, useId } from "react";
+import { format } from "date-fns";
 import { useForm, FormProvider, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -24,6 +25,7 @@ import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { PairedInputFields } from "@/components/measurement/PairedInputFields";
 import { LastSetContextLine } from "@/components/measurement/LastSetContextLine";
 import { parseFieldError } from "@/lib/parse-field-error";
+import { DurationInput } from "@/components/duration-input";
 
 // Create dynamic measurement schema that accepts any metric string
 // Backend will validate against org-enabled metrics
@@ -70,7 +72,7 @@ export default function MeasurementForm() {
     resolver: zodResolver(dynamicMeasurementSchema),
     defaultValues: {
       userId: "",
-      date: new Date().toISOString().split('T')[0],
+      date: format(new Date(), 'yyyy-MM-dd'),
       metric: firstMetricCode,
       value: 0,
       auxiliaryValue: undefined,
@@ -195,6 +197,7 @@ export default function MeasurementForm() {
   // Get unit from metric config dynamically
   const units = availableMetrics.find(m => m.code === metric)?.unit || "";
   const selectedMetric = availableMetrics.find(m => m.code === metric);
+  const isDuration = selectedMetric?.displayFormat === "duration";
 
   // Query for calculation preview for derived metrics
   const { data: calculationPreview, isFetching: isPreviewFetching } = useQuery({
@@ -280,7 +283,7 @@ export default function MeasurementForm() {
   const clearForm = () => {
     form.reset({
       userId: "",
-      date: new Date().toISOString().split('T')[0],
+      date: format(new Date(), 'yyyy-MM-dd'),
       metric: firstMetricCode,
       value: 0,
       notes: "",
@@ -517,6 +520,17 @@ export default function MeasurementForm() {
                   </FormLabel>
                   <div className="flex">
                     <FormControl>
+                      {isDuration ? (
+                        <DurationInput
+                          name={field.name}
+                          ref={field.ref}
+                          onBlur={field.onBlur}
+                          value={field.value}
+                          onValueChange={field.onChange}
+                          disabled={createMeasurementMutation.isPending}
+                          data-testid="measurement-value"
+                        />
+                      ) : (
                       <Input
                         {...field}
                         type="number"
@@ -528,8 +542,9 @@ export default function MeasurementForm() {
                         onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
                         value={field.value || ''}
                       />
+                      )}
                     </FormControl>
-                    {units && (
+                    {units && !isDuration && (
                       <div className="px-4 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600 text-sm">
                         {units}
                       </div>
@@ -734,7 +749,7 @@ export default function MeasurementForm() {
                               min="1970-01-01"
                               disabled={createAthleteMutation.isPending}
                               data-testid="input-quick-add-birthday"
-                              max={new Date().toISOString().split('T')[0]} // Prevent future dates
+                              max={format(new Date(), 'yyyy-MM-dd')} // Prevent future dates
                             />
                           </FormControl>
                           <FormMessage />

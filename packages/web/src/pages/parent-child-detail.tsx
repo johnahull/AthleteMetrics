@@ -10,6 +10,7 @@
  * Route: /parent/children/:athleteId
  */
 import { useState, useEffect } from 'react';
+import { toCalendarDate } from '@/utils/date-utils';
 import { useParams, useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
@@ -291,7 +292,7 @@ export default function ParentChildDetail() {
                     <div className="flex gap-4">
                       <dt className="w-28 font-medium text-muted-foreground shrink-0">Date of Birth</dt>
                       <dd className="text-foreground">
-                        {new Date(profile.birthDate).toLocaleDateString(undefined, {
+                        {toCalendarDate(profile.birthDate)?.toLocaleDateString(undefined, {
                           year: 'numeric',
                           month: 'long',
                           day: 'numeric',

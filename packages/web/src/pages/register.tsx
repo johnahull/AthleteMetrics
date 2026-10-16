@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { format } from 'date-fns';
 import { useLocation } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -522,7 +523,7 @@ export default function Register() {
                   type="date"
                   value={formData.birthDate}
                   onChange={(e) => setFormData({ ...formData, birthDate: e.target.value })}
-                  max={new Date().toISOString().split('T')[0]}
+                  max={format(new Date(), 'yyyy-MM-dd')}
                   required
                 />
               </div>

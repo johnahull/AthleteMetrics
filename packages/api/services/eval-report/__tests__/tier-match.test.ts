@@ -213,6 +213,7 @@ describe('matchTierGroup: eligibility', () => {
     'POWER_EUR',
     'MOMENTUM',
     'AGILITY_COD_DEFICIT_YD',
+    'AGILITY_COD_DEFICIT_M_INTERP',
     'RSI_105',
     'T_TEST',
     'JUMP_CMJ_SL_L',

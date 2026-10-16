@@ -152,6 +152,24 @@ describe('MetricContextTooltip', () => {
     });
   });
 
+  describe('Metric type', () => {
+    it('ranks with the metric type when one is passed', async () => {
+      const user = userEvent.setup();
+      render(
+        <MetricContextTooltip metric="VERTICAL_JUMP" value={20} metricType="lower_is_better">
+          <span data-testid="trigger">20"</span>
+        </MetricContextTooltip>
+      );
+
+      await user.hover(screen.getByTestId('tooltip-trigger'));
+
+      await waitFor(() => {
+        expect(screen.getAllByText('Elite').length).toBeGreaterThan(0);
+      });
+      expect(screen.queryByText('Developing')).not.toBeInTheDocument();
+    });
+  });
+
   describe('Gender Filtering', () => {
     it('should render with gender filter', async () => {
       const user = userEvent.setup();

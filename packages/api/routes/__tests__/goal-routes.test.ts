@@ -37,6 +37,11 @@ vi.mock('../../storage', () => ({
   },
 }));
 
+// Direction comes from the metric's row; MILE_RUN stands in for a lower-is-better metric outside the built-in list
+vi.mock('../../utils/metric-type', () => ({
+  isLowerBetter: vi.fn(async (code: string) => code === 'FLY10_TIME' || code === 'MILE_RUN'),
+}));
+
 // Valid UUIDs for testing
 const mockAthleteId = '550e8400-e29b-41d4-a716-446655440000';
 const mockCoachId = '550e8400-e29b-41d4-a716-446655440001';
@@ -433,6 +438,45 @@ describe('Goal Routes', () => {
       expect(response.body.message).toContain('Invalid input data');
     });
 
+    it('rejects a target value goal whose target is not better than the baseline (lower-is-better metric)', async () => {
+      const response = await request(athleteApp)
+        .post('/api/goals')
+        .send({ metric: 'MILE_RUN', goalType: 'target_value', targetValue: 440, baselineValue: 420, targetDate: getFutureDate() });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toMatch(/better than the baseline/i);
+      expect(storage.createGoal).not.toHaveBeenCalled();
+    });
+
+    it('rejects a target value goal whose target is not better than the baseline (higher-is-better metric)', async () => {
+      const response = await request(athleteApp)
+        .post('/api/goals')
+        .send({ metric: 'VERTICAL_JUMP', goalType: 'target_value', targetValue: 28, baselineValue: 30, targetDate: getFutureDate() });
+
+      expect(response.status).toBe(400);
+      expect(storage.createGoal).not.toHaveBeenCalled();
+    });
+
+    it('accepts a lower target for a lower-is-better metric outside the built-in list', async () => {
+      vi.mocked(storage.createGoal).mockResolvedValue(getCreatedGoal());
+
+      const response = await request(athleteApp)
+        .post('/api/goals')
+        .send({ metric: 'MILE_RUN', goalType: 'target_value', targetValue: 400, baselineValue: 420, targetDate: getFutureDate() });
+
+      expect(response.status).toBe(201);
+    });
+
+    it('does not apply the direction check to improvement percentage goals', async () => {
+      vi.mocked(storage.createGoal).mockResolvedValue(getCreatedGoal());
+
+      const response = await request(athleteApp)
+        .post('/api/goals')
+        .send({ metric: 'MILE_RUN', goalType: 'improvement_percentage', targetValue: 10, baselineValue: 420, targetDate: getFutureDate() });
+
+      expect(response.status).toBe(201);
+    });
+
     it('should reject coach creating goal', async () => {
       const validGoalData = getValidGoalData();
       const response = await request(coachApp)
@@ -642,6 +686,69 @@ describe('Goal Routes', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.message).toContain('Invalid input data');
+    });
+
+    describe('target vs baseline (same check as POST)', () => {
+      const message = 'Target must be better than the baseline (lower for this metric)';
+
+      it('rejects raising the target of a lower-is-better goal to the baseline or above', async () => {
+        vi.mocked(storage.getGoal).mockResolvedValue(existingGoal);
+        const response = await request(athleteApp).put(`/api/goals/${mockGoalId}`).send({ targetValue: 1.3 });
+        expect(response.status).toBe(400);
+        expect(response.body.message).toBe(message);
+        expect(storage.updateGoal).not.toHaveBeenCalled();
+      });
+
+      it('rejects a baseline-only change that leaves the stored target not better', async () => {
+        vi.mocked(storage.getGoal).mockResolvedValue(existingGoal);
+        const response = await request(athleteApp).put(`/api/goals/${mockGoalId}`).send({ baselineValue: 0.9 });
+        expect(response.status).toBe(400);
+        expect(response.body.message).toBe(message);
+        expect(storage.updateGoal).not.toHaveBeenCalled();
+      });
+
+      it('rejects switching to a higher-is-better metric when the target is below the baseline', async () => {
+        vi.mocked(storage.getGoal).mockResolvedValue(existingGoal);
+        const response = await request(athleteApp).put(`/api/goals/${mockGoalId}`).send({ metric: 'VERTICAL_JUMP' });
+        expect(response.status).toBe(400);
+        expect(response.body.message).toBe('Target must be better than the baseline (higher for this metric)');
+      });
+
+      it('rejects switching an improvement goal to target_value when the target is not better', async () => {
+        vi.mocked(storage.getGoal).mockResolvedValue({ ...existingGoal, goalType: 'improvement_percentage', targetValue: '10' });
+        const response = await request(athleteApp).put(`/api/goals/${mockGoalId}`).send({ goalType: 'target_value' });
+        expect(response.status).toBe(400);
+        expect(response.body.message).toBe(message);
+      });
+
+      it('accepts a lower target for a lower-is-better metric outside the built-in list', async () => {
+        vi.mocked(storage.getGoal).mockResolvedValue({ ...existingGoal, metric: 'MILE_RUN', targetValue: '380', baselineValue: '400' });
+        vi.mocked(storage.updateGoal).mockResolvedValue(existingGoal as any);
+        const response = await request(athleteApp).put(`/api/goals/${mockGoalId}`).send({ targetValue: 370 });
+        expect(response.status).toBe(200);
+      });
+
+      it('accepts a target value goal with no stored baseline (cannot compare)', async () => {
+        vi.mocked(storage.getGoal).mockResolvedValue({ ...existingGoal, metric: 'MILE_RUN', goalType: 'improvement_percentage', targetValue: '10', baselineValue: null });
+        vi.mocked(storage.updateGoal).mockResolvedValue(existingGoal as any);
+        const response = await request(athleteApp).put(`/api/goals/${mockGoalId}`).send({ goalType: 'target_value', targetValue: 400 });
+        expect(response.status).toBe(200);
+      });
+
+      it('does not check improvement percentage goals', async () => {
+        vi.mocked(storage.getGoal).mockResolvedValue({ ...existingGoal, goalType: 'improvement_percentage', targetValue: '10' });
+        vi.mocked(storage.updateGoal).mockResolvedValue(existingGoal as any);
+        const response = await request(athleteApp).put(`/api/goals/${mockGoalId}`).send({ targetValue: 15 });
+        expect(response.status).toBe(200);
+      });
+
+      it('does not block a status or notes update of a stored goal', async () => {
+        // An older goal whose target is not better than its baseline can still be abandoned or annotated
+        vi.mocked(storage.getGoal).mockResolvedValue({ ...existingGoal, targetValue: '1.5' });
+        vi.mocked(storage.updateGoal).mockResolvedValue(existingGoal as any);
+        const response = await request(athleteApp).put(`/api/goals/${mockGoalId}`).send({ status: 'abandoned', notes: 'x' });
+        expect(response.status).toBe(200);
+      });
     });
   });
 

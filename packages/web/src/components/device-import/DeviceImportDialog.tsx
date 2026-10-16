@@ -45,6 +45,7 @@ import {
   type ParsedSession,
 } from '@/hooks/useDeviceImport';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
+import { formatValueWithUnit } from '@/lib/metrics';
 import { ChevronDown, ChevronRight, AlertTriangle, Upload, Loader2 } from 'lucide-react';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -213,7 +214,7 @@ function AthleteReviewRow({
                 <div key={i} className="flex items-center gap-2">
                   <span className="text-muted-foreground w-28">{getLabel(drill.metric)}</span>
                   <span className="font-semibold">
-                    {drill.value} {drill.units}
+                    {formatValueWithUnit(drill.value, drill.units)}
                   </span>
                   {drill.isOutlier && (
                     <Badge variant="outline" className="text-yellow-700 border-yellow-300 text-xs">
@@ -227,7 +228,7 @@ function AthleteReviewRow({
                   )}
                   {drill.splits && drill.splits.length > 0 && (
                     <span className="text-muted-foreground">
-                      ({drill.splits.map((s) => `${getLabel(s.metric)}: ${s.value}${s.units}`).join(', ')})
+                      ({drill.splits.map((s) => `${getLabel(s.metric)}: ${formatValueWithUnit(s.value, s.units)}`).join(', ')})
                     </span>
                   )}
                 </div>

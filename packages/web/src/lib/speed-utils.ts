@@ -20,7 +20,7 @@ export function calculateFly10Speed(timeInSeconds: number): number {
  */
 export function formatFly10TimeWithSpeed(timeInSeconds: number): string {
   const speed = calculateFly10Speed(timeInSeconds);
-  return `${timeInSeconds}s (${speed} mph)`;
+  return `${timeInSeconds} s (${speed} mph)`;
 }
 
 /**

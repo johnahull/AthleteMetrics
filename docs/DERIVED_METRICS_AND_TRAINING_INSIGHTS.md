@@ -593,6 +593,7 @@ export function calculateImprovementRate(
   monthlyRate: number;
   percentageChange: number;
 } {
+  // METRIC_CONFIG was removed in #637 (the map was always empty; metric label/unit/type come from the metric list)
   const isTimeBased = METRIC_CONFIG[metric]?.lowerIsBetter;
   const rawChange = currentValue - baselineValue;
 

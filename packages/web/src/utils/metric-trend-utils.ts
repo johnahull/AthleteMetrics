@@ -9,6 +9,7 @@
  */
 
 import { isLowerBetter } from '@/constants/metrics';
+import type { MetricType } from '@shared/analytics-types';
 
 export type TrendDirection = 'improving' | 'steady' | 'declining';
 
@@ -30,11 +31,13 @@ interface Measurement {
  *
  * @param measurements - Array of measurements sorted by date (newest first)
  * @param metric - The metric type (e.g., 'FLY10_TIME', 'VERTICAL_JUMP')
+ * @param metricType - The metric's type from the metric list; without it the built-in list decides
  * @returns Trend data with direction, percentage change, and comparison text
  */
 export function calculateMetricTrend(
   measurements: Measurement[],
-  metric: string
+  metric: string,
+  metricType?: MetricType
 ): MetricTrendData | null {
   // Need at least 2 measurements to calculate trend
   if (measurements.length < 2) {
@@ -60,7 +63,7 @@ export function calculateMetricTrend(
     const overallAvg = calculateAverage(sortedMeasurements);
 
     const percentChange = calculatePercentChange(overallAvg, recentAvg);
-    const trend = determineTrend(percentChange, metric);
+    const trend = determineTrend(percentChange, metric, metricType);
     const comparisonText = generateComparisonText(trend, percentChange, metric);
 
     return {
@@ -80,7 +83,7 @@ export function calculateMetricTrend(
   const percentChange = calculatePercentChange(previousAvg, recentAvg);
 
   // Determine trend direction
-  const trend = determineTrend(percentChange, metric);
+  const trend = determineTrend(percentChange, metric, metricType);
 
   // Generate comparison text
   const comparisonText = generateComparisonText(trend, percentChange, metric);
@@ -123,14 +126,14 @@ function calculatePercentChange(oldValue: number, newValue: number): number {
  *
  * Steady threshold: < 5% change
  */
-function determineTrend(percentChange: number, metric: string): TrendDirection {
+function determineTrend(percentChange: number, metric: string, metricType?: MetricType): TrendDirection {
   const STEADY_THRESHOLD = 5; // Less than 5% change is considered steady
 
   if (Math.abs(percentChange) < STEADY_THRESHOLD) {
     return 'steady';
   }
 
-  const lowerIsBetter = isLowerBetter(metric);
+  const lowerIsBetter = isLowerBetter(metric, metricType);
 
   if (lowerIsBetter) {
     // For time-based metrics, negative change is improving
@@ -181,11 +184,12 @@ export function getSparklineData(
  */
 export function getBestValue(
   measurements: Measurement[],
-  metric: string
+  metric: string,
+  metricType?: MetricType
 ): number | null {
   if (measurements.length === 0) return null;
 
-  const lowerIsBetter = isLowerBetter(metric);
+  const lowerIsBetter = isLowerBetter(metric, metricType);
 
   const values = measurements.map((m) => parseFloat(String(m.value)));
 

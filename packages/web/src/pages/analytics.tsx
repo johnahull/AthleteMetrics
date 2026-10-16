@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { format } from "date-fns";
+import { toCalendarDate } from "@/utils/date-utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
@@ -19,11 +21,12 @@ import { useToast } from "@/hooks/use-toast";
 import DistributionChart from "@/components/charts/distribution-chart";
 import ScatterChart from "@/components/charts/scatter-chart";
 import { StatisticsSummaryCard } from "@/components/analytics/StatisticsSummaryCard";
-import { getMetricUnits, getMetricColor } from "@/lib/metrics";
+import { formatValueWithUnit } from "@/lib/metrics";
 import { Gender, SoccerPosition, type Team, type Measurement } from "@shared/schema";
-import { isLowerIsBetterMetric } from "@shared/analytics-types";
+import { isLowerBetterType } from "@shared/analytics-types";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { useMetricLabels } from "@/hooks/use-metric-labels";
+import { formatMeasurement } from "@shared/duration-format";
 
 // Edit measurement form schema
 const editMeasurementSchema = z.object({
@@ -41,7 +44,7 @@ const editMeasurementSchema = z.object({
 
 export default function Analytics() {
   const labels = useContextualLabels();
-  const { getLabel: getMetricLabel } = useMetricLabels();
+  const { getLabel: getMetricLabel, formats: metricFormats, types: metricTypes } = useMetricLabels();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -137,13 +140,13 @@ export default function Analytics() {
       const now = new Date();
       if (filters.dateRange === "last7") {
         const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        params.append('dateFrom', weekAgo.toISOString().split('T')[0]);
+        params.append('dateFrom', format(weekAgo, 'yyyy-MM-dd'));
       } else if (filters.dateRange === "last30") {
         const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        params.append('dateFrom', monthAgo.toISOString().split('T')[0]);
+        params.append('dateFrom', format(monthAgo, 'yyyy-MM-dd'));
       } else if (filters.dateRange === "last90") {
         const quarterAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-        params.append('dateFrom', quarterAgo.toISOString().split('T')[0]);
+        params.append('dateFrom', format(quarterAgo, 'yyyy-MM-dd'));
       }
 
       // Add organization context for proper filtering
@@ -293,7 +296,7 @@ export default function Analytics() {
     if (data.length === 0) return { p25: 0, p50: 0, p75: 0, p90: 0 };
 
     // For time-based metrics, lower values are better, so we need to reverse the percentile logic
-    const isTimeBased = isLowerIsBetterMetric(metric);
+    const isTimeBased = isLowerBetterType(metric, metricTypes[metric]);
     const sorted = [...data].sort((a, b) => a - b);
 
     const getPercentile = (p: number) => {
@@ -768,19 +771,21 @@ export default function Analytics() {
                       <td className="px-4 py-3 text-gray-600">{measurement.user.sport || "N/A"}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          getMetricColor(measurement.metric)
+                          "bg-gray-100 text-gray-800"
                         }`}>
                           {getMetricLabel(measurement.metric)}
                         </span>
                       </td>
                       <td className="px-4 py-3 font-mono text-gray-900">
-                        {measurement.value}{getMetricUnits(measurement.metric)}
+                        {metricFormats[measurement.metric]
+                          ? formatMeasurement(Number(measurement.value), metricFormats[measurement.metric])
+                          : formatValueWithUnit(measurement.value, measurement.units)}
                       </td>
                       <td className="px-4 py-3 text-gray-600 font-mono">
                         {measurement.age}
                       </td>
                       <td className="px-4 py-3 text-gray-600">
-                        {new Date(measurement.date).toLocaleDateString()}
+                        {toCalendarDate(measurement.date)?.toLocaleDateString()}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-x-2">

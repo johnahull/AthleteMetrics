@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
+import { toCalendarDate } from '@/utils/date-utils';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -24,6 +25,9 @@ import { calculateBoxPlotStatistics, safeParseDate, generateDeterministicJitter 
 import { resolveLabelCollisions } from './utils/labelCollisionResolver';
 import type { AthleteDataPoint, ChartDataPoint, LabelPosition, ChartInstance, TooltipItem, ChartContext, ChartScale } from './types/timeSeriesChartTypes';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
+import { formatValueWithUnit } from '@/lib/metrics';
+import { durationAxis } from './utils/durationAxis';
+import { formatMeasurement } from '@shared/duration-format';
 
 // Register Chart.js components
 
@@ -101,8 +105,8 @@ export function TimeSeriesBoxSwarmChart({
 
     const datasets: any[] = [];
     const dateLabels = sortedDates.map(dateStr => {
-      const date = new Date(dateStr);
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const date = toCalendarDate(dateStr);
+      return date?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) ?? '';
     });
 
     // Create box plot and swarm plot datasets for each date
@@ -282,14 +286,15 @@ export function TimeSeriesBoxSwarmChart({
 
   const chartOptions = useMemo(() => {
     const metricConfig = getMetricConfig(metric);
-    const unit = metricConfig?.unit || '';
+    const durationConfig = metricConfig?.displayFormat === 'duration' ? metricConfig : null;
+    const unit = durationConfig ? 'mm:ss' : metricConfig?.unit || '';
     const metricLabel = metricConfig?.label || metric;
 
     // Create date labels inside chartOptions to avoid closure issues
     const sortedDates = [...selectedDates].sort();
     const currentDateLabels = sortedDates.map(dateStr => {
-      const date = new Date(dateStr);
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const date = toCalendarDate(dateStr);
+      return date?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) ?? '';
     });
 
     return {
@@ -335,9 +340,11 @@ export function TimeSeriesBoxSwarmChart({
               const dataPoint = context.raw;
 
               // Format value with dual display for FLY10_TIME
-              const formattedValue = isFly10Metric(metric)
-                ? formatFly10Dual(value, 'time-first')
-                : `${value}${unit}`;
+              const formattedValue = durationConfig
+                ? formatMeasurement(value, durationConfig)
+                : isFly10Metric(metric)
+                  ? formatFly10Dual(value, 'time-first')
+                  : formatValueWithUnit(value, unit);
 
               // Build the tooltip line with athlete name, value, and personal best indicator
               let label = `${datasetLabel}: ${formattedValue}`;
@@ -389,7 +396,8 @@ export function TimeSeriesBoxSwarmChart({
             color: 'rgba(75, 85, 99, 0.1)'
           },
           // Add padding to y-axis to prevent edge rendering
-          grace: '5%'
+          grace: '5%',
+          ...(durationConfig ? durationAxis(durationConfig) : {})
         }
       },
       interaction: {
@@ -641,7 +649,7 @@ export function TimeSeriesBoxSwarmChart({
         }
       }
     };
-  }, [config, metric, selectedDates, localShowAthleteNames]);
+  }, [config, metric, selectedDates, localShowAthleteNames, getMetricConfig]);
 
   if (!data || data.length === 0) {
     return (

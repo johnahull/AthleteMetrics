@@ -38,6 +38,12 @@ describe('getEventMetricDisplay', () => {
     });
   });
 
+  it('shows the unit of a time (duration) metric as mm:ss', () => {
+    expect(
+      getEventMetricDisplay({ metricCode: 'MILE_RUN', metricDetails: { label: 'Mile Run', unit: 's', category: 'endurance', displayFormat: 'duration' } }).unit,
+    ).toBe('mm:ss');
+  });
+
   it('treats an empty unit (e.g. RSI) as no unit', () => {
     expect(
       getEventMetricDisplay({ metricCode: 'RSI', metricDetails: { label: 'Reactive Strength Index', unit: '', category: 'power' } }).unit,

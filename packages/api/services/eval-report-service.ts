@@ -9,6 +9,7 @@ import { and, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import type { db as database } from "../db";
 import { measurements, siteBenchmarks, siteMetrics, users, events, type Event } from "@shared/schema";
 import type { EvalSelectionInput } from "@shared/eval-report-config";
+import type { DisplayFormat } from "@shared/duration-format";
 import { eventCalendarDate } from "./event-measurements-service";
 import { movementBand } from "./eval-report/mqi-band";
 import {
@@ -60,7 +61,7 @@ export interface EvalAssemblyInput {
   /** The event's rows; rows of another event, athlete or organization are ignored */
   rows: readonly EvalMeasurementRow[];
   priorEvent: { event: EventRef; rows: readonly EvalMeasurementRow[] } | null;
-  metricMeta: ReadonlyMap<string, { unit: string | null; lowerIsBetter: boolean }>;
+  metricMeta: ReadonlyMap<string, { unit: string | null; lowerIsBetter: boolean; displayFormat?: DisplayFormat }>;
   benchmarks: readonly TierCandidateRow[];
   selection: EvalSelectionInput;
   load: LoadLevel | null;
@@ -130,12 +131,14 @@ export function assembleEvalReportModel(input: EvalAssemblyInput): EvalReportMod
     const unit = unitOf(code, scoped);
     const lowerIsBetter = input.metricMeta.get(code)?.lowerIsBetter ?? false;
     const priorValue = sectionOn.retestTrend && prior ? prior.bests.get(code) : undefined;
+    const isDuration = input.metricMeta.get(code)?.displayFormat === "duration";
     return {
       key,
       code,
       label: key ? METRIC_LABELS[key] : (OTHER_METRIC_LABELS[code] ?? code),
       value,
       unit,
+      ...(isDuration ? { displayFormat: "duration" as const } : {}),
       comparison: sectionOn.ageGroupComparison
         ? matchTierGroup({
             metricCode: code, value, lowerIsBetter, athlete: tierAthlete, eventDate: event.date, candidates: input.benchmarks,
@@ -304,7 +307,7 @@ export async function loadEvalReportInputs(
   const priorRows = prior ? await eventRows(prior.id) : [];
   const codes = [...new Set([...Object.values(EVAL_METRIC_CODES), ...rows.map((r) => r.metric), ...priorRows.map((r) => r.metric)])];
   const metaRows = await db
-    .select({ code: siteMetrics.code, unit: siteMetrics.unit, metricType: siteMetrics.metricType })
+    .select({ code: siteMetrics.code, unit: siteMetrics.unit, metricType: siteMetrics.metricType, displayFormat: siteMetrics.displayFormat })
     .from(siteMetrics)
     .where(inArray(siteMetrics.code, codes));
 
@@ -333,7 +336,9 @@ export async function loadEvalReportInputs(
     },
     rows,
     priorEvent: prior ? { event: prior, rows: priorRows } : null,
-    metricMeta: new Map(metaRows.map((m) => [m.code, { unit: m.unit, lowerIsBetter: m.metricType === "lower_is_better" }])),
+    metricMeta: new Map(
+      metaRows.map((m) => [m.code, { unit: m.unit, lowerIsBetter: m.metricType === "lower_is_better", displayFormat: m.displayFormat }]),
+    ),
     benchmarks: benchmarkRows.map((b) => ({ ...b, _source: "site" })),
   };
 }

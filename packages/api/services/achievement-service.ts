@@ -11,32 +11,7 @@
 import { storage } from '../storage';
 import type { Measurement, AchievementDefinition, UserAchievement, siteMetrics } from '@shared/schema';
 import { startOfMonth, endOfMonth, subMonths, differenceInMonths } from 'date-fns';
-import { db } from '../db';
-import { eq } from 'drizzle-orm';
-import { siteMetrics as siteMetricsTable } from '@shared/schema';
-
-// Cache for metric types to avoid repeated DB queries
-const metricTypeCache = new Map<string, string>();
-
-// Helper to determine if lower values are better for a metric
-// Queries siteMetrics table as source of truth
-async function isLowerBetterMetric(metricCode: string): Promise<boolean> {
-  // Check cache first
-  if (metricTypeCache.has(metricCode)) {
-    return metricTypeCache.get(metricCode) === 'lower_is_better';
-  }
-
-  // Query database for metric type
-  const [metric] = await db
-    .select({ metricType: siteMetricsTable.metricType })
-    .from(siteMetricsTable)
-    .where(eq(siteMetricsTable.code, metricCode));
-
-  const metricType = metric?.metricType || 'higher_is_better';
-  metricTypeCache.set(metricCode, metricType);
-
-  return metricType === 'lower_is_better';
-}
+import { isLowerBetter as isLowerBetterInOrg } from '../utils/metric-type';
 
 export class AchievementService {
   /**
@@ -74,7 +49,17 @@ export class AchievementService {
   }
 
   /**
-   * Check for PR-related badges
+   * The athlete's verified measurements in ONE organization. Achievements are awarded per organization and the
+   * metric direction is resolved per organization, so another org's (or a personal) row must not count.
+   * storage.getMeasurements' organizationId filter is athlete membership, not the row's org, so filter here.
+   */
+  private async getOrgHistory(userId: string, organizationId: string, metric?: string): Promise<Measurement[]> {
+    const rows = await storage.getMeasurements({ userId, metric, includeUnverified: false });
+    return rows.filter(m => m.organizationId === organizationId);
+  }
+
+  /**
+   * Check for PR-related badges. Callers must pass org-scoped, verified rows (see getOrgHistory).
    */
   async checkPRBadges(
     userId: string,
@@ -88,7 +73,7 @@ export class AchievementService {
 
     // Get measurements for this specific metric
     const metricMeasurements = allMeasurements.filter(m => m.metric === metric);
-    const isLowerBetter = await isLowerBetterMetric(metric);
+    const isLowerBetter = await isLowerBetterInOrg(metric, organizationId);
 
     // Sort to find best value
     const sortedMeasurements = [...metricMeasurements].sort((a, b) => {
@@ -138,11 +123,12 @@ export class AchievementService {
    */
   async checkConsistencyBadges(
     userId: string,
-    organizationId: string
+    organizationId: string,
+    orgMeasurements?: Measurement[]
   ): Promise<Array<{ code: string; metadata?: any }>> {
     const achievements: Array<{ code: string; metadata?: any }> = [];
 
-    const allMeasurements = await storage.getMeasurements({ userId, includeUnverified: false });
+    const allMeasurements = orgMeasurements ?? await this.getOrgHistory(userId, organizationId);
 
     // FIRST_MEASUREMENT: First measurement ever
     if (allMeasurements.length === 1) {
@@ -216,15 +202,14 @@ export class AchievementService {
   async checkImprovementBadges(
     userId: string,
     organizationId: string,
-    metric: string
+    metric: string,
+    orgMeasurements?: Measurement[]
   ): Promise<Array<{ code: string; metadata?: any }>> {
     const achievements: Array<{ code: string; metadata?: any }> = [];
 
-    const metricMeasurements = await storage.getMeasurements({
-      userId,
-      metric,
-      includeUnverified: false,
-    });
+    const metricMeasurements = orgMeasurements
+      ? orgMeasurements.filter(m => m.metric === metric)
+      : await this.getOrgHistory(userId, organizationId, metric);
 
     if (metricMeasurements.length < 2) {
       return achievements;
@@ -235,7 +220,7 @@ export class AchievementService {
       return new Date(a.date).getTime() - new Date(b.date).getTime();
     });
 
-    const isLowerBetter = await isLowerBetterMetric(metric);
+    const isLowerBetter = await isLowerBetterInOrg(metric, organizationId);
     const latest = sorted[sorted.length - 1];
     const latestValue = parseFloat(latest.value as string);
 
@@ -360,7 +345,8 @@ export class AchievementService {
    */
   async checkAllAroundPR(
     userId: string,
-    organizationId: string
+    organizationId: string,
+    orgMeasurements?: Measurement[]
   ): Promise<Array<{ code: string; metadata?: any }>> {
     const achievements: Array<{ code: string; metadata?: any }> = [];
 
@@ -375,7 +361,7 @@ export class AchievementService {
       'RSI',
     ];
 
-    const allMeasurements = await storage.getMeasurements({ userId, includeUnverified: false });
+    const allMeasurements = orgMeasurements ?? await this.getOrgHistory(userId, organizationId);
     const metricsWithData = new Set(allMeasurements.map(m => m.metric));
 
     // The 5-0-5 slot is satisfied by either protocol (meters or yards).
@@ -407,22 +393,22 @@ export class AchievementService {
 
     try {
       // Get all measurements for context
-      const allMeasurements = await storage.getMeasurements({ userId, includeUnverified: false });
+      const allMeasurements = await this.getOrgHistory(userId, organizationId);
 
       // Check PR badges
       const prBadges = await this.checkPRBadges(userId, organizationId, measurement, allMeasurements);
       newAchievements.push(...prBadges);
 
       // Check consistency badges
-      const consistencyBadges = await this.checkConsistencyBadges(userId, organizationId);
+      const consistencyBadges = await this.checkConsistencyBadges(userId, organizationId, allMeasurements);
       newAchievements.push(...consistencyBadges);
 
       // Check improvement badges for this metric
-      const improvementBadges = await this.checkImprovementBadges(userId, organizationId, measurement.metric);
+      const improvementBadges = await this.checkImprovementBadges(userId, organizationId, measurement.metric, allMeasurements);
       newAchievements.push(...improvementBadges);
 
       // Check all-around PR
-      const allAroundBadges = await this.checkAllAroundPR(userId, organizationId);
+      const allAroundBadges = await this.checkAllAroundPR(userId, organizationId, allMeasurements);
       newAchievements.push(...allAroundBadges);
 
       // Award each achievement (if not already unlocked)

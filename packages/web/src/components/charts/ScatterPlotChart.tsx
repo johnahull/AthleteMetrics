@@ -25,6 +25,8 @@ import type {
   BenchmarkLine
 } from '@shared/analytics-types';
 import { useMetricConfig } from '@/hooks/use-metric-config';
+import { durationAxis } from './utils/durationAxis';
+import { formatMeasurement } from '@shared/duration-format';
 import { CHART_CONFIG } from '@/constants/chart-config';
 import { safeNumber } from '@shared/utils/number-conversion';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
@@ -622,6 +624,16 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
   }, [benchmarks, showBenchmarks, scatterData]);
 
   // Chart options
+  // Duration (mm:ss) axes: m:ss ticks and tooltip values
+  const [xDuration, yDuration] = useMemo(
+    () =>
+      [scatterData?.xMetric, scatterData?.yMetric].map((code) => {
+        const metricConfig = code ? getMetricConfig(code) : null;
+        return metricConfig?.displayFormat === 'duration' ? metricConfig : null;
+      }),
+    [scatterData?.xMetric, scatterData?.yMetric, getMetricConfig],
+  );
+
   const options: ChartOptions<'scatter'> = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
@@ -661,6 +673,8 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
             if (scatterData?.yMetric && isFly10Metric(scatterData.yMetric) && point.y) {
               yDisplay = formatFly10Dual(point.y, 'time-first');
             }
+            if (xDuration && point.x != null) xDisplay = formatMeasurement(point.x, xDuration);
+            if (yDuration && point.y != null) yDisplay = formatMeasurement(point.y, yDuration);
 
             return [
               `${scatterData?.xLabel}: ${xDisplay}`,
@@ -786,11 +800,12 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
           display: true,
           text: scatterData?.xMetric && isFly10Metric(scatterData.xMetric)
             ? `${scatterData?.xLabel} (s / mph)`
-            : `${scatterData?.xLabel} (${scatterData?.xUnit})`
+            : `${scatterData?.xLabel} (${xDuration ? 'mm:ss' : scatterData?.xUnit})`
         },
         grid: {
           display: true
-        }
+        },
+        ...(xDuration ? durationAxis(xDuration) : {})
       },
       y: {
         type: 'linear',
@@ -798,11 +813,12 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
           display: true,
           text: scatterData?.yMetric && isFly10Metric(scatterData.yMetric)
             ? `${scatterData?.yLabel} (s / mph)`
-            : `${scatterData?.yLabel} (${scatterData?.yUnit})`
+            : `${scatterData?.yLabel} (${yDuration ? 'mm:ss' : scatterData?.yUnit})`
         },
         grid: {
           display: true
-        }
+        },
+        ...(yDuration ? durationAxis(yDuration) : {})
       }
     },
     elements: {
@@ -882,7 +898,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
         }
       }
     }
-  }), [scatterData, config, showQuadrants, localShowAthleteNames, benchmarkAnnotations]);
+  }), [scatterData, config, showQuadrants, localShowAthleteNames, benchmarkAnnotations, xDuration, yDuration]);
 
   // Generate quadrant legend data (must be before early return to avoid hooks violation)
   const quadrantLegend = useMemo(() => {

@@ -9,9 +9,12 @@
  */
 
 import React, { useState, useMemo } from 'react';
+import { format } from 'date-fns';
+import { useMetricLabels } from '@/hooks/use-metric-labels';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DurationInput } from '@/components/duration-input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -25,6 +28,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { MetricType } from '@shared/analytics-types';
 import {
   GoalType,
   GoalStatus,
@@ -41,6 +45,7 @@ interface Measurement {
   metric: string;
   value: number | string;
   date: string;
+  units?: string | null;
 }
 
 interface GoalCreationData {
@@ -54,6 +59,14 @@ interface GoalCreationData {
 interface GoalCreationWizardProps {
   measurements: Measurement[];
   availableMetrics: string[];
+  /** Codes of time (mm:ss) metrics: their target value is typed as m:ss */
+  durationMetrics?: string[];
+  /** Better/worse direction per metric code; without an entry the built-in lists decide */
+  metricTypes?: Record<string, MetricType>;
+  /** True while the metric list (and so metricTypes) is loading: the saved baseline depends on direction */
+  metricTypesLoading?: boolean;
+  /** True when the metric list failed to load: no direction is known, so no goal can be saved */
+  metricTypesError?: boolean;
   onCreateGoal: (goal: GoalCreationData) => void | Promise<void>;
   onCancel: () => void;
 }
@@ -63,16 +76,31 @@ type WizardStep = 1 | 2 | 3;
 export function GoalCreationWizard({
   measurements,
   availableMetrics,
+  durationMetrics,
+  metricTypes,
+  metricTypesLoading,
+  metricTypesError,
   onCreateGoal,
   onCancel,
 }: GoalCreationWizardProps) {
+  // Once the list has loaded, a code with no type that is not a built-in has no known direction, so no goal for it
+  const hasDirection = (metric: string) =>
+    !metricTypes || metricTypesLoading || !!metricTypes[metric] ||
+    !!getMetricEducation(metric) || isLowerBetterMetric(metric);
+  const pickableMetrics = availableMetrics.filter(hasDirection);
+
   const [currentStep, setCurrentStep] = useState<WizardStep>(1);
   const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
+  const { getUnit } = useMetricLabels();
+  const selectedUnit = selectedMetric ? getUnit(selectedMetric) : '';
   const [selectedGoalType, setSelectedGoalType] = useState<GoalType | null>(null);
   const [targetValue, setTargetValue] = useState<string>('');
   const [targetDate, setTargetDate] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<{ target?: string; date?: string; count?: string }>({});
+  // A code picked while loading can turn out to have no direction
+  const metricUnavailable = !!selectedMetric && !hasDirection(selectedMetric);
+  const submitBlocked = metricTypesLoading || metricTypesError || metricUnavailable;
 
   // Get current performance for selected metric
   const currentPerformance = useMemo(() => {
@@ -87,7 +115,7 @@ export function GoalCreationWizard({
 
     if (metricMeasurements.length === 0) return null;
 
-    const lowerIsBetter = isLowerBetterMetric(selectedMetric);
+    const lowerIsBetter = isLowerBetterMetric(selectedMetric, metricTypes?.[selectedMetric]);
     const best = lowerIsBetter
       ? Math.min(...metricMeasurements.map((m) => m.value))
       : Math.max(...metricMeasurements.map((m) => m.value));
@@ -97,13 +125,13 @@ export function GoalCreationWizard({
     )[0].value;
 
     return { best, latest, count: metricMeasurements.length };
-  }, [selectedMetric, measurements]);
+  }, [selectedMetric, measurements, metricTypes]);
 
   // Get smart suggestions
   const suggestions = useMemo(() => {
     if (!selectedMetric) return [];
-    return suggestGoals(measurements, selectedMetric);
-  }, [selectedMetric, measurements]);
+    return suggestGoals(measurements, selectedMetric, metricTypes?.[selectedMetric]);
+  }, [selectedMetric, measurements, metricTypes]);
 
   // Validate target value
   const validateTargetValue = (value: string): string | null => {
@@ -112,7 +140,7 @@ export function GoalCreationWizard({
     const numValue = parseFloat(value);
     if (isNaN(numValue)) return 'Please enter a valid number';
 
-    const lowerIsBetter = isLowerBetterMetric(selectedMetric);
+    const lowerIsBetter = isLowerBetterMetric(selectedMetric, metricTypes?.[selectedMetric]);
 
     if (selectedGoalType === GoalType.TARGET_VALUE) {
       if (lowerIsBetter && numValue >= currentPerformance.best) {
@@ -140,11 +168,8 @@ export function GoalCreationWizard({
   const validateTargetDate = (date: string): string | null => {
     if (!date) return 'Please select a target date';
 
-    const targetDateObj = new Date(date);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    if (targetDateObj <= today) {
+    // 'YYYY-MM-DD' compares as a string
+    if (date <= format(new Date(), 'yyyy-MM-dd')) {
       return 'Date must be in the future';
     }
 
@@ -199,13 +224,13 @@ export function GoalCreationWizard({
     const percent = parseFloat(targetValue);
     if (isNaN(percent)) return null;
 
-    const lowerIsBetter = isLowerBetterMetric(selectedMetric);
+    const lowerIsBetter = isLowerBetterMetric(selectedMetric, metricTypes?.[selectedMetric]);
     const improvement = currentPerformance.best * (percent / 100);
 
     return lowerIsBetter
       ? currentPerformance.best - improvement
       : currentPerformance.best + improvement;
-  }, [selectedGoalType, targetValue, currentPerformance, selectedMetric]);
+  }, [selectedGoalType, targetValue, currentPerformance, selectedMetric, metricTypes]);
 
   // Check if form is valid
   const isFormValid = useMemo(() => {
@@ -217,7 +242,7 @@ export function GoalCreationWizard({
 
   // Handle form submission
   const handleSubmit = async () => {
-    if (!selectedMetric || !selectedGoalType || !currentPerformance) return;
+    if (!selectedMetric || !selectedGoalType || !currentPerformance || submitBlocked) return;
 
     setIsSubmitting(true);
 
@@ -274,7 +299,7 @@ export function GoalCreationWizard({
           <div className="space-y-4">
             <h3 className="text-lg font-medium">Select a Metric</h3>
             <div className="grid gap-2">
-              {availableMetrics.map((metric) => {
+              {pickableMetrics.map((metric) => {
                 const education = getMetricEducation(metric);
                 return (
                   <Button
@@ -311,7 +336,7 @@ export function GoalCreationWizard({
                 <p className="text-sm text-blue-800">
                   Current best:{' '}
                   <span className="font-bold">
-                    {formatMetricValue(currentPerformance.best, selectedMetric)}
+                    {formatMetricValue(currentPerformance.best, selectedMetric, selectedUnit)}
                   </span>
                   {' '}({currentPerformance.count} measurements)
                 </p>
@@ -405,6 +430,14 @@ export function GoalCreationWizard({
             {/* Target Value Input */}
             <div className="grid gap-y-2">
               <Label htmlFor="target-value">{getTargetInputLabel()}</Label>
+              {selectedGoalType === GoalType.TARGET_VALUE && durationMetrics?.includes(selectedMetric) ? (
+                <DurationInput
+                  id="target-value"
+                  value={targetValue ? Number(targetValue) : undefined}
+                  onValueChange={(seconds) => handleTargetValueChange(seconds === undefined ? '' : String(seconds))}
+                  aria-describedby={errors.target ? 'target-error' : undefined}
+                />
+              ) : (
               <Input
                 id="target-value"
                 type="number"
@@ -420,6 +453,7 @@ export function GoalCreationWizard({
                 }
                 aria-describedby={errors.target ? 'target-error' : undefined}
               />
+              )}
               {errors.target && (
                 <p id="target-error" className="text-sm text-red-600">
                   {errors.target}
@@ -436,7 +470,7 @@ export function GoalCreationWizard({
                 >
                   Target will be:{' '}
                   <span className="font-bold">
-                    {formatMetricValue(calculatedTarget, selectedMetric)}
+                    {formatMetricValue(calculatedTarget, selectedMetric, selectedUnit)}
                   </span>
                 </div>
               )}
@@ -449,7 +483,7 @@ export function GoalCreationWizard({
                 type="date"
                 value={targetDate}
                 onChange={(e) => handleTargetDateChange(e.target.value)}
-                min={new Date().toISOString().split('T')[0]}
+                min={format(new Date(), 'yyyy-MM-dd')}
                 aria-describedby={errors.date ? 'date-error' : undefined}
               />
               {errors.date && (
@@ -458,6 +492,12 @@ export function GoalCreationWizard({
                 </p>
               )}
             </div>
+
+            {metricUnavailable && (
+              <p className="text-sm text-red-600" role="alert">
+                This metric is not available for goals. Go back and pick another metric.
+              </p>
+            )}
 
             {/* Action Buttons */}
             <div className="flex gap-2 pt-4">
@@ -468,7 +508,7 @@ export function GoalCreationWizard({
               <Button
                 className="flex-1"
                 onClick={handleSubmit}
-                disabled={!isFormValid || isSubmitting}
+                disabled={!isFormValid || isSubmitting || submitBlocked}
               >
                 {isSubmitting ? (
                   <>
@@ -478,6 +518,13 @@ export function GoalCreationWizard({
                     />
                     Creating...
                   </>
+                ) : metricTypesLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />
+                    Loading metrics…
+                  </>
+                ) : metricTypesError ? (
+                  'Metrics unavailable, try again later'
                 ) : (
                   <>
                     <CheckCircle className="h-4 w-4 mr-2" />

@@ -245,6 +245,37 @@ describe("RecentAthletesWidget", () => {
     });
   });
 
+  describe("Malformed date", () => {
+    it("renders the row without throwing when lastMeasurementDate is not a date", async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          athletes: [
+            {
+              id: "athlete-bad",
+              firstName: "Bad",
+              lastName: "Date",
+              avatar: null,
+              lastMeasurementDate: "not-a-date",
+              lastMeasurementType: "FLY10_TIME",
+              teamName: null,
+            },
+          ],
+        }),
+      });
+
+      render(<RecentAthletesWidget organizationId="test-org-id" />, {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("Bad Date")).toBeInTheDocument();
+      });
+      // date-fns v4 formats null as the epoch; a bad date must not render one.
+      expect(screen.queryByText(/^(Dec 31|Jan 1)$/)).not.toBeInTheDocument();
+    });
+  });
+
   describe("Add Measurement Action", () => {
     const mockAthletes = [
       {

@@ -6,6 +6,7 @@
  */
 
 import { useForm, useWatch } from "react-hook-form";
+import { format } from "date-fns";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { AlertCircle } from "lucide-react";
@@ -30,6 +31,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
+import { DurationInput } from "@/components/duration-input";
 import { isMovementQualityMetric } from "@shared/peer-comparison-exclusions";
 
 // Form validation schema
@@ -54,10 +56,7 @@ const selfEntrySchema = z.object({
     .min(1, "Date is required")
     .refine((dateStr) => {
       if (!dateStr) return true; // Let min() handle empty string
-      const date = new Date(dateStr);
-      const today = new Date();
-      today.setHours(23, 59, 59, 999); // End of today
-      return date <= today;
+      return dateStr <= format(new Date(), 'yyyy-MM-dd'); // 'YYYY-MM-DD' compares as a string
     }, "Date cannot be in the future"),
   notes: z.string().optional(),
 });
@@ -92,7 +91,7 @@ export function SelfEntryForm({
     defaultValues: {
       metric: '' as SelfEntryFormData['metric'], // Empty string triggers validation on submit
       value: undefined as unknown as number, // undefined triggers validation on submit
-      date: new Date().toISOString().split('T')[0], // Default to today
+      date: format(new Date(), 'yyyy-MM-dd'), // Default to today
       notes: '',
     },
   });
@@ -100,6 +99,7 @@ export function SelfEntryForm({
   // Watch metric field outside render to avoid unnecessary re-renders
   const selectedMetricCode = useWatch({ control: form.control, name: 'metric' });
   const selectedMetric = selectableMetrics.find(m => m.code === selectedMetricCode);
+  const isDuration = selectedMetric?.displayFormat === 'duration';
 
   const handleSubmit = async (data: SelfEntryFormData) => {
     await onSubmit({
@@ -164,9 +164,19 @@ export function SelfEntryForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>
-                  Value{selectedMetric?.unit ? ` (${selectedMetric.unit})` : ''}
+                  Value{isDuration ? ' (m:ss)' : selectedMetric?.unit ? ` (${selectedMetric.unit})` : ''}
                 </FormLabel>
                 <FormControl>
+                  {isDuration ? (
+                    <DurationInput
+                      name={field.name}
+                      ref={field.ref}
+                      onBlur={field.onBlur}
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      disabled={isSubmitting}
+                    />
+                  ) : (
                   <Input
                     type="number"
                     step="0.01"
@@ -179,6 +189,7 @@ export function SelfEntryForm({
                     }}
                     value={field.value ?? ''}
                   />
+                  )}
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -197,7 +208,7 @@ export function SelfEntryForm({
                     type="date"
                     disabled={isSubmitting}
                     {...field}
-                    max={new Date().toISOString().split('T')[0]}
+                    max={format(new Date(), 'yyyy-MM-dd')}
                   />
                 </FormControl>
                 <FormMessage />

@@ -5,6 +5,7 @@
  */
 
 import type { Measurement } from '@shared/schema';
+import { format } from 'date-fns';
 
 /**
  * Escape CSV field value
@@ -92,7 +93,7 @@ export function exportMeasurementsToCSV(
   metricLabels?: Record<string, string>
 ): void {
   // Generate default filename with current date
-  const defaultFilename = `measurements-${new Date().toISOString().split('T')[0]}.csv`;
+  const defaultFilename = `measurements-${format(new Date(), 'yyyy-MM-dd')}.csv`;
   const finalFilename = filename || defaultFilename;
 
   // Convert measurements to CSV string

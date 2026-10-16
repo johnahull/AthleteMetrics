@@ -91,7 +91,7 @@
 - ✅ **Update METRIC_CONFIG** (`packages/shared/analytics-types.ts`)
   - [x] Create dynamic MetricConfig interface
   - [x] Update all references to use API-fetched data
-  - Note: Kept METRIC_CONFIG for backward compatibility
+  - Note: Kept METRIC_CONFIG for backward compatibility. Removed in #637 (the map was always empty; metric label/unit/type come from the metric list)
 
 - ✅ **Update Metric Utilities** - Created `use-metric-config.ts` hook
   - [x] Add React Query hooks for metric fetching

@@ -197,7 +197,7 @@ describe('goal-utils', () => {
         status: GoalStatus.ACTIVE,
         createdAt: '2024-01-01',
       };
-      expect(formatGoalTarget(goal)).toBe('1.05s');
+      expect(formatGoalTarget(goal, 's')).toBe('1.05 s');
     });
 
     it('should format target value goal for distance metric', () => {
@@ -213,7 +213,7 @@ describe('goal-utils', () => {
         status: GoalStatus.ACTIVE,
         createdAt: '2024-01-01',
       };
-      expect(formatGoalTarget(goal)).toBe('36.0"');
+      expect(formatGoalTarget(goal, 'in')).toBe('36.0 in');
     });
 
     it('should format improvement percentage goal', () => {
@@ -266,6 +266,14 @@ describe('goal-utils', () => {
       expect(suggestions[0]).toHaveProperty('description');
     });
 
+    it("uses the measurements' own unit in suggestion descriptions", () => {
+      const withUnits = measurements.map(m => ({ ...m, units: m.metric === 'FLY10_TIME' ? 's' : 'in' }));
+      const suggestions = suggestGoals(withUnits as any, 'FLY10_TIME');
+      const valueGoals = suggestions.filter(s => s.goalType === GoalType.TARGET_VALUE);
+      expect(valueGoals.length).toBeGreaterThan(0);
+      expect(valueGoals.every(s => /\d s\b/.test(s.description))).toBe(true);
+    });
+
     it('should suggest appropriate targets for lower-is-better metrics', () => {
       const suggestions = suggestGoals(measurements, 'FLY10_TIME');
       // For a time metric, suggested target should be lower than current
@@ -286,6 +294,13 @@ describe('goal-utils', () => {
       const suggestions = suggestGoals(measurements, 'FLY10_TIME');
       const consistencySuggestion = suggestions.find(s => s.goalType === GoalType.CONSISTENCY);
       expect(consistencySuggestion).toBeDefined();
+    });
+
+    it('takes direction from the metric type over the built-in education table', () => {
+      // An admin made FLY10_TIME higher-is-better: the suggested target must go up, not down
+      const suggestions = suggestGoals(measurements, 'FLY10_TIME', 'higher_is_better');
+      const targetSuggestion = suggestions.find(s => s.goalType === GoalType.TARGET_VALUE);
+      expect(targetSuggestion?.targetValue).toBeGreaterThan(1.2);
     });
 
     it('should return empty array for unknown metric', () => {
@@ -435,6 +450,24 @@ describe('goal-utils', () => {
       };
       const text = getGoalProgressText(goal);
       expect(text).toContain('0%');
+    });
+
+    it('measures progress in the direction of the metric type', () => {
+      // ORG_SPRINT is a custom time: 10.0 -> 9.5 is half of a 10% improvement
+      const goal: Goal = {
+        id: 'goal-1',
+        userId: 'user-1',
+        metric: 'ORG_SPRINT',
+        goalType: GoalType.IMPROVEMENT_PERCENTAGE,
+        targetValue: 10,
+        baselineValue: 10,
+        currentValue: 9.5,
+        targetDate: '2099-06-01',
+        status: GoalStatus.ACTIVE,
+        createdAt: '2024-01-01',
+      };
+      expect(getGoalProgressText(goal, 'lower_is_better')).toContain('50%');
+      expect(getGoalProgressText(goal)).toContain('0%');
     });
   });
 });

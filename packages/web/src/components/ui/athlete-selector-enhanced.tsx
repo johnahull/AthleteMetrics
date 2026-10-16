@@ -40,6 +40,8 @@ export function AthleteSelector({
     selectAll,
     metricLabel,
     unit,
+    formatValue,
+    isMetricConfigLoaded,
     athleteColorMap
   } = usePerformanceAthleteSelector({
     data,
@@ -113,6 +115,8 @@ export function AthleteSelector({
           variant="outline"
           size="sm"
           onClick={selectTopPerformers}
+          // The ranking direction comes from the metric list, so wait for it
+          disabled={!isMetricConfigLoaded}
           className="flex items-center gap-1"
         >
           <Trophy className="w-3 h-3" />
@@ -213,7 +217,7 @@ export function AthleteSelector({
                     <div className="text-xs text-gray-600 ml-2">
                       {'bestValue' in athlete && athlete.bestValue !== undefined && (
                         <span className="font-mono">
-                          {athlete.bestValue.toFixed(2)}{unit}
+                          {formatValue(athlete.bestValue)}
                         </span>
                       )}
                     </div>
@@ -233,11 +237,11 @@ export function AthleteSelector({
       </div>
 
       {/* Footer */}
-      <div className="mt-4 pt-3 border-t text-xs text-gray-500 flex justify-between">
-        <span>
-          Best {metricLabel} performers shown first
+      <div className="mt-4 pt-3 border-t text-xs text-gray-500 flex justify-between gap-2">
+        <span className="min-w-0">
+          Best {metricLabel}{unit && ` (${unit})`} performers shown first
         </span>
-        <span>
+        <span className="shrink-0 whitespace-nowrap">
           {selectedAthleteIds.length}/{maxSelection} selected
         </span>
       </div>

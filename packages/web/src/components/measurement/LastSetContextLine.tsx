@@ -2,6 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useFormContext } from "react-hook-form";
 import { History } from "lucide-react";
 import type { AvailableMetric } from "@/hooks/use-available-metrics";
+import { toCalendarDate } from "@/utils/date-utils";
+import { formatMeasurement } from "@shared/duration-format";
 
 interface LastSetContextLineProps {
   athleteId: string | undefined;
@@ -102,7 +104,9 @@ export function LastSetContextLine({ athleteId, metric }: LastSetContextLineProp
           </>
         ) : (
           <span className="font-medium tabular-nums">
-            {parseFloat(last.value).toFixed(2)} {last.units ?? metric.unit}
+            {metric.displayFormat === "duration"
+              ? formatMeasurement(parseFloat(last.value), metric)
+              : `${parseFloat(last.value).toFixed(2)} ${last.units ?? metric.unit}`}
           </span>
         )}{" "}
         <span className="text-gray-400">on {formattedDate}</span>
@@ -116,7 +120,8 @@ export function LastSetContextLine({ athleteId, metric }: LastSetContextLineProp
  * within a week, short month-day after. Coaches care about recency at a glance.
  */
 function formatRelativeOrShortDate(isoDate: string): string {
-  const date = new Date(isoDate);
+  const date = toCalendarDate(isoDate);
+  if (!date) return '';
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const dateMidnight = new Date(date);

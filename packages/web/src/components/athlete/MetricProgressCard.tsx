@@ -26,7 +26,10 @@ import { MetricContextTooltip } from './MetricContextTooltip';
 import { AthleteMetricExplanation } from './AthleteMetricExplanation';
 import { isLowerBetter } from '@/constants/metrics';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
+import { toCalendarDate } from '@/utils/date-utils';
+import { formatValueWithUnit } from '@/lib/metrics';
 import type { MetricExplanation } from '@shared/metric-explanations';
+import { formatMeasurement } from '@shared/duration-format';
 
 // Chart.js is already registered globally in App.tsx via chart-setup.ts
 
@@ -70,11 +73,10 @@ interface MetricProgressCardProps {
 
 /**
  * Filter measurements to keep only the best value per date.
- * Uses isLowerBetter to determine what "best" means for the metric.
+ * `lowerIsBetter` decides what "best" means for the metric.
  */
-function filterBestPerDate(measurements: Measurement[], metric: string): Measurement[] {
+function filterBestPerDate(measurements: Measurement[], lowerIsBetter: boolean): Measurement[] {
   const bestByDate = new Map<string, Measurement>();
-  const lowerIsBetter = isLowerBetter(metric);
 
   for (const m of measurements) {
     const existing = bestByDate.get(m.date);
@@ -109,8 +111,11 @@ export function MetricProgressCard({
   metricType,
 }: MetricProgressCardProps) {
   const confettiTriggered = useRef(false);
-  const { getLabel: getMetricLabel } = useMetricLabels();
+  const { getLabel: getMetricLabel, formats } = useMetricLabels();
+  const durationFormat = formats[metric];
   const isTracking = metricType === 'tracking';
+  // The metric list knows new and custom metrics; the built-in list is the fallback
+  const lowerIsBetter = isLowerBetter(metric, metricType);
 
   // Trigger confetti for recent PRs
   useEffect(() => {
@@ -131,13 +136,13 @@ export function MetricProgressCard({
 
   // Filter to best measurement per date for sparkline and trend
   const filteredMeasurements = useMemo(
-    () => filterBestPerDate(measurements, metric),
-    [measurements, metric]
+    () => filterBestPerDate(measurements, lowerIsBetter),
+    [measurements, lowerIsBetter]
   );
 
   // Calculate trend data using filtered measurements
   const trendData = useMemo(
-    () => (metricType === 'tracking' ? null : calculateMetricTrend(filteredMeasurements, metric)),
+    () => (metricType === 'tracking' ? null : calculateMetricTrend(filteredMeasurements, metric, metricType)),
     [filteredMeasurements, metric, metricType]
   );
 
@@ -182,7 +187,6 @@ export function MetricProgressCard({
     if (mostRecentDate < ninetyDaysAgo) return false;
 
     const currentNum = parseFloat(String(mostRecentMeasurement.value));
-    const lowerIsBetter = isLowerBetter(metric);
     return measurements.every((m) => {
       const mDate = new Date(m.date);
       if (mDate < ninetyDaysAgo) return true;
@@ -190,11 +194,11 @@ export function MetricProgressCard({
       const mNum = parseFloat(String(m.value));
       return lowerIsBetter ? currentNum <= mNum : currentNum >= mNum;
     });
-  }, [measurements, metric, mostRecentMeasurement, isTracking]);
+  }, [measurements, lowerIsBetter, mostRecentMeasurement, isTracking]);
 
   const bestValue = useMemo(
-    () => getBestValue(measurements, metric),
-    [measurements, metric]
+    () => getBestValue(measurements, metric, metricType),
+    [measurements, metric, metricType]
   );
 
   // Handle empty measurements
@@ -246,7 +250,10 @@ export function MetricProgressCard({
       tooltip: {
         enabled: true,
         callbacks: {
-          label: (context: TooltipItem<'line'>) => `${context.parsed.y}${units}`,
+          label: (context: TooltipItem<'line'>) =>
+            durationFormat && context.parsed.y != null
+              ? formatMeasurement(context.parsed.y, durationFormat)
+              : formatValueWithUnit(context.parsed.y ?? '', units),
         },
       },
     },
@@ -303,13 +310,17 @@ export function MetricProgressCard({
               metric={metric}
               value={currentValue ?? 0}
               compact
+              metricType={metricType}
             >
               <span
                 data-testid="current-value"
                 className="text-2xl sm:text-3xl font-bold text-gray-900"
               >
-                {currentValue?.toFixed(2)}
-                {units}
+                {durationFormat && currentValue != null
+                  ? formatMeasurement(currentValue, durationFormat)
+                  : currentValue == null
+                    ? undefined
+                    : formatValueWithUnit(currentValue.toFixed(2), units)}
               </span>
             </MetricContextTooltip>
             {/* Platform-wide convention: small "est." chip on every isCalculated measurement.
@@ -359,7 +370,7 @@ export function MetricProgressCard({
 
           {/* PR Display - uses personalRecord if available, otherwise bestValue.
               Hidden for tracking metrics: they have no "best" direction. */}
-          {!isTracking && (
+          {!isTracking && (personalRecord?.value != null || bestValue != null) && (
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1.5">
               <Trophy className="h-4 w-4 text-yellow-600" />
@@ -369,18 +380,20 @@ export function MetricProgressCard({
               metric={metric}
               value={personalRecord?.value ?? bestValue ?? 0}
               compact
+              metricType={metricType}
             >
               <span
                 data-testid="pr-value"
                 className="text-xl font-semibold text-yellow-700"
               >
-                {personalRecord?.value?.toFixed(2) ?? bestValue?.toFixed(2)}
-                {units}
+                {durationFormat && (personalRecord?.value ?? bestValue) != null
+                  ? formatMeasurement((personalRecord?.value ?? bestValue)!, durationFormat)
+                  : formatValueWithUnit(personalRecord?.value?.toFixed(2) ?? bestValue?.toFixed(2) ?? '', units)}
               </span>
             </MetricContextTooltip>
-            {personalRecord && (
+            {personalRecord && toCalendarDate(personalRecord.date) && (
               <span className="text-xs text-gray-500">
-                ({new Date(personalRecord.date).toLocaleDateString()})
+                ({toCalendarDate(personalRecord.date)?.toLocaleDateString()})
               </span>
             )}
             {personalRecord?.isRecent && !isTracking && (

@@ -6,9 +6,10 @@
 import React, { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { calculateStatistics } from '@shared/analytics-utils';
-import { getMetricUnits, getMetricType } from '@/lib/metrics';
+import { formatValueWithUnit } from '@/lib/metrics';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
-import type { MetricType } from '@shared/analytics-types';
+import { formatMeasurement } from '@shared/duration-format';
+import { resolveMetricType, type MetricType } from '@shared/analytics-types';
 
 /**
  * Distribution mode for displaying percentile breakdowns
@@ -23,7 +24,7 @@ interface StatisticsSummaryCardProps {
   metric: string;
   title?: string;
   distributionMode?: DistributionMode;
-  /** Override metric type from DB (for custom metrics). Falls back to getMetricType(). */
+  /** Override metric type from DB. Falls back to the metric list, then resolveMetricType(). */
   metricType?: MetricType;
 }
 
@@ -43,9 +44,9 @@ export function StatisticsSummaryCard({
   distributionMode = 'quartiles',
   metricType: metricTypeOverride,
 }: StatisticsSummaryCardProps) {
-  const { getLabel } = useMetricLabels();
-  // Resolve metric direction: DB override > fallback chain
-  const metricDirection = metricTypeOverride || getMetricType(metric);
+  const { getLabel, getUnit, formats, types } = useMetricLabels();
+  // Resolve metric direction: prop override > metric list > fallback
+  const metricDirection = resolveMetricType(metric, metricTypeOverride ?? types[metric]);
   // Extract numeric values from measurements (already filtered by caller)
   // Memoize to prevent unnecessary recalculations
   const stats = useMemo(() => {
@@ -54,7 +55,10 @@ export function StatisticsSummaryCard({
   }, [measurements]);
 
   // Get units for this metric
-  const units = getMetricUnits(metric);
+  const units = getUnit(metric);
+  const durationFormat = formats[metric];
+  const show = (value: number) =>
+    durationFormat ? formatMeasurement(value, durationFormat) : formatValueWithUnit(formatNumber(value, 2), units);
   const displayTitle = title || `${getLabel(metric)} Statistics`;
 
   // Handle empty state
@@ -140,26 +144,26 @@ export function StatisticsSummaryCard({
           {/* Mean */}
           <div className="space-y-1">
             <div className="text-sm text-muted-foreground">Mean</div>
-            <div className="text-2xl font-bold">{formatNumber(stats.mean, 2)}{units}</div>
+            <div className="text-2xl font-bold">{show(stats.mean)}</div>
           </div>
 
           {/* Median */}
           <div className="space-y-1">
             <div className="text-sm text-muted-foreground">Median</div>
-            <div className="text-2xl font-bold">{formatNumber(stats.median, 2)}{units}</div>
+            <div className="text-2xl font-bold">{show(stats.median)}</div>
           </div>
 
           {/* Standard Deviation */}
           <div className="space-y-1">
             <div className="text-sm text-muted-foreground">Std Dev</div>
-            <div className="text-2xl font-bold">{formatNumber(stats.std, 2)}{units}</div>
+            <div className="text-2xl font-bold">{show(stats.std)}</div>
           </div>
 
           {/* Range */}
           <div className="space-y-1">
             <div className="text-sm text-muted-foreground">Range</div>
             <div className="text-2xl font-bold">
-              {formatNumber(stats.min, 2)}{units} - {formatNumber(stats.max, 2)}{units}
+              {show(stats.min)} - {show(stats.max)}
             </div>
           </div>
 
@@ -175,7 +179,7 @@ export function StatisticsSummaryCard({
                 item.tag === 'best' ? 'text-green-600' :
                 item.tag === 'worst' ? 'text-red-600' : ''
               }`}>
-                {formatNumber(item.value, 2)}{units}
+                {show(item.value)}
               </div>
             </div>
           ))}

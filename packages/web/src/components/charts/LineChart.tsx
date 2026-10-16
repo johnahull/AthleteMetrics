@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useRef } from 'react';
+import { toCalendarDate } from '@/utils/date-utils';
 import type { ChartOptions } from 'chart.js';
 import type { AnnotationOptions } from 'chartjs-plugin-annotation';
 import { Line } from 'react-chartjs-2';
@@ -16,6 +17,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { ChevronUpIcon, ChevronDownIcon } from 'lucide-react';
 import { getAthleteColor } from '@/utils/chart-constants';
+import { durationAxis } from './utils/durationAxis';
+import { formatMeasurement } from '@shared/duration-format';
+import { isLowerBetterType } from '@shared/analytics-types';
 
 // Chart.js components are registered globally in lib/chart-setup.ts
 
@@ -63,8 +67,7 @@ export function LineChart({
 
     // Sort athletes by performance for smart defaults
     const metric = data[0]?.metric;
-    const metricConfig = getMetricConfig(metric);
-    const lowerIsBetter = metricConfig?.lowerIsBetter || false;
+    const lowerIsBetter = isLowerBetterType(metric, getMetricConfig(metric)?.metricType);
 
     const sortedData = [...data].sort((a, b) => {
       const aValues = a.data.map(point => point.value);
@@ -151,8 +154,8 @@ export function LineChart({
 
     const sortedDates = Array.from(allDates).sort();
     const labels = sortedDates.map(dateStr => {
-      const date = new Date(dateStr);
-      return date.toLocaleDateString('en-US', {
+      const date = toCalendarDate(dateStr);
+      return date?.toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric'
       });
@@ -228,7 +231,9 @@ export function LineChart({
 
     const metric = trendsToShow[0].metric;
     const metricConfig = getMetricConfig(metric);
-    const unit = metricConfig?.unit || '';
+    const durationConfig = metricConfig?.displayFormat === 'duration' ? metricConfig : null;
+    // m:ss values carry no unit
+    const unit = durationConfig ? '' : metricConfig?.unit || '';
     const metricLabel = metricConfig?.label || metric;
 
     return {
@@ -236,10 +241,11 @@ export function LineChart({
       datasets,
       metric,
       unit,
+      durationConfig,
       metricLabel,
       sortedDates
     };
-  }, [data, highlightAthlete, selectedAthleteIdsSet, showGroupAverage]);
+  }, [data, highlightAthlete, selectedAthleteIdsSet, showGroupAverage, getMetricConfig]);
 
   // Find personal bests - calculate actual best value based on metric type
   const personalBests = useMemo(() => {
@@ -260,7 +266,8 @@ export function LineChart({
 
       // Get metric type to determine if lower or higher is better
       const metric = trend.metric || lineData.metric;
-      const lowerIsBetter = getMetricConfig(metric)?.lowerIsBetter ?? true;
+      // Unknown direction defaults to higher-is-better via isLowerBetterType (the old `?? true` meant lower-is-better)
+      const lowerIsBetter = isLowerBetterType(metric, getMetricConfig(metric)?.metricType);
 
       // Find the actual best point using reduce (not .find())
       const bestPoint = trend.data.reduce((best, current) => {
@@ -389,16 +396,18 @@ export function LineChart({
           title: (context) => {
             const dateIndex = context[0].dataIndex;
             const dateStr = lineData?.sortedDates[dateIndex];
-            return dateStr ? new Date(dateStr).toLocaleDateString() : '';
+            return toCalendarDate(dateStr)?.toLocaleDateString() ?? '';
           },
           label: (context) => {
             const value = context.parsed.y;
             if (value === null) return '';
 
             // Format value with dual display for FLY10_TIME
-            const formattedValue = lineData?.metric && isFly10Metric(lineData.metric)
-              ? formatFly10Dual(value, 'time-first')
-              : `${value.toFixed(2)}${lineData?.unit}`;
+            const formattedValue = lineData?.durationConfig
+              ? formatMeasurement(value, lineData.durationConfig)
+              : lineData?.metric && isFly10Metric(lineData.metric)
+                ? formatFly10Dual(value, 'time-first')
+                : `${value.toFixed(2)}${lineData?.unit}`;
 
             return `${context.dataset.label}: ${formattedValue}`;
           },
@@ -440,11 +449,12 @@ export function LineChart({
       y: {
         title: {
           display: true,
-          text: `${lineData?.metricLabel} (${lineData?.unit})`
+          text: `${lineData?.metricLabel} (${lineData?.durationConfig ? 'mm:ss' : lineData?.unit})`
         },
         grid: {
           display: true
-        }
+        },
+        ...(lineData?.durationConfig ? durationAxis(lineData.durationConfig) : {})
       }
     },
     elements: {
@@ -651,12 +661,13 @@ export function LineChart({
           <div className="text-center">
             <div className="font-medium">Personal Best</div>
             <div className="text-lg font-bold text-green-600">
-              {personalBests[0].value.toFixed(2)}{lineData.unit}
+              {lineData.durationConfig
+                ? formatMeasurement(personalBests[0].value, lineData.durationConfig)
+                : `${personalBests[0].value.toFixed(2)}${lineData.unit}`}
             </div>
             <div className="text-xs text-muted-foreground">
               {(() => {
-                const date = personalBests[0].date instanceof Date ? personalBests[0].date : new Date(personalBests[0].date);
-                return date.toLocaleDateString();
+                return toCalendarDate(personalBests[0].date)?.toLocaleDateString();
               })()}
             </div>
           </div>
@@ -671,7 +682,7 @@ export function LineChart({
 
                 const first = athleteTrend.data[0].value;
                 const last = athleteTrend.data[athleteTrend.data.length - 1].value;
-                const isLowerBetter = getMetricConfig(athleteTrend.metric)?.lowerIsBetter;
+                const isLowerBetter = isLowerBetterType(athleteTrend.metric, getMetricConfig(athleteTrend.metric)?.metricType);
 
                 const improvement = isLowerBetter ? first - last : last - first;
                 const trend = improvement > 0 ? '↗️ Improving' : improvement < 0 ? '↘️ Declining' : '→ Stable';

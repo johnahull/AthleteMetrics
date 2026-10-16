@@ -24,7 +24,8 @@ import {
 import { TrendingUp, AlertCircle, RefreshCw, Award, ArrowUp } from "lucide-react";
 import { useMostImproved } from "@/hooks/useMostImproved";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
-import { formatMetricValue } from "@/lib/metrics";
+import { formatValueWithUnit } from "@/lib/metrics";
+import { formatMeasurement } from "@shared/duration-format";
 import type { TimeframePreset } from "@shared/dashboard-timeframe";
 
 interface MostImprovedCardProps {
@@ -71,8 +72,11 @@ export function MostImprovedCard({
     limit: 5,
   });
 
+  const shownMetric = metrics.find((m) => m.code === (mostImprovedData?.metric || effectiveMetric));
+
   const isLoading = metricsLoading || mostImprovedLoading;
   const improvements = mostImprovedData?.improvements || [];
+  const improvedUnit = metrics.find((m) => m.code === (mostImprovedData?.metric || effectiveMetric))?.unit ?? '';
 
   // Handle athlete click
   const handleAthleteClick = (athleteId: string) => {
@@ -228,7 +232,9 @@ export function MostImprovedCard({
                   {entry.teamName && <span>{entry.teamName}</span>}
                   {entry.teamName && <span>•</span>}
                   <span>
-                    {formatMetricValue(mostImprovedData?.metric || "", entry.previousValue)} → {formatMetricValue(mostImprovedData?.metric || "", entry.currentValue)}
+                    {shownMetric?.displayFormat === "duration"
+                      ? `${formatMeasurement(entry.previousValue, shownMetric)} → ${formatMeasurement(entry.currentValue, shownMetric)}`
+                      : <>{formatValueWithUnit(entry.previousValue, improvedUnit)} → {formatValueWithUnit(entry.currentValue, improvedUnit)}</>}
                   </span>
                 </div>
               </div>

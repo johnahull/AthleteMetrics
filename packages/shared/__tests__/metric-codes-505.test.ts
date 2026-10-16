@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { VALID_METRICS, MetricType } from '../schema/constants';
-import { LOWER_IS_BETTER_METRICS } from '../analytics-types';
+import { resolveMetricType } from '../analytics-types';
 import { COMMON_METRICS } from '../import-types';
 
 const RETIRED = ['AGILITY_505', 'AGILITY_505_L', 'AGILITY_505_R', 'AGILITY_505_LSI'];
@@ -14,7 +14,7 @@ const M_YD_CODES = [
   'AGILITY_505_YD_L',
   'AGILITY_505_YD_R',
 ];
-const DEFICIT_CODES = ['AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD'];
+const DEFICIT_CODES = ['AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD', 'AGILITY_COD_DEFICIT_M_INTERP'];
 
 describe('AM-FEAT-016 metric codes', () => {
   const validKeys = VALID_METRICS.map((m) => m.key as string);
@@ -37,14 +37,14 @@ describe('AM-FEAT-016 metric codes', () => {
   it('MetricType exposes the deficit codes', () => {
     expect((MetricType as Record<string, string>).AGILITY_COD_DEFICIT_M).toBe('AGILITY_COD_DEFICIT_M');
     expect((MetricType as Record<string, string>).AGILITY_COD_DEFICIT_YD).toBe('AGILITY_COD_DEFICIT_YD');
+    expect((MetricType as Record<string, string>).AGILITY_COD_DEFICIT_M_INTERP).toBe('AGILITY_COD_DEFICIT_M_INTERP');
   });
 
-  it('LOWER_IS_BETTER_METRICS has AGILITY_505_M/_YD and the deficit codes, not the retired code', () => {
-    const list = LOWER_IS_BETTER_METRICS as readonly string[];
+  it('the lower-is-better fallback covers AGILITY_505_M/_YD and the deficit codes, not the retired code', () => {
     for (const code of ['AGILITY_505_M', 'AGILITY_505_YD', ...DEFICIT_CODES]) {
-      expect(list).toContain(code);
+      expect(resolveMetricType(code)).toBe('lower_is_better');
     }
-    for (const code of RETIRED) expect(list).not.toContain(code);
+    for (const code of RETIRED) expect(resolveMetricType(code)).toBe('higher_is_better');
   });
 
   it('COMMON_METRICS lists both protocol 5-0-5 codes', () => {
@@ -78,7 +78,6 @@ describe('repo guard: retired 5-0-5 tokens', () => {
     'tests/integration/data-generators-import.test.ts': 'asserts the generators never emit the retired codes (opt-in, GENERATORS_DIR)',
     'packages/api/routes/__tests__/benchmark-analytics-metric-codes.test.ts': 'asserts the API rejects the retired code with 400',
     'packages/api/ocr/processors/__tests__/data-parser.test.ts': 'asserts OCR metric lists no longer contain the retired code',
-    'packages/api/services/__tests__/lower-is-better-sql-codes.test.ts': 'asserts the SQL lower-is-better list dropped the retired code',
     'packages/api/services/__tests__/template-generator-sample-values.test.ts': 'asserts no sample value exists for the retired code',
     'packages/api/services/__tests__/achievement-service.test.ts': 'asserts the retired code does not count toward the all-around PR',
     'packages/web/src/__tests__/utils/metric-education-utils.test.ts': 'asserts the retired education entry is gone',

@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { format } from 'date-fns';
 import { measurementsToCSVString, exportMeasurementsToCSV } from '../measurement-export';
 import type { Measurement } from '@shared/schema';
 
@@ -356,7 +357,7 @@ describe('exportMeasurementsToCSV', () => {
     exportMeasurementsToCSV(measurements as Measurement[]);
 
     const mockAnchor = createElementSpy.mock.results[0].value;
-    const today = new Date().toISOString().split('T')[0];
+    const today = format(new Date(), 'yyyy-MM-dd');
     expect(mockAnchor.download).toBe(`measurements-${today}.csv`);
   });
 

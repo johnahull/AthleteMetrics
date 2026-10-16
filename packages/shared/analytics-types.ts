@@ -3,6 +3,8 @@
  * Comprehensive type system for sophisticated analytics and charting
  */
 
+import type { DisplayFormat } from './duration-format';
+
 // Core analysis types
 export type AnalysisType = 'individual' | 'intra_group' | 'multi_group';
 export type TimeframeType = 'best' | 'trends';
@@ -414,7 +416,6 @@ export const CHART_SELECTION_MATRIX: Record<string, Record<string, Record<string
 export type MetricType = 'lower_is_better' | 'higher_is_better' | 'tracking';
 
 // Dynamic metric configuration interface
-// This replaces the hardcoded METRIC_CONFIG with API-fetched data
 export interface DynamicMetricConfig {
   code: string;
   label: string;
@@ -429,6 +430,8 @@ export interface DynamicMetricConfig {
   isDerived?: boolean;
   formula?: string;
   dependentMetrics?: string[];
+  displayFormat?: DisplayFormat;
+  decimalPrecision?: number;
 }
 
 // Organization-specific metric configuration
@@ -438,19 +441,16 @@ export interface OrganizationMetricConfig extends DynamicMetricConfig {
   displayOrder?: number;
 }
 
-// Legacy: Metric units and labels (DEPRECATED - use API-fetched metrics instead)
-// Database (site_metrics table) is now the single source of truth
-// Use useMetricConfig hook to fetch metric configuration
-export const METRIC_CONFIG: Record<string, { label: string; unit: string; metricType: MetricType }> = {};
-
 /**
- * Canonical list of time-based metrics where lower values indicate better performance.
- * Used as fallback when database config is not available.
+ * LAST-RESORT FALLBACK ONLY. The metric's own `metricType` (site_metrics /
+ * custom_org_metrics row, e.g. `useMetricLabels().types`) always wins.
  *
- * IMPORTANT: This is the SINGLE SOURCE OF TRUTH for this list.
- * All other files should import from here to avoid duplication.
+ * Built-in time codes that are lower_is_better in site_metrics, used only for
+ * a code with no known type: the first paint while the metric list loads, or
+ * a code the viewer's list omits (org-disabled, inactive, another org's).
+ * Read it only through `resolveMetricType`; it is deliberately not exported.
  */
-export const LOWER_IS_BETTER_METRICS = [
+const LOWER_IS_BETTER_METRICS: readonly string[] = [
   'FLY10_TIME',
   'FLY10_TIME_RI5',
   'FLY10_TIME_RI10',
@@ -464,6 +464,7 @@ export const LOWER_IS_BETTER_METRICS = [
   'AGILITY_505_YD_R',
   'AGILITY_COD_DEFICIT_M',
   'AGILITY_COD_DEFICIT_YD',
+  'AGILITY_COD_DEFICIT_M_INTERP',
   'AGILITY_5105',
   'AGILITY_5105_L',
   'AGILITY_5105_R',
@@ -478,82 +479,20 @@ export const LOWER_IS_BETTER_METRICS = [
   'DASH_30M',
   'DASH_40M',
   'FLY10M_TIME',
-] as const;
-
-export type LowerIsBetterMetric = typeof LOWER_IS_BETTER_METRICS[number];
+];
 
 /**
- * Type-safe check if a metric code is in the LOWER_IS_BETTER_METRICS list
- *
- * This is a type guard that narrows the type to LowerIsBetterMetric.
- * For general metric type detection, prefer getMetricTypeWithFallback() which
- * also checks METRIC_CONFIG and provides default behavior.
- *
- * @param metric - Metric code to check (e.g., 'FLY10_TIME', 'DASH_40YD')
- * @returns true if metric is in the LOWER_IS_BETTER_METRICS list
- *
- * @example
- * ```typescript
- * if (isLowerIsBetterMetric('FLY10_TIME')) {
- *   // TypeScript knows metric is LowerIsBetterMetric here
- *   console.log('Lower is better for this metric');
- * }
- * ```
+ * The one place that decides a metric's direction from its code and type.
+ * The given type (from the metric's DB row) wins; without one, a built-in time
+ * code is lower_is_better and anything else is higher_is_better.
  */
-export function isLowerIsBetterMetric(metric: string): metric is LowerIsBetterMetric {
-  return (LOWER_IS_BETTER_METRICS as readonly string[]).includes(metric);
+export function resolveMetricType(code: string, metricType?: MetricType | null): MetricType {
+  return metricType ?? (LOWER_IS_BETTER_METRICS.includes(code) ? 'lower_is_better' : 'higher_is_better');
 }
 
-/**
- * Get the metric type with fallback to LOWER_IS_BETTER_METRICS list
- *
- * This is the canonical implementation used across the codebase for determining
- * metric types when database configuration is unavailable. It provides a robust
- * fallback chain to ensure consistent behavior.
- *
- * **Fallback chain:**
- * 1. Check METRIC_CONFIG (static definitions, may be empty after database migration)
- * 2. Check LOWER_IS_BETTER_METRICS list (time-based metrics)
- * 3. Default to 'higher_is_better' (most performance metrics)
- *
- * **Note:** For React components, prefer using the `useMetricConfig` hook to fetch
- * metric types directly from the database (site_metrics table). This function is
- * provided for utility code that cannot use React hooks.
- *
- * @param metric - Metric code (e.g., 'FLY10_TIME', 'HEIGHT', 'TOP_SPEED_CALC')
- * @returns MetricType - 'lower_is_better', 'higher_is_better', or 'tracking'
- *
- * @example
- * ```typescript
- * // In utility functions (non-React code)
- * const metricType = getMetricTypeWithFallback('FLY10_TIME');
- * // Returns 'lower_is_better'
- *
- * const shouldSortAscending = metricType === 'lower_is_better';
- * ```
- *
- * @example
- * ```typescript
- * // In React components, prefer using the hook:
- * const { data: metrics } = useMetricConfig();
- * const metricConfig = metrics?.find(m => m.code === 'FLY10_TIME');
- * const metricType = metricConfig?.metricType ?? getMetricTypeWithFallback('FLY10_TIME');
- * ```
- */
-export function getMetricTypeWithFallback(metric: string): MetricType {
-  // Check METRIC_CONFIG first (may be empty after static metric removal)
-  const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-  if (config?.metricType) {
-    return config.metricType;
-  }
-
-  // Fall back to known lower-is-better metrics using type-safe check
-  if (isLowerIsBetterMetric(metric)) {
-    return 'lower_is_better';
-  }
-
-  // Default to higher_is_better (most performance metrics)
-  return 'higher_is_better';
+/** True when lower values are better for this metric (see `resolveMetricType`). */
+export function isLowerBetterType(code: string, metricType?: MetricType | null): boolean {
+  return resolveMetricType(code, metricType) === 'lower_is_better';
 }
 
 // Color schemes for charts

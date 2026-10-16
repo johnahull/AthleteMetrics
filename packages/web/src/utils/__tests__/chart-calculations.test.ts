@@ -121,6 +121,28 @@ describe('Chart Calculations', () => {
 
       expect(labels.topRight.label).toContain('Elite Performance');
     });
+
+    it('takes direction from the metric types: a custom lower-is-better metric reads low as good', () => {
+      // ORG_SPRINT is not a built-in, so only its type makes it lower-is-better
+      const labels = getPerformanceQuadrantLabels('ORG_SPRINT', 'VERTICAL_JUMP', 'lower_is_better', 'higher_is_better');
+
+      expect(labels.topLeft.color).toBe('green');
+      expect(labels.bottomRight.color).toBe('red');
+    });
+
+    it('gives neutral labels when both metrics are tracking (HEIGHT, WEIGHT)', () => {
+      const labels = getPerformanceQuadrantLabels('HEIGHT', 'WEIGHT', 'tracking', 'tracking');
+
+      expect(labels.topRight).toEqual({ label: 'High HEIGHT, High WEIGHT', color: 'yellow' });
+      expect(labels.bottomLeft.color).toBe('yellow');
+    });
+
+    it('lets the type win over the built-in fallback', () => {
+      const labels = getPerformanceQuadrantLabels('DASH_40YD', 'VERTICAL_JUMP', 'higher_is_better', 'higher_is_better');
+
+      expect(labels.topRight.color).toBe('green');
+      expect(labels.topLeft.color).not.toBe('green');
+    });
   });
 
   describe('processAthleteDatasets', () => {

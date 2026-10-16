@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { toCalendarDate } from '@/utils/date-utils';
 import type { ChartOptions } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import { ChartErrorBoundary } from './ChartErrorBoundary';
@@ -33,11 +34,11 @@ export function BenchmarkProgressChart({
     }
 
     const labels = data.snapshots.map((snapshot) => {
-      const date = new Date(snapshot.date);
-      return date.toLocaleDateString('en-US', {
+      const date = toCalendarDate(snapshot.date);
+      return date?.toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',
-      });
+      }) ?? '';
     });
 
     // Define dataset type to allow different property values between datasets
@@ -121,7 +122,7 @@ export function BenchmarkProgressChart({
           title: (context) => {
             const dataIndex = context[0].dataIndex;
             const snapshot = data.snapshots[dataIndex];
-            return new Date(snapshot.date).toLocaleDateString();
+            return toCalendarDate(snapshot.date)?.toLocaleDateString() ?? '';
           },
           label: (context) => {
             const dataIndex = context.dataIndex;
@@ -195,8 +196,8 @@ export function BenchmarkProgressChart({
   const firstSnapshot = data.snapshots[0];
   const lastSnapshot = data.snapshots[data.snapshots.length - 1];
   const ariaDescription = `Line chart showing ${data.benchmarkName} achievement rate over time. ` +
-    `Starting at ${firstSnapshot.achievementRate.toFixed(1)}% on ${new Date(firstSnapshot.date).toLocaleDateString()}, ` +
-    `ending at ${lastSnapshot.achievementRate.toFixed(1)}% on ${new Date(lastSnapshot.date).toLocaleDateString()} ` +
+    `Starting at ${firstSnapshot.achievementRate.toFixed(1)}% on ${toCalendarDate(firstSnapshot.date)?.toLocaleDateString() ?? ''}, ` +
+    `ending at ${lastSnapshot.achievementRate.toFixed(1)}% on ${toCalendarDate(lastSnapshot.date)?.toLocaleDateString() ?? ''} ` +
     `across ${data.snapshots.length} data points.`;
 
   return (

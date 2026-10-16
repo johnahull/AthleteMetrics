@@ -10,6 +10,8 @@
  */
 
 import { isLowerBetterMetric, formatMetricValue, getMetricEducation } from './metric-education-utils';
+import { formatMeasurement, type MeasurementFormat } from '@shared/duration-format';
+import type { MetricType } from '@shared/analytics-types';
 
 /**
  * Types of goals athletes can set
@@ -72,17 +74,20 @@ interface Measurement {
   metric: string;
   value: number | string;
   date: string;
+  /** Unit the value was recorded in */
+  units?: string | null;
 }
 
 /**
  * Calculate progress towards a goal (0-100%)
+ * @param metricType - The metric's type from the metric list; without it the built-in lists decide
  */
-export function calculateGoalProgress(goal: Goal): number {
+export function calculateGoalProgress(goal: Goal, metricType?: MetricType): number {
   const { goalType, targetValue, baselineValue, currentValue, metric } = goal;
 
   switch (goalType) {
     case GoalType.TARGET_VALUE: {
-      const lowerIsBetter = isLowerBetterMetric(metric);
+      const lowerIsBetter = isLowerBetterMetric(metric, metricType);
 
       if (lowerIsBetter) {
         // For time metrics: baseline > target (lower is better)
@@ -108,7 +113,7 @@ export function calculateGoalProgress(goal: Goal): number {
     case GoalType.IMPROVEMENT_PERCENTAGE: {
       // Target is a percentage improvement (e.g., 10%)
       // currentValue represents current performance
-      const lowerIsBetter = isLowerBetterMetric(metric);
+      const lowerIsBetter = isLowerBetterMetric(metric, metricType);
 
       // Calculate current improvement percentage
       let currentImprovementPct: number;
@@ -155,12 +160,13 @@ export function getGoalStatusColor(status: GoalStatus): string {
 /**
  * Format goal target for display
  */
-export function formatGoalTarget(goal: Goal): string {
+export function formatGoalTarget(goal: Goal, unit?: string | null, format?: MeasurementFormat): string {
   const { goalType, targetValue, metric } = goal;
 
   switch (goalType) {
     case GoalType.TARGET_VALUE:
-      return formatMetricValue(targetValue, metric);
+      // A duration (mm:ss) metric's target prints as m:ss, with no unit
+      return format?.displayFormat === 'duration' ? formatMeasurement(targetValue, format) : formatMetricValue(targetValue, metric, unit);
 
     case GoalType.IMPROVEMENT_PERCENTAGE:
       return `${targetValue}% improvement`;
@@ -176,7 +182,7 @@ export function formatGoalTarget(goal: Goal): string {
 /**
  * Suggest goals based on athlete's measurement history
  */
-export function suggestGoals(measurements: Measurement[], metric: string): GoalSuggestion[] {
+export function suggestGoals(measurements: Measurement[], metric: string, metricType?: MetricType): GoalSuggestion[] {
   const education = getMetricEducation(metric);
   if (!education) return [];
 
@@ -191,7 +197,9 @@ export function suggestGoals(measurements: Measurement[], metric: string): GoalS
 
   if (metricMeasurements.length === 0) return [];
 
-  const lowerIsBetter = education.lowerIsBetter;
+  // Newest row's own unit: the unit the athlete's values were recorded in
+  const unit = metricMeasurements[0].units;
+  const lowerIsBetter = isLowerBetterMetric(metric, metricType);
   const currentBest = lowerIsBetter
     ? Math.min(...metricMeasurements.map(m => m.value))
     : Math.max(...metricMeasurements.map(m => m.value));
@@ -208,21 +216,21 @@ export function suggestGoals(measurements: Measurement[], metric: string): GoalS
     suggestions.push({
       goalType: GoalType.TARGET_VALUE,
       targetValue: parseFloat(moderateTarget.toFixed(2)),
-      description: `Improve ${education.name} to ${formatMetricValue(moderateTarget, metric)}`,
+      description: `Improve ${education.name} to ${formatMetricValue(moderateTarget, metric, unit)}`,
       difficulty: 'moderate',
     });
 
     suggestions.push({
       goalType: GoalType.TARGET_VALUE,
       targetValue: parseFloat(easyTarget.toFixed(2)),
-      description: `Reach ${formatMetricValue(easyTarget, metric)} (3% improvement)`,
+      description: `Reach ${formatMetricValue(easyTarget, metric, unit)} (3% improvement)`,
       difficulty: 'easy',
     });
 
     suggestions.push({
       goalType: GoalType.TARGET_VALUE,
       targetValue: parseFloat(challengingTarget.toFixed(2)),
-      description: `Push for ${formatMetricValue(challengingTarget, metric)} (8% improvement)`,
+      description: `Push for ${formatMetricValue(challengingTarget, metric, unit)} (8% improvement)`,
       difficulty: 'challenging',
     });
   } else {
@@ -234,21 +242,21 @@ export function suggestGoals(measurements: Measurement[], metric: string): GoalS
     suggestions.push({
       goalType: GoalType.TARGET_VALUE,
       targetValue: parseFloat(moderateTarget.toFixed(1)),
-      description: `Improve ${education.name} to ${formatMetricValue(moderateTarget, metric)}`,
+      description: `Improve ${education.name} to ${formatMetricValue(moderateTarget, metric, unit)}`,
       difficulty: 'moderate',
     });
 
     suggestions.push({
       goalType: GoalType.TARGET_VALUE,
       targetValue: parseFloat(easyTarget.toFixed(1)),
-      description: `Reach ${formatMetricValue(easyTarget, metric)} (3% improvement)`,
+      description: `Reach ${formatMetricValue(easyTarget, metric, unit)} (3% improvement)`,
       difficulty: 'easy',
     });
 
     suggestions.push({
       goalType: GoalType.TARGET_VALUE,
       targetValue: parseFloat(challengingTarget.toFixed(1)),
-      description: `Push for ${formatMetricValue(challengingTarget, metric)} (8% improvement)`,
+      description: `Push for ${formatMetricValue(challengingTarget, metric, unit)} (8% improvement)`,
       difficulty: 'challenging',
     });
   }
@@ -274,13 +282,14 @@ export function suggestGoals(measurements: Measurement[], metric: string): GoalS
 
 /**
  * Check if a goal has been achieved
+ * @param metricType - The metric's type from the metric list; without it the built-in lists decide
  */
-export function isGoalAchieved(goal: Goal): boolean {
+export function isGoalAchieved(goal: Goal, metricType?: MetricType): boolean {
   const { goalType, targetValue, currentValue, metric } = goal;
 
   switch (goalType) {
     case GoalType.TARGET_VALUE: {
-      const lowerIsBetter = isLowerBetterMetric(metric);
+      const lowerIsBetter = isLowerBetterMetric(metric, metricType);
       if (lowerIsBetter) {
         return currentValue <= targetValue;
       } else {
@@ -291,7 +300,7 @@ export function isGoalAchieved(goal: Goal): boolean {
     case GoalType.IMPROVEMENT_PERCENTAGE: {
       // Calculate current improvement percentage
       const { baselineValue } = goal;
-      const lowerIsBetter = isLowerBetterMetric(metric);
+      const lowerIsBetter = isLowerBetterMetric(metric, metricType);
 
       let currentImprovementPct: number;
       if (lowerIsBetter) {
@@ -333,7 +342,7 @@ export function getDaysRemaining(targetDate: string): number {
 /**
  * Get human-readable progress text for a goal
  */
-export function getGoalProgressText(goal: Goal): string {
+export function getGoalProgressText(goal: Goal, metricType?: MetricType): string {
   if (goal.status === GoalStatus.ACHIEVED) {
     return 'Goal achieved! 🎉';
   }
@@ -346,7 +355,7 @@ export function getGoalProgressText(goal: Goal): string {
     return 'Goal abandoned';
   }
 
-  const progress = calculateGoalProgress(goal);
+  const progress = calculateGoalProgress(goal, metricType);
   const daysRemaining = getDaysRemaining(goal.targetDate);
 
   if (progress === 100) {

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { toCalendarDate } from '@/utils/date-utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -312,7 +313,7 @@ export function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) 
                     key={date}
                     className="border border-gray-300 p-1 sm:p-2 text-xs font-medium text-gray-700 min-w-[60px] sm:min-w-[80px]"
                   >
-                    {new Date(date).toLocaleDateString('en-US', {
+                    {toCalendarDate(date)?.toLocaleDateString('en-US', {
                       month: 'short',
                       day: 'numeric',
                     })}
@@ -391,7 +392,7 @@ export function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) 
               <div>
                 <p className="text-sm text-gray-600">Date</p>
                 <p className="text-base font-medium">
-                  {new Date(selectedCell.date).toLocaleDateString()}
+                  {toCalendarDate(selectedCell.date)?.toLocaleDateString()}
                 </p>
               </div>
 

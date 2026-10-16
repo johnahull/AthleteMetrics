@@ -78,4 +78,14 @@ describe('filterToBestPerPlayer', () => {
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('1');
   });
+
+  it('uses the metric type when given: MILE_RUN lower_is_better keeps the minimum', () => {
+    const items: TestItem[] = [
+      { id: '1', playerId: 'p1', value: 420 },
+      { id: '2', playerId: 'p1', value: 360 },
+    ];
+    expect(filterToBestPerPlayer(items, 'MILE_RUN', getId, getValue, 'lower_is_better')[0].id).toBe('2');
+    // Without a type a code outside the built-in list is higher-is-better
+    expect(filterToBestPerPlayer(items, 'MILE_RUN', getId, getValue)[0].id).toBe('1');
+  });
 });

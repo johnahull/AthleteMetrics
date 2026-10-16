@@ -61,6 +61,7 @@ const formSchema = z.object({
   validationMin: z.number().optional(),
   validationMax: z.number().optional(),
   decimalPrecision: z.number().int().min(0).max(10).optional(),
+  displayFormat: z.enum(['decimal', 'duration']).default('decimal'),
   sportAssociations: z.array(z.string()).optional(),
   isDerived: z.boolean().default(false),
   formula: z.string().max(1000).optional(),
@@ -133,6 +134,7 @@ export function CustomOrgMetricForm({
       validationMin: undefined,
       validationMax: undefined,
       decimalPrecision: 3,
+      displayFormat: "decimal",
       sportAssociations: [],
       isDerived: false,
       formula: "",
@@ -142,6 +144,8 @@ export function CustomOrgMetricForm({
   });
 
   const isDerived = form.watch("isDerived");
+  const isDuration = form.watch("displayFormat") === "duration";
+  const boundUnit = isDuration ? " (seconds)" : "";
 
   // Reset form when metric changes
   useEffect(() => {
@@ -158,6 +162,7 @@ export function CustomOrgMetricForm({
         validationMin: metric.validationMin ? parseFloat(metric.validationMin) : undefined,
         validationMax: metric.validationMax ? parseFloat(metric.validationMax) : undefined,
         decimalPrecision: metric.decimalPrecision ?? 3,
+        displayFormat: metric.displayFormat ?? "decimal",
         sportAssociations: metric.sportAssociations || [],
         isDerived: metric.isDerived ?? false,
         formula: metric.formula || "",
@@ -177,6 +182,7 @@ export function CustomOrgMetricForm({
         validationMin: undefined,
         validationMax: undefined,
         decimalPrecision: 3,
+        displayFormat: "decimal",
         sportAssociations: [],
         isDerived: false,
         formula: "",
@@ -350,12 +356,46 @@ export function CustomOrgMetricForm({
                       <FormItem>
                         <FormLabel>Unit</FormLabel>
                         <FormControl>
-                          <Input {...field} value={field.value || ""} placeholder="e.g., s, in, mph" />
+                          <Input
+                            {...field}
+                            value={field.value || ""}
+                            placeholder="e.g., s, in, mph"
+                            disabled={isDuration} // Time metrics are stored in seconds
+                          />
                         </FormControl>
                         <FormDescription>
                           Unit of measurement (seconds, inches, mph, etc.)
                         </FormDescription>
                         <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Display format: time (mm:ss) */}
+                  <FormField
+                    control={form.control}
+                    name="displayFormat"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                        <div className="grid gap-y-0.5">
+                          <FormLabel className="text-base">Time (mm:ss)</FormLabel>
+                          <FormDescription>
+                            Enter and show values as minutes:seconds, e.g. 7:15.0 for a 2k row. Values are stored in seconds (unit s).
+                          </FormDescription>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={field.value === "duration"}
+                            onCheckedChange={(checked) => {
+                              field.onChange(checked ? "duration" : "decimal");
+                              if (checked) {
+                                form.setValue("unit", "s");
+                                form.setValue("decimalPrecision", 1);
+                              }
+                            }}
+                            data-testid="custom-metric-duration-switch"
+                          />
+                        </FormControl>
                       </FormItem>
                     )}
                   />
@@ -453,7 +493,7 @@ export function CustomOrgMetricForm({
                       name="validationMin"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Minimum Value</FormLabel>
+                          <FormLabel>Minimum Value{boundUnit}</FormLabel>
                           <FormControl>
                             <Input
                               {...field}
@@ -479,7 +519,7 @@ export function CustomOrgMetricForm({
                       name="validationMax"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Maximum Value</FormLabel>
+                          <FormLabel>Maximum Value{boundUnit}</FormLabel>
                           <FormControl>
                             <Input
                               {...field}

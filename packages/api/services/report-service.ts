@@ -16,6 +16,7 @@ import {
   customBenchmarks,
   organizationBenchmarks,
   siteMetrics,
+  customOrgMetrics,
   events,
   organizations,
   type Report,
@@ -23,11 +24,12 @@ import {
   type ReportBenchmark,
 } from '@shared/schema';
 import { isUnder13OrUnknownDob } from '@shared/coppa-utils';
-import { eq, and, gte, lte, inArray, desc, sql } from 'drizzle-orm';
+import { eq, and, or, isNull, gte, lte, inArray, desc, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { quantileRank, median, mean, min, max, standardDeviation } from 'simple-statistics';
 import { BaseService } from './base-service';
 import { evaluateTierBenchmark as evaluateTierBenchmarkPure } from './benchmark-tiers';
+import { getMetricType } from '../utils/metric-type';
 import { type MetricExplanation } from '@shared/metric-explanations';
 import { isPeerComparisonExcludedMetric } from '@shared/peer-comparison-exclusions';
 import { getMetricExplanationsMap } from './metric-explanation-service';
@@ -44,6 +46,7 @@ import type { ReportTrends, ReportDistributions, TeamReportTrends, TeamReportDis
 import type { ReportFvProfile } from '@shared/report-fv-types';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
 import { wasUnder13At } from '@shared/coppa-utils';
+import type { MeasurementFormat } from '@shared/duration-format';
 
 interface TimeframeConfig {
   type: 'preset' | 'custom';
@@ -142,6 +145,8 @@ interface TeamReportData {
   athleteCount: number;
   metricLabels: Record<string, string>;
   metricUnits: Record<string, string>;
+  /** Duration (mm:ss) metrics only; absent on data generated before it existed */
+  metricFormats?: Record<string, MeasurementFormat>;
   metricExplanations: Record<string, MetricExplanation>;
   eventContext?: EventContext; // Present when eventId filter is used
   orgBranding?: OrgBranding;
@@ -157,6 +162,8 @@ interface IndividualReportData {
   generatedAt: string;
   metricLabels: Record<string, string>;
   metricUnits: Record<string, string>;
+  /** Duration (mm:ss) metrics only; absent on data generated before it existed */
+  metricFormats?: Record<string, MeasurementFormat>;
   metricExplanations: Record<string, MetricExplanation>;
   eventContext?: EventContext; // Present when eventId filter is used
   orgBranding?: OrgBranding;
@@ -196,18 +203,21 @@ export async function isEvalSnapshotRestricted(athleteId: unknown, eventDate: un
 }
 
 export class ReportService extends BaseService {
-  // Cache for metric info to prevent N+1 queries
-  private metricInfoCache = new Map<string, { lowerIsBetter: boolean; metricType: string; name: string }>();
+  // Cache for metric info to prevent N+1 queries. Keyed by organization + code (custom codes are unique per org
+  // only) and cleared at the start of each report build, so an admin edit applies on the next build.
+  private metricInfoCache = new Map<string, { lowerIsBetter: boolean; metricType: string }>();
 
   /**
    * Get display labels and units for a list of metric codes
    */
-  async getMetricLabelsAndUnits(metricCodes: string[]): Promise<{
+  async getMetricLabelsAndUnits(metricCodes: string[], organizationId?: string): Promise<{
     labels: Record<string, string>;
     units: Record<string, string>;
+    formats: Record<string, MeasurementFormat>;
   }> {
     const labels: Record<string, string> = {};
     const units: Record<string, string> = {};
+    const formats: Record<string, MeasurementFormat> = {};
 
     // Fetch all metrics in one query
     const metrics = await db
@@ -215,13 +225,33 @@ export class ReportService extends BaseService {
         code: siteMetrics.code,
         label: siteMetrics.label,
         unit: siteMetrics.unit,
+        displayFormat: siteMetrics.displayFormat,
+        decimalPrecision: siteMetrics.decimalPrecision,
       })
       .from(siteMetrics)
       .where(inArray(siteMetrics.code, metricCodes));
 
+    // A site metric wins; a code with no site row may be this organization's custom metric
+    const missing = metricCodes.filter(code => !metrics.some(m => m.code === code));
+    if (organizationId && missing.length > 0) {
+      metrics.push(...await db
+        .select({
+          code: customOrgMetrics.code,
+          label: customOrgMetrics.label,
+          unit: customOrgMetrics.unit,
+          displayFormat: customOrgMetrics.displayFormat,
+          decimalPrecision: customOrgMetrics.decimalPrecision,
+        })
+        .from(customOrgMetrics)
+        .where(and(eq(customOrgMetrics.organizationId, organizationId), inArray(customOrgMetrics.code, missing))));
+    }
+
     for (const metric of metrics) {
       labels[metric.code] = metric.label;
       units[metric.code] = metric.unit || '';
+      if (metric.displayFormat === 'duration') {
+        formats[metric.code] = { unit: metric.unit, displayFormat: 'duration', decimalPrecision: metric.decimalPrecision };
+      }
     }
 
     // Fallback to code for any missing labels
@@ -234,7 +264,7 @@ export class ReportService extends BaseService {
       }
     }
 
-    return { labels, units };
+    return { labels, units, formats };
   }
 
   /**
@@ -244,6 +274,7 @@ export class ReportService extends BaseService {
     reportId: string,
     userId: string
   ): Promise<TeamReportData> {
+    this.metricInfoCache.clear();
     // Get report configuration
     const report = await db
       .select()
@@ -303,11 +334,12 @@ export class ReportService extends BaseService {
       config.compositeIndex,
       reportId,
       benchmarksByMetric,
-      config.includeEventPercentiles
+      config.includeEventPercentiles,
+      report.organizationId
     );
 
     // Get metric display labels and units
-    const { labels: metricLabels, units: metricUnits } = await this.getMetricLabelsAndUnits(config.metrics);
+    const { labels: metricLabels, units: metricUnits, formats: metricFormats } = await this.getMetricLabelsAndUnits(config.metrics, report.organizationId);
     const metricExplanations = await getMetricExplanationsMap(
       config.metrics,
       report.organizationId,
@@ -319,7 +351,7 @@ export class ReportService extends BaseService {
     // so this is cheap) so client components — including the public/anonymous
     // report view, which has no authenticated org context to derive this
     // itself — can evaluate tier standing correctly without a client hook.
-    const directionInfos = await Promise.all(config.metrics.map(m => this.getMetricInfo(m)));
+    const directionInfos = await Promise.all(config.metrics.map(m => this.getMetricInfo(m, report.organizationId)));
     const metricDirections: Record<string, 'higher' | 'lower'> = {};
     config.metrics.forEach((metric, i) => {
       metricDirections[metric] = directionInfos[i].lowerIsBetter ? 'lower' : 'higher';
@@ -405,6 +437,7 @@ export class ReportService extends BaseService {
       athleteCount: athleteRankings.length,
       metricLabels,
       metricUnits,
+      metricFormats,
       metricExplanations,
       metricDirections,
       eventContext,
@@ -424,6 +457,7 @@ export class ReportService extends BaseService {
     userId: string,
     athleteId: string
   ): Promise<IndividualReportData> {
+    this.metricInfoCache.clear();
     // Get report configuration
     const report = await db
       .select()
@@ -504,7 +538,7 @@ export class ReportService extends BaseService {
         (m) => m.metric === metric
       );
       if (metricMeasurements.length > 0) {
-        const metricInfo = await this.getMetricInfo(metric);
+        const metricInfo = await this.getMetricInfo(metric, report.organizationId);
         const values = metricMeasurements.map((m) => parseFloat(m.value));
         bestPerformances[metric] = metricInfo.lowerIsBetter
           ? Math.min(...values)
@@ -537,7 +571,8 @@ export class ReportService extends BaseService {
         athleteId,
         config.eventId,
         config.metrics,
-        bestPerformances
+        bestPerformances,
+        report.organizationId
       );
       eventPercentiles = evtPercentiles;
     }
@@ -560,7 +595,7 @@ export class ReportService extends BaseService {
       // getMetricInfo memoizes, but a selected metric with no measurements in
       // range was not pre-warmed by the bestPerformances loop above — resolve
       // any remaining cold lookups concurrently instead of serially.
-      const infos = await Promise.all(config.metrics.map(m => this.getMetricInfo(m)));
+      const infos = await Promise.all(config.metrics.map(m => this.getMetricInfo(m, report.organizationId)));
       config.metrics.forEach((metric, i) => {
         directions[metric] = infos[i].lowerIsBetter ? 'lower' : 'higher';
       });
@@ -586,7 +621,7 @@ export class ReportService extends BaseService {
         if (dist) {
           // getMetricInfo memoizes (warmed by the bestPerformances loop), so this
           // is a cache hit; direction lets the histogram annotate the "better" side.
-          const info = await this.getMetricInfo(metric);
+          const info = await this.getMetricInfo(metric, report.organizationId);
           distributions[metric] = { ...dist, direction: info.lowerIsBetter ? 'lower' : 'higher' };
         }
       }
@@ -635,7 +670,7 @@ export class ReportService extends BaseService {
     };
 
     // Get metric display labels and units
-    const { labels: metricLabels, units: metricUnits } = await this.getMetricLabelsAndUnits(config.metrics);
+    const { labels: metricLabels, units: metricUnits, formats: metricFormats } = await this.getMetricLabelsAndUnits(config.metrics, report.organizationId);
     const metricExplanations = await getMetricExplanationsMap(
       config.metrics,
       report.organizationId,
@@ -675,6 +710,7 @@ export class ReportService extends BaseService {
       generatedAt: new Date().toISOString(),
       metricLabels,
       metricUnits,
+      metricFormats,
       metricExplanations,
       eventContext,
       trends,
@@ -745,7 +781,7 @@ export class ReportService extends BaseService {
 
       // Get best performance per athlete within the cohort
       const athleteBestMap = new Map<string, number>();
-      const metricInfo = await this.getMetricInfo(metric);
+      const metricInfo = await this.getMetricInfo(metric, organizationId);
 
       for (const r of cohortMeasurements) {
         if (r.measurement.metric !== metric) continue;
@@ -798,7 +834,8 @@ export class ReportService extends BaseService {
     athleteId: string,
     eventId: string,
     metrics: string[],
-    athletePerformances: Record<string, number>
+    athletePerformances: Record<string, number>,
+    organizationId?: string
   ): Promise<{ percentiles: Record<string, number> }> {
     const percentiles: Record<string, number> = {};
 
@@ -824,7 +861,7 @@ export class ReportService extends BaseService {
 
       // Get best performance per athlete in the event
       const athleteBestMap = new Map<string, number>();
-      const metricInfo = await this.getMetricInfo(metric);
+      const metricInfo = await this.getMetricInfo(metric, organizationId);
 
       for (const m of eventMeasurements) {
         const value = parseFloat(m.value);
@@ -890,7 +927,8 @@ export class ReportService extends BaseService {
     // Get selected site benchmark IDs from report config
     const selectedSiteBenchmarkIds = reportConfig.benchmarks?.site || [];
 
-    // Get site benchmarks enabled for this organization AND selected in the report
+    // Site benchmarks are global data, so no per-organization enablement row is required: the wizard's
+    // benchmark-set mode selects ids that have none (sets use opt-out visibility)
     let siteBenchmarksList: Array<{ benchmark: typeof siteBenchmarks.$inferSelect }> = [];
     if (selectedSiteBenchmarkIds.length > 0) {
       siteBenchmarksList = await db
@@ -898,19 +936,20 @@ export class ReportService extends BaseService {
           benchmark: siteBenchmarks,
         })
         .from(siteBenchmarks)
-        .innerJoin(
+        .leftJoin(
           organizationBenchmarks,
           and(
             eq(organizationBenchmarks.benchmarkId, siteBenchmarks.id),
             eq(organizationBenchmarks.benchmarkType, 'site'),
-            eq(organizationBenchmarks.organizationId, organizationId),
-            eq(organizationBenchmarks.isEnabled, true)
+            eq(organizationBenchmarks.organizationId, organizationId)
           )
         )
         .where(
           and(
             eq(siteBenchmarks.isActive, true),
-            inArray(siteBenchmarks.id, selectedSiteBenchmarkIds)
+            inArray(siteBenchmarks.id, selectedSiteBenchmarkIds),
+            // No row = visible (set opt-out model); an explicit disable still hides it
+            or(isNull(organizationBenchmarks.id), eq(organizationBenchmarks.isEnabled, true))
           )
         );
     }
@@ -1029,7 +1068,8 @@ export class ReportService extends BaseService {
           const tierComparison = await this.evaluateTierBenchmark(
             athleteValue,
             metricCode,
-            allTiers
+            allTiers,
+            organizationId
           );
           if (tierComparison) {
             comparisons[metricCode].push(tierComparison);
@@ -1405,7 +1445,7 @@ export class ReportService extends BaseService {
     );
 
     // Pre-fetch all metric configs to warm the cache and avoid N+1 queries
-    await Promise.all(metrics.map(m => this.getMetricInfo(m)));
+    await Promise.all(metrics.map(m => this.getMetricInfo(m, organizationId)));
 
     // Performance optimization: Pre-group measurements by metric to avoid O(n×m) complexity
     // This reduces from O(n×m) to O(n+m) where n=measurements, m=metrics
@@ -1420,7 +1460,7 @@ export class ReportService extends BaseService {
 
     for (const metric of metrics) {
       // Get metric configuration to determine lowerIsBetter (from cache)
-      const metricInfo = await this.getMetricInfo(metric);
+      const metricInfo = await this.getMetricInfo(metric, organizationId);
 
       // Get only measurements for this specific metric (already filtered)
       const metricMeasurements = measurementsByMetric.get(metric) || [];
@@ -1524,7 +1564,8 @@ export class ReportService extends BaseService {
       tierOrder?: number;
       coachingNote?: string | null;
     }>>,
-    includeEventPercentiles?: boolean
+    includeEventPercentiles?: boolean,
+    organizationId?: string
   ): Promise<AthletePerformance[]> {
     // Group measurements by athlete
     const athleteMap = new Map<string, any>();
@@ -1556,7 +1597,7 @@ export class ReportService extends BaseService {
       if (!athlete.measurements[metric]) {
         athlete.measurements[metric] = value;
       } else {
-        const metricInfo = await this.getMetricInfo(metric);
+        const metricInfo = await this.getMetricInfo(metric, organizationId);
         if (metricInfo.lowerIsBetter) {
           athlete.measurements[metric] = Math.min(
             athlete.measurements[metric],
@@ -1584,7 +1625,7 @@ export class ReportService extends BaseService {
 
       if (values.length === 0) continue;
 
-      const metricInfo = await this.getMetricInfo(metric);
+      const metricInfo = await this.getMetricInfo(metric, organizationId);
       const teamAverage = mean(values);
 
       for (const athlete of athletes) {
@@ -1634,7 +1675,7 @@ export class ReportService extends BaseService {
       }
 
       // Pre-warm metric info cache to avoid sequential DB hits in the nested loop
-      await Promise.all(metrics.map(m => this.getMetricInfo(m)));
+      await Promise.all(metrics.map(m => this.getMetricInfo(m, organizationId)));
 
       for (const athlete of athletes) {
         for (const metric of metrics) {
@@ -1644,7 +1685,7 @@ export class ReportService extends BaseService {
           const benchmarks = benchmarksByMetric[metric];
           if (!benchmarks || benchmarks.length === 0) continue;
 
-          const metricInfo = await this.getMetricInfo(metric); // cached from pre-warm
+          const metricInfo = await this.getMetricInfo(metric, organizationId); // cached from pre-warm
           const comparisons: any[] = [];
           const processedGroups = new Set<string>();
 
@@ -1656,7 +1697,7 @@ export class ReportService extends BaseService {
 
               const tierGroup = tierGroupsByMetric.get(metric)?.get(benchmark.tierGroupId);
               if (tierGroup) {
-                const tierComparison = await this.evaluateTierBenchmark(value, metric, tierGroup);
+                const tierComparison = await this.evaluateTierBenchmark(value, metric, tierGroup, organizationId);
                 if (tierComparison) {
                   comparisons.push(tierComparison);
                 }
@@ -1776,9 +1817,10 @@ export class ReportService extends BaseService {
   private async evaluateTierBenchmark(
     athleteValue: number,
     metricCode: string,
-    allTiers: any[]
+    allTiers: any[],
+    organizationId?: string
   ): Promise<BenchmarkComparison | null> {
-    const info = await this.getMetricInfo(metricCode);
+    const info = await this.getMetricInfo(metricCode, organizationId);
     return evaluateTierBenchmarkPure(athleteValue, info.lowerIsBetter, allTiers);
   }
 
@@ -1835,19 +1877,20 @@ export class ReportService extends BaseService {
           benchmark: siteBenchmarks,
         })
         .from(siteBenchmarks)
-        .innerJoin(
+        .leftJoin(
           organizationBenchmarks,
           and(
             eq(organizationBenchmarks.benchmarkId, siteBenchmarks.id),
             eq(organizationBenchmarks.benchmarkType, 'site'),
-            eq(organizationBenchmarks.organizationId, organizationId),
-            eq(organizationBenchmarks.isEnabled, true)
+            eq(organizationBenchmarks.organizationId, organizationId)
           )
         )
         .where(
           and(
             eq(siteBenchmarks.isActive, true),
-            inArray(siteBenchmarks.id, benchmarkConfig.site)
+            inArray(siteBenchmarks.id, benchmarkConfig.site),
+            // No row = visible (set opt-out model); an explicit disable still hides it
+            or(isNull(organizationBenchmarks.id), eq(organizationBenchmarks.isEnabled, true))
           )
         );
 
@@ -1979,26 +2022,18 @@ export class ReportService extends BaseService {
     return buildCohortLabel(filterTeamNames, filters.gender, filters.positions);
   }
 
-  private async getMetricInfo(metricCode: string) {
+  /** Direction of a metric for the report's organization: site metric first, then that org's custom metric. */
+  private async getMetricInfo(metricCode: string, organizationId?: string) {
     // Check cache first to prevent N+1 queries
-    if (this.metricInfoCache.has(metricCode)) {
-      return this.metricInfoCache.get(metricCode)!;
+    const key = `${organizationId ?? ''}:${metricCode}`;
+    if (this.metricInfoCache.has(key)) {
+      return this.metricInfoCache.get(key)!;
     }
 
-    const metric = await db
-      .select()
-      .from(siteMetrics)
-      .where(eq(siteMetrics.code, metricCode))
-      .limit(1)
-      .then((rows) => rows[0]);
+    const metricType = await getMetricType(metricCode, organizationId);
+    const result = { lowerIsBetter: metricType === 'lower_is_better', metricType };
 
-    const lowerIsBetter = metric?.metricType === 'lower_is_better';
-    const result = metric
-      ? { lowerIsBetter, metricType: metric.metricType, name: metric.label }
-      : { lowerIsBetter: true, metricType: 'lower_is_better' as const, name: metricCode };
-
-    // Cache the result
-    this.metricInfoCache.set(metricCode, result);
+    this.metricInfoCache.set(key, result);
     return result;
   }
 }

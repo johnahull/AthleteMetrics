@@ -14,8 +14,8 @@ import { sanitizeCSVValue } from "../utils/csv-utils";
 import { ocrService } from "../ocr/ocr-service";
 import { findBestAthleteMatch, type MatchingCriteria, type MatchResult } from "../athlete-matching";
 import { isSiteAdmin } from "@shared/auth-utils";
+import { parseImportValue, formatMeasurement } from "@shared/duration-format";
 import { OCR_REQUIRED_CHOICE_MESSAGES, type OcrRequiredChoice } from "@shared/ocr-types";
-import { METRIC_CONFIG } from "@shared/analytics-types";
 import { COMMON_METRICS, type ImportResult } from "@shared/import-types";
 import { globalAthleteService } from "../services/global-athlete-service";
 import { isValidEmail } from "@shared/email-validation";
@@ -25,8 +25,8 @@ import { getPgErrorCode, PG_UNIQUE_VIOLATION } from "../lib/pg-error";
 import { importValidationService, type ValidationContext } from "../services/import-validation-service";
 import { logAuthorizationFailure } from "../helpers/audit-logging";
 import { getCachedUserOrganizations } from "../helpers/cached-org-access";
-import { eq } from "drizzle-orm";
-import { users, userTeams, userOrganizations, type SiteMetric } from "@shared/schema";
+import { and, eq, inArray } from "drizzle-orm";
+import { users, userTeams, userOrganizations, siteMetrics, customOrgMetrics, type SiteMetric } from "@shared/schema";
 import { DerivedMetricCalculator } from "../services/derived-metric-calculator";
 import { assertCanEnterMetric, MovementQualityPermissionError } from "../services/measurement-service";
 import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
@@ -136,16 +136,13 @@ interface MeasurementFilters {
 }
 
 // Helper to get default unit for a metric
-// Prioritizes DB-defined metrics, falls back to legacy METRIC_CONFIG for backwards compatibility
+// DB-defined metric unit, else seconds
 const getDefaultUnit = (metric: string, metricsMap?: Map<string, SiteMetric>): string => {
   if (metricsMap) {
     const siteMetric = metricsMap.get(metric.toUpperCase());
     if (siteMetric && siteMetric.unit !== null) return siteMetric.unit;
   }
-  // Fallback to legacy METRIC_CONFIG for backwards compatibility
-  const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-  // Use nullish coalescing to allow empty string units (e.g., RSI)
-  return config?.unit ?? 's'; // Default to seconds if metric not found
+  return 's'; // Default to seconds if metric not found
 };
 
 // Phone number validation function
@@ -401,8 +398,8 @@ export function registerImportExportRoutes(app: Express) {
           }
 
           // Validate and clean the measurement value
-          const numericValue = parseFloat(extracted.value);
-          if (isNaN(numericValue) || numericValue <= 0) {
+          const numericValue = parseImportValue(extracted.value);
+          if (numericValue === null || numericValue <= 0) {
             errors.push({
               row: rowNum,
               error: `Invalid measurement value: ${extracted.value}`,
@@ -1259,6 +1256,13 @@ export function registerImportExportRoutes(app: Express) {
               continue;
             }
 
+            // mm:ss ("6:42.5") is seconds; parseFloat would have saved it as 6
+            const csvValue = parseImportValue(value);
+            if (csvValue === null || csvValue <= 0) {
+              errors.push({ row: rowNum, error: `Invalid measurement value: ${value}` });
+              continue;
+            }
+
             // Validate metric code (permissive mode - generate warning but continue)
             const metricValidation = importValidationService.validateMetricCode(metric, validationContext);
             if (!metricValidation.valid && metricValidation.warning) {
@@ -1443,7 +1447,7 @@ export function registerImportExportRoutes(app: Express) {
               date,
               age: age && !isNaN(parseInt(age)) ? parseInt(age) : undefined,
               metric,
-              value: parseFloat(value),
+              value: csvValue,
               units: units || getDefaultUnit(metric, validationContext.metrics),
               flyInDistance: parseFlyInInput(metric, flyInDistance),
               notes: notes || undefined,
@@ -1724,8 +1728,32 @@ export function registerImportExportRoutes(app: Express) {
       // Headers match client/src/pages/import-export.tsx measurementsTemplate (line 694)
       const csvHeaders = [
         'firstName', 'lastName', 'gender', 'teamName', 'date', 'age',
-        'metric', 'value', 'units', 'flyInDistance', 'notes'
+        'metric', 'value', 'units', 'flyInDistance', 'notes', 'display_value'
       ];
+
+      // display_value: mm:ss for duration metrics (site or custom), otherwise the same as value
+      const exportedCodes = [...new Set(measurements.map(m => m.metric).filter(Boolean))];
+      // Site metrics are keyed by code; custom codes are unique per organization only, so by `${organizationId}:${code}`
+      const durationFormats = new Map<string, { displayFormat: 'duration'; decimalPrecision: number }>();
+      const exportedOrgIds = [...new Set(measurements.map(m => m.organizationId).filter(Boolean))];
+      if (exportedCodes.length > 0) {
+        const siteRows = await db
+          .select({ code: siteMetrics.code, decimalPrecision: siteMetrics.decimalPrecision })
+          .from(siteMetrics)
+          .where(and(inArray(siteMetrics.code, exportedCodes), eq(siteMetrics.displayFormat, 'duration')));
+        for (const r of siteRows) durationFormats.set(r.code, { displayFormat: 'duration', decimalPrecision: r.decimalPrecision });
+        if (exportedOrgIds.length > 0) {
+          const customRows = await db
+            .select({ organizationId: customOrgMetrics.organizationId, code: customOrgMetrics.code, decimalPrecision: customOrgMetrics.decimalPrecision })
+            .from(customOrgMetrics)
+            .where(and(
+              inArray(customOrgMetrics.code, exportedCodes),
+              inArray(customOrgMetrics.organizationId, exportedOrgIds),
+              eq(customOrgMetrics.displayFormat, 'duration'),
+            ));
+          for (const r of customRows) durationFormats.set(`${r.organizationId}:${r.code}`, { displayFormat: 'duration', decimalPrecision: r.decimalPrecision });
+        }
+      }
 
       // Check for measurements with multi-team users that will lose data in export
       const multiTeamMeasurements = measurements.filter(m => m.user?.teams && m.user.teams.length > 1);
@@ -1735,6 +1763,8 @@ export function registerImportExportRoutes(app: Express) {
         const user = measurement.user;
         // Export first team only as "teamName" (singular) to match import format
         const teamName = user?.teams && user.teams.length > 0 ? user.teams[0].name : '';
+        const durationFormat = durationFormats.get(measurement.metric)
+          ?? durationFormats.get(`${measurement.organizationId}:${measurement.metric}`);
 
         return [
           user?.firstName || '',
@@ -1747,7 +1777,10 @@ export function registerImportExportRoutes(app: Express) {
           measurement.value || '',
           measurement.units || '',
           measurement.flyInDistance || '',
-          measurement.notes || ''
+          measurement.notes || '',
+          durationFormat && measurement.value && Number.isFinite(Number(measurement.value))
+            ? formatMeasurement(Number(measurement.value), durationFormat)
+            : measurement.value || ''
         ].map(field => {
           // SECURITY: Sanitize for formula injection, then escape for CSV format
           let value = String(field || '');

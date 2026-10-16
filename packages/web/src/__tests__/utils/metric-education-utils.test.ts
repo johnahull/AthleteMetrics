@@ -85,8 +85,8 @@ describe('metric-education-utils', () => {
     });
 
     it('formats both 5-0-5 protocols as seconds', () => {
-      expect(formatMetricValue(2.456, 'AGILITY_505_M')).toBe('2.46s');
-      expect(formatMetricValue(2.244, 'AGILITY_505_YD')).toBe('2.24s');
+      expect(formatMetricValue(2.456, 'AGILITY_505_M', 's')).toBe('2.46 s');
+      expect(formatMetricValue(2.244, 'AGILITY_505_YD', 's')).toBe('2.24 s');
     });
 
     it('keeps percentile thresholds for AGILITY_505_M and omits them for AGILITY_505_YD until calibrated', () => {
@@ -137,25 +137,43 @@ describe('metric-education-utils', () => {
     it('should return false for unknown metrics', () => {
       expect(isLowerBetterMetric('UNKNOWN')).toBe(false);
     });
+
+    it('lets the metric type decide, for built-ins and custom codes', () => {
+      expect(isLowerBetterMetric('FLY10_TIME', 'higher_is_better')).toBe(false);
+      expect(isLowerBetterMetric('ORG_SPRINT', 'lower_is_better')).toBe(true);
+      expect(isLowerBetterMetric('HEIGHT', 'tracking')).toBe(false);
+    });
   });
 
   describe('formatMetricValue', () => {
-    it('should format time metrics with 2 decimal places and "s" suffix', () => {
-      expect(formatMetricValue(1.234, 'FLY10_TIME')).toBe('1.23s');
-      expect(formatMetricValue(4.5, 'DASH_40YD')).toBe('4.50s');
+    it('should format time metrics with 2 decimal places and the supplied unit', () => {
+      expect(formatMetricValue(1.234, 'FLY10_TIME', 's')).toBe('1.23 s');
+      expect(formatMetricValue(4.5, 'DASH_40YD', 's')).toBe('4.50 s');
     });
 
-    it('should format vertical jump with 1 decimal place and "in" suffix', () => {
-      expect(formatMetricValue(32.5, 'VERTICAL_JUMP')).toBe('32.5"');
-      expect(formatMetricValue(28, 'VERTICAL_JUMP')).toBe('28.0"');
+    it('should format vertical jump with 1 decimal place and the supplied unit', () => {
+      expect(formatMetricValue(32.5, 'VERTICAL_JUMP', 'in')).toBe('32.5 in');
+      expect(formatMetricValue(28, 'VERTICAL_JUMP', 'in')).toBe('28.0 in');
     });
 
-    it('should format top speed with 1 decimal place and "mph" suffix', () => {
-      expect(formatMetricValue(21.5, 'TOP_SPEED')).toBe('21.5 mph');
+    it('should format top speed with 1 decimal place and the supplied unit', () => {
+      expect(formatMetricValue(21.5, 'TOP_SPEED', 'mph')).toBe('21.5 mph');
     });
 
     it('should format RSI with 2 decimal places', () => {
       expect(formatMetricValue(2.15, 'RSI')).toBe('2.15');
+    });
+
+    it('should never append a unit to RSI', () => {
+      expect(formatMetricValue(2.15, 'RSI', 's')).toBe('2.15');
+    });
+
+    it('should not invent a unit when none is supplied', () => {
+      expect(formatMetricValue(1.234, 'FLY10_TIME')).toBe('1.23');
+    });
+
+    it('should use whatever unit the metric config supplies', () => {
+      expect(formatMetricValue(32.5, 'VERTICAL_JUMP', 'cm')).toBe('32.5 cm');
     });
   });
 
@@ -340,6 +358,66 @@ describe('metric-education-utils', () => {
     it('should return null for unknown metric', () => {
       const context = getMetricContext(10, 'UNKNOWN_METRIC', mockAthleteData);
       expect(context).toBeNull();
+    });
+  });
+
+  describe('metric type from the metric list', () => {
+    const athleteData = { personalBest: 30, recentAverage: 28, measurementCount: 5, lastMeasurement: 29 };
+
+    it('a lower_is_better type makes the benchmark helpers rank lower values better', () => {
+      // VERTICAL_JUMP is higher-is-better in the built-in array, so only the type can flip it
+      expect(getBenchmarkComparison(20, 'VERTICAL_JUMP', undefined, 'lower_is_better')?.level).toBe('elite');
+      expect(getBenchmarkComparison(20, 'VERTICAL_JUMP')?.level).toBe('developing');
+      expect(getPercentileRanking(20, 'VERTICAL_JUMP', undefined, undefined, 'lower_is_better')!.percentile).toBeGreaterThanOrEqual(95);
+      expect(getPercentileRanking(20, 'VERTICAL_JUMP')!.percentile).toBeLessThan(40);
+    });
+
+    it('a higher_is_better type wins over the built-in array', () => {
+      expect(getBenchmarkComparison(1.3, 'FLY10_TIME', undefined, 'higher_is_better')?.level).toBe('elite');
+      expect(getBenchmarkComparison(1.3, 'FLY10_TIME')?.level).toBe('developing');
+    });
+
+    it('getMetricContext passes the type to the PR, trend, percentile and benchmark', () => {
+      const typed = getMetricContext(25, 'VERTICAL_JUMP', athleteData, undefined, 'lower_is_better');
+      expect(typed?.comparisonToPR?.isNewPersonalBest).toBe(true);
+      expect(typed?.comparisonToRecent?.trend).toBe('improving');
+      expect(typed?.benchmark?.level).toBe('elite');
+
+      const untyped = getMetricContext(25, 'VERTICAL_JUMP', athleteData);
+      expect(untyped?.comparisonToPR?.isNewPersonalBest).toBe(false);
+      expect(untyped?.comparisonToRecent?.trend).toBe('declining');
+    });
+
+    it('a MILE_RUN lower_is_better type is lower-is-better although MILE_RUN is not in the array', () => {
+      expect(isLowerBetterMetric('MILE_RUN')).toBe(false);
+      expect(isLowerBetterMetric('MILE_RUN', 'lower_is_better')).toBe(true);
+      // No static table entry: the table helpers still have nothing to say about it
+      expect(getBenchmarkComparison(300, 'MILE_RUN', undefined, 'lower_is_better')).toBeNull();
+      expect(getMetricContext(300, 'MILE_RUN', null, undefined, 'lower_is_better')).toBeNull();
+    });
+
+    it('the built-in table gives the same results as the seeded DB type', () => {
+      // Literal copy of metricType per code in scripts/seed-default-metrics.ts, so a change to the built-in array shows up here
+      const seededTypes = {
+        FLY10_TIME: 'lower_is_better',
+        VERTICAL_JUMP: 'higher_is_better',
+        AGILITY_505_M: 'lower_is_better',
+        AGILITY_505_YD: 'lower_is_better',
+        AGILITY_5105: 'lower_is_better',
+        T_TEST: 'lower_is_better',
+        DASH_40YD: 'lower_is_better',
+        TOP_SPEED: 'higher_is_better',
+        RSI: 'higher_is_better',
+      } as const;
+      for (const [code, type] of Object.entries(seededTypes)) {
+        expect(isLowerBetterMetric(code)).toBe(type === 'lower_is_better');
+        for (const value of [0.9, 1.2, 2.4, 4.6, 10.2, 19, 27, 40]) {
+          for (const gender of [undefined, 'female'] as const) {
+            expect(getPercentileRanking(value, code, undefined, gender, type)).toEqual(getPercentileRanking(value, code, undefined, gender));
+            expect(getBenchmarkComparison(value, code, gender, type)).toEqual(getBenchmarkComparison(value, code, gender));
+          }
+        }
+      }
     });
   });
 });

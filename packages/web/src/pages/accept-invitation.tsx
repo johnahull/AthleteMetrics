@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { format } from 'date-fns';
 import { useLocation, Link } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -429,7 +430,7 @@ export default function AcceptInvitation() {
                 type="date"
                 value={formData.birthDate}
                 onChange={handleInputChange('birthDate')}
-                max={new Date().toISOString().split('T')[0]}
+                max={format(new Date(), 'yyyy-MM-dd')}
                 required
               />
             </div>

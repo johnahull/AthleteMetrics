@@ -18,7 +18,7 @@ import type { EvalDefaults, EvalOfferedMetric, EvalReportSettings } from "@/hook
 const offered: EvalOfferedMetric[] = [
   { code: "DASH_10YD", key: "DASH_10", label: "10-yard dash", group: "speed", checked: true },
   { code: "JUMP_CMJ_HOH", key: "CMJ_HOH", label: "Jump height", group: "power", checked: true },
-  { code: "AGILITY_505_YD_LSI", key: "505_LSI", label: "Left-right balance", group: "movement", checked: true },
+  { code: "AGILITY_505_M_LSI", key: "505_LSI", label: "Left-right balance", group: "movement", checked: true },
   { code: "MQI_TOTAL", key: "MQI", label: "Movement", group: "movement", checked: true },
   { code: "VERTICAL_JUMP", key: null, label: "Hands-free jump height", group: "power", checked: false },
 ];

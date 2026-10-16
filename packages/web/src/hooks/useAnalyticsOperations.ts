@@ -15,7 +15,6 @@ import type {
   AnalyticsResponse,
   ChartConfiguration,
 } from '@shared/analytics-types';
-import { METRIC_CONFIG } from '@shared/analytics-types';
 
 /**
  * Hook for managing analytics permissions and organization context
@@ -242,20 +241,14 @@ export function useChartConfiguration() {
     // Helper function to format metrics for display
     const formatMetricsForDisplay = () => {
       if ((state.selectedChartType === 'scatter_plot' || state.selectedChartType === 'connected_scatter') && state.metrics.additional.length > 0) {
-        const primaryLabel = METRIC_CONFIG[state.metrics.primary as keyof typeof METRIC_CONFIG]?.label || state.metrics.primary;
-        const additionalLabel = METRIC_CONFIG[state.metrics.additional[0] as keyof typeof METRIC_CONFIG]?.label || state.metrics.additional[0];
-        return `${primaryLabel} vs ${additionalLabel}`;
+        return `${state.metrics.primary} vs ${state.metrics.additional[0]}`;
       }
 
       if ((state.selectedChartType === 'radar_chart' || state.selectedChartType === 'multi_line') && state.metrics.additional.length > 0) {
-        const allMetrics = [state.metrics.primary, ...state.metrics.additional];
-        const metricLabels = allMetrics.map(metric =>
-          METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric
-        );
-        return metricLabels.join(', ');
+        return [state.metrics.primary, ...state.metrics.additional].join(', ');
       }
 
-      return METRIC_CONFIG[state.metrics.primary as keyof typeof METRIC_CONFIG]?.label || state.metrics.primary;
+      return state.metrics.primary;
     };
 
     switch (state.analysisType) {
@@ -349,13 +342,10 @@ export function useAnalyticsExport() {
     );
 
     // Generate title for sharing using the org-aware label, falling back to
-    // METRIC_CONFIG for any code not in availableMetrics. `??` (not `||`) so
+    // the code for any code not in availableMetrics. `??` (not `||`) so
     // a legitimately-empty label string isn't silently bypassed — matches the
     // resolution operator used everywhere else in this PR.
-    const primaryLabel =
-      metricLabels[state.metrics.primary] ??
-      METRIC_CONFIG[state.metrics.primary as keyof typeof METRIC_CONFIG]?.label ??
-      state.metrics.primary;
+    const primaryLabel = metricLabels[state.metrics.primary] ?? state.metrics.primary;
     const chartTitle = `${primaryLabel} Performance Chart`;
 
     switch (format) {

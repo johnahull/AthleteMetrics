@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { format } from "date-fns";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -633,7 +634,7 @@ export default function Athletes() {
     const selected = athletes
       .filter((a: any) => selectedAthletes.has(a.id))
       .map((a: any) => ({ firstName: a.firstName ?? '', lastName: a.lastName ?? '' }));
-    const today = new Date().toISOString().split('T')[0];
+    const today = format(new Date(), 'yyyy-MM-dd');
     const filename = sanitizeDashrFilename(`athletes-${today}`);
     try {
       await downloadDashrXlsx(filename, selected);

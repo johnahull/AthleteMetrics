@@ -10,6 +10,7 @@
 
 import React from 'react';
 import { formatDistanceToNow } from 'date-fns';
+import { toCalendarDate } from '@/utils/date-utils';
 
 interface AthleteHomeHeroProps {
   athlete: {
@@ -37,10 +38,10 @@ export function AthleteHomeHero({
     }
 
     try {
-      const date = new Date(lastMeasurementDate);
+      const date = toCalendarDate(lastMeasurementDate);
 
       // Validate the date is actually valid
-      if (isNaN(date.getTime())) {
+      if (!date) {
         return 'Invalid date';
       }
 

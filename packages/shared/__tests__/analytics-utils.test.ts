@@ -171,6 +171,23 @@ describe('Analytics Utilities', () => {
     });
   });
 
+  describe('filterToBestMeasurements with metric types', () => {
+    const point = (value: number, date: string): ChartDataPoint => ({
+      athleteId: '1', athleteName: 'Athlete 1', metric: 'MILE_RUN', value, date: new Date(date), teamName: 'Team A',
+    });
+
+    it('picks the lowest MILE_RUN when the passed type is lower-is-better, the highest without a type', () => {
+      const data = [point(400, '2024-01-01'), point(360, '2024-02-01'), point(420, '2024-03-01')];
+      expect(filterToBestMeasurements(data, { MILE_RUN: 'lower_is_better' })[0].value).toBe(360);
+      expect(filterToBestMeasurements(data)[0].value).toBe(420);
+    });
+
+    it('picks the most recent value for a tracking metric', () => {
+      const data = [point(400, '2024-01-01'), point(360, '2024-03-01'), point(420, '2024-02-01')];
+      expect(filterToBestMeasurements(data, { MILE_RUN: 'tracking' })[0].value).toBe(360);
+    });
+  });
+
   describe('filterToBestMeasurementsPerDate', () => {
     const createMockDataPointWithDate = (
       athleteId: string,
@@ -221,6 +238,15 @@ describe('Analytics Utilities', () => {
       expect(result).toHaveLength(2);
       expect(result.find(r => r.athleteId === '1')?.value).toBe(35);
       expect(result.find(r => r.athleteId === '2')?.value).toBe(28);
+    });
+
+    it('uses the passed metric type: lowest MILE_RUN per date when it is lower-is-better', () => {
+      const data = [
+        createMockDataPointWithDate('1', 'MILE_RUN', 400, '2024-01-01'),
+        createMockDataPointWithDate('1', 'MILE_RUN', 380, '2024-01-01'),
+      ];
+      expect(filterToBestMeasurementsPerDate(data, { MILE_RUN: 'lower_is_better' })[0].value).toBe(380);
+      expect(filterToBestMeasurementsPerDate(data)[0].value).toBe(400);
     });
   });
 

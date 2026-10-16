@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { toCalendarDate } from '@/utils/date-utils';
 import {
   Chart as ChartJS,
   LinearScale,
@@ -21,6 +22,8 @@ import type {
   StatisticalSummary
 } from '@shared/analytics-types';
 import { useMetricConfig } from '@/hooks/use-metric-config';
+import { durationAxis } from './utils/durationAxis';
+import { formatMeasurement } from '@shared/duration-format';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -374,6 +377,16 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
   }, [data, statistics, highlightAthlete, effectiveSelectedIds, athleteToggles, showGroupAverage]);
 
   // Chart options
+  // Duration (mm:ss) axes: m:ss ticks and tooltip values
+  const [xDuration, yDuration] = useMemo(
+    () =>
+      [scatterData?.xMetric, scatterData?.yMetric].map((code) => {
+        const metricConfig = code ? getMetricConfig(code) : null;
+        return metricConfig?.displayFormat === 'duration' ? metricConfig : null;
+      }),
+    [scatterData?.xMetric, scatterData?.yMetric, getMetricConfig],
+  );
+
   const options: ChartOptions<'scatter'> = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
@@ -401,9 +414,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
               return 'Group Average';
             }
             
-            return point.date ? 
-              `${datasetLabel} - ${new Date(point.date).toLocaleDateString()}` :
-              datasetLabel;
+            const day = toCalendarDate(point.date)?.toLocaleDateString();
+            return day ? `${datasetLabel} - ${day}` : datasetLabel;
           },
           label: (context) => {
             const point = context.raw as any;
@@ -419,6 +431,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             if (scatterData?.yMetric && isFly10Metric(scatterData.yMetric) && point.y) {
               yDisplay = formatFly10Dual(point.y, 'time-first');
             }
+            if (xDuration && point.x != null) xDisplay = formatMeasurement(point.x, xDuration);
+            if (yDuration && point.y != null) yDisplay = formatMeasurement(point.y, yDuration);
 
             return [
               `${scatterData?.xLabel}: ${xDisplay}`,
@@ -433,8 +447,9 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
               labels.push('🏆 Personal Best!');
             }
             
-            if (point.date) {
-              labels.push(`Date: ${new Date(point.date).toLocaleDateString()}`);
+            const day = toCalendarDate(point.date)?.toLocaleDateString();
+            if (day) {
+              labels.push(`Date: ${day}`);
             }
             
             return labels;
@@ -557,11 +572,12 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           display: true,
           text: scatterData?.xMetric && isFly10Metric(scatterData.xMetric)
             ? `${scatterData?.xLabel} (s / mph)`
-            : `${scatterData?.xLabel} (${scatterData?.xUnit})`
+            : `${scatterData?.xLabel} (${xDuration ? 'mm:ss' : scatterData?.xUnit})`
         },
         grid: {
           display: true
-        }
+        },
+        ...(xDuration ? durationAxis(xDuration) : {})
       },
       y: {
         type: 'linear',
@@ -569,11 +585,12 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
           display: true,
           text: scatterData?.yMetric && isFly10Metric(scatterData.yMetric)
             ? `${scatterData?.yLabel} (s / mph)`
-            : `${scatterData?.yLabel} (${scatterData?.yUnit})`
+            : `${scatterData?.yLabel} (${yDuration ? 'mm:ss' : scatterData?.yUnit})`
         },
         grid: {
           display: true
-        }
+        },
+        ...(yDuration ? durationAxis(yDuration) : {})
       }
     },
     elements: {
@@ -588,7 +605,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
       intersect: false,
       mode: 'point'
     }
-  }), [scatterData, config, showQuadrants, statistics]);
+  }), [scatterData, config, showQuadrants, statistics, xDuration, yDuration]);
 
   if (!scatterData) {
     return (

@@ -4,7 +4,7 @@
  */
 
 import type { StatisticalSummary, ChartDataPoint, MetricType } from './analytics-types';
-import { getMetricTypeWithFallback } from './analytics-types';
+import { resolveMetricType } from './analytics-types';
 
 /**
  * Validates that input values are valid numbers
@@ -123,6 +123,7 @@ export function calculateStatistics(values: number[]): StatisticalSummary {
  *
  * @param metric - The metric key (e.g., 'FLY10_TIME', 'HEIGHT')
  * @param stats - Statistical summary containing aggregated values
+ * @param metricType - The metric's type from its DB row; without it see resolveMetricType
  * @returns Best value according to metric type
  *
  * Note: For tracking metrics (e.g., HEIGHT, WEIGHT), returns max value as a proxy for "latest".
@@ -131,21 +132,22 @@ export function calculateStatistics(values: number[]): StatisticalSummary {
  * in this function. For more accurate "latest value" behavior, use filterToBestMeasurements()
  * which has access to date information.
  */
-export function getBestPerformanceValue(metric: string, stats: StatisticalSummary): number {
+export function getBestPerformanceValue(metric: string, stats: StatisticalSummary, metricType?: MetricType): number {
   if (stats.count === 0) return 0;
 
-  const metricType = getMetricTypeWithFallback(metric);
+  const resolvedType = resolveMetricType(metric, metricType);
 
   // For tracking metrics, use max as proxy for latest value
   // For lower_is_better, use min; for higher_is_better, use max
-  return metricType === 'lower_is_better' ? stats.min : stats.max;
+  return resolvedType === 'lower_is_better' ? stats.min : stats.max;
 }
 
 /**
  * Filters data to best measurements per athlete (for 'best' data type)
  * Uses metric configuration to determine what "best" means
+ * @param metricTypes - Each metric's type from its DB row; a code without an entry: see resolveMetricType
  */
-export function filterToBestMeasurements(data: ChartDataPoint[]): ChartDataPoint[] {
+export function filterToBestMeasurements(data: ChartDataPoint[], metricTypes?: Record<string, MetricType>): ChartDataPoint[] {
   if (data.length === 0) return [];
 
   const grouped = data.reduce((acc, point) => {
@@ -159,7 +161,7 @@ export function filterToBestMeasurements(data: ChartDataPoint[]): ChartDataPoint
     if (athleteMetricData.length === 0) return athleteMetricData[0]; // Should not happen
 
     const metric = athleteMetricData[0].metric;
-    const metricType = getMetricTypeWithFallback(metric);
+    const metricType = resolveMetricType(metric, metricTypes?.[metric]);
 
     if (metricType === 'tracking') {
       // For tracking metrics, find the most recent measurement by date
@@ -186,16 +188,18 @@ export function filterToBestMeasurements(data: ChartDataPoint[]): ChartDataPoint
  * Generic best-per-player filter for any measurement-like object.
  * Groups items by playerId accessor, picks the best value per group
  * based on metric direction (lower_is_better → min, otherwise → max).
+ * @param metricType - The metric's type from its DB row; without it see resolveMetricType
  */
 export function filterToBestPerPlayer<T>(
   items: T[],
   metric: string,
   getPlayerId: (item: T) => string,
   getValue: (item: T) => number,
+  metricType?: MetricType,
 ): T[] {
   if (items.length === 0) return [];
 
-  const metricType = getMetricTypeWithFallback(metric);
+  const resolvedType = resolveMetricType(metric, metricType);
   const bestByPlayer = new Map<string, T>();
 
   for (const item of items) {
@@ -206,7 +210,7 @@ export function filterToBestPerPlayer<T>(
     } else {
       const curr = getValue(item);
       const prev = getValue(existing);
-      const isBetter = metricType === 'lower_is_better' ? curr < prev : curr > prev;
+      const isBetter = resolvedType === 'lower_is_better' ? curr < prev : curr > prev;
       if (isBetter) {
         bestByPlayer.set(playerId, item);
       }
@@ -218,8 +222,9 @@ export function filterToBestPerPlayer<T>(
 
 /**
  * Filters data to best measurements per athlete per date (for 'trends' data type)
+ * @param metricTypes - Each metric's type from its DB row; a code without an entry: see resolveMetricType
  */
-export function filterToBestMeasurementsPerDate(data: ChartDataPoint[]): ChartDataPoint[] {
+export function filterToBestMeasurementsPerDate(data: ChartDataPoint[], metricTypes?: Record<string, MetricType>): ChartDataPoint[] {
   if (data.length === 0) return [];
 
   const grouped = data.reduce((acc, point) => {
@@ -235,7 +240,7 @@ export function filterToBestMeasurementsPerDate(data: ChartDataPoint[]): ChartDa
     if (athleteMetricDateData.length === 0) return athleteMetricDateData[0]; // Should not happen
 
     const metric = athleteMetricDateData[0].metric;
-    const metricType = getMetricTypeWithFallback(metric);
+    const metricType = resolveMetricType(metric, metricTypes?.[metric]);
 
     if (metricType === 'tracking') {
       // For tracking metrics, all values on same date are equally valid, return first

@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { format } from "date-fns";
+import { toCalendarDate } from "@/utils/date-utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -18,12 +20,15 @@ import { filterToBestPerPlayer } from "@shared/analytics-utils";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
+import { useMetricLabels } from "@/hooks/use-metric-labels";
+import { formatMeasurement } from "@shared/duration-format";
 import { Filter, X, ChevronLeft, ChevronRight, Calendar, Building2, AlertCircle, User, Download, CheckSquare, XSquare, ArrowUpDown } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { StatisticsSummaryCard, type DistributionMode } from "@/components/analytics/StatisticsSummaryCard";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { formatValueWithUnit } from "@/lib/metrics";
 
 // Measurement type from API (extended from @shared/schema Measurement with joined user data)
 // Note: This is intentionally duplicated rather than importing from shared types because
@@ -187,6 +192,7 @@ export default function AdminMeasurementsPage() {
 
   // Fetch available metrics from database (includes derived metrics)
   const { metrics: availableMetrics } = useAvailableMetrics();
+  const { formats: metricFormats, types: metricTypes } = useMetricLabels();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -534,7 +540,7 @@ export default function AdminMeasurementsPage() {
       const headers = ['Date', 'Athlete', 'Organization', 'Team', 'Metric', 'Value', 'Units', 'Age', 'Submitted By', 'Verified By', 'Status', 'Notes'];
 
       const rows = measurements.map(m => [
-        new Date(m.date).toLocaleDateString(),
+        toCalendarDate(m.date)?.toLocaleDateString() ?? '',
         m.user.fullName,
         m.user.teams?.[0]?.organization.name || m.organizationId || '-',
         m.teamNameSnapshot || '-',
@@ -573,7 +579,7 @@ export default function AdminMeasurementsPage() {
       try {
         const link = document.createElement('a');
         link.href = url;
-        link.download = `measurements-${new Date().toISOString().split('T')[0]}.csv`;
+        link.download = `measurements-${format(new Date(), 'yyyy-MM-dd')}.csv`;
         link.click();
       } finally {
         // Always revoke the object URL to prevent memory leaks
@@ -645,7 +651,7 @@ export default function AdminMeasurementsPage() {
 
     const applyMode = (items: Measurement[], metric: string) =>
       statisticsMode === 'best'
-        ? filterToBestPerPlayer(items, metric, (m) => m.userId, (m) => parseFloat(m.value))
+        ? filterToBestPerPlayer(items, metric, (m) => m.userId, (m) => parseFloat(m.value), metricTypes[metric])
         : items;
 
     if (watchedFilters.metric) {
@@ -687,7 +693,7 @@ export default function AdminMeasurementsPage() {
         </div>
       );
     }
-  }, [measurements, watchedFilters.metric, distributionMode, statisticsMode]);
+  }, [measurements, watchedFilters.metric, distributionMode, statisticsMode, metricTypes]);
 
   // Access control check
   if (!user?.isSiteAdmin) {
@@ -1284,7 +1290,7 @@ export default function AdminMeasurementsPage() {
                         <TableCell className="whitespace-nowrap">
                           <div className="flex items-center gap-2">
                             <Calendar className="h-4 w-4 text-muted-foreground" />
-                            {new Date(measurement.date).toLocaleDateString()}
+                            {toCalendarDate(measurement.date)?.toLocaleDateString()}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -1322,7 +1328,9 @@ export default function AdminMeasurementsPage() {
                           </Badge>
                         </TableCell>
                         <TableCell className="font-medium">
-                          {measurement.value} {measurement.units}
+                          {metricFormats[measurement.metric]
+                            ? formatMeasurement(Number(measurement.value), metricFormats[measurement.metric])
+                            : formatValueWithUnit(measurement.value, measurement.units)}
                         </TableCell>
                         <TableCell>{measurement.age}</TableCell>
                         <TableCell>

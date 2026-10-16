@@ -1,4 +1,5 @@
 import { useMemo, useRef, useEffect } from 'react';
+import { toCalendarDate } from '@/utils/date-utils';
 import { Line } from 'react-chartjs-2';
 import type { Chart as ChartJS, ChartOptions } from 'chart.js';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -121,10 +122,10 @@ export function WellnessTrendChart({
 
     return {
       labels: athleteResponses.map((r) =>
-        new Date(r.date).toLocaleDateString('en-US', {
+        toCalendarDate(r.date)?.toLocaleDateString('en-US', {
           month: 'short',
           day: 'numeric',
-        })
+        }) ?? ''
       ),
       datasets,
     };

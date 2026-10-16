@@ -24,7 +24,6 @@ import {
   teams,
   auditLogs,
   userOrganizations,
-  siteMetrics,
   MAX_INSIGHTS_LENGTH,
   type Report,
 } from "@shared/schema";
@@ -36,11 +35,13 @@ import { coppaService } from "../services/coppa-service";
 import { parentalConsents, parentAthleteLinks } from "@shared/schema/tables/coppa";
 import { COPPA_ACTIONS, isUnder13OrUnknownDob } from "@shared/coppa-utils";
 import { isGroupComparisonOn } from "@shared/report-charts";
+import { formatMeasurement } from "@shared/duration-format";
 import type { MetricExplanation } from "@shared/metric-explanations";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from "../utils/report-utils";
+import { getMetricTypes } from "../utils/metric-type";
 import { getPgErrorCode, PG_UNIQUE_VIOLATION } from "../lib/pg-error";
 import { calculateTierDistributions } from "@shared/benchmark-utils";
 import { requireRole } from "../permissions/middleware";
@@ -3964,6 +3965,11 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
 
   const reportName = report.name || 'Performance Report';
   const pageWidth = doc.internal.pageSize.getWidth();
+  // mm:ss for a duration metric; null for any other metric, which keeps its existing format
+  const durationText = (code: string, value: number): string | null => {
+    const f = reportData.metricFormats?.[code];
+    return f ? formatMeasurement(value, f) : null;
+  };
 
   // --- Cover page for individual reports ---
   if (reportData.reportType === 'individual') {
@@ -4126,10 +4132,10 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     if (reportData.teamStatistics && reportData.teamStatistics.length > 0) {
       const statsRows = reportData.teamStatistics.map((stat: any) => [
         stat.metric,
-        stat.average !== null ? stat.average.toFixed(2) : "N/A",
-        stat.median !== null ? stat.median.toFixed(2) : "N/A",
-        stat.min !== null ? stat.min.toFixed(2) : "N/A",
-        stat.max !== null ? stat.max.toFixed(2) : "N/A",
+        stat.average !== null ? (durationText(stat.metric, stat.average) ?? stat.average.toFixed(2)) : "N/A",
+        stat.median !== null ? (durationText(stat.metric, stat.median) ?? stat.median.toFixed(2)) : "N/A",
+        stat.min !== null ? (durationText(stat.metric, stat.min) ?? stat.min.toFixed(2)) : "N/A",
+        stat.max !== null ? (durationText(stat.metric, stat.max) ?? stat.max.toFixed(2)) : "N/A",
         stat.topPerformer?.userName || "N/A",
       ]);
 
@@ -4168,7 +4174,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
         const benchmarkRows = benchmarkAchievements.map((achievement: any) => [
           achievement.metric,
           achievement.benchmarkName,
-          `${achievement.benchmarkValue.toFixed(2)} ${achievement.units}`,
+          durationText(achievement.metric, achievement.benchmarkValue) ?? `${achievement.benchmarkValue.toFixed(2)} ${achievement.units}`,
           achievement.count.toString(),
           `${achievement.percentage.toFixed(0)}%`,
         ]);
@@ -4274,17 +4280,22 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
         yPos += 6;
 
         // Sort athletes by this metric
-        const sortedAthletes = await sortAthletesByMetric(reportData.athleteRankings, stat.metric);
+        const sortedAthletes = await sortAthletesByMetric(reportData.athleteRankings, stat.metric, report.organizationId);
         const totalAthletes = sortedAthletes.length;
         const displayedAthletes = sortedAthletes.slice(0, PDF_LIMITS.MAX_ATHLETES_PER_METRIC);
 
         if (displayedAthletes.length > 0) {
+          // Resolve the direction once per metric, not once per athlete
+          const lowerIsBetter = await isLowerBetter(stat.metric, report.organizationId);
+          const benchmarkLabels = await Promise.all(
+            displayedAthletes.map((athlete: any) => getBenchmarkLabel(athlete, stat.metric, report.organizationId, lowerIsBetter)),
+          );
           // Collect tier color for each row's benchmark column
           const rowTierColors: (string | null)[] = [];
           const metricRows = displayedAthletes.map((athlete: any, idx: number) => {
             const value = athlete.measurements[stat.metric];
             const percentile = athlete.percentiles?.[stat.metric];
-            const benchmarkLabel = getBenchmarkLabel(athlete, stat.metric);
+            const benchmarkLabel = benchmarkLabels[idx];
 
             // Check if this athlete has a tier benchmark for coloring
             const comps = athlete.benchmarkComparisons?.[stat.metric];
@@ -4294,7 +4305,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
             return [
               (idx + 1).toString(),
               athlete.userName,
-              value !== null && value !== undefined ? `${value.toFixed(2)} ${stat.units || ''}` : "N/A",
+              value !== null && value !== undefined ? (durationText(stat.metric, value) ?? `${value.toFixed(2)} ${stat.units || ''}`) : "N/A",
               percentile !== undefined ? `${percentile.toFixed(0)}th` : "N/A",
               benchmarkLabel || "-",
             ];
@@ -4407,7 +4418,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
         ([metric, value]: [string, any]) => {
           const label = reportData.metricLabels?.[metric] || metric;
           const unit = reportData.metricUnits?.[metric] || '';
-          const formatted = `${value.toFixed(2)}${unit ? ` ${unit}` : ''}`;
+          const formatted = durationText(metric, value) ?? `${value.toFixed(2)}${unit ? ` ${unit}` : ''}`;
           return showPercentile
             ? [label, formatted, athlete.percentiles[metric]?.toFixed(1) || "N/A"]
             : [label, formatted];
@@ -4449,7 +4460,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
                 const dist = comp.distanceToNextTier < 1
                   ? comp.distanceToNextTier.toFixed(2)
                   : comp.distanceToNextTier.toFixed(1);
-                tierLabel += ` (${dist}${unit ? ` ${unit}` : ''} to ${comp.nextTierName})`;
+                tierLabel += ` (${durationText(metric, comp.distanceToNextTier) ?? `${dist}${unit ? ` ${unit}` : ''}`} to ${comp.nextTierName})`;
               }
               // Prefix with rank indicator
               const rankPrefix = comp.tierOrder ? `#${comp.tierOrder} ` : '';
@@ -4464,7 +4475,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
                   label,
                   comp.tierGroupName || comp.benchmarkName,
                   tierCellText,
-                  `${comp.athleteValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
+                  durationText(metric, comp.athleteValue) ?? `${comp.athleteValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
                 ],
                 tierColor: comp.tierColor || 'gray',
                 tierOrder: comp.tierOrder || 99,
@@ -4474,8 +4485,8 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
               singleValueRows.push([
                 label,
                 comp.benchmarkName,
-                `${comp.benchmarkValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
-                `${comp.athleteValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
+                durationText(metric, comp.benchmarkValue) ?? `${comp.benchmarkValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
+                durationText(metric, comp.athleteValue) ?? `${comp.athleteValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
                 comp.meetsOrExceeds ? "Yes" : "No",
               ]);
             }
@@ -5029,15 +5040,8 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
       // Team report metrics (limited to MAX_METRICS)
       const statsToProcess = typedReportData.teamStatistics.slice(0, MAX_METRICS);
 
-      // Batch query metricType for all codes to avoid N+1 DB queries
-      const teamMetricCodes = statsToProcess.map(s => s.metric);
-      const teamMetricTypes = teamMetricCodes.length > 0
-        ? await db
-            .select({ code: siteMetrics.code, metricType: siteMetrics.metricType })
-            .from(siteMetrics)
-            .where(inArray(siteMetrics.code, teamMetricCodes))
-        : [];
-      const teamLowerIsBetterMap = new Map(teamMetricTypes.map(m => [m.code, m.metricType === 'lower_is_better']));
+      // One batch lookup (site metric first, then the report org's custom metric) to avoid N+1 DB queries
+      const teamMetricTypes = await getMetricTypes(statsToProcess.map(s => s.metric), report.organizationId);
 
       for (const stat of statsToProcess) {
         const metricCode = stat.metric;
@@ -5058,7 +5062,7 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
           label: typedReportData.metricLabels?.[metricCode] || metricCode, // Human-readable label
           values: limitedValues,
           unit: stat.units || "",
-          lowerIsBetter: teamLowerIsBetterMap.get(metricCode) ?? false,
+          lowerIsBetter: teamMetricTypes[metricCode] === 'lower_is_better',
         });
       }
     } else if (report.reportType === 'individual' && typedReportData.athlete) {
@@ -5067,16 +5071,10 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
       if (athlete.measurements) {
         const entries = Object.entries(athlete.measurements).slice(0, MAX_METRICS);
 
-        // Batch query unit and metricType for all codes to avoid N+1 DB queries
+        // Batch lookups of unit and type (site metric first, then the report org's custom metric) to avoid N+1
         const individualMetricCodes = entries.filter(([, v]) => typeof v === 'number').map(([code]) => code);
-        const individualMetricInfo = individualMetricCodes.length > 0
-          ? await db
-              .select({ code: siteMetrics.code, unit: siteMetrics.unit, metricType: siteMetrics.metricType })
-              .from(siteMetrics)
-              .where(inArray(siteMetrics.code, individualMetricCodes))
-          : [];
-        const individualUnitMap = new Map(individualMetricInfo.map(m => [m.code, m.unit || '']));
-        const individualLowerIsBetterMap = new Map(individualMetricInfo.map(m => [m.code, m.metricType === 'lower_is_better']));
+        const { units: individualUnits } = await reportService.getMetricLabelsAndUnits(individualMetricCodes, report.organizationId);
+        const individualMetricTypes = await getMetricTypes(individualMetricCodes, report.organizationId);
 
         for (const [metricCode, value] of entries) {
           if (typeof value === 'number') {
@@ -5084,8 +5082,8 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
               code: metricCode,
               label: typedReportData.metricLabels?.[metricCode] || metricCode, // Human-readable label
               values: [value],
-              unit: individualUnitMap.get(metricCode) || '',
-              lowerIsBetter: individualLowerIsBetterMap.get(metricCode) ?? false,
+              unit: individualUnits[metricCode] || '',
+              lowerIsBetter: individualMetricTypes[metricCode] === 'lower_is_better',
               percentile: athlete.percentiles?.[metricCode],
               teamAverage: athlete.teamAverages?.[metricCode],
             });

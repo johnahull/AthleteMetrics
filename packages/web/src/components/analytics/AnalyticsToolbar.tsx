@@ -4,6 +4,7 @@
  */
 
 import React from 'react';
+import { toCalendarDate } from '@/utils/date-utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -152,8 +153,8 @@ export function AnalyticsToolbar({
                             <div className="flex justify-between">
                               <span>Date range:</span>
                               <span>
-                                {new Date(analyticsData.meta.dateRange.start).toLocaleDateString()} - {' '}
-                                {new Date(analyticsData.meta.dateRange.end).toLocaleDateString()}
+                                {toCalendarDate(analyticsData.meta.dateRange.start)?.toLocaleDateString()} - {' '}
+                                {toCalendarDate(analyticsData.meta.dateRange.end)?.toLocaleDateString()}
                               </span>
                             </div>
                           )}

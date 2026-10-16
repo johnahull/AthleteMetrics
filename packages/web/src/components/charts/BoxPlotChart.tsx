@@ -35,6 +35,8 @@ import { generateDeterministicJitter } from './utils/boxPlotStatistics';
 import { resolveLabelsWithSpatialIndex, type LabelPosition } from '@/utils/spatial-index';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 import { percentileOf } from './chart-stats-utils';
+import { durationAxis } from './utils/durationAxis';
+import { formatMeasurement } from '@shared/duration-format';
 
 // Chart.js components are registered globally in lib/chart-setup.ts
 
@@ -1129,6 +1131,11 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
     }
   };
 
+  // A single duration (mm:ss) metric gets an m:ss value axis
+  const statMetrics = Object.keys(statistics || {});
+  const singleMetricConfig = statMetrics.length === 1 ? getMetricConfig(statMetrics[0]) : null;
+  const durationConfig = singleMetricConfig?.displayFormat === 'duration' ? singleMetricConfig : null;
+
   // Chart options
   const options: ChartOptions<'scatter'> = {
     responsive: true,
@@ -1250,13 +1257,16 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 
             // Get metric from rawData first, fallback to statistics keys
             const metric = rawData?.metric || Object.keys(statistics || {})[context.parsed.x];
-            const unit = getMetricConfig(metric)?.unit || '';
+            const metricConfig = getMetricConfig(metric);
+            const unit = metricConfig?.unit || '';
             const value = context.parsed.y;
 
             // Format value with dual display for FLY10_TIME
-            const formattedValue = isFly10Metric(metric)
-              ? formatFly10Dual(value, 'time-first')
-              : `${value.toFixed(2)}${unit}`;
+            const formattedValue = metricConfig?.displayFormat === 'duration'
+              ? formatMeasurement(value, metricConfig)
+              : isFly10Metric(metric)
+                ? formatFly10Dual(value, 'time-first')
+                : `${value.toFixed(2)}${unit}`;
 
             // Enhanced label for individual athlete points
             if (rawData && rawData.athleteName) {
@@ -1309,11 +1319,10 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
 
             // Add statistical summary for all points
             if (stats) {
-              result.push(
-                `Mean: ${stats.mean.toFixed(2)}${getMetricConfig(metric)?.unit || ''}`,
-                `Median: ${stats.median.toFixed(2)}${getMetricConfig(metric)?.unit || ''}`,
-                `Std Dev: ${stats.std.toFixed(2)}${getMetricConfig(metric)?.unit || ''}`
-              );
+              const statConfig = getMetricConfig(metric);
+              const show = (v: number) =>
+                statConfig?.displayFormat === 'duration' ? formatMeasurement(v, statConfig) : `${v.toFixed(2)}${statConfig?.unit || ''}`;
+              result.push(`Mean: ${show(stats.mean)}`, `Median: ${show(stats.median)}`, `Std Dev: ${show(stats.std)}`);
             }
 
             return result;
@@ -1374,7 +1383,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
               if (isFly10Metric(metric)) {
                 return `${getMetricConfig(metric)?.label || 'Value'} (s / mph)`;
               }
-              const unit = getMetricConfig(metric)?.unit || '';
+              const unit = durationConfig ? 'mm:ss' : getMetricConfig(metric)?.unit || '';
               const label = getMetricConfig(metric)?.label || 'Value';
               return unit ? `${label} (${unit})` : label;
             }
@@ -1395,7 +1404,8 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             }
             return Number(value).toFixed(2);
           }
-        }
+        },
+        ...(durationConfig ? durationAxis(durationConfig) : {})
       }
     },
     elements: {
@@ -1505,6 +1515,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
     // Format values based on metric type
     const formatValue = (value: number) => {
       if (typeof value !== 'number' || isNaN(value)) return '-';
+      if (metricConfig?.displayFormat === 'duration') return formatMeasurement(value, metricConfig);
       const isTimeMetric = currentMetric?.includes('TIME') || currentMetric?.includes('AGILITY') ||
                           currentMetric?.includes('TEST') || currentMetric?.includes('DASH');
       return isTimeMetric ? value.toFixed(2) : value.toFixed(1);
@@ -1514,9 +1525,11 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
       groupsWithStats,
       metricConfig,
       currentMetric,
-      formatValue
+      formatValue,
+      // m:ss values carry no unit
+      unit: metricConfig?.displayFormat === 'duration' ? '' : metricConfig?.unit || ''
     };
-  }, [selectedGroups, data]); // METRIC_CONFIG is a static constant, not included in deps
+  }, [selectedGroups, data, getMetricConfig]);
 
   // Add error boundary wrapper for chart rendering
   return (
@@ -1619,7 +1632,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
               <div className="font-medium text-right pr-4">Mean</div>
               {multiGroupStats.groupsWithStats.map((item, index) => (
                 <div key={index} className="text-lg font-bold text-foreground text-center">
-                  {multiGroupStats.formatValue(item.stats.mean)}{multiGroupStats.metricConfig?.unit || ''}
+                  {multiGroupStats.formatValue(item.stats.mean)}{multiGroupStats.unit}
                 </div>
               ))}
 
@@ -1627,7 +1640,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
               <div className="font-medium text-right pr-4">Median</div>
               {multiGroupStats.groupsWithStats.map((item, index) => (
                 <div key={index} className="text-lg font-bold text-foreground text-center">
-                  {multiGroupStats.formatValue(item.stats.median)}{multiGroupStats.metricConfig?.unit || ''}
+                  {multiGroupStats.formatValue(item.stats.median)}{multiGroupStats.unit}
                 </div>
               ))}
 
@@ -1635,7 +1648,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
               <div className="font-medium text-right pr-4">Min</div>
               {multiGroupStats.groupsWithStats.map((item, index) => (
                 <div key={index} className="text-lg font-bold text-muted-foreground text-center">
-                  {multiGroupStats.formatValue(item.stats.min)}{multiGroupStats.metricConfig?.unit || ''}
+                  {multiGroupStats.formatValue(item.stats.min)}{multiGroupStats.unit}
                 </div>
               ))}
 
@@ -1643,7 +1656,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
               <div className="font-medium text-right pr-4">Max</div>
               {multiGroupStats.groupsWithStats.map((item, index) => (
                 <div key={index} className="text-lg font-bold text-muted-foreground text-center">
-                  {multiGroupStats.formatValue(item.stats.max)}{multiGroupStats.metricConfig?.unit || ''}
+                  {multiGroupStats.formatValue(item.stats.max)}{multiGroupStats.unit}
                 </div>
               ))}
 
@@ -1651,7 +1664,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
               <div className="font-medium text-right pr-4">Std Dev</div>
               {multiGroupStats.groupsWithStats.map((item, index) => (
                 <div key={index} className="text-lg font-bold text-muted-foreground text-center">
-                  {multiGroupStats.formatValue(item.stats.stdDev || item.stats.std || 0)}{multiGroupStats.metricConfig?.unit || ''}
+                  {multiGroupStats.formatValue(item.stats.stdDev || item.stats.std || 0)}{multiGroupStats.unit}
                 </div>
               ))}
 
@@ -1659,7 +1672,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
               <div className="font-medium text-right pr-4">Q1</div>
               {multiGroupStats.groupsWithStats.map((item, index) => (
                 <div key={index} className="text-lg font-bold text-muted-foreground text-center">
-                  {multiGroupStats.formatValue(item.stats.q1 || item.stats.percentiles?.p25 || (item.stats.median - (item.stats.stdDev || item.stats.std || 0) * 0.674))}{multiGroupStats.metricConfig?.unit || ''}
+                  {multiGroupStats.formatValue(item.stats.q1 || item.stats.percentiles?.p25 || (item.stats.median - (item.stats.stdDev || item.stats.std || 0) * 0.674))}{multiGroupStats.unit}
                 </div>
               ))}
 
@@ -1667,7 +1680,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
               <div className="font-medium text-right pr-4">Q3</div>
               {multiGroupStats.groupsWithStats.map((item, index) => (
                 <div key={index} className="text-lg font-bold text-muted-foreground text-center">
-                  {multiGroupStats.formatValue(item.stats.q3 || item.stats.percentiles?.p75 || (item.stats.median + (item.stats.stdDev || item.stats.std || 0) * 0.674))}{multiGroupStats.metricConfig?.unit || ''}
+                  {multiGroupStats.formatValue(item.stats.q3 || item.stats.percentiles?.p75 || (item.stats.median + (item.stats.stdDev || item.stats.std || 0) * 0.674))}{multiGroupStats.unit}
                 </div>
               ))}
             </div>
@@ -1676,7 +1689,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             {/* Metric context */}
             {isStatsExpanded && multiGroupStats.metricConfig && (
               <p className="text-xs text-muted-foreground mt-2">
-                {multiGroupStats.metricConfig.label} ({multiGroupStats.metricConfig.unit})
+                {multiGroupStats.metricConfig.label} ({multiGroupStats.metricConfig.displayFormat === 'duration' ? 'mm:ss' : multiGroupStats.metricConfig.unit})
                 {multiGroupStats.metricConfig.lowerIsBetter ? ' - Lower is better' : ' - Higher is better'}
               </p>
             )}

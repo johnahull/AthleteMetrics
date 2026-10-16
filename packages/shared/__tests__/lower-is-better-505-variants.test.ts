@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { isLowerIsBetterMetric, LOWER_IS_BETTER_METRICS } from '../analytics-types';
+import { isLowerBetterType } from '../analytics-types';
 import { FLY10_RUN_IN_YD } from '../fly-run-in';
 
 describe('5-0-5 lower-is-better direction (exact lookup)', () => {
@@ -13,23 +13,23 @@ describe('5-0-5 lower-is-better direction (exact lookup)', () => {
     'AGILITY_505_YD_L',
     'AGILITY_505_YD_R',
   ])('%s is lower-is-better', (code) => {
-    expect(isLowerIsBetterMetric(code)).toBe(true);
+    expect(isLowerBetterType(code)).toBe(true);
   });
 
   it.each(['AGILITY_505_M_LSI', 'AGILITY_505_YD_LSI'])(
     '%s (a % symmetry index, higher_is_better in site_metrics) is NOT lower-is-better',
     (code) => {
-      expect(isLowerIsBetterMetric(code)).toBe(false);
+      expect(isLowerBetterType(code)).toBe(false);
     },
   );
 });
 
-describe('web pages use the shared lower-is-better lookup, not local copies', () => {
+describe('web pages use the shared lower-is-better resolver, not local copies', () => {
   const root = path.resolve(__dirname, '../../web/src/pages');
   it.each(['publish.tsx', 'analytics.tsx', 'my-peer-comparison.tsx'])('%s has no hard-coded list', (file) => {
     const src = fs.readFileSync(path.join(root, file), 'utf-8');
     expect(src).not.toMatch(new RegExp(`['"]FLY10_TIME['"],\\s*['"]AGILITY_5`));
-    expect(src).toMatch(/isLowerIsBetterMetric/);
+    expect(src).toMatch(/isLowerBetterType/);
   });
 });
 
@@ -47,14 +47,14 @@ describe('lower-is-better time codes defined as lower_is_better in site_metrics 
     'FLY10M_TIME',
     'AGILITY_COD_DEFICIT_M',
     'AGILITY_COD_DEFICIT_YD',
+    'AGILITY_COD_DEFICIT_M_INTERP',
   ])('%s is lower-is-better', (code) => {
-    expect(isLowerIsBetterMetric(code)).toBe(true);
+    expect(isLowerBetterType(code)).toBe(true);
   });
 });
 
 describe('FLY10 run-in variants (AM-FEAT-017) are lower-is-better', () => {
-  it.each(Object.keys(FLY10_RUN_IN_YD))('%s is in LOWER_IS_BETTER_METRICS and isLowerIsBetterMetric', (code) => {
-    expect(LOWER_IS_BETTER_METRICS as readonly string[]).toContain(code);
-    expect(isLowerIsBetterMetric(code)).toBe(true);
+  it.each(Object.keys(FLY10_RUN_IN_YD))('%s falls back to lower-is-better without a type', (code) => {
+    expect(isLowerBetterType(code)).toBe(true);
   });
 });

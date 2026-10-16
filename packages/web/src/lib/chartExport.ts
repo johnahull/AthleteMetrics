@@ -10,7 +10,6 @@ import type {
   MultiMetricData,
   AnalyticsResponse
 } from '@shared/analytics-types';
-import { METRIC_CONFIG } from '@shared/analytics-types';
 import { devLog } from '@/utils/dev-logger';
 
 export type ExportFormat = 'csv' | 'png' | 'clipboard' | 'share';
@@ -33,7 +32,7 @@ export function exportAnalyticsDataAsCSV(
 ): void {
   const timestamp = new Date().toISOString().split('T')[0];
   const metricLabels = [metrics.primary, ...metrics.additional]
-    .map(m => metricLabelMap?.[m] || METRIC_CONFIG[m as keyof typeof METRIC_CONFIG]?.label || m)
+    .map(m => metricLabelMap?.[m] || m)
     .join('_');
 
   const filename = `analytics_${chartType}_${metricLabels}_${timestamp}.csv`;
@@ -65,7 +64,7 @@ function convertChartDataPointsToCSV(data: ChartDataPoint[], metricLabelMap?: Me
     'Athlete ID': point.athleteId,
     'Athlete Name': point.athleteName,
     'Team': point.teamName || '',
-    'Metric': metricLabelMap?.[point.metric] || METRIC_CONFIG[point.metric as keyof typeof METRIC_CONFIG]?.label || point.metric,
+    'Metric': metricLabelMap?.[point.metric] || point.metric,
     'Value': point.value,
     'Date': point.date instanceof Date
       ? point.date.toISOString().split('T')[0]
@@ -89,7 +88,7 @@ function convertTrendDataToCSV(trends: TrendData[], metricLabelMap?: MetricLabel
         'Athlete ID': trend.athleteId,
         'Athlete Name': trend.athleteName,
         'Team': trend.teamName || '',
-        'Metric': metricLabelMap?.[trend.metric] || METRIC_CONFIG[trend.metric as keyof typeof METRIC_CONFIG]?.label || trend.metric,
+        'Metric': metricLabelMap?.[trend.metric] || trend.metric,
         'Value': point.value,
         'Date': point.date instanceof Date
           ? point.date.toISOString().split('T')[0]
@@ -118,7 +117,7 @@ function convertMultiMetricDataToCSV(multiMetric: MultiMetricData[], metricLabel
 
     // Add each metric as a column using custom labels if provided
     Object.entries(athlete.metrics).forEach(([metric, value]) => {
-      const metricLabel = metricLabelMap?.[metric] || METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG]?.label || metric;
+      const metricLabel = metricLabelMap?.[metric] || metric;
       row[metricLabel] = value;
     });
 
@@ -351,7 +350,7 @@ export function generateExportFilename(
 ): string {
   const timestamp = new Date().toISOString().split('T')[0];
   const metricLabels = [metrics.primary, ...metrics.additional]
-    .map(m => metricLabelMap?.[m] || METRIC_CONFIG[m as keyof typeof METRIC_CONFIG]?.label || m)
+    .map(m => metricLabelMap?.[m] || m)
     .join('_');
 
   const chartTypeName = chartType.replace(/_/g, '-');

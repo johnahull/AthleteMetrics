@@ -20,6 +20,7 @@ vi.mock('@/hooks/use-metric-labels', () => ({
   useMetricLabels: () => ({
     labels: METRIC_LABELS,
     getLabel: (code: string) => METRIC_LABELS[code] ?? code,
+    formats: { MILE_RUN: { unit: 's', displayFormat: 'duration', decimalPrecision: 1 } },
     isLoading: false,
   }),
 }));
@@ -201,15 +202,13 @@ describe('MeasurementTimeline', () => {
     });
 
     it('should display value with units', () => {
-      // NOTE: formatMetricValue now returns raw values as fallback.
-      // Unit formatting should come from API response in production.
       render(<MeasurementTimeline measurements={mockMeasurements} />);
 
-      // Values displayed - use exact: false because value and unit are separate text nodes
-      expect(screen.getByText('1.52', { exact: false })).toBeInTheDocument();
-      expect(screen.getByText('28.5', { exact: false })).toBeInTheDocument();
-      expect(screen.getByText('4.85', { exact: false })).toBeInTheDocument();
-      expect(screen.getByText('9.32', { exact: false })).toBeInTheDocument();
+      // Each value is followed by its own unit
+      expect(screen.getByText('1.52 s')).toBeInTheDocument();
+      expect(screen.getByText('28.5 in')).toBeInTheDocument();
+      expect(screen.getByText('4.85 s')).toBeInTheDocument();
+      expect(screen.getByText('9.32 s')).toBeInTheDocument();
     });
 
     it('should display date in day format', () => {
@@ -329,6 +328,14 @@ describe('MeasurementTimeline', () => {
 
       const firstCard = screen.getByTestId('measurement-card-1');
       expect(firstCard).toHaveAttribute('aria-label');
+    });
+  });
+
+  describe('duration (mm:ss) metrics', () => {
+    it('shows a duration measurement as m:ss', () => {
+      render(<MeasurementTimeline measurements={[{ ...mockMeasurements[0], id: 'mile', metric: 'MILE_RUN', value: '402.500', units: 's' }]} />);
+      expect(screen.getAllByText(/6:42\.5/).length).toBeGreaterThan(0);
+      expect(screen.queryByText(/402\.5/)).toBeNull();
     });
   });
 });

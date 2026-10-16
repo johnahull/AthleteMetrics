@@ -3,49 +3,24 @@
  * These helpers are used for PDF report generation and metric analysis
  */
 
-import { db } from '../db';
-import { eq } from 'drizzle-orm';
-import { siteMetrics } from '@shared/schema';
+import { isLowerBetter } from './metric-type';
 
 // Re-export from shared package — single source of truth
 export { deriveTierGroupName } from '@shared/benchmark-utils';
 
-// Cache for metric types to avoid repeated DB queries
-const metricTypeCache = new Map<string, string>();
-
-/**
- * Determines if lower values are better for a given metric
- * Queries siteMetrics table as source of truth
- * @param metricCode - The metric code to check
- * @returns true if lower values are better (e.g., times), false otherwise
- */
-export async function isLowerBetter(metricCode: string): Promise<boolean> {
-  // Check cache first
-  if (metricTypeCache.has(metricCode)) {
-    return metricTypeCache.get(metricCode) === 'lower_is_better';
-  }
-
-  // Query database for metric type
-  const [metric] = await db
-    .select({ metricType: siteMetrics.metricType })
-    .from(siteMetrics)
-    .where(eq(siteMetrics.code, metricCode));
-
-  const metricType = metric?.metricType || 'higher_is_better';
-  metricTypeCache.set(metricCode, metricType);
-
-  return metricType === 'lower_is_better';
-}
+// Direction comes from the metric's own row (site metric, else the organization's custom metric)
+export { isLowerBetter };
 
 /**
  * Sorts athletes by their performance in a specific metric
  * @param athletes - Array of athlete objects with measurements
  * @param metricCode - The metric code to sort by
+ * @param organizationId - The report's organization, to resolve its custom metrics
  * @returns Sorted array of athletes (best to worst performance)
  */
-export async function sortAthletesByMetric(athletes: any[], metricCode: string): Promise<any[]> {
+export async function sortAthletesByMetric(athletes: any[], metricCode: string, organizationId?: string): Promise<any[]> {
   if (!Array.isArray(athletes)) return [];
-  const lowerIsBetter = await isLowerBetter(metricCode);
+  const lowerIsBetter = await isLowerBetter(metricCode, organizationId);
   return [...athletes]
     .filter(athlete => athlete?.measurements?.[metricCode] !== undefined)
     .sort((a, b) => {
@@ -60,9 +35,16 @@ export async function sortAthletesByMetric(athletes: any[], metricCode: string):
  * Gets the highest benchmark tier an athlete meets for a specific metric
  * @param athlete - Athlete object with benchmark comparisons
  * @param metricCode - The metric code to check
+ * @param organizationId - The report's organization, to resolve its custom metrics
+ * @param lowerIsBetter - The metric's direction, when the caller already resolved it (looked up only if omitted)
  * @returns The name of the highest benchmark tier met, or null if none
  */
-export async function getBenchmarkLabel(athlete: any, metricCode: string): Promise<string | null> {
+export async function getBenchmarkLabel(
+  athlete: any,
+  metricCode: string,
+  organizationId?: string,
+  lowerIsBetter?: boolean,
+): Promise<string | null> {
   const comparisons = athlete.benchmarkComparisons?.[metricCode];
   if (!comparisons || comparisons.length === 0) return null;
 
@@ -81,9 +63,9 @@ export async function getBenchmarkLabel(athlete: any, metricCode: string): Promi
   }
 
   // Fall back to single-value benchmark logic
-  const lowerIsBetter = await isLowerBetter(metricCode);
+  const lowerBetter = lowerIsBetter ?? await isLowerBetter(metricCode, organizationId);
   const sortedComparisons = [...comparisons].sort((a: any, b: any) => {
-    return lowerIsBetter ? a.benchmarkValue - b.benchmarkValue : b.benchmarkValue - a.benchmarkValue;
+    return lowerBetter ? a.benchmarkValue - b.benchmarkValue : b.benchmarkValue - a.benchmarkValue;
   });
 
   for (const comparison of sortedComparisons) {

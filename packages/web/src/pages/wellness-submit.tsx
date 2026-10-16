@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { format } from 'date-fns';
 import { useRoute } from 'wouter';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -170,7 +171,7 @@ export default function WellnessSubmit() {
           athlete: data.selectedAthleteId, // Middleware expects 'athlete' parameter
           selectedAthleteId: data.selectedAthleteId,
           athleteName: data.athleteName,
-          date: new Date().toISOString().split('T')[0],
+          date: format(new Date(), 'yyyy-MM-dd'),
         }),
       });
 

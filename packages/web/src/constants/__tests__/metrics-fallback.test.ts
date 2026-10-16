@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
+import * as metricConstants from '../metrics';
 import {
   METRIC_DISPLAY_NAMES,
   METRIC_UNITS,
   METRIC_UNIT_ABBREVIATIONS,
-  METRIC_LOWER_IS_BETTER,
   getMetricDisplayName,
   getMetricUnit,
   getMetricUnitAbbreviation,
@@ -34,9 +34,8 @@ describe('Metric Constants - Fallback Behavior', () => {
       expect(METRIC_UNIT_ABBREVIATIONS).toEqual({});
     });
 
-    it('should have empty METRIC_LOWER_IS_BETTER', () => {
-      expect(Object.keys(METRIC_LOWER_IS_BETTER)).toHaveLength(0);
-      expect(METRIC_LOWER_IS_BETTER).toEqual({});
+    it('has no METRIC_LOWER_IS_BETTER map (direction comes from resolveMetricType)', () => {
+      expect(metricConstants).not.toHaveProperty('METRIC_LOWER_IS_BETTER');
     });
   });
 
@@ -92,17 +91,18 @@ describe('Metric Constants - Fallback Behavior', () => {
 
   describe('isLowerBetter', () => {
     it('should default to false for unknown metrics (higher is better is the default)', () => {
-      // When metric not in map and not in LOWER_IS_BETTER_METRICS, returns false
+      // A code with no type outside the built-in fallback list is higher-is-better
       expect(isLowerBetter('UNKNOWN_METRIC')).toBe(false);
+      expect(isLowerBetter('MILE_RUN')).toBe(false);
     });
 
-    it('should return true for time-based FLY10_TIME (in LOWER_IS_BETTER_METRICS list)', () => {
-      // FLY10_TIME is in the fallback LOWER_IS_BETTER_METRICS list
+    it('should return true for time-based FLY10_TIME (built-in fallback)', () => {
+      // FLY10_TIME is a built-in time, so the fallback says lower is better
       expect(isLowerBetter('FLY10_TIME')).toBe(true);
     });
 
     it('should return false for VERTICAL_JUMP (higher is better)', () => {
-      // VERTICAL_JUMP is not in LOWER_IS_BETTER_METRICS, defaults to higher is better
+      // VERTICAL_JUMP is not a built-in time, defaults to higher is better
       expect(isLowerBetter('VERTICAL_JUMP')).toBe(false);
     });
 
@@ -128,7 +128,7 @@ describe('Metric Constants - Fallback Behavior', () => {
     });
 
     it('should handle FLY10_TIME correctly (lower is better)', () => {
-      // FLY10_TIME is in LOWER_IS_BETTER_METRICS list
+      // FLY10_TIME is a built-in time
       expect(getProgressionStatus('FLY10_TIME', 1.5, 1.3)).toBe('improved');
       expect(getProgressionStatus('FLY10_TIME', 1.3, 1.5)).toBe('declined');
     });
@@ -137,6 +137,17 @@ describe('Metric Constants - Fallback Behavior', () => {
       // VERTICAL_JUMP defaults to higher is better
       expect(getProgressionStatus('VERTICAL_JUMP', 28, 30)).toBe('improved');
       expect(getProgressionStatus('VERTICAL_JUMP', 30, 28)).toBe('declined');
+    });
+
+    it('takes the direction from the metric type for a metric outside the built-in list', () => {
+      // MILE_RUN is not a built-in time; only its type says lower is better
+      expect(getProgressionStatus('MILE_RUN', 400, 360, 'lower_is_better')).toBe('improved');
+      expect(getProgressionStatus('MILE_RUN', 360, 400, 'lower_is_better')).toBe('declined');
+    });
+
+    it('lets the metric type override the built-in list', () => {
+      expect(isLowerBetter('FLY10_TIME', 'higher_is_better')).toBe(false);
+      expect(isLowerBetter('MILE_RUN', 'lower_is_better')).toBe(true);
     });
   });
 });

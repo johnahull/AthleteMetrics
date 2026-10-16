@@ -15,7 +15,7 @@ const CODES: Array<[string, string, string, string]> = [
   ['DASH_10', 'DASH_10YD', '10-yard dash', 's'],
   ['FLY_10', 'FLY10_TIME', 'Fly 10', 's'],
   ['CMJ_HOH', 'JUMP_CMJ_HOH', 'Jump height', 'in'],
-  ['505', 'AGILITY_505_YD', '5-0-5 agility (faster leg)', 's'],
+  ['505', 'AGILITY_505_M', '5-0-5 agility, meters (faster leg)', 's'],
   ['SQUAT_JUMP', 'JUMP_SJ_HEIGHT', 'Squat jump height', 'in'],
   ['EUR', 'POWER_EUR', 'Elastic use ratio', ''],
   ['DASH_20', 'DASH_20YD', '20-yard dash', 's'],
@@ -114,7 +114,7 @@ describe('eval report PDF renderer', () => {
   });
 
   it('carries no risk, injury, medical, placement, price or college-path wording for a model with LSI data', () => {
-    const m = model(10, true, { metrics: [...model(9).metrics, metric(0, false, { code: 'AGILITY_505_YD_LSI', key: '505_LSI', label: 'Left-right balance', value: 82.5, unit: '%' })] });
+    const m = model(10, true, { metrics: [...model(9).metrics, metric(0, false, { code: 'AGILITY_505_M_LSI', key: '505_LSI', label: 'Left-right balance', value: 82.5, unit: '%' })] });
     const text = pdfText(buildEvalReportPdf(m, org).doc);
     expect(text).toContain('Worth working on');
     expect(text).not.toMatch(/elevated|risk|injur|medical|placement|foundation|elite|FIERCE|\$|D1|path|\bhe\b|\bshe\b|\bhis\b|\bher\b/i);
@@ -282,5 +282,39 @@ describe('eval report PDF renderer', () => {
   it('falls back to a default colour for a bad brand colour and renders without branding', () => {
     expect(() => buildEvalReportPdf(model(3), { name: null, brandPrimaryColor: 'nope' })).not.toThrow();
     expect(() => buildEvalReportPdf(model(3), undefined)).not.toThrow();
+  });
+});
+
+describe('eval report PDF: duration (mm:ss) metrics', () => {
+  const mile = (over: Partial<EvalMetricResult> = {}): EvalMetricResult => ({
+    key: null,
+    code: 'MILE_RUN',
+    label: 'Mile run',
+    value: 402.5,
+    unit: 's',
+    comparison: { kind: 'average', name: 'Average', averageValue: 410, operator: 'lte', status: 'at_or_better', distancePct: 2 },
+    collegeStandard: null,
+    collegeGauge: false,
+    trend: { change: -4.2, direction: 'improved' },
+    ...over,
+  });
+
+  it('prints the value, the average and the trend as mm:ss', () => {
+    const text = pdfText(buildEvalReportPdf(model(0, true, { metrics: [mile({ displayFormat: 'duration' })] }), org).doc);
+    expect(text).toContain('6:42.5');
+    expect(text).toContain('6:50.0');
+    expect(text).toContain('0:04.2');
+    expect(text).not.toContain('402.50 s');
+  });
+
+  it('renders a model saved before displayFormat existed exactly as before', () => {
+    const saved = mile();
+    expect(saved).not.toHaveProperty('displayFormat');
+    const text = pdfText(buildEvalReportPdf(model(0, true, { metrics: [saved] }), org).doc);
+    expect(text).toContain('402.50 s');
+    expect(text).toContain('410.00 s');
+    expect(text).toContain('4.20 s');
+    expect(text).not.toContain('6:42');
+    expect(text).toBe(pdfText(buildEvalReportPdf(model(0, true, { metrics: [mile({ displayFormat: 'decimal' })] }), org).doc));
   });
 });

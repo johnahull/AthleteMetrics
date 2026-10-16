@@ -5,7 +5,8 @@
  * Provides educational content and contextual information about athletic performance metrics
  */
 
-import { isLowerIsBetterMetric } from '@shared/analytics-types';
+import { isLowerBetterType, type MetricType } from '@shared/analytics-types';
+import { formatValueWithUnit } from '@/lib/metrics';
 
 // ============================================================================
 // Types
@@ -337,20 +338,18 @@ export function getMetricEducation(metric: string): MetricEducation | null {
 
 /**
  * Check if lower values are better for a metric
+ * @param metricType - The metric's type from the metric list; without it see resolveMetricType
  */
-export function isLowerBetterMetric(metric: string): boolean {
-  const education = METRIC_EDUCATION[metric];
-  if (education) return education.lowerIsBetter ?? false;
-  // Metrics without an education entry (e.g. COD deficit) use the shared list
-  return isLowerIsBetterMetric(metric);
+export function isLowerBetterMetric(metric: string, metricType?: MetricType): boolean {
+  return isLowerBetterType(metric, metricType);
 }
 
 /**
- * Format a metric value with appropriate units and precision
+ * Format a metric value with the metric's precision. The unit comes from the
+ * caller (metric config or the measurement row), never from this module.
  */
-export function formatMetricValue(value: number, metric: string): string {
-  const education = METRIC_EDUCATION[metric];
-  if (!education) return value.toString();
+export function formatMetricValue(value: number, metric: string, unit?: string | null): string {
+  if (!METRIC_EDUCATION[metric]) return formatValueWithUnit(value.toString(), unit);
 
   switch (metric) {
     case 'FLY10_TIME':
@@ -359,15 +358,15 @@ export function formatMetricValue(value: number, metric: string): string {
     case 'AGILITY_5105':
     case 'T_TEST':
     case 'DASH_40YD':
-      return `${value.toFixed(2)}s`;
-    case 'VERTICAL_JUMP':
-      return `${value.toFixed(1)}"`;
-    case 'TOP_SPEED':
-      return `${value.toFixed(1)} mph`;
+      return formatValueWithUnit(value.toFixed(2), unit);
     case 'RSI':
+      // Dimensionless ratio: never print a unit
       return value.toFixed(2);
+    case 'VERTICAL_JUMP':
+    case 'TOP_SPEED':
+      return formatValueWithUnit(value.toFixed(1), unit);
     default:
-      return value.toString();
+      return formatValueWithUnit(value.toString(), unit);
   }
 }
 
@@ -378,13 +377,14 @@ export function getPercentileRanking(
   value: number,
   metric: string,
   ageGroup?: string,
-  gender?: 'male' | 'female'
+  gender?: 'male' | 'female',
+  metricType?: MetricType
 ): PercentileResult | null {
   const benchmarks =
     gender === 'female' ? BENCHMARKS_FEMALE[metric] : BENCHMARKS_MALE[metric];
   if (!benchmarks) return null;
 
-  const lowerIsBetter = isLowerBetterMetric(metric);
+  const lowerIsBetter = isLowerBetterMetric(metric, metricType);
 
   // Calculate approximate percentile based on benchmarks
   let percentile: number;
@@ -474,13 +474,14 @@ export function getPercentileRanking(
 export function getBenchmarkComparison(
   value: number,
   metric: string,
-  gender?: 'male' | 'female'
+  gender?: 'male' | 'female',
+  metricType?: MetricType
 ): BenchmarkResult | null {
   const benchmarks =
     gender === 'female' ? BENCHMARKS_FEMALE[metric] : BENCHMARKS_MALE[metric];
   if (!benchmarks) return null;
 
-  const lowerIsBetter = isLowerBetterMetric(metric);
+  const lowerIsBetter = isLowerBetterMetric(metric, metricType);
   let level: BenchmarkLevel;
   let description: string;
 
@@ -519,12 +520,13 @@ export function getMetricContext(
   value: number,
   metric: string,
   athleteData: AthleteMetricData | null,
-  gender?: 'male' | 'female'
+  gender?: 'male' | 'female',
+  metricType?: MetricType
 ): MetricContext | null {
   // Validate metric exists
   if (!METRIC_EDUCATION[metric]) return null;
 
-  const lowerIsBetter = isLowerBetterMetric(metric);
+  const lowerIsBetter = isLowerBetterMetric(metric, metricType);
 
   // Calculate PR comparison
   let comparisonToPR: PRComparison | null = null;
@@ -598,7 +600,7 @@ export function getMetricContext(
   return {
     comparisonToPR,
     comparisonToRecent,
-    percentile: getPercentileRanking(value, metric, undefined, gender),
-    benchmark: getBenchmarkComparison(value, metric, gender),
+    percentile: getPercentileRanking(value, metric, undefined, gender, metricType),
+    benchmark: getBenchmarkComparison(value, metric, gender, metricType),
   };
 }

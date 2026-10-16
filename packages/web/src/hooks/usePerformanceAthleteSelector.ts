@@ -1,9 +1,10 @@
 import { useMemo } from 'react';
 import { useAthleteSelector } from './useAthleteSelector';
-import { METRIC_CONFIG } from '@shared/analytics-types';
-import type { TrendData } from '@shared/analytics-types';
-import { safeNumber } from '@shared/utils/number-conversion';
+import { isLowerBetterType, type TrendData } from '@shared/analytics-types';
+import { formatMeasurement } from '@shared/duration-format';
+import { safeNumberArray } from '@shared/utils/number-conversion';
 import { CHART_CONFIG } from '@/constants/chart-config';
+import { useMetricConfig } from '@/hooks/use-metric-config';
 
 interface UsePerformanceAthleteSelectorOptions {
   data: TrendData[];
@@ -24,18 +25,21 @@ export function usePerformanceAthleteSelector({
   maxSelection = 10,
   metric
 }: UsePerformanceAthleteSelectorOptions) {
+  const { getMetricConfig, isLoaded: isMetricConfigLoaded } = useMetricConfig();
+  const metricConfig = getMetricConfig(metric);
+  const metricType = metricConfig?.metricType;
+
   // Process athlete data with performance metrics
   const athleteOptions = useMemo(() => {
-    const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-    const lowerIsBetter = metricConfig?.metricType === 'lower_is_better';
-    const isTracking = metricConfig?.metricType === 'tracking';
+    const lowerIsBetter = isLowerBetterType(metric, metricType);
+    const isTracking = metricType === 'tracking';
 
     return data.map(trend => {
-      // Calculate best value for this athlete using safe conversion
-      const values = trend.data.map(point => safeNumber(point.value));
+      // Drop non-numeric values: as 0 they would rank first for a lower-is-better metric
+      const values = safeNumberArray(trend.data.map(point => point.value));
       // For tracking metrics, use the most recent value; otherwise use best performance
       const bestValue = isTracking
-        ? values[values.length - 1] || 0
+        ? values[values.length - 1] ?? NaN
         : lowerIsBetter
           ? Math.min(...values)
           : Math.max(...values);
@@ -52,12 +56,18 @@ export function usePerformanceAthleteSelector({
       if (isTracking) {
         return a.name.localeCompare(b.name);
       }
+      // No-data sentinel (+/-Infinity or NaN) sorts last; subtracting two of them gives NaN
+      const aOk = Number.isFinite(a.bestValue);
+      const bOk = Number.isFinite(b.bestValue);
+      if (!aOk && !bOk) return 0;
+      if (!aOk) return 1;
+      if (!bOk) return -1;
       // Sort by performance (best first)
       return lowerIsBetter
         ? a.bestValue - b.bestValue
         : b.bestValue - a.bestValue;
     });
-  }, [data, metric]);
+  }, [data, metric, metricType]);
 
   // Use base selector hook with processed data
   const selectorState = useAthleteSelector({
@@ -98,10 +108,17 @@ export function usePerformanceAthleteSelector({
     onSelectionChange(randomIds);
   };
 
-  // Get metric configuration
-  const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-  const unit = metricConfig?.unit || '';
-  const metricLabel = metricConfig?.label || metric;
+  // Duration metrics show mm:ss, so a unit suffix would be wrong
+  const isDuration = metricConfig?.displayFormat === 'duration';
+  const unit = isDuration ? '' : metricConfig?.unit ?? '';
+  const metricLabel = metricConfig?.label ?? metric;
+  // A non-finite best value (athlete with no usable data) is never shown; tracking metrics sort it by name, others sort it last
+  const formatValue = (value: number) =>
+    !Number.isFinite(value)
+      ? '\u2014'
+      : metricConfig
+      ? formatMeasurement(value, { ...metricConfig, decimalPrecision: metricConfig.decimalPrecision ?? (isDuration ? 1 : 2) })
+      : value.toFixed(2);
 
   return {
     ...selectorState,
@@ -116,9 +133,10 @@ export function usePerformanceAthleteSelector({
     selectRandom,
 
     // Metric info
-    metricConfig,
     unit,
     metricLabel,
+    formatValue,
+    isMetricConfigLoaded,
 
     // Performance-specific state
     selectedAthleteIds,

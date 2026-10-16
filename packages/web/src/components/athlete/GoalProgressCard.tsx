@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Target, CheckCircle2, XCircle, Clock, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useMetricLabels } from '@/hooks/use-metric-labels';
 import {
   Goal,
   GoalStatus,
@@ -27,6 +28,8 @@ import {
   isGoalAchieved,
 } from '@/utils/goal-utils';
 import { getMetricEducation, formatMetricValue } from '@/utils/metric-education-utils';
+import { toCalendarDate } from '@/utils/date-utils';
+import { formatMeasurement } from '@shared/duration-format';
 
 interface GoalProgressCardProps {
   goal: Goal;
@@ -41,9 +44,11 @@ export function GoalProgressCard({
   onAbandon,
   compact = false,
 }: GoalProgressCardProps) {
-  const progress = calculateGoalProgress(goal);
+  const { getUnit, formats, types: metricTypes } = useMetricLabels();
+  const unit = getUnit(goal.metric);
+  const progress = calculateGoalProgress(goal, metricTypes?.[goal.metric]);
   const daysRemaining = getDaysRemaining(goal.targetDate);
-  const achieved = isGoalAchieved(goal);
+  const achieved = isGoalAchieved(goal, metricTypes?.[goal.metric]);
   const education = getMetricEducation(goal.metric);
   const metricName = education?.name || goal.metric;
 
@@ -94,12 +99,14 @@ export function GoalProgressCard({
     );
   };
 
-  // Format current value display
+  // Format current value display (m:ss for a duration metric)
   const formatCurrentDisplay = () => {
     if (goal.goalType === GoalType.CONSISTENCY) {
       return String(goal.currentValue);
     }
-    return formatMetricValue(goal.currentValue, goal.metric);
+    return formats[goal.metric]
+      ? formatMeasurement(goal.currentValue, formats[goal.metric])
+      : formatMetricValue(goal.currentValue, goal.metric, unit);
   };
 
   // Format days remaining text
@@ -117,7 +124,8 @@ export function GoalProgressCard({
 
   // Format target date for display
   const formatTargetDate = () => {
-    const date = new Date(goal.targetDate);
+    const date = toCalendarDate(goal.targetDate);
+    if (!date) return '';
     return date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
@@ -151,7 +159,7 @@ export function GoalProgressCard({
           <div>
             <p className="text-sm text-gray-500">Target</p>
             <p data-testid="goal-target" className="text-xl font-bold text-gray-900">
-              {formatGoalTarget(goal)}
+              {formatGoalTarget(goal, unit, formats[goal.metric])}
             </p>
           </div>
           <div className="text-right">
