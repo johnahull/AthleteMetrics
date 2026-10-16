@@ -24,8 +24,11 @@ import { isLowerBetter } from "../utils/metric-type";
  */
 async function targetNotBetterMessage(goal: { goalType?: string; metric: string; targetValue: unknown; baselineValue: unknown }): Promise<string | null> {
   if (goal.goalType !== 'target_value') return null;
+  // Number(null) is 0, so a missing value must not be coerced: nothing to compare
+  if (goal.targetValue == null || goal.baselineValue == null) return null;
   const target = Number(goal.targetValue);
   const baseline = Number(goal.baselineValue);
+  if (!Number.isFinite(target) || !Number.isFinite(baseline)) return null;
   const lowerIsBetter = await isLowerBetter(goal.metric);
   if (lowerIsBetter ? target >= baseline : target <= baseline) {
     return `Target must be better than the baseline (${lowerIsBetter ? 'lower' : 'higher'} for this metric)`;

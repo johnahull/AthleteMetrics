@@ -728,6 +728,13 @@ describe('Goal Routes', () => {
         expect(response.status).toBe(200);
       });
 
+      it('accepts a target value goal with no stored baseline (cannot compare)', async () => {
+        vi.mocked(storage.getGoal).mockResolvedValue({ ...existingGoal, metric: 'MILE_RUN', goalType: 'improvement_percentage', targetValue: '10', baselineValue: null });
+        vi.mocked(storage.updateGoal).mockResolvedValue(existingGoal as any);
+        const response = await request(athleteApp).put(`/api/goals/${mockGoalId}`).send({ goalType: 'target_value', targetValue: 400 });
+        expect(response.status).toBe(200);
+      });
+
       it('does not check improvement percentage goals', async () => {
         vi.mocked(storage.getGoal).mockResolvedValue({ ...existingGoal, goalType: 'improvement_percentage', targetValue: '10' });
         vi.mocked(storage.updateGoal).mockResolvedValue(existingGoal as any);
