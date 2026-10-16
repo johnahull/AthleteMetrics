@@ -1,8 +1,10 @@
 import { useMemo } from 'react';
 import { useAthleteSelector } from './useAthleteSelector';
-import type { TrendData } from '@shared/analytics-types';
+import { isLowerBetterType, type TrendData } from '@shared/analytics-types';
+import { formatMeasurement } from '@shared/duration-format';
 import { safeNumber } from '@shared/utils/number-conversion';
 import { CHART_CONFIG } from '@/constants/chart-config';
+import { useMetricConfig } from '@/hooks/use-metric-config';
 
 interface UsePerformanceAthleteSelectorOptions {
   data: TrendData[];
@@ -23,12 +25,14 @@ export function usePerformanceAthleteSelector({
   maxSelection = 10,
   metric
 }: UsePerformanceAthleteSelectorOptions) {
+  const { getMetricConfig } = useMetricConfig();
+  const metricConfig = getMetricConfig(metric);
+  const metricType = metricConfig?.metricType;
+
   // Process athlete data with performance metrics
   const athleteOptions = useMemo(() => {
-    // shortcut: no metric type reaches this hook, so every metric ranks higher-is-better (unchanged
-    // behaviour; the old static label map was always empty). Pass the metric type in to fix.
-    const lowerIsBetter = false;
-    const isTracking = false;
+    const lowerIsBetter = isLowerBetterType(metric, metricType);
+    const isTracking = metricType === 'tracking';
 
     return data.map(trend => {
       // Calculate best value for this athlete using safe conversion
@@ -57,7 +61,7 @@ export function usePerformanceAthleteSelector({
         ? a.bestValue - b.bestValue
         : b.bestValue - a.bestValue;
     });
-  }, [data, metric]);
+  }, [data, metric, metricType]);
 
   // Use base selector hook with processed data
   const selectorState = useAthleteSelector({
@@ -98,8 +102,12 @@ export function usePerformanceAthleteSelector({
     onSelectionChange(randomIds);
   };
 
-  const unit = '';
-  const metricLabel = metric;
+  // Duration metrics show mm:ss, so a unit suffix would be wrong
+  const isDuration = metricConfig?.displayFormat === 'duration';
+  const unit = isDuration ? '' : metricConfig?.unit ?? '';
+  const metricLabel = metricConfig?.label ?? metric;
+  const formatValue = (value: number) =>
+    isDuration && metricConfig ? formatMeasurement(value, metricConfig) : `${value.toFixed(2)}${unit}`;
 
   return {
     ...selectorState,
@@ -116,6 +124,7 @@ export function usePerformanceAthleteSelector({
     // Metric info
     unit,
     metricLabel,
+    formatValue,
 
     // Performance-specific state
     selectedAthleteIds,

@@ -40,6 +40,7 @@ export function AthleteSelector({
     selectAll,
     metricLabel,
     unit,
+    formatValue,
     athleteColorMap
   } = usePerformanceAthleteSelector({
     data,
@@ -213,7 +214,7 @@ export function AthleteSelector({
                     <div className="text-xs text-gray-600 ml-2">
                       {'bestValue' in athlete && athlete.bestValue !== undefined && (
                         <span className="font-mono">
-                          {athlete.bestValue.toFixed(2)}{unit}
+                          {formatValue(athlete.bestValue)}
                         </span>
                       )}
                     </div>
@@ -235,7 +236,7 @@ export function AthleteSelector({
       {/* Footer */}
       <div className="mt-4 pt-3 border-t text-xs text-gray-500 flex justify-between">
         <span>
-          Best {metricLabel} performers shown first
+          Best {metricLabel}{unit && ` (${unit})`} performers shown first
         </span>
         <span>
           {selectedAthleteIds.length}/{maxSelection} selected
