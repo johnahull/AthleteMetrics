@@ -22,10 +22,3 @@ export function groupedCodes(codes: string[], metricGroups?: MetricGroup[]): Dis
   if (rest.length > 0) out.push({ group: null, label: null, codes: rest });
   return out;
 }
-
-/** code -> its group id and label, for charts that put a heading at each group change. */
-export function groupLookup(metricGroups?: MetricGroup[]): (code: string) => { group: string; label: string } | undefined {
-  const map = new Map<string, { group: string; label: string }>();
-  for (const g of metricGroups ?? []) for (const c of g.codes) map.set(c, { group: g.group, label: g.label });
-  return (code) => map.get(code);
-}

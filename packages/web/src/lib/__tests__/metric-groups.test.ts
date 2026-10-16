@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { groupedCodes, groupLookup } from '../metric-groups';
+import { groupedCodes } from '../metric-groups';
 
 const metricGroups = [
   { group: 'speed', label: 'Speed', codes: ['DASH_10YD', 'DASH_20YD'] },
@@ -28,14 +28,5 @@ describe('groupedCodes', () => {
 
   it('returns nothing for no codes', () => {
     expect(groupedCodes([], metricGroups)).toEqual([]);
-  });
-});
-
-describe('groupLookup', () => {
-  it('maps a code to its group and label', () => {
-    const find = groupLookup(metricGroups);
-    expect(find('DASH_20YD')).toEqual({ group: 'speed', label: 'Speed' });
-    expect(find('NOPE')).toBeUndefined();
-    expect(groupLookup(undefined)('DASH_20YD')).toBeUndefined();
   });
 });
