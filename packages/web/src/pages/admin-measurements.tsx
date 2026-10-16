@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { format } from "date-fns";
 import { toCalendarDate } from "@/utils/date-utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -574,7 +575,7 @@ export default function AdminMeasurementsPage() {
       try {
         const link = document.createElement('a');
         link.href = url;
-        link.download = `measurements-${new Date().toISOString().split('T')[0]}.csv`;
+        link.download = `measurements-${format(new Date(), 'yyyy-MM-dd')}.csv`;
         link.click();
       } finally {
         // Always revoke the object URL to prevent memory leaks

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { format } from "date-fns";
 import { toCalendarDate } from "@/utils/date-utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -439,7 +440,7 @@ export default function Publish() {
     // Save the PDF. Sanitize the label before using it in the filename:
     // custom org metric labels can contain `/`, `:`, `*`, `?`, `|`, `\`, `<`,
     // `>`, `"` which are invalid filename characters on Windows/macOS.
-    const dateStr = filters.dateFrom ? filters.dateFrom : new Date().toISOString().split('T')[0];
+    const dateStr = filters.dateFrom ? filters.dateFrom : format(new Date(), 'yyyy-MM-dd');
     const safeLabel = getMetricLabel(filters.metric).replace(/[/\\:*?"<>|]/g, '-');
     const fileName = `${safeLabel}_Results_${dateStr}.pdf`;
     pdf.save(fileName);
