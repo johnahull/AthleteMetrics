@@ -115,8 +115,13 @@ export function useChartCalculations({
   // Memoized performance quadrant labels
   const quadrantLabels = useMemo(() => {
     if (!scatterData) return null;
-    return getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric);
-  }, [scatterData?.xMetric, scatterData?.yMetric]);
+    return getPerformanceQuadrantLabels(
+      scatterData.xMetric,
+      scatterData.yMetric,
+      getMetricConfig(scatterData.xMetric)?.metricType,
+      getMetricConfig(scatterData.yMetric)?.metricType
+    );
+  }, [scatterData?.xMetric, scatterData?.yMetric, getMetricConfig]);
 
   return {
     scatterData,

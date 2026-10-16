@@ -5,7 +5,7 @@
  * Provides educational content and contextual information about athletic performance metrics
  */
 
-import { isLowerIsBetterMetric, type MetricType } from '@shared/analytics-types';
+import { isLowerBetterType, type MetricType } from '@shared/analytics-types';
 import { formatValueWithUnit } from '@/lib/metrics';
 
 // ============================================================================
@@ -338,14 +338,10 @@ export function getMetricEducation(metric: string): MetricEducation | null {
 
 /**
  * Check if lower values are better for a metric
- * @param metricType - The metric's type from the metric list; without it the built-in lists decide
+ * @param metricType - The metric's type from the metric list; without it see resolveMetricType
  */
 export function isLowerBetterMetric(metric: string, metricType?: MetricType): boolean {
-  if (metricType) return metricType === 'lower_is_better';
-  const education = METRIC_EDUCATION[metric];
-  if (education) return education.lowerIsBetter ?? false;
-  // Metrics without an education entry (e.g. COD deficit) use the shared list
-  return isLowerIsBetterMetric(metric);
+  return isLowerBetterType(metric, metricType);
 }
 
 /**

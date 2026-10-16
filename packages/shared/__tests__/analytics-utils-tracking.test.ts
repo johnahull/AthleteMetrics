@@ -39,6 +39,12 @@ describe('Analytics Utils with Tracking Metrics', () => {
       expect(result).toBe(7.0); // max value (as proxy for latest)
     });
 
+    it('uses the metric type when given: MILE_RUN lower_is_better returns min', () => {
+      expect(getBestPerformanceValue('MILE_RUN', mockStats, 'lower_is_better')).toBe(3.0);
+      expect(getBestPerformanceValue('MILE_RUN', mockStats)).toBe(7.0);
+      expect(getBestPerformanceValue('FLY10_TIME', mockStats, 'higher_is_better')).toBe(7.0);
+    });
+
     it('should return 0 for empty stats', () => {
       const emptyStats: StatisticalSummary = {
         count: 0,

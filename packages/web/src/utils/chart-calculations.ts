@@ -7,7 +7,7 @@
  */
 
 import type { TrendData, StatisticalSummary, ChartConfiguration, MetricType } from '@shared/analytics-types';
-import { getMetricTypeWithFallback } from '@shared/analytics-types';
+import { resolveMetricType } from '@shared/analytics-types';
 import type { ChartOptions } from 'chart.js';
 import type {
   ChartPoint,
@@ -30,12 +30,18 @@ import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
  *
  * @param xMetric - X-axis metric key
  * @param yMetric - Y-axis metric key
+ * @param xType - X metric's type from the metric list; without it see resolveMetricType
+ * @param yType - Y metric's type from the metric list; without it see resolveMetricType
  * @returns Object with quadrant labels and colors based on metric interpretation
  */
-export function getPerformanceQuadrantLabels(xMetric: string, yMetric: string): PerformanceQuadrantLabels {
-  // Use shared fallback logic for metric types
-  const xMetricType = getMetricTypeWithFallback(xMetric);
-  const yMetricType = getMetricTypeWithFallback(yMetric);
+export function getPerformanceQuadrantLabels(
+  xMetric: string,
+  yMetric: string,
+  xType?: MetricType,
+  yType?: MetricType
+): PerformanceQuadrantLabels {
+  const xMetricType = resolveMetricType(xMetric, xType);
+  const yMetricType = resolveMetricType(yMetric, yType);
 
   const xIsTracking = xMetricType === 'tracking';
   const yIsTracking = yMetricType === 'tracking';

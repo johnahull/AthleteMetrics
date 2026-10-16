@@ -434,4 +434,144 @@ describe('GoalCreationWizard', () => {
       );
     });
   });
+
+  describe('persisted improvement target', () => {
+    async function fillImprovementGoal(user: ReturnType<typeof userEvent.setup>, metric: RegExp) {
+      await user.click(screen.getByRole('button', { name: metric }));
+      await user.click(screen.getByText(/improvement percentage/i));
+      await user.type(screen.getByLabelText(/improvement percentage/i), '10');
+      const futureDate = new Date();
+      futureDate.setMonth(futureDate.getMonth() + 3);
+      const dateInput = screen.getByLabelText(/target date/i);
+      await user.clear(dateInput);
+      await user.type(dateInput, futureDate.toISOString().split('T')[0]);
+    }
+
+    const dashMeasurements = [
+      { metric: 'DASH_10YD', value: 2.0, date: '2024-01-01' },
+      { metric: 'DASH_10YD', value: 1.9, date: '2024-02-01' },
+    ];
+
+    it('saves the fastest time as the baseline for a built-in time with no metric types (DASH_10YD)', async () => {
+      const onCreateGoal = vi.fn();
+      const user = userEvent.setup();
+      render(
+        <GoalCreationWizard
+          measurements={dashMeasurements}
+          availableMetrics={['DASH_10YD']}
+          metricTypes={undefined}
+          onCreateGoal={onCreateGoal}
+          onCancel={vi.fn()}
+        />
+      );
+
+      await fillImprovementGoal(user, /DASH_10YD/);
+      await user.click(screen.getByRole('button', { name: /create goal/i }));
+
+      expect(onCreateGoal).toHaveBeenCalledWith(
+        expect.objectContaining({ metric: 'DASH_10YD', targetValue: 10, baselineValue: 1.9 })
+      );
+    });
+
+    it('keeps Create Goal disabled while the metric list is loading', async () => {
+      const onCreateGoal = vi.fn();
+      const user = userEvent.setup();
+      render(
+        <GoalCreationWizard
+          measurements={dashMeasurements}
+          availableMetrics={['DASH_10YD']}
+          metricTypes={{}}
+          metricTypesLoading
+          onCreateGoal={onCreateGoal}
+          onCancel={vi.fn()}
+        />
+      );
+
+      await fillImprovementGoal(user, /DASH_10YD/);
+
+      expect(screen.getByRole('button', { name: /loading metrics/i })).toBeDisabled();
+    });
+
+    it('keeps Create Goal disabled and says why when the metric list failed to load', async () => {
+      const user = userEvent.setup();
+      render(
+        <GoalCreationWizard
+          measurements={dashMeasurements}
+          availableMetrics={['DASH_10YD']}
+          metricTypes={{}}
+          metricTypesError
+          onCreateGoal={vi.fn()}
+          onCancel={vi.fn()}
+        />
+      );
+
+      await fillImprovementGoal(user, /DASH_10YD/);
+
+      expect(screen.getByRole('button', { name: /metrics unavailable/i })).toBeDisabled();
+    });
+
+    const sprintMeasurements = [
+      { metric: 'ORG_SPRINT', value: 5.5, date: '2024-01-01' },
+      { metric: 'ORG_SPRINT', value: 5.0, date: '2024-02-01' },
+      { metric: 'ORG_OTHER', value: 3, date: '2024-02-01' },
+    ];
+
+    it('saves the fastest time for a custom lower-is-better code picked while the list was loading', async () => {
+      const onCreateGoal = vi.fn();
+      const user = userEvent.setup();
+      const props = {
+        measurements: sprintMeasurements,
+        availableMetrics: ['ORG_SPRINT'],
+        onCreateGoal,
+        onCancel: vi.fn(),
+      };
+      const { rerender } = render(<GoalCreationWizard {...props} metricTypes={{}} metricTypesLoading />);
+
+      await fillImprovementGoal(user, /ORG_SPRINT/);
+      rerender(
+        <GoalCreationWizard {...props} metricTypes={{ ORG_SPRINT: 'lower_is_better' }} metricTypesLoading={false} />
+      );
+      await user.click(screen.getByRole('button', { name: /create goal/i }));
+
+      expect(onCreateGoal).toHaveBeenCalledWith(
+        expect.objectContaining({ metric: 'ORG_SPRINT', targetValue: 10, baselineValue: 5.0 })
+      );
+    });
+
+    it('hides a measured code with no metric type once the list has loaded', () => {
+      render(
+        <GoalCreationWizard
+          measurements={sprintMeasurements}
+          availableMetrics={['ORG_SPRINT', 'ORG_OTHER', 'VERTICAL_JUMP', 'DASH_10YD']}
+          metricTypes={{ ORG_SPRINT: 'lower_is_better' }}
+          onCreateGoal={vi.fn()}
+          onCancel={vi.fn()}
+        />
+      );
+
+      expect(screen.getByRole('button', { name: /ORG_SPRINT/ })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /ORG_OTHER/ })).not.toBeInTheDocument();
+      // Built-ins keep their known direction
+      expect(screen.getByRole('button', { name: /Vertical Jump/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /DASH_10YD/ })).toBeInTheDocument();
+    });
+
+    it('blocks a code picked while loading that has no metric type once loaded', async () => {
+      const onCreateGoal = vi.fn();
+      const user = userEvent.setup();
+      const props = {
+        measurements: sprintMeasurements,
+        availableMetrics: ['ORG_SPRINT'],
+        onCreateGoal,
+        onCancel: vi.fn(),
+      };
+      const { rerender } = render(<GoalCreationWizard {...props} metricTypes={{}} metricTypesLoading />);
+
+      await fillImprovementGoal(user, /ORG_SPRINT/);
+      rerender(<GoalCreationWizard {...props} metricTypes={{}} metricTypesLoading={false} />);
+
+      expect(screen.getByRole('button', { name: /create goal/i })).toBeDisabled();
+      expect(screen.getByText(/not available for goals/i)).toBeInTheDocument();
+    });
+  });
 });

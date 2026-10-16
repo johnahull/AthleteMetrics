@@ -21,7 +21,7 @@ import ScatterChart from "@/components/charts/scatter-chart";
 import { StatisticsSummaryCard } from "@/components/analytics/StatisticsSummaryCard";
 import { formatValueWithUnit } from "@/lib/metrics";
 import { Gender, SoccerPosition, type Team, type Measurement } from "@shared/schema";
-import { isLowerIsBetterMetric } from "@shared/analytics-types";
+import { isLowerBetterType } from "@shared/analytics-types";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { useMetricLabels } from "@/hooks/use-metric-labels";
 import { formatMeasurement } from "@shared/duration-format";
@@ -42,7 +42,7 @@ const editMeasurementSchema = z.object({
 
 export default function Analytics() {
   const labels = useContextualLabels();
-  const { getLabel: getMetricLabel, formats: metricFormats } = useMetricLabels();
+  const { getLabel: getMetricLabel, formats: metricFormats, types: metricTypes } = useMetricLabels();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -294,7 +294,7 @@ export default function Analytics() {
     if (data.length === 0) return { p25: 0, p50: 0, p75: 0, p90: 0 };
 
     // For time-based metrics, lower values are better, so we need to reverse the percentile logic
-    const isTimeBased = isLowerIsBetterMetric(metric);
+    const isTimeBased = isLowerBetterType(metric, metricTypes[metric]);
     const sorted = [...data].sort((a, b) => a - b);
 
     const getPercentile = (p: number) => {

@@ -62,6 +62,10 @@ interface GoalCreationWizardProps {
   durationMetrics?: string[];
   /** Better/worse direction per metric code; without an entry the built-in lists decide */
   metricTypes?: Record<string, MetricType>;
+  /** True while the metric list (and so metricTypes) is loading: the saved baseline depends on direction */
+  metricTypesLoading?: boolean;
+  /** True when the metric list failed to load: no direction is known, so no goal can be saved */
+  metricTypesError?: boolean;
   onCreateGoal: (goal: GoalCreationData) => void | Promise<void>;
   onCancel: () => void;
 }
@@ -73,9 +77,17 @@ export function GoalCreationWizard({
   availableMetrics,
   durationMetrics,
   metricTypes,
+  metricTypesLoading,
+  metricTypesError,
   onCreateGoal,
   onCancel,
 }: GoalCreationWizardProps) {
+  // Once the list has loaded, a code with no type that is not a built-in has no known direction, so no goal for it
+  const hasDirection = (metric: string) =>
+    !metricTypes || metricTypesLoading || !!metricTypes[metric] ||
+    !!getMetricEducation(metric) || isLowerBetterMetric(metric);
+  const pickableMetrics = availableMetrics.filter(hasDirection);
+
   const [currentStep, setCurrentStep] = useState<WizardStep>(1);
   const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
   const { getUnit } = useMetricLabels();
@@ -85,6 +97,9 @@ export function GoalCreationWizard({
   const [targetDate, setTargetDate] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<{ target?: string; date?: string; count?: string }>({});
+  // A code picked while loading can turn out to have no direction
+  const metricUnavailable = !!selectedMetric && !hasDirection(selectedMetric);
+  const submitBlocked = metricTypesLoading || metricTypesError || metricUnavailable;
 
   // Get current performance for selected metric
   const currentPerformance = useMemo(() => {
@@ -114,8 +129,8 @@ export function GoalCreationWizard({
   // Get smart suggestions
   const suggestions = useMemo(() => {
     if (!selectedMetric) return [];
-    return suggestGoals(measurements, selectedMetric);
-  }, [selectedMetric, measurements]);
+    return suggestGoals(measurements, selectedMetric, metricTypes?.[selectedMetric]);
+  }, [selectedMetric, measurements, metricTypes]);
 
   // Validate target value
   const validateTargetValue = (value: string): string | null => {
@@ -229,7 +244,7 @@ export function GoalCreationWizard({
 
   // Handle form submission
   const handleSubmit = async () => {
-    if (!selectedMetric || !selectedGoalType || !currentPerformance) return;
+    if (!selectedMetric || !selectedGoalType || !currentPerformance || submitBlocked) return;
 
     setIsSubmitting(true);
 
@@ -286,7 +301,7 @@ export function GoalCreationWizard({
           <div className="space-y-4">
             <h3 className="text-lg font-medium">Select a Metric</h3>
             <div className="grid gap-2">
-              {availableMetrics.map((metric) => {
+              {pickableMetrics.map((metric) => {
                 const education = getMetricEducation(metric);
                 return (
                   <Button
@@ -480,6 +495,12 @@ export function GoalCreationWizard({
               )}
             </div>
 
+            {metricUnavailable && (
+              <p className="text-sm text-red-600" role="alert">
+                This metric is not available for goals. Go back and pick another metric.
+              </p>
+            )}
+
             {/* Action Buttons */}
             <div className="flex gap-2 pt-4">
               <Button variant="ghost" onClick={() => setCurrentStep(2)}>
@@ -489,7 +510,7 @@ export function GoalCreationWizard({
               <Button
                 className="flex-1"
                 onClick={handleSubmit}
-                disabled={!isFormValid || isSubmitting}
+                disabled={!isFormValid || isSubmitting || submitBlocked}
               >
                 {isSubmitting ? (
                   <>
@@ -499,6 +520,13 @@ export function GoalCreationWizard({
                     />
                     Creating...
                   </>
+                ) : metricTypesLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />
+                    Loading metrics…
+                  </>
+                ) : metricTypesError ? (
+                  'Metrics unavailable, try again later'
                 ) : (
                   <>
                     <CheckCircle className="h-4 w-4 mr-2" />

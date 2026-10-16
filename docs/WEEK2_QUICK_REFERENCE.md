@@ -301,6 +301,8 @@ import '@/lib/chart-setup'; // Registers Chart.js components
 
 **Problem**: Times showing "declining" when they're improving
 
+> **Update:** direction now comes from the metric's own `metricType` (site or custom metric row); see `resolveMetricType` in `packages/shared/analytics-types.ts` (web) and `packages/api/utils/metric-type.ts` (server). The list below is only the fallback when no type is known.
+
 **Solution**: Verify metric is in `LOWER_IS_BETTER_METRICS` array:
 
 ```typescript

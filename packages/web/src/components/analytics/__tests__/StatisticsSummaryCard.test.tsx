@@ -22,6 +22,7 @@ vi.mock('@/hooks/use-metric-labels', () => ({
     getLabel: (code: string) => METRIC_LABEL_FIXTURE[code] ?? code,
     getUnit: (code: string) => ({ VERTICAL_JUMP: 'in', FLY10_TIME: 's', DASH_40YD: 's' } as Record<string, string>)[code] ?? '',
     formats: { MILE_RUN: { unit: 's', displayFormat: 'duration', decimalPrecision: 1 } },
+    types: { ORG_SPRINT: 'lower_is_better', FLY10_TIME: 'lower_is_better', VERTICAL_JUMP: 'higher_is_better' },
     isLoading: false,
   }),
 }));
@@ -396,6 +397,17 @@ describe('StatisticsSummaryCard', () => {
       expect(screen.getAllByText('6:46.5').length).toBeGreaterThanOrEqual(2); // mean and median
       expect(screen.getByText('6:42.5 - 6:50.5')).toBeInTheDocument();
       expect(screen.queryByText(/406\.5/)).toBeNull();
+    });
+  });
+
+  describe('metric direction', () => {
+    it('reads the direction from the metric list when no metricType prop is passed', () => {
+      // ORG_SPRINT is a custom time, lower is better only per the metric list
+      const measurements = [4.1, 4.3, 4.5, 4.7].map((v) => createTestMeasurement({ metric: 'ORG_SPRINT', value: String(v), units: 's' }));
+      render(<StatisticsSummaryCard measurements={measurements} metric="ORG_SPRINT" />);
+
+      expect(screen.getByText('Q1 (25th)')).toHaveTextContent('(Best)');
+      expect(screen.getByText('Q3 (75th)')).toHaveTextContent('(Worst)');
     });
   });
 });

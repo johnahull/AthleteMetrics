@@ -13,6 +13,8 @@ export interface UseMetricLabelsResult {
   /** Better/worse direction per metric code, including metrics outside the built-in lists */
   types: Record<string, MetricType>;
   isLoading: boolean;
+  /** Set when the metric list failed to load: `types` is then empty, so direction is unknown */
+  error: Error | null;
 }
 
 /**
@@ -48,7 +50,7 @@ export function splitMetricCode(code: string): string {
  * to render a skeleton until labels resolve.
  */
 export function useMetricLabels(): UseMetricLabelsResult {
-  const { metrics, isLoading } = useAvailableMetrics();
+  const { metrics, isLoading, error } = useAvailableMetrics();
 
   const labels = useMemo(
     () => Object.fromEntries(metrics.map((m) => [m.code, m.label])),
@@ -82,5 +84,5 @@ export function useMetricLabels(): UseMetricLabelsResult {
     [metrics],
   );
 
-  return { labels, getLabel, getUnit, formats, types, isLoading };
+  return { labels, getLabel, getUnit, formats, types, isLoading, error };
 }

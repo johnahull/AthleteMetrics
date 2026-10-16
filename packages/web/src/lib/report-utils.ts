@@ -3,23 +3,14 @@
  * Extracted from TeamReportView to follow DRY principles
  */
 
-import { getMetricTypeWithFallback, type MetricType } from '@shared/analytics-types';
+import { isLowerBetterType, type MetricType } from '@shared/analytics-types';
 
 /**
  * Determine if lower values are better for a metric
- * Uses the metric's type from the metric list when given, otherwise the
- * canonical fallback logic from analytics-types
+ * Uses the metric's type from the metric list when given (see resolveMetricType)
  */
 export function isLowerBetter(metricCode: string, metricType?: MetricType): boolean {
-  return (metricType ?? getMetricTypeWithFallback(metricCode)) === 'lower_is_better';
-}
-
-/**
- * Determine if a metric is a tracking-only metric (no better/worse direction)
- * Uses the canonical fallback logic from analytics-types
- */
-export function isTrackingMetric(metricCode: string): boolean {
-  return getMetricTypeWithFallback(metricCode) === 'tracking';
+  return isLowerBetterType(metricCode, metricType);
 }
 
 /**

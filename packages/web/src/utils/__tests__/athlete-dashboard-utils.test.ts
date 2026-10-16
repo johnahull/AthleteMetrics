@@ -147,3 +147,20 @@ describe('athlete-dashboard-utils — metric direction from the metric list', ()
     expect(pr.value).toBe(1.5);
   });
 });
+
+describe('athlete-dashboard-utils — no direction guess from the code name', () => {
+  it('treats a code with TIME in its name but no type as higher-is-better (ORG_HANG_TIME)', () => {
+    const hang = [m('ORG_HANG_TIME', 0.8, '2024-01-01'), m('ORG_HANG_TIME', 1.0, '2024-02-01'), m('ORG_HANG_TIME', 0.9, '2024-03-01')];
+    const timeline = generateActivityTimeline(hang);
+    // 1.0 -> 0.9 is a decline for a higher-is-better metric, so no "Improved" insight
+    expect(timeline[0].date).toBe('2024-03-01');
+    expect(timeline[0].insightType).toBeNull();
+  });
+
+  it('keeps built-in times lower-is-better without types (DASH_40YD)', () => {
+    const dash = [m('DASH_40YD', 5.0, '2024-01-01'), m('DASH_40YD', 4.8, '2024-02-01'), m('DASH_40YD', 4.9, '2024-03-01')];
+    const [pr] = calculatePersonalRecords(dash);
+    expect(pr.value).toBe(4.8);
+  });
+});
+

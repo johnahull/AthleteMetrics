@@ -16,7 +16,7 @@ import {
 import { Download, RotateCcw, Trash2, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { formatValueWithUnit } from "@/lib/metrics";
 import { Gender } from "@shared/schema";
-import { isLowerIsBetterMetric } from "@shared/analytics-types";
+import { isLowerBetterType } from "@shared/analytics-types";
 import { DATE_CONSTANTS } from "@shared/constants";
 import jsPDF from "jspdf";
 import { useToast } from "@/hooks/use-toast";
@@ -187,9 +187,7 @@ export default function Publish() {
     if (!measurements) return [];
 
     const athleteBest = new Map();
-    const isTimeBased = metricTypes[filters.metric]
-      ? metricTypes[filters.metric] === 'lower_is_better'
-      : isLowerIsBetterMetric(filters.metric);
+    const isTimeBased = isLowerBetterType(filters.metric, metricTypes[filters.metric]);
 
     measurements.forEach((measurement: any) => {
       const athleteId = measurement.user.id;
@@ -228,9 +226,7 @@ export default function Publish() {
   const allMeasurementsSorted = useMemo(() => {
     if (!measurements) return [];
 
-    const isTimeBased = metricTypes[filters.metric]
-      ? metricTypes[filters.metric] === 'lower_is_better'
-      : isLowerIsBetterMetric(filters.metric);
+    const isTimeBased = isLowerBetterType(filters.metric, metricTypes[filters.metric]);
     return [...measurements].sort((a: any, b: any) => {
       const aValue = parseFloat(a.value);
       const bValue = parseFloat(b.value);

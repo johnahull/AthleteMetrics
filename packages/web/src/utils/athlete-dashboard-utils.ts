@@ -3,8 +3,8 @@
  */
 
 import { differenceInDays, startOfMonth, endOfMonth } from 'date-fns';
-import { getMetricType, formatValueWithUnit } from '@/lib/metrics';
-import type { MetricType } from '@shared/analytics-types';
+import { formatValueWithUnit } from '@/lib/metrics';
+import { isLowerBetterType, type MetricType } from '@shared/analytics-types';
 import { formatMeasurement, type MeasurementFormat } from '@shared/duration-format';
 
 interface Measurement {
@@ -80,7 +80,7 @@ export function calculatePersonalRecords(
     if (metricMeasurements.length === 0) return;
 
     // Sort by value (ascending for time-based metrics, descending for others)
-    const isLowerBetter = getMetricType(metric, metricTypes?.[metric]) === 'lower_is_better';
+    const isLowerBetter = isLowerBetterType(metric, metricTypes?.[metric]);
 
     const sortedMeasurements = [...metricMeasurements].sort((a, b) => {
       const aValue = parseFloat(String(a.value));
@@ -154,12 +154,7 @@ export function generateActivityTimeline(
 
   return recentMeasurements.map((measurement, index) => {
     const value = parseFloat(String(measurement.value));
-    const metricType = metricTypes?.[measurement.metric];
-    const isLowerBetter = metricType
-      ? metricType === 'lower_is_better'
-      : measurement.metric.includes('TIME') ||
-        measurement.metric.includes('DASH') ||
-        measurement.metric.includes('AGILITY');
+    const isLowerBetter = isLowerBetterType(measurement.metric, metricTypes?.[measurement.metric]);
 
     // Check if this is a PR
     const currentPR = prMap.get(measurement.metric);

@@ -296,6 +296,13 @@ describe('goal-utils', () => {
       expect(consistencySuggestion).toBeDefined();
     });
 
+    it('takes direction from the metric type over the built-in education table', () => {
+      // An admin made FLY10_TIME higher-is-better: the suggested target must go up, not down
+      const suggestions = suggestGoals(measurements, 'FLY10_TIME', 'higher_is_better');
+      const targetSuggestion = suggestions.find(s => s.goalType === GoalType.TARGET_VALUE);
+      expect(targetSuggestion?.targetValue).toBeGreaterThan(1.2);
+    });
+
     it('should return empty array for unknown metric', () => {
       const suggestions = suggestGoals(measurements, 'UNKNOWN_METRIC');
       expect(suggestions).toEqual([]);
@@ -443,6 +450,24 @@ describe('goal-utils', () => {
       };
       const text = getGoalProgressText(goal);
       expect(text).toContain('0%');
+    });
+
+    it('measures progress in the direction of the metric type', () => {
+      // ORG_SPRINT is a custom time: 10.0 -> 9.5 is half of a 10% improvement
+      const goal: Goal = {
+        id: 'goal-1',
+        userId: 'user-1',
+        metric: 'ORG_SPRINT',
+        goalType: GoalType.IMPROVEMENT_PERCENTAGE,
+        targetValue: 10,
+        baselineValue: 10,
+        currentValue: 9.5,
+        targetDate: '2099-06-01',
+        status: GoalStatus.ACTIVE,
+        createdAt: '2024-01-01',
+      };
+      expect(getGoalProgressText(goal, 'lower_is_better')).toContain('50%');
+      expect(getGoalProgressText(goal)).toContain('0%');
     });
   });
 });
