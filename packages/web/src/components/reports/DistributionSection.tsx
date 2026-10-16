@@ -1,12 +1,15 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { ReportDistributions, MetricDistribution } from '@shared/report-trends-types';
 import { computeHistogram, percentBetterThanPeers } from './histogram-utils';
+import { formatMeasurement, type MeasurementFormat } from '@shared/duration-format';
 
 interface Props {
   athleteName: string;
   distributions: ReportDistributions;
   metricLabels?: Record<string, string>;
   metricUnits?: Record<string, string>;
+  /** Duration (mm:ss) metrics only; others keep their unit display */
+  metricFormats?: Record<string, MeasurementFormat>;
   /** Direction-normalized "better than X%" per metric, from the report (preferred). */
   percentiles?: Record<string, number>;
   /** Name of the peer cohort (e.g. "Varsity (Male, WR)"); falls back to "your group". */
@@ -27,6 +30,7 @@ function MetricHistogram({
   dist,
   label,
   unit,
+  format,
   percentile,
   groupLabel,
   captureCode,
@@ -35,6 +39,7 @@ function MetricHistogram({
   dist: MetricDistribution;
   label: string;
   unit?: string;
+  format?: MeasurementFormat;
   percentile?: number;
   groupLabel: string;
   captureCode: string;
@@ -49,7 +54,9 @@ function MetricHistogram({
       : percentBetterThanPeers(dist.values, dist.athleteValue, dist.direction);
 
   const betterSide = dist.direction === 'higher' ? 'farther right = better' : 'farther left = better';
-  const yourValue = `${fmt(dist.athleteValue)}${unit ? ` ${unit}` : ''}`;
+  // m:ss for a duration metric (no unit), otherwise the compact number and unit
+  const show = (n: number) => (format ? formatMeasurement(n, format) : fmt(n));
+  const yourValue = format ? show(dist.athleteValue) : `${fmt(dist.athleteValue)}${unit ? ` ${unit}` : ''}`;
 
   // SVG layout (viewBox units).
   const W = 600;
@@ -96,13 +103,13 @@ function MetricHistogram({
                 </text>
               )}
               <text x={cx} y={210} textAnchor="middle" fontSize={9} fill="#64748b">
-                {`${fmt(b.start)}–${fmt(b.end)}`}
+                {`${show(b.start)}–${show(b.end)}`}
               </text>
             </g>
           );
         })}
         <text x={W / 2} y={232} textAnchor="middle" fontSize={11} fill="#64748b">
-          {`${label}${unit ? ` (${unit})` : ''} — ${betterSide}`}
+          {`${label}${format ? ' (mm:ss)' : unit ? ` (${unit})` : ''} — ${betterSide}`}
         </text>
       </svg>
     </div>
@@ -114,6 +121,7 @@ export function DistributionSection({
   distributions,
   metricLabels = {},
   metricUnits = {},
+  metricFormats = {},
   percentiles = {},
   comparisonLabel,
 }: Props) {
@@ -136,6 +144,7 @@ export function DistributionSection({
               dist={dist}
               label={label}
               unit={metricUnits[code]}
+              format={metricFormats[code]}
               percentile={percentiles[code]}
               groupLabel={groupLabel}
               captureCode={code}

@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { formatFlyInDistance } from "@shared/fly-run-in";
+import { formatMeasurement } from "@shared/duration-format";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -58,7 +59,7 @@ export default function AthleteProfile() {
   const { user, organizationContext } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { getLabel } = useMetricLabels();
+  const { getLabel, formats: metricFormats, types: metricTypes } = useMetricLabels();
   const { metrics: metricConfigs } = useAvailableMetrics();
 
   const [showEditModal, setShowEditModal] = useState(false);
@@ -192,12 +193,12 @@ export default function AthleteProfile() {
     [measurements]
   );
   const personalRecords = useMemo(
-    () => calculatePersonalRecords(measurements),
-    [measurements]
+    () => calculatePersonalRecords(measurements, undefined, metricFormats, metricTypes),
+    [measurements, metricFormats, metricTypes]
   );
   const activityTimeline = useMemo(
-    () => generateActivityTimeline(measurements),
-    [measurements]
+    () => generateActivityTimeline(measurements, undefined, metricFormats, metricTypes),
+    [measurements, metricFormats, metricTypes]
   );
 
   // Group measurements by metric for progress cards
@@ -570,7 +571,9 @@ export default function AthleteProfile() {
                         </Badge>
                       </td>
                       <td className="py-3 px-4 text-sm font-mono text-gray-900">
-                        {measurement.value}{measurement.units}
+                        {metricFormats[measurement.metric]
+                          ? formatMeasurement(Number(measurement.value), metricFormats[measurement.metric])
+                          : <>{measurement.value}{measurement.units}</>}
                       </td>
                       <td className="py-3 px-4 text-sm font-mono text-gray-600">
                         {fly10SpeedMph(measurement.metric, parseFloat(measurement.value))?.toFixed(1) ?? '-'}

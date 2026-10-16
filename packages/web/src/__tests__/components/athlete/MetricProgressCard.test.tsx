@@ -30,6 +30,7 @@ vi.mock('@/hooks/use-metric-labels', () => ({
   useMetricLabels: () => ({
     labels: METRIC_LABEL_FIXTURE,
     getLabel: (code: string) => METRIC_LABEL_FIXTURE[code] ?? code,
+    formats: { MILE_RUN: { unit: 's', displayFormat: 'duration', decimalPrecision: 1 } },
     isLoading: false,
   }),
 }));
@@ -612,6 +613,22 @@ describe('MetricProgressCard', () => {
       expect(screen.getByText(/Improved 10% from last PR/)).toBeInTheDocument();
       expect(screen.getByText(/Best in last 90d/i)).toBeInTheDocument();
       expect(confettiMock).toHaveBeenCalled();
+    });
+  });
+
+  describe('duration (mm:ss) metrics', () => {
+    it('shows the current and PR values as mm:ss without the seconds unit', () => {
+      render(
+        <MetricProgressCard
+          metric="MILE_RUN"
+          displayName="Mile Run"
+          measurements={[{ value: 402.5, date: '2024-02-01' }]}
+          units="s"
+          metricType="lower_is_better"
+        />
+      );
+      expect(screen.getByTestId('current-value')).toHaveTextContent(/^6:42\.5$/);
+      expect(screen.getByTestId('pr-value')).toHaveTextContent(/^6:42\.5$/);
     });
   });
 });

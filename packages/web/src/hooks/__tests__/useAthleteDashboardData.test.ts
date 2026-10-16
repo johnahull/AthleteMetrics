@@ -31,6 +31,8 @@ vi.mock('../use-metric-labels', () => ({
   useMetricLabels: () => ({
     labels: METRIC_LABELS,
     getLabel: (code: string) => METRIC_LABELS[code] ?? code,
+    formats: {},
+    types: {},
     isLoading: false,
   }),
 }));

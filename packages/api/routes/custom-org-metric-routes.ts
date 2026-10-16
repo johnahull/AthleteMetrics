@@ -34,7 +34,8 @@ const modifyMetricLimiter = rateLimit({
 });
 
 // Validation schemas
-const createCustomMetricSchema = z.object({
+// displayFormat has no default here: a default in the update schema would reset it on a partial PATCH (Zod 4)
+const customMetricBaseSchema = z.object({
   label: z.string().min(1, "Label is required").max(100),
   category: z.string().max(50).optional(),
   unit: z.string().max(20).optional(),
@@ -46,7 +47,7 @@ const createCustomMetricSchema = z.object({
   validationMin: z.number().optional(),
   validationMax: z.number().optional(),
   decimalPrecision: z.number().int().min(0).max(10).optional(),
-  displayFormat: z.enum(displayFormatEnum).default('decimal'),
+  displayFormat: z.enum(displayFormatEnum).optional(),
   sportAssociations: z.array(z.string()).optional(),
   isDerived: z.boolean().optional(),
   formula: z.string().max(1000).optional(),
@@ -61,7 +62,11 @@ const createCustomMetricSchema = z.object({
   icon: z.string().max(50).optional(),
 });
 
-const updateCustomMetricSchema = createCustomMetricSchema.partial();
+export const createCustomMetricSchema = customMetricBaseSchema.extend({
+  displayFormat: z.enum(displayFormatEnum).default('decimal'),
+});
+
+export const updateCustomMetricSchema = customMetricBaseSchema.partial();
 
 export function registerCustomOrgMetricRoutes(app: Express) {
   const service = getCustomOrgMetricService();

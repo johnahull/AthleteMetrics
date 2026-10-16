@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TierBadge } from "@/components/benchmarks/TierBadge";
 import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
+import { formatMeasurement, type MeasurementFormat } from "@shared/duration-format";
 import { format } from "date-fns";
 import { captureTrendCharts } from "@/lib/chartExport";
 import { Lock } from "lucide-react";
@@ -86,6 +87,8 @@ export default function PublicReport() {
   const metricExplanations = (snapshotData.metricExplanations ?? {}) as Record<string, MetricExplanationData>;
   const metricLabels = (snapshotData.metricLabels ?? {}) as Record<string, string>;
   const metricUnits = (snapshotData.metricUnits ?? {}) as Record<string, string>;
+  // Duration (mm:ss) metrics only; absent on snapshots taken before it existed
+  const metricFormats = snapshotData.metricFormats as Record<string, MeasurementFormat> | undefined;
   const trends = snapshotData.trends as ReportTrends | undefined;
   const fvProfile = snapshotData.fvProfile as ReportFvProfile | undefined;
   const sel = resolveChartSelection(snapshotData.reportConfig);
@@ -237,7 +240,7 @@ export default function PublicReport() {
                               {stat.average !== null && stat.average !== undefined
                                 ? (isFly10Metric(stat.metric)
                                     ? formatFly10Dual(stat.average)
-                                    : `${stat.average.toFixed(2)} ${units}`)
+                                    : (metricFormats?.[stat.metric] ? formatMeasurement(stat.average, metricFormats[stat.metric]) : `${stat.average.toFixed(2)} ${units}`))
                                 : "N/A"}
                             </TableCell>
                             {benchmarkColumns.map((name) => {
@@ -247,7 +250,7 @@ export default function PublicReport() {
                                 return (
                                   <TableCell key={name}>
                                     <span style={b.tierColor ? { color: b.tierColor } : undefined}>
-                                      {`${b.minValue.toFixed(2)} - ${b.maxValue.toFixed(2)} ${units}`}
+                                      {(metricFormats?.[stat.metric] ? `${formatMeasurement(b.minValue, metricFormats[stat.metric])} - ${formatMeasurement(b.maxValue, metricFormats[stat.metric])}` : `${b.minValue.toFixed(2)} - ${b.maxValue.toFixed(2)} ${units}`)}
                                     </span>
                                   </TableCell>
                                 );
@@ -255,7 +258,7 @@ export default function PublicReport() {
                               if (b.value != null) {
                                 return (
                                   <TableCell key={name}>
-                                    {`${b.value.toFixed(2)} ${units}`}
+                                    {(metricFormats?.[stat.metric] ? formatMeasurement(b.value, metricFormats[stat.metric]) : `${b.value.toFixed(2)} ${units}`)}
                                   </TableCell>
                                 );
                               }
@@ -269,7 +272,7 @@ export default function PublicReport() {
                                     {stat.topPerformer.value !== null && stat.topPerformer.value !== undefined
                                       ? (isFly10Metric(stat.metric)
                                           ? formatFly10Dual(stat.topPerformer.value)
-                                          : `${stat.topPerformer.value.toFixed(2)} ${units}`)
+                                          : (metricFormats?.[stat.metric] ? formatMeasurement(stat.topPerformer.value, metricFormats[stat.metric]) : `${stat.topPerformer.value.toFixed(2)} ${units}`))
                                       : "N/A"}
                                   </div>
                                 </div>
@@ -281,7 +284,7 @@ export default function PublicReport() {
                               {stat.min !== null && stat.min !== undefined && stat.max !== null && stat.max !== undefined
                                 ? (isFly10Metric(stat.metric)
                                     ? `${formatFly10Dual(stat.min)} - ${formatFly10Dual(stat.max)}`
-                                    : `${stat.min.toFixed(2)} - ${stat.max.toFixed(2)} ${units}`)
+                                    : (metricFormats?.[stat.metric] ? `${formatMeasurement(stat.min, metricFormats[stat.metric])} - ${formatMeasurement(stat.max, metricFormats[stat.metric])}` : `${stat.min.toFixed(2)} - ${stat.max.toFixed(2)} ${units}`))
                                 : "N/A"}
                             </TableCell>
                           </TableRow>
@@ -332,6 +335,7 @@ export default function PublicReport() {
                 teamStatistics={teamStatistics}
                 metricLabels={metricLabels}
                 metricUnits={metricUnits}
+                metricFormats={metricFormats}
                 metricDirections={teamMetricDirections}
                 athleteRankings={athleteRankings}
                 timeframe={snapshotData.reportConfig?.timeframe}
@@ -339,7 +343,7 @@ export default function PublicReport() {
             )}
 
             {teamSel.trends && teamTrends && Object.keys(teamTrends).length > 0 && (
-              <TeamTrendSection trends={teamTrends} metricLabels={metricLabels} metricUnits={metricUnits} />
+              <TeamTrendSection trends={teamTrends} metricLabels={metricLabels} metricUnits={metricUnits} metricFormats={metricFormats} />
             )}
 
             {/* teamName falls back to comparisonLabel (the cohort filter label,
@@ -443,7 +447,7 @@ export default function PublicReport() {
                               {typeof value === 'number'
                                 ? (isFly10Metric(metricCode)
                                     ? formatFly10Dual(value)
-                                    : `${value.toFixed(2)}${unit ? ` ${unit}` : ''}`)
+                                    : (metricFormats?.[metricCode] ? formatMeasurement(value, metricFormats[metricCode]) : `${value.toFixed(2)}${unit ? ` ${unit}` : ''}`))
                                 : "N/A"}
                             </TableCell>
                             {showComparison && (
@@ -451,7 +455,7 @@ export default function PublicReport() {
                                 {typeof teamAverage === 'number'
                                   ? (isFly10Metric(metricCode)
                                       ? formatFly10Dual(teamAverage)
-                                      : `${teamAverage.toFixed(2)}${unit ? ` ${unit}` : ''}`)
+                                      : (metricFormats?.[metricCode] ? formatMeasurement(teamAverage, metricFormats[metricCode]) : `${teamAverage.toFixed(2)}${unit ? ` ${unit}` : ''}`))
                                   : "N/A"}
                               </TableCell>
                             )}
@@ -479,6 +483,7 @@ export default function PublicReport() {
                                             nextTierName={b.nextTierName}
                                             distanceToNextTier={b.distanceToNextTier}
                                             unit={unit}
+                                            format={metricFormats?.[metricCode]}
                                             showProgress={true}
                                           />
                                         </div>
@@ -487,7 +492,7 @@ export default function PublicReport() {
                                           <span className="font-medium">{b.benchmarkName}:</span>{" "}
                                           {isFly10Metric(metricCode)
                                             ? formatFly10Dual(b.benchmarkValue)
-                                            : `${b.benchmarkValue.toFixed(2)}${unit ? ` ${unit}` : ''}`}
+                                            : (metricFormats?.[metricCode] ? formatMeasurement(b.benchmarkValue, metricFormats[metricCode]) : `${b.benchmarkValue.toFixed(2)}${unit ? ` ${unit}` : ''}`)}
                                           <Badge
                                             variant={b.meetsOrExceeds ? "default" : "secondary"}
                                             className="ml-2"
@@ -539,6 +544,7 @@ export default function PublicReport() {
                           metricCode={code}
                           comparison={tiered}
                           unit={metricUnits[code]}
+                          format={metricFormats?.[code]}
                         />
                       );
                     }
@@ -549,6 +555,7 @@ export default function PublicReport() {
                         metricCode={code}
                         comparison={c}
                         unit={metricUnits[code]}
+                        format={metricFormats?.[code]}
                       />
                     ));
                   })}
@@ -561,6 +568,7 @@ export default function PublicReport() {
                 trends={trends}
                 metricLabels={metricLabels}
                 metricUnits={metricUnits}
+                metricFormats={metricFormats}
               />
             )}
 
@@ -570,6 +578,7 @@ export default function PublicReport() {
                 distributions={snapshotData.distributions}
                 metricLabels={metricLabels}
                 metricUnits={metricUnits}
+                metricFormats={metricFormats}
                 percentiles={snapshotData.athlete?.percentiles}
                 comparisonLabel={snapshotData.comparisonLabel}
               />

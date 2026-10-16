@@ -18,6 +18,7 @@ import type {
   ChartDataPoint
 } from '@shared/analytics-types';
 import { useMetricConfig } from '@/hooks/use-metric-config';
+import { formatMeasurement } from '@shared/duration-format';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 import { AthleteSelector } from './components/AthleteSelector';
 import { useAthleteSelection } from '@/hooks/useAthleteSelection';
@@ -342,13 +343,16 @@ export function RadarChart({
               actualValue = athlete?.metrics[metric] || 0;
             }
 
-            const unit = getMetricConfig(metric)?.unit || '';
-            const label = getMetricConfig(metric)?.label || metric;
+            const metricConfig = getMetricConfig(metric);
+            const unit = metricConfig?.unit || '';
+            const label = metricConfig?.label || metric;
 
             // Format value with dual display for FLY10_TIME
-            const formattedValue = isFly10Metric(metric)
-              ? formatFly10Dual(actualValue, 'time-first')
-              : `${actualValue.toFixed(2)}${unit}`;
+            const formattedValue = metricConfig?.displayFormat === 'duration'
+              ? formatMeasurement(actualValue, metricConfig)
+              : isFly10Metric(metric)
+                ? formatFly10Dual(actualValue, 'time-first')
+                : `${actualValue.toFixed(2)}${unit}`;
 
             return [
               `${label}: ${formattedValue}`,
@@ -492,14 +496,17 @@ export function RadarChart({
                 const athlete = radarData.data.find(a => a.athleteId === highlightAthlete);
                 const value = athlete?.metrics[metric];
                 const percentile = athlete?.percentileRanks?.[metric];
-                const unit = getMetricConfig(metric)?.unit || '';
-                const label = getMetricConfig(metric)?.label || metric;
+                const metricConfig = getMetricConfig(metric);
+                const unit = metricConfig?.unit || '';
+                const label = metricConfig?.label || metric;
 
                 return (
                   <div key={metric} className="space-y-1">
                     <div className="font-medium text-xs">{label}</div>
                     <div className="text-lg font-bold">
-                      {value?.toFixed(2)}{unit}
+                      {metricConfig?.displayFormat === 'duration' && value != null
+                        ? formatMeasurement(value, metricConfig)
+                        : <>{value?.toFixed(2)}{unit}</>}
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {percentile?.toFixed(0)}th percentile

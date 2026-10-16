@@ -236,3 +236,24 @@ describe('EvalReportView', () => {
     });
   });
 });
+
+describe('EvalReportBody: duration (mm:ss) metrics', () => {
+  const mile = (over: Partial<EvalMetricResultView> = {}): EvalMetricResultView => ({
+    key: null, code: 'MILE_RUN', label: 'Mile run', value: 402.5, unit: 's',
+    comparison: null, collegeStandard: null, collegeGauge: false,
+    trend: { change: -4.2, direction: 'improved' },
+    ...over,
+  });
+
+  it('shows the value and the trend as mm:ss', () => {
+    render(<EvalReportBody model={{ ...model, metrics: [mile({ displayFormat: 'duration' })] }} />);
+    expect(screen.getByTestId('eval-metric-MILE_RUN')).toHaveTextContent('6:42.5');
+    expect(screen.getByText(/Improved by 0:04.2/)).toBeInTheDocument();
+  });
+
+  it('shows a model saved before displayFormat existed as before (decimal)', () => {
+    render(<EvalReportBody model={{ ...model, metrics: [mile()] }} />);
+    expect(screen.getByTestId('eval-metric-MILE_RUN')).toHaveTextContent('402.50 s');
+    expect(screen.getByText(/Improved by 4.20 s/)).toBeInTheDocument();
+  });
+});

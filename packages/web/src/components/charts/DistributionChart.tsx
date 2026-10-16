@@ -17,6 +17,7 @@ import type {
 } from '@shared/analytics-types';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 import { useMetricConfig } from '@/hooks/use-metric-config';
+import { formatMeasurement } from '@shared/duration-format';
 
 // Register Chart.js components
 
@@ -71,13 +72,16 @@ export const DistributionChart = React.memo(function DistributionChart({
       bins[binIndex].athletes.push(metricData[index].athleteName);
     });
 
+    const config = getMetricConfig(primaryMetric);
+    const durationConfig = config?.displayFormat === 'duration' ? config : null;
+    // m:ss values carry no unit
+    const unit = durationConfig ? '' : config?.unit || '';
+    const binValue = (v: number) => (durationConfig ? formatMeasurement(v, durationConfig) : v.toFixed(2));
+
     // Create chart data
     const labels = bins.map(bin => 
-      `${bin.min.toFixed(2)} - ${bin.max.toFixed(2)}`
+      `${binValue(bin.min)} - ${binValue(bin.max)}`
     );
-
-    const config = getMetricConfig(primaryMetric);
-    const unit = config?.unit || '';
 
     const datasets = [{
       label: `${config?.label || primaryMetric} Distribution`,
@@ -178,10 +182,14 @@ export const DistributionChart = React.memo(function DistributionChart({
       datasets,
       binData: bins,
       unit,
+      durationConfig,
       primaryMetric,
       validatedStats
     };
-  }, [data, statistics, highlightAthlete]);
+  }, [data, statistics, highlightAthlete, getMetricConfig]);
+
+  const show = (value: number) =>
+    distributionData?.durationConfig ? formatMeasurement(value, distributionData.durationConfig) : `${value.toFixed(2)}${distributionData?.unit}`;
 
   // Chart options
   const options: ChartOptions<'bar'> = {
@@ -216,7 +224,7 @@ export const DistributionChart = React.memo(function DistributionChart({
               return `Range: ${minFormatted} - ${maxFormatted}`;
             }
 
-            return `Range: ${binData.min.toFixed(2)} - ${binData.max.toFixed(2)}${distributionData?.unit}`;
+            return `Range: ${show(binData.min)} - ${show(binData.max)}`;
           },
           label: (context) => {
             return `Athletes: ${context.parsed.y}`;
@@ -242,7 +250,7 @@ export const DistributionChart = React.memo(function DistributionChart({
           display: true,
           text: `${distributionData?.primaryMetric ?
             getMetricConfig(distributionData.primaryMetric)?.label :
-            'Value'} (${distributionData?.unit})`
+            'Value'} (${distributionData?.durationConfig ? 'mm:ss' : distributionData?.unit})`
         },
         ticks: {
           maxRotation: 45
@@ -284,25 +292,25 @@ export const DistributionChart = React.memo(function DistributionChart({
           <div className="text-center">
             <div className="font-medium">Mean</div>
             <div className="text-muted-foreground">
-              {distributionData.validatedStats.mean?.toFixed(2) || 'N/A'}{distributionData.unit}
+              {distributionData.validatedStats.mean != null ? show(distributionData.validatedStats.mean) : 'N/A'}
             </div>
           </div>
           <div className="text-center">
             <div className="font-medium">Median</div>
             <div className="text-muted-foreground">
-              {distributionData.validatedStats.median?.toFixed(2) || 'N/A'}{distributionData.unit}
+              {distributionData.validatedStats.median != null ? show(distributionData.validatedStats.median) : 'N/A'}
             </div>
           </div>
           <div className="text-center">
             <div className="font-medium">Std Dev</div>
             <div className="text-muted-foreground">
-              {distributionData.validatedStats.std?.toFixed(2) || 'N/A'}{distributionData.unit}
+              {distributionData.validatedStats.std != null ? show(distributionData.validatedStats.std) : 'N/A'}
             </div>
           </div>
           <div className="text-center">
             <div className="font-medium">Range</div>
             <div className="text-muted-foreground">
-              {distributionData.validatedStats.min?.toFixed(2) || 'N/A'} - {distributionData.validatedStats.max?.toFixed(2) || 'N/A'}{distributionData.unit}
+              {distributionData.validatedStats.min != null ? show(distributionData.validatedStats.min) : 'N/A'} - {distributionData.validatedStats.max != null ? show(distributionData.validatedStats.max) : 'N/A'}
             </div>
           </div>
         </div>

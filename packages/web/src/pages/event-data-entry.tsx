@@ -80,6 +80,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { format } from "date-fns";
+import { formatDurationExact } from "@shared/duration-format";
 import { EVENT_DATA_ENTRY_REGISTRATION_STATUSES } from "@shared/schema";
 import type { EventMetric, Measurement } from "@shared/schema";
 import { toCalendarDate } from "@/utils/date-utils";
@@ -252,12 +253,13 @@ export default function EventDataEntry() {
         const saved = measurementLookup.get(key);
         const existing = saved?.latest;
 
+        const isDuration = metric.metricDetails?.displayFormat === "duration";
         measurements[metric.metricCode] = {
           userId,
           metricCode: metric.metricCode,
-          value: existing?.value?.toString() || "",
+          value: existing?.value ? (isDuration ? formatDurationExact(Number(existing.value)) : existing.value.toString()) : "",
           originalValue: existing?.value ? Number(existing.value) : undefined,
-          isDuration: metric.metricDetails?.displayFormat === "duration",
+          isDuration,
           savedMeasurementId: existing?.id,
           savedCount: saved?.count ?? 0,
           isDirty: false,

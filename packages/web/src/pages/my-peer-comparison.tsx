@@ -26,6 +26,7 @@ import {
   type ComparisonScope,
 } from '@/components/athlete/PeerComparisonFilters';
 import { isLowerIsBetterMetric } from '@shared/analytics-types';
+import { useMetricLabels } from '@/hooks/use-metric-labels';
 import { PeerMetricCard, type BenchmarkStatus } from '@/components/athlete/PeerMetricCard';
 import { useAthleteMetricExplanations } from '@/hooks/useAthleteMetricExplanations';
 import { Card, CardContent } from '@/components/ui/card';
@@ -46,6 +47,7 @@ import { useQuery } from '@tanstack/react-query';
 export default function MyPeerComparisonPage() {
   const { user, isLoading: authLoading, organizationContext } = useAuth();
   const { athleteId, isLoading: contextLoading } = useAthleteContext();
+  const { types: metricTypes } = useMetricLabels();
 
   // Filter state
   const [scope, setScope] = useState<ComparisonScope>('global');
@@ -303,7 +305,11 @@ export default function MyPeerComparisonPage() {
                   result={result}
                   benchmark={benchmarksByMetric.get(result.metric)}
                   filters={effectiveFilters}
-                  lowerIsBetter={isLowerIsBetterMetric(result.metric)}
+                  lowerIsBetter={
+                    metricTypes?.[result.metric]
+                      ? metricTypes[result.metric] === 'lower_is_better'
+                      : isLowerIsBetterMetric(result.metric)
+                  }
                   explanation={metricExplanations[result.metric]}
                 />
               ))}

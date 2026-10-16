@@ -5,7 +5,7 @@
  * units, and helper functions. This eliminates duplication across components.
  */
 
-import { LOWER_IS_BETTER_METRICS } from '@shared/analytics-types';
+import { LOWER_IS_BETTER_METRICS, type MetricType } from '@shared/analytics-types';
 
 // =============================================================================
 // METRIC DISPLAY NAMES
@@ -80,9 +80,13 @@ export function getMetricUnitAbbreviation(metric: string, fallback?: string): st
 /**
  * Check if lower values are better for a metric
  * @param metric - The metric code
+ * @param metricType - The metric's type from the metric list; without it the built-in list decides
  * @returns true if lower is better, false if higher is better
  */
-export function isLowerBetter(metric: string): boolean {
+export function isLowerBetter(metric: string, metricType?: MetricType): boolean {
+  if (metricType) {
+    return metricType === 'lower_is_better';
+  }
   // Check deprecated static config first
   const configValue = METRIC_LOWER_IS_BETTER[metric];
   if (configValue !== undefined) {
@@ -101,16 +105,18 @@ export function isLowerBetter(metric: string): boolean {
  * @param metric - The metric code
  * @param oldValue - Previous measurement value
  * @param newValue - New measurement value
+ * @param metricType - The metric's type from the metric list; without it the built-in list decides
  * @returns 'improved' | 'declined' | 'unchanged'
  */
 export function getProgressionStatus(
   metric: string,
   oldValue: number,
-  newValue: number
+  newValue: number,
+  metricType?: MetricType
 ): 'improved' | 'declined' | 'unchanged' {
   if (oldValue === newValue) return 'unchanged';
 
-  const lowerIsBetter = isLowerBetter(metric);
+  const lowerIsBetter = isLowerBetter(metric, metricType);
   const improved = lowerIsBetter ? newValue < oldValue : newValue > oldValue;
 
   return improved ? 'improved' : 'declined';

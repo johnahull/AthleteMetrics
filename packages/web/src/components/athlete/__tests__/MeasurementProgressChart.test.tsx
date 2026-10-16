@@ -17,6 +17,7 @@ vi.mock('react-chartjs-2', () => ({
       <div data-testid="chart-data-points">{data.datasets?.[0]?.data?.length || 0}</div>
       <div data-testid="chart-labels">{data.labels?.length || 0}</div>
       <div data-testid="chart-dataset-label">{data.datasets?.[0]?.label || ''}</div>
+      <div data-testid="chart-data-values">{data.datasets?.[0]?.data?.join(',') || ''}</div>
     </div>
   ))
 }));
@@ -24,12 +25,15 @@ vi.mock('react-chartjs-2', () => ({
 const METRIC_LABELS: Record<string, string> = {
   FLY10_TIME: '10-Yard Fly Time',
   VERTICAL_JUMP: 'Vertical Jump',
+  MILE_RUN: 'Mile Run',
 };
 
 vi.mock('@/hooks/use-metric-labels', () => ({
   useMetricLabels: () => ({
     labels: METRIC_LABELS,
     getLabel: (code: string) => METRIC_LABELS[code] ?? code,
+    // MILE_RUN is not in the hard-coded lower-is-better list: only its type says lower is better
+    types: { MILE_RUN: 'lower_is_better' },
     isLoading: false,
   }),
 }));
@@ -312,6 +316,23 @@ describe('MeasurementProgressChart', () => {
 
       // 3 measurements on 2 dates -> should show 2 data points (best per date)
       expect(screen.getByTestId('chart-data-points')).toHaveTextContent('2');
+    });
+
+    it('keeps the fastest time per date for a lower-is-better metric outside the built-in list', () => {
+      const mileMeasurements: Measurement[] = [
+        createMockMeasurement({ id: 'm1', metric: 'MILE_RUN', value: '400', date: '2024-01-10' }),
+        createMockMeasurement({ id: 'm2', metric: 'MILE_RUN', value: '360', date: '2024-01-10' }),
+      ];
+
+      render(
+        <MeasurementProgressChart
+          measurements={mileMeasurements}
+          showBestOnly={true}
+          onShowBestOnlyChange={() => {}}
+        />
+      );
+
+      expect(screen.getByTestId('chart-data-values')).toHaveTextContent('360');
     });
 
     it('should default to showing all when showBestOnly prop is not provided', () => {

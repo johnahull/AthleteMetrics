@@ -151,3 +151,14 @@ describe('BenchmarkStandingBar', () => {
     });
   });
 });
+
+describe('BenchmarkStandingBar: duration (mm:ss) metric', () => {
+  it('shows the athlete and benchmark values as m:ss', () => {
+    const format = { unit: 's', displayFormat: 'duration' as const, decimalPrecision: 1 };
+    render(
+      <BenchmarkStandingBar label="Mile" metricCode="MILE" unit="s" format={format}
+        comparison={{ ...comparison, athleteValue: 402.5, benchmarkValue: 390, meetsOrExceeds: false, comparisonOperator: 'lte' }} />
+    );
+    expect(screen.getByText(/You: 6:42\.5 · Club Standard: 6:30\.0 · ✗ Misses by 0:12\.5/)).toBeInTheDocument();
+  });
+});

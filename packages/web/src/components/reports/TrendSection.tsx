@@ -3,14 +3,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { ReportTrends } from '@shared/report-trends-types';
 import { BenchmarkTrendChart } from '@/components/charts/BenchmarkTrendChart';
 import { TrendAtAGlanceCards } from './TrendAtAGlanceCards';
+import type { MeasurementFormat } from '@shared/duration-format';
 
 interface TrendSectionProps {
   trends: ReportTrends;
   metricLabels?: Record<string, string>;
   metricUnits?: Record<string, string>;
+  /** Duration (mm:ss) metrics only; others keep their unit display */
+  metricFormats?: Record<string, MeasurementFormat>;
 }
 
-export function TrendSection({ trends, metricLabels = {}, metricUnits = {} }: TrendSectionProps) {
+export function TrendSection({ trends, metricLabels = {}, metricUnits = {}, metricFormats = {} }: TrendSectionProps) {
   const entries = Object.entries(trends);
   if (entries.length === 0) return null;
 
@@ -20,7 +23,7 @@ export function TrendSection({ trends, metricLabels = {}, metricUnits = {} }: Tr
         <CardTitle>Progress Over Time</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        <TrendAtAGlanceCards entries={entries} metricLabels={metricLabels} metricUnits={metricUnits} />
+        <TrendAtAGlanceCards entries={entries} metricLabels={metricLabels} metricUnits={metricUnits} metricFormats={metricFormats} />
 
         {/* Detail charts */}
         <div className="space-y-8">
@@ -31,6 +34,7 @@ export function TrendSection({ trends, metricLabels = {}, metricUnits = {} }: Tr
               trend={trend}
               label={metricLabels[code] || code}
               unit={metricUnits[code]}
+              format={metricFormats[code]}
             />
           ))}
         </div>

@@ -550,3 +550,14 @@ describe('evalInputErrorResponse', () => {
     expect(res.status).toBe(500);
   });
 });
+
+describe('assembleEvalReportModel: display format', () => {
+  it('carries displayFormat for a duration metric and leaves decimal metrics without it', () => {
+    const meta = new Map([...META, ['MILE_RUN', { unit: 's', lowerIsBetter: true, displayFormat: 'duration' as const }]]);
+    const model = assembleEvalReportModel(
+      input({ metricMeta: meta, rows: [row('DASH_10YD', 2.0), row('MILE_RUN', 402.5)], selection: { metricKeys: ['DASH_10', 'MILE_RUN'] } }),
+    );
+    expect(metric(model, 'MILE_RUN')!.displayFormat).toBe('duration');
+    expect(metric(model, 'DASH_10YD')!).not.toHaveProperty('displayFormat');
+  });
+});

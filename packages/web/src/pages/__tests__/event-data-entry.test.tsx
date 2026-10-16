@@ -527,6 +527,23 @@ describe('EventDataEntry', () => {
       expect(saveButton()).toBeDisabled();
     });
 
+    it('shows a saved time cell as m:ss and labels the column (mm:ss)', async () => {
+      const user = userEvent.setup();
+      eventMetricsState = [metric('MILE_RUN', { metricDetails: { label: 'Mile Run', unit: 's', category: 'endurance', displayFormat: 'duration' } })];
+      measurementsState.data = [saved('m1', 'ath-1', 'MILE_RUN', 402.5)];
+      render(<EventDataEntry />);
+      const header = screen.getByRole('columnheader', { name: /Mile Run/ });
+      expect(header).toHaveTextContent('(mm:ss)');
+      expect(header).not.toHaveTextContent('(s)');
+      expect(verticalJumpCell('Jordan Lee')).toHaveValue('6:42.5');
+      // Unchanged, so nothing to save
+      expect(saveButton()).toBeDisabled();
+      // Retyping the same time in seconds is still clean
+      await user.clear(verticalJumpCell('Jordan Lee'));
+      await user.type(verticalJumpCell('Jordan Lee'), '402.5');
+      expect(saveButton()).toBeDisabled();
+    });
+
     it('flags m:ss typed into a decimal metric as not a number', async () => {
       const user = userEvent.setup();
       render(<EventDataEntry />);

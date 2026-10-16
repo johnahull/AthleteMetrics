@@ -1,5 +1,6 @@
 // packages/web/src/components/charts/TierProgressChart.tsx
 import type { BenchmarkComparison } from '@shared/benchmark-types';
+import { formatMeasurement, type MeasurementFormat } from '@shared/duration-format';
 import { tierSegments, athletePositionPct, athletePositionPctForValue, nextTierCaption } from './tier-progress-utils';
 import { generateDeterministicJitter } from './utils/boxPlotStatistics';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -10,6 +11,8 @@ interface TierProgressChartProps {
   metricCode: string;
   comparison: BenchmarkComparison;
   unit?: string;
+  /** Duration (mm:ss) metric format: values print as m:ss with no unit */
+  format?: MeasurementFormat;
   /** Optional per-athlete values for this metric. When provided (team-report
    *  usage), an additional small marker is rendered per athlete, visually
    *  subordinate to the primary marker (which then represents the team
@@ -27,15 +30,18 @@ interface TierProgressChartProps {
 /** Vertical jitter range (px) applied to individual athlete markers so tied/close values don't visually merge. */
 const ATHLETE_MARKER_JITTER_PX = 6;
 
-export function TierProgressChart({ label, metricCode, comparison, unit, athleteValues, rangeLabel }: TierProgressChartProps) {
+export function TierProgressChart({ label, metricCode, comparison, unit, format, athleteValues, rangeLabel }: TierProgressChartProps) {
   const segs = tierSegments(comparison);
   if (segs.length === 0) return null;
   const pos = athletePositionPct(comparison);
-  const caption = nextTierCaption(comparison, unit);
-  const unitSuffix = unit ? ` ${unit}` : '';
+  const caption = nextTierCaption(comparison, unit, format);
+  const durationFormat = format?.displayFormat === 'duration' ? format : undefined;
+  // m:ss values carry no unit
+  const unitSuffix = unit && !durationFormat ? ` ${unit}` : '';
+  const showValue = (v: number) => (durationFormat ? formatMeasurement(v, durationFormat) : Math.round(v * 100) / 100);
   const hasAthleteValues = !!athleteValues && athleteValues.length > 0;
   const primaryLabel = hasAthleteValues ? 'Team Average' : 'You';
-  const primaryVal = Math.round(comparison.athleteValue * 100) / 100;
+  const primaryVal = showValue(comparison.athleteValue);
   const bestInRangeSuffix = rangeLabel ? ` (best within ${rangeLabel})` : '';
 
   return (
@@ -57,7 +63,7 @@ export function TierProgressChart({ label, metricCode, comparison, unit, athlete
           {hasAthleteValues && athleteValues!.map((a) => {
             const apos = athletePositionPctForValue(a.value, segs);
             const jitter = generateDeterministicJitter(a.athleteId, ATHLETE_MARKER_JITTER_PX);
-            const aval = Math.round(a.value * 100) / 100;
+            const aval = showValue(a.value);
             return (
               <Tooltip key={a.athleteId}>
                 <TooltipTrigger asChild>

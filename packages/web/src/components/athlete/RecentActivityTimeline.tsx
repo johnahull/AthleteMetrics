@@ -19,6 +19,8 @@ interface TimelineActivity {
   metric: string;
   displayName: string;
   value: number;
+  /** mm:ss for a duration metric; otherwise value and units are shown */
+  displayValue?: string;
   units: string;
   insight: string | null;
   insightType: 'pr' | 'improvement' | 'consistent' | null;
@@ -156,7 +158,7 @@ export function RecentActivityTimeline({
                       </div>
                       <div className="text-right">
                         <span className="text-lg font-bold text-gray-900">
-                          {activity.value}{activity.units}
+                          {activity.displayValue ?? `${activity.value}${activity.units}`}
                         </span>
                       </div>
                     </div>

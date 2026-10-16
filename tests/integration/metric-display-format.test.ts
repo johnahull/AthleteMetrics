@@ -31,6 +31,8 @@ vi.mock('../../packages/api/vite.js', () => ({
 }));
 
 import { registerRoutes } from '../../packages/api/routes';
+import { createCustomMetricSchema, updateCustomMetricSchema } from '../../packages/api/routes/custom-org-metric-routes';
+import { z } from 'zod';
 
 const PASSWORD = 'TestAdmin123!';
 const tag = randomUUID().slice(0, 8).toUpperCase();
@@ -197,5 +199,16 @@ describe('custom org metrics: displayFormat', () => {
     expect(created.status).toBe(201);
     const res = await patchCustom(created.body.code, { unit: 'min' });
     expect(res.status).toBe(400);
+  });
+});
+
+describe('custom org metric schemas: displayFormat default', () => {
+  it('create defaults to decimal; update has no default, so a partial PATCH never resets the format', () => {
+    expect(createCustomMetricSchema.parse({ label: 'X', metricType: 'tracking' }).displayFormat).toBe('decimal');
+    expect('displayFormat' in updateCustomMetricSchema.parse({})).toBe(false);
+    // A default inside the update schema would reset the format on every partial PATCH under Zod 4
+    let inner: z.ZodTypeAny = updateCustomMetricSchema.shape.displayFormat;
+    while (inner instanceof z.ZodOptional) inner = inner.unwrap();
+    expect(inner).toBeInstanceOf(z.ZodEnum);
   });
 });

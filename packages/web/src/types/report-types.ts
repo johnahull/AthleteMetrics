@@ -3,6 +3,7 @@ import type { ReportTrends, ReportDistributions, TeamReportTrends, TeamReportDis
 import type { ReportFvProfile } from '@shared/report-fv-types';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
 import type { ChartSelection, TeamChartSelection } from '@shared/report-charts';
+import type { DisplayFormat, MeasurementFormat } from '@shared/duration-format';
 
 export interface Benchmark {
   name: string;
@@ -112,6 +113,8 @@ export interface TeamReportData {
   generatedAt: string;
   metricLabels?: Record<string, string>;
   metricUnits?: Record<string, string>;
+  /** Duration (mm:ss) metrics only; absent on data generated before it existed */
+  metricFormats?: Record<string, MeasurementFormat>;
   metricExplanations?: Record<string, MetricExplanation>;
   /** Per-metric direction ('lower' = lower-is-better), so client components can
    *  evaluate tier standing without needing authenticated org-scoped metric
@@ -144,6 +147,8 @@ export interface IndividualReportData {
   generatedAt: string;
   metricLabels?: Record<string, string>;
   metricUnits?: Record<string, string>;
+  /** Duration (mm:ss) metrics only; absent on data generated before it existed */
+  metricFormats?: Record<string, MeasurementFormat>;
   metricExplanations?: Record<string, MetricExplanation>;
   orgBranding?: OrgBranding;
   trends?: ReportTrends;
@@ -164,6 +169,8 @@ export interface EvalMetricResultView {
   label: string;
   value: number;
   unit: string;
+  /** Absent on models saved before mm:ss display existed (decimal) */
+  displayFormat?: DisplayFormat;
   comparison:
     | { kind: "tiers"; comparison: BenchmarkComparison }
     | { kind: "average"; name: string | null; averageValue: number; status: "at_or_better" | "below"; distancePct: number }

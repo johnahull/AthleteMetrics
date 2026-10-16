@@ -284,3 +284,37 @@ describe('eval report PDF renderer', () => {
     expect(() => buildEvalReportPdf(model(3), undefined)).not.toThrow();
   });
 });
+
+describe('eval report PDF: duration (mm:ss) metrics', () => {
+  const mile = (over: Partial<EvalMetricResult> = {}): EvalMetricResult => ({
+    key: null,
+    code: 'MILE_RUN',
+    label: 'Mile run',
+    value: 402.5,
+    unit: 's',
+    comparison: { kind: 'average', name: 'Average', averageValue: 410, operator: 'lte', status: 'at_or_better', distancePct: 2 },
+    collegeStandard: null,
+    collegeGauge: false,
+    trend: { change: -4.2, direction: 'improved' },
+    ...over,
+  });
+
+  it('prints the value, the average and the trend as mm:ss', () => {
+    const text = pdfText(buildEvalReportPdf(model(0, true, { metrics: [mile({ displayFormat: 'duration' })] }), org).doc);
+    expect(text).toContain('6:42.5');
+    expect(text).toContain('6:50.0');
+    expect(text).toContain('0:04.2');
+    expect(text).not.toContain('402.50 s');
+  });
+
+  it('renders a model saved before displayFormat existed exactly as before', () => {
+    const saved = mile();
+    expect(saved).not.toHaveProperty('displayFormat');
+    const text = pdfText(buildEvalReportPdf(model(0, true, { metrics: [saved] }), org).doc);
+    expect(text).toContain('402.50 s');
+    expect(text).toContain('410.00 s');
+    expect(text).toContain('4.20 s');
+    expect(text).not.toContain('6:42');
+    expect(text).toBe(pdfText(buildEvalReportPdf(model(0, true, { metrics: [mile({ displayFormat: 'decimal' })] }), org).doc));
+  });
+});

@@ -33,6 +33,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { VerificationBadge } from './VerificationBadge';
 import type { Measurement } from '@shared/schema';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
+import { formatMeasurement } from '@shared/duration-format';
 
 export interface MeasurementTimelineProps {
   measurements: Measurement[];
@@ -133,7 +134,7 @@ export function MeasurementTimeline({
   measurements,
   isLoading = false,
 }: MeasurementTimelineProps) {
-  const { getLabel } = useMetricLabels();
+  const { getLabel, formats } = useMetricLabels();
 
   // Show loading skeleton
   if (isLoading) {
@@ -209,7 +210,9 @@ export function MeasurementTimeline({
                         {/* Value */}
                         <div className="text-right">
                           <span className="text-2xl font-bold text-foreground">
-                            {measurement.value}{measurement.units}
+                            {formats[measurement.metric]
+                              ? formatMeasurement(Number(measurement.value), formats[measurement.metric])
+                              : `${measurement.value}${measurement.units}`}
                           </span>
                         </div>
                       </div>

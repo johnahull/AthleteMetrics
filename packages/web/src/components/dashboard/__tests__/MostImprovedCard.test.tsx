@@ -590,6 +590,28 @@ describe("MostImprovedCard", () => {
   });
 
   describe("Metric Value Formatting", () => {
+    it("shows a duration (mm:ss) metric as m:ss", async () => {
+      (global.fetch as any).mockImplementation((url: string) => {
+        if (url.includes("/api/organizations/org-123/metrics")) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve([
+              { metricCode: "MILE_RUN", isEnabled: true, customLabel: null,
+                siteMetric: { label: "Mile", unit: "s", metricType: "lower_is_better", category: null, description: null, displayFormat: "duration", decimalPrecision: 1 } },
+            ]) });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            improvements: [{ athleteId: "athlete-1", athleteName: "John Smith", teamId: "team-1", teamName: "Varsity", previousValue: 406.7, currentValue: 402.5, improvementPercent: 1.03, measurementCount: 2, hasPersonalBest: false }],
+            metric: "MILE_RUN", metricLabel: "Mile", metricType: "lower_is_better", totalAthletes: 20,
+          }),
+        });
+      });
+
+      render(<MostImprovedCard organizationId="org-123" timeframe="30d" />, { wrapper: createWrapper() });
+
+      await waitFor(() => expect(screen.getByText(/6:46\.7 → 6:42\.5/)).toBeInTheDocument());
+    });
+
     it("should format lower_is_better metrics (time)", async () => {
       // NOTE: formatMetricValue now returns raw values as fallback.
       // Unit formatting should come from API response in production.

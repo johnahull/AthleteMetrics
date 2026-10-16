@@ -46,6 +46,7 @@ import { format } from "date-fns";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
+import { formatMeasurement } from "@shared/duration-format";
 import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from "@/lib/report-utils";
 import {
   getPerformanceColor,
@@ -142,7 +143,7 @@ function AthleteIndividualReportView({ report }: { report: Report }) {
     );
   }
 
-  const { athlete, metricLabels, metricUnits } = reportData;
+  const { athlete, metricLabels, metricUnits, metricFormats } = reportData;
   const showComparison = isGroupComparisonOn(reportData.reportConfig);
   // Backstop label resolution with the org's currently-active metric labels —
   // see the matching block in AthleteTeamReportView below for rationale.
@@ -239,7 +240,7 @@ function AthleteIndividualReportView({ report }: { report: Report }) {
                         {typeof value === "number"
                           ? (isFly10Metric(metricCode)
                               ? formatFly10Dual(value)
-                              : `${value.toFixed(2)}${unit ? ` ${unit}` : ""}`)
+                              : (metricFormats?.[metricCode] ? formatMeasurement(value, metricFormats[metricCode]) : `${value.toFixed(2)}${unit ? ` ${unit}` : ""}`))
                           : "N/A"}
                       </TableCell>
                       {showComparison && (
@@ -247,7 +248,7 @@ function AthleteIndividualReportView({ report }: { report: Report }) {
                           {teamAverage !== undefined
                             ? (isFly10Metric(metricCode)
                                 ? formatFly10Dual(teamAverage)
-                                : `${teamAverage.toFixed(2)}${unit ? ` ${unit}` : ""}`)
+                                : (metricFormats?.[metricCode] ? formatMeasurement(teamAverage, metricFormats[metricCode]) : `${teamAverage.toFixed(2)}${unit ? ` ${unit}` : ""}`))
                             : "N/A"}
                         </TableCell>
                       )}
@@ -268,7 +269,7 @@ function AthleteIndividualReportView({ report }: { report: Report }) {
                                 <span className="font-medium">{b.benchmarkName}:</span>{" "}
                                 {isFly10Metric(metricCode)
                                   ? formatFly10Dual(b.benchmarkValue)
-                                  : `${b.benchmarkValue.toFixed(2)}${unit ? ` ${unit}` : ""}`}
+                                  : (metricFormats?.[metricCode] ? formatMeasurement(b.benchmarkValue, metricFormats[metricCode]) : `${b.benchmarkValue.toFixed(2)}${unit ? ` ${unit}` : ""}`)}
                                 <Badge
                                   variant={b.meetsOrExceeds ? "default" : "secondary"}
                                   className="ml-2"
@@ -353,11 +354,11 @@ function AthleteTeamReportView({ report }: { report: Report }) {
     );
   }
 
-  const { teamStatistics, athleteRankings, generatedAt, metricLabels, metricUnits } = reportData;
+  const { teamStatistics, athleteRankings, generatedAt, metricLabels, metricUnits, metricFormats } = reportData;
   // Backstop label resolution with the org's currently-active metric labels in
   // case the report payload omits a code (e.g. custom org metric added after
   // the report ran but before it rendered).
-  const { getLabel } = useMetricLabels();
+  const { getLabel, types: metricTypes } = useMetricLabels();
   const resolveLabel = (code: string) => metricLabels?.[code] ?? getLabel(code);
 
   // Collect all unique benchmark names
@@ -517,7 +518,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
                         {stat.average !== null && stat.average !== undefined
                           ? (isFly10Metric(stat.metric)
                               ? formatFly10Dual(stat.average)
-                              : `${stat.average.toFixed(2)} ${stat.units || ""}`)
+                              : (metricFormats?.[stat.metric] ? formatMeasurement(stat.average, metricFormats[stat.metric]) : `${stat.average.toFixed(2)} ${stat.units || ""}`))
                           : "N/A"}
                       </TableCell>
                       {benchmarkColumns.map((name) => {
@@ -530,7 +531,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
                           return (
                             <TableCell key={name}>
                               <span style={benchmarkData.tierColor ? { color: benchmarkData.tierColor } : undefined}>
-                                {`${benchmarkData.minValue.toFixed(2)} - ${benchmarkData.maxValue.toFixed(2)} ${stat.units || ""}`}
+                                {(metricFormats?.[stat.metric] ? `${formatMeasurement(benchmarkData.minValue, metricFormats[stat.metric])} - ${formatMeasurement(benchmarkData.maxValue, metricFormats[stat.metric])}` : `${benchmarkData.minValue.toFixed(2)} - ${benchmarkData.maxValue.toFixed(2)} ${stat.units || ""}`)}
                               </span>
                             </TableCell>
                           );
@@ -539,7 +540,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
                         if (benchmarkData.value != null) {
                           return (
                             <TableCell key={name}>
-                              {`${benchmarkData.value.toFixed(2)} ${stat.units || ""}`}
+                              {(metricFormats?.[stat.metric] ? formatMeasurement(benchmarkData.value, metricFormats[stat.metric]) : `${benchmarkData.value.toFixed(2)} ${stat.units || ""}`)}
                             </TableCell>
                           );
                         }
@@ -553,7 +554,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
                               {stat.topPerformer.value !== null && stat.topPerformer.value !== undefined
                                 ? (isFly10Metric(stat.metric)
                                     ? formatFly10Dual(stat.topPerformer.value)
-                                    : `${stat.topPerformer.value.toFixed(2)} ${stat.units || ""}`)
+                                    : (metricFormats?.[stat.metric] ? formatMeasurement(stat.topPerformer.value, metricFormats[stat.metric]) : `${stat.topPerformer.value.toFixed(2)} ${stat.units || ""}`))
                                 : "N/A"}
                             </div>
                           </div>
@@ -565,7 +566,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
                         {stat.min !== null && stat.min !== undefined && stat.max !== null && stat.max !== undefined
                           ? (isFly10Metric(stat.metric)
                               ? `${formatFly10Dual(stat.min)} - ${formatFly10Dual(stat.max)}`
-                              : `${stat.min.toFixed(2)} - ${stat.max.toFixed(2)} ${stat.units || ""}`)
+                              : (metricFormats?.[stat.metric] ? `${formatMeasurement(stat.min, metricFormats[stat.metric])} - ${formatMeasurement(stat.max, metricFormats[stat.metric])}` : `${stat.min.toFixed(2)} - ${stat.max.toFixed(2)} ${stat.units || ""}`))
                           : "N/A"}
                       </TableCell>
                     </TableRow>
@@ -656,7 +657,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
         <div className="space-y-6">
           <h2 className="text-xl font-semibold">Individual Performance by Metric</h2>
           {teamStatistics.map((stat: TeamStatistic) => {
-            const sortedAthletes = sortAthletesByMetric(athleteRankings, stat.metric);
+            const sortedAthletes = sortAthletesByMetric(athleteRankings, stat.metric, metricTypes?.[stat.metric]);
             if (sortedAthletes.length === 0) return null;
 
             return (
@@ -664,8 +665,8 @@ function AthleteTeamReportView({ report }: { report: Report }) {
                 <CardHeader>
                   <CardTitle>{resolveLabel(stat.metric)}</CardTitle>
                   <CardDescription>
-                    {labels.team} Average: {stat.average !== null ? `${stat.average.toFixed(2)} ${stat.units || ""}` : "N/A"}
-                    {stat.standardDeviation !== null && ` | SD: ±${stat.standardDeviation.toFixed(2)} ${stat.units || ""}`}
+                    {labels.team} Average: {stat.average !== null ? (metricFormats?.[stat.metric] ? formatMeasurement(stat.average, metricFormats[stat.metric]) : `${stat.average.toFixed(2)} ${stat.units || ""}`) : "N/A"}
+                    {stat.standardDeviation !== null && ` | SD: ±${metricFormats?.[stat.metric] ? formatMeasurement(stat.standardDeviation, metricFormats[stat.metric]) : `${stat.standardDeviation.toFixed(2)} ${stat.units || ""}`}`}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -688,8 +689,8 @@ function AthleteTeamReportView({ report }: { report: Report }) {
                         const quartileBadge = getQuartileBadge(percentile);
 
                         // Get benchmark label and metric direction
-                        const benchmarkLabel = getBenchmarkLabel(athlete, stat.metric);
-                        const lowerIsBetter = isLowerBetter(stat.metric);
+                        const benchmarkLabel = getBenchmarkLabel(athlete, stat.metric, metricTypes?.[stat.metric]);
+                        const lowerIsBetter = isLowerBetter(stat.metric, metricTypes?.[stat.metric]);
 
                         // Calculate deviation statistics
                         const { deviation, percentDiff, zScore, deviationColor, zScoreColor } =
@@ -723,7 +724,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
                               {value !== null && value !== undefined
                                 ? (isFly10Metric(stat.metric)
                                     ? formatFly10Dual(value)
-                                    : `${value.toFixed(2)} ${stat.units || ""}`)
+                                    : (metricFormats?.[stat.metric] ? formatMeasurement(value, metricFormats[stat.metric]) : `${value.toFixed(2)} ${stat.units || ""}`))
                                 : "N/A"}
                             </TableCell>
                             <TableCell>
@@ -745,7 +746,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
                             <TableCell>
                               {deviation !== null && percentDiff !== null ? (
                                 <span className={`font-semibold ${deviationColor}`}>
-                                  {deviation > 0 ? "+" : ""}{deviation.toFixed(2)} {stat.units || ""}
+                                  {deviation > 0 ? "+" : ""}{metricFormats?.[stat.metric] ? formatMeasurement(deviation, metricFormats[stat.metric]) : `${deviation.toFixed(2)} ${stat.units || ""}`}
                                   <span className="text-xs ml-1">
                                     ({percentDiff > 0 ? "+" : ""}{percentDiff.toFixed(1)}%)
                                   </span>

@@ -11,6 +11,8 @@ import type {
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 import { useMetricConfig } from '@/hooks/use-metric-config';
 import { parseColorToRgba } from '@/lib/color-utils';
+import { durationAxis } from './utils/durationAxis';
+import { formatMeasurement } from '@shared/duration-format';
 
 // Helper function to get the best performance value based on metric type
 function getBestPerformanceValue(
@@ -108,7 +110,9 @@ export function BarChart({
     );
 
     const metricInfo = getMetricConfig(primaryMetric);
-    const unit = metricInfo?.unit || '';
+    const durationConfig = metricInfo?.displayFormat === 'duration' ? metricInfo : null;
+    // m:ss values carry no unit
+    const unit = durationConfig ? '' : metricInfo?.unit || '';
     const label = metricInfo?.label || primaryMetric;
     const isLowerBetter = metricInfo?.lowerIsBetter;
 
@@ -123,6 +127,7 @@ export function BarChart({
       }],
       athletes,
       unit,
+      durationConfig,
       primaryMetric,
       isLowerBetter
     };
@@ -232,9 +237,11 @@ export function BarChart({
             if (value === null) return '';
 
             // Format value with dual display for FLY10_TIME
-            const formattedValue = barData?.primaryMetric && isFly10Metric(barData.primaryMetric)
-              ? formatFly10Dual(value, 'time-first')
-              : `${value.toFixed(2)}${barData?.unit}`;
+            const formattedValue = barData?.durationConfig
+              ? formatMeasurement(value, barData.durationConfig)
+              : barData?.primaryMetric && isFly10Metric(barData.primaryMetric)
+                ? formatFly10Dual(value, 'time-first')
+                : `${value.toFixed(2)}${barData?.unit}`;
 
             return `${barData?.datasets[0].label}: ${formattedValue}`;
           },
@@ -282,9 +289,10 @@ export function BarChart({
       x: {
         title: {
           display: true,
-          text: `${barData?.datasets[0].label} (${barData?.unit})`
+          text: `${barData?.datasets[0].label} (${barData?.durationConfig ? 'mm:ss' : barData?.unit})`
         },
-        beginAtZero: !barData?.isLowerBetter // Start from zero unless lower is better
+        beginAtZero: !barData?.isLowerBetter, // Start from zero unless lower is better
+        ...(barData?.durationConfig ? durationAxis(barData.durationConfig) : {})
       },
       y: {
         title: {
@@ -304,6 +312,9 @@ export function BarChart({
       }
     }
   };
+
+  const show = (value: number) =>
+    barData?.durationConfig ? formatMeasurement(value, barData.durationConfig) : `${value.toFixed(2)}${barData?.unit}`;
 
   if (!barData) {
     return (
@@ -328,7 +339,7 @@ export function BarChart({
         <div>
           <div className="font-medium">Best Performance</div>
           <div className="text-lg font-bold text-green-600">
-            {getBestPerformanceValue(barData.primaryMetric, barData.datasets[0].data, getMetricConfig).toFixed(2)}{barData.unit}
+            {show(getBestPerformanceValue(barData.primaryMetric, barData.datasets[0].data, getMetricConfig))}
           </div>
           <div className="text-xs text-muted-foreground">
             {getBestPerformingAthlete(barData.primaryMetric, barData.athletes, barData.datasets[0].data, getMetricConfig)?.athleteName}
@@ -338,7 +349,7 @@ export function BarChart({
         <div>
           <div className="font-medium">Average</div>
           <div className="text-lg font-bold text-blue-600">
-            {(barData.datasets[0].data.reduce((a, b) => a + b, 0) / barData.datasets[0].data.length).toFixed(2)}{barData.unit}
+            {show(barData.datasets[0].data.reduce((a, b) => a + b, 0) / barData.datasets[0].data.length)}
           </div>
           <div className="text-xs text-muted-foreground">
             Top 25 athletes
@@ -348,7 +359,7 @@ export function BarChart({
         <div>
           <div className="font-medium">Range</div>
           <div className="text-lg font-bold text-gray-600">
-            {(Math.max(...barData.datasets[0].data) - Math.min(...barData.datasets[0].data)).toFixed(2)}{barData.unit}
+            {show(Math.max(...barData.datasets[0].data) - Math.min(...barData.datasets[0].data))}
           </div>
           <div className="text-xs text-muted-foreground">
             Max - Min

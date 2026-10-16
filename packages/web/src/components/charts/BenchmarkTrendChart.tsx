@@ -3,6 +3,8 @@ import { useMemo } from 'react';
 import type { ChartOptions } from 'chart.js';
 import type { AnnotationOptions } from 'chartjs-plugin-annotation';
 import { Line } from 'react-chartjs-2';
+import { formatMeasurement, type MeasurementFormat } from '@shared/duration-format';
+import { durationAxis } from './utils/durationAxis';
 import type { MetricTrend, TrendPoint } from '@shared/report-trends-types';
 import {
   buildTrendChartData,
@@ -19,6 +21,8 @@ interface BenchmarkTrendChartProps {
   trend: MetricTrend;
   label: string;
   unit?: string;
+  /** Duration (mm:ss) metric format: m:ss axis ticks and tooltips */
+  format?: MeasurementFormat;
   /**
    * Optional faint background lines drawn behind the main series (e.g. per-
    * athlete series behind a team-average main line). The time-scale x-axis
@@ -28,7 +32,7 @@ interface BenchmarkTrendChartProps {
   backgroundSeries?: TrendPoint[][];
 }
 
-export function BenchmarkTrendChart({ metricCode, trend, label, unit, backgroundSeries }: BenchmarkTrendChartProps) {
+export function BenchmarkTrendChart({ metricCode, trend, label, unit, format, backgroundSeries }: BenchmarkTrendChartProps) {
   const cue = useMemo(() => directionCue(trend.direction), [trend.direction]);
 
   // Index of the personal-best point so we can enlarge + star it on the line.
@@ -122,7 +126,8 @@ export function BenchmarkTrendChart({ metricCode, trend, label, unit, background
     return ann;
   }, [trend.benchmark, trend.series, trend.direction, pbIdx]);
 
-  const yTitle = unit ? `${label} (${unit})` : label;
+  const durationFormat = format?.displayFormat === 'duration' ? format : undefined;
+  const yTitle = durationFormat ? `${label} (mm:ss)` : unit ? `${label} (${unit})` : label;
 
   const options: ChartOptions<'line'> = {
     responsive: true,
@@ -132,6 +137,9 @@ export function BenchmarkTrendChart({ metricCode, trend, label, unit, background
       legend: { display: false },
       title: { display: true, text: label, font: { size: 14, weight: 'bold' } },
       annotation: Object.keys(annotations).length > 0 ? { annotations } : undefined,
+      ...(durationFormat
+        ? { tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label ?? label}: ${formatMeasurement(ctx.parsed.y ?? 0, durationFormat)}` } } }
+        : {}),
     },
     scales: {
       x: {
@@ -147,6 +155,7 @@ export function BenchmarkTrendChart({ metricCode, trend, label, unit, background
       },
       y: {
         title: { display: true, text: `${yTitle}  ${cue.arrow} better` },
+        ...(durationFormat ? durationAxis(durationFormat) : {}),
       },
     },
   };

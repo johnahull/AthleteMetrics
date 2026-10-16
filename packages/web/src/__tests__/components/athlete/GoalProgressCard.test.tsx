@@ -9,6 +9,17 @@ import userEvent from '@testing-library/user-event';
 import { GoalProgressCard } from '@/components/athlete/GoalProgressCard';
 import { GoalType, GoalStatus, Goal } from '@/utils/goal-utils';
 
+vi.mock('@/hooks/use-metric-labels', () => ({
+  useMetricLabels: () => ({
+    labels: {},
+    getLabel: (c: string) => c,
+    formats: { MILE_RUN: { unit: 's', displayFormat: 'duration', decimalPrecision: 1 } },
+    // MILE_RUN is not in the hard-coded lower-is-better list: only its type says lower is better
+    types: { MILE_RUN: 'lower_is_better' },
+    isLoading: false,
+  }),
+}));
+
 describe('GoalProgressCard', () => {
   const defaultGoal: Goal = {
     id: 'goal-1',
@@ -283,6 +294,32 @@ describe('GoalProgressCard', () => {
       render(<GoalProgressCard goal={defaultGoal} />);
       const card = screen.getByTestId('goal-progress-card');
       expect(card).toHaveAttribute('aria-label');
+    });
+  });
+
+  describe('duration (mm:ss) metric', () => {
+    it('shows the target and current values as m:ss', () => {
+      render(<GoalProgressCard goal={{ ...defaultGoal, metric: 'MILE_RUN', targetValue: 390, baselineValue: 420, currentValue: 402.5 }} />);
+      expect(screen.getByTestId('goal-target')).toHaveTextContent('6:30.0');
+      expect(screen.getByTestId('goal-current')).toHaveTextContent('6:42.5');
+    });
+  });
+
+  describe('direction from the metric list', () => {
+    it('counts a faster time as progress for a lower-is-better metric outside the built-in list', () => {
+      render(
+        <GoalProgressCard
+          goal={{
+            ...defaultGoal,
+            metric: 'MILE_RUN',
+            goalType: GoalType.IMPROVEMENT_PERCENTAGE,
+            targetValue: 10,
+            baselineValue: 400,
+            currentValue: 360,
+          }}
+        />
+      );
+      expect(screen.getByTestId('goal-progress')).toHaveTextContent('100%');
     });
   });
 });

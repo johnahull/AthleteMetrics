@@ -432,6 +432,7 @@ export interface DynamicMetricConfig {
   formula?: string;
   dependentMetrics?: string[];
   displayFormat?: DisplayFormat;
+  decimalPrecision?: number;
 }
 
 // Organization-specific metric configuration

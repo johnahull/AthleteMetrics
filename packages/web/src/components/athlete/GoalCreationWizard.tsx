@@ -26,6 +26,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { MetricType } from '@shared/analytics-types';
 import {
   GoalType,
   GoalStatus,
@@ -57,6 +58,8 @@ interface GoalCreationWizardProps {
   availableMetrics: string[];
   /** Codes of time (mm:ss) metrics: their target value is typed as m:ss */
   durationMetrics?: string[];
+  /** Better/worse direction per metric code; without an entry the built-in lists decide */
+  metricTypes?: Record<string, MetricType>;
   onCreateGoal: (goal: GoalCreationData) => void | Promise<void>;
   onCancel: () => void;
 }
@@ -67,6 +70,7 @@ export function GoalCreationWizard({
   measurements,
   availableMetrics,
   durationMetrics,
+  metricTypes,
   onCreateGoal,
   onCancel,
 }: GoalCreationWizardProps) {
@@ -91,7 +95,7 @@ export function GoalCreationWizard({
 
     if (metricMeasurements.length === 0) return null;
 
-    const lowerIsBetter = isLowerBetterMetric(selectedMetric);
+    const lowerIsBetter = isLowerBetterMetric(selectedMetric, metricTypes?.[selectedMetric]);
     const best = lowerIsBetter
       ? Math.min(...metricMeasurements.map((m) => m.value))
       : Math.max(...metricMeasurements.map((m) => m.value));
@@ -101,7 +105,7 @@ export function GoalCreationWizard({
     )[0].value;
 
     return { best, latest, count: metricMeasurements.length };
-  }, [selectedMetric, measurements]);
+  }, [selectedMetric, measurements, metricTypes]);
 
   // Get smart suggestions
   const suggestions = useMemo(() => {
@@ -116,7 +120,7 @@ export function GoalCreationWizard({
     const numValue = parseFloat(value);
     if (isNaN(numValue)) return 'Please enter a valid number';
 
-    const lowerIsBetter = isLowerBetterMetric(selectedMetric);
+    const lowerIsBetter = isLowerBetterMetric(selectedMetric, metricTypes?.[selectedMetric]);
 
     if (selectedGoalType === GoalType.TARGET_VALUE) {
       if (lowerIsBetter && numValue >= currentPerformance.best) {
@@ -203,13 +207,13 @@ export function GoalCreationWizard({
     const percent = parseFloat(targetValue);
     if (isNaN(percent)) return null;
 
-    const lowerIsBetter = isLowerBetterMetric(selectedMetric);
+    const lowerIsBetter = isLowerBetterMetric(selectedMetric, metricTypes?.[selectedMetric]);
     const improvement = currentPerformance.best * (percent / 100);
 
     return lowerIsBetter
       ? currentPerformance.best - improvement
       : currentPerformance.best + improvement;
-  }, [selectedGoalType, targetValue, currentPerformance, selectedMetric]);
+  }, [selectedGoalType, targetValue, currentPerformance, selectedMetric, metricTypes]);
 
   // Check if form is valid
   const isFormValid = useMemo(() => {

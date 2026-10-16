@@ -1,3 +1,4 @@
+import type { DisplayFormat } from "@shared/duration-format";
 import type { MqiBandLabel } from "@shared/mqi-band";
 import type { BalanceLine } from "./balance";
 import type { EvalMetricKey } from "./metric-key-map";
@@ -37,6 +38,8 @@ export interface EvalMetricResult {
   label: string;
   value: number;
   unit: string;
+  /** 'duration' prints mm:ss; absent on rows saved before it existed, which print as decimal */
+  displayFormat?: DisplayFormat;
   /** Age-group comparison; null = no set for this athlete: show value and unit with no gauge */
   comparison: AgeGroupMatch | null;
   /** D1 Average comparison; null when there is no D1 row for the athlete's sex and sport */

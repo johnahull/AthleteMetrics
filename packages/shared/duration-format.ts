@@ -78,3 +78,11 @@ export function parseImportValue(raw: string): number | null {
   const n = parseFloat(text);
   return Number.isNaN(n) ? null : n;
 }
+
+const DURATION_TICK_STEPS = [5, 10, 15, 30, 60, 300];
+
+/** Axis step in seconds for a duration chart, so ticks land on round mm:ss values (0:30, 1:00, 5:00). */
+export function durationTickStep(rangeSeconds: number, maxTicks = 6): number {
+  const step = DURATION_TICK_STEPS.find((s) => rangeSeconds / s <= maxTicks);
+  return step ?? 300 * Math.ceil(rangeSeconds / (300 * maxTicks));
+}
