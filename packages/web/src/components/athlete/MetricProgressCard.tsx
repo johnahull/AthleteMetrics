@@ -379,7 +379,7 @@ export function MetricProgressCard({
                 {units}
               </span>
             </MetricContextTooltip>
-            {personalRecord && (
+            {personalRecord && toCalendarDate(personalRecord.date) && (
               <span className="text-xs text-gray-500">
                 ({toCalendarDate(personalRecord.date)?.toLocaleDateString()})
               </span>

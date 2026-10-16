@@ -402,9 +402,8 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
               return 'Group Average';
             }
             
-            return point.date ? 
-              `${datasetLabel} - ${toCalendarDate(point.date)?.toLocaleDateString()}` :
-              datasetLabel;
+            const day = toCalendarDate(point.date)?.toLocaleDateString();
+            return day ? `${datasetLabel} - ${day}` : datasetLabel;
           },
           label: (context) => {
             const point = context.raw as any;
@@ -434,8 +433,9 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
               labels.push('🏆 Personal Best!');
             }
             
-            if (point.date) {
-              labels.push(`Date: ${toCalendarDate(point.date)?.toLocaleDateString()}`);
+            const day = toCalendarDate(point.date)?.toLocaleDateString();
+            if (day) {
+              labels.push(`Date: ${day}`);
             }
             
             return labels;
