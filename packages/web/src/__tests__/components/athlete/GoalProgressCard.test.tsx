@@ -13,6 +13,7 @@ vi.mock('@/hooks/use-metric-labels', () => ({
   useMetricLabels: () => ({
     labels: {},
     getLabel: (c: string) => c,
+    getUnit: (code: string) => ({ FLY10_TIME: 's', VERTICAL_JUMP: 'in' } as Record<string, string>)[code] ?? '',
     formats: { MILE_RUN: { unit: 's', displayFormat: 'duration', decimalPrecision: 1 } },
     // MILE_RUN is not in the hard-coded lower-is-better list: only its type says lower is better
     types: { MILE_RUN: 'lower_is_better' },
@@ -42,12 +43,12 @@ describe('GoalProgressCard', () => {
 
     it('should render target value', () => {
       render(<GoalProgressCard goal={defaultGoal} />);
-      expect(screen.getByTestId('goal-target')).toHaveTextContent('1.00s');
+      expect(screen.getByTestId('goal-target')).toHaveTextContent('1.00 s');
     });
 
     it('should render current value', () => {
       render(<GoalProgressCard goal={defaultGoal} />);
-      expect(screen.getByTestId('goal-current')).toHaveTextContent('1.10s');
+      expect(screen.getByTestId('goal-current')).toHaveTextContent('1.10 s');
     });
 
     it('should render progress bar', () => {
@@ -216,7 +217,7 @@ describe('GoalProgressCard', () => {
       };
       render(<GoalProgressCard goal={jumpGoal} />);
       expect(screen.getByText(/Vertical Jump/i)).toBeInTheDocument();
-      expect(screen.getByTestId('goal-target')).toHaveTextContent('36.0"');
+      expect(screen.getByTestId('goal-target')).toHaveTextContent('36.0 in');
     });
   });
 

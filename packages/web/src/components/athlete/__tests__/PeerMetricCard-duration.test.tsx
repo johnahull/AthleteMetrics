@@ -12,6 +12,7 @@ vi.mock('@/hooks/use-metric-labels', () => ({
     labels: {},
     getLabel: (c: string) => c,
     formats: { MILE_RUN: { unit: 's', displayFormat: 'duration', decimalPrecision: 1 } },
+    getUnit: (code: string) => (code === 'MILE_RUN' ? 's' : ''),
     isLoading: false,
   }),
 }));

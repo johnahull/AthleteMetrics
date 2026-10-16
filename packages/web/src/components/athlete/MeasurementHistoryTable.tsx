@@ -27,6 +27,7 @@ import { useMetricLabels } from '@/hooks/use-metric-labels';
 import { formatMeasurement } from '@shared/duration-format';
 import { AthleteOrgContext } from '@/lib/athlete-org-context';
 import { Link } from 'wouter';
+import { formatValueWithUnit } from "@/lib/metrics";
 
 export interface MeasurementHistoryTableProps {
   measurements: Measurement[];
@@ -66,7 +67,7 @@ export function MeasurementHistoryTable({
   const showActions = Boolean(onEdit || onDelete);
   const { getLabel, formats } = useMetricLabels();
   const valueText = (m: { metric: string; value: string; units: string }) =>
-    formats[m.metric] ? formatMeasurement(Number(m.value), formats[m.metric]) : `${m.value} ${m.units}`;
+    formats[m.metric] ? formatMeasurement(Number(m.value), formats[m.metric]) : formatValueWithUnit(m.value, m.units);
 
   // Try to get filter mode from context to determine if we should show org column
   const athleteOrgContext = useContext(AthleteOrgContext);

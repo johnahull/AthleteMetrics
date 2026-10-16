@@ -33,6 +33,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { VerificationBadge } from './VerificationBadge';
 import type { Measurement } from '@shared/schema';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
+import { formatValueWithUnit } from "@/lib/metrics";
 import { formatMeasurement } from '@shared/duration-format';
 
 export interface MeasurementTimelineProps {
@@ -212,7 +213,7 @@ export function MeasurementTimeline({
                           <span className="text-2xl font-bold text-foreground">
                             {formats[measurement.metric]
                               ? formatMeasurement(Number(measurement.value), formats[measurement.metric])
-                              : `${measurement.value}${measurement.units}`}
+                              : formatValueWithUnit(measurement.value, measurement.units)}
                           </span>
                         </div>
                       </div>

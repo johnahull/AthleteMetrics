@@ -3,7 +3,7 @@
  */
 
 import { differenceInDays, startOfMonth, endOfMonth } from 'date-fns';
-import { getMetricType } from '@/lib/metrics';
+import { getMetricType, formatValueWithUnit } from '@/lib/metrics';
 import type { MetricType } from '@shared/analytics-types';
 import { formatMeasurement, type MeasurementFormat } from '@shared/duration-format';
 
@@ -112,11 +112,7 @@ export function calculatePersonalRecords(
           ? improvement.toFixed(2)
           : improvement.toFixed(1);
 
-      if (isLowerBetter) {
-        improvementText = `↑ ${formattedImprovement}${units} better than last best`;
-      } else {
-        improvementText = `↑ ${formattedImprovement}${units} better than last best`;
-      }
+      improvementText = `↑ ${formatValueWithUnit(formattedImprovement, units)} better than last best`;
     }
 
     personalRecords.push({

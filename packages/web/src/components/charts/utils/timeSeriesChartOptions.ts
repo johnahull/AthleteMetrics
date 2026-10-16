@@ -1,6 +1,7 @@
 import type { ChartOptions } from 'chart.js';
 import { CHART_CONFIG } from '@/constants/chart-config';
 import type { ChartConfiguration } from '@shared/analytics-types';
+import { formatValueWithUnit } from '@/lib/metrics';
 
 export function createTimeSeriesChartOptions(
   config: ChartConfiguration,
@@ -41,7 +42,7 @@ export function createTimeSeriesChartOptions(
           label: (context) => {
             const point = context.raw as any;
             const value = typeof point.y === 'number' ? point.y.toFixed(2) : point.y;
-            return `${metricLabel}: ${value}${unit}`;
+            return `${metricLabel}: ${formatValueWithUnit(value, unit)}`;
           },
           afterLabel: (context) => {
             const point = context.raw as any;

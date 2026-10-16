@@ -63,7 +63,7 @@ describe('MetricProgressCard', () => {
       );
 
       expect(screen.getByText('10-Yard Fly Time')).toBeInTheDocument();
-      expect(screen.getByTestId('current-value')).toHaveTextContent('1.38s');
+      expect(screen.getByTestId('current-value')).toHaveTextContent('1.38 s');
     });
 
     it('should render sparkline chart', () => {
@@ -89,7 +89,7 @@ describe('MetricProgressCard', () => {
         />
       );
 
-      expect(screen.getByTestId('pr-value')).toHaveTextContent('1.38s');
+      expect(screen.getByTestId('pr-value')).toHaveTextContent('1.38 s');
     });
   });
 
@@ -291,7 +291,7 @@ describe('MetricProgressCard', () => {
         />
       );
 
-      expect(screen.getByTestId('current-value')).toHaveTextContent('1.50s');
+      expect(screen.getByTestId('current-value')).toHaveTextContent('1.50 s');
       // Should show chart but no trend
       expect(screen.getByTestId('sparkline-chart')).toBeInTheDocument();
       expect(screen.queryByTestId('trend-badge')).not.toBeInTheDocument();
@@ -313,7 +313,7 @@ describe('MetricProgressCard', () => {
         />
       );
 
-      expect(screen.getByTestId('current-value')).toHaveTextContent('1.40s');
+      expect(screen.getByTestId('current-value')).toHaveTextContent('1.40 s');
       expect(screen.getByTestId('sparkline-chart')).toBeInTheDocument();
     });
 
@@ -508,7 +508,7 @@ describe('MetricProgressCard', () => {
       );
 
       // Current value should be the best from the most recent date (1.48)
-      expect(screen.getByTestId('current-value')).toHaveTextContent('1.48s');
+      expect(screen.getByTestId('current-value')).toHaveTextContent('1.48 s');
     });
 
     it('should calculate trend using filtered best-per-date data', () => {

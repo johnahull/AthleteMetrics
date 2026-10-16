@@ -74,6 +74,8 @@ interface Measurement {
   metric: string;
   value: number | string;
   date: string;
+  /** Unit the value was recorded in */
+  units?: string | null;
 }
 
 /**
@@ -158,13 +160,13 @@ export function getGoalStatusColor(status: GoalStatus): string {
 /**
  * Format goal target for display
  */
-export function formatGoalTarget(goal: Goal, format?: MeasurementFormat): string {
+export function formatGoalTarget(goal: Goal, unit?: string | null, format?: MeasurementFormat): string {
   const { goalType, targetValue, metric } = goal;
 
   switch (goalType) {
     case GoalType.TARGET_VALUE:
-      // A duration (mm:ss) metric's target prints as m:ss
-      return format?.displayFormat === 'duration' ? formatMeasurement(targetValue, format) : formatMetricValue(targetValue, metric);
+      // A duration (mm:ss) metric's target prints as m:ss, with no unit
+      return format?.displayFormat === 'duration' ? formatMeasurement(targetValue, format) : formatMetricValue(targetValue, metric, unit);
 
     case GoalType.IMPROVEMENT_PERCENTAGE:
       return `${targetValue}% improvement`;
@@ -195,6 +197,8 @@ export function suggestGoals(measurements: Measurement[], metric: string): GoalS
 
   if (metricMeasurements.length === 0) return [];
 
+  // Newest row's own unit: the unit the athlete's values were recorded in
+  const unit = metricMeasurements[0].units;
   const lowerIsBetter = education.lowerIsBetter;
   const currentBest = lowerIsBetter
     ? Math.min(...metricMeasurements.map(m => m.value))
@@ -212,21 +216,21 @@ export function suggestGoals(measurements: Measurement[], metric: string): GoalS
     suggestions.push({
       goalType: GoalType.TARGET_VALUE,
       targetValue: parseFloat(moderateTarget.toFixed(2)),
-      description: `Improve ${education.name} to ${formatMetricValue(moderateTarget, metric)}`,
+      description: `Improve ${education.name} to ${formatMetricValue(moderateTarget, metric, unit)}`,
       difficulty: 'moderate',
     });
 
     suggestions.push({
       goalType: GoalType.TARGET_VALUE,
       targetValue: parseFloat(easyTarget.toFixed(2)),
-      description: `Reach ${formatMetricValue(easyTarget, metric)} (3% improvement)`,
+      description: `Reach ${formatMetricValue(easyTarget, metric, unit)} (3% improvement)`,
       difficulty: 'easy',
     });
 
     suggestions.push({
       goalType: GoalType.TARGET_VALUE,
       targetValue: parseFloat(challengingTarget.toFixed(2)),
-      description: `Push for ${formatMetricValue(challengingTarget, metric)} (8% improvement)`,
+      description: `Push for ${formatMetricValue(challengingTarget, metric, unit)} (8% improvement)`,
       difficulty: 'challenging',
     });
   } else {
@@ -238,21 +242,21 @@ export function suggestGoals(measurements: Measurement[], metric: string): GoalS
     suggestions.push({
       goalType: GoalType.TARGET_VALUE,
       targetValue: parseFloat(moderateTarget.toFixed(1)),
-      description: `Improve ${education.name} to ${formatMetricValue(moderateTarget, metric)}`,
+      description: `Improve ${education.name} to ${formatMetricValue(moderateTarget, metric, unit)}`,
       difficulty: 'moderate',
     });
 
     suggestions.push({
       goalType: GoalType.TARGET_VALUE,
       targetValue: parseFloat(easyTarget.toFixed(1)),
-      description: `Reach ${formatMetricValue(easyTarget, metric)} (3% improvement)`,
+      description: `Reach ${formatMetricValue(easyTarget, metric, unit)} (3% improvement)`,
       difficulty: 'easy',
     });
 
     suggestions.push({
       goalType: GoalType.TARGET_VALUE,
       targetValue: parseFloat(challengingTarget.toFixed(1)),
-      description: `Push for ${formatMetricValue(challengingTarget, metric)} (8% improvement)`,
+      description: `Push for ${formatMetricValue(challengingTarget, metric, unit)} (8% improvement)`,
       difficulty: 'challenging',
     });
   }

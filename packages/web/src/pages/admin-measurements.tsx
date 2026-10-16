@@ -26,6 +26,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { StatisticsSummaryCard, type DistributionMode } from "@/components/analytics/StatisticsSummaryCard";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { formatValueWithUnit } from "@/lib/metrics";
 
 // Measurement type from API (extended from @shared/schema Measurement with joined user data)
 // Note: This is intentionally duplicated rather than importing from shared types because
@@ -1327,7 +1328,7 @@ export default function AdminMeasurementsPage() {
                         <TableCell className="font-medium">
                           {metricFormats[measurement.metric]
                             ? formatMeasurement(Number(measurement.value), metricFormats[measurement.metric])
-                            : `${measurement.value} ${measurement.units}`}
+                            : formatValueWithUnit(measurement.value, measurement.units)}
                         </TableCell>
                         <TableCell>{measurement.age}</TableCell>
                         <TableCell>

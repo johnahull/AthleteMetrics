@@ -20,6 +20,7 @@ vi.mock('@/hooks/use-metric-labels', () => ({
   useMetricLabels: () => ({
     labels: METRIC_LABEL_FIXTURE,
     getLabel: (code: string) => METRIC_LABEL_FIXTURE[code] ?? code,
+    getUnit: (code: string) => ({ VERTICAL_JUMP: 'in', FLY10_TIME: 's', DASH_40YD: 's' } as Record<string, string>)[code] ?? '',
     formats: { MILE_RUN: { unit: 's', displayFormat: 'duration', decimalPrecision: 1 } },
     isLoading: false,
   }),

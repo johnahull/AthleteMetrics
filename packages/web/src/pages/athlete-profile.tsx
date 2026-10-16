@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { getMetricBadgeVariant } from "@/lib/metrics";
+import { formatValueWithUnit } from "@/lib/metrics";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -35,7 +35,6 @@ import {
   calculatePersonalRecords,
   generateActivityTimeline,
 } from "@/utils/athlete-dashboard-utils";
-import { getMetricUnits } from "@/lib/metrics";
 import { useMetricLabels } from "@/hooks/use-metric-labels";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
 
@@ -59,7 +58,7 @@ export default function AthleteProfile() {
   const { user, organizationContext } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { getLabel, formats: metricFormats, types: metricTypes } = useMetricLabels();
+  const { getLabel, getUnit, formats: metricFormats, types: metricTypes } = useMetricLabels();
   const { metrics: metricConfigs } = useAvailableMetrics();
 
   const [showEditModal, setShowEditModal] = useState(false);
@@ -431,7 +430,7 @@ export default function AthleteProfile() {
                 metric={metric}
                 displayName={getLabel(metric)}
                 measurements={measurementsByMetric[metric]}
-                units={getMetricUnits(metric)}
+                units={getUnit(metric)}
                 personalRecord={personalRecords.find(pr => pr.metric === metric)}
                 metricType={metricConfigs.find(m => m.code === metric)?.metricType}
               />
@@ -566,14 +565,14 @@ export default function AthleteProfile() {
                         {measurement.age}
                       </td>
                       <td className="py-3 px-4 text-sm">
-                        <Badge variant={getMetricBadgeVariant(measurement.metric)}>
+                        <Badge variant="secondary">
                           {getLabel(measurement.metric)}
                         </Badge>
                       </td>
                       <td className="py-3 px-4 text-sm font-mono text-gray-900">
                         {metricFormats[measurement.metric]
                           ? formatMeasurement(Number(measurement.value), metricFormats[measurement.metric])
-                          : <>{measurement.value}{measurement.units}</>}
+                          : formatValueWithUnit(measurement.value, measurement.units)}
                       </td>
                       <td className="py-3 px-4 text-sm font-mono text-gray-600">
                         {fly10SpeedMph(measurement.metric, parseFloat(measurement.value))?.toFixed(1) ?? '-'}

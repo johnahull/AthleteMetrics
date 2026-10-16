@@ -35,7 +35,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, AlertCircle, BarChart3, Target, ArrowRight } from 'lucide-react';
 import { Redirect, Link } from 'wouter';
-import { getMetricUnits } from '@/lib/metrics';
 import type { Goal, SiteSettings, Organization } from '@shared/schema';
 
 export default function MyDashboardPage() {
@@ -212,7 +211,7 @@ export default function MyDashboardPage() {
                 metric={metric}
                 displayName={metricConfig?.label || metric}
                 measurements={measurementsByMetric[metric] || []}
-                units={getMetricUnits(metric)}
+                units={metricConfig?.unit ?? ""}
                 personalRecord={dashboardData.personalRecords.find(pr => pr.metric === metric)}
                 isDerived={metricConfig?.isDerived}
                 dependentMetrics={metricConfig?.dependentMetrics}
