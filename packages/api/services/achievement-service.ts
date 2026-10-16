@@ -49,6 +49,16 @@ export class AchievementService {
   }
 
   /**
+   * The athlete's verified measurements in ONE organization. Achievements are awarded per organization and the
+   * metric direction is resolved per organization, so another org's (or a personal) row must not count.
+   * storage.getMeasurements' organizationId filter is athlete membership, not the row's org, so filter here.
+   */
+  private async getOrgHistory(userId: string, organizationId: string, metric?: string): Promise<Measurement[]> {
+    const rows = await storage.getMeasurements({ userId, metric, includeUnverified: false });
+    return rows.filter(m => m.organizationId === organizationId);
+  }
+
+  /**
    * Check for PR-related badges
    */
   async checkPRBadges(
@@ -117,7 +127,7 @@ export class AchievementService {
   ): Promise<Array<{ code: string; metadata?: any }>> {
     const achievements: Array<{ code: string; metadata?: any }> = [];
 
-    const allMeasurements = await storage.getMeasurements({ userId, includeUnverified: false });
+    const allMeasurements = await this.getOrgHistory(userId, organizationId);
 
     // FIRST_MEASUREMENT: First measurement ever
     if (allMeasurements.length === 1) {
@@ -195,11 +205,7 @@ export class AchievementService {
   ): Promise<Array<{ code: string; metadata?: any }>> {
     const achievements: Array<{ code: string; metadata?: any }> = [];
 
-    const metricMeasurements = await storage.getMeasurements({
-      userId,
-      metric,
-      includeUnverified: false,
-    });
+    const metricMeasurements = await this.getOrgHistory(userId, organizationId, metric);
 
     if (metricMeasurements.length < 2) {
       return achievements;
@@ -350,7 +356,7 @@ export class AchievementService {
       'RSI',
     ];
 
-    const allMeasurements = await storage.getMeasurements({ userId, includeUnverified: false });
+    const allMeasurements = await this.getOrgHistory(userId, organizationId);
     const metricsWithData = new Set(allMeasurements.map(m => m.metric));
 
     // The 5-0-5 slot is satisfied by either protocol (meters or yards).
@@ -382,7 +388,7 @@ export class AchievementService {
 
     try {
       // Get all measurements for context
-      const allMeasurements = await storage.getMeasurements({ userId, includeUnverified: false });
+      const allMeasurements = await this.getOrgHistory(userId, organizationId);
 
       // Check PR badges
       const prBadges = await this.checkPRBadges(userId, organizationId, measurement, allMeasurements);
