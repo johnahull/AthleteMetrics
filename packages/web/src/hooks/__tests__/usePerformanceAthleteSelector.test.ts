@@ -1,19 +1,22 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import type { TrendData } from '@shared/analytics-types';
 import { usePerformanceAthleteSelector } from '../usePerformanceAthleteSelector';
 
-const metricList: Record<string, { label: string; unit: string; metricType: string; displayFormat: string }> = {
+const metricList: Record<string, { label: string; unit: string; metricType: string; displayFormat: string; decimalPrecision?: number }> = {
   FLY10_TIME: { label: '10-Yard Fly Time', unit: 's', metricType: 'lower_is_better', displayFormat: 'decimal' },
   MILE_RUN: { label: 'Mile Run', unit: 's', metricType: 'lower_is_better', displayFormat: 'duration' },
   VERTICAL_JUMP: { label: 'Vertical Jump', unit: 'in', metricType: 'higher_is_better', displayFormat: 'decimal' },
   BODY_WEIGHT: { label: 'Body Weight', unit: 'lbs', metricType: 'tracking', displayFormat: 'decimal' },
 };
 
+// Mutable so a test can simulate the metric list still loading
+const metricConfigState = { loaded: true };
+
 vi.mock('@/hooks/use-metric-config', () => ({
   useMetricConfig: () => ({
-    getMetricConfig: (code: string) => metricList[code] ?? null,
-    isLoaded: true,
+    getMetricConfig: (code: string) => (metricConfigState.loaded ? metricList[code] ?? null : null),
+    isLoaded: metricConfigState.loaded,
     metricsMap: {},
   }),
 }));
@@ -37,6 +40,10 @@ function render(metric: string, data: TrendData[], maxSelection = 2) {
 }
 
 describe('usePerformanceAthleteSelector', () => {
+  afterEach(() => {
+    metricConfigState.loaded = true;
+  });
+
   it.each(['FLY10_TIME', 'MILE_RUN'])('ranks a lower-is-better metric (%s) fastest first', (metric) => {
     const data = [
       trend('slow', 'Slow', metric, [2.0, 1.9]),
@@ -78,7 +85,7 @@ describe('usePerformanceAthleteSelector', () => {
     const { result } = render('FLY10_TIME', []);
     expect(result.current.metricLabel).toBe('10-Yard Fly Time');
     expect(result.current.unit).toBe('s');
-    expect(result.current.formatValue(1.5)).toBe('1.50s');
+    expect(result.current.formatValue(1.5)).toBe('1.50 s');
   });
 
   it('shows duration metrics as mm:ss with no unit', () => {
@@ -86,6 +93,44 @@ describe('usePerformanceAthleteSelector', () => {
     expect(result.current.metricLabel).toBe('Mile Run');
     expect(result.current.unit).toBe('');
     expect(result.current.formatValue(402.5)).toBe('6:42.5');
+  });
+
+  it('formats with the metric decimal precision and keeps 2 decimals when none is set', () => {
+    metricList.CMJ = { label: 'CMJ', unit: 'cm', metricType: 'higher_is_better', displayFormat: 'decimal', decimalPrecision: 1 };
+    try {
+      expect(render('CMJ', []).result.current.formatValue(28.54)).toBe('28.5 cm');
+      expect(render('VERTICAL_JUMP', []).result.current.formatValue(28.5)).toBe('28.50 in');
+    } finally {
+      delete metricList.CMJ;
+    }
+  });
+
+  it('ignores non-numeric values instead of ranking them as 0', () => {
+    const data = [
+      trend('bad', 'Bad', 'FLY10_TIME', [Number.NaN, 1.8]),
+      trend('fast', 'Fast', 'FLY10_TIME', [1.5]),
+      trend('none', 'None', 'FLY10_TIME', [Number.NaN]),
+    ];
+    const { result } = render('FLY10_TIME', data);
+
+    expect(result.current.athleteOptions.map(a => a.id)).toEqual(['fast', 'bad', 'none']);
+    expect(result.current.athleteOptions.map(a => a.bestValue).slice(0, 2)).toEqual([1.5, 1.8]);
+  });
+
+  it('reports whether the metric list has loaded', () => {
+    expect(render('FLY10_TIME', []).result.current.isMetricConfigLoaded).toBe(true);
+    metricConfigState.loaded = false;
+    expect(render('FLY10_TIME', []).result.current.isMetricConfigLoaded).toBe(false);
+  });
+
+  it('ranks a built-in time metric fastest first while the metric list loads', () => {
+    metricConfigState.loaded = false;
+    const data = [
+      trend('slow', 'Slow', 'FLY10_TIME', [2.0]),
+      trend('fast', 'Fast', 'FLY10_TIME', [1.5]),
+      trend('mid', 'Mid', 'FLY10_TIME', [1.7]),
+    ];
+    expect(render('FLY10_TIME', data).result.current.athleteOptions.map(a => a.id)).toEqual(['fast', 'mid', 'slow']);
   });
 
   it('falls back to the code for an unknown metric', () => {

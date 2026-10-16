@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useAthleteSelector } from './useAthleteSelector';
 import { isLowerBetterType, type TrendData } from '@shared/analytics-types';
 import { formatMeasurement } from '@shared/duration-format';
-import { safeNumber } from '@shared/utils/number-conversion';
+import { safeNumberArray } from '@shared/utils/number-conversion';
 import { CHART_CONFIG } from '@/constants/chart-config';
 import { useMetricConfig } from '@/hooks/use-metric-config';
 
@@ -25,7 +25,7 @@ export function usePerformanceAthleteSelector({
   maxSelection = 10,
   metric
 }: UsePerformanceAthleteSelectorOptions) {
-  const { getMetricConfig } = useMetricConfig();
+  const { getMetricConfig, isLoaded: isMetricConfigLoaded } = useMetricConfig();
   const metricConfig = getMetricConfig(metric);
   const metricType = metricConfig?.metricType;
 
@@ -35,8 +35,8 @@ export function usePerformanceAthleteSelector({
     const isTracking = metricType === 'tracking';
 
     return data.map(trend => {
-      // Calculate best value for this athlete using safe conversion
-      const values = trend.data.map(point => safeNumber(point.value));
+      // Drop non-numeric values: as 0 they would rank first for a lower-is-better metric
+      const values = safeNumberArray(trend.data.map(point => point.value));
       // For tracking metrics, use the most recent value; otherwise use best performance
       const bestValue = isTracking
         ? values[values.length - 1] || 0
@@ -107,7 +107,9 @@ export function usePerformanceAthleteSelector({
   const unit = isDuration ? '' : metricConfig?.unit ?? '';
   const metricLabel = metricConfig?.label ?? metric;
   const formatValue = (value: number) =>
-    isDuration && metricConfig ? formatMeasurement(value, metricConfig) : `${value.toFixed(2)}${unit}`;
+    metricConfig
+      ? formatMeasurement(value, { ...metricConfig, decimalPrecision: metricConfig.decimalPrecision ?? (isDuration ? 1 : 2) })
+      : value.toFixed(2);
 
   return {
     ...selectorState,
@@ -125,6 +127,7 @@ export function usePerformanceAthleteSelector({
     unit,
     metricLabel,
     formatValue,
+    isMetricConfigLoaded,
 
     // Performance-specific state
     selectedAthleteIds,

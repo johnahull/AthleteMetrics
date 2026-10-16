@@ -41,6 +41,7 @@ export function AthleteSelector({
     metricLabel,
     unit,
     formatValue,
+    isMetricConfigLoaded,
     athleteColorMap
   } = usePerformanceAthleteSelector({
     data,
@@ -114,6 +115,8 @@ export function AthleteSelector({
           variant="outline"
           size="sm"
           onClick={selectTopPerformers}
+          // The ranking direction comes from the metric list, so wait for it
+          disabled={!isMetricConfigLoaded}
           className="flex items-center gap-1"
         >
           <Trophy className="w-3 h-3" />
