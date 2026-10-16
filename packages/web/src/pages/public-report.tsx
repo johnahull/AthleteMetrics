@@ -24,7 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import { MetricExplanation } from "@/components/reports/MetricExplanation";
 import { MetricGroupRowHeading, MetricGroupHeading } from "@/components/reports/MetricGroupHeading";
 import { groupedCodes } from "@/lib/metric-groups";
-import type { MetricGroup } from "@shared/metric-order";
+import { sortCodesByGroups, type MetricGroup } from "@shared/metric-order";
 import { ReportMetricsGlossary } from "@/components/reports/ReportMetricsGlossary";
 import { TrendSection } from "@/components/reports/TrendSection";
 import { PercentileRadarSection } from "@/components/reports/PercentileRadarSection";
@@ -114,8 +114,8 @@ export default function PublicReport() {
   // stale `dataSnapshot` shape that the producer no longer emits).
   const glossaryOrder =
     reportType === 'individual'
-      ? Object.keys(athlete?.measurements ?? {})
-      : teamStatistics.map((s) => s.metric);
+      ? sortCodesByGroups(Object.keys(athlete?.measurements ?? {}), metricGroups)
+      : sortCodesByGroups(teamStatistics.map((s) => s.metric), metricGroups);
 
   // Team: collect all unique benchmark names across metrics (mirrors TeamReportView).
   const allBenchmarkNames = new Set<string>();

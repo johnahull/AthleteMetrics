@@ -6,6 +6,7 @@
 import express, { type Express } from "express";
 import { DEFAULT_AI_MODEL_KEY, getAIModel } from "@shared/ai-models";
 import rateLimit from "express-rate-limit";
+import { sortCodesByGroups } from "@shared/metric-order";
 import { buildMeasurementRows, buildBenchmarkRows } from "./pdf-metric-rows";
 import { ReportService } from "../services/report-service";
 import { createReportsFromInput, ReportCreateError } from "../services/report-create";
@@ -4734,9 +4735,9 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     }
   };
   if (reportData.reportType === 'team' && Array.isArray(reportData.teamStatistics)) {
-    for (const stat of reportData.teamStatistics) pushCode(stat?.metric);
+    for (const code of sortCodesByGroups(reportData.teamStatistics.map((s: any) => s?.metric), reportData.metricGroups)) pushCode(code);
   } else if (reportData.reportType === 'individual' && reportData.athlete?.measurements) {
-    for (const code of Object.keys(reportData.athlete.measurements)) pushCode(code);
+    for (const code of sortCodesByGroups(Object.keys(reportData.athlete.measurements), reportData.metricGroups)) pushCode(code);
   }
   // Fallback: include any explanation keys that weren't already ordered
   for (const code of Object.keys(glossaryExplanations)) pushCode(code);

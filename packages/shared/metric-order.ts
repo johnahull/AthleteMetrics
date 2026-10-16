@@ -147,3 +147,10 @@ export function orderReportData<T extends Obj>(
   out.metricGroups = metricGroups;
   return out as T & { metricGroups: MetricGroup[] };
 }
+
+/** `codes` in the order of `metricGroups` (unlisted codes last). Use instead of object-key order for all-digit codes. */
+export function sortCodesByGroups(codes: string[], metricGroups?: MetricGroup[]): string[] {
+  if (!metricGroups?.length) return codes;
+  const position = new Map(metricGroups.flatMap((g) => g.codes).map((c, i) => [c, i]));
+  return [...codes].sort((a, b) => (position.get(a) ?? Infinity) - (position.get(b) ?? Infinity));
+}

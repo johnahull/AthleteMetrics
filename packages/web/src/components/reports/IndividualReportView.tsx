@@ -26,6 +26,7 @@ import { CoachingInsightsCard } from "./CoachingInsightsCard";
 import { MetricExplanation } from "./MetricExplanation";
 import { MetricGroupRowHeading, MetricGroupHeading } from "./MetricGroupHeading";
 import { groupedCodes } from "@/lib/metric-groups";
+import { sortCodesByGroups } from "@shared/metric-order";
 import { ReportMetricsGlossary } from "./ReportMetricsGlossary";
 import { TrendSection } from "@/components/reports/TrendSection";
 import { PercentileRadarSection } from "@/components/reports/PercentileRadarSection";
@@ -119,7 +120,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
   }
 
   const { athlete, metricLabels, metricUnits, metricFormats, metricExplanations, trends, distributions } = reportData;
-  const measurementCodes = athlete?.measurements ? Object.keys(athlete.measurements) : [];
+  const measurementCodes = athlete?.measurements ? sortCodesByGroups(Object.keys(athlete.measurements), reportData.metricGroups) : [];
   const sel = resolveChartSelection(reportData.reportConfig);
   const showComparison = isGroupComparisonOn(reportData.reportConfig);
 

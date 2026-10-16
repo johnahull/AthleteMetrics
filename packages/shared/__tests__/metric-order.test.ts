@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   METRIC_GROUP_ORDER,
   normalizeCategory,
+  sortCodesByGroups,
   groupMetricCodes,
   orderReportData,
 } from "../metric-order";
@@ -141,5 +142,16 @@ describe("orderReportData", () => {
   it("works on empty data and non-objects", () => {
     expect(orderReportData({ reportType: "team" }, {}).metricGroups).toEqual([]);
     expect(orderReportData(null as any, {})).toBeNull();
+  });
+});
+
+describe("sortCodesByGroups", () => {
+  const groups = groupMetricCodes(["1600", "DASH_10YD", "BODY_WEIGHT"], { "1600": "Endurance" });
+  it("orders by the groups' code order, not by object-key order", () => {
+    expect(sortCodesByGroups(["BODY_WEIGHT", "1600", "DASH_10YD"], groups)).toEqual(["DASH_10YD", "1600", "BODY_WEIGHT"]);
+  });
+  it("keeps codes the groups do not list at the end, and passes through without groups", () => {
+    expect(sortCodesByGroups(["X", "DASH_10YD"], groups)).toEqual(["DASH_10YD", "X"]);
+    expect(sortCodesByGroups(["B", "A"], undefined)).toEqual(["B", "A"]);
   });
 });
