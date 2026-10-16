@@ -39,7 +39,7 @@ export function usePerformanceAthleteSelector({
       const values = safeNumberArray(trend.data.map(point => point.value));
       // For tracking metrics, use the most recent value; otherwise use best performance
       const bestValue = isTracking
-        ? values[values.length - 1] || 0
+        ? values[values.length - 1] ?? NaN
         : lowerIsBetter
           ? Math.min(...values)
           : Math.max(...values);

@@ -81,6 +81,22 @@ describe('usePerformanceAthleteSelector', () => {
     expect(result.current.athleteOptions.map(a => a.bestValue)).toEqual([135, 160]);
   });
 
+  it('sorts a tracking metric by name even when value order differs', () => {
+    const data = [
+      trend('z', 'Zed', 'BODY_WEIGHT', [150]),
+      trend('a', 'Amy', 'BODY_WEIGHT', [190]),
+    ];
+    const { result } = render('BODY_WEIGHT', data);
+    expect(result.current.athleteOptions.map(a => a.id)).toEqual(['a', 'z']);
+  });
+
+  it('shows a placeholder, not 0, for a tracking athlete with no numeric values', () => {
+    const data = [trend('a', 'Amy', 'BODY_WEIGHT', [NaN])];
+    const { result } = render('BODY_WEIGHT', data);
+    expect(Number.isFinite(result.current.athleteOptions[0].bestValue)).toBe(false);
+    expect(result.current.formatValue(result.current.athleteOptions[0].bestValue)).toBe('\u2014');
+  });
+
   it('takes the label and unit from the metric list', () => {
     const { result } = render('FLY10_TIME', []);
     expect(result.current.metricLabel).toBe('10-Yard Fly Time');
