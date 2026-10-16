@@ -19,6 +19,7 @@ import { ChevronUpIcon, ChevronDownIcon } from 'lucide-react';
 import { getAthleteColor } from '@/utils/chart-constants';
 import { durationAxis } from './utils/durationAxis';
 import { formatMeasurement } from '@shared/duration-format';
+import { isLowerBetterType } from '@shared/analytics-types';
 
 // Chart.js components are registered globally in lib/chart-setup.ts
 
@@ -66,8 +67,7 @@ export function LineChart({
 
     // Sort athletes by performance for smart defaults
     const metric = data[0]?.metric;
-    const metricConfig = getMetricConfig(metric);
-    const lowerIsBetter = metricConfig?.lowerIsBetter || false;
+    const lowerIsBetter = isLowerBetterType(metric, getMetricConfig(metric)?.metricType);
 
     const sortedData = [...data].sort((a, b) => {
       const aValues = a.data.map(point => point.value);
@@ -266,7 +266,8 @@ export function LineChart({
 
       // Get metric type to determine if lower or higher is better
       const metric = trend.metric || lineData.metric;
-      const lowerIsBetter = getMetricConfig(metric)?.lowerIsBetter ?? true;
+      // Unknown direction defaults to higher-is-better via isLowerBetterType (the old `?? true` meant lower-is-better)
+      const lowerIsBetter = isLowerBetterType(metric, getMetricConfig(metric)?.metricType);
 
       // Find the actual best point using reduce (not .find())
       const bestPoint = trend.data.reduce((best, current) => {
@@ -681,7 +682,7 @@ export function LineChart({
 
                 const first = athleteTrend.data[0].value;
                 const last = athleteTrend.data[athleteTrend.data.length - 1].value;
-                const isLowerBetter = getMetricConfig(athleteTrend.metric)?.lowerIsBetter;
+                const isLowerBetter = isLowerBetterType(athleteTrend.metric, getMetricConfig(athleteTrend.metric)?.metricType);
 
                 const improvement = isLowerBetter ? first - last : last - first;
                 const trend = improvement > 0 ? '↗️ Improving' : improvement < 0 ? '↘️ Declining' : '→ Stable';
