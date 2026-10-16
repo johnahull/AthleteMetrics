@@ -86,6 +86,17 @@ describe('metric-type resolver', () => {
     expect(String(warn.mock.calls[0][0])).toContain('UNKNOWN_ONCE');
   });
 
+  it('caps the warned-codes memory: past 1000 codes it starts over, so a code can warn again', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const codes = Array.from({ length: 1001 }, (_, i) => `CAP_${i}`);
+    await getMetricTypes(codes, 'org-a');
+    expect(warn).toHaveBeenCalledTimes(1001);
+    // CAP_0 was dropped when the memory filled; CAP_1000 was remembered after the reset
+    await getMetricTypes(['CAP_0', 'CAP_1000'], 'org-a');
+    expect(warn).toHaveBeenCalledTimes(1002);
+    expect(String(warn.mock.calls[1001][0])).toContain('CAP_0');
+  });
+
   it('does not remember an unknown code: a row added later is used at once', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     expect(await isLowerBetter('ORG_LATER', 'org-a')).toBe(false);

@@ -6,6 +6,8 @@ import { db } from '../db';
 import { and, eq, inArray } from 'drizzle-orm';
 import { customOrgMetrics, siteMetrics, type MetricType } from '@shared/schema';
 
+// Codes come from user requests, so the warn-once memory is capped: when full it starts over
+const MAX_WARNED_CODES = 1000;
 const warnedUnknownCodes = new Set<string>();
 
 /**
@@ -40,6 +42,7 @@ export async function getMetricTypes(codes: string[], organizationId?: string | 
     if (types[code]) continue;
     types[code] = 'higher_is_better';
     if (!warnedUnknownCodes.has(code)) {
+      if (warnedUnknownCodes.size >= MAX_WARNED_CODES) warnedUnknownCodes.clear();
       warnedUnknownCodes.add(code);
       console.warn(`[metric-type] No metric row for code "${code}"; treating it as higher_is_better`);
     }
