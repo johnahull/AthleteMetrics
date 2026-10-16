@@ -3822,11 +3822,11 @@ const MAX_CHART_IMAGES = 60;
  * data-URL entries so a bad/oversized payload degrades gracefully instead of
  * crashing the export or pinning the event loop.
  */
-interface ChartImage { metricCode: string; dataUrl: string; title?: string; group?: string; groupLabel?: string }
+export interface ChartImage { metricCode: string; dataUrl: string; title?: string; group?: string; groupLabel?: string; section?: string }
 const MAX_GROUP_TEXT_LENGTH = 60;
 const CHART_HEADING_HEIGHT = 8;
 
-function normalizeChartImages(raw: unknown): ChartImage[] {
+export function normalizeChartImages(raw: unknown): ChartImage[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .slice(0, MAX_CHART_IMAGES)
@@ -3843,11 +3843,11 @@ function normalizeChartImages(raw: unknown): ChartImage[] {
     )
     .map((img) => {
       const bounded = (v: unknown) => (typeof v === 'string' && v.length > 0 ? v.slice(0, MAX_GROUP_TEXT_LENGTH) : undefined);
-      return { ...img, group: bounded(img.group), groupLabel: bounded(img.groupLabel) };
+      return { ...img, group: bounded(img.group), groupLabel: bounded(img.groupLabel), section: bounded(img.section) };
     });
 }
 
-function addTrendChartsToPdf(
+export function addTrendChartsToPdf(
   doc: jsPDF,
   chartImages: ChartImage[],
   metricLabels: Record<string, string> = {},

@@ -27,13 +27,22 @@ describe('planChartPageBreaks', () => {
 });
 
 describe('chartGroupHeadings', () => {
-  const c = (group?: string, groupLabel?: string) => ({ group, groupLabel });
+  const c = (group?: string, groupLabel?: string, section?: string) => ({ group, groupLabel, section });
 
   it('marks the first chart and each group change, not repeats', () => {
     const out = chartGroupHeadings([
       c('speed', 'Speed'), c('speed', 'Speed'), c('power', 'Power'), c('power', 'Power'), c('agility', 'Agility'),
     ]);
     expect(out).toEqual(['Speed', null, 'Power', null, 'Agility']);
+  });
+
+  it('heads each section separately when consecutive sections share the same group', () => {
+    const out = chartGroupHeadings([
+      c('speed', 'Speed', 'standing'), c('speed', 'Speed', 'standing'),
+      c('speed', 'Speed', 'trends'), c('speed', 'Speed', 'trends'),
+      c('speed', 'Speed', 'distribution'),
+    ]);
+    expect(out).toEqual(['Speed', null, 'Speed', null, 'Speed']);
   });
 
   it('resets after a chart with no group, so the same group heads again', () => {

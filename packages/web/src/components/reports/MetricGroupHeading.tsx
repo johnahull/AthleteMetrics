@@ -30,11 +30,14 @@ export function MetricGroupBlocks({
   codes,
   metricGroups,
   className,
+  section,
   render,
 }: {
   codes: string[];
   metricGroups?: MetricGroup[];
   className?: string;
+  /** Section id, so PDF capture starts a new heading run per section. */
+  section: string;
   render: (code: string) => ReactNode;
 }) {
   return (
@@ -44,6 +47,7 @@ export function MetricGroupBlocks({
           key={g.group ?? 'all'}
           data-metric-group={g.group ?? undefined}
           data-metric-group-label={g.label ?? undefined}
+          data-metric-section={section}
           className={className}
         >
           <MetricGroupHeading label={g.label} />

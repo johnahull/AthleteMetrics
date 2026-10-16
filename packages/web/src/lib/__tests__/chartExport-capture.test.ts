@@ -13,9 +13,9 @@ describe('captureTrendCharts metric group', () => {
 
   it('sends the group and label of the wrapper around a grouped chart', async () => {
     document.body.innerHTML =
-      '<div data-metric-group="speed" data-metric-group-label="Speed"><div data-chart-metric="DASH_10YD"></div></div>';
+      '<div data-metric-group="speed" data-metric-group-label="Speed" data-metric-section="trends"><div data-chart-metric="DASH_10YD"></div></div>';
     const [chart] = await captureTrendCharts();
-    expect(chart).toMatchObject({ metricCode: 'DASH_10YD', group: 'speed', groupLabel: 'Speed' });
+    expect(chart).toMatchObject({ metricCode: 'DASH_10YD', group: 'speed', groupLabel: 'Speed', section: 'trends' });
   });
 
   it('omits the group on a section-level chart', async () => {
@@ -24,5 +24,6 @@ describe('captureTrendCharts metric group', () => {
     expect(chart.metricCode).toBe('radar');
     expect(chart.group).toBeUndefined();
     expect(chart.groupLabel).toBeUndefined();
+    expect(chart.section).toBeUndefined();
   });
 });

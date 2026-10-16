@@ -34,6 +34,7 @@ export function TeamBoxSwarmSection({ distributions, metricLabels = {}, generate
         <MetricGroupBlocks
           codes={entries.map(([code]) => code)}
           metricGroups={metricGroups}
+          section="team-boxswarm"
           className="space-y-10"
           render={(code) => {
           const dist = distributions[code];

@@ -39,6 +39,7 @@ export function LeaderboardBarSection({ athleteRankings, teamStatistics, metricL
         <MetricGroupBlocks
           codes={rows.map(({ stat }) => stat.metric)}
           metricGroups={metricGroups}
+          section="leaderboard"
           className="space-y-10"
           render={(code) => {
           const { stat, sorted } = rows.find((r) => r.stat.metric === code)!;

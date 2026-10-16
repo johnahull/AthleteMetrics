@@ -28,14 +28,16 @@ export function planChartPageBreaks(blockHeights: number[], usableHeight: number
 
 /**
  * Heading text for each chart that starts a metric group: the first chart of a group, or a group change from
- * the previous chart. A chart with no group (a section-level chart) gets no heading and resets the run, so a
+ * the previous chart or section. A chart with no group (a section-level chart) gets no heading and resets the run, so a
  * following chart of the same group is headed again. No "(cont.)" headings.
  */
-export function chartGroupHeadings(charts: Array<{ group?: string; groupLabel?: string }>): Array<string | null> {
+export function chartGroupHeadings(charts: Array<{ group?: string; groupLabel?: string; section?: string }>): Array<string | null> {
   let previous: string | undefined;
-  return charts.map(({ group, groupLabel }) => {
-    const heading = group && group !== previous ? (groupLabel || group) : null;
-    previous = group;
+  return charts.map(({ group, groupLabel, section }) => {
+    // The run is per section, so a new section starts with a heading even when its group is the same
+    const key = group ? `${section ?? ''}|${group}` : undefined;
+    const heading = key && key !== previous ? (groupLabel || group!) : null;
+    previous = key;
     return heading;
   });
 }

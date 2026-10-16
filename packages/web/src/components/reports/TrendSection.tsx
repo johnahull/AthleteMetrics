@@ -33,6 +33,7 @@ export function TrendSection({ trends, metricLabels = {}, metricUnits = {}, metr
           <MetricGroupBlocks
             codes={entries.map(([code]) => code)}
             metricGroups={metricGroups}
+            section="trends"
             className="space-y-8"
             render={(code) => (
               <BenchmarkTrendChart

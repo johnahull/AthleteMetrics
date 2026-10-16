@@ -47,6 +47,7 @@ export function TeamTrendSection({ trends, metricLabels = {}, metricUnits = {}, 
           <MetricGroupBlocks
             codes={entries.map(([code]) => code)}
             metricGroups={metricGroups}
+            section="team-trends"
             className="space-y-8"
             render={(code) => {
               const trend = trends[code];

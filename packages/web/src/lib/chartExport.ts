@@ -214,6 +214,8 @@ export interface CapturedChart {
   /** Metric group of the nearest ancestor with data-metric-group; absent on section-level charts. */
   group?: string;
   groupLabel?: string;
+  /** Chart section the wrapper belongs to (data-metric-section), so each section gets its own headings. */
+  section?: string;
 }
 
 export async function captureTrendCharts(): Promise<CapturedChart[]> {
@@ -238,8 +240,9 @@ export async function captureTrendCharts(): Promise<CapturedChart[]> {
       const groupNode = node.closest('[data-metric-group]');
       const group = groupNode?.getAttribute('data-metric-group') || undefined;
       const groupLabel = groupNode?.getAttribute('data-metric-group-label') || undefined;
+      const section = groupNode?.getAttribute('data-metric-section') || undefined;
       try {
-        return { metricCode, dataUrl: await getChartPngDataUrl(node), title, group, groupLabel } as CapturedChart;
+        return { metricCode, dataUrl: await getChartPngDataUrl(node), title, group, groupLabel, section } as CapturedChart;
       } catch (error) {
         devLog.error(`Failed to capture trend chart for ${metricCode}:`, error);
         return null;

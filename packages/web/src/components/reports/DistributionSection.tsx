@@ -143,6 +143,7 @@ export function DistributionSection({
         <MetricGroupBlocks
           codes={entries.map(([code]) => code)}
           metricGroups={metricGroups}
+          section="distribution"
           className="space-y-6"
           render={(code) => {
             const dist = distributions[code];
