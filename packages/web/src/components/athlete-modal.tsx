@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import { format } from "date-fns";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
@@ -436,7 +437,7 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
                         data-testid="input-athlete-birthdate"
                         value={field.value || ""}
                         placeholder="YYYY-MM-DD"
-                        max={new Date().toISOString().split('T')[0]} // Prevent future dates
+                        max={format(new Date(), 'yyyy-MM-dd')} // Prevent future dates
                       />
                     </FormControl>
                     <FormMessage />

@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
+import { format } from 'date-fns';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -167,11 +168,8 @@ export function GoalCreationWizard({
   const validateTargetDate = (date: string): string | null => {
     if (!date) return 'Please select a target date';
 
-    const targetDateObj = new Date(date);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    if (targetDateObj <= today) {
+    // 'YYYY-MM-DD' compares as a string
+    if (date <= format(new Date(), 'yyyy-MM-dd')) {
       return 'Date must be in the future';
     }
 
@@ -485,7 +483,7 @@ export function GoalCreationWizard({
                 type="date"
                 value={targetDate}
                 onChange={(e) => handleTargetDateChange(e.target.value)}
-                min={new Date().toISOString().split('T')[0]}
+                min={format(new Date(), 'yyyy-MM-dd')}
                 aria-describedby={errors.date ? 'date-error' : undefined}
               />
               {errors.date && (

@@ -343,6 +343,8 @@ export const submitWellnessResponseSchema = z.object({
     const submissionDate = new Date(data.date + 'T00:00:00Z');
     const today = new Date();
     today.setUTCHours(0, 0, 0, 0);
+    // The client sends its local day, which east of UTC can be one day ahead
+    today.setUTCDate(today.getUTCDate() + 1);
     return submissionDate <= today;
   },
   {

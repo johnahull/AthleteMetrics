@@ -4,6 +4,7 @@
  */
 
 import React, { useMemo, useRef, useEffect, useCallback, useState } from 'react';
+import { toCalendarDate } from '@/utils/date-utils';
 import type { TrendData, ChartConfiguration, StatisticalSummary } from '@shared/analytics-types';
 import { devLog } from '@/utils/dev-logger';
 import { useMetricConfig } from '@/hooks/use-metric-config';
@@ -236,11 +237,11 @@ export function TimeSeriesViolinChart({
 
         return {
           date: dateStr,
-          dateLabel: new Date(dateStr).toLocaleDateString(undefined, {
+          dateLabel: toCalendarDate(dateStr)?.toLocaleDateString(undefined, {
             year: 'numeric',
             month: 'short',
             day: 'numeric'
-          }),
+          }) ?? '',
           athletes,
           values,
           stats: { min, max, q1, median, q3, mean, count, std },

@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
+import { format } from "date-fns";
+import { toCalendarDate } from "@/utils/date-utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -389,7 +391,7 @@ export default function Publish() {
     pdf.setFontSize(10);
     let yPos = 35;
     if (filters.dateFrom || filters.dateTo) {
-      const dateRange = `Date Range: ${filters.dateFrom ? new Date(filters.dateFrom).toLocaleDateString() : 'Any'} - ${filters.dateTo ? new Date(filters.dateTo).toLocaleDateString() : 'Any'}`;
+      const dateRange = `Date Range: ${filters.dateFrom ? toCalendarDate(filters.dateFrom)?.toLocaleDateString() : 'Any'} - ${filters.dateTo ? toCalendarDate(filters.dateTo)?.toLocaleDateString() : 'Any'}`;
       pdf.text(dateRange, 20, yPos);
       yPos += 10;
     }
@@ -437,7 +439,7 @@ export default function Publish() {
         140,
         yPos,
       );
-      pdf.text(new Date(measurement.date).toLocaleDateString(), 170, yPos);
+      pdf.text(toCalendarDate(measurement.date)?.toLocaleDateString() ?? '', 170, yPos);
 
       yPos += 12;
     });
@@ -445,7 +447,7 @@ export default function Publish() {
     // Save the PDF. Sanitize the label before using it in the filename:
     // custom org metric labels can contain `/`, `:`, `*`, `?`, `|`, `\`, `<`,
     // `>`, `"` which are invalid filename characters on Windows/macOS.
-    const dateStr = filters.dateFrom ? filters.dateFrom : new Date().toISOString().split('T')[0];
+    const dateStr = filters.dateFrom ? filters.dateFrom : format(new Date(), 'yyyy-MM-dd');
     const safeLabel = getMetricLabel(filters.metric).replace(/[/\\:*?"<>|]/g, '-');
     const fileName = `${safeLabel}_Results_${dateStr}.pdf`;
     pdf.save(fileName);
@@ -959,7 +961,7 @@ export default function Publish() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-gray-600">
-                        {new Date(measurement.date).toLocaleDateString()}
+                        {toCalendarDate(measurement.date)?.toLocaleDateString()}
                       </td>
                     </tr>
                   );
@@ -1029,7 +1031,7 @@ export default function Publish() {
                           {metricFormats[filters.metric]
                             ? formatMeasurement(parseFloat(m.value), metricFormats[filters.metric])
                             : formatValueWithUnit(m.value, m.units)}{" "}
-                          • {new Date(m.date).toLocaleDateString()}
+                          • {toCalendarDate(m.date)?.toLocaleDateString()}
                         </span>
                       </li>
                     ))

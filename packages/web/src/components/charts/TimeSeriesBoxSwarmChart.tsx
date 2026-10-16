@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
+import { toCalendarDate } from '@/utils/date-utils';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -104,8 +105,8 @@ export function TimeSeriesBoxSwarmChart({
 
     const datasets: any[] = [];
     const dateLabels = sortedDates.map(dateStr => {
-      const date = new Date(dateStr);
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const date = toCalendarDate(dateStr);
+      return date?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) ?? '';
     });
 
     // Create box plot and swarm plot datasets for each date
@@ -292,8 +293,8 @@ export function TimeSeriesBoxSwarmChart({
     // Create date labels inside chartOptions to avoid closure issues
     const sortedDates = [...selectedDates].sort();
     const currentDateLabels = sortedDates.map(dateStr => {
-      const date = new Date(dateStr);
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const date = toCalendarDate(dateStr);
+      return date?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) ?? '';
     });
 
     return {

@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { toCalendarDate } from '@/utils/date-utils';
+import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -30,7 +32,7 @@ export function BatchWizard({ open, onClose, onComplete }: BatchWizardProps) {
   const [step, setStep] = useState(1);
   const [selectedAthleteIds, setSelectedAthleteIds] = useState<string[]>([]);
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>([]);
-  const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [measurementsPerAthlete, setMeasurementsPerAthlete] = useState(1);
 
   const totalSteps = 4;
@@ -72,7 +74,7 @@ export function BatchWizard({ open, onClose, onComplete }: BatchWizardProps) {
     setStep(1);
     setSelectedAthleteIds([]);
     setSelectedMetrics([]);
-    setDate(new Date().toISOString().split('T')[0]);
+    setDate(format(new Date(), 'yyyy-MM-dd'));
     setMeasurementsPerAthlete(1);
     onClose();
   };
@@ -537,7 +539,7 @@ function StepReview({ athleteIds, metrics, date, measurementsPerAthlete }: StepR
               <div className="flex-1">
                 <h4 className="font-semibold text-sm">Default Date</h4>
                 <p className="text-lg font-semibold mt-1">
-                  {new Date(date).toLocaleDateString('en-US', {
+                  {toCalendarDate(date)?.toLocaleDateString('en-US', {
                     weekday: 'long',
                     year: 'numeric',
                     month: 'long',

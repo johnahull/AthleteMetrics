@@ -6,6 +6,7 @@
  */
 
 import { useForm, useWatch } from "react-hook-form";
+import { format } from "date-fns";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { AlertCircle } from "lucide-react";
@@ -55,10 +56,7 @@ const selfEntrySchema = z.object({
     .min(1, "Date is required")
     .refine((dateStr) => {
       if (!dateStr) return true; // Let min() handle empty string
-      const date = new Date(dateStr);
-      const today = new Date();
-      today.setHours(23, 59, 59, 999); // End of today
-      return date <= today;
+      return dateStr <= format(new Date(), 'yyyy-MM-dd'); // 'YYYY-MM-DD' compares as a string
     }, "Date cannot be in the future"),
   notes: z.string().optional(),
 });
@@ -93,7 +91,7 @@ export function SelfEntryForm({
     defaultValues: {
       metric: '' as SelfEntryFormData['metric'], // Empty string triggers validation on submit
       value: undefined as unknown as number, // undefined triggers validation on submit
-      date: new Date().toISOString().split('T')[0], // Default to today
+      date: format(new Date(), 'yyyy-MM-dd'), // Default to today
       notes: '',
     },
   });
@@ -210,7 +208,7 @@ export function SelfEntryForm({
                     type="date"
                     disabled={isSubmitting}
                     {...field}
-                    max={new Date().toISOString().split('T')[0]}
+                    max={format(new Date(), 'yyyy-MM-dd')}
                   />
                 </FormControl>
                 <FormMessage />

@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
+import { toCalendarDate } from '@/utils/date-utils';
 import { formatMeasurement } from '@shared/duration-format';
 
 interface Measurement {
@@ -46,7 +47,8 @@ function resolveTimelineLabel(
 export function MeasurementsTimeline({ measurements }: MeasurementsTimelineProps) {
   const { getLabel, formats } = useMetricLabels();
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
+    const date = toCalendarDate(dateStr);
+    if (!date) return '';
     const now = new Date();
     const diffTime = Math.abs(now.getTime() - date.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));

@@ -148,8 +148,8 @@ describe('MeasurementHistoryTable', () => {
     it('should display formatted date (human readable)', () => {
       render(<MeasurementHistoryTable measurements={mockMeasurements} />);
 
-      // Expect dates like "Mar 15, 2024" - account for timezone shift (may show Mar 14)
-      expect(screen.getByText(/mar.*(14|15).*2024/i)).toBeInTheDocument();
+      // Calendar date: the stored day in every timezone
+      expect(screen.getByText('Mar 15, 2024')).toBeInTheDocument();
     });
 
     it('should display metric display name instead of raw key', () => {

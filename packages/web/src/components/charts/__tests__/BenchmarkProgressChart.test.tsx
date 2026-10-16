@@ -117,4 +117,18 @@ describe('BenchmarkProgressChart', () => {
     render(<BenchmarkProgressChart data={decliningData} />);
     expect(screen.getByTestId('mock-line-chart')).toBeInTheDocument();
   });
+
+  it('does not put "undefined" in the screen-reader description for malformed dates', () => {
+    const bad = {
+      ...mockData,
+      snapshots: [
+        { ...mockData.snapshots[0], date: 'not-a-date' },
+        { ...mockData.snapshots[2], date: 'also-bad' },
+      ],
+    };
+    const { container } = render(<BenchmarkProgressChart data={bad} />);
+    const desc = container.querySelector('#benchmark-progress-chart-desc');
+    expect(desc?.textContent).toContain('Starting at');
+    expect(desc?.textContent).not.toContain('undefined');
+  });
 });

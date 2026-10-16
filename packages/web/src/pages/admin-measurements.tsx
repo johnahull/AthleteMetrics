@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { format } from "date-fns";
+import { toCalendarDate } from "@/utils/date-utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -538,7 +540,7 @@ export default function AdminMeasurementsPage() {
       const headers = ['Date', 'Athlete', 'Organization', 'Team', 'Metric', 'Value', 'Units', 'Age', 'Submitted By', 'Verified By', 'Status', 'Notes'];
 
       const rows = measurements.map(m => [
-        new Date(m.date).toLocaleDateString(),
+        toCalendarDate(m.date)?.toLocaleDateString() ?? '',
         m.user.fullName,
         m.user.teams?.[0]?.organization.name || m.organizationId || '-',
         m.teamNameSnapshot || '-',
@@ -577,7 +579,7 @@ export default function AdminMeasurementsPage() {
       try {
         const link = document.createElement('a');
         link.href = url;
-        link.download = `measurements-${new Date().toISOString().split('T')[0]}.csv`;
+        link.download = `measurements-${format(new Date(), 'yyyy-MM-dd')}.csv`;
         link.click();
       } finally {
         // Always revoke the object URL to prevent memory leaks
@@ -1288,7 +1290,7 @@ export default function AdminMeasurementsPage() {
                         <TableCell className="whitespace-nowrap">
                           <div className="flex items-center gap-2">
                             <Calendar className="h-4 w-4 text-muted-foreground" />
-                            {new Date(measurement.date).toLocaleDateString()}
+                            {toCalendarDate(measurement.date)?.toLocaleDateString()}
                           </div>
                         </TableCell>
                         <TableCell>

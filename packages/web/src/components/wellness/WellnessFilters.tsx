@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toCalendarDate } from '@/utils/date-utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -144,8 +145,8 @@ export function WellnessFilters({
               {/* Date range badge */}
               <Badge variant="secondary" className="flex items-center gap-1">
                 <span>
-                  {new Date(filters.dateFrom).toLocaleDateString()} -{' '}
-                  {new Date(filters.dateTo).toLocaleDateString()}
+                  {toCalendarDate(filters.dateFrom)?.toLocaleDateString() ?? ''} -{' '}
+                  {toCalendarDate(filters.dateTo)?.toLocaleDateString() ?? ''}
                 </span>
               </Badge>
 

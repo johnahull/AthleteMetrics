@@ -10,7 +10,7 @@ import { useWellnessDashboard } from '@/hooks/use-wellness-dashboard';
 import { useTeams } from '@/hooks/use-teams';
 import TeamStatusCard from '@/components/wellness/TeamStatusCard';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 
 interface WellnessDashboardProps {
   organizationId: string;
@@ -22,7 +22,7 @@ export default function WellnessDashboard({ organizationId }: WellnessDashboardP
   // Get today's date in YYYY-MM-DD format
   const getTodayDate = () => {
     const today = new Date();
-    return today.toISOString().split('T')[0];
+    return format(today, 'yyyy-MM-dd');
   };
 
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDate());

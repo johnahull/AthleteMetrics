@@ -26,6 +26,7 @@ import { MetricContextTooltip } from './MetricContextTooltip';
 import { AthleteMetricExplanation } from './AthleteMetricExplanation';
 import { isLowerBetter } from '@/constants/metrics';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
+import { toCalendarDate } from '@/utils/date-utils';
 import { formatValueWithUnit } from '@/lib/metrics';
 import type { MetricExplanation } from '@shared/metric-explanations';
 import { formatMeasurement } from '@shared/duration-format';
@@ -390,9 +391,9 @@ export function MetricProgressCard({
                   : formatValueWithUnit(personalRecord?.value?.toFixed(2) ?? bestValue?.toFixed(2) ?? '', units)}
               </span>
             </MetricContextTooltip>
-            {personalRecord && (
+            {personalRecord && toCalendarDate(personalRecord.date) && (
               <span className="text-xs text-gray-500">
-                ({new Date(personalRecord.date).toLocaleDateString()})
+                ({toCalendarDate(personalRecord.date)?.toLocaleDateString()})
               </span>
             )}
             {personalRecord?.isRecent && !isTracking && (

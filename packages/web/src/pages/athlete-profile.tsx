@@ -37,6 +37,7 @@ import {
 } from "@/utils/athlete-dashboard-utils";
 import { useMetricLabels } from "@/hooks/use-metric-labels";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
+import { toCalendarDate } from "@/utils/date-utils";
 
 // Edit measurement form schema
 const editMeasurementSchema = z.object({
@@ -314,7 +315,7 @@ export default function AthleteProfile() {
   };
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString();
+    return toCalendarDate(dateStr)?.toLocaleDateString() ?? '';
   };
 
   // Wellness data - wellnessEnabled is calculated from site + org settings above

@@ -12,6 +12,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Clock } from 'lucide-react';
 import { getMetricIcon } from '@/utils/athlete-metric-icons';
+import { toCalendarDate } from '@/utils/date-utils';
 import { formatValueWithUnit } from "@/lib/metrics";
 
 interface TimelineActivity {
@@ -102,7 +103,7 @@ export function RecentActivityTimeline({
                     {getMetricIcon(activity.metric)}
                   </div>
                   <span className="text-gray-500">
-                    {new Date(activity.date).toLocaleDateString('en-US', {
+                    {toCalendarDate(activity.date)?.toLocaleDateString('en-US', {
                       month: 'short',
                       day: 'numeric',
                     })}
@@ -150,7 +151,7 @@ export function RecentActivityTimeline({
                           data-testid={`activity-date-${activity.id}`}
                           className="text-sm text-gray-500"
                         >
-                          {new Date(activity.date).toLocaleDateString('en-US', {
+                          {toCalendarDate(activity.date)?.toLocaleDateString('en-US', {
                             month: 'short',
                             day: 'numeric',
                             year: 'numeric',

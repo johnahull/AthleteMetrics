@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { format } from "date-fns";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -206,7 +207,7 @@ export function InvitationModal({
                     <FormControl>
                       <Input
                         type="date"
-                        max={new Date().toISOString().split("T")[0]}
+                        max={format(new Date(), 'yyyy-MM-dd')}
                         {...field}
                         data-testid="input-invite-birth-date"
                       />

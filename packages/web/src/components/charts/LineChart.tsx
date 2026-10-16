@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useRef } from 'react';
+import { toCalendarDate } from '@/utils/date-utils';
 import type { ChartOptions } from 'chart.js';
 import type { AnnotationOptions } from 'chartjs-plugin-annotation';
 import { Line } from 'react-chartjs-2';
@@ -153,8 +154,8 @@ export function LineChart({
 
     const sortedDates = Array.from(allDates).sort();
     const labels = sortedDates.map(dateStr => {
-      const date = new Date(dateStr);
-      return date.toLocaleDateString('en-US', {
+      const date = toCalendarDate(dateStr);
+      return date?.toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric'
       });
@@ -394,7 +395,7 @@ export function LineChart({
           title: (context) => {
             const dateIndex = context[0].dataIndex;
             const dateStr = lineData?.sortedDates[dateIndex];
-            return dateStr ? new Date(dateStr).toLocaleDateString() : '';
+            return toCalendarDate(dateStr)?.toLocaleDateString() ?? '';
           },
           label: (context) => {
             const value = context.parsed.y;
@@ -665,8 +666,7 @@ export function LineChart({
             </div>
             <div className="text-xs text-muted-foreground">
               {(() => {
-                const date = personalBests[0].date instanceof Date ? personalBests[0].date : new Date(personalBests[0].date);
-                return date.toLocaleDateString();
+                return toCalendarDate(personalBests[0].date)?.toLocaleDateString();
               })()}
             </div>
           </div>

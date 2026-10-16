@@ -7,6 +7,7 @@
  */
 
 import { useAuth } from '@/lib/auth';
+import { toCalendarDate } from '@/utils/date-utils';
 import { useUnifiedDashboard, useUnifiedMeasurements, useGlobalAthleteProfile } from '@/hooks/useGlobalAthlete';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -237,7 +238,7 @@ export default function UnifiedDashboardPage() {
                       )}
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      {new Date(m.date).toLocaleDateString()}
+                      {toCalendarDate(m.date)?.toLocaleDateString()}
                     </div>
                   </div>
                   <div className="text-right">

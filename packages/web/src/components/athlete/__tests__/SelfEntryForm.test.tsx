@@ -8,6 +8,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { format } from 'date-fns';
 import { SelfEntryForm } from '../SelfEntryForm';
 
 // Mock the useAvailableMetrics hook
@@ -154,7 +155,7 @@ describe('SelfEntryForm', () => {
       render(<SelfEntryForm onSubmit={mockOnSubmit} onCancel={mockOnCancel} />);
 
       const dateInput = screen.getByLabelText(/date/i);
-      const today = new Date().toISOString().split('T')[0];
+      const today = format(new Date(), 'yyyy-MM-dd');
 
       expect(dateInput).toHaveValue(today);
     });

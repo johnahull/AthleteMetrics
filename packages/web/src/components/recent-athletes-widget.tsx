@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { toCalendarDate } from "@/utils/date-utils";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Users, Plus, AlertCircle, RefreshCw } from "lucide-react";
@@ -164,7 +165,10 @@ export default function RecentAthletesWidget({
                     <span>{getMetricLabel(athlete.lastMeasurementType)}</span>
                     <span>•</span>
                     <span>
-                      {format(new Date(athlete.lastMeasurementDate), "MMM d")}
+                      {(() => {
+                        const day = toCalendarDate(athlete.lastMeasurementDate);
+                        return day ? format(day, "MMM d") : "";
+                      })()}
                     </span>
                     {athlete.teamName && (
                       <>

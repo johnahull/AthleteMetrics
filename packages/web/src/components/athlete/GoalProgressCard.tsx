@@ -28,6 +28,7 @@ import {
   isGoalAchieved,
 } from '@/utils/goal-utils';
 import { getMetricEducation, formatMetricValue } from '@/utils/metric-education-utils';
+import { toCalendarDate } from '@/utils/date-utils';
 import { formatMeasurement } from '@shared/duration-format';
 
 interface GoalProgressCardProps {
@@ -123,7 +124,8 @@ export function GoalProgressCard({
 
   // Format target date for display
   const formatTargetDate = () => {
-    const date = new Date(goal.targetDate);
+    const date = toCalendarDate(goal.targetDate);
+    if (!date) return '';
     return date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',

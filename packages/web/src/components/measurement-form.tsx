@@ -1,4 +1,5 @@
 import { useState, useEffect, useId } from "react";
+import { format } from "date-fns";
 import { useForm, FormProvider, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -71,7 +72,7 @@ export default function MeasurementForm() {
     resolver: zodResolver(dynamicMeasurementSchema),
     defaultValues: {
       userId: "",
-      date: new Date().toISOString().split('T')[0],
+      date: format(new Date(), 'yyyy-MM-dd'),
       metric: firstMetricCode,
       value: 0,
       auxiliaryValue: undefined,
@@ -282,7 +283,7 @@ export default function MeasurementForm() {
   const clearForm = () => {
     form.reset({
       userId: "",
-      date: new Date().toISOString().split('T')[0],
+      date: format(new Date(), 'yyyy-MM-dd'),
       metric: firstMetricCode,
       value: 0,
       notes: "",
@@ -748,7 +749,7 @@ export default function MeasurementForm() {
                               min="1970-01-01"
                               disabled={createAthleteMutation.isPending}
                               data-testid="input-quick-add-birthday"
-                              max={new Date().toISOString().split('T')[0]} // Prevent future dates
+                              max={format(new Date(), 'yyyy-MM-dd')} // Prevent future dates
                             />
                           </FormControl>
                           <FormMessage />
