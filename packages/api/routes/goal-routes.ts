@@ -15,6 +15,7 @@ import { requireAuth } from "../middleware";
 import { insertGoalSchema, updateGoalSchema, goalStatusEnum } from "@shared/schema";
 import { ZodError } from "zod";
 import { isSiteAdmin } from "../utils/auth-helpers";
+import { isLowerBetter } from "../utils/metric-type";
 
 // UUID validation regex
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -227,6 +228,18 @@ export function registerGoalRoutes(app: Express) {
           // No measurements found - require baseline value
           return res.status(400).json({
             message: "No recent measurements found for this metric. Please provide a baseline value."
+          });
+        }
+      }
+
+      // A target value goal must aim past the baseline. goals.metric references site_metrics, so no org is needed
+      if (validatedData.goalType === 'target_value') {
+        const target = Number(validatedData.targetValue);
+        const baseline = Number(finalBaselineValue);
+        const lowerIsBetter = await isLowerBetter(validatedData.metric);
+        if (lowerIsBetter ? target >= baseline : target <= baseline) {
+          return res.status(400).json({
+            message: `Target must be better than the baseline (${lowerIsBetter ? 'lower' : 'higher'} for this metric)`
           });
         }
       }
