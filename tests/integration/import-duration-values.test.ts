@@ -107,7 +107,7 @@ describe('mm:ss values on the import paths (CSV, OCR)', () => {
       .attach(
         'file',
         Buffer.from(
-          `firstName,lastName,teamName,date,metric,value\n${athlete.firstName},${athlete.lastName},${teamName},2026-03-10,${METRIC},${value}\n`
+          `firstName,lastName,teamName,date,metric,value\n"${athlete.firstName}","${athlete.lastName}","${teamName}",2026-03-10,${METRIC},"${value}"\n`
         ),
         'm.csv'
       );

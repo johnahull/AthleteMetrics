@@ -401,6 +401,7 @@ export interface IStorage {
   disableMetricForOrganization(organizationId: string, metricCode: string): Promise<OrganizationMetric>;
   updateOrganizationMetric(organizationId: string, metricCode: string, data: Partial<UpdateOrganizationMetric>): Promise<OrganizationMetric>;
   bulkEnableMetricsForOrganization(organizationId: string, metricCodes: string[]): Promise<OrganizationMetric[]>;
+  bulkUpdateMetricsForOrganization(organizationId: string, changes: { enable: string[]; disable: string[] }): Promise<OrganizationMetric[]>;
 
   // Site Benchmarks (Master Benchmark Catalog)
   getSiteBenchmarks(filters?: { includeInactive?: boolean; orgType?: OrganizationType }): Promise<SiteBenchmark[]>;
@@ -5023,76 +5024,73 @@ export class DatabaseStorage implements IStorage {
     organizationId: string,
     metricCodes: string[]
   ): Promise<OrganizationMetric[]> {
-    // Use transaction to ensure atomicity
+    return await db.transaction((tx: any) => this.enableMetricsInTx(tx, organizationId, metricCodes));
+  }
+
+  /**
+   * Enable and disable many metrics in one transaction. A disable code with no row is a no-op
+   * (it is already not enabled). Returns only the rows that were written.
+   */
+  async bulkUpdateMetricsForOrganization(
+    organizationId: string,
+    changes: { enable: string[]; disable: string[] }
+  ): Promise<OrganizationMetric[]> {
     return await db.transaction(async (tx: any) => {
-      // Validate all metrics exist and are active in a single query
-      const activeMetrics = await tx
-        .select()
-        .from(siteMetrics)
-        .where(
-          and(
-            inArray(siteMetrics.code, metricCodes),
-            eq(siteMetrics.isActive, true)
-          )
-        );
-
-      // Check if all requested metrics were found and are active
-      if (activeMetrics.length !== metricCodes.length) {
-        const foundCodes = activeMetrics.map((m: any) => m.code);
-        const missingCodes = metricCodes.filter(code => !foundCodes.includes(code));
-        throw new Error(
-          `Some metrics are not found or not active: ${missingCodes.join(', ')}`
-        );
-      }
-
-      // Enable each metric (upsert to handle existing records)
-      const results: OrganizationMetric[] = [];
-      for (const metricCode of metricCodes) {
-        // Check if already exists
-        const [existing] = await tx
-          .select()
-          .from(organizationMetrics)
-          .where(
-            and(
-              eq(organizationMetrics.organizationId, organizationId),
-              eq(organizationMetrics.metricCode, metricCode)
-            )
-          )
-          .limit(1);
-
-        if (existing) {
-          // Update to enabled if it exists
-          const [updated] = await tx
+      const enabled = changes.enable.length
+        ? await this.enableMetricsInTx(tx, organizationId, changes.enable)
+        : [];
+      const disabled: OrganizationMetric[] = changes.disable.length
+        ? await tx
             .update(organizationMetrics)
-            .set({
-              isEnabled: true,
-              updatedAt: new Date(),
-            })
+            .set({ isEnabled: false, updatedAt: new Date() })
             .where(
               and(
                 eq(organizationMetrics.organizationId, organizationId),
-                eq(organizationMetrics.metricCode, metricCode)
+                inArray(organizationMetrics.metricCode, changes.disable)
               )
             )
-            .returning();
-          results.push(updated);
-        } else {
-          // Create new entry
-          const [created] = await tx
-            .insert(organizationMetrics)
-            .values({
-              organizationId,
-              metricCode,
-              isEnabled: true,
-              createdAt: new Date(),
-            })
-            .returning();
-          results.push(created);
-        }
-      }
-
-      return results;
+            .returning()
+        : [];
+      return [...enabled, ...disabled];
     });
+  }
+
+  private async enableMetricsInTx(
+    tx: any,
+    organizationId: string,
+    metricCodes: string[]
+  ): Promise<OrganizationMetric[]> {
+    // Validate all metrics exist and are active in a single query
+    const activeMetrics = await tx
+      .select()
+      .from(siteMetrics)
+      .where(
+        and(
+          inArray(siteMetrics.code, metricCodes),
+          eq(siteMetrics.isActive, true)
+        )
+      );
+
+    // Check if all requested metrics were found and are active
+    if (activeMetrics.length !== metricCodes.length) {
+      const foundCodes = activeMetrics.map((m: any) => m.code);
+      const missingCodes = metricCodes.filter(code => !foundCodes.includes(code));
+      throw new Error(
+        `Some metrics are not found or not active: ${missingCodes.join(', ')}`
+      );
+    }
+
+    // One upsert for all codes: creates missing rows, re-enables existing ones (other settings kept)
+    if (metricCodes.length === 0) return [];
+    const now = new Date();
+    return await tx
+      .insert(organizationMetrics)
+      .values(metricCodes.map((metricCode) => ({ organizationId, metricCode, isEnabled: true, createdAt: now })))
+      .onConflictDoUpdate({
+        target: [organizationMetrics.organizationId, organizationMetrics.metricCode],
+        set: { isEnabled: true, updatedAt: now },
+      })
+      .returning();
   }
 
   // ========================================================================

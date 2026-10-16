@@ -47,6 +47,7 @@ describe('lower-is-better time codes defined as lower_is_better in site_metrics 
     'FLY10M_TIME',
     'AGILITY_COD_DEFICIT_M',
     'AGILITY_COD_DEFICIT_YD',
+    'AGILITY_COD_DEFICIT_M_INTERP',
   ])('%s is lower-is-better', (code) => {
     expect(isLowerBetterType(code)).toBe(true);
   });

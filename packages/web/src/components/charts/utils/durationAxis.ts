@@ -11,6 +11,8 @@ export function durationAxis(format: MeasurementFormat) {
       const step = durationTickStep(scale.max - scale.min);
       const ticks: { value: number }[] = [];
       for (let v = Math.ceil(scale.min / step) * step; v <= scale.max; v += step) ticks.push({ value: v });
+      // A single value off the step grid yields no tick; keep one at the value so labels stay m:ss
+      if (ticks.length === 0) ticks.push({ value: scale.min });
       scale.ticks = ticks;
     },
     ticks: {

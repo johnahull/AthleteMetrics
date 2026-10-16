@@ -16,6 +16,12 @@ describe('durationAxis', () => {
     expect(scale.ticks.map((t) => t.value)).toEqual([300, 360, 420, 480, 540, 600]);
   });
 
+  it('keeps one tick for a single value off the step grid', () => {
+    const scale = { min: 402.5, max: 402.5, ticks: [] as { value: number }[] };
+    durationAxis(format).afterBuildTicks(scale);
+    expect(scale.ticks.map((t) => t.value)).toEqual([402.5]);
+  });
+
   it('labels ticks as m:ss without decimals', () => {
     expect(durationAxis(format).ticks.callback(420)).toBe('7:00');
     expect(durationAxis(format).ticks.callback('405')).toBe('6:45');

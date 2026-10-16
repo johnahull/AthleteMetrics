@@ -71,6 +71,16 @@ export const BUILT_IN_METRIC_EXPLANATIONS: Record<string, MetricExplanation> = {
     unitNote: 'Measured in seconds; lower is better.',
     directionOfBetter: 'lower',
   },
+  AGILITY_COD_DEFICIT_M_INTERP: {
+    title: 'COD Deficit (m, interpolated 10 m)',
+    shortDescription: 'How much time the 180-degree turn costs you compared with running straight (meters protocol, estimated 10 m).',
+    whatItMeasures:
+      'The change of direction deficit is your faster-leg 5-0-5 time in meters minus your 10-meter sprint time. Here the 10-meter time is not timed directly: it is estimated from your 10 and 20 yard splits. It isolates the time lost to braking, turning, and re-accelerating.',
+    whyItMatters:
+      'A small deficit means you lose little time when you change direction relative to your straight-line speed. A large deficit points to turning mechanics and braking strength as the area to train. Because the 10-meter time is an estimate, compare it with other estimated results rather than with a timed 10-meter deficit.',
+    unitNote: 'Measured in seconds; lower is better.',
+    directionOfBetter: 'lower',
+  },
   AGILITY_5105: {
     title: '5-10-5 Pro Agility',
     shortDescription: 'How fast you can change direction side to side — the NFL Combine standard.',
