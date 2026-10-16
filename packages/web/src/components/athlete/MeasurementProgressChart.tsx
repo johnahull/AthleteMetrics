@@ -7,6 +7,7 @@
  */
 
 import React, { useMemo, useRef, useState } from 'react';
+import { toCalendarDate } from '@/utils/date-utils';
 import { Line } from 'react-chartjs-2';
 import type { ChartOptions, ChartDataset } from 'chart.js';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -184,8 +185,8 @@ export function MeasurementProgressChart({
     displayedMeasurementsRef.current = sorted;
 
     const labels = sorted.map(m => {
-      const date = new Date(m.date);
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const date = toCalendarDate(m.date);
+      return date?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     });
 
     // Build datasets array with proper typing

@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { toCalendarDate } from '@/utils/date-utils';
 import {
   Chart as ChartJS,
   LinearScale,
@@ -402,7 +403,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             }
             
             return point.date ? 
-              `${datasetLabel} - ${new Date(point.date).toLocaleDateString()}` :
+              `${datasetLabel} - ${toCalendarDate(point.date)?.toLocaleDateString()}` :
               datasetLabel;
           },
           label: (context) => {
@@ -434,7 +435,7 @@ export const ConnectedScatterChart = React.memo(function ConnectedScatterChart({
             }
             
             if (point.date) {
-              labels.push(`Date: ${new Date(point.date).toLocaleDateString()}`);
+              labels.push(`Date: ${toCalendarDate(point.date)?.toLocaleDateString()}`);
             }
             
             return labels;

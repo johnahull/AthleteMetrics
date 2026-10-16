@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { toCalendarDate } from '@/utils/date-utils';
 import { Calendar, Users, CheckSquare, Square, Shuffle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -51,14 +52,14 @@ export function DateSelector({
     // Convert to DateInfo objects
     return Array.from(dateMap.entries())
       .map(([dateStr, athleteIds]) => {
-        const date = new Date(dateStr);
+        const date = toCalendarDate(dateStr);
         return {
           date: dateStr,
-          displayDate: date.toLocaleDateString('en-US', {
+          displayDate: date?.toLocaleDateString('en-US', {
             month: 'short',
             day: 'numeric',
             year: 'numeric'
-          }),
+          }) ?? '',
           athleteCount: athleteIds.size,
           totalMeasurements: athleteIds.size // For trends, each athlete has max 1 measurement per date
         };

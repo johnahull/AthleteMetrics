@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { toCalendarDate } from '@/utils/date-utils';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -198,8 +199,8 @@ export function MultiLineChart({
 
     // Create labels
     const labels = sortedDates.map(dateStr => {
-      const date = new Date(dateStr);
-      return date.toLocaleDateString('en-US', {
+      const date = toCalendarDate(dateStr);
+      return date?.toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric'
       });
@@ -310,7 +311,7 @@ export function MultiLineChart({
           title: (context: any) => {
             const dateIndex = context[0].dataIndex;
             const dateStr = multiLineData?.sortedDates[dateIndex];
-            return dateStr ? new Date(dateStr).toLocaleDateString() : '';
+            return toCalendarDate(dateStr)?.toLocaleDateString() ?? '';
           },
           label: (context: any) => {
             const value = context.parsed.y;

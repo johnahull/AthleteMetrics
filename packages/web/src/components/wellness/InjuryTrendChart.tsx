@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { toCalendarDate } from '@/utils/date-utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Line } from 'react-chartjs-2';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
@@ -101,8 +102,8 @@ export function InjuryTrendChart({ template, responses, filters }: InjuryTrendCh
 
   const chartData = useMemo(() => {
     const labels = dailyInjuryData.map(d => {
-      const date = new Date(d.date);
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const date = toCalendarDate(d.date);
+      return date?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     });
 
     return {

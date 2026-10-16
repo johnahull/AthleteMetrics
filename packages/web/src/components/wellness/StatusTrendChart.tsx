@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { toCalendarDate } from '@/utils/date-utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Line } from 'react-chartjs-2';
 import type { ChartOptions } from 'chart.js';
@@ -75,8 +76,8 @@ export function StatusTrendChart({ template, responses, filters }: StatusTrendCh
 
   const chartData = useMemo(() => {
     const labels = dailyBreakdowns.map(d => {
-      const date = new Date(d.date);
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const date = toCalendarDate(d.date);
+      return date?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     });
 
     return {

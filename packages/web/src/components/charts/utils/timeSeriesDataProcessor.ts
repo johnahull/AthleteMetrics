@@ -1,4 +1,5 @@
 import type { TrendData } from '@shared/analytics-types';
+import { toCalendarDate } from '@/utils/date-utils';
 import { safeNumber } from '@shared/utils/number-conversion';
 
 export interface ProcessedDateData {
@@ -89,6 +90,5 @@ export function createAthleteColorMap(
  * Formats date string for chart labels
  */
 export function formatDateLabel(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return toCalendarDate(dateStr)?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) ?? '';
 }
