@@ -1701,10 +1701,14 @@ function addAnchorMetricIssue(
   }
 }
 
-// sameRunInputs must be sources of the metric and are only honoured by the same_date strategy.
+// sameRunInputs must be sources of the metric and are only honoured by the plain same_date strategy
+// (not with latest_event or an anchorMetric).
 // Checked only when the payload carries the fields (a partial PATCH cannot be checked here).
 function addSameRunInputsIssue(
-  data: { dependentMetrics?: string[] | null; calculationConfig?: { dateMatchStrategy?: string; sameRunInputs?: string[] } | null },
+  data: {
+    dependentMetrics?: string[] | null;
+    calculationConfig?: { dateMatchStrategy?: string; sourceSelection?: string; anchorMetric?: string; sameRunInputs?: string[] } | null;
+  },
   ctx: z.RefinementCtx
 ) {
   const inputs = data.calculationConfig?.sameRunInputs;
@@ -1712,11 +1716,13 @@ function addSameRunInputsIssue(
   const deps = data.dependentMetrics?.map((d) => d.toUpperCase());
   if (
     data.calculationConfig?.dateMatchStrategy !== 'same_date' ||
+    data.calculationConfig?.sourceSelection ||
+    data.calculationConfig?.anchorMetric ||
     (deps && !inputs.every((c) => deps.includes(c.toUpperCase())))
   ) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "sameRunInputs requires the same_date strategy and must be dependent metrics",
+      message: "sameRunInputs requires the plain same_date strategy (no sourceSelection or anchorMetric) and must be dependent metrics",
       path: ['calculationConfig', 'sameRunInputs'],
     });
   }
