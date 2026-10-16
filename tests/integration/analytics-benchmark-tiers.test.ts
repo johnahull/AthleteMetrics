@@ -31,6 +31,7 @@ import {
   measurements,
   customBenchmarks,
   organizationBenchmarks,
+  siteMetrics,
 } from '@shared/schema';
 import { eq, and, inArray } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
@@ -389,5 +390,66 @@ describe('GET /api/analytics/benchmark-tiers', () => {
     // Reflects only the VERIFIED best (27.5), not the better unverified 35.0.
     expect(c.athleteValue).toBe(27.5);
     expect(c.tierName).toBe('Good');
+  });
+
+  it('uses the lowest value for a site lower-is-better metric outside the seeded list', async () => {
+    // Tier benchmarks reference site_metrics (FK), so only site metrics can have tiers. MILE_RUN_* was never in the
+    // old hard-coded list: its direction can only come from the site_metrics row.
+    const code = `MILE_RUN_TIER_${Date.now()}`;
+    await db.insert(siteMetrics).values({ code, label: 'Mile', unit: 's', metricType: 'lower_is_better' } as any);
+    try {
+      const tierGroupId = randomUUID();
+      const tiers = await db.insert(customBenchmarks).values([
+        { tierName: 'Elite', minValue: '0.00', maxValue: '360.00' },
+        { tierName: 'Developing', minValue: '360.00', maxValue: '600.00' },
+      ].map((t, i) => ({
+        organizationId: testOrg.id,
+        metricCode: code,
+        name: `Mile ${t.tierName}`,
+        comparisonOperator: 'range',
+        minValue: t.minValue,
+        maxValue: t.maxValue,
+        tierGroupId,
+        tierOrder: i + 1,
+        tierName: t.tierName,
+        tierColor: 'gray',
+        isActive: true,
+      }))).returning();
+      createdBenchmarkIds.push(...tiers.map((b) => b.id));
+      const orgBenchmarks = await db.insert(organizationBenchmarks).values(tiers.map((b, i) => ({
+        organizationId: testOrg.id,
+        benchmarkId: b.id,
+        benchmarkType: 'custom',
+        isEnabled: true,
+        displayOrder: 20 + i,
+      }))).returning();
+      createdOrgBenchmarkIds.push(...orgBenchmarks.map((o) => o.id));
+      await db.insert(measurements).values(['400.000', '350.000'].map((value, i) => ({
+        userId: testAthlete.id,
+        submittedBy: testCoach.id,
+        date: `2024-0${i + 4}-15`,
+        age: 17,
+        metric: code,
+        value,
+        units: 's',
+        organizationId: testOrg.id,
+        isVerified: true,
+      })));
+
+      const response = await request(app)
+        .get('/api/analytics/benchmark-tiers')
+        .query({ athleteId: testAthlete.id, metric: code })
+        .set('Cookie', coachAuthCookie);
+
+      expect(response.status).toBe(200);
+      expect(response.body.comparison.athleteValue).toBe(350);
+      expect(response.body.comparison.tierName).toBe('Elite');
+    } finally {
+      await db.delete(organizationBenchmarks).where(inArray(organizationBenchmarks.id, createdOrgBenchmarkIds));
+      await db.delete(customBenchmarks).where(inArray(customBenchmarks.id, createdBenchmarkIds));
+      createdOrgBenchmarkIds = [];
+      createdBenchmarkIds = [];
+      await db.delete(siteMetrics).where(eq(siteMetrics.code, code));
+    }
   });
 });

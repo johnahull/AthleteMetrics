@@ -12,6 +12,14 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { subMonths } from 'date-fns';
 import { AchievementService } from '../achievement-service';
 import { storage } from '../../storage';
+import { isLowerBetter } from '../../utils/metric-type';
+
+// Metric direction comes from the DB resolver; the unit tests decide it here, per organization.
+// MILE_RUN and ORG_RUN are not in the old hard-coded list, so they prove the resolved type is what counts.
+const LOWER_IN_ORG: Record<string, string[]> = {
+  'org-456': ['FLY10_TIME', 'DASH_40YD', 'MILE_RUN', 'ORG_RUN'],
+};
+vi.mock('../../utils/metric-type', () => ({ isLowerBetter: vi.fn() }));
 
 // Mock storage
 vi.mock('../../storage', () => ({
@@ -32,6 +40,7 @@ describe('AchievementService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(isLowerBetter).mockImplementation(async (code, orgId) => (LOWER_IN_ORG[orgId ?? ''] ?? []).includes(code));
     service = new AchievementService();
   });
 
@@ -412,6 +421,85 @@ describe('AchievementService', () => {
         expect(risingStar.metadata.metric).toBe('FLY10_TIME');
         expect(parseFloat(risingStar.metadata.improvement)).toBeGreaterThanOrEqual(10);
       }
+    });
+  });
+
+  describe('metric direction from the resolver (row organization)', () => {
+    const m = (metric: string, value: number, date = new Date(), id = `m-${metric}-${value}`) => ({
+      id,
+      userId: mockUserId,
+      organizationId: mockOrgId,
+      metric,
+      value: String(value),
+      units: 's',
+      date: date.toISOString(),
+      age: 16,
+      isVerified: true,
+      createdAt: new Date(),
+    }) as any;
+
+    beforeEach(() => {
+      vi.mocked(storage.checkAchievementExists).mockResolvedValue(false);
+    });
+
+    it('awards FIRST_PR for a faster custom lower-is-better ORG_RUN time and asks with the row organization', async () => {
+      const latest = m('ORG_RUN', 360);
+      const result = await service.checkPRBadges(mockUserId, mockOrgId, latest, [m('ORG_RUN', 400), latest]);
+      expect(result.map(a => a.code)).toContain('FIRST_PR');
+      expect(isLowerBetter).toHaveBeenCalledWith('ORG_RUN', mockOrgId);
+    });
+
+    it('does not award FIRST_PR for a slower custom lower-is-better ORG_RUN time', async () => {
+      const latest = m('ORG_RUN', 440);
+      const result = await service.checkPRBadges(mockUserId, mockOrgId, latest, [m('ORG_RUN', 400), latest]);
+      expect(result.map(a => a.code)).not.toContain('FIRST_PR');
+    });
+
+    it('uses the direction of the organization passed in, not another one', async () => {
+      // ORG_RUN is higher-is-better in org-other, so the larger value is the record there
+      const latest = m('ORG_RUN', 440);
+      const result = await service.checkPRBadges(mockUserId, 'org-other', latest, [m('ORG_RUN', 400), latest]);
+      expect(result.map(a => a.code)).toContain('FIRST_PR');
+      expect(isLowerBetter).toHaveBeenCalledWith('ORG_RUN', 'org-other');
+    });
+
+    it.each([
+      ['FLY10_TIME', 1.1, 1.3],
+      ['DASH_40YD', 5.2, 5.6],
+      ['VERTICAL_JUMP', 28, 24],
+      ['RSI', 2.4, 2.0],
+      ['TOP_SPEED', 20, 18],
+    ])('keeps the built-in direction of %s (better %s, worse %s)', async (metric, better, worse) => {
+      const improved = m(metric, better, new Date(), 'new');
+      expect((await service.checkPRBadges(mockUserId, mockOrgId, improved, [m(metric, worse, new Date(), 'prior'), improved]))
+        .map(a => a.code)).toContain('FIRST_PR');
+      const worsened = m(metric, worse, new Date(), 'new');
+      expect((await service.checkPRBadges(mockUserId, mockOrgId, worsened, [m(metric, better, new Date(), 'prior'), worsened]))
+        .map(a => a.code)).not.toContain('FIRST_PR');
+    });
+
+    it('awards PR_STREAK_3 for a falling custom lower-is-better ORG_RUN series, not for a rising one', async () => {
+      const day = (n: number) => new Date(2026, 0, n);
+      vi.mocked(storage.getMeasurements).mockResolvedValue(
+        [400, 390, 380, 370].map((v, i) => m('ORG_RUN', v, day(i + 1))),
+      );
+      expect((await service.checkImprovementBadges(mockUserId, mockOrgId, 'ORG_RUN')).map(a => a.code)).toContain('PR_STREAK_3');
+      expect(isLowerBetter).toHaveBeenCalledWith('ORG_RUN', mockOrgId);
+
+      vi.mocked(storage.getMeasurements).mockResolvedValue(
+        [370, 380, 390, 400].map((v, i) => m('ORG_RUN', v, day(i + 1))),
+      );
+      expect((await service.checkImprovementBadges(mockUserId, mockOrgId, 'ORG_RUN')).map(a => a.code)).not.toContain('PR_STREAK_3');
+    });
+
+    it('awards RISING_STAR when a lower-is-better MILE_RUN time drops 10% over 3 months', async () => {
+      const old = subMonths(new Date(), 4);
+      const recent = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      vi.mocked(storage.getMeasurements).mockResolvedValue([m('MILE_RUN', 400, old), m('MILE_RUN', 350, recent)]);
+      expect((await service.checkImprovementBadges(mockUserId, mockOrgId, 'MILE_RUN')).map(a => a.code)).toContain('RISING_STAR');
+
+      vi.mocked(storage.getMeasurements).mockResolvedValue([m('MILE_RUN', 350, old), m('MILE_RUN', 400, recent)]);
+      expect((await service.checkImprovementBadges(mockUserId, mockOrgId, 'MILE_RUN')).map(a => a.code)).not.toContain('RISING_STAR');
     });
   });
 

@@ -26,13 +26,13 @@ import {
   teams,
   userOrganizations,
   measurements,
-  siteMetrics,
   siteBenchmarks,
   customBenchmarks,
   organizationBenchmarks,
 } from "@shared/schema";
 import { eq, and, inArray, isNotNull } from "drizzle-orm";
 import { evaluateTierBenchmark, selectTierGroup } from "../services/benchmark-tiers";
+import { isLowerBetter } from "../utils/metric-type";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import {
   getPresetDateRange,
@@ -909,14 +909,8 @@ export function registerAnalyticsRoutes(app: Express) {
       ];
       const tiers = selectTierGroup(allTierRows);
 
-      // Determine metric direction (mirrors ReportService.getMetricInfo).
-      const metricRow = await db
-        .select({ metricType: siteMetrics.metricType })
-        .from(siteMetrics)
-        .where(eq(siteMetrics.code, metric))
-        .limit(1)
-        .then((rows) => rows[0]);
-      const lowerIsBetter = metricRow ? metricRow.metricType === "lower_is_better" : true;
+      // Metric direction from its own row (site metric, else this organization's custom metric).
+      const lowerIsBetter = await isLowerBetter(metric, organizationId);
 
       // Compute the athlete's best verified value for the metric in this org.
       // NOTE: This endpoint intentionally filters isVerified = true (consistent with
