@@ -20,12 +20,15 @@ import { filterToBestPerPlayer } from "@shared/analytics-utils";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
+import { useMetricLabels } from "@/hooks/use-metric-labels";
+import { formatMeasurement } from "@shared/duration-format";
 import { Filter, X, ChevronLeft, ChevronRight, Calendar, Building2, AlertCircle, User, Download, CheckSquare, XSquare, ArrowUpDown } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { StatisticsSummaryCard, type DistributionMode } from "@/components/analytics/StatisticsSummaryCard";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { formatValueWithUnit } from "@/lib/metrics";
 
 // Measurement type from API (extended from @shared/schema Measurement with joined user data)
 // Note: This is intentionally duplicated rather than importing from shared types because
@@ -189,6 +192,7 @@ export default function AdminMeasurementsPage() {
 
   // Fetch available metrics from database (includes derived metrics)
   const { metrics: availableMetrics } = useAvailableMetrics();
+  const { formats: metricFormats } = useMetricLabels();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -1324,7 +1328,9 @@ export default function AdminMeasurementsPage() {
                           </Badge>
                         </TableCell>
                         <TableCell className="font-medium">
-                          {measurement.value} {measurement.units}
+                          {metricFormats[measurement.metric]
+                            ? formatMeasurement(Number(measurement.value), metricFormats[measurement.metric])
+                            : formatValueWithUnit(measurement.value, measurement.units)}
                         </TableCell>
                         <TableCell>{measurement.age}</TableCell>
                         <TableCell>

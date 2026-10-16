@@ -3,7 +3,9 @@
  */
 
 import { differenceInDays, startOfMonth, endOfMonth } from 'date-fns';
-import { isLowerIsBetter } from '@/lib/metrics';
+import { getMetricType, formatValueWithUnit } from '@/lib/metrics';
+import type { MetricType } from '@shared/analytics-types';
+import { formatMeasurement, type MeasurementFormat } from '@shared/duration-format';
 
 interface Measurement {
   id: string;
@@ -48,10 +50,18 @@ export function getLastMeasurementDate(measurements: Measurement[]): Date | null
  * Pass `metricLabels` (from `useMetricLabels().labels`) to surface custom org
  * metrics and per-org label overrides. Falls back to a built-in name map for
  * unmigrated callers, then to the raw code.
+ *
+ * Pass `metricFormats` (from `useMetricLabels().formats`) so duration metrics get an
+ * mm:ss `displayValue` and improvement text.
+ *
+ * Pass `metricTypes` (from `useMetricLabels().types`) so metrics outside the built-in
+ * lower-is-better list (new site metrics, custom org metrics) take the right direction.
  */
 export function calculatePersonalRecords(
   measurements: Measurement[],
   metricLabels?: Record<string, string>,
+  metricFormats?: Record<string, MeasurementFormat>,
+  metricTypes?: Record<string, MetricType>,
 ) {
   const metricGroups: Record<string, Measurement[]> = {};
 
@@ -70,7 +80,7 @@ export function calculatePersonalRecords(
     if (metricMeasurements.length === 0) return;
 
     // Sort by value (ascending for time-based metrics, descending for others)
-    const isLowerBetter = isLowerIsBetter(metric);
+    const isLowerBetter = getMetricType(metric, metricTypes?.[metric]) === 'lower_is_better';
 
     const sortedMeasurements = [...metricMeasurements].sort((a, b) => {
       const aValue = parseFloat(String(a.value));
@@ -94,22 +104,22 @@ export function calculatePersonalRecords(
       const secondBestValue = parseFloat(String(secondBest.value));
       improvement = Math.abs(bestValue - secondBestValue);
 
-      const units = bestMeasurement.units || '';
-      const formattedImprovement = isLowerBetter
-        ? improvement.toFixed(2)
-        : improvement.toFixed(1);
+      const durationFormat = metricFormats?.[metric];
+      const units = durationFormat ? '' : bestMeasurement.units || '';
+      const formattedImprovement = durationFormat
+        ? formatMeasurement(improvement, durationFormat)
+        : isLowerBetter
+          ? improvement.toFixed(2)
+          : improvement.toFixed(1);
 
-      if (isLowerBetter) {
-        improvementText = `↑ ${formattedImprovement}${units} better than last best`;
-      } else {
-        improvementText = `↑ ${formattedImprovement}${units} better than last best`;
-      }
+      improvementText = `↑ ${formatValueWithUnit(formattedImprovement, units)} better than last best`;
     }
 
     personalRecords.push({
       metric,
       displayName: metricLabels?.[metric] ?? getMetricDisplayName(metric),
       value: bestValue,
+      displayValue: metricFormats?.[metric] ? formatMeasurement(bestValue, metricFormats[metric]) : undefined,
       units: bestMeasurement.units,
       date: bestMeasurement.date,
       isRecent,
@@ -130,6 +140,8 @@ export function calculatePersonalRecords(
 export function generateActivityTimeline(
   measurements: Measurement[],
   metricLabels?: Record<string, string>,
+  metricFormats?: Record<string, MeasurementFormat>,
+  metricTypes?: Record<string, MetricType>,
 ) {
   // Get last 5 measurements sorted by date
   const recentMeasurements = [...measurements]
@@ -137,14 +149,17 @@ export function generateActivityTimeline(
     .slice(0, 5);
 
   // Calculate personal records to detect new PRs
-  const personalRecords = calculatePersonalRecords(measurements);
+  const personalRecords = calculatePersonalRecords(measurements, undefined, undefined, metricTypes);
   const prMap = new Map(personalRecords.map((pr) => [pr.metric, pr.value]));
 
   return recentMeasurements.map((measurement, index) => {
     const value = parseFloat(String(measurement.value));
-    const isLowerBetter = measurement.metric.includes('TIME') ||
-      measurement.metric.includes('DASH') ||
-      measurement.metric.includes('AGILITY');
+    const metricType = metricTypes?.[measurement.metric];
+    const isLowerBetter = metricType
+      ? metricType === 'lower_is_better'
+      : measurement.metric.includes('TIME') ||
+        measurement.metric.includes('DASH') ||
+        measurement.metric.includes('AGILITY');
 
     // Check if this is a PR
     const currentPR = prMap.get(measurement.metric);
@@ -185,6 +200,7 @@ export function generateActivityTimeline(
       metric: measurement.metric,
       displayName: metricLabels?.[measurement.metric] ?? getMetricDisplayName(measurement.metric),
       value,
+      displayValue: metricFormats?.[measurement.metric] ? formatMeasurement(value, metricFormats[measurement.metric]) : undefined,
       units: measurement.units,
       insight,
       insightType,

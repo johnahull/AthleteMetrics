@@ -8,6 +8,7 @@ import { toCalendarDate } from '@/utils/date-utils';
 import type { TrendData, ChartConfiguration, StatisticalSummary } from '@shared/analytics-types';
 import { devLog } from '@/utils/dev-logger';
 import { useMetricConfig } from '@/hooks/use-metric-config';
+import { formatMeasurement } from '@shared/duration-format';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 import { Button } from '@/components/ui/button';
 import { ChevronUpIcon, ChevronDownIcon } from 'lucide-react';
@@ -309,6 +310,12 @@ export function TimeSeriesViolinChart({
   }, [processedData, canvasWidth]);
 
   // Custom drawing logic
+  // Duration (mm:ss) metric: axis, tooltip and stats in m:ss
+  const durationConfig = useMemo(() => {
+    const metricConfig = getMetricConfig(metric);
+    return metricConfig?.displayFormat === 'duration' ? metricConfig : null;
+  }, [metric, getMetricConfig]);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || processedData.length === 0) return;
@@ -534,7 +541,9 @@ export function TimeSeriesViolinChart({
         const value = globalMin + (valueRange * i) / numTicks;
         const y = valueToY(value);
 
-        const displayValue = value < 0.1 && value > -0.1 ? value.toFixed(3) : value.toFixed(2);
+        const displayValue = durationConfig
+          ? formatMeasurement(value, durationConfig)
+          : value < 0.1 && value > -0.1 ? value.toFixed(3) : value.toFixed(2);
         ctx.fillText(displayValue, padding - 10, y + 4);
 
         ctx.strokeStyle = '#6B7280';
@@ -557,7 +566,7 @@ export function TimeSeriesViolinChart({
       devLog.error('TimeSeriesViolinChart: Error drawing chart', error);
       setError('Unable to render the chart.');
     }
-  }, [processedData, resizeKey]);
+  }, [processedData, resizeKey, durationConfig]);
 
   // Handle window resize
   useEffect(() => {
@@ -624,6 +633,8 @@ export function TimeSeriesViolinChart({
   }, [coordinateMap]);
 
   const metricConfig = getMetricConfig(metric);
+  const showStat = (value: number) =>
+    durationConfig ? formatMeasurement(value, durationConfig) : `${value.toFixed(2)}${metricConfig?.unit ?? ''}`;
 
   if (error) {
     return (
@@ -708,9 +719,11 @@ export function TimeSeriesViolinChart({
               <div className="text-xs text-gray-300">{tooltip.date}</div>
               <div className="mt-1">
                 <span className="font-bold">
-                  {isFly10Metric(metric)
-                    ? formatFly10Dual(tooltip.value, 'time-first')
-                    : `${tooltip.value.toFixed(2)}${metricConfig?.unit || ''}`}
+                  {durationConfig
+                    ? formatMeasurement(tooltip.value, durationConfig)
+                    : isFly10Metric(metric)
+                      ? formatFly10Dual(tooltip.value, 'time-first')
+                      : `${tooltip.value.toFixed(2)}${metricConfig?.unit || ''}`}
                 </span>
                 {tooltip.isPersonalBest && <span className="ml-2">⭐</span>}
               </div>
@@ -805,7 +818,7 @@ export function TimeSeriesViolinChart({
               <div className="font-medium text-right pr-4">Mean</div>
               {processedData.map((dateData, index) => (
                 <div key={index} className="text-lg font-bold text-purple-600 text-center">
-                  {dateData.stats.mean.toFixed(2)}{metricConfig.unit}
+                  {showStat(dateData.stats.mean)}
                 </div>
               ))}
 
@@ -813,7 +826,7 @@ export function TimeSeriesViolinChart({
               <div className="font-medium text-right pr-4">Median</div>
               {processedData.map((dateData, index) => (
                 <div key={index} className="text-lg font-bold text-yellow-600 text-center">
-                  {dateData.stats.median.toFixed(2)}{metricConfig.unit}
+                  {showStat(dateData.stats.median)}
                 </div>
               ))}
 
@@ -821,7 +834,7 @@ export function TimeSeriesViolinChart({
               <div className="font-medium text-right pr-4">Q1 (25th %ile)</div>
               {processedData.map((dateData, index) => (
                 <div key={index} className="text-lg font-bold text-orange-500 text-center">
-                  {dateData.stats.q1.toFixed(2)}{metricConfig.unit}
+                  {showStat(dateData.stats.q1)}
                 </div>
               ))}
 
@@ -829,7 +842,7 @@ export function TimeSeriesViolinChart({
               <div className="font-medium text-right pr-4">Q3 (75th %ile)</div>
               {processedData.map((dateData, index) => (
                 <div key={index} className="text-lg font-bold text-orange-500 text-center">
-                  {dateData.stats.q3.toFixed(2)}{metricConfig.unit}
+                  {showStat(dateData.stats.q3)}
                 </div>
               ))}
 
@@ -837,7 +850,7 @@ export function TimeSeriesViolinChart({
               <div className="font-medium text-right pr-4">Std Dev</div>
               {processedData.map((dateData, index) => (
                 <div key={index} className="text-lg font-bold text-gray-600 text-center">
-                  {dateData.stats.std.toFixed(2)}{metricConfig.unit}
+                  {showStat(dateData.stats.std)}
                 </div>
               ))}
 
@@ -845,7 +858,7 @@ export function TimeSeriesViolinChart({
               <div className="font-medium text-right pr-4">Range</div>
               {processedData.map((dateData, index) => (
                 <div key={index} className="text-lg font-bold text-gray-600 text-center">
-                  {(dateData.stats.max - dateData.stats.min).toFixed(2)}{metricConfig.unit}
+                  {showStat(dateData.stats.max - dateData.stats.min)}
                 </div>
               ))}
             </div>
@@ -855,7 +868,7 @@ export function TimeSeriesViolinChart({
 
       {metricConfig && (
         <p className="text-xs text-muted-foreground mt-2">
-          {metricConfig.label} ({isFly10Metric(metric) ? 's / mph' : metricConfig.unit})
+          {metricConfig.label} ({isFly10Metric(metric) ? 's / mph' : durationConfig ? 'mm:ss' : metricConfig.unit})
           {metricConfig.lowerIsBetter ? ' - Lower is better' : ' - Higher is better'}
         </p>
       )}

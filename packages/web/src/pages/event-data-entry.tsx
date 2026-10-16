@@ -32,7 +32,7 @@ import { useAuth } from "@/lib/auth";
 import { canManageEvent } from "@/lib/event-permissions";
 import { getEventMetricDisplay, type EventMetricWithSiteDetails } from "@/lib/event-metric-display";
 import { canAddTrial } from "@/lib/event-grid-cell-state";
-import { chunkBulkItems, saveSummary, savedCellPatch } from "@/lib/event-grid-save";
+import { chunkBulkItems, saveSummary, savedCellPatch, cellNumber, isSendable } from "@/lib/event-grid-save";
 import {
   buildRecordingSheet,
   downloadRecordingSheet,
@@ -80,6 +80,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { format } from "date-fns";
+import { formatDurationExact } from "@shared/duration-format";
 import { EVENT_DATA_ENTRY_REGISTRATION_STATUSES } from "@shared/schema";
 import type { EventMetric, Measurement } from "@shared/schema";
 import { toCalendarDate } from "@/utils/date-utils";
@@ -95,6 +96,8 @@ interface MeasurementCell {
   metricCode: string;
   value: string;
   originalValue?: number;
+  /** Time (mm:ss) metric: the value may be typed as m:ss */
+  isDuration?: boolean;
   /** Newest saved row of this cell; a retype replaces it when it is the only one */
   savedMeasurementId?: string;
   /** Saved rows (trials) of this cell */
@@ -124,10 +127,6 @@ interface AthleteRow {
 // Movement Quality scores are entered in a per-athlete panel (or loaded from a sheet), not in the numeric grid
 const MQ_BASE_CODES = new Set([...MQI_PATTERNS, ...MQI_TRANSITIONS].map((m) => m.code));
 const MQ_CODES = new Set([...MQ_BASE_CODES, MQI_TOTAL_CODE, MQI_TRANSITION_TOTAL_CODE]);
-
-// A dirty cell with a number, also one the server rejected last time (its error is cleared on send)
-const isSendable = (cell: Pick<MeasurementCell, "isDirty" | "value">) =>
-  cell.isDirty && cell.value !== "" && !isNaN(Number(cell.value));
 
 const GRID_SCROLLER_ID = "event-data-entry-grid";
 const GRID_KEYS = "ArrowUp ArrowDown ArrowLeft ArrowRight Enter";
@@ -254,11 +253,13 @@ export default function EventDataEntry() {
         const saved = measurementLookup.get(key);
         const existing = saved?.latest;
 
+        const isDuration = metric.metricDetails?.displayFormat === "duration";
         measurements[metric.metricCode] = {
           userId,
           metricCode: metric.metricCode,
-          value: existing?.value?.toString() || "",
+          value: existing?.value ? (isDuration ? formatDurationExact(Number(existing.value)) : existing.value.toString()) : "",
           originalValue: existing?.value ? Number(existing.value) : undefined,
+          isDuration,
           savedMeasurementId: existing?.id,
           savedCount: saved?.count ?? 0,
           isDirty: false,
@@ -284,7 +285,9 @@ export default function EventDataEntry() {
               value: previous.value,
               error: previous.error,
               // Numeric: "1.60" typed and 1.6 saved (e.g. by a request whose response was lost) is clean
-              isDirty: previous.value === "" ? cell.originalValue !== undefined : Number(previous.value) !== cell.originalValue,
+              isDirty: previous.value === ""
+                ? cell.originalValue !== undefined
+                : (cell.isDuration ? cellNumber({ value: previous.value, isDuration: true }) : Number(previous.value)) !== cell.originalValue,
               fromImport: previous.fromImport,
             };
           } else if (previous?.importedValue !== undefined) {
@@ -307,14 +310,17 @@ export default function EventDataEntry() {
         const cell = row.measurements[metricCode];
         if (!cell) return prev;
 
-        // Validate numeric input
+        // Validate numeric input (m:ss or seconds for a time metric)
         let error: string | undefined;
-        if (value !== "" && isNaN(Number(value))) {
-          error = "Must be a number";
+        if (value !== "" && cellNumber({ value, isDuration: cell.isDuration }) === null) {
+          error = cell.isDuration ? "Must be a time like 6:42.5" : "Must be a number";
         }
 
         const originalValue = cell.originalValue?.toString() || "";
-        const isDirty = value !== originalValue;
+        // A time compares as seconds: "6:42.5" equals a saved 402.5
+        const isDirty = cell.isDuration
+          ? cellNumber({ value, isDuration: true }) !== (cell.originalValue ?? null)
+          : value !== originalValue;
 
         return {
           ...prev,
@@ -384,7 +390,7 @@ export default function EventDataEntry() {
   const measurementItem = (cell: MeasurementCell): CreateEventMeasurementInput => ({
     userId: cell.userId,
     metric: cell.metricCode,
-    value: Number(cell.value),
+    value: cellNumber(cell) ?? Number(cell.value),
     date: event?.startDate ? new Date(event.startDate).toISOString() : new Date().toISOString(),
   });
 

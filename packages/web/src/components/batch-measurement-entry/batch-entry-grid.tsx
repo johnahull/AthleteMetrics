@@ -1,11 +1,12 @@
 import React, { useRef, useCallback } from 'react';
-import { useFormContext, FieldArrayWithId } from 'react-hook-form';
+import { useFormContext, Controller, FieldArrayWithId } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Trash2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAvailableMetrics } from '@/hooks/use-available-metrics';
+import { DurationInput } from '@/components/duration-input';
 
 // Type for batch measurement row (matches schema in use-batch-measurement-form.ts)
 type BatchMeasurementRow = {
@@ -24,7 +25,7 @@ interface BatchEntryGridProps {
 }
 
 export function BatchEntryGrid({ fields, deleteRow }: BatchEntryGridProps) {
-  const { register, setValue, watch, formState: { errors } } = useFormContext();
+  const { register, setValue, watch, control, formState: { errors } } = useFormContext();
   const gridRef = useRef<HTMLTableElement>(null);
 
   const { data: athletes = [] } = useQuery<any[]>({
@@ -142,6 +143,8 @@ export function BatchEntryGrid({ fields, deleteRow }: BatchEntryGridProps) {
             const dateError = getFieldError(index, 'date');
             const metricError = getFieldError(index, 'metric');
             const valueError = getFieldError(index, 'value');
+            const rowMetric = watch(`measurements.${index}.metric`);
+            const isDuration = availableMetrics.find((m) => m.code === rowMetric)?.displayFormat === 'duration';
 
             return (
               <tr
@@ -211,6 +214,24 @@ export function BatchEntryGrid({ fields, deleteRow }: BatchEntryGridProps) {
                 {/* Value Input */}
                 <td className="p-2">
                   <div>
+                    {isDuration ? (
+                      <Controller
+                        control={control}
+                        name={`measurements.${index}.value`}
+                        render={({ field: valueField }) => (
+                          <DurationInput
+                            name={valueField.name}
+                            ref={valueField.ref}
+                            onBlur={valueField.onBlur}
+                            value={valueField.value}
+                            onValueChange={valueField.onChange}
+                            data-testid={`batch-value-${index}`}
+                            className={valueError ? 'border-red-500 ring-2 ring-red-200' : ''}
+                            onKeyDown={(e) => handleKeyDown(e, index, 3)}
+                          />
+                        )}
+                      />
+                    ) : (
                     <Input
                       type="number"
                       step="0.01"
@@ -221,6 +242,7 @@ export function BatchEntryGrid({ fields, deleteRow }: BatchEntryGridProps) {
                       className={valueError ? 'border-red-500 ring-2 ring-red-200' : ''}
                       onKeyDown={(e) => handleKeyDown(e, index, 3)}
                     />
+                    )}
                     {valueError && (
                       <p className="text-xs text-red-500 mt-1">{valueError.message}</p>
                     )}

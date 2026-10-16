@@ -24,7 +24,8 @@ import {
 import { Trophy, AlertCircle, RefreshCw, Award, TrendingUp } from "lucide-react";
 import { useLeaderboard } from "@/hooks/useLeaderboard";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
-import { formatMetricValue } from "@/lib/metrics";
+import { formatValueWithUnit } from "@/lib/metrics";
+import { formatMeasurement } from "@shared/duration-format";
 import type { TimeframePreset } from "@shared/dashboard-timeframe";
 
 interface LeaderboardWidgetProps {
@@ -72,8 +73,11 @@ export function LeaderboardWidget({
     limit,
   });
 
+  const shownMetric = metrics.find((m) => m.code === (leaderboardData?.metric || effectiveMetric));
+
   const isLoading = metricsLoading || leaderboardLoading;
   const rankings = leaderboardData?.rankings || [];
+  const rankedUnit = metrics.find((m) => m.code === (leaderboardData?.metric || effectiveMetric))?.unit ?? '';
 
   // Get rank badge styling
   const getRankBadgeClass = (rank: number): string => {
@@ -306,7 +310,9 @@ export function LeaderboardWidget({
                   {entry.teamName && <span>{entry.teamName}</span>}
                   <span>•</span>
                   <span className="font-medium">
-                    {formatMetricValue(leaderboardData?.metric || effectiveMetric, entry.value)}
+                    {shownMetric?.displayFormat === "duration"
+                      ? formatMeasurement(entry.value, shownMetric)
+                      : formatValueWithUnit(entry.value, rankedUnit)}
                   </span>
                 </div>
 

@@ -27,7 +27,7 @@ vi.mock('@/hooks/use-available-metrics', () => ({
   }),
 }));
 vi.mock('@/hooks/use-metric-labels', () => ({
-  useMetricLabels: () => ({ labels: {}, getLabel: (code: string) => code, isLoading: false }),
+  useMetricLabels: () => ({ labels: {}, getLabel: (code: string) => code, getUnit: () => '', formats: {}, types: {}, isLoading: false }),
 }));
 vi.mock('@/hooks/use-wellness-dashboard', () => ({
   useWellnessDashboard: () => ({ data: undefined, isLoading: false, isFetching: false, error: null, refetch: vi.fn(), dataUpdatedAt: 0 }),

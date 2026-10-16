@@ -19,7 +19,7 @@ vi.mock('react-chartjs-2', () => ({
 vi.mock('canvas-confetti', () => ({ default: vi.fn() }));
 vi.mock('@/hooks/use-metric-config', () => ({ useMetricConfig: () => ({ getMetricConfig: () => null }) }));
 vi.mock('@/hooks/use-metric-labels', () => ({
-  useMetricLabels: () => ({ labels: {}, getLabel: (code: string) => code, isLoading: false }),
+  useMetricLabels: () => ({ labels: {}, getLabel: (code: string) => code, getUnit: () => '', formats: {}, types: {}, isLoading: false }),
 }));
 
 describe('invalid date text', () => {

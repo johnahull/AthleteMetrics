@@ -30,6 +30,7 @@ vi.mock('@/hooks/use-metric-labels', () => ({
   useMetricLabels: () => ({
     labels: METRIC_LABEL_FIXTURE,
     getLabel: (code: string) => METRIC_LABEL_FIXTURE[code] ?? code,
+    formats: { MILE_RUN: { unit: 's', displayFormat: 'duration', decimalPrecision: 1 } },
     isLoading: false,
   }),
 }));
@@ -62,7 +63,7 @@ describe('MetricProgressCard', () => {
       );
 
       expect(screen.getByText('10-Yard Fly Time')).toBeInTheDocument();
-      expect(screen.getByTestId('current-value')).toHaveTextContent('1.38s');
+      expect(screen.getByTestId('current-value')).toHaveTextContent('1.38 s');
     });
 
     it('should render sparkline chart', () => {
@@ -88,7 +89,7 @@ describe('MetricProgressCard', () => {
         />
       );
 
-      expect(screen.getByTestId('pr-value')).toHaveTextContent('1.38s');
+      expect(screen.getByTestId('pr-value')).toHaveTextContent('1.38 s');
     });
   });
 
@@ -290,7 +291,7 @@ describe('MetricProgressCard', () => {
         />
       );
 
-      expect(screen.getByTestId('current-value')).toHaveTextContent('1.50s');
+      expect(screen.getByTestId('current-value')).toHaveTextContent('1.50 s');
       // Should show chart but no trend
       expect(screen.getByTestId('sparkline-chart')).toBeInTheDocument();
       expect(screen.queryByTestId('trend-badge')).not.toBeInTheDocument();
@@ -312,7 +313,7 @@ describe('MetricProgressCard', () => {
         />
       );
 
-      expect(screen.getByTestId('current-value')).toHaveTextContent('1.40s');
+      expect(screen.getByTestId('current-value')).toHaveTextContent('1.40 s');
       expect(screen.getByTestId('sparkline-chart')).toBeInTheDocument();
     });
 
@@ -507,7 +508,7 @@ describe('MetricProgressCard', () => {
       );
 
       // Current value should be the best from the most recent date (1.48)
-      expect(screen.getByTestId('current-value')).toHaveTextContent('1.48s');
+      expect(screen.getByTestId('current-value')).toHaveTextContent('1.48 s');
     });
 
     it('should calculate trend using filtered best-per-date data', () => {
@@ -612,6 +613,22 @@ describe('MetricProgressCard', () => {
       expect(screen.getByText(/Improved 10% from last PR/)).toBeInTheDocument();
       expect(screen.getByText(/Best in last 90d/i)).toBeInTheDocument();
       expect(confettiMock).toHaveBeenCalled();
+    });
+  });
+
+  describe('duration (mm:ss) metrics', () => {
+    it('shows the current and PR values as mm:ss without the seconds unit', () => {
+      render(
+        <MetricProgressCard
+          metric="MILE_RUN"
+          displayName="Mile Run"
+          measurements={[{ value: 402.5, date: '2024-02-01' }]}
+          units="s"
+          metricType="lower_is_better"
+        />
+      );
+      expect(screen.getByTestId('current-value')).toHaveTextContent(/^6:42\.5$/);
+      expect(screen.getByTestId('pr-value')).toHaveTextContent(/^6:42\.5$/);
     });
   });
 });

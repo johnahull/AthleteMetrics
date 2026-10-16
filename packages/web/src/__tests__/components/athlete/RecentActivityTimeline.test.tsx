@@ -114,9 +114,9 @@ describe('RecentActivityTimeline', () => {
     it('should display values with units', () => {
       render(<RecentActivityTimeline activities={mockActivities} />);
 
-      expect(screen.getByText('1.45s')).toBeInTheDocument();
-      expect(screen.getByText('32.5in')).toBeInTheDocument();
-      expect(screen.getByText('5.1s')).toBeInTheDocument();
+      expect(screen.getByText('1.45 s')).toBeInTheDocument();
+      expect(screen.getByText('32.5 in')).toBeInTheDocument();
+      expect(screen.getByText('5.1 s')).toBeInTheDocument();
     });
 
     it('should handle empty activities list', () => {
@@ -248,5 +248,15 @@ describe('RecentActivityTimeline', () => {
         expect(element).toBeInTheDocument();
       });
     });
+  });
+
+  it('shows a duration activity by its mm:ss displayValue', () => {
+    render(
+      <RecentActivityTimeline
+        activities={[{ id: 'd', date: '2024-01-15', metric: 'MILE_RUN', displayName: 'Mile Run', value: 402.5, displayValue: '6:42.5', units: 's', insight: null, insightType: null }]}
+      />
+    );
+    expect(screen.getByText('6:42.5')).toBeInTheDocument();
+    expect(screen.queryByText(/402\.5/)).toBeNull();
   });
 });

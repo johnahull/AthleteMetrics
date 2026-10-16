@@ -24,9 +24,11 @@ import { Badge } from '@/components/ui/badge';
 import { ChevronDown, ChevronUp, Download, Pencil, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
+import { formatMeasurement } from '@shared/duration-format';
 import { AthleteOrgContext } from '@/lib/athlete-org-context';
 import { Link } from 'wouter';
 import { toCalendarDate } from '@/utils/date-utils';
+import { formatValueWithUnit } from "@/lib/metrics";
 
 export interface MeasurementHistoryTableProps {
   measurements: Measurement[];
@@ -65,7 +67,9 @@ export function MeasurementHistoryTable({
   showSourceColumn = false,
 }: MeasurementHistoryTableProps) {
   const showActions = Boolean(onEdit || onDelete);
-  const { getLabel } = useMetricLabels();
+  const { getLabel, formats } = useMetricLabels();
+  const valueText = (m: { metric: string; value: string; units: string }) =>
+    formats[m.metric] ? formatMeasurement(Number(m.value), formats[m.metric]) : formatValueWithUnit(m.value, m.units);
 
   // Try to get filter mode from context to determine if we should show org column
   const athleteOrgContext = useContext(AthleteOrgContext);
@@ -267,12 +271,12 @@ export function MeasurementHistoryTable({
                   }}
                   tabIndex={0}
                   aria-expanded={isExpanded}
-                  aria-label={`${getLabel(measurement.metric)}: ${measurement.value} ${measurement.units}. Press Enter to ${isExpanded ? 'collapse' : 'expand'} notes.`}
+                  aria-label={`${getLabel(measurement.metric)}: ${valueText(measurement)}. Press Enter to ${isExpanded ? 'collapse' : 'expand'} notes.`}
                 >
                   <TableCell>{formatDate(measurement.date)}</TableCell>
                   <TableCell>{getLabel(measurement.metric)}</TableCell>
                   <TableCell>
-                    {measurement.value} {measurement.units}
+                    {valueText(measurement)}
                   </TableCell>
                   {showOrgColumn && (
                     <TableCell>

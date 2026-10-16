@@ -1,4 +1,5 @@
 import type { BenchmarkComparison } from '@shared/benchmark-types';
+import { formatMeasurement, type MeasurementFormat } from '@shared/duration-format';
 import {
   benchmarkStandingPct,
   benchmarkStandingPctForValue,
@@ -20,6 +21,8 @@ interface BenchmarkStandingBarProps {
   metricCode: string;
   comparison: BenchmarkComparison;
   unit?: string;
+  /** Duration (mm:ss) metric format: values print as m:ss with no unit */
+  format?: MeasurementFormat;
   /** Optional per-athlete values for this metric. When provided (team-report
    *  usage), an additional small marker is rendered per athlete, visually
    *  subordinate to the primary marker (which then represents the team
@@ -37,15 +40,18 @@ interface BenchmarkStandingBarProps {
 /** Vertical jitter range (px) applied to individual athlete dots so tied/close values don't visually merge. */
 const ATHLETE_DOT_JITTER_PX = 6;
 
-export function BenchmarkStandingBar({ label, metricCode, comparison, unit, athleteValues, rangeLabel }: BenchmarkStandingBarProps) {
+export function BenchmarkStandingBar({ label, metricCode, comparison, unit, format, athleteValues, rangeLabel }: BenchmarkStandingBarProps) {
   const pos = benchmarkStandingPct(comparison);
   const meets = comparison.meetsOrExceeds;
   const dir = benchmarkBetterDirection(comparison); // 'higher' | 'lower' | 'none'
-  const athleteVal = Math.round(comparison.athleteValue * 100) / 100;
-  const benchVal = Math.round(comparison.benchmarkValue * 100) / 100;
-  const unitSuffix = unit ? ` ${unit}` : '';
+  const durationFormat = format?.displayFormat === 'duration' ? format : undefined;
+  // m:ss values carry no unit
+  const unitSuffix = unit && !durationFormat ? ` ${unit}` : '';
+  const showValue = (v: number) => (durationFormat ? formatMeasurement(v, durationFormat) : Math.round(v * 100) / 100);
   const hasAthleteValues = !!athleteValues && athleteValues.length > 0;
   const primaryLabel = hasAthleteValues ? 'Team Average' : 'You';
+  const athleteVal = showValue(comparison.athleteValue);
+  const benchVal = showValue(comparison.benchmarkValue);
   const bestInRangeSuffix = rangeLabel ? ` (best within ${rangeLabel})` : '';
 
   // Shade the "better" half green and the worse half red, oriented by direction:
@@ -86,7 +92,7 @@ export function BenchmarkStandingBar({ label, metricCode, comparison, unit, athl
           {hasAthleteValues && athleteValues!.map((a) => {
             const apos = benchmarkStandingPctForValue(a.value, comparison.benchmarkValue);
             const jitter = generateDeterministicJitter(a.athleteId, ATHLETE_DOT_JITTER_PX);
-            const aval = Math.round(a.value * 100) / 100;
+            const aval = showValue(a.value);
             return (
               <Tooltip key={a.athleteId}>
                 <TooltipTrigger asChild>
@@ -116,7 +122,7 @@ export function BenchmarkStandingBar({ label, metricCode, comparison, unit, athl
           </Tooltip>
         </div>
         <div className="mt-1 text-xs text-muted-foreground">
-          {primaryLabel}: {athleteVal}{unitSuffix} · {comparison.benchmarkName}: {benchVal}{unitSuffix} · {benchmarkStandingCaption(comparison, unit)}
+          {primaryLabel}: {athleteVal}{unitSuffix} · {comparison.benchmarkName}: {benchVal}{unitSuffix} · {benchmarkStandingCaption(comparison, unit, format)}
         </div>
         {hasAthleteValues && (
           <div className="mt-0.5 text-[10px] text-muted-foreground">

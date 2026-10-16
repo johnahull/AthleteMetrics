@@ -14,3 +14,14 @@ describe("formatValue (shared by the PDF and the web view)", () => {
     expect(formatValue(92.345, "%")).toBe("92.35%");
   });
 });
+
+describe("formatValue with a duration display format", () => {
+  it("prints seconds as mm:ss", () => {
+    expect(formatValue(402.5, "s", "duration")).toBe("6:42.5");
+  });
+
+  it("is unchanged when the format is decimal or missing", () => {
+    expect(formatValue(402.5, "s", "decimal")).toBe("402.50 s");
+    expect(formatValue(402.5, "s")).toBe("402.50 s");
+  });
+});

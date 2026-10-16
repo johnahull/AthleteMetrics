@@ -12,6 +12,7 @@
  */
 
 import { useMemo } from 'react';
+import { formatMeasurement, type MeasurementFormat } from '@shared/duration-format';
 import { Star, Diamond, CheckCircle, ArrowRight, Circle } from 'lucide-react';
 import type { DistributionData } from '@/hooks/usePeerComparison';
 
@@ -21,6 +22,8 @@ export interface DistributionBoxPlotProps {
   metricName: string;
   lowerIsBetter?: boolean;
   height?: number;
+  /** Duration (mm:ss) metric format: labels print as m:ss */
+  format?: MeasurementFormat;
 }
 
 /**
@@ -37,7 +40,11 @@ export function DistributionBoxPlot({
   metricName,
   lowerIsBetter = false,
   height = 80,
+  format,
 }: DistributionBoxPlotProps) {
+  // m:ss for a duration metric, otherwise the number at the given precision
+  const show = (v: number, decimals: number) =>
+    format?.displayFormat === 'duration' ? formatMeasurement(v, format) : v.toFixed(decimals);
   const { p10, p25, p50, p75, p90, mean, sampleSize } = distribution;
 
   // Calculate actual statistical percentile rank for accessibility
@@ -143,7 +150,7 @@ export function DistributionBoxPlot({
       className="relative w-full"
       style={{ height }}
       role="img"
-      aria-label={`Box plot showing percentile ranges for ${metricName}. Your value is ${athleteValue.toFixed(2)} at the ${actualPercentile}th percentile. The distribution ranges from ${p10.toFixed(1)} (10th percentile) to ${p90.toFixed(1)} (90th percentile) with a median of ${p50.toFixed(1)}.`}
+      aria-label={`Box plot showing percentile ranges for ${metricName}. Your value is ${show(athleteValue, 2)} at the ${actualPercentile}th percentile. The distribution ranges from ${show(p10, 1)} (10th percentile) to ${show(p90, 1)} (90th percentile) with a median of ${show(p50, 1)}.`}
     >
       {/* Container with padding for labels */}
       <div className="absolute inset-0 px-4 py-2">
@@ -190,7 +197,7 @@ export function DistributionBoxPlot({
             <div
               className="absolute w-2 h-2 bg-white border-2 border-gray-500 rotate-45"
               style={{ left: `${meanPos}%`, transform: 'translateX(-50%) translateY(-1px)' }}
-              title={`Mean: ${mean?.toFixed(2)}`}
+              title={`Mean: ${mean != null ? show(mean, 2) : mean}`}
             />
           )}
 
@@ -198,7 +205,7 @@ export function DistributionBoxPlot({
           <div
             className={`absolute w-4 h-4 rounded-full border-2 shadow-md z-10 flex items-center justify-center ${getAthleteColor()}`}
             style={{ left: `${athletePos}%`, transform: 'translateX(-50%)' }}
-            title={`Your value: ${athleteValue.toFixed(2)}`}
+            title={`Your value: ${show(athleteValue, 2)}`}
           >
             {getAthleteIcon()}
           </div>
@@ -211,7 +218,7 @@ export function DistributionBoxPlot({
             className="absolute transform -translate-x-1/2"
             style={{ left: `${whiskerLeft}%` }}
           >
-            {p10.toFixed(1)}
+            {show(p10, 1)}
           </span>
 
           {/* Median label */}
@@ -219,7 +226,7 @@ export function DistributionBoxPlot({
             className="absolute transform -translate-x-1/2 font-medium text-blue-600"
             style={{ left: `${medianPos}%` }}
           >
-            {p50.toFixed(1)}
+            {show(p50, 1)}
           </span>
 
           {/* p90 label */}
@@ -227,7 +234,7 @@ export function DistributionBoxPlot({
             className="absolute transform -translate-x-1/2"
             style={{ left: `${whiskerRight}%` }}
           >
-            {p90.toFixed(1)}
+            {show(p90, 1)}
           </span>
         </div>
 

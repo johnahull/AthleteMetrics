@@ -7,12 +7,15 @@ import { evaluateTierStanding } from '@/components/charts/tier-progress-utils';
 import { deriveTierGroupName } from '@shared/benchmark-utils';
 import { formatDateRange } from './report-utils';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
+import type { MeasurementFormat } from '@shared/duration-format';
 import type { TeamStatistic, AthleteRanking, TimeframeConfig } from '@/types/report-types';
 
 interface Props {
   teamStatistics: TeamStatistic[];
   metricLabels?: Record<string, string>;
   metricUnits?: Record<string, string>;
+  /** Duration (mm:ss) metrics only */
+  metricFormats?: Record<string, MeasurementFormat>;
   /** Per-metric direction from the report payload (server-computed) — not
    *  derived client-side, since this section also renders on the public
    *  report view, which has no authenticated org context. */
@@ -99,6 +102,7 @@ export function TeamBenchmarkStandingSection({
   teamStatistics,
   metricLabels = {},
   metricUnits = {},
+  metricFormats = {},
   metricDirections = {},
   athleteRankings = [],
   timeframe,
@@ -139,6 +143,7 @@ export function TeamBenchmarkStandingSection({
                 metricCode={stat.metric}
                 comparison={comparison}
                 unit={unit}
+                format={metricFormats[stat.metric]}
                 athleteValues={athleteValues}
                 rangeLabel={rangeLabel}
               />
@@ -149,6 +154,7 @@ export function TeamBenchmarkStandingSection({
                 metricCode={stat.metric}
                 comparison={comparison}
                 unit={unit}
+                format={metricFormats[stat.metric]}
                 athleteValues={athleteValues}
                 rangeLabel={rangeLabel}
               />

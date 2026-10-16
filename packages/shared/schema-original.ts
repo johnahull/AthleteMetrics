@@ -7,6 +7,7 @@ import { PASSWORD_REQUIREMENTS, PASSWORD_REGEX } from "./password-requirements";
 import { validateUsername } from "./username-validation";
 import { isSafePublicUrl } from "./url-safety";
 import type { DerivedCalculationConfig } from "./schema/tables/metrics";
+import { displayFormatEnum } from "./schema/enums";
 import { DEFAULT_AI_MODEL_KEY, SELECTABLE_AI_MODEL_KEYS } from "./ai-models";
 
 // AI Coaching Insights constants
@@ -1736,6 +1737,7 @@ export const insertSiteMetricSchema = createInsertSchema(siteMetrics).omit({
   validationMin: z.number().optional(),
   validationMax: z.number().optional(),
   decimalPrecision: z.number().int().min(0).max(10).default(3),
+  displayFormat: z.enum(displayFormatEnum).default('decimal'),
   color: z.string().max(20).optional(),
   icon: z.string().max(50).optional(),
   // Derived metrics fields
@@ -1789,6 +1791,8 @@ export const updateSiteMetricSchema = z.object({
   validationMin: z.number().optional(),
   validationMax: z.number().optional(),
   decimalPrecision: z.number().int().min(0).max(10).optional(),
+  // No default here: a partial edit must not reset the format
+  displayFormat: z.enum(displayFormatEnum).optional(),
   color: z.string().max(20).optional(),
   icon: z.string().max(50).optional(),
   // Derived metrics fields

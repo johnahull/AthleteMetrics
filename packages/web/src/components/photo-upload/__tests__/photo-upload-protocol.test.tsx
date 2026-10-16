@@ -13,7 +13,7 @@ vi.mock('@/lib/auth', () => ({
   useAuth: () => ({ userOrganizations: [{ organizationId: 'org-1' }] }),
 }));
 vi.mock('@/hooks/use-metric-labels', () => ({
-  useMetricLabels: () => ({ getLabel: (c: string) => c, labels: {}, isLoading: false }),
+  useMetricLabels: () => ({ getLabel: (c: string) => c, labels: {}, formats: {}, isLoading: false }),
 }));
 
 const PROTOCOL_MSG = 'Choose meters or yards for 5-0-5 readings';

@@ -29,9 +29,9 @@ export function formatFly10Dual(
   const mph = fly10ToMph(seconds);
 
   if (format === 'speed-first') {
-    return `${mph.toFixed(2)} mph (${seconds.toFixed(2)}s)`;
+    return `${mph.toFixed(2)} mph (${seconds.toFixed(2)} s)`;
   }
-  return `${seconds.toFixed(2)}s (${mph.toFixed(2)} mph)`;
+  return `${seconds.toFixed(2)} s (${mph.toFixed(2)} mph)`;
 }
 
 /**
@@ -41,7 +41,7 @@ export function formatFly10Dual(
  * While both measure the same thing (speed over 10 yards), the dual display
  * format (seconds + mph) is only appropriate when the primary unit is seconds.
  *
- * - FLY10_TIME charts show: "1.95s (10.5 mph)" - dual display makes sense
+ * - FLY10_TIME charts show: "1.95 s (10.5 mph)" - dual display makes sense
  * - TOP_SPEED charts show: "10.5 mph" only - dual display would be confusing
  */
 export function isFly10Metric(metric: string): boolean {

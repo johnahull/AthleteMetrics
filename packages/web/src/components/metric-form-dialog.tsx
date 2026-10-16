@@ -34,13 +34,14 @@ import { useCreateSiteMetric, useUpdateSiteMetric } from "@/lib/metrics-api";
 import type { SiteMetric } from "@shared/schema";
 import { OrganizationTypeMultiSelect } from "@/components/organization-type-multi-select";
 import { SportMultiSelect } from "@/components/sport-multi-select";
-import { organizationTypeEnum, metricTypeEnum, derivedCalculationConfigSchema } from "@shared/schema";
+import { organizationTypeEnum, metricTypeEnum, displayFormatEnum, derivedCalculationConfigSchema } from "@shared/schema";
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { useDebounce } from "@/hooks/useDebounce";
 
 // CODE QUALITY FIX: Extract magic number to named constant
 const DEFAULT_DECIMAL_PRECISION = 3; // Standard precision for athletic measurements
+const DURATION_DECIMAL_PRECISION = 1; // 6:42.5
 
 // Zod schema for metric form validation
 const metricFormSchema = z.object({
@@ -60,6 +61,7 @@ const metricFormSchema = z.object({
   whatItMeasures: z.string().max(5000).optional(),
   whyItMatters: z.string().max(5000).optional(),
   metricType: z.enum(metricTypeEnum).default('lower_is_better'),
+  displayFormat: z.enum(displayFormatEnum).default('decimal'),
   availableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
   sportAssociations: z.array(z.string()).optional(),
   isDerived: z.boolean().default(false),
@@ -133,6 +135,7 @@ export default function MetricFormDialog({
       whatItMeasures: "",
       whyItMatters: "",
       metricType: 'lower_is_better',
+      displayFormat: 'decimal',
       availableOrgTypes: undefined,
       sportAssociations: undefined,
       isDerived: false,
@@ -147,6 +150,7 @@ export default function MetricFormDialog({
 
   // Watch isDerived to show/hide derived metric fields
   const isDerived = form.watch('isDerived');
+  const isDuration = form.watch('displayFormat') === 'duration';
   const formula = form.watch('formula');
   const dateMatchStrategy = form.watch('calculationConfig.dateMatchStrategy');
 
@@ -169,6 +173,7 @@ export default function MetricFormDialog({
         whatItMeasures: metric.whatItMeasures || "",
         whyItMatters: metric.whyItMatters || "",
         metricType: metric.metricType,
+        displayFormat: metric.displayFormat ?? 'decimal',
         availableOrgTypes: metric.availableOrgTypes || undefined,
         sportAssociations: metric.sportAssociations || undefined,
         isDerived: metric.isDerived || false,
@@ -191,6 +196,7 @@ export default function MetricFormDialog({
         whatItMeasures: "",
         whyItMatters: "",
         metricType: 'lower_is_better',
+        displayFormat: 'decimal',
         availableOrgTypes: undefined,
         sportAssociations: undefined,
         isDerived: false,
@@ -221,6 +227,11 @@ export default function MetricFormDialog({
             whatItMeasures: data.whatItMeasures?.trim() || null,
             whyItMatters: data.whyItMatters?.trim() || null,
             metricType: data.metricType,
+            displayFormat: data.displayFormat,
+            // Switching to mm:ss resets the precision to 1 decimal; otherwise the stored precision is kept
+            decimalPrecision: data.displayFormat === 'duration' && metric.displayFormat !== 'duration'
+              ? DURATION_DECIMAL_PRECISION
+              : undefined,
             availableOrgTypes: data.availableOrgTypes?.length ? data.availableOrgTypes : undefined,
             sportAssociations: data.sportAssociations?.length ? data.sportAssociations : undefined,
             isDerived: data.isDerived,
@@ -250,7 +261,8 @@ export default function MetricFormDialog({
           availableOrgTypes: data.availableOrgTypes || undefined,
           sportAssociations: data.sportAssociations || undefined,
           isActive: true,
-          decimalPrecision: DEFAULT_DECIMAL_PRECISION,
+          displayFormat: data.displayFormat,
+          decimalPrecision: data.displayFormat === 'duration' ? DURATION_DECIMAL_PRECISION : DEFAULT_DECIMAL_PRECISION,
           isDerived: data.isDerived,
           formula: data.isDerived ? data.formula : undefined,
           dependentMetrics: data.isDerived && formulaValidation.data?.dependentMetrics
@@ -369,6 +381,7 @@ export default function MetricFormDialog({
                     <Input
                       {...field}
                       placeholder="seconds"
+                      disabled={isDuration} // Time metrics are stored in seconds
                       data-testid="metric-unit-input"
                     />
                   </FormControl>
@@ -376,6 +389,32 @@ export default function MetricFormDialog({
                     Unit of measurement (e.g., seconds, inches, mph)
                   </FormDescription>
                   <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Display format: time (mm:ss) */}
+            <FormField
+              control={form.control}
+              name="displayFormat"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                  <div className="grid gap-y-0.5">
+                    <FormLabel className="text-base">Time (mm:ss)</FormLabel>
+                    <FormDescription>
+                      Enter and show values as minutes:seconds, e.g. 6:42.5 for a mile run. Values are stored in seconds (unit s).
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value === 'duration'}
+                      onCheckedChange={(checked) => {
+                        field.onChange(checked ? 'duration' : 'decimal');
+                        if (checked) form.setValue('unit', 's');
+                      }}
+                      data-testid="metric-duration-switch"
+                    />
+                  </FormControl>
                 </FormItem>
               )}
             />

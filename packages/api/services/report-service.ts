@@ -23,7 +23,7 @@ import {
   type ReportBenchmark,
 } from '@shared/schema';
 import { isUnder13OrUnknownDob } from '@shared/coppa-utils';
-import { eq, and, gte, lte, inArray, desc, sql } from 'drizzle-orm';
+import { eq, and, or, isNull, gte, lte, inArray, desc, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { quantileRank, median, mean, min, max, standardDeviation } from 'simple-statistics';
 import { BaseService } from './base-service';
@@ -44,6 +44,7 @@ import type { ReportTrends, ReportDistributions, TeamReportTrends, TeamReportDis
 import type { ReportFvProfile } from '@shared/report-fv-types';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
 import { wasUnder13At } from '@shared/coppa-utils';
+import type { MeasurementFormat } from '@shared/duration-format';
 
 interface TimeframeConfig {
   type: 'preset' | 'custom';
@@ -142,6 +143,8 @@ interface TeamReportData {
   athleteCount: number;
   metricLabels: Record<string, string>;
   metricUnits: Record<string, string>;
+  /** Duration (mm:ss) metrics only; absent on data generated before it existed */
+  metricFormats?: Record<string, MeasurementFormat>;
   metricExplanations: Record<string, MetricExplanation>;
   eventContext?: EventContext; // Present when eventId filter is used
   orgBranding?: OrgBranding;
@@ -157,6 +160,8 @@ interface IndividualReportData {
   generatedAt: string;
   metricLabels: Record<string, string>;
   metricUnits: Record<string, string>;
+  /** Duration (mm:ss) metrics only; absent on data generated before it existed */
+  metricFormats?: Record<string, MeasurementFormat>;
   metricExplanations: Record<string, MetricExplanation>;
   eventContext?: EventContext; // Present when eventId filter is used
   orgBranding?: OrgBranding;
@@ -205,9 +210,11 @@ export class ReportService extends BaseService {
   async getMetricLabelsAndUnits(metricCodes: string[]): Promise<{
     labels: Record<string, string>;
     units: Record<string, string>;
+    formats: Record<string, MeasurementFormat>;
   }> {
     const labels: Record<string, string> = {};
     const units: Record<string, string> = {};
+    const formats: Record<string, MeasurementFormat> = {};
 
     // Fetch all metrics in one query
     const metrics = await db
@@ -215,6 +222,8 @@ export class ReportService extends BaseService {
         code: siteMetrics.code,
         label: siteMetrics.label,
         unit: siteMetrics.unit,
+        displayFormat: siteMetrics.displayFormat,
+        decimalPrecision: siteMetrics.decimalPrecision,
       })
       .from(siteMetrics)
       .where(inArray(siteMetrics.code, metricCodes));
@@ -222,6 +231,9 @@ export class ReportService extends BaseService {
     for (const metric of metrics) {
       labels[metric.code] = metric.label;
       units[metric.code] = metric.unit || '';
+      if (metric.displayFormat === 'duration') {
+        formats[metric.code] = { unit: metric.unit, displayFormat: 'duration', decimalPrecision: metric.decimalPrecision };
+      }
     }
 
     // Fallback to code for any missing labels
@@ -234,7 +246,7 @@ export class ReportService extends BaseService {
       }
     }
 
-    return { labels, units };
+    return { labels, units, formats };
   }
 
   /**
@@ -307,7 +319,7 @@ export class ReportService extends BaseService {
     );
 
     // Get metric display labels and units
-    const { labels: metricLabels, units: metricUnits } = await this.getMetricLabelsAndUnits(config.metrics);
+    const { labels: metricLabels, units: metricUnits, formats: metricFormats } = await this.getMetricLabelsAndUnits(config.metrics);
     const metricExplanations = await getMetricExplanationsMap(
       config.metrics,
       report.organizationId,
@@ -405,6 +417,7 @@ export class ReportService extends BaseService {
       athleteCount: athleteRankings.length,
       metricLabels,
       metricUnits,
+      metricFormats,
       metricExplanations,
       metricDirections,
       eventContext,
@@ -635,7 +648,7 @@ export class ReportService extends BaseService {
     };
 
     // Get metric display labels and units
-    const { labels: metricLabels, units: metricUnits } = await this.getMetricLabelsAndUnits(config.metrics);
+    const { labels: metricLabels, units: metricUnits, formats: metricFormats } = await this.getMetricLabelsAndUnits(config.metrics);
     const metricExplanations = await getMetricExplanationsMap(
       config.metrics,
       report.organizationId,
@@ -675,6 +688,7 @@ export class ReportService extends BaseService {
       generatedAt: new Date().toISOString(),
       metricLabels,
       metricUnits,
+      metricFormats,
       metricExplanations,
       eventContext,
       trends,
@@ -890,7 +904,8 @@ export class ReportService extends BaseService {
     // Get selected site benchmark IDs from report config
     const selectedSiteBenchmarkIds = reportConfig.benchmarks?.site || [];
 
-    // Get site benchmarks enabled for this organization AND selected in the report
+    // Site benchmarks are global data, so no per-organization enablement row is required: the wizard's
+    // benchmark-set mode selects ids that have none (sets use opt-out visibility)
     let siteBenchmarksList: Array<{ benchmark: typeof siteBenchmarks.$inferSelect }> = [];
     if (selectedSiteBenchmarkIds.length > 0) {
       siteBenchmarksList = await db
@@ -898,19 +913,20 @@ export class ReportService extends BaseService {
           benchmark: siteBenchmarks,
         })
         .from(siteBenchmarks)
-        .innerJoin(
+        .leftJoin(
           organizationBenchmarks,
           and(
             eq(organizationBenchmarks.benchmarkId, siteBenchmarks.id),
             eq(organizationBenchmarks.benchmarkType, 'site'),
-            eq(organizationBenchmarks.organizationId, organizationId),
-            eq(organizationBenchmarks.isEnabled, true)
+            eq(organizationBenchmarks.organizationId, organizationId)
           )
         )
         .where(
           and(
             eq(siteBenchmarks.isActive, true),
-            inArray(siteBenchmarks.id, selectedSiteBenchmarkIds)
+            inArray(siteBenchmarks.id, selectedSiteBenchmarkIds),
+            // No row = visible (set opt-out model); an explicit disable still hides it
+            or(isNull(organizationBenchmarks.id), eq(organizationBenchmarks.isEnabled, true))
           )
         );
     }
@@ -1835,19 +1851,20 @@ export class ReportService extends BaseService {
           benchmark: siteBenchmarks,
         })
         .from(siteBenchmarks)
-        .innerJoin(
+        .leftJoin(
           organizationBenchmarks,
           and(
             eq(organizationBenchmarks.benchmarkId, siteBenchmarks.id),
             eq(organizationBenchmarks.benchmarkType, 'site'),
-            eq(organizationBenchmarks.organizationId, organizationId),
-            eq(organizationBenchmarks.isEnabled, true)
+            eq(organizationBenchmarks.organizationId, organizationId)
           )
         )
         .where(
           and(
             eq(siteBenchmarks.isActive, true),
-            inArray(siteBenchmarks.id, benchmarkConfig.site)
+            inArray(siteBenchmarks.id, benchmarkConfig.site),
+            // No row = visible (set opt-out model); an explicit disable still hides it
+            or(isNull(organizationBenchmarks.id), eq(organizationBenchmarks.isEnabled, true))
           )
         );
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { chunkBulkItems, saveSummary, savedCellPatch, MAX_BULK_ITEMS, MAX_BULK_BYTES } from '../event-grid-save';
+import { chunkBulkItems, saveSummary, savedCellPatch, cellNumber, isSendable, MAX_BULK_ITEMS, MAX_BULK_BYTES } from '../event-grid-save';
 
 const item = (i: number, notes = '') => ({ userId: `u-${i}`, metric: 'VERTICAL_JUMP', value: i, date: '2026-03-10T00:00:00.000Z', notes });
 const bytes = (chunk: unknown[]) => new TextEncoder().encode(JSON.stringify({ measurements: chunk })).length;
@@ -98,3 +98,27 @@ describe('saveSummary', () => {
   });
 });
 
+
+describe('cellNumber / isSendable: time (mm:ss) cells', () => {
+  it('reads m:ss and plain seconds in a duration cell', () => {
+    expect(cellNumber({ value: '6:42.5', isDuration: true })).toBe(402.5);
+    expect(cellNumber({ value: '402.5', isDuration: true })).toBe(402.5);
+    expect(cellNumber({ value: '6:60', isDuration: true })).toBeNull();
+    expect(cellNumber({ value: '', isDuration: true })).toBeNull();
+  });
+  it('keeps the plain number rule for other cells', () => {
+    expect(cellNumber({ value: '1.6' })).toBe(1.6);
+    expect(cellNumber({ value: '6:42' })).toBeNull();
+    expect(cellNumber({ value: '' })).toBeNull();
+  });
+  it('sends a dirty m:ss cell of a duration metric, not of a decimal metric', () => {
+    expect(isSendable({ isDirty: true, value: '6:42.5', isDuration: true })).toBe(true);
+    expect(isSendable({ isDirty: true, value: '6:42.5' })).toBe(false);
+    expect(isSendable({ isDirty: false, value: '6:42.5', isDuration: true })).toBe(false);
+    expect(isSendable({ isDirty: true, value: '1.6' })).toBe(true);
+    expect(isSendable({ isDirty: true, value: '' })).toBe(false);
+  });
+  it('savedCellPatch stores the saved seconds of an m:ss cell', () => {
+    expect(savedCellPatch({ value: '6:42.5', savedCount: 0, isDuration: true }, { value: '6:42.5' }, 'm1', false).originalValue).toBe(402.5);
+  });
+});

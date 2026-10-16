@@ -13,7 +13,7 @@ vi.mock('@/lib/auth', () => ({
   useAuth: () => ({ userOrganizations: [{ organizationId: 'org-1' }] }),
 }));
 vi.mock('@/hooks/use-metric-labels', () => ({
-  useMetricLabels: () => ({ getLabel: (c: string) => c, labels: {}, isLoading: false }),
+  useMetricLabels: () => ({ getLabel: (c: string) => c, labels: {}, formats: {}, isLoading: false }),
 }));
 
 const RUN_IN_MSG = OCR_REQUIRED_CHOICE_MESSAGES.flyRunIn;

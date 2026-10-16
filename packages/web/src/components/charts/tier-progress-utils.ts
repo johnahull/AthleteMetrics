@@ -1,4 +1,5 @@
 import type { BenchmarkComparison, TierInfo } from '@shared/benchmark-types';
+import { formatMeasurement, type MeasurementFormat } from '@shared/duration-format';
 
 /** Tiers ordered worst->best (descending tierOrder) for left->right bars. */
 export function tierSegments(cmp: BenchmarkComparison): TierInfo[] {
@@ -91,18 +92,22 @@ export function benchmarkBetterDirection(cmp: BenchmarkComparison): 'higher' | '
   return 'none';
 }
 
-/** "✓ Meets (by 0.03 s)" / "✗ Misses by 0.03 s" with absolute difference. */
-export function benchmarkStandingCaption(cmp: BenchmarkComparison, unit?: string): string {
+/** "✓ Meets (by 0.03 s)" / "✗ Misses by 0.03 s" with absolute difference; m:ss when a duration `format` is given. */
+export function benchmarkStandingCaption(cmp: BenchmarkComparison, unit?: string, format?: MeasurementFormat): string {
   const u = unit ? ` ${unit}` : '';
-  const diff = Math.round(Math.abs(cmp.athleteValue - cmp.benchmarkValue) * 100) / 100;
-  return cmp.meetsOrExceeds ? `✓ Meets (by ${diff}${u})` : `✗ Misses by ${diff}${u}`;
+  const absDiff = Math.abs(cmp.athleteValue - cmp.benchmarkValue);
+  const diff = format?.displayFormat === 'duration' ? formatMeasurement(absDiff, format) : `${Math.round(absDiff * 100) / 100}${u}`;
+  return cmp.meetsOrExceeds ? `✓ Meets (by ${diff})` : `✗ Misses by ${diff}`;
 }
 
-/** "2.5 in to Elite" / "Top tier ✓". */
-export function nextTierCaption(cmp: BenchmarkComparison, unit?: string): string {
+/** "2.5 in to Elite" / "Top tier ✓"; m:ss when a duration `format` is given. */
+export function nextTierCaption(cmp: BenchmarkComparison, unit?: string, format?: MeasurementFormat): string {
   if (cmp.isBestTier || !cmp.nextTierName || cmp.distanceToNextTier == null) return 'Top tier ✓';
   const u = unit ? ` ${unit}` : '';
-  return `${Math.round(cmp.distanceToNextTier * 100) / 100}${u} to ${cmp.nextTierName}`;
+  const distance = format?.displayFormat === 'duration'
+    ? formatMeasurement(cmp.distanceToNextTier, format)
+    : `${Math.round(cmp.distanceToNextTier * 100) / 100}${u}`;
+  return `${distance} to ${cmp.nextTierName}`;
 }
 
 /**

@@ -1,11 +1,12 @@
 import { useState, useMemo } from "react";
 import { formatFlyInDistance } from "@shared/fly-run-in";
+import { formatMeasurement } from "@shared/duration-format";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { getMetricBadgeVariant } from "@/lib/metrics";
+import { formatValueWithUnit } from "@/lib/metrics";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -34,7 +35,6 @@ import {
   calculatePersonalRecords,
   generateActivityTimeline,
 } from "@/utils/athlete-dashboard-utils";
-import { getMetricUnits } from "@/lib/metrics";
 import { useMetricLabels } from "@/hooks/use-metric-labels";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
 import { toCalendarDate } from "@/utils/date-utils";
@@ -59,7 +59,7 @@ export default function AthleteProfile() {
   const { user, organizationContext } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { getLabel } = useMetricLabels();
+  const { getLabel, getUnit, formats: metricFormats, types: metricTypes } = useMetricLabels();
   const { metrics: metricConfigs } = useAvailableMetrics();
 
   const [showEditModal, setShowEditModal] = useState(false);
@@ -193,12 +193,12 @@ export default function AthleteProfile() {
     [measurements]
   );
   const personalRecords = useMemo(
-    () => calculatePersonalRecords(measurements),
-    [measurements]
+    () => calculatePersonalRecords(measurements, undefined, metricFormats, metricTypes),
+    [measurements, metricFormats, metricTypes]
   );
   const activityTimeline = useMemo(
-    () => generateActivityTimeline(measurements),
-    [measurements]
+    () => generateActivityTimeline(measurements, undefined, metricFormats, metricTypes),
+    [measurements, metricFormats, metricTypes]
   );
 
   // Group measurements by metric for progress cards
@@ -431,7 +431,7 @@ export default function AthleteProfile() {
                 metric={metric}
                 displayName={getLabel(metric)}
                 measurements={measurementsByMetric[metric]}
-                units={getMetricUnits(metric)}
+                units={getUnit(metric)}
                 personalRecord={personalRecords.find(pr => pr.metric === metric)}
                 metricType={metricConfigs.find(m => m.code === metric)?.metricType}
               />
@@ -566,12 +566,14 @@ export default function AthleteProfile() {
                         {measurement.age}
                       </td>
                       <td className="py-3 px-4 text-sm">
-                        <Badge variant={getMetricBadgeVariant(measurement.metric)}>
+                        <Badge variant="secondary">
                           {getLabel(measurement.metric)}
                         </Badge>
                       </td>
                       <td className="py-3 px-4 text-sm font-mono text-gray-900">
-                        {measurement.value}{measurement.units}
+                        {metricFormats[measurement.metric]
+                          ? formatMeasurement(Number(measurement.value), metricFormats[measurement.metric])
+                          : formatValueWithUnit(measurement.value, measurement.units)}
                       </td>
                       <td className="py-3 px-4 text-sm font-mono text-gray-600">
                         {fly10SpeedMph(measurement.metric, parseFloat(measurement.value))?.toFixed(1) ?? '-'}

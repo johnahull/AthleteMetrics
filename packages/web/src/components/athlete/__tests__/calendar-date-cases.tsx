@@ -21,7 +21,7 @@ import AthleteProfile from '@/pages/athlete-profile';
 vi.mock('canvas-confetti', () => ({ default: vi.fn() }));
 vi.mock('react-chartjs-2', () => ({ Line: () => <div data-testid="sparkline-chart" /> }));
 vi.mock('@/hooks/use-metric-labels', () => ({
-  useMetricLabels: () => ({ labels: {}, getLabel: (code: string) => code, isLoading: false }),
+  useMetricLabels: () => ({ labels: {}, getLabel: (code: string) => code, getUnit: () => '', formats: {}, types: {}, isLoading: false }),
 }));
 
 vi.mock('wouter', async (importOriginal) => ({

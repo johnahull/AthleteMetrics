@@ -17,6 +17,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { ChevronUpIcon, ChevronDownIcon } from 'lucide-react';
 import { getAthleteColor } from '@/utils/chart-constants';
+import { durationAxis } from './utils/durationAxis';
+import { formatMeasurement } from '@shared/duration-format';
 
 // Chart.js components are registered globally in lib/chart-setup.ts
 
@@ -229,7 +231,9 @@ export function LineChart({
 
     const metric = trendsToShow[0].metric;
     const metricConfig = getMetricConfig(metric);
-    const unit = metricConfig?.unit || '';
+    const durationConfig = metricConfig?.displayFormat === 'duration' ? metricConfig : null;
+    // m:ss values carry no unit
+    const unit = durationConfig ? '' : metricConfig?.unit || '';
     const metricLabel = metricConfig?.label || metric;
 
     return {
@@ -237,10 +241,11 @@ export function LineChart({
       datasets,
       metric,
       unit,
+      durationConfig,
       metricLabel,
       sortedDates
     };
-  }, [data, highlightAthlete, selectedAthleteIdsSet, showGroupAverage]);
+  }, [data, highlightAthlete, selectedAthleteIdsSet, showGroupAverage, getMetricConfig]);
 
   // Find personal bests - calculate actual best value based on metric type
   const personalBests = useMemo(() => {
@@ -397,9 +402,11 @@ export function LineChart({
             if (value === null) return '';
 
             // Format value with dual display for FLY10_TIME
-            const formattedValue = lineData?.metric && isFly10Metric(lineData.metric)
-              ? formatFly10Dual(value, 'time-first')
-              : `${value.toFixed(2)}${lineData?.unit}`;
+            const formattedValue = lineData?.durationConfig
+              ? formatMeasurement(value, lineData.durationConfig)
+              : lineData?.metric && isFly10Metric(lineData.metric)
+                ? formatFly10Dual(value, 'time-first')
+                : `${value.toFixed(2)}${lineData?.unit}`;
 
             return `${context.dataset.label}: ${formattedValue}`;
           },
@@ -441,11 +448,12 @@ export function LineChart({
       y: {
         title: {
           display: true,
-          text: `${lineData?.metricLabel} (${lineData?.unit})`
+          text: `${lineData?.metricLabel} (${lineData?.durationConfig ? 'mm:ss' : lineData?.unit})`
         },
         grid: {
           display: true
-        }
+        },
+        ...(lineData?.durationConfig ? durationAxis(lineData.durationConfig) : {})
       }
     },
     elements: {
@@ -652,7 +660,9 @@ export function LineChart({
           <div className="text-center">
             <div className="font-medium">Personal Best</div>
             <div className="text-lg font-bold text-green-600">
-              {personalBests[0].value.toFixed(2)}{lineData.unit}
+              {lineData.durationConfig
+                ? formatMeasurement(personalBests[0].value, lineData.durationConfig)
+                : `${personalBests[0].value.toFixed(2)}${lineData.unit}`}
             </div>
             <div className="text-xs text-muted-foreground">
               {(() => {

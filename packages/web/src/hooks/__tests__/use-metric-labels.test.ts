@@ -93,4 +93,39 @@ describe('useMetricLabels', () => {
 
     expect(result.current.getLabel('FLY10_TIME')).toBe('My Org Fly Time');
   });
+
+  it('getUnit returns the configured unit, and "" for unknown codes', () => {
+    mockAvailableMetrics.metrics = [
+      { ...fixture('FLY10_TIME', '10-Yard Fly Time'), unit: 's' },
+      { ...fixture('CUSTOM_X', 'Custom X'), unit: 'kg', isCustom: true },
+    ];
+
+    const { result } = renderHook(() => useMetricLabels());
+
+    expect(result.current.getUnit('FLY10_TIME')).toBe('s');
+    expect(result.current.getUnit('CUSTOM_X')).toBe('kg');
+    expect(result.current.getUnit('ARCHIVED_METRIC')).toBe('');
+  });
+
+  it('lists the display format of duration (mm:ss) metrics only', () => {
+    mockAvailableMetrics.metrics = [
+      { ...fixture('MILE', 'Mile'), unit: 's', displayFormat: 'duration', decimalPrecision: 1 },
+      { ...fixture('FLY10_TIME', 'Fly'), unit: 's', displayFormat: 'decimal' },
+    ];
+
+    const { result } = renderHook(() => useMetricLabels());
+
+    expect(result.current.formats).toEqual({ MILE: { unit: 's', displayFormat: 'duration', decimalPrecision: 1 } });
+  });
+
+  it('lists the metric type of every metric', () => {
+    mockAvailableMetrics.metrics = [
+      { ...fixture('MILE_RUN', 'Mile Run'), metricType: 'lower_is_better', lowerIsBetter: true },
+      fixture('VERTICAL_JUMP', 'Vertical Jump'),
+    ];
+
+    const { result } = renderHook(() => useMetricLabels());
+
+    expect(result.current.types).toEqual({ MILE_RUN: 'lower_is_better', VERTICAL_JUMP: 'higher_is_better' });
+  });
 });

@@ -7,6 +7,7 @@ import { useToggleSiteBenchmarkStatus, useDeleteSiteBenchmark } from "@/lib/benc
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useMetricConfig } from "@/hooks/use-metric-config";
+import { formatMeasurement } from "@shared/duration-format";
 import { Edit, Trash2, Target, Layers } from "lucide-react";
 import { BenchmarkDeleteDialog } from "./BenchmarkDeleteDialog";
 import { TierBadgeCompact } from "./TierBadge";
@@ -66,7 +67,10 @@ export function BenchmarkCard({ benchmark, onEdit }: BenchmarkCardProps) {
 
   // Get metric config for unit display
   const metricConfig = getMetricConfig(benchmark.metricCode);
-  const unit = metricConfig?.unit || '';
+  const durationConfig = metricConfig?.displayFormat === 'duration' ? metricConfig : null;
+  // A duration target prints as m:ss, which carries no unit
+  const unit = durationConfig ? '' : metricConfig?.unit || '';
+  const target = <T,>(v: T) => (durationConfig && v != null ? formatMeasurement(Number(v), durationConfig) : v);
 
   // Format comparison operator for display
   const operatorLabel = {
@@ -149,13 +153,13 @@ export function BenchmarkCard({ benchmark, onEdit }: BenchmarkCardProps) {
                 {isRangeBenchmark ? (
                   <>
                     <span className="text-2xl font-bold">
-                      {benchmark.minValue ?? '—'} – {benchmark.maxValue ?? '—'}
+                      {target(benchmark.minValue) ?? '—'} – {target(benchmark.maxValue) ?? '—'}
                     </span>
                     {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
                   </>
                 ) : (
                   <>
-                    <span className="text-2xl font-bold">{benchmark.benchmarkValue}</span>
+                    <span className="text-2xl font-bold">{target(benchmark.benchmarkValue)}</span>
                     {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
                   </>
                 )}

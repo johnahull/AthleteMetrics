@@ -15,6 +15,8 @@ import type {
   StatisticalSummary 
 } from '@shared/analytics-types';
 import { useMetricConfig } from '@/hooks/use-metric-config';
+import { durationAxis } from './utils/durationAxis';
+import { formatMeasurement } from '@shared/duration-format';
 import { generateDeterministicJitter } from './utils/boxPlotStatistics';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 
@@ -138,18 +140,22 @@ export function SwarmChart({
       });
     }
 
-    const unit = getMetricConfig(primaryMetric)?.unit || '';
-    const metricLabel = getMetricConfig(primaryMetric)?.label || primaryMetric;
+    const metricInfo = getMetricConfig(primaryMetric);
+    const durationConfig = metricInfo?.displayFormat === 'duration' ? metricInfo : null;
+    // m:ss values carry no unit
+    const unit = durationConfig ? '' : metricInfo?.unit || '';
+    const metricLabel = metricInfo?.label || primaryMetric;
 
     return {
       datasets,
       unit,
+      durationConfig,
       metricLabel,
       primaryMetric,
       swarmPoints,
       stats
     };
-  }, [data, statistics, highlightAthlete]);
+  }, [data, statistics, highlightAthlete, getMetricConfig]);
 
   // Chart options
   const options: ChartOptions<'scatter'> = {
@@ -180,9 +186,11 @@ export function SwarmChart({
             const value = point.y || context.parsed.y;
 
             // Format value with dual display for FLY10_TIME
-            const formattedValue = swarmData?.primaryMetric && isFly10Metric(swarmData.primaryMetric)
-              ? formatFly10Dual(value, 'time-first')
-              : `${value.toFixed(2)}${swarmData?.unit}`;
+            const formattedValue = swarmData?.durationConfig
+              ? formatMeasurement(value, swarmData.durationConfig)
+              : swarmData?.primaryMetric && isFly10Metric(swarmData.primaryMetric)
+                ? formatFly10Dual(value, 'time-first')
+                : `${value.toFixed(2)}${swarmData?.unit}`;
 
             return `${swarmData?.metricLabel}: ${formattedValue}`;
           },
@@ -246,11 +254,12 @@ export function SwarmChart({
         type: 'linear',
         title: {
           display: true,
-          text: `${swarmData?.metricLabel} (${swarmData?.unit})`
+          text: `${swarmData?.metricLabel} (${swarmData?.durationConfig ? 'mm:ss' : swarmData?.unit})`
         },
         grid: {
           display: true
-        }
+        },
+        ...(swarmData?.durationConfig ? durationAxis(swarmData.durationConfig) : {})
       }
     },
     elements: {
@@ -263,6 +272,9 @@ export function SwarmChart({
       mode: 'point'
     }
   };
+
+  const show = (value: number) =>
+    swarmData?.durationConfig ? formatMeasurement(value, swarmData.durationConfig) : `${value.toFixed(2)}${swarmData?.unit}`;
 
   if (!swarmData) {
     return (
@@ -286,25 +298,25 @@ export function SwarmChart({
           <div>
             <div className="font-medium">Mean</div>
             <div className="text-lg font-bold text-red-600">
-              {swarmData.stats.mean.toFixed(2)}{swarmData.unit}
+              {show(swarmData.stats.mean)}
             </div>
           </div>
           <div>
             <div className="font-medium">Median</div>
             <div className="text-lg font-bold text-yellow-600">
-              {swarmData.stats.median.toFixed(2)}{swarmData.unit}
+              {show(swarmData.stats.median)}
             </div>
           </div>
           <div>
             <div className="font-medium">Std Dev</div>
             <div className="text-lg font-bold text-gray-600">
-              {swarmData.stats.std.toFixed(2)}{swarmData.unit}
+              {show(swarmData.stats.std)}
             </div>
           </div>
           <div>
             <div className="font-medium">Range</div>
             <div className="text-lg font-bold text-gray-600">
-              {(swarmData.stats.max - swarmData.stats.min).toFixed(2)}{swarmData.unit}
+              {show(swarmData.stats.max - swarmData.stats.min)}
             </div>
           </div>
         </div>

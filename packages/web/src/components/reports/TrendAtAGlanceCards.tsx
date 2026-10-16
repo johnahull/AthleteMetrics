@@ -2,6 +2,7 @@
 import { Badge } from '@/components/ui/badge';
 import type { BenchmarkOverlay } from '@shared/report-trends-types';
 import { formatDelta, currentTierName } from '@/components/charts/trend-utils';
+import { formatMeasurement, type MeasurementFormat } from '@shared/duration-format';
 
 /** The subset of a trend (individual or team) the at-a-glance cards need. */
 interface TrendCardData {
@@ -13,13 +14,15 @@ interface Props {
   entries: Array<[string, TrendCardData]>;
   metricLabels?: Record<string, string>;
   metricUnits?: Record<string, string>;
+  /** Duration (mm:ss) metrics only; others keep their unit display */
+  metricFormats?: Record<string, MeasurementFormat>;
 }
 
 /**
  * The "at-a-glance" metric cards atop both TrendSection and TeamTrendSection —
  * shared so a future fix to this layout/logic only needs to happen once.
  */
-export function TrendAtAGlanceCards({ entries, metricLabels = {}, metricUnits = {} }: Props) {
+export function TrendAtAGlanceCards({ entries, metricLabels = {}, metricUnits = {}, metricFormats = {} }: Props) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       {entries.map(([code, trend]) => {
@@ -30,7 +33,9 @@ export function TrendAtAGlanceCards({ entries, metricLabels = {}, metricUnits = 
         return (
           <div key={code} className="border rounded-lg p-3">
             <div className="text-xs text-muted-foreground">{label}</div>
-            <div className="text-xl font-bold">{trend.delta.to}{unit ? ` ${unit}` : ''}</div>
+            <div className="text-xl font-bold">
+              {metricFormats[code] ? formatMeasurement(trend.delta.to, metricFormats[code]) : `${trend.delta.to}${unit ? ` ${unit}` : ''}`}
+            </div>
             <div className="flex flex-wrap gap-1 mt-1">
               <Badge variant={improving ? 'default' : 'secondary'}>{formatDelta(trend.delta)}</Badge>
               {tier && <Badge variant="outline">{tier}</Badge>}

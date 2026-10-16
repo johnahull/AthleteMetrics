@@ -85,8 +85,8 @@ describe('metric-education-utils', () => {
     });
 
     it('formats both 5-0-5 protocols as seconds', () => {
-      expect(formatMetricValue(2.456, 'AGILITY_505_M')).toBe('2.46s');
-      expect(formatMetricValue(2.244, 'AGILITY_505_YD')).toBe('2.24s');
+      expect(formatMetricValue(2.456, 'AGILITY_505_M', 's')).toBe('2.46 s');
+      expect(formatMetricValue(2.244, 'AGILITY_505_YD', 's')).toBe('2.24 s');
     });
 
     it('keeps percentile thresholds for AGILITY_505_M and omits them for AGILITY_505_YD until calibrated', () => {
@@ -140,22 +140,34 @@ describe('metric-education-utils', () => {
   });
 
   describe('formatMetricValue', () => {
-    it('should format time metrics with 2 decimal places and "s" suffix', () => {
-      expect(formatMetricValue(1.234, 'FLY10_TIME')).toBe('1.23s');
-      expect(formatMetricValue(4.5, 'DASH_40YD')).toBe('4.50s');
+    it('should format time metrics with 2 decimal places and the supplied unit', () => {
+      expect(formatMetricValue(1.234, 'FLY10_TIME', 's')).toBe('1.23 s');
+      expect(formatMetricValue(4.5, 'DASH_40YD', 's')).toBe('4.50 s');
     });
 
-    it('should format vertical jump with 1 decimal place and "in" suffix', () => {
-      expect(formatMetricValue(32.5, 'VERTICAL_JUMP')).toBe('32.5"');
-      expect(formatMetricValue(28, 'VERTICAL_JUMP')).toBe('28.0"');
+    it('should format vertical jump with 1 decimal place and the supplied unit', () => {
+      expect(formatMetricValue(32.5, 'VERTICAL_JUMP', 'in')).toBe('32.5 in');
+      expect(formatMetricValue(28, 'VERTICAL_JUMP', 'in')).toBe('28.0 in');
     });
 
-    it('should format top speed with 1 decimal place and "mph" suffix', () => {
-      expect(formatMetricValue(21.5, 'TOP_SPEED')).toBe('21.5 mph');
+    it('should format top speed with 1 decimal place and the supplied unit', () => {
+      expect(formatMetricValue(21.5, 'TOP_SPEED', 'mph')).toBe('21.5 mph');
     });
 
     it('should format RSI with 2 decimal places', () => {
       expect(formatMetricValue(2.15, 'RSI')).toBe('2.15');
+    });
+
+    it('should never append a unit to RSI', () => {
+      expect(formatMetricValue(2.15, 'RSI', 's')).toBe('2.15');
+    });
+
+    it('should not invent a unit when none is supplied', () => {
+      expect(formatMetricValue(1.234, 'FLY10_TIME')).toBe('1.23');
+    });
+
+    it('should use whatever unit the metric config supplies', () => {
+      expect(formatMetricValue(32.5, 'VERTICAL_JUMP', 'cm')).toBe('32.5 cm');
     });
   });
 

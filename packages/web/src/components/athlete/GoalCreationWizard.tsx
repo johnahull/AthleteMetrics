@@ -10,9 +10,11 @@
 
 import React, { useState, useMemo } from 'react';
 import { format } from 'date-fns';
+import { useMetricLabels } from '@/hooks/use-metric-labels';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DurationInput } from '@/components/duration-input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -26,6 +28,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { MetricType } from '@shared/analytics-types';
 import {
   GoalType,
   GoalStatus,
@@ -42,6 +45,7 @@ interface Measurement {
   metric: string;
   value: number | string;
   date: string;
+  units?: string | null;
 }
 
 interface GoalCreationData {
@@ -55,6 +59,10 @@ interface GoalCreationData {
 interface GoalCreationWizardProps {
   measurements: Measurement[];
   availableMetrics: string[];
+  /** Codes of time (mm:ss) metrics: their target value is typed as m:ss */
+  durationMetrics?: string[];
+  /** Better/worse direction per metric code; without an entry the built-in lists decide */
+  metricTypes?: Record<string, MetricType>;
   onCreateGoal: (goal: GoalCreationData) => void | Promise<void>;
   onCancel: () => void;
 }
@@ -64,11 +72,15 @@ type WizardStep = 1 | 2 | 3;
 export function GoalCreationWizard({
   measurements,
   availableMetrics,
+  durationMetrics,
+  metricTypes,
   onCreateGoal,
   onCancel,
 }: GoalCreationWizardProps) {
   const [currentStep, setCurrentStep] = useState<WizardStep>(1);
   const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
+  const { getUnit } = useMetricLabels();
+  const selectedUnit = selectedMetric ? getUnit(selectedMetric) : '';
   const [selectedGoalType, setSelectedGoalType] = useState<GoalType | null>(null);
   const [targetValue, setTargetValue] = useState<string>('');
   const [targetDate, setTargetDate] = useState<string>('');
@@ -88,7 +100,7 @@ export function GoalCreationWizard({
 
     if (metricMeasurements.length === 0) return null;
 
-    const lowerIsBetter = isLowerBetterMetric(selectedMetric);
+    const lowerIsBetter = isLowerBetterMetric(selectedMetric, metricTypes?.[selectedMetric]);
     const best = lowerIsBetter
       ? Math.min(...metricMeasurements.map((m) => m.value))
       : Math.max(...metricMeasurements.map((m) => m.value));
@@ -98,7 +110,7 @@ export function GoalCreationWizard({
     )[0].value;
 
     return { best, latest, count: metricMeasurements.length };
-  }, [selectedMetric, measurements]);
+  }, [selectedMetric, measurements, metricTypes]);
 
   // Get smart suggestions
   const suggestions = useMemo(() => {
@@ -113,7 +125,7 @@ export function GoalCreationWizard({
     const numValue = parseFloat(value);
     if (isNaN(numValue)) return 'Please enter a valid number';
 
-    const lowerIsBetter = isLowerBetterMetric(selectedMetric);
+    const lowerIsBetter = isLowerBetterMetric(selectedMetric, metricTypes?.[selectedMetric]);
 
     if (selectedGoalType === GoalType.TARGET_VALUE) {
       if (lowerIsBetter && numValue >= currentPerformance.best) {
@@ -197,13 +209,13 @@ export function GoalCreationWizard({
     const percent = parseFloat(targetValue);
     if (isNaN(percent)) return null;
 
-    const lowerIsBetter = isLowerBetterMetric(selectedMetric);
+    const lowerIsBetter = isLowerBetterMetric(selectedMetric, metricTypes?.[selectedMetric]);
     const improvement = currentPerformance.best * (percent / 100);
 
     return lowerIsBetter
       ? currentPerformance.best - improvement
       : currentPerformance.best + improvement;
-  }, [selectedGoalType, targetValue, currentPerformance, selectedMetric]);
+  }, [selectedGoalType, targetValue, currentPerformance, selectedMetric, metricTypes]);
 
   // Check if form is valid
   const isFormValid = useMemo(() => {
@@ -309,7 +321,7 @@ export function GoalCreationWizard({
                 <p className="text-sm text-blue-800">
                   Current best:{' '}
                   <span className="font-bold">
-                    {formatMetricValue(currentPerformance.best, selectedMetric)}
+                    {formatMetricValue(currentPerformance.best, selectedMetric, selectedUnit)}
                   </span>
                   {' '}({currentPerformance.count} measurements)
                 </p>
@@ -403,6 +415,14 @@ export function GoalCreationWizard({
             {/* Target Value Input */}
             <div className="grid gap-y-2">
               <Label htmlFor="target-value">{getTargetInputLabel()}</Label>
+              {selectedGoalType === GoalType.TARGET_VALUE && durationMetrics?.includes(selectedMetric) ? (
+                <DurationInput
+                  id="target-value"
+                  value={targetValue ? Number(targetValue) : undefined}
+                  onValueChange={(seconds) => handleTargetValueChange(seconds === undefined ? '' : String(seconds))}
+                  aria-describedby={errors.target ? 'target-error' : undefined}
+                />
+              ) : (
               <Input
                 id="target-value"
                 type="number"
@@ -418,6 +438,7 @@ export function GoalCreationWizard({
                 }
                 aria-describedby={errors.target ? 'target-error' : undefined}
               />
+              )}
               {errors.target && (
                 <p id="target-error" className="text-sm text-red-600">
                   {errors.target}
@@ -434,7 +455,7 @@ export function GoalCreationWizard({
                 >
                   Target will be:{' '}
                   <span className="font-bold">
-                    {formatMetricValue(calculatedTarget, selectedMetric)}
+                    {formatMetricValue(calculatedTarget, selectedMetric, selectedUnit)}
                   </span>
                 </div>
               )}

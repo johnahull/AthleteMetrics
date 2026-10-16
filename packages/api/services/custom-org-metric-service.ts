@@ -11,6 +11,7 @@ import { customOrgMetrics, siteMetrics, measurements, userOrganizations, organiz
 import { eq, and, count, sql, or } from "drizzle-orm";
 import type { CustomOrgMetric } from "@shared/schema";
 import { validateFormula, detectCircularDependencies } from "./formula-service";
+import { violatesDurationUnit, DURATION_UNIT_ERROR, type DisplayFormat } from "@shared/duration-format";
 
 export interface InsertCustomOrgMetric {
   label: string;
@@ -24,6 +25,7 @@ export interface InsertCustomOrgMetric {
   validationMin?: number;
   validationMax?: number;
   decimalPrecision?: number;
+  displayFormat?: DisplayFormat;
   sportAssociations?: string[];
   isDerived?: boolean;
   formula?: string;
@@ -208,6 +210,8 @@ export class CustomOrgMetricService extends BaseService {
         throw new Error("Unauthorized: Only organization administrators can create custom metrics");
       }
 
+      if (violatesDurationUnit(data)) throw new Error(DURATION_UNIT_ERROR);
+
       // Check for duplicate label (Issue #5 fix)
       const existingByLabel = await this.getCustomOrgMetricByLabel(organizationId, data.label);
       if (existingByLabel) {
@@ -287,6 +291,7 @@ export class CustomOrgMetricService extends BaseService {
           validationMin: data.validationMin?.toString(),
           validationMax: data.validationMax?.toString(),
           decimalPrecision: data.decimalPrecision ?? 3,
+          displayFormat: data.displayFormat ?? 'decimal',
           sportAssociations: data.sportAssociations,
           isDerived: data.isDerived ?? false,
           formula: data.formula,
@@ -434,6 +439,13 @@ export class CustomOrgMetricService extends BaseService {
         throw new Error(`Custom metric with code ${code} not found`);
       }
 
+      if (violatesDurationUnit({
+        unit: data.unit ?? existing.unit,
+        displayFormat: data.displayFormat ?? existing.displayFormat,
+      })) {
+        throw new Error(DURATION_UNIT_ERROR);
+      }
+
       // If changing metricType, check for existing measurements
       if (data.metricType && data.metricType !== existing.metricType) {
         const measurementCount = await this.getMeasurementCount(organizationId, code);
@@ -458,6 +470,7 @@ export class CustomOrgMetricService extends BaseService {
       if (data.validationMin !== undefined) updateData.validationMin = data.validationMin?.toString();
       if (data.validationMax !== undefined) updateData.validationMax = data.validationMax?.toString();
       if (data.decimalPrecision !== undefined) updateData.decimalPrecision = data.decimalPrecision;
+      if (data.displayFormat !== undefined) updateData.displayFormat = data.displayFormat;
       if (data.sportAssociations !== undefined) updateData.sportAssociations = data.sportAssociations;
       if (data.displayOrder !== undefined) updateData.displayOrder = data.displayOrder;
       if (data.color !== undefined) updateData.color = data.color;

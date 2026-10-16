@@ -27,6 +27,8 @@ import {
   Legend,
 } from "chart.js";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
+import { durationAxis } from "@/components/charts/utils/durationAxis";
+import { formatMeasurement } from "@shared/duration-format";
 import type { TimeframePreset } from "@shared/dashboard-timeframe";
 
 // Register Chart.js components
@@ -250,8 +252,11 @@ export function DashboardTrendsChart({
     effectiveMetrics.forEach((metricCode, index) => {
       const metricInfo = metrics.find((m) => m.code === metricCode);
       const color = METRIC_COLORS[index % METRIC_COLORS.length];
+      // Duration (mm:ss) metric: round m:ss ticks
+      const duration = metricInfo?.displayFormat === "duration" ? durationAxis(metricInfo) : null;
 
       scales[`y${index}`] = {
+        ...(duration ? { afterBuildTicks: duration.afterBuildTicks } : {}),
         type: "linear" as const,
         display: true,
         position: index === 0 ? "left" : "right",
@@ -261,6 +266,7 @@ export function DashboardTrendsChart({
         },
         ticks: {
           color: color.border,
+          ...(duration ? duration.ticks : {}),
         },
         title: {
           display: effectiveMetrics.length > 1,
@@ -280,6 +286,14 @@ export function DashboardTrendsChart({
         tooltip: {
           mode: "index" as const,
           intersect: false,
+          callbacks: {
+            label: (ctx: { datasetIndex: number; dataset: { label?: string }; parsed: { y: number | null } }) => {
+              const metricInfo = metrics.find((m) => m.code === effectiveMetrics[ctx.datasetIndex]);
+              const y = ctx.parsed.y;
+              const value = y != null && metricInfo?.displayFormat === "duration" ? formatMeasurement(y, metricInfo) : y;
+              return `${ctx.dataset.label ?? ""}: ${value}`;
+            },
+          },
         },
       },
       scales,

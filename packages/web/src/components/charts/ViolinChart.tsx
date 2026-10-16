@@ -8,6 +8,7 @@ import { Chart as ChartJS } from 'chart.js';
 import type { ChartDataPoint, ChartConfiguration, StatisticalSummary, GroupDefinition } from '@shared/analytics-types';
 import { devLog } from '@/utils/dev-logger';
 import { useMetricConfig } from '@/hooks/use-metric-config';
+import { formatMeasurement } from '@shared/duration-format';
 import { getDateKey } from '@/utils/date-utils';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 import { Button } from '@/components/ui/button';
@@ -457,6 +458,13 @@ export function ViolinChart({
     return ((unsignedHash % 1000) / 1000 - 0.5) * range;
   }
 
+  // Duration (mm:ss) metric: axis, tooltip and stats in m:ss
+  const firstMetric = data && data.length > 0 ? data[0]?.metric : undefined;
+  const durationConfig = useMemo(() => {
+    const metricConfig = firstMetric ? getMetricConfig(firstMetric) : null;
+    return metricConfig?.displayFormat === 'duration' ? metricConfig : null;
+  }, [firstMetric, getMetricConfig]);
+
   // Custom drawing logic for violin chart
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -774,7 +782,9 @@ export function ViolinChart({
       const y = valueToY(value);
 
       // Format numbers nicely - use simple format for axis (dual format in tooltips)
-      const displayValue = value < 0.1 && value > -0.1 ? value.toFixed(3) : value.toFixed(2);
+      const displayValue = durationConfig
+        ? formatMeasurement(value, durationConfig)
+        : value < 0.1 && value > -0.1 ? value.toFixed(3) : value.toFixed(2);
       ctx.fillText(displayValue, padding - 10, y + 4);
 
       // Tick marks
@@ -810,7 +820,7 @@ export function ViolinChart({
         ctx.fillText('Unable to render chart. Please check your data.', canvas.width / 2, canvas.height / 2);
       }
     }
-  }, [processedData, resizeKey]);
+  }, [processedData, resizeKey, durationConfig]);
 
   // Handle window resize with debounce to prevent performance issues
   useEffect(() => {
@@ -917,6 +927,8 @@ export function ViolinChart({
 
   const metric = data && data.length > 0 ? data[0]?.metric : undefined;
   const metricConfig = metric ? getMetricConfig(metric) : null;
+  const showStat = (value: number) =>
+    durationConfig ? formatMeasurement(value, durationConfig) : `${value.toFixed(2)}${metricConfig?.unit ?? ''}`;
 
   devLog.log('ViolinChart render', {
     dataLength: data.length,
@@ -1028,9 +1040,11 @@ export function ViolinChart({
                 </span>
               )}
               <span className="font-bold">
-                {tooltip.metric && isFly10Metric(tooltip.metric)
-                  ? formatFly10Dual(tooltip.value, 'time-first')
-                  : `${tooltip.value.toFixed(2)}${tooltip.metric && getMetricConfig(tooltip.metric)?.unit || ''}`}
+                {durationConfig
+                  ? formatMeasurement(tooltip.value, durationConfig)
+                  : tooltip.metric && isFly10Metric(tooltip.metric)
+                    ? formatFly10Dual(tooltip.value, 'time-first')
+                    : `${tooltip.value.toFixed(2)}${tooltip.metric && getMetricConfig(tooltip.metric)?.unit || ''}`}
               </span>
             </div>
           </div>
@@ -1102,7 +1116,7 @@ export function ViolinChart({
             <div className="font-medium text-right pr-4">Mean</div>
             {processedData.map((group, index) => (
               <div key={index} className="text-lg font-bold text-red-600 text-center">
-                {group.stats.mean.toFixed(2)}{metricConfig.unit}
+                {showStat(group.stats.mean)}
               </div>
             ))}
 
@@ -1110,7 +1124,7 @@ export function ViolinChart({
             <div className="font-medium text-right pr-4">Median</div>
             {processedData.map((group, index) => (
               <div key={index} className="text-lg font-bold text-yellow-600 text-center">
-                {group.stats.median.toFixed(2)}{metricConfig.unit}
+                {showStat(group.stats.median)}
               </div>
             ))}
 
@@ -1118,7 +1132,7 @@ export function ViolinChart({
             <div className="font-medium text-right pr-4">Std Dev</div>
             {processedData.map((group, index) => (
               <div key={index} className="text-lg font-bold text-gray-600 text-center">
-                {group.stats.std.toFixed(2)}{metricConfig.unit}
+                {showStat(group.stats.std)}
               </div>
             ))}
 
@@ -1126,7 +1140,7 @@ export function ViolinChart({
             <div className="font-medium text-right pr-4">Range</div>
             {processedData.map((group, index) => (
               <div key={index} className="text-lg font-bold text-gray-600 text-center">
-                {(group.stats.max - group.stats.min).toFixed(2)}{metricConfig.unit}
+                {showStat(group.stats.max - group.stats.min)}
               </div>
             ))}
           </div>
@@ -1136,7 +1150,7 @@ export function ViolinChart({
 
       {metricConfig && (
         <p className="text-xs text-muted-foreground mt-2">
-          {metricConfig.label} ({metric && isFly10Metric(metric) ? 's / mph' : metricConfig.unit})
+          {metricConfig.label} ({metric && isFly10Metric(metric) ? 's / mph' : durationConfig ? 'mm:ss' : metricConfig.unit})
           {metricConfig.lowerIsBetter ? ' - Lower is better' : ' - Higher is better'}
         </p>
       )}

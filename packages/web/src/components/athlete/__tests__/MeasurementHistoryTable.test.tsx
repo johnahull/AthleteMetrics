@@ -22,6 +22,7 @@ vi.mock('@/hooks/use-metric-labels', () => ({
   useMetricLabels: () => ({
     labels: METRIC_LABELS,
     getLabel: (code: string) => METRIC_LABELS[code] ?? code,
+    formats: { MILE_RUN: { unit: 's', displayFormat: 'duration', decimalPrecision: 1 } },
     isLoading: false,
   }),
 }));
@@ -365,6 +366,14 @@ describe('MeasurementHistoryTable', () => {
 
       const table = screen.getByRole('table');
       expect(table).toHaveAttribute('aria-busy', 'true');
+    });
+  });
+
+  describe('duration (mm:ss) metrics', () => {
+    it('shows a duration measurement as m:ss', () => {
+      render(<MeasurementHistoryTable measurements={[{ ...mockMeasurements[0], id: 'mile', metric: 'MILE_RUN', value: '402.500', units: 's' }]} />);
+      expect(screen.getAllByText(/6:42\.5/).length).toBeGreaterThan(0);
+      expect(screen.queryByText(/402\.5/)).toBeNull();
     });
   });
 });

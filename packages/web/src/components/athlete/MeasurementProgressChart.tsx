@@ -108,7 +108,7 @@ export function MeasurementProgressChart({
   const [internalShowTrendLine, setInternalShowTrendLine] = useState(true);
   const showTrendLine = controlledShowTrendLine ?? internalShowTrendLine;
   const handleTrendLineChange = onShowTrendLineChange ?? setInternalShowTrendLine;
-  const { getLabel } = useMetricLabels();
+  const { getLabel, types: metricTypes } = useMetricLabels();
 
   // Check if measurements have mixed metrics
   const uniqueMetrics = useMemo(() => {
@@ -134,7 +134,7 @@ export function MeasurementProgressChart({
     // Filter to best per date if showBestOnly is true
     if (showBestOnly) {
       const metric = sorted[0]?.metric || '';
-      const lowerIsBetter = isLowerBetter(metric);
+      const lowerIsBetter = isLowerBetter(metric, metricTypes[metric]);
       const bestByDate = new Map<string, Measurement>();
 
       for (const m of sorted) {
@@ -163,7 +163,7 @@ export function MeasurementProgressChart({
     const units = sorted[0]?.units || '';
 
     return { sorted, data, metric, units };
-  }, [measurements, showBestOnly]);
+  }, [measurements, showBestOnly, metricTypes]);
 
   // Calculate trend line data (only when data changes, not when toggle changes)
   const trendData = useMemo(() => {

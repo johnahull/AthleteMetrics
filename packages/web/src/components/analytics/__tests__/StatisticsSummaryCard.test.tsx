@@ -20,6 +20,8 @@ vi.mock('@/hooks/use-metric-labels', () => ({
   useMetricLabels: () => ({
     labels: METRIC_LABEL_FIXTURE,
     getLabel: (code: string) => METRIC_LABEL_FIXTURE[code] ?? code,
+    getUnit: (code: string) => ({ VERTICAL_JUMP: 'in', FLY10_TIME: 's', DASH_40YD: 's' } as Record<string, string>)[code] ?? '',
+    formats: { MILE_RUN: { unit: 's', displayFormat: 'duration', decimalPrecision: 1 } },
     isLoading: false,
   }),
 }));
@@ -384,6 +386,16 @@ describe('StatisticsSummaryCard', () => {
       // Standard deviation and IQR should be 0 - value and units may be separate text nodes
       const allZeros = screen.getAllByText('0.00', { exact: false });
       expect(allZeros.length).toBeGreaterThanOrEqual(2); // StdDev and IQR
+    });
+  });
+
+  describe('duration (mm:ss) metrics', () => {
+    it('shows mean, median, std dev and range as m:ss', () => {
+      const measurements = [402.5, 410.5].map((v) => createTestMeasurement({ metric: 'MILE_RUN', value: String(v), units: 's' }));
+      render(<StatisticsSummaryCard measurements={measurements} metric="MILE_RUN" />);
+      expect(screen.getAllByText('6:46.5').length).toBeGreaterThanOrEqual(2); // mean and median
+      expect(screen.getByText('6:42.5 - 6:50.5')).toBeInTheDocument();
+      expect(screen.queryByText(/406\.5/)).toBeNull();
     });
   });
 });
