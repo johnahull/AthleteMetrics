@@ -107,12 +107,14 @@ describe('eval report routes', () => {
     // only (no manual migrations), so create what is absent and delete in afterAll only what was created here.
     const neededMetrics: Array<[code: string, category: string, unit: string, metricType: string]> = [
       ['DASH_10YD', 'speed', 's', 'lower_is_better'],
+      ['DASH_20YD', 'speed', 's', 'lower_is_better'],
+      ['AGILITY_COD_DEFICIT_M_INTERP', 'agility', 's', 'lower_is_better'],
       ['TOP_SPEED', 'speed', 'mph', 'higher_is_better'],
       ['JUMP_BROAD', 'power', 'in', 'higher_is_better'],
       ['JUMP_CMJ_HOH', 'power', 'in', 'higher_is_better'],
-      ['AGILITY_505_YD_L', 'agility', 's', 'lower_is_better'],
-      ['AGILITY_505_YD_R', 'agility', 's', 'lower_is_better'],
-      ['AGILITY_505_YD_LSI', 'agility', '%', 'higher_is_better'],
+      ['AGILITY_505_M_L', 'agility', 's', 'lower_is_better'],
+      ['AGILITY_505_M_R', 'agility', 's', 'lower_is_better'],
+      ['AGILITY_505_M_LSI', 'agility', '%', 'higher_is_better'],
       ['RSI_105', 'power', '', 'higher_is_better'],
     ];
     for (const [code, category, unit, metricType] of neededMetrics) {
@@ -141,6 +143,7 @@ describe('eval report routes', () => {
     await mkUser('stranger');
     await mkUser('unverifiedOnly', { gender: 'Female', birthDate: '2011-03-01', sports: [SPORT] });
     await mkUser('rsiOnly', { gender: 'Female', birthDate: '2011-03-01', sports: [SPORT] });
+    await mkUser('meterBattery', { gender: 'Female', birthDate: '2011-03-01', sports: [SPORT] });
     u.siteAdmin = { id: `site-admin-${suffix}`, isSiteAdmin: true };
 
     await db.insert(userOrganizations).values([
@@ -159,6 +162,7 @@ describe('eval report routes', () => {
       { userId: u.stranger.id, organizationId: orgA, role: 'athlete' },
       { userId: u.unverifiedOnly.id, organizationId: orgA, role: 'athlete' },
       { userId: u.rsiOnly.id, organizationId: orgA, role: 'athlete' },
+      { userId: u.meterBattery.id, organizationId: orgA, role: 'athlete' },
     ] as any);
 
     const mkEvent = async (organizationId: string | null, name: string, startDate = '2026-05-01T10:00:00Z', extra = {}) => {
@@ -196,9 +200,9 @@ describe('eval report routes', () => {
       // RSI_105 is in NO_TIER_CODES: a matching age-group row must still give no comparison
       avg('rsi105-jv', 'RSI_105', '1.500', 'gte', {}),
       avg('rsi105-d1', 'RSI_105', '2.000', 'gte', { level: 'D1', tierName: 'D1 Average', ageMin: null, ageMax: null }),
-      bench('lsi-normal', { metricCode: 'AGILITY_505_YD_LSI', comparisonOperator: 'range', minValue: '95', maxValue: '100', tierGroupId: lsiGroup, tierOrder: 1, tierName: 'Normal', sport: null }),
-      bench('lsi-monitor', { metricCode: 'AGILITY_505_YD_LSI', comparisonOperator: 'range', minValue: '90', maxValue: '94.999', tierGroupId: lsiGroup, tierOrder: 2, tierName: 'Monitor', sport: null }),
-      bench('lsi-low', { metricCode: 'AGILITY_505_YD_LSI', comparisonOperator: 'range', minValue: '0', maxValue: '89.999', tierGroupId: lsiGroup, tierOrder: 3, tierName: 'Low', sport: null }),
+      bench('lsi-normal', { metricCode: 'AGILITY_505_M_LSI', comparisonOperator: 'range', minValue: '95', maxValue: '100', tierGroupId: lsiGroup, tierOrder: 1, tierName: 'Normal', sport: null }),
+      bench('lsi-monitor', { metricCode: 'AGILITY_505_M_LSI', comparisonOperator: 'range', minValue: '90', maxValue: '94.999', tierGroupId: lsiGroup, tierOrder: 2, tierName: 'Monitor', sport: null }),
+      bench('lsi-low', { metricCode: 'AGILITY_505_M_LSI', comparisonOperator: 'range', minValue: '0', maxValue: '89.999', tierGroupId: lsiGroup, tierOrder: 3, tierName: 'Low', sport: null }),
     ] as any);
 
     await measure(u.athlete.id, 'DASH_10YD', 2.0);
@@ -210,11 +214,16 @@ describe('eval report routes', () => {
     await measure(u.athlete.id, 'DASH_10YD', 1.0, { isVerified: false });
     await measure(u.athlete.id, 'TOP_SPEED', 15, { units: 'mph' });
     await measure(u.athlete.id, 'JUMP_BROAD', 60, { units: 'in' });
-    await measure(u.noSport.id, 'AGILITY_505_YD_L', 2.6);
-    await measure(u.noSport.id, 'AGILITY_505_YD_R', 3.0);
+    await measure(u.noSport.id, 'AGILITY_505_M_L', 2.6);
+    await measure(u.noSport.id, 'AGILITY_505_M_R', 3.0);
     await measure(u.gone.id, 'DASH_10YD', 2.0);
     await measure(u.unverifiedOnly.id, 'DASH_10YD', 2.0, { isVerified: false });
     await measure(u.rsiOnly.id, 'RSI_105', 1.8, { units: '' });
+    // Meter 5-0-5 legs and yard splits: the COD deficit needs the 20 yd split
+    await measure(u.meterBattery.id, 'AGILITY_505_M_L', 2.85);
+    await measure(u.meterBattery.id, 'AGILITY_505_M_R', 2.8);
+    await measure(u.meterBattery.id, 'DASH_10YD', 1.8);
+    await measure(u.meterBattery.id, 'DASH_20YD', 3.05);
     // The athlete in a second organization, and earlier / later events
     await measure(u.athlete.id, 'DASH_10YD', 2.2, { eventId: eventB, organizationId: orgB });
     await measure(u.athlete.id, 'DASH_10YD', 2.1, { eventId: eventPrior });
@@ -407,6 +416,20 @@ describe('eval report routes', () => {
     expect(rsi).toMatchObject({ key: 'RSI_BILATERAL', code: 'RSI_105', value: 1.8, comparison: null, collegeStandard: null });
   });
 
+  it('derives the meter COD deficit from the 20 yd split, and shows the 20 yd split only when selected', async () => {
+    const res = await preview('coachA', eventA, u.meterBattery.id, { selection: { metricKeys: ['505', 'COD_DEFICIT'] } });
+    expect(res.status).toBe(200);
+    const byCode = Object.fromEntries(res.body.model.metrics.map((m: any) => [m.code, m]));
+    expect(Object.keys(byCode).sort()).toEqual(['AGILITY_505_M', 'AGILITY_COD_DEFICIT_M_INTERP']);
+    expect(byCode.AGILITY_505_M.value).toBe(2.8);
+    expect(byCode.AGILITY_COD_DEFICIT_M_INTERP.value).toBeCloseTo(0.883, 6);
+    expect(byCode.AGILITY_COD_DEFICIT_M_INTERP.unit).toBe('s');
+    expect(JSON.stringify(res.body.model)).not.toMatch(/AGILITY_[A-Z0-9_]*_YD/);
+
+    const withSplit = await preview('coachA', eventA, u.meterBattery.id, { selection: { metricKeys: ['DASH_20', 'COD_DEFICIT'] } });
+    expect(withSplit.body.model.metrics.map((m: any) => m.code)).toEqual(['DASH_20YD', 'AGILITY_COD_DEFICIT_M_INTERP']);
+  });
+
   it('judges the balance for a female athlete with no sport, without risk or injury wording', async () => {
     const res = await preview('coachA', eventA, u.noSport.id);
     expect(res.status).toBe(200);
@@ -420,7 +443,7 @@ describe('eval report routes', () => {
     expect(inputs.benchmarks.length).toBeGreaterThan(0);
     for (const b of inputs.benchmarks) {
       expect(b.sport).toBeNull();
-      expect(b.metricCode).toBe('AGILITY_505_YD_LSI');
+      expect(b.metricCode).toBe('AGILITY_505_M_LSI');
     }
   });
 

@@ -1,5 +1,5 @@
 /**
- * Migration 0161: display_format ('decimal' | 'duration') on site_metrics and custom_org_metrics.
+ * Migration 0162: display_format ('decimal' | 'duration') on site_metrics and custom_org_metrics.
  * Live checks run in a rolled-back transaction and only on a disposable test DB.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -11,7 +11,7 @@ import postgres from 'postgres';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const read = (f: string) => fs.readFileSync(path.resolve(__dirname, '../../migrations', f), 'utf-8');
-const NAME = '0161_add_metric_display_format';
+const NAME = '0162_add_metric_display_format';
 const UP = read(`${NAME}.sql`);
 const DOWN = read(`${NAME}_down.sql`);
 
@@ -19,7 +19,7 @@ const dbUrl = process.env.DATABASE_URL || '';
 const isDisposableTestDb =
   process.env.NODE_ENV === 'test' && (/@(localhost|127\.0\.0\.1)[:/]/.test(dbUrl) || process.env.CI === 'true');
 
-describe('Migration 0161: static analysis', () => {
+describe('Migration 0162: static analysis', () => {
   it('adds the column to both tables, idempotently, with a decimal default', () => {
     for (const table of ['site_metrics', 'custom_org_metrics']) {
       expect(UP).toMatch(
@@ -34,7 +34,7 @@ describe('Migration 0161: static analysis', () => {
   });
 });
 
-describe.skipIf(!isDisposableTestDb)('Migration 0161: against a disposable DB (rolled back)', () => {
+describe.skipIf(!isDisposableTestDb)('Migration 0162: against a disposable DB (rolled back)', () => {
   let sql: ReturnType<typeof postgres>;
   beforeAll(() => {
     sql = postgres(dbUrl, { max: 1 });
@@ -55,7 +55,7 @@ describe.skipIf(!isDisposableTestDb)('Migration 0161: against a disposable DB (r
     }
   };
 
-  /** The tables as they are before 0161 (db:push may already have added the column) */
+  /** The tables as they are before 0162 (db:push may already have added the column) */
   const setup = async (tx: any) => {
     await tx`ALTER TABLE site_metrics DROP COLUMN IF EXISTS display_format`;
     await tx`ALTER TABLE custom_org_metrics DROP COLUMN IF EXISTS display_format`;
@@ -72,9 +72,9 @@ describe.skipIf(!isDisposableTestDb)('Migration 0161: against a disposable DB (r
       const siteId = randomUUID();
       const orgId = randomUUID();
       const customId = randomUUID();
-      await tx`INSERT INTO site_metrics (id, code, label, metric_type) VALUES (${siteId}, ${'ZZ_0161_' + siteId.slice(0, 8)}, 'x', 'lower_is_better')`;
-      await tx`INSERT INTO organizations (id, name) VALUES (${orgId}, ${'0161 org ' + orgId})`;
-      await tx`INSERT INTO custom_org_metrics (id, organization_id, code, label, unit) VALUES (${customId}, ${orgId}, 'ZZ_0161', 'x', 's')`;
+      await tx`INSERT INTO site_metrics (id, code, label, metric_type) VALUES (${siteId}, ${'ZZ_0162_' + siteId.slice(0, 8)}, 'x', 'lower_is_better')`;
+      await tx`INSERT INTO organizations (id, name) VALUES (${orgId}, ${'0162 org ' + orgId})`;
+      await tx`INSERT INTO custom_org_metrics (id, organization_id, code, label, unit) VALUES (${customId}, ${orgId}, 'ZZ_0162', 'x', 's')`;
       await tx.unsafe(UP);
       expect((await tx`SELECT display_format FROM site_metrics WHERE id = ${siteId}`)[0].display_format).toBe('decimal');
       expect((await tx`SELECT display_format FROM custom_org_metrics WHERE id = ${customId}`)[0].display_format).toBe('decimal');

@@ -107,6 +107,7 @@ export default function OrgMetricsPage() {
 
       {/* Site Metrics Configuration */}
       <OrganizationMetricsCard
+        key={organizationId}
         organizationId={organizationId}
         canEdit={true}
       />

@@ -1431,7 +1431,7 @@ export default function OrganizationProfile() {
 
       {/* Metrics Configuration Section - Visible to Site Admins and Org Admins */}
       {(user?.isSiteAdmin || isOrgAdmin) && (
-        <OrganizationMetricsCard organizationId={id!} canEdit={canEdit} />
+        <OrganizationMetricsCard key={id} organizationId={id!} canEdit={canEdit} />
       )}
 
     </div>

@@ -15,7 +15,7 @@ describe('Metric Type Helper Functions', () => {
         expect(getMetricType('FLY10_TIME')).toBe('lower_is_better');
       });
 
-      it.each(['AGILITY_505_M', 'AGILITY_505_YD', 'AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD'])(
+      it.each(['AGILITY_505_M', 'AGILITY_505_YD', 'AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD', 'AGILITY_COD_DEFICIT_M_INTERP'])(
         'should return lower_is_better for %s',
         (code) => {
           expect(getMetricType(code)).toBe('lower_is_better');
@@ -79,6 +79,7 @@ describe('Metric Type Helper Functions', () => {
       expect(LOWER_IS_BETTER_METRICS).toContain('AGILITY_505_YD');
       expect(LOWER_IS_BETTER_METRICS).toContain('AGILITY_COD_DEFICIT_M');
       expect(LOWER_IS_BETTER_METRICS).toContain('AGILITY_COD_DEFICIT_YD');
+      expect(LOWER_IS_BETTER_METRICS).toContain('AGILITY_COD_DEFICIT_M_INTERP');
       expect(LOWER_IS_BETTER_METRICS).toContain('AGILITY_5105');
       expect(LOWER_IS_BETTER_METRICS).toContain('T_TEST');
       expect(LOWER_IS_BETTER_METRICS).toContain('DASH_40YD');
