@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
 import { AthleteOrgContext } from '@/lib/athlete-org-context';
 import { Link } from 'wouter';
+import { toCalendarDate } from '@/utils/date-utils';
 
 export interface MeasurementHistoryTableProps {
   measurements: Measurement[];
@@ -45,7 +46,8 @@ type SortField = 'date' | 'metric' | 'value';
 type SortDirection = 'asc' | 'desc';
 
 function formatDate(dateString: string): string {
-  const date = new Date(dateString);
+  const date = toCalendarDate(dateString);
+  if (!date) return '';
   return date.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',

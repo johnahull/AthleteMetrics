@@ -26,6 +26,7 @@ import { MetricContextTooltip } from './MetricContextTooltip';
 import { AthleteMetricExplanation } from './AthleteMetricExplanation';
 import { isLowerBetter } from '@/constants/metrics';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
+import { toCalendarDate } from '@/utils/date-utils';
 import type { MetricExplanation } from '@shared/metric-explanations';
 
 // Chart.js is already registered globally in App.tsx via chart-setup.ts
@@ -380,7 +381,7 @@ export function MetricProgressCard({
             </MetricContextTooltip>
             {personalRecord && (
               <span className="text-xs text-gray-500">
-                ({new Date(personalRecord.date).toLocaleDateString()})
+                ({toCalendarDate(personalRecord.date)?.toLocaleDateString()})
               </span>
             )}
             {personalRecord?.isRecent && !isTracking && (
