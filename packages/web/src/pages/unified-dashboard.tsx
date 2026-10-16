@@ -192,10 +192,9 @@ export default function UnifiedDashboardPage() {
                     {getMetricLabel(metric)}
                   </div>
                   <div className="text-xl font-bold">
-                    {stats.latest?.value || 'N/A'}
-                    <span className="text-sm font-normal text-muted-foreground ml-1">
-                      {stats.latest?.units || getUnit(metric)}
-                    </span>
+                    {stats.latest?.value
+                      ? formatValueWithUnit(stats.latest.value, stats.latest.units || getUnit(metric))
+                      : 'N/A'}
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">
                     {stats.count} measurement{stats.count !== 1 ? 's' : ''}
