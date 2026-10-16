@@ -19,9 +19,9 @@
 -- peer_percentile_cache, site_metric_explanations, yard site_benchmarks and
 -- their benchmark_set_items / organization_benchmarks) is deleted explicitly.
 --
--- ORDER: if 0145 (COD deficit) is applied, run 0145_down BEFORE 0144_down: the
--- deficit formulas reference the _M / _YD legs. This file refuses (clear
--- message) while the deficit metrics exist.
+-- ORDER: if 0145 (COD deficit) or 0161 (interpolated COD deficit) is applied, run
+-- 0145_down / 0161_down BEFORE 0144_down: the deficit formulas reference the _M / _YD
+-- legs. This file refuses (clear message) while the deficit metrics exist.
 --
 -- Tracking: the runner skips a migration by name once recorded, and a rollback
 -- must not leave the row behind or the next forward deploy would silently skip
@@ -81,9 +81,9 @@ DECLARE
   v_cfg    INTEGER;
 BEGIN
   SELECT COUNT(*) INTO v_cod FROM site_metrics
-   WHERE code IN ('AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD');
+   WHERE code IN ('AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD', 'AGILITY_COD_DEFICIT_M_INTERP');
   IF v_cod > 0 THEN
-    RAISE EXCEPTION 'Migration 0144 down aborted: migration 0145 (COD deficit) is still applied; run 0145_down (0145_add_cod_deficit_metrics_down.sql) first (its formulas reference the _M / _YD legs)';
+    RAISE EXCEPTION 'Migration 0144 down aborted: migration 0145 (COD deficit) or 0161 (AGILITY_COD_DEFICIT_M_INTERP) is still applied; run 0145_down (0145_add_cod_deficit_metrics_down.sql) and 0161_down (0161_add_cod_deficit_m_interp_down.sql) first (their formulas reference the _M / _YD legs)';
   END IF;
 
   SELECT COUNT(*) INTO v_meas FROM measurements

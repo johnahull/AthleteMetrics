@@ -47,7 +47,7 @@ describe('getMetricExplanation — built-in metrics', () => {
     expect(result.unitNote.length).toBeGreaterThan(0);
   });
 
-  it('exposes BUILT_IN_METRIC_CODES with all 11 documented metrics', () => {
+  it('exposes BUILT_IN_METRIC_CODES with all 12 documented metrics', () => {
     expect(BUILT_IN_METRIC_CODES).toEqual(
       expect.arrayContaining([
         'FLY10_TIME',
@@ -56,6 +56,7 @@ describe('getMetricExplanation — built-in metrics', () => {
         'AGILITY_505_YD',
         'AGILITY_COD_DEFICIT_M',
         'AGILITY_COD_DEFICIT_YD',
+        'AGILITY_COD_DEFICIT_M_INTERP',
         'AGILITY_5105',
         'T_TEST',
         'DASH_40YD',
@@ -63,7 +64,7 @@ describe('getMetricExplanation — built-in metrics', () => {
         'RSI',
       ]),
     );
-    expect(BUILT_IN_METRIC_CODES).toHaveLength(11);
+    expect(BUILT_IN_METRIC_CODES).toHaveLength(12);
   });
 
   it('describes the 5-0-5 meters protocol in meters and the yards protocol in yards', () => {
@@ -90,7 +91,17 @@ describe('getMetricExplanation — built-in metrics', () => {
     expect(getMetricExplanation('AGILITY_COD_DEFICIT_YD').whatItMeasures).toMatch(/yards/i);
   });
 
-  it.each(['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505_M', 'AGILITY_505_YD', 'AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'TOP_SPEED', 'RSI'])(
+  it('explains the interpolated metric COD deficit (10 m estimated from the 10 and 20 yd splits)', () => {
+    const e = getMetricExplanation('AGILITY_COD_DEFICIT_M_INTERP');
+    expect(e.title).toBe('COD Deficit (m, interpolated 10 m)');
+    expect(e.directionOfBetter).toBe('lower');
+    expect(e.unitNote).toBe('Measured in seconds; lower is better.');
+    expect(e.whatItMeasures).toMatch(/estimated/i);
+    expect(e.whatItMeasures).toMatch(/10 and 20 yard/i);
+    expect(e.whatItMeasures).toMatch(/meters/i);
+  });
+
+  it.each(['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505_M', 'AGILITY_505_YD', 'AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD', 'AGILITY_COD_DEFICIT_M_INTERP', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'TOP_SPEED', 'RSI'])(
     '%s has all required fields populated',
     (code) => {
       const result = getMetricExplanation(code);

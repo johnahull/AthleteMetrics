@@ -1262,7 +1262,7 @@ export function registerImportExportRoutes(app: Express) {
 
             // mm:ss ("6:42.5") is seconds; parseFloat would have saved it as 6
             const csvValue = parseImportValue(value);
-            if (csvValue === null) {
+            if (csvValue === null || csvValue <= 0) {
               errors.push({ row: rowNum, error: `Invalid measurement value: ${value}` });
               continue;
             }
