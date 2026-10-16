@@ -39,7 +39,7 @@ const BUILT_IN_CODES: Partial<Record<MetricGroupId, readonly string[]>> = {
     "AGILITY_505_M", "AGILITY_505_M_L", "AGILITY_505_M_R",
     "AGILITY_505_YD", "AGILITY_505_YD_L", "AGILITY_505_YD_R",
     "AGILITY_505", "AGILITY_505_L", "AGILITY_505_R",
-    "AGILITY_5105", "T_TEST",
+    "AGILITY_5105", "AGILITY_5105_L", "AGILITY_5105_R", "T_TEST",
     "AGILITY_COD_DEFICIT_M_INTERP", "AGILITY_COD_DEFICIT_M", "AGILITY_COD_DEFICIT_YD",
   ],
   power: [
@@ -67,6 +67,7 @@ const GROUP_IDS = new Set<string>(METRIC_GROUP_ORDER.map((g) => g.id));
 const CATEGORY_ALIASES: Record<string, MetricGroupId> = {
   acceleration: "speed",
   movement_quality: "movement",
+  conditioning: "endurance",
 };
 
 /** "Power" -> power, "Body Composition" -> body_composition; null when it is not a known group. */
@@ -108,7 +109,11 @@ function reorderKeys<T>(map: unknown, position: Map<string, number>): T {
 const ATHLETE_KEYED = ["measurements", "percentiles", "eventPercentiles", "teamAverages", "benchmarkComparisons"];
 const TOP_KEYED = ["trends", "distributions", "teamTrends", "teamDistributions"];
 
-/** Copy of a report with metric-keyed maps re-inserted in group order, plus `metricGroups`. Input is not mutated. */
+/**
+ * Copy of a report with metric-keyed maps re-inserted in group order, plus `metricGroups`. Input is not mutated.
+ * Limit: JS orders integer-like keys (a custom code such as "1600") ascending regardless of insertion, so
+ * consumers that need exact order must read `metricGroups[].codes`, not object key order.
+ */
 export function orderReportData<T extends Obj>(
   data: T,
   categories: Record<string, string | null | undefined>,

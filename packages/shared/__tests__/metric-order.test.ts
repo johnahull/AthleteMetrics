@@ -19,6 +19,7 @@ describe("normalizeCategory", () => {
     expect(normalizeCategory("Body Composition")).toBe("body_composition");
     expect(normalizeCategory("Movement Quality")).toBe("movement");
     expect(normalizeCategory("Acceleration")).toBe("speed");
+    expect(normalizeCategory("conditioning")).toBe("endurance");
   });
   it("returns null for unknown or empty", () => {
     expect(normalizeCategory("whatever")).toBeNull();
@@ -44,6 +45,14 @@ describe("groupMetricCodes", () => {
   });
   it("built-in map beats a conflicting category", () => {
     expect(groupMetricCodes(["DASH_10YD"], { DASH_10YD: "Power" })[0].group).toBe("speed");
+  });
+  it("keeps 5-10-5 left/right right after the 5-10-5", () => {
+    const g = groupMetricCodes(["T_TEST", "AGILITY_5105_R", "AGILITY_5105_L", "AGILITY_5105"], {})[0];
+    expect(g.codes).toEqual(["AGILITY_5105", "AGILITY_5105_L", "AGILITY_5105_R", "T_TEST"]);
+  });
+  it("puts conditioning metrics in endurance", () => {
+    const g = groupMetricCodes(["COND_VO2MAX_EST"], { COND_VO2MAX_EST: "conditioning" });
+    expect(g.map((x) => x.group)).toEqual(["endurance"]);
   });
   it("handles empty input and drops empty groups", () => {
     expect(groupMetricCodes([], {})).toEqual([]);
