@@ -347,7 +347,7 @@ export default function PublicReport() {
             )}
 
             {teamSel.trends && teamTrends && Object.keys(teamTrends).length > 0 && (
-              <TeamTrendSection trends={teamTrends} metricLabels={metricLabels} metricUnits={metricUnits} metricFormats={metricFormats} />
+              <TeamTrendSection trends={teamTrends} metricLabels={metricLabels} metricUnits={metricUnits} metricFormats={metricFormats} metricGroups={metricGroups} />
             )}
 
             {/* teamName falls back to comparisonLabel (the cohort filter label,
@@ -359,6 +359,7 @@ export default function PublicReport() {
                 real team name(s) for the same report. */}
             {teamSel.boxSwarm && teamDistributions && Object.keys(teamDistributions).length > 0 && (
               <TeamBoxSwarmSection
+                metricGroups={metricGroups}
                 distributions={teamDistributions}
                 metricLabels={metricLabels}
                 generatedAt={generatedAt}
@@ -368,6 +369,7 @@ export default function PublicReport() {
 
             {teamSel.leaderboard && (
               <LeaderboardBarSection
+                metricGroups={metricGroups}
                 athleteRankings={athleteRankings}
                 teamStatistics={teamStatistics}
                 metricLabels={metricLabels}
@@ -542,7 +544,7 @@ export default function PublicReport() {
                 <CardHeader><CardTitle>Benchmark Standing</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
                   {groupedCodes(Object.keys(athlete.benchmarkComparisons), metricGroups).map((g) => (
-                    <div key={g.group ?? 'all'} className="space-y-4">
+                    <div key={g.group ?? 'all'} data-metric-group={g.group ?? undefined} data-metric-group-label={g.label ?? undefined} className="space-y-4">
                       <MetricGroupHeading label={g.label} />
                       {g.codes.map((code) => {
                         const comps: any = athlete.benchmarkComparisons[code];
@@ -579,6 +581,7 @@ export default function PublicReport() {
 
             {sel.trends && trends && Object.keys(trends).length > 0 && (
               <TrendSection
+                metricGroups={metricGroups}
                 trends={trends}
                 metricLabels={metricLabels}
                 metricUnits={metricUnits}
@@ -588,6 +591,7 @@ export default function PublicReport() {
 
             {sel.distribution && snapshotData.distributions && Object.keys(snapshotData.distributions).length > 0 && (
               <DistributionSection
+                metricGroups={metricGroups}
                 athleteName={snapshotData.athlete?.userName ?? ''}
                 distributions={snapshotData.distributions}
                 metricLabels={metricLabels}

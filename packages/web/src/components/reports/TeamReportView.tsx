@@ -655,11 +655,12 @@ export function TeamReportView({ report }: TeamReportViewProps) {
       )}
 
       {sel.trends && teamTrends && Object.keys(teamTrends).length > 0 && (
-        <TeamTrendSection trends={teamTrends} metricLabels={metricLabels} metricUnits={metricUnits} metricFormats={metricFormats} />
+        <TeamTrendSection trends={teamTrends} metricLabels={metricLabels} metricUnits={metricUnits} metricFormats={metricFormats} metricGroups={reportData.metricGroups} />
       )}
 
       {sel.boxSwarm && teamDistributions && Object.keys(teamDistributions).length > 0 && (
         <TeamBoxSwarmSection
+          metricGroups={reportData.metricGroups}
           distributions={teamDistributions}
           metricLabels={metricLabels}
           generatedAt={generatedAt}
@@ -669,6 +670,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
 
       {sel.leaderboard && (
         <LeaderboardBarSection
+          metricGroups={reportData.metricGroups}
           athleteRankings={athleteRankings}
           teamStatistics={teamStatistics}
           metricLabels={metricLabels}

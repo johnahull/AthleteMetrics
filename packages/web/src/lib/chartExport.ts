@@ -211,7 +211,7 @@ export interface CapturedChart {
   metricCode: string;
   dataUrl: string;
   title?: string;
-  /** Metric group of a per-metric chart (data-metric-group); absent on section-level charts. */
+  /** Metric group of the nearest ancestor with data-metric-group; absent on section-level charts. */
   group?: string;
   groupLabel?: string;
 }
@@ -234,8 +234,10 @@ export async function captureTrendCharts(): Promise<CapturedChart[]> {
       const metricCode = node.getAttribute('data-chart-metric') || node.getAttribute('data-report-chart') || '';
       if (!metricCode) return null;
       const title = node.getAttribute('data-report-chart-title') || undefined;
-      const group = node.getAttribute('data-metric-group') || undefined;
-      const groupLabel = node.getAttribute('data-metric-group-label') || undefined;
+      // The group wrapper sits around the chart (and its heading), so the heading is never captured twice
+      const groupNode = node.closest('[data-metric-group]');
+      const group = groupNode?.getAttribute('data-metric-group') || undefined;
+      const groupLabel = groupNode?.getAttribute('data-metric-group-label') || undefined;
       try {
         return { metricCode, dataUrl: await getChartPngDataUrl(node), title, group, groupLabel } as CapturedChart;
       } catch (error) {

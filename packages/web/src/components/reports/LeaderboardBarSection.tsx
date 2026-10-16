@@ -5,6 +5,8 @@ import { sortAthletesByMetric } from '@/lib/report-utils';
 import { buildStatisticalSummary } from '@/components/charts/chart-stats-utils';
 import type { AthleteRanking, TeamStatistic } from '@/types/report-types';
 import type { ChartDataPoint } from '@shared/analytics-types';
+import { MetricGroupBlocks } from './MetricGroupHeading';
+import type { MetricGroup } from '@shared/metric-order';
 
 interface Props {
   athleteRankings: AthleteRanking[];
@@ -17,9 +19,10 @@ interface Props {
    *  `teamName || 'Independent'` fallback incorrectly labels every athlete
    *  as unaffiliated. */
   teamName?: string;
+  metricGroups?: MetricGroup[];
 }
 
-export function LeaderboardBarSection({ athleteRankings, teamStatistics, metricLabels = {}, generatedAt, teamName }: Props) {
+export function LeaderboardBarSection({ athleteRankings, teamStatistics, metricLabels = {}, generatedAt, teamName, metricGroups }: Props) {
   const rows = teamStatistics
     .map((stat) => ({ stat, sorted: sortAthletesByMetric(athleteRankings, stat.metric) }))
     .filter(({ sorted }) => sorted.length > 0);
@@ -33,7 +36,12 @@ export function LeaderboardBarSection({ athleteRankings, teamStatistics, metricL
         <CardDescription>Ranked performance per metric, best to worst</CardDescription>
       </CardHeader>
       <CardContent className="space-y-10">
-        {rows.map(({ stat, sorted }) => {
+        <MetricGroupBlocks
+          codes={rows.map(({ stat }) => stat.metric)}
+          metricGroups={metricGroups}
+          className="space-y-10"
+          render={(code) => {
+          const { stat, sorted } = rows.find((r) => r.stat.metric === code)!;
           const label = metricLabels[stat.metric] || stat.metric;
           const points: ChartDataPoint[] = sorted.map((athlete) => ({
             athleteId: athlete.userId,
@@ -54,7 +62,8 @@ export function LeaderboardBarSection({ athleteRankings, teamStatistics, metricL
               />
             </div>
           );
-        })}
+          }}
+        />
       </CardContent>
     </Card>
   );

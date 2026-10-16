@@ -347,7 +347,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
           <CardHeader><CardTitle>Benchmark Standing</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             {groupedCodes(Object.keys(athlete.benchmarkComparisons), reportData.metricGroups).map((g) => (
-              <div key={g.group ?? 'all'} className="space-y-4">
+              <div key={g.group ?? 'all'} data-metric-group={g.group ?? undefined} data-metric-group-label={g.label ?? undefined} className="space-y-4">
                 <MetricGroupHeading label={g.label} />
                 {g.codes.map((code) => {
                   const comps: any = athlete.benchmarkComparisons[code];
@@ -383,11 +383,12 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
       )}
 
       {sel.trends && trends && Object.keys(trends).length > 0 && (
-        <TrendSection trends={trends} metricLabels={metricLabels} metricUnits={metricUnits} metricFormats={metricFormats} />
+        <TrendSection trends={trends} metricLabels={metricLabels} metricUnits={metricUnits} metricFormats={metricFormats} metricGroups={reportData.metricGroups} />
       )}
 
       {sel.distribution && distributions && Object.keys(distributions).length > 0 && (
         <DistributionSection
+          metricGroups={reportData.metricGroups}
           athleteName={athlete.userName}
           distributions={distributions}
           metricLabels={metricLabels}

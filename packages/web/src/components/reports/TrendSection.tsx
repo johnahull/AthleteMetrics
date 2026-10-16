@@ -4,6 +4,8 @@ import type { ReportTrends } from '@shared/report-trends-types';
 import { BenchmarkTrendChart } from '@/components/charts/BenchmarkTrendChart';
 import { TrendAtAGlanceCards } from './TrendAtAGlanceCards';
 import type { MeasurementFormat } from '@shared/duration-format';
+import { MetricGroupBlocks } from './MetricGroupHeading';
+import type { MetricGroup } from '@shared/metric-order';
 
 interface TrendSectionProps {
   trends: ReportTrends;
@@ -11,9 +13,10 @@ interface TrendSectionProps {
   metricUnits?: Record<string, string>;
   /** Duration (mm:ss) metrics only; others keep their unit display */
   metricFormats?: Record<string, MeasurementFormat>;
+  metricGroups?: MetricGroup[];
 }
 
-export function TrendSection({ trends, metricLabels = {}, metricUnits = {}, metricFormats = {} }: TrendSectionProps) {
+export function TrendSection({ trends, metricLabels = {}, metricUnits = {}, metricFormats = {}, metricGroups }: TrendSectionProps) {
   const entries = Object.entries(trends);
   if (entries.length === 0) return null;
 
@@ -27,16 +30,21 @@ export function TrendSection({ trends, metricLabels = {}, metricUnits = {}, metr
 
         {/* Detail charts */}
         <div className="space-y-8">
-          {entries.map(([code, trend]) => (
-            <BenchmarkTrendChart
-              key={code}
-              metricCode={code}
-              trend={trend}
-              label={metricLabels[code] || code}
-              unit={metricUnits[code]}
-              format={metricFormats[code]}
-            />
-          ))}
+          <MetricGroupBlocks
+            codes={entries.map(([code]) => code)}
+            metricGroups={metricGroups}
+            className="space-y-8"
+            render={(code) => (
+              <BenchmarkTrendChart
+                key={code}
+                metricCode={code}
+                trend={trends[code]}
+                label={metricLabels[code] || code}
+                unit={metricUnits[code]}
+                format={metricFormats[code]}
+              />
+            )}
+          />
         </div>
       </CardContent>
     </Card>

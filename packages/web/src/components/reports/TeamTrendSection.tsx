@@ -6,6 +6,8 @@ import { BenchmarkTrendChart } from '@/components/charts/BenchmarkTrendChart';
 import { MAX_FAINT_ATHLETES } from '@/components/charts/trend-utils';
 import { TrendAtAGlanceCards } from './TrendAtAGlanceCards';
 import type { MeasurementFormat } from '@shared/duration-format';
+import { MetricGroupBlocks } from './MetricGroupHeading';
+import type { MetricGroup } from '@shared/metric-order';
 
 interface TeamTrendSectionProps {
   trends: TeamReportTrends;
@@ -13,9 +15,10 @@ interface TeamTrendSectionProps {
   metricUnits?: Record<string, string>;
   /** Duration (mm:ss) metrics only; others keep their unit display */
   metricFormats?: Record<string, MeasurementFormat>;
+  metricGroups?: MetricGroup[];
 }
 
-export function TeamTrendSection({ trends, metricLabels = {}, metricUnits = {}, metricFormats = {} }: TeamTrendSectionProps) {
+export function TeamTrendSection({ trends, metricLabels = {}, metricUnits = {}, metricFormats = {}, metricGroups }: TeamTrendSectionProps) {
   const entries = useMemo(() => Object.entries(trends), [trends]);
   // Stabilize each chart's faint-athlete series so BenchmarkTrendChart's own
   // useMemo (keyed on this array) doesn't invalidate on every parent render.
@@ -41,22 +44,30 @@ export function TeamTrendSection({ trends, metricLabels = {}, metricUnits = {}, 
 
         {/* Detail charts: team-average bold line + up to 8 faint athlete lines */}
         <div className="space-y-8">
-          {entries.map(([code, trend]) => (
-            <BenchmarkTrendChart
-              key={code}
-              metricCode={code}
-              trend={{
-                series: trend.teamSeries,
-                direction: trend.direction,
-                delta: trend.delta,
-                benchmark: trend.benchmark,
-              }}
-              label={metricLabels[code] || code}
-              unit={metricUnits[code]}
-              format={metricFormats[code]}
-              backgroundSeries={backgroundSeriesByMetric[code]}
-            />
-          ))}
+          <MetricGroupBlocks
+            codes={entries.map(([code]) => code)}
+            metricGroups={metricGroups}
+            className="space-y-8"
+            render={(code) => {
+              const trend = trends[code];
+              return (
+                <BenchmarkTrendChart
+                  key={code}
+                  metricCode={code}
+                  trend={{
+                    series: trend.teamSeries,
+                    direction: trend.direction,
+                    delta: trend.delta,
+                    benchmark: trend.benchmark,
+                  }}
+                  label={metricLabels[code] || code}
+                  unit={metricUnits[code]}
+                  format={metricFormats[code]}
+                  backgroundSeries={backgroundSeriesByMetric[code]}
+                />
+              );
+            }}
+          />
         </div>
       </CardContent>
     </Card>

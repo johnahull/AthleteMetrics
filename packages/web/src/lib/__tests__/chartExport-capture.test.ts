@@ -11,9 +11,9 @@ describe('captureTrendCharts metric group', () => {
     document.body.innerHTML = '';
   });
 
-  it('sends the group and label of a grouped chart', async () => {
+  it('sends the group and label of the wrapper around a grouped chart', async () => {
     document.body.innerHTML =
-      '<div data-chart-metric="DASH_10YD" data-metric-group="speed" data-metric-group-label="Speed"></div>';
+      '<div data-metric-group="speed" data-metric-group-label="Speed"><div data-chart-metric="DASH_10YD"></div></div>';
     const [chart] = await captureTrendCharts();
     expect(chart).toMatchObject({ metricCode: 'DASH_10YD', group: 'speed', groupLabel: 'Speed' });
   });

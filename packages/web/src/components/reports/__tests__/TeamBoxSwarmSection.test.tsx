@@ -101,3 +101,39 @@ describe('TeamBoxSwarmSection', () => {
     expect(screen.getByTestId('boxplot-team-tooltip')).toHaveTextContent('Team: Independent');
   });
 });
+
+describe('TeamBoxSwarmSection metric groups', () => {
+  const dist = (v: number) => ({
+    values: [v, v + 1],
+    athletes: [
+      { athleteId: 'u1', athleteName: 'A', value: v },
+      { athleteId: 'u2', athleteName: 'B', value: v + 1 },
+    ],
+    stats: { min: v, q1: v, median: v, q3: v, max: v + 1 },
+    teamAverage: v,
+    direction: 'higher' as const,
+  });
+  const grouped: TeamReportDistributions = { DASH_10YD: dist(1), DASH_20YD: dist(2), VJ: dist(20) };
+  const metricGroups = [
+    { group: 'speed', label: 'Speed', codes: ['DASH_10YD', 'DASH_20YD'] },
+    { group: 'power', label: 'Power', codes: ['VJ'] },
+  ] as any[];
+
+  it('draws one heading per group, tags each group wrapper, and keeps headings out of captured charts', () => {
+    const { container } = render(
+      <TeamBoxSwarmSection distributions={grouped} generatedAt="2024-01-01" metricGroups={metricGroups} />,
+    );
+    const wrappers = container.querySelectorAll('[data-metric-group]');
+    expect(Array.from(wrappers).map((w) => w.getAttribute('data-metric-group-label'))).toEqual(['Speed', 'Power']);
+    const headings = Array.from(container.querySelectorAll('h4'));
+    expect(headings.map((h) => h.textContent)).toEqual(['Speed', 'Power']);
+    for (const h of headings) expect(h.closest('[data-report-chart^="boxswarm:"]')).toBeNull();
+    expect(wrappers[0].querySelectorAll('[data-report-chart^="boxswarm:"]')).toHaveLength(2);
+  });
+
+  it('renders no headings without metricGroups', () => {
+    const { container } = render(<TeamBoxSwarmSection distributions={grouped} generatedAt="2024-01-01" />);
+    expect(container.querySelectorAll('h4')).toHaveLength(0);
+    expect(container.querySelectorAll('[data-report-chart^="boxswarm:"]')).toHaveLength(3);
+  });
+});
