@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { toCalendarDate } from "@/utils/date-utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -388,7 +389,7 @@ export default function Publish() {
     pdf.setFontSize(10);
     let yPos = 35;
     if (filters.dateFrom || filters.dateTo) {
-      const dateRange = `Date Range: ${filters.dateFrom ? new Date(filters.dateFrom).toLocaleDateString() : 'Any'} - ${filters.dateTo ? new Date(filters.dateTo).toLocaleDateString() : 'Any'}`;
+      const dateRange = `Date Range: ${filters.dateFrom ? toCalendarDate(filters.dateFrom)?.toLocaleDateString() : 'Any'} - ${filters.dateTo ? toCalendarDate(filters.dateTo)?.toLocaleDateString() : 'Any'}`;
       pdf.text(dateRange, 20, yPos);
       yPos += 10;
     }
@@ -430,7 +431,7 @@ export default function Publish() {
       pdf.text(measurement.user.fullName, 40, yPos);
       pdf.text(teamNames, 100, yPos);
       pdf.text(`${measurement.value}${getMetricUnits(filters.metric)}`, 140, yPos);
-      pdf.text(new Date(measurement.date).toLocaleDateString(), 170, yPos);
+      pdf.text(toCalendarDate(measurement.date)?.toLocaleDateString() ?? '', 170, yPos);
 
       yPos += 12;
     });
@@ -950,7 +951,7 @@ export default function Publish() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-gray-600">
-                        {new Date(measurement.date).toLocaleDateString()}
+                        {toCalendarDate(measurement.date)?.toLocaleDateString()}
                       </td>
                     </tr>
                   );
@@ -1017,7 +1018,7 @@ export default function Publish() {
                       <li key={m.id} className="flex items-center justify-between py-1 border-b border-gray-200 last:border-0">
                         <span className="font-medium text-gray-900">{m.user.fullName}</span>
                         <span className="text-gray-600">
-                          {m.value}{getMetricUnits(filters.metric)} • {new Date(m.date).toLocaleDateString()}
+                          {m.value}{getMetricUnits(filters.metric)} • {toCalendarDate(m.date)?.toLocaleDateString()}
                         </span>
                       </li>
                     ))

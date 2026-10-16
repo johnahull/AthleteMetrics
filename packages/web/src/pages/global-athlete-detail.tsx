@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toCalendarDate } from "@/utils/date-utils";
 import { useRoute, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -171,7 +172,7 @@ export default function GlobalAthleteDetail() {
                 <Calendar className="h-4 w-4 text-gray-400" />
                 <span className="font-medium">
                   {globalAthlete.birthDate
-                    ? format(new Date(globalAthlete.birthDate), "MMM d, yyyy")
+                    ? format(toCalendarDate(globalAthlete.birthDate)!, "MMM d, yyyy")
                     : "Not set"}
                 </span>
               </div>

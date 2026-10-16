@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { toCalendarDate } from "@/utils/date-utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
@@ -780,7 +781,7 @@ export default function Analytics() {
                         {measurement.age}
                       </td>
                       <td className="px-4 py-3 text-gray-600">
-                        {new Date(measurement.date).toLocaleDateString()}
+                        {toCalendarDate(measurement.date)?.toLocaleDateString()}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-x-2">
