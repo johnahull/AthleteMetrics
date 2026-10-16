@@ -53,7 +53,8 @@ export function recomputeDerived(bests: ReadonlyMap<string, number>): Map<string
   set("EUR", both(get("CMJ_HOH"), get("SQUAT_JUMP"), (cmj, sj) => (sj > 0 ? cmj / sj : null)));
   const dash10 = get("DASH_10");
   const dash20 = get("DASH_20");
-  // Best 10 yd and best 20 yd can come from different reps (same known limit as migration 0161)
+  // Uses the per-metric bests, so the best 10 yd and best 20 yd can come from different reps. The stored
+  // AGILITY_COD_DEFICIT_M_INTERP pairs them within one run (sameRunInputs), so this value differs from it when runs differ.
   // Splits out of order (20 yd not slower than 10 yd) give no 10 m time
   const tenMetre = both(dash10, dash20, (d10, d20) => (d20 > d10 ? d10 + TEN_M_INTERP * (d20 - d10) : null));
   const deficit = both(fasterLeg ?? undefined, tenMetre ?? undefined, (leg, tenM) => leg - tenM);
