@@ -59,6 +59,18 @@ describe('usePerformanceAthleteSelector', () => {
     expect(onSelectionChange).toHaveBeenCalledWith(['fast', 'mid']);
   });
 
+  it.each(['FLY10_TIME', 'VERTICAL_JUMP'])('sorts athletes with no usable data last, deterministically (%s)', (metric) => {
+    const data = [
+      trend('e1', 'E1', metric, []),
+      ...[5, 3, 8, 1, 9, 2, 7, 4, 6].map(n => trend(`n${n}`, `N${n}`, metric, [metric === 'FLY10_TIME' ? n : 100 - n])),
+      trend('e2', 'E2', metric, [NaN]),
+      trend('e3', 'E3', metric, []),
+    ];
+    const { result } = render(metric, data);
+
+    expect(result.current.athleteOptions.map(a => a.id)).toEqual(['n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'n9', 'e1', 'e2', 'e3']);
+  });
+
   it('ranks a higher-is-better metric highest first', () => {
     const data = [
       trend('low', 'Low', 'VERTICAL_JUMP', [20, 22]),

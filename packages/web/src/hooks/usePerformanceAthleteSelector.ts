@@ -56,6 +56,12 @@ export function usePerformanceAthleteSelector({
       if (isTracking) {
         return a.name.localeCompare(b.name);
       }
+      // No-data sentinel (+/-Infinity or NaN) sorts last; subtracting two of them gives NaN
+      const aOk = Number.isFinite(a.bestValue);
+      const bOk = Number.isFinite(b.bestValue);
+      if (!aOk && !bOk) return 0;
+      if (!aOk) return 1;
+      if (!bOk) return -1;
       // Sort by performance (best first)
       return lowerIsBetter
         ? a.bestValue - b.bestValue
@@ -106,7 +112,7 @@ export function usePerformanceAthleteSelector({
   const isDuration = metricConfig?.displayFormat === 'duration';
   const unit = isDuration ? '' : metricConfig?.unit ?? '';
   const metricLabel = metricConfig?.label ?? metric;
-  // A non-finite best value (athlete with no usable data) sorts last but is never shown
+  // A non-finite best value (athlete with no usable data) is never shown; tracking metrics sort it by name, others sort it last
   const formatValue = (value: number) =>
     !Number.isFinite(value)
       ? '\u2014'

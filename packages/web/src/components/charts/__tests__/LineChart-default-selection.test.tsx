@@ -10,7 +10,7 @@ import type { TrendData } from '@shared/analytics-types';
 import { LineChart } from '../LineChart';
 
 // Mutable so a test can simulate the metric list still loading (no config)
-const metricConfigState: { config: { label: string; unit: string; metricType: string; lowerIsBetter: boolean; displayFormat: string } | null } = {
+const metricConfigState: { config: { label: string; unit: string; metricType: string; displayFormat: string } | null } = {
   config: null,
 };
 
@@ -65,7 +65,7 @@ describe('LineChart default top-N selection', () => {
   });
 
   it('picks the fastest athletes for a lower-is-better metric from the metric list', () => {
-    metricConfigState.config = { label: 'Mile Run', unit: 's', metricType: 'lower_is_better', lowerIsBetter: true, displayFormat: 'duration' };
+    metricConfigState.config = { label: 'Mile Run', unit: 's', metricType: 'lower_is_better', displayFormat: 'duration' };
     expect(pickedAthletes('MILE_RUN').sort()).toEqual(['Fast', 'Mid']);
   });
 
@@ -74,7 +74,7 @@ describe('LineChart default top-N selection', () => {
   });
 
   it('picks the highest athletes for a higher-is-better metric', () => {
-    metricConfigState.config = { label: 'Vertical Jump', unit: 'in', metricType: 'higher_is_better', lowerIsBetter: false, displayFormat: 'decimal' };
+    metricConfigState.config = { label: 'Vertical Jump', unit: 'in', metricType: 'higher_is_better', displayFormat: 'decimal' };
     expect(pickedAthletes('VERTICAL_JUMP').sort()).toEqual(['Mid', 'Slow']);
   });
 });

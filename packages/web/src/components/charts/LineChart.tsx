@@ -265,6 +265,7 @@ export function LineChart({
 
       // Get metric type to determine if lower or higher is better
       const metric = trend.metric || lineData.metric;
+      // Unknown direction defaults to higher-is-better via isLowerBetterType (the old `?? true` meant lower-is-better)
       const lowerIsBetter = isLowerBetterType(metric, getMetricConfig(metric)?.metricType);
 
       // Find the actual best point using reduce (not .find())
