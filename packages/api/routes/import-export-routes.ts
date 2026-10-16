@@ -14,6 +14,7 @@ import { sanitizeCSVValue } from "../utils/csv-utils";
 import { ocrService } from "../ocr/ocr-service";
 import { findBestAthleteMatch, type MatchingCriteria, type MatchResult } from "../athlete-matching";
 import { isSiteAdmin } from "@shared/auth-utils";
+import { parseImportValue } from "@shared/duration-format";
 import { OCR_REQUIRED_CHOICE_MESSAGES, type OcrRequiredChoice } from "@shared/ocr-types";
 import { METRIC_CONFIG } from "@shared/analytics-types";
 import { COMMON_METRICS, type ImportResult } from "@shared/import-types";
@@ -401,8 +402,8 @@ export function registerImportExportRoutes(app: Express) {
           }
 
           // Validate and clean the measurement value
-          const numericValue = parseFloat(extracted.value);
-          if (isNaN(numericValue) || numericValue <= 0) {
+          const numericValue = parseImportValue(extracted.value);
+          if (numericValue === null || numericValue <= 0) {
             errors.push({
               row: rowNum,
               error: `Invalid measurement value: ${extracted.value}`,
@@ -1259,6 +1260,13 @@ export function registerImportExportRoutes(app: Express) {
               continue;
             }
 
+            // mm:ss ("6:42.5") is seconds; parseFloat would have saved it as 6
+            const csvValue = parseImportValue(value);
+            if (csvValue === null || csvValue <= 0) {
+              errors.push({ row: rowNum, error: `Invalid measurement value: ${value}` });
+              continue;
+            }
+
             // Validate metric code (permissive mode - generate warning but continue)
             const metricValidation = importValidationService.validateMetricCode(metric, validationContext);
             if (!metricValidation.valid && metricValidation.warning) {
@@ -1443,7 +1451,7 @@ export function registerImportExportRoutes(app: Express) {
               date,
               age: age && !isNaN(parseInt(age)) ? parseInt(age) : undefined,
               metric,
-              value: parseFloat(value),
+              value: csvValue,
               units: units || getDefaultUnit(metric, validationContext.metrics),
               flyInDistance: parseFlyInInput(metric, flyInDistance),
               notes: notes || undefined,
