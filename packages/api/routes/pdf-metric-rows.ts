@@ -23,7 +23,11 @@ function groupedRows<T, R>(
 ): void {
   const groups = metricGroups?.length
     ? metricGroups.map((g) => ({ label: g.label as string | null, codes: g.codes }))
-    : [{ label: null, codes: Object.keys(data) }];
+    : [];
+  // Codes the server did not group (and data from before grouping) still print, under no heading
+  const known = new Set(groups.flatMap((g) => g.codes));
+  const rest = Object.keys(data).filter((c) => !known.has(c));
+  if (rest.length > 0) groups.push({ label: null, codes: rest });
   for (const { label, codes } of groups) {
     const rows = codes.filter((c) => c in data).flatMap((c) => build(c, data[c]));
     if (rows.length > 0) onRows(rows, label ? headingRow(label, colSpan) : null);

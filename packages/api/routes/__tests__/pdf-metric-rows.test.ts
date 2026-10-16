@@ -40,6 +40,14 @@ describe('buildMeasurementRows', () => {
     expect(rows).toEqual([[heading('Power', 2)], ['CMJ', '20.00 in']]);
   });
 
+  it('keeps metrics missing from metricGroups in a trailing group without a heading', () => {
+    const rows = buildMeasurementRows({
+      measurements: { MYSTERY: 5, JUMP_CMJ_HOH: 20 }, percentiles: {}, labels, units, showPercentile: false,
+      durationText, metricGroups: groups,
+    });
+    expect(rows).toEqual([[heading('Power', 2)], ['CMJ', '20.00 in'], ['MYSTERY', '5.00']]);
+  });
+
   it('falls back to plain entry order without metricGroups', () => {
     const rows = buildMeasurementRows({
       measurements: { JUMP_CMJ_HOH: 20 }, percentiles: {}, labels, units, showPercentile: false, durationText,
@@ -82,6 +90,16 @@ describe('buildBenchmarkRows', () => {
     ]);
     expect(singleRows[0]).toEqual([heading('Power', 5)]);
     expect((singleRows[1] as any[])[4]).toBe('Yes');
+  });
+
+  it('keeps benchmark rows for metrics missing from metricGroups', () => {
+    const { tierRows, tierColors, singleRows } = buildBenchmarkRows({
+      benchmarkComparisons: { MYSTERY: [tier('Elite', 1, 'green'), single] },
+      labels, units, durationText, metricGroups: groups,
+    });
+    expect(tierRows).toHaveLength(1);
+    expect(tierColors).toEqual(['green']);
+    expect(singleRows).toHaveLength(1);
   });
 
   it('returns empty arrays when nothing applies', () => {
