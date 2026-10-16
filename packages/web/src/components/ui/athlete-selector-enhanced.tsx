@@ -237,11 +237,11 @@ export function AthleteSelector({
       </div>
 
       {/* Footer */}
-      <div className="mt-4 pt-3 border-t text-xs text-gray-500 flex justify-between">
-        <span>
+      <div className="mt-4 pt-3 border-t text-xs text-gray-500 flex justify-between gap-2">
+        <span className="min-w-0">
           Best {metricLabel}{unit && ` (${unit})`} performers shown first
         </span>
-        <span>
+        <span className="shrink-0 whitespace-nowrap">
           {selectedAthleteIds.length}/{maxSelection} selected
         </span>
       </div>
