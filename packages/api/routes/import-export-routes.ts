@@ -1782,7 +1782,7 @@ export function registerImportExportRoutes(app: Express) {
           measurement.units || '',
           measurement.flyInDistance || '',
           measurement.notes || '',
-          durationFormat && measurement.value
+          durationFormat && measurement.value && Number.isFinite(Number(measurement.value))
             ? formatMeasurement(Number(measurement.value), durationFormat)
             : measurement.value || ''
         ].map(field => {

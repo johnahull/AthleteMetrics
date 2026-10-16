@@ -30,6 +30,7 @@ const JUMP = `DUREXP_JUMP_${suffix}`;
 const ROW = `ORG_DUREXP_ROW_${suffix}`;
 // Custom codes are unique per organization only: decimal here, duration in another organization
 const SHARED = `ORG_DUREXP_SHARED_${suffix}`;
+const NAN_MILE = `DUREXP_NAN_${suffix}`;
 
 describe('duration metrics in exports', () => {
   let app: Express;
@@ -75,6 +76,7 @@ describe('duration metrics in exports', () => {
     await db.insert(siteMetrics).values([
       { code: MILE, label: 'Mile', unit: 's', displayFormat: 'duration', decimalPrecision: 1 },
       { code: JUMP, label: 'Jump', unit: 'in', decimalPrecision: 1 },
+      { code: NAN_MILE, label: 'Nan Mile', unit: 's', displayFormat: 'duration', decimalPrecision: 1 },
     ] as any);
     await db.insert(customOrgMetrics).values([
       { organizationId: orgId, code: ROW, label: 'Row 2k', unit: 's', displayFormat: 'duration', decimalPrecision: 1, createdBy: coach.id },
@@ -85,7 +87,7 @@ describe('duration metrics in exports', () => {
     const row = (metric: string, value: string, units: string) => ({
       userId: athlete.id, submittedBy: coach.id, organizationId: orgId, date: '2026-03-10', age: 18, metric, value, units, isVerified: true,
     });
-    await db.insert(measurements).values([row(MILE, '402.500', 's'), row(JUMP, '24.500', 'in'), row(ROW, '435.000', 's'), row(SHARED, '125.000', 's')] as any);
+    await db.insert(measurements).values([row(MILE, '402.500', 's'), row(JUMP, '24.500', 'in'), row(ROW, '435.000', 's'), row(SHARED, '125.000', 's'), row(NAN_MILE, 'NaN', 's')] as any);
 
     const login = await request(app).post('/api/auth/login').send({ username: coach.username, password: PASSWORD });
     cookie = login.headers['set-cookie'][0];
@@ -94,7 +96,7 @@ describe('duration metrics in exports', () => {
   afterAll(async () => {
     await db.delete(measurements).where(eq(measurements.userId, athlete.id));
     await db.delete(customOrgMetrics).where(inArray(customOrgMetrics.organizationId, [orgId, otherOrgId]));
-    await db.delete(siteMetrics).where(inArray(siteMetrics.code, [MILE, JUMP]));
+    await db.delete(siteMetrics).where(inArray(siteMetrics.code, [MILE, JUMP, NAN_MILE]));
     await db.delete(userOrganizations).where(eq(userOrganizations.organizationId, orgId));
     await db.delete(users).where(inArray(users.id, [athlete.id, coach.id]));
     await db.delete(organizations).where(inArray(organizations.id, [orgId, otherOrgId]));
@@ -112,6 +114,15 @@ describe('duration metrics in exports', () => {
     expect(byMetric[MILE]).toEqual({ value: '402.500', display: '6:42.5' });
     expect(byMetric[ROW]).toEqual({ value: '435.000', display: '7:15.0' });
     expect(byMetric[JUMP]).toEqual({ value: '24.500', display: '24.500' });
+  });
+
+  it('CSV export falls back to the raw value when a duration metric value is not a finite number', async () => {
+    const res = await request(app).get(`/api/export/measurements?organizationId=${orgId}`).set('Cookie', cookie);
+    expect(res.status, res.text).toBe(200);
+    const [header, ...lines] = res.text.split('\n');
+    const cols = header.split(',');
+    const row = lines.map((l) => l.split(',')).find((c) => c[cols.indexOf('metric')] === NAN_MILE);
+    expect(row?.[cols.indexOf('display_value')]).toBe('NaN');
   });
 
   it('CSV export uses the custom metric of the measurement organization when another organization has the same code', async () => {
