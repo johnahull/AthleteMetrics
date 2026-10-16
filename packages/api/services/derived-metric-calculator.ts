@@ -38,6 +38,7 @@ type DbTransaction = PgTransaction<
   ExtractTablesWithRelations<typeof import('@shared/schema')>
 >;
 import { evaluateFormula } from './formula-service';
+import { selectSameRunSources } from './same-run-sources';
 import type { DerivedCalcFailure } from './derived-total-warnings';
 
 /**
@@ -1285,6 +1286,42 @@ export class DerivedMetricCalculator {
   }
 
   /**
+   * The `codes` rows of one run on `targetDate` (see same-run-sources.ts), under the same filters as the
+   * per-metric same_date lookup. Null when no run has every code. An anchor row, if one is among the
+   * codes, is not special-cased: configs combining anchorMetric and sameRunInputs are not supported.
+   */
+  private async findSameRunSources(
+    dbOrTx: typeof dbType | DbTransaction,
+    userId: string,
+    codes: string[],
+    targetDate: string,
+    metricConfigs?: Map<string, { higherIsBetter: boolean }>,
+    scope?: MeasurementVisibilityScope,
+    orgScope?: AnchorOrgScope
+  ): Promise<Map<string, Measurement> | null> {
+    const anchorOrgId = orgScope?.anchorRow.organizationId;
+    const orgFilter = orgScope
+      ? anchorOrgId
+        ? or(isNull(measurements.organizationId), eq(measurements.organizationId, anchorOrgId))
+        : isNull(measurements.organizationId)
+      : undefined;
+    const rows = await dbOrTx
+      .select()
+      .from(measurements)
+      .where(
+        and(
+          eq(measurements.userId, userId),
+          inArray(measurements.metric, codes),
+          eq(measurements.date, targetDate),
+          eq(measurements.isVerified, true),
+          visibilityCondition(scope),
+          orgFilter
+        )
+      );
+    return selectSameRunSources(rows, codes, (code) => metricConfigs?.get(code)?.higherIsBetter ?? true);
+  }
+
+  /**
    * Core implementation for finding source measurements using date matching strategies.
    * This method is used by all three public/private variants (findSourceMeasurements,
    * findSourceMeasurementsInTransaction, findSourceMeasurementsWithDb) to avoid code duplication.
@@ -1313,10 +1350,27 @@ export class DerivedMetricCalculator {
 
     const sourceMeasurementsMap = new Map<string, Measurement>();
 
+    // Inputs that must come from one device-import run are picked together, before the per-metric loop
+    let sameRun: Map<string, Measurement> | null | undefined;
+    const sameRunCodes = new Set((config.sameRunInputs ?? []).map((c) => c.toUpperCase()));
+    if (sameRunCodes.size > 0 && config.dateMatchStrategy === 'same_date') {
+      sameRun = await this.findSameRunSources(dbOrTx, userId, [...sameRunCodes], targetDate, metricConfigs, scope, orgScope);
+      if (!sameRun) {
+        if (config.missingSourceBehavior === 'skip') return null;
+        throw new Error(`Missing source measurements from a single run for metrics: ${[...sameRunCodes].join(', ')}`);
+      }
+    }
+
     for (const metricCode of dependentMetrics) {
       // Normalize metric code to uppercase to match database convention
       const normalizedMetricCode = metricCode.toUpperCase();
       let sourceMeasurement: Measurement | undefined;
+
+      const sameRunSource = sameRun?.get(normalizedMetricCode);
+      if (sameRunSource) {
+        sourceMeasurementsMap.set(metricCode, sameRunSource);
+        continue;
+      }
 
       // Determine if this metric prefers higher values (for sorting best value first)
       // Default to true (higher is better) if not specified

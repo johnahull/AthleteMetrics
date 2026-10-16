@@ -1701,6 +1701,27 @@ function addAnchorMetricIssue(
   }
 }
 
+// sameRunInputs must be sources of the metric and are only honoured by the same_date strategy.
+// Checked only when the payload carries the fields (a partial PATCH cannot be checked here).
+function addSameRunInputsIssue(
+  data: { dependentMetrics?: string[] | null; calculationConfig?: { dateMatchStrategy?: string; sameRunInputs?: string[] } | null },
+  ctx: z.RefinementCtx
+) {
+  const inputs = data.calculationConfig?.sameRunInputs;
+  if (!inputs) return;
+  const deps = data.dependentMetrics?.map((d) => d.toUpperCase());
+  if (
+    data.calculationConfig?.dateMatchStrategy !== 'same_date' ||
+    (deps && !inputs.every((c) => deps.includes(c.toUpperCase())))
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "sameRunInputs requires the same_date strategy and must be dependent metrics",
+      path: ['calculationConfig', 'sameRunInputs'],
+    });
+  }
+}
+
 // Shape of a derived metric's calculationConfig; the metric form dialog extends it.
 export const derivedCalculationConfigSchema = z.object({
   dateMatchStrategy: z.enum(['same_date', 'latest_before', 'closest']),
@@ -1708,6 +1729,7 @@ export const derivedCalculationConfigSchema = z.object({
   missingSourceBehavior: z.enum(['skip', 'error']),
   sourceSelection: z.enum(['latest_event']).optional(),
   anchorMetric: z.string().max(50).optional(),
+  sameRunInputs: z.array(z.string().max(50)).min(2).optional(),
 });
 
 export const insertSiteMetricSchema = createInsertSchema(siteMetrics).omit({
@@ -1747,6 +1769,7 @@ export const insertSiteMetricSchema = createInsertSchema(siteMetrics).omit({
   calculationConfig: derivedCalculationConfigSchema.optional(),
 }).superRefine((data, ctx) => {
   addAnchorMetricIssue(data, ctx);
+  addSameRunInputsIssue(data, ctx);
   // Cross-field validation: If isDerived is true, formula is required
   if (data.isDerived === true) {
     if (!data.formula || data.formula.trim() === '') {
@@ -1802,6 +1825,7 @@ export const updateSiteMetricSchema = z.object({
   calculationConfig: derivedCalculationConfigSchema.nullable().optional(),
 }).superRefine((data, ctx) => {
   addAnchorMetricIssue(data, ctx);
+  addSameRunInputsIssue(data, ctx);
   // Cross-field validation: If isDerived is being set to true, formula should be provided
   if (data.isDerived === true) {
     if (data.formula !== undefined && (!data.formula || data.formula.trim() === '')) {

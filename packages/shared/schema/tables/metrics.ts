@@ -23,6 +23,12 @@ export type DerivedCalculationConfig = {
    * matched on the same date; the other sources use dateMatchStrategy.
    */
   anchorMetric?: string;
+  /**
+   * Source metric codes (two or more of dependentMetrics, same_date only) that must all come from ONE
+   * device-import run (calculationMetadata.runId), e.g. the 10 yd and 20 yd splits of one sprint.
+   * Rows without a run id (manual entry, older imports) form one pool that is never mixed with runs.
+   */
+  sameRunInputs?: string[];
 };
 
 // Site-level metric definitions (master catalog)
