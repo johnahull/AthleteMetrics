@@ -145,8 +145,8 @@ export function WellnessFilters({
               {/* Date range badge */}
               <Badge variant="secondary" className="flex items-center gap-1">
                 <span>
-                  {toCalendarDate(filters.dateFrom)?.toLocaleDateString()} -{' '}
-                  {toCalendarDate(filters.dateTo)?.toLocaleDateString()}
+                  {toCalendarDate(filters.dateFrom)?.toLocaleDateString() ?? ''} -{' '}
+                  {toCalendarDate(filters.dateTo)?.toLocaleDateString() ?? ''}
                 </span>
               </Badge>
 

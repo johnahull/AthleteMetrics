@@ -165,7 +165,10 @@ export default function RecentAthletesWidget({
                     <span>{getMetricLabel(athlete.lastMeasurementType)}</span>
                     <span>•</span>
                     <span>
-                      {format(toCalendarDate(athlete.lastMeasurementDate)!, "MMM d")}
+                      {(() => {
+                        const day = toCalendarDate(athlete.lastMeasurementDate);
+                        return day ? format(day, "MMM d") : "";
+                      })()}
                     </span>
                     {athlete.teamName && (
                       <>

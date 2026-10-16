@@ -77,7 +77,7 @@ export function StatusTrendChart({ template, responses, filters }: StatusTrendCh
   const chartData = useMemo(() => {
     const labels = dailyBreakdowns.map(d => {
       const date = toCalendarDate(d.date);
-      return date?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      return date?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) ?? '';
     });
 
     return {

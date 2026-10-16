@@ -186,7 +186,7 @@ export function MeasurementProgressChart({
 
     const labels = sorted.map(m => {
       const date = toCalendarDate(m.date);
-      return date?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      return date?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) ?? '';
     });
 
     // Build datasets array with proper typing

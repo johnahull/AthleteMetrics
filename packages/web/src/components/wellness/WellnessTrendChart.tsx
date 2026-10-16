@@ -125,7 +125,7 @@ export function WellnessTrendChart({
         toCalendarDate(r.date)?.toLocaleDateString('en-US', {
           month: 'short',
           day: 'numeric',
-        })
+        }) ?? ''
       ),
       datasets,
     };

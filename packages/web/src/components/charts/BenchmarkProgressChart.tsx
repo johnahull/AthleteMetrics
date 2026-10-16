@@ -38,7 +38,7 @@ export function BenchmarkProgressChart({
       return date?.toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',
-      });
+      }) ?? '';
     });
 
     // Define dataset type to allow different property values between datasets

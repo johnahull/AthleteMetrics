@@ -103,7 +103,7 @@ export function InjuryTrendChart({ template, responses, filters }: InjuryTrendCh
   const chartData = useMemo(() => {
     const labels = dailyInjuryData.map(d => {
       const date = toCalendarDate(d.date);
-      return date?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      return date?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) ?? '';
     });
 
     return {

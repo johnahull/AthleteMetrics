@@ -106,7 +106,7 @@ export function TimeSeriesBoxSwarmChart({
     const datasets: any[] = [];
     const dateLabels = sortedDates.map(dateStr => {
       const date = toCalendarDate(dateStr);
-      return date?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      return date?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) ?? '';
     });
 
     // Create box plot and swarm plot datasets for each date
@@ -294,7 +294,7 @@ export function TimeSeriesBoxSwarmChart({
     const sortedDates = [...selectedDates].sort();
     const currentDateLabels = sortedDates.map(dateStr => {
       const date = toCalendarDate(dateStr);
-      return date?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      return date?.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) ?? '';
     });
 
     return {
