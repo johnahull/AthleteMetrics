@@ -6,6 +6,7 @@
 import express, { type Express } from "express";
 import { DEFAULT_AI_MODEL_KEY, getAIModel } from "@shared/ai-models";
 import rateLimit from "express-rate-limit";
+import { buildMeasurementRows, buildBenchmarkRows } from "./pdf-metric-rows";
 import { ReportService } from "../services/report-service";
 import { createReportsFromInput, ReportCreateError } from "../services/report-create";
 import { planChartPageBreaks } from "./pdf-chart-layout";
@@ -4426,16 +4427,15 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
 
     if (athlete.measurements) {
       const showPercentile = isGroupComparisonOn(reportData.reportConfig);
-      const measurementRows = Object.entries(athlete.measurements).map(
-        ([metric, value]: [string, any]) => {
-          const label = reportData.metricLabels?.[metric] || metric;
-          const unit = reportData.metricUnits?.[metric] || '';
-          const formatted = durationText(metric, value) ?? `${value.toFixed(2)}${unit ? ` ${unit}` : ''}`;
-          return showPercentile
-            ? [label, formatted, athlete.percentiles[metric]?.toFixed(1) || "N/A"]
-            : [label, formatted];
-        }
-      );
+      const measurementRows = buildMeasurementRows({
+        measurements: athlete.measurements,
+        percentiles: athlete.percentiles,
+        labels: reportData.metricLabels ?? {},
+        units: reportData.metricUnits ?? {},
+        showPercentile,
+        durationText,
+        metricGroups: reportData.metricGroups,
+      });
 
       autoTable(doc, {
         startY: yPos,
@@ -4450,64 +4450,16 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
 
     // Benchmark comparisons
     if (athlete.benchmarkComparisons) {
-      const singleValueRows: any[] = [];
-      // Tier data: keep metadata alongside cells for color styling
-      const tierData: Array<{
-        cells: string[];
-        tierColor: string;
-        tierOrder: number;
-      }> = [];
-
-      Object.entries(athlete.benchmarkComparisons).forEach(
-        ([metric, comparisons]: [string, any]) => {
-          const label = reportData.metricLabels?.[metric] || metric;
-          const unit = reportData.metricUnits?.[metric] || '';
-          comparisons.forEach((comp: any) => {
-            if (comp.tierName) {
-              // Tier benchmark: show tier name + distance to next
-              let tierLabel = comp.tierName;
-              if (comp.isBestTier) {
-                tierLabel += ' [Best]';
-              } else if (comp.distanceToNextTier != null && comp.nextTierName) {
-                const dist = comp.distanceToNextTier < 1
-                  ? comp.distanceToNextTier.toFixed(2)
-                  : comp.distanceToNextTier.toFixed(1);
-                tierLabel += ` (${durationText(metric, comp.distanceToNextTier) ?? `${dist}${unit ? ` ${unit}` : ''}`} to ${comp.nextTierName})`;
-              }
-              // Prefix with rank indicator
-              const rankPrefix = comp.tierOrder ? `#${comp.tierOrder} ` : '';
-              // Append per-tier coaching note when present (migration 0137).
-              // Newline-separated so autoTable wraps it as secondary text below
-              // the tier label.
-              const tierCellText = comp.coachingNote
-                ? `${rankPrefix}${tierLabel}\n${comp.coachingNote}`
-                : `${rankPrefix}${tierLabel}`;
-              tierData.push({
-                cells: [
-                  label,
-                  comp.tierGroupName || comp.benchmarkName,
-                  tierCellText,
-                  durationText(metric, comp.athleteValue) ?? `${comp.athleteValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
-                ],
-                tierColor: comp.tierColor || 'gray',
-                tierOrder: comp.tierOrder || 99,
-              });
-            } else {
-              // Single-value benchmark: existing format
-              singleValueRows.push([
-                label,
-                comp.benchmarkName,
-                durationText(metric, comp.benchmarkValue) ?? `${comp.benchmarkValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
-                durationText(metric, comp.athleteValue) ?? `${comp.athleteValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
-                comp.meetsOrExceeds ? "Yes" : "No",
-              ]);
-            }
-          });
-        }
-      );
+      const { tierRows, tierColors, singleRows: singleValueRows } = buildBenchmarkRows({
+        benchmarkComparisons: athlete.benchmarkComparisons,
+        labels: reportData.metricLabels ?? {},
+        units: reportData.metricUnits ?? {},
+        durationText,
+        metricGroups: reportData.metricGroups,
+      });
 
       // Render tier benchmarks table with color-coded tier cells
-      if (tierData.length > 0) {
+      if (tierRows.length > 0) {
         doc.setFontSize(14);
         doc.text("Benchmark Tiers", 14, yPos);
         yPos += 10;
@@ -4515,7 +4467,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
         autoTable(doc, {
           startY: yPos,
           head: [["Metric", "Tier Group", "Tier", "Actual"]],
-          body: tierData.map(d => d.cells),
+          body: tierRows,
           theme: isVisual ? "striped" : "grid",
           headStyles: { fillColor: colors.primary },
           styles: { fontSize: 9 },
@@ -4524,8 +4476,8 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
             const rowIdx = data.row.index;
             const colIdx = data.column.index;
             // Color the "Tier" column (index 2) with the tier's color tint
-            if (colIdx === 2 && rowIdx < tierData.length) {
-              const colorName = tierData[rowIdx].tierColor;
+            const colorName = tierColors[rowIdx];
+            if (colIdx === 2 && colorName) {
               data.cell.styles.fillColor = tierTint(colorName);
               data.cell.styles.fontStyle = 'bold';
             }
