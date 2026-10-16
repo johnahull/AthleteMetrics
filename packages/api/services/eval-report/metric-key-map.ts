@@ -1,7 +1,8 @@
 /**
- * Logical eval-report keys -> protocol-aware metric codes (AM-FEAT-019). The eval battery uses the yard
- * protocol; a yard key never maps to a meter code. Saved selections and templates store the logical keys,
- * so a code rename only changes this map.
+ * Logical eval-report keys -> protocol-aware metric codes (AM-FEAT-019). Sprints are yard splits; the 5-0-5
+ * is the meter protocol for every organization (AM-FEAT-016 Revision 2026-10-13), and the COD deficit is the
+ * meter 5-0-5 minus a 10 m time interpolated from the 10 and 20 yd splits. No 5-0-5 key maps to a yard code.
+ * Saved selections and templates store the logical keys, so a code rename only changes this map.
  */
 export const EVAL_METRIC_CODES = {
   DASH_10: "DASH_10YD",
@@ -16,11 +17,11 @@ export const EVAL_METRIC_CODES = {
   CMJ_SL_LEFT: "JUMP_CMJ_SL_L",
   CMJ_SL_RIGHT: "JUMP_CMJ_SL_R",
   CMJ_SL_ASYM: "JUMP_CMJ_SL_ASYM",
-  "505": "AGILITY_505_YD",
-  "505_LEFT": "AGILITY_505_YD_L",
-  "505_RIGHT": "AGILITY_505_YD_R",
-  "505_LSI": "AGILITY_505_YD_LSI",
-  COD_DEFICIT: "AGILITY_COD_DEFICIT_YD",
+  "505": "AGILITY_505_M",
+  "505_LEFT": "AGILITY_505_M_L",
+  "505_RIGHT": "AGILITY_505_M_R",
+  "505_LSI": "AGILITY_505_M_LSI",
+  COD_DEFICIT: "AGILITY_COD_DEFICIT_M_INTERP",
   T_TEST: "T_TEST",
   MOMENTUM: "MOMENTUM",
   MQI: "MQI_TOTAL",
