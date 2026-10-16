@@ -18,6 +18,8 @@ const SITE_MILE = `MILE_RUN_DECL_${suffix}`;
 const ORG_RUN = `ORG_RUN_DECL_${suffix}`;
 const ORG_JUMP = `ORG_JUMP_DECL_${suffix}`;
 const UNKNOWN = `NO_ROW_DECL_${suffix}`;
+// Higher-is-better in the main (and Both) org, lower-is-better in HigherOnly
+const ORG_FLIP = `ORG_FLIP_DECL_${suffix}`;
 
 const orgIds: string[] = [];
 const userIds: string[] = [];
@@ -54,26 +56,35 @@ async function addSeries(orgId: string, athleteId: string, metric: string, value
 }
 
 const rising = [300, 300, 300, 360, 360, 360];
+const falling = [360, 360, 360, 300, 300, 300];
 
 describe('getAtRiskAthletes decline direction', () => {
   let main: { orgId: string; athleteId: string };
   let higherOnly: { orgId: string; athleteId: string };
+  let both: { orgId: string; athleteId: string };
 
   beforeAll(async () => {
     main = await orgWithAthlete('Main');
     higherOnly = await orgWithAthlete('HigherOnly');
+    both = await orgWithAthlete('Both');
     await db.insert(siteMetrics).values({ code: SITE_MILE, label: 'Mile', unit: 's', metricType: 'lower_is_better' } as any);
     await db.insert(customOrgMetrics).values([
       { organizationId: main.orgId, code: ORG_RUN, label: 'Org Run', unit: 's', metricType: 'lower_is_better' },
       { organizationId: main.orgId, code: ORG_JUMP, label: 'Org Jump', unit: 'in', metricType: 'higher_is_better' },
       // The same code is higher-is-better in the other organization; it must not change the main org's rows.
       { organizationId: higherOnly.orgId, code: ORG_RUN, label: 'Org Run B', unit: 's', metricType: 'higher_is_better' },
+      { organizationId: main.orgId, code: ORG_FLIP, label: 'Org Flip', unit: 'in', metricType: 'higher_is_better' },
+      { organizationId: both.orgId, code: ORG_FLIP, label: 'Org Flip Both', unit: 'in', metricType: 'higher_is_better' },
+      { organizationId: higherOnly.orgId, code: ORG_FLIP, label: 'Org Flip B', unit: 's', metricType: 'lower_is_better' },
     ] as any);
 
-    for (const metric of [SITE_MILE, ORG_RUN, ORG_JUMP, 'VERTICAL_JUMP', UNKNOWN]) {
+    for (const metric of [SITE_MILE, ORG_RUN, ORG_JUMP, 'VERTICAL_JUMP', UNKNOWN, ORG_FLIP]) {
       await addSeries(main.orgId, main.athleteId, metric, rising);
     }
     await addSeries(higherOnly.orgId, higherOnly.athleteId, 'VERTICAL_JUMP', rising);
+    // One athlete, one code, opposite directions in two orgs: a 16.67% drop (higher) and a 20% rise (lower)
+    await addSeries(both.orgId, both.athleteId, ORG_FLIP, falling);
+    await addSeries(higherOnly.orgId, both.athleteId, ORG_FLIP, rising);
   });
 
   afterAll(async () => {
@@ -87,6 +98,23 @@ describe('getAtRiskAthletes decline direction', () => {
     expect(declined).toEqual([ORG_RUN, SITE_MILE].sort());
     const orgRun = result.declining.find((d) => d.metric === ORG_RUN);
     expect(orgRun?.declinePercent).toBe(20);
+    // Last measurement is 2026-06-15, far past the 14-day threshold; scoped to the org's athletes only
+    expect(result.inactive.map((i) => i.athleteId)).toEqual([main.athleteId]);
+  });
+
+  it('takes a custom metric direction only from the measurement row\'s own organization', async () => {
+    const result = await new AnalyticsService().getAtRiskAthletes(main.orgId);
+    // ORG_FLIP rises and is higher-is-better in the main org: an improvement, whatever HigherOnly says
+    expect(result.declining.some((d) => d.metric === ORG_FLIP)).toBe(false);
+    const keys = result.declining.map((d) => `${d.athleteId}|${d.metric}`);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('reports one entry per athlete and metric, the larger decline, when two orgs disagree on direction', async () => {
+    const result = await new AnalyticsService().getAtRiskAthletes(both.orgId);
+    const flips = result.declining.filter((d) => d.athleteId === both.athleteId && d.metric === ORG_FLIP);
+    expect(flips).toHaveLength(1);
+    expect(flips[0].declinePercent).toBe(20);
   });
 
   it('works when no measured metric is lower-is-better (a rising jump is not a decline)', async () => {

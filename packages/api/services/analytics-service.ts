@@ -1118,7 +1118,8 @@ export class AnalyticsService {
         GROUP BY athlete_id, metric, lower_is_better
         HAVING COUNT(DISTINCT row_num) >= 6
       )
-      SELECT
+      -- One entry per athlete and metric: the larger decline when two series (opposite directions) both decline
+      SELECT DISTINCT ON (athlete_id, metric)
         athlete_id::text as "athleteId",
         metric,
         CASE
@@ -1138,6 +1139,7 @@ export class AnalyticsService {
             ELSE ((previous_avg - current_avg) / previous_avg) * 100
           END
         ) > 5
+      ORDER BY athlete_id, metric, "declinePercent" DESC
     `;
 
     const decliningPerformances = await db.execute(decliningQuery) as any[];
