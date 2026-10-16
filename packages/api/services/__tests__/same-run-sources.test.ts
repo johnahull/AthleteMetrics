@@ -3,13 +3,19 @@ import { insertSiteMetricSchema, type Measurement } from '@shared/schema';
 import { selectSameRunSources, sameRunKey } from '../same-run-sources';
 
 let seq = 0;
-const row = (metric: string, value: number, runId?: string, createdAt = new Date(2026, 9, 13, 10, 0, seq++)) =>
+const row = (
+  metric: string,
+  value: number,
+  runId?: string,
+  createdAt = new Date(2026, 9, 13, 10, 0, seq++),
+  formula = 'direct_import_split'
+) =>
   ({
     id: `m${seq}`,
     metric,
     value: String(value),
     createdAt,
-    calculationMetadata: runId ? { runId } : null,
+    calculationMetadata: runId ? { runId, formula } : null,
   }) as unknown as Measurement;
 
 const LOWER = () => false;
@@ -60,6 +66,21 @@ describe('selectSameRunSources', () => {
     expect(sameRunKey(sel.get('DASH_10YD')!)).toBe('new');
   });
 
+  it('prefers the gate split over the Final Time row of the same run (never mixes the two clocks)', () => {
+    // 20 yd Dash: Final Time 2.94 is a DASH_20YD parent row, the 20 yd gate 2.95 is a split row
+    const rows = [
+      row('DASH_10YD', 1.69, 'A'),
+      row('DASH_20YD', 2.94, 'A', undefined, 'direct_import'),
+      row('DASH_20YD', 2.95, 'A', undefined, 'direct_import_split'),
+    ];
+    expect(pick(rows)).toEqual({ DASH_10YD: '1.69', DASH_20YD: '2.95' });
+  });
+
+  it('falls back to the Final Time row when the run has no gate at that code', () => {
+    const rows = [row('DASH_10YD', 1.69, 'A'), row('DASH_20YD', 2.94, 'A', undefined, 'direct_import')];
+    expect(pick(rows)).toEqual({ DASH_10YD: '1.69', DASH_20YD: '2.94' });
+  });
+
   it('honours a higher-is-better input', () => {
     const rows = [
       row('DASH_10YD', 1.69, 'A'), row('DASH_20YD', 2.95, 'A'),
@@ -91,6 +112,12 @@ describe('calculationConfig.sameRunInputs validation', () => {
 
   it('accepts two dependent metrics under same_date', () => {
     expect(metric({ ...base, sameRunInputs: ['DASH_10YD', 'DASH_20YD'] }).success).toBe(true);
+  });
+
+  it('rejects sameRunInputs together with latest_event or an anchorMetric', () => {
+    const inputs = ['DASH_10YD', 'DASH_20YD'];
+    expect(metric({ ...base, sourceSelection: 'latest_event', sameRunInputs: inputs }).success).toBe(false);
+    expect(metric({ ...base, anchorMetric: 'AGILITY_505_M_L', sameRunInputs: inputs }).success).toBe(false);
   });
 
   it('rejects a code that is not a dependent metric, a single code, and other strategies', () => {

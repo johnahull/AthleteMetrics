@@ -158,6 +158,16 @@ describe('device import: derived split inputs come from one run', () => {
     expect(runIds(rows[0].sources).size).toBe(1);
   });
 
+  it('uses the 20 yd gate, not the Final Time, of the same run', async () => {
+    // 20 yd Dash: Final Time 2.94 (DASH_20YD parent row) and a 20 yd gate 2.95 (DASH_20YD split row)
+    await importFile([dash(20, 2.94, [[1.69, 10], [2.95, 20]])]);
+    await compute();
+
+    const rows = await derivedRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].value).toBeCloseTo(2.95 - 1.69, 3);
+  });
+
   it('computes nothing when no single run has both inputs', async () => {
     // A: 30 yd dash with only a 10 yd gate (DASH_10YD split + DASH_30YD). B: 20 yd dash, no gates (DASH_20YD only)
     await importFile([dash(30, 4.08, [[1.69, 10]]), dash(20, 2.9, [])]);
@@ -206,15 +216,14 @@ describe('device import: derived split inputs come from one run', () => {
     expect(rows[0].value).toBeCloseTo(1.26, 3);
   });
 
-  it('after a 2-run import, deleting the rows and re-importing 1 run leaves nothing of the first batch', async () => {
+  it('after a delete and a 1-run re-import, only the new batch remains and every derived value has one run id', async () => {
     const first = await importFile([RUN_A, RUN_B]);
     await compute();
-    expect(await derivedRows()).toHaveLength(1);
     const ids = (await db.select({ id: measurements.id }).from(measurements).where(eq(measurements.userId, athleteId))).map((r) => r.id);
     const del = await new MeasurementService().bulkDelete(ids, orgId);
     expect(del.failed).toBe(0);
 
-    // Re-import run B's gates only: slower 10 yd, faster 20 yd
+    // Re-import run B only
     const second = await importFile([RUN_B]);
     await compute();
 

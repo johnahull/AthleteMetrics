@@ -16,9 +16,13 @@ export function sameRunKey(m: Pick<Measurement, 'calculationMetadata'>): string 
   return typeof runId === 'string' ? runId : NO_RUN;
 }
 
+const isGateSplit = (m: Pick<Measurement, 'calculationMetadata'>) =>
+  (m.calculationMetadata as { formula?: unknown } | null)?.formula === 'direct_import_split';
+
 /**
  * Picks one run that has a row for every code and returns each code's row from it, or null when no run is complete.
- * Within a run (or the no-run pool) each code takes its best row (direction-aware, newest on a tie).
+ * Within a run (or the no-run pool) each code takes its best row (direction-aware, newest on a tie); in a run,
+ * a gate split row beats the drill's Final Time row.
  * Runs are ranked by those values in `codes` order, then by newest row.
  *
  * @param rows candidate rows of the codes (already filtered for user, date, verification and visibility)
@@ -41,11 +45,14 @@ export function selectSameRunSources(
   };
 
   let best: Map<string, Measurement> | null = null;
-  for (const runRows of runs.values()) {
+  for (const [runKey, runRows] of runs) {
     const sources = new Map<string, Measurement>();
     for (const code of codes) {
-      for (const r of runRows) {
-        if (r.metric !== code) continue;
+      const ofCode = runRows.filter((r) => r.metric === code);
+      // A run's drill row carries the Final Time and its split row the gate time: two clocks that differ
+      // by milliseconds. Take the gate when the run has one, so the inputs never mix the two.
+      const gates = ofCode.filter((r) => isGateSplit(r));
+      for (const r of runKey !== NO_RUN && gates.length > 0 ? gates : ofCode) {
         const current = sources.get(code);
         if (!current || better(code, r, current)) sources.set(code, r);
       }
