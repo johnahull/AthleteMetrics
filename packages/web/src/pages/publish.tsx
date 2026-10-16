@@ -14,7 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Download, RotateCcw, Trash2, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
-import { getMetricUnits, getMetricColor } from "@/lib/metrics";
+import { formatValueWithUnit } from "@/lib/metrics";
 import { Gender } from "@shared/schema";
 import { isLowerBetterType } from "@shared/analytics-types";
 import { DATE_CONSTANTS } from "@shared/constants";
@@ -433,7 +433,7 @@ export default function Publish() {
       pdf.text(
         metricFormats[filters.metric]
           ? formatMeasurement(parseFloat(measurement.value), metricFormats[filters.metric])
-          : `${measurement.value}${getMetricUnits(filters.metric)}`,
+          : formatValueWithUnit(measurement.value, measurement.units),
         140,
         yPos,
       );
@@ -951,9 +951,9 @@ export default function Publish() {
                           <span className="font-mono text-gray-900">
                             {metricFormats[filters.metric]
                               ? formatMeasurement(parseFloat(measurement.value), metricFormats[filters.metric])
-                              : `${measurement.value}${getMetricUnits(filters.metric)}`}
+                              : formatValueWithUnit(measurement.value, measurement.units)}
                           </span>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getMetricColor(filters.metric)}`}>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800`}>
                             {getMetricLabel(filters.metric)}
                           </span>
                         </div>
@@ -1028,7 +1028,7 @@ export default function Publish() {
                         <span className="text-gray-600">
                           {metricFormats[filters.metric]
                             ? formatMeasurement(parseFloat(m.value), metricFormats[filters.metric])
-                            : `${m.value}${getMetricUnits(filters.metric)}`}{" "}
+                            : formatValueWithUnit(m.value, m.units)}{" "}
                           • {new Date(m.date).toLocaleDateString()}
                         </span>
                       </li>

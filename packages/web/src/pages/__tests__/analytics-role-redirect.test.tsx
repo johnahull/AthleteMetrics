@@ -34,7 +34,7 @@ vi.mock('@/components/analytics/StatisticsSummaryCard', () => ({ StatisticsSumma
 vi.mock('@/hooks/useContextualLabels', () => ({
   useContextualLabels: vi.fn(() => ({ team: 'Team', teams: 'Teams' })),
 }));
-vi.mock('@/hooks/use-metric-labels', () => ({ useMetricLabels: vi.fn(() => ({ getLabel: (m: string) => m })) }));
+vi.mock('@/hooks/use-metric-labels', () => ({ useMetricLabels: vi.fn(() => ({ getLabel: (m: string) => m, getUnit: () => '' })) }));
 
 const baseUser: EnhancedUser = {
   id: 'u1',

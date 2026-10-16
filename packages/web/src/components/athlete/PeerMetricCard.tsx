@@ -24,7 +24,7 @@ import {
   type PeerFilterCriteria,
 } from '@/hooks/usePeerComparison';
 import { DistributionBoxPlot } from '@/components/charts/DistributionBoxPlot';
-import { getMetricUnits } from '@/lib/metrics';
+import { formatValueWithUnit } from '@/lib/metrics';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
 import { formatMeasurement } from '@shared/duration-format';
 import { AthleteMetricExplanation } from './AthleteMetricExplanation';
@@ -90,7 +90,7 @@ export function PeerMetricCard({
   explanation,
 }: PeerMetricCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const { formats } = useMetricLabels();
+  const { formats, getUnit } = useMetricLabels();
 
   // Fetch detailed distribution data when expanded
   const {
@@ -105,7 +105,7 @@ export function PeerMetricCard({
   const displayName = explanation?.title ?? result.metric;
   const durationFormat = formats[result.metric];
   // A duration value is shown as m:ss, which carries no unit
-  const units = durationFormat ? '' : getMetricUnits(result.metric);
+  const units = durationFormat ? '' : getUnit(result.metric);
   const percentileLabel = getPercentileLabel(result.percentile);
 
   // Safe formatting helper for numeric values
@@ -122,7 +122,7 @@ export function PeerMetricCard({
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-medium text-gray-900">{displayName}</h3>
             <span className="text-sm text-gray-500">
-              {formatValue(result.athleteValue)} {units}
+              {formatValueWithUnit(formatValue(result.athleteValue), units)}
             </span>
           </div>
           <div className="text-sm text-gray-400 text-center py-4">
@@ -149,7 +149,7 @@ export function PeerMetricCard({
             />
           </div>
           <span className="text-lg font-semibold text-gray-800 whitespace-nowrap">
-            {formatValue(result.athleteValue)} {units}
+            {formatValueWithUnit(formatValue(result.athleteValue), units)}
           </span>
         </div>
 
@@ -195,7 +195,7 @@ export function PeerMetricCard({
                 </Badge>
               </div>
               <p className="text-xs text-gray-500">
-                Target: {formatValue(benchmark.targetValue)} {units}
+                Target: {formatValueWithUnit(formatValue(benchmark.targetValue), units)}
               </p>
             </div>
             {benchmark.isMet ? (

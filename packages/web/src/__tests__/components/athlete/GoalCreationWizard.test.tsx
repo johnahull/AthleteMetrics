@@ -9,6 +9,15 @@ import userEvent from '@testing-library/user-event';
 import { GoalCreationWizard } from '@/components/athlete/GoalCreationWizard';
 import { GoalType } from '@/utils/goal-utils';
 
+vi.mock('@/hooks/use-metric-labels', () => ({
+  useMetricLabels: () => ({
+    labels: {},
+    getLabel: (code: string) => code,
+    getUnit: (code: string) => ({ FLY10_TIME: 's', VERTICAL_JUMP: 'in' } as Record<string, string>)[code] ?? '',
+    isLoading: false,
+  }),
+}));
+
 describe('GoalCreationWizard', () => {
   const mockMeasurements = [
     { metric: 'FLY10_TIME', value: 1.2, date: '2024-01-01' },

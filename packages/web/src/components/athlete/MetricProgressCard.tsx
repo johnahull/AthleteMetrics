@@ -26,6 +26,7 @@ import { MetricContextTooltip } from './MetricContextTooltip';
 import { AthleteMetricExplanation } from './AthleteMetricExplanation';
 import { isLowerBetter } from '@/constants/metrics';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
+import { formatValueWithUnit } from '@/lib/metrics';
 import type { MetricExplanation } from '@shared/metric-explanations';
 import { formatMeasurement } from '@shared/duration-format';
 
@@ -249,7 +250,9 @@ export function MetricProgressCard({
         enabled: true,
         callbacks: {
           label: (context: TooltipItem<'line'>) =>
-            durationFormat && context.parsed.y != null ? formatMeasurement(context.parsed.y, durationFormat) : `${context.parsed.y}${units}`,
+            durationFormat && context.parsed.y != null
+              ? formatMeasurement(context.parsed.y, durationFormat)
+              : formatValueWithUnit(context.parsed.y ?? '', units),
         },
       },
     },
@@ -311,14 +314,11 @@ export function MetricProgressCard({
                 data-testid="current-value"
                 className="text-2xl sm:text-3xl font-bold text-gray-900"
               >
-                {durationFormat && currentValue != null ? (
-                  formatMeasurement(currentValue, durationFormat)
-                ) : (
-                  <>
-                    {currentValue?.toFixed(2)}
-                    {units}
-                  </>
-                )}
+                {durationFormat && currentValue != null
+                  ? formatMeasurement(currentValue, durationFormat)
+                  : currentValue == null
+                    ? undefined
+                    : formatValueWithUnit(currentValue.toFixed(2), units)}
               </span>
             </MetricContextTooltip>
             {/* Platform-wide convention: small "est." chip on every isCalculated measurement.
@@ -368,7 +368,7 @@ export function MetricProgressCard({
 
           {/* PR Display - uses personalRecord if available, otherwise bestValue.
               Hidden for tracking metrics: they have no "best" direction. */}
-          {!isTracking && (
+          {!isTracking && (personalRecord?.value != null || bestValue != null) && (
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1.5">
               <Trophy className="h-4 w-4 text-yellow-600" />
@@ -383,14 +383,9 @@ export function MetricProgressCard({
                 data-testid="pr-value"
                 className="text-xl font-semibold text-yellow-700"
               >
-                {durationFormat && (personalRecord?.value ?? bestValue) != null ? (
-                  formatMeasurement((personalRecord?.value ?? bestValue)!, durationFormat)
-                ) : (
-                  <>
-                    {personalRecord?.value?.toFixed(2) ?? bestValue?.toFixed(2)}
-                    {units}
-                  </>
-                )}
+                {durationFormat && (personalRecord?.value ?? bestValue) != null
+                  ? formatMeasurement((personalRecord?.value ?? bestValue)!, durationFormat)
+                  : formatValueWithUnit(personalRecord?.value?.toFixed(2) ?? bestValue?.toFixed(2) ?? '', units)}
               </span>
             </MetricContextTooltip>
             {personalRecord && (

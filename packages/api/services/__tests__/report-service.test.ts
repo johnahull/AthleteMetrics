@@ -873,5 +873,114 @@ describe('ReportService', () => {
       await db.delete(siteBenchmarks).where(eq(siteBenchmarks.id, maleBenchmark.id));
       await db.delete(users).where(eq(users.id, femaleAthlete.id));
     });
+
+    // Regression: the wizard's "benchmark set" mode sends a set's site benchmark ids, which
+    // have no organization_benchmarks row (sets use opt-out visibility), so they were dropped.
+    it('should include a selected site benchmark the organization never individually enabled', async () => {
+      const uniqueSuffix = `noorg-${Date.now()}`;
+
+      const [athlete] = await db.insert(users).values({
+        username: `set-athlete-${uniqueSuffix}`,
+        emails: [`set-${uniqueSuffix}@example.com`],
+        password: 'hashedpassword',
+        firstName: 'Set',
+        lastName: 'Athlete',
+        fullName: 'Set Athlete',
+        gender: 'Female',
+        birthYear: 2002,
+      }).returning();
+
+      const [benchmark] = await db.insert(siteBenchmarks).values({
+        metricCode: 'FLY10_TIME',
+        name: `Set Sprint ${uniqueSuffix}`,
+        benchmarkValue: '1.30',
+        comparisonOperator: 'lte',
+        isActive: true,
+      }).returning();
+
+      // No organization_benchmarks row on purpose
+      const [report] = await db.insert(reports).values({
+        name: `Set Test Report ${uniqueSuffix}`,
+        organizationId: testOrgId,
+        reportType: 'individual',
+        config: {
+          timeframe: { type: 'preset', preset: 'all_time' },
+          metrics: ['FLY10_TIME'],
+          benchmarks: { site: [benchmark.id] },
+        },
+        createdBy: testUserId,
+      }).returning();
+
+      const comparisons = await (reportService as any).getBenchmarkComparisons(
+        athlete.id,
+        testOrgId,
+        report.id,
+        { FLY10_TIME: 1.25 },
+        report.config
+      );
+
+      expect(
+        comparisons.FLY10_TIME.find((c: any) => c.benchmarkName === `Set Sprint ${uniqueSuffix}`)
+      ).toBeDefined();
+
+      await db.delete(reports).where(eq(reports.id, report.id));
+      await db.delete(siteBenchmarks).where(eq(siteBenchmarks.id, benchmark.id));
+      await db.delete(users).where(eq(users.id, athlete.id));
+    });
+
+    it('should still hide a selected site benchmark the organization explicitly disabled', async () => {
+      const uniqueSuffix = `disabled-${Date.now()}`;
+
+      const [athlete] = await db.insert(users).values({
+        username: `dis-athlete-${uniqueSuffix}`,
+        emails: [`dis-${uniqueSuffix}@example.com`],
+        password: 'hashedpassword',
+        firstName: 'Dis',
+        lastName: 'Athlete',
+        fullName: 'Dis Athlete',
+      }).returning();
+
+      const [benchmark] = await db.insert(siteBenchmarks).values({
+        metricCode: 'FLY10_TIME',
+        name: `Disabled Sprint ${uniqueSuffix}`,
+        benchmarkValue: '1.30',
+        comparisonOperator: 'lte',
+        isActive: true,
+      }).returning();
+
+      await db.insert(organizationBenchmarks).values({
+        organizationId: testOrgId,
+        benchmarkId: benchmark.id,
+        benchmarkType: 'site',
+        isEnabled: false,
+      });
+
+      const [report] = await db.insert(reports).values({
+        name: `Disabled Test Report ${uniqueSuffix}`,
+        organizationId: testOrgId,
+        reportType: 'individual',
+        config: {
+          timeframe: { type: 'preset', preset: 'all_time' },
+          metrics: ['FLY10_TIME'],
+          benchmarks: { site: [benchmark.id] },
+        },
+        createdBy: testUserId,
+      }).returning();
+
+      const comparisons = await (reportService as any).getBenchmarkComparisons(
+        athlete.id,
+        testOrgId,
+        report.id,
+        { FLY10_TIME: 1.25 },
+        report.config
+      );
+
+      expect(comparisons.FLY10_TIME).toEqual([]);
+
+      await db.delete(reports).where(eq(reports.id, report.id));
+      await db.delete(organizationBenchmarks).where(eq(organizationBenchmarks.benchmarkId, benchmark.id));
+      await db.delete(siteBenchmarks).where(eq(siteBenchmarks.id, benchmark.id));
+      await db.delete(users).where(eq(users.id, athlete.id));
+    });
   });
 });

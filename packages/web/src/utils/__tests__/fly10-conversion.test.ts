@@ -58,46 +58,46 @@ describe('fly10ToMph', () => {
 describe('formatFly10Dual', () => {
   it('should format time-first by default', () => {
     const result = formatFly10Dual(2.0);
-    expect(result).toMatch(/^2\.00s \(10\.23 mph\)$/);
+    expect(result).toMatch(/^2\.00 s \(10\.23 mph\)$/);
   });
 
   it('should format time-first when specified', () => {
     const result = formatFly10Dual(1.95, 'time-first');
-    expect(result).toMatch(/^1\.95s \(10\.49 mph\)$/);
+    expect(result).toMatch(/^1\.95 s \(10\.49 mph\)$/);
   });
 
   it('should format speed-first when specified', () => {
     const result = formatFly10Dual(1.95, 'speed-first');
-    expect(result).toMatch(/^10\.49 mph \(1\.95s\)$/);
+    expect(result).toMatch(/^10\.49 mph \(1\.95 s\)$/);
   });
 
   it('should handle edge cases gracefully', () => {
     // Zero seconds
-    expect(formatFly10Dual(0)).toContain('0.00s');
+    expect(formatFly10Dual(0)).toContain('0.00 s');
     expect(formatFly10Dual(0)).toContain('0.00 mph');
 
     // Negative seconds
-    expect(formatFly10Dual(-1)).toContain('-1.00s');
+    expect(formatFly10Dual(-1)).toContain('-1.00 s');
     expect(formatFly10Dual(-1)).toContain('0.00 mph');
   });
 
   it('should format decimals to 2 places', () => {
     const result = formatFly10Dual(1.999);
-    expect(result).toContain('2.00s');
+    expect(result).toContain('2.00 s');
     expect(result).toContain('10.23 mph');
   });
 
   it('should handle very fast times', () => {
     // Extremely fast: 1.0s = 20.45 mph
     const result = formatFly10Dual(1.0);
-    expect(result).toContain('1.00s');
+    expect(result).toContain('1.00 s');
     expect(result).toContain('20.45 mph');
   });
 
   it('should handle very slow times', () => {
     // Very slow: 5.0s = 4.09 mph
     const result = formatFly10Dual(5.0);
-    expect(result).toContain('5.00s');
+    expect(result).toContain('5.00 s');
     expect(result).toContain('4.09 mph');
   });
 });
@@ -149,10 +149,10 @@ describe('Integration tests', () => {
 
     // Format dual display
     const formatted = formatFly10Dual(seconds, 'time-first');
-    expect(formatted).toBe('1.95s (10.49 mph)');
+    expect(formatted).toBe('1.95 s (10.49 mph)');
 
     const formattedSpeedFirst = formatFly10Dual(seconds, 'speed-first');
-    expect(formattedSpeedFirst).toBe('10.49 mph (1.95s)');
+    expect(formattedSpeedFirst).toBe('10.49 mph (1.95 s)');
   });
 
   it('should handle complete workflow for TOP_SPEED', () => {

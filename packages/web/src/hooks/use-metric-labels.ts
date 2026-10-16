@@ -6,6 +6,8 @@ import type { MetricType } from '@shared/analytics-types';
 export interface UseMetricLabelsResult {
   labels: Record<string, string>;
   getLabel: (code: string) => string;
+  /** Configured unit for a code; "" when the metric is unknown (use a row's own `units` when one is at hand). */
+  getUnit: (code: string) => string;
   /** Duration (mm:ss) metrics only, ready for formatMeasurement; other metrics keep their own display */
   formats: Record<string, MeasurementFormat>;
   /** Better/worse direction per metric code, including metrics outside the built-in lists */
@@ -60,6 +62,13 @@ export function useMetricLabels(): UseMetricLabelsResult {
     [labels],
   );
 
+  const units = useMemo(
+    () => Object.fromEntries(metrics.map((m) => [m.code, m.unit])),
+    [metrics],
+  );
+
+  const getUnit = useCallback((code: string) => units[code] ?? '', [units]);
+
   const formats = useMemo(
     () =>
       Object.fromEntries(
@@ -75,5 +84,5 @@ export function useMetricLabels(): UseMetricLabelsResult {
     [metrics],
   );
 
-  return { labels, getLabel, formats, types, isLoading, error };
+  return { labels, getLabel, getUnit, formats, types, isLoading, error };
 }

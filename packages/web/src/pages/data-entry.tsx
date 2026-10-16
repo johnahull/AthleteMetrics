@@ -28,6 +28,7 @@ import { useMetricLabels } from '@/hooks/use-metric-labels';
 import { formatMeasurement } from '@shared/duration-format';
 import { RESPONSIVE_BREAKPOINTS } from '@shared/constants';
 import type { UserOrganization } from '@shared/schema';
+import { formatValueWithUnit } from "@/lib/metrics";
 
 // Lazy load the Import/Export panel to keep initial page load fast
 const ImportExportPanel = lazy(() => import('@/components/import/ImportExportPanel'));
@@ -399,7 +400,7 @@ export default function DataEntry() {
                           {getLabel(measurement.metric)}:{" "}
                           {formats[measurement.metric]
                             ? formatMeasurement(Number(measurement.value), formats[measurement.metric])
-                            : `${measurement.value}${measurement.units}`}
+                            : formatValueWithUnit(measurement.value, measurement.units)}
                         </span>
                         <span>•</span>
                         <span>{measurement.date}</span>

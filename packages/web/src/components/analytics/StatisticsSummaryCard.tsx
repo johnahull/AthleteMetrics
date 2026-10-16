@@ -6,7 +6,7 @@
 import React, { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { calculateStatistics } from '@shared/analytics-utils';
-import { getMetricUnits } from '@/lib/metrics';
+import { formatValueWithUnit } from '@/lib/metrics';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
 import { formatMeasurement } from '@shared/duration-format';
 import { resolveMetricType, type MetricType } from '@shared/analytics-types';
@@ -44,7 +44,7 @@ export function StatisticsSummaryCard({
   distributionMode = 'quartiles',
   metricType: metricTypeOverride,
 }: StatisticsSummaryCardProps) {
-  const { getLabel, formats, types } = useMetricLabels();
+  const { getLabel, getUnit, formats, types } = useMetricLabels();
   // Resolve metric direction: prop override > metric list > fallback
   const metricDirection = resolveMetricType(metric, metricTypeOverride ?? types[metric]);
   // Extract numeric values from measurements (already filtered by caller)
@@ -55,10 +55,10 @@ export function StatisticsSummaryCard({
   }, [measurements]);
 
   // Get units for this metric
-  const units = getMetricUnits(metric);
+  const units = getUnit(metric);
   const durationFormat = formats[metric];
   const show = (value: number) =>
-    durationFormat ? formatMeasurement(value, durationFormat) : `${formatNumber(value, 2)}${units}`;
+    durationFormat ? formatMeasurement(value, durationFormat) : formatValueWithUnit(formatNumber(value, 2), units);
   const displayTitle = title || `${getLabel(metric)} Statistics`;
 
   // Handle empty state

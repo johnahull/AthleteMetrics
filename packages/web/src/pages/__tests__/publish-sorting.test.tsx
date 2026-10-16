@@ -178,6 +178,17 @@ describe('Publish Page - Column Sorting', () => {
     });
   };
 
+  describe('Value units', () => {
+    it("shows each row's own unit next to its value", async () => {
+      setupFetchMocks(mockMeasurements.map((m) => ({ ...m, units: 's' })));
+      renderWithProviders(<Publish />);
+
+      await selectMetric();
+
+      expect((await screen.findAllByText('1.50 s')).length).toBeGreaterThan(0);
+    });
+  });
+
   describe('Column Headers - Clickability and Icons', () => {
     it('should render column headers as clickable with sort icons', async () => {
       const user = userEvent.setup();
