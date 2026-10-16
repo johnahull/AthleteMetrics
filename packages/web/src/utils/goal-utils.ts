@@ -180,7 +180,7 @@ export function formatGoalTarget(goal: Goal, format?: MeasurementFormat): string
 /**
  * Suggest goals based on athlete's measurement history
  */
-export function suggestGoals(measurements: Measurement[], metric: string): GoalSuggestion[] {
+export function suggestGoals(measurements: Measurement[], metric: string, metricType?: MetricType): GoalSuggestion[] {
   const education = getMetricEducation(metric);
   if (!education) return [];
 
@@ -195,7 +195,7 @@ export function suggestGoals(measurements: Measurement[], metric: string): GoalS
 
   if (metricMeasurements.length === 0) return [];
 
-  const lowerIsBetter = education.lowerIsBetter;
+  const lowerIsBetter = isLowerBetterMetric(metric, metricType);
   const currentBest = lowerIsBetter
     ? Math.min(...metricMeasurements.map(m => m.value))
     : Math.max(...metricMeasurements.map(m => m.value));
@@ -338,7 +338,7 @@ export function getDaysRemaining(targetDate: string): number {
 /**
  * Get human-readable progress text for a goal
  */
-export function getGoalProgressText(goal: Goal): string {
+export function getGoalProgressText(goal: Goal, metricType?: MetricType): string {
   if (goal.status === GoalStatus.ACHIEVED) {
     return 'Goal achieved! 🎉';
   }
@@ -351,7 +351,7 @@ export function getGoalProgressText(goal: Goal): string {
     return 'Goal abandoned';
   }
 
-  const progress = calculateGoalProgress(goal);
+  const progress = calculateGoalProgress(goal, metricType);
   const daysRemaining = getDaysRemaining(goal.targetDate);
 
   if (progress === 100) {

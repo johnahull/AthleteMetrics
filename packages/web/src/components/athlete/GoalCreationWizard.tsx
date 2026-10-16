@@ -60,6 +60,8 @@ interface GoalCreationWizardProps {
   durationMetrics?: string[];
   /** Better/worse direction per metric code; without an entry the built-in lists decide */
   metricTypes?: Record<string, MetricType>;
+  /** True while the metric list (and so metricTypes) is loading: the saved baseline depends on direction */
+  metricTypesLoading?: boolean;
   onCreateGoal: (goal: GoalCreationData) => void | Promise<void>;
   onCancel: () => void;
 }
@@ -71,6 +73,7 @@ export function GoalCreationWizard({
   availableMetrics,
   durationMetrics,
   metricTypes,
+  metricTypesLoading,
   onCreateGoal,
   onCancel,
 }: GoalCreationWizardProps) {
@@ -110,8 +113,8 @@ export function GoalCreationWizard({
   // Get smart suggestions
   const suggestions = useMemo(() => {
     if (!selectedMetric) return [];
-    return suggestGoals(measurements, selectedMetric);
-  }, [selectedMetric, measurements]);
+    return suggestGoals(measurements, selectedMetric, metricTypes?.[selectedMetric]);
+  }, [selectedMetric, measurements, metricTypes]);
 
   // Validate target value
   const validateTargetValue = (value: string): string | null => {
@@ -225,7 +228,7 @@ export function GoalCreationWizard({
 
   // Handle form submission
   const handleSubmit = async () => {
-    if (!selectedMetric || !selectedGoalType || !currentPerformance) return;
+    if (!selectedMetric || !selectedGoalType || !currentPerformance || metricTypesLoading) return;
 
     setIsSubmitting(true);
 
@@ -485,7 +488,7 @@ export function GoalCreationWizard({
               <Button
                 className="flex-1"
                 onClick={handleSubmit}
-                disabled={!isFormValid || isSubmitting}
+                disabled={!isFormValid || isSubmitting || metricTypesLoading}
               >
                 {isSubmitting ? (
                   <>

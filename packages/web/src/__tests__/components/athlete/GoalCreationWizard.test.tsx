@@ -425,4 +425,62 @@ describe('GoalCreationWizard', () => {
       );
     });
   });
+
+  describe('persisted improvement target', () => {
+    async function fillImprovementGoal(user: ReturnType<typeof userEvent.setup>, metric: RegExp) {
+      await user.click(screen.getByRole('button', { name: metric }));
+      await user.click(screen.getByText(/improvement percentage/i));
+      await user.type(screen.getByLabelText(/improvement percentage/i), '10');
+      const futureDate = new Date();
+      futureDate.setMonth(futureDate.getMonth() + 3);
+      const dateInput = screen.getByLabelText(/target date/i);
+      await user.clear(dateInput);
+      await user.type(dateInput, futureDate.toISOString().split('T')[0]);
+    }
+
+    const dashMeasurements = [
+      { metric: 'DASH_10YD', value: 2.0, date: '2024-01-01' },
+      { metric: 'DASH_10YD', value: 1.9, date: '2024-02-01' },
+    ];
+
+    it('saves the fastest time as the baseline for a built-in time with no metric types (DASH_10YD)', async () => {
+      const onCreateGoal = vi.fn();
+      const user = userEvent.setup();
+      render(
+        <GoalCreationWizard
+          measurements={dashMeasurements}
+          availableMetrics={['DASH_10YD']}
+          metricTypes={undefined}
+          onCreateGoal={onCreateGoal}
+          onCancel={vi.fn()}
+        />
+      );
+
+      await fillImprovementGoal(user, /DASH_10YD/);
+      await user.click(screen.getByRole('button', { name: /create goal/i }));
+
+      expect(onCreateGoal).toHaveBeenCalledWith(
+        expect.objectContaining({ metric: 'DASH_10YD', targetValue: 10, baselineValue: 1.9 })
+      );
+    });
+
+    it('keeps Create Goal disabled while the metric list is loading', async () => {
+      const onCreateGoal = vi.fn();
+      const user = userEvent.setup();
+      render(
+        <GoalCreationWizard
+          measurements={dashMeasurements}
+          availableMetrics={['DASH_10YD']}
+          metricTypes={{}}
+          metricTypesLoading
+          onCreateGoal={onCreateGoal}
+          onCancel={vi.fn()}
+        />
+      );
+
+      await fillImprovementGoal(user, /DASH_10YD/);
+
+      expect(screen.getByRole('button', { name: /create goal/i })).toBeDisabled();
+    });
+  });
 });

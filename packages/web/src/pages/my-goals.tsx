@@ -60,7 +60,7 @@ export default function MyGoalsPage() {
   const createGoal = useCreateGoal();
   const { metrics } = useAvailableMetrics();
   const durationMetrics = metrics.filter((m) => m.displayFormat === 'duration').map((m) => m.code);
-  const { types: metricTypes } = useMetricLabels();
+  const { types: metricTypes, isLoading: metricTypesLoading } = useMetricLabels();
 
   // Filter completed/archived goals
   const completedGoals = allGoals.filter(
@@ -218,6 +218,7 @@ export default function MyGoalsPage() {
             availableMetrics={dashboardData?.availableMetrics || []}
             durationMetrics={durationMetrics}
             metricTypes={metricTypes}
+            metricTypesLoading={metricTypesLoading}
             onCreateGoal={handleCreateGoal}
             onCancel={() => setShowGoalWizard(false)}
           />
