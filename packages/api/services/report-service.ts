@@ -23,7 +23,7 @@ import {
   type ReportBenchmark,
 } from '@shared/schema';
 import { isUnder13OrUnknownDob } from '@shared/coppa-utils';
-import { eq, and, gte, lte, inArray, desc, sql } from 'drizzle-orm';
+import { eq, and, or, isNull, gte, lte, inArray, desc, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { quantileRank, median, mean, min, max, standardDeviation } from 'simple-statistics';
 import { BaseService } from './base-service';
@@ -904,7 +904,8 @@ export class ReportService extends BaseService {
     // Get selected site benchmark IDs from report config
     const selectedSiteBenchmarkIds = reportConfig.benchmarks?.site || [];
 
-    // Get site benchmarks enabled for this organization AND selected in the report
+    // Site benchmarks are global data, so no per-organization enablement row is required: the wizard's
+    // benchmark-set mode selects ids that have none (sets use opt-out visibility)
     let siteBenchmarksList: Array<{ benchmark: typeof siteBenchmarks.$inferSelect }> = [];
     if (selectedSiteBenchmarkIds.length > 0) {
       siteBenchmarksList = await db
@@ -912,19 +913,20 @@ export class ReportService extends BaseService {
           benchmark: siteBenchmarks,
         })
         .from(siteBenchmarks)
-        .innerJoin(
+        .leftJoin(
           organizationBenchmarks,
           and(
             eq(organizationBenchmarks.benchmarkId, siteBenchmarks.id),
             eq(organizationBenchmarks.benchmarkType, 'site'),
-            eq(organizationBenchmarks.organizationId, organizationId),
-            eq(organizationBenchmarks.isEnabled, true)
+            eq(organizationBenchmarks.organizationId, organizationId)
           )
         )
         .where(
           and(
             eq(siteBenchmarks.isActive, true),
-            inArray(siteBenchmarks.id, selectedSiteBenchmarkIds)
+            inArray(siteBenchmarks.id, selectedSiteBenchmarkIds),
+            // No row = visible (set opt-out model); an explicit disable still hides it
+            or(isNull(organizationBenchmarks.id), eq(organizationBenchmarks.isEnabled, true))
           )
         );
     }
@@ -1849,19 +1851,20 @@ export class ReportService extends BaseService {
           benchmark: siteBenchmarks,
         })
         .from(siteBenchmarks)
-        .innerJoin(
+        .leftJoin(
           organizationBenchmarks,
           and(
             eq(organizationBenchmarks.benchmarkId, siteBenchmarks.id),
             eq(organizationBenchmarks.benchmarkType, 'site'),
-            eq(organizationBenchmarks.organizationId, organizationId),
-            eq(organizationBenchmarks.isEnabled, true)
+            eq(organizationBenchmarks.organizationId, organizationId)
           )
         )
         .where(
           and(
             eq(siteBenchmarks.isActive, true),
-            inArray(siteBenchmarks.id, benchmarkConfig.site)
+            inArray(siteBenchmarks.id, benchmarkConfig.site),
+            // No row = visible (set opt-out model); an explicit disable still hides it
+            or(isNull(organizationBenchmarks.id), eq(organizationBenchmarks.isEnabled, true))
           )
         );
 
