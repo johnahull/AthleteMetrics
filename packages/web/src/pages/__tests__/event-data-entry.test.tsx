@@ -505,6 +505,36 @@ describe('EventDataEntry', () => {
       expect(mutateBulk).toHaveBeenCalledTimes(1);
     });
 
+    it('sends an m:ss cell of a time metric as seconds and shows it clean after the refetch', async () => {
+      const user = userEvent.setup();
+      eventMetricsState = [metric('MILE_RUN', { metricDetails: { label: 'Mile Run', unit: 's', category: 'endurance', displayFormat: 'duration' } })];
+      measurementsState.data = [saved('m1', 'ath-1', 'MILE_RUN', 420)];
+      mutateBulk.mockImplementation(async () => {
+        measurementsState = { ...measurementsState, data: [saved('m1', 'ath-1', 'MILE_RUN', 402.5)] };
+        return ok([], [{ ...saved('m1', 'ath-1', 'MILE_RUN', 402.5), index: 0 }]);
+      });
+      render(<EventDataEntry />);
+
+      await user.clear(verticalJumpCell('Jordan Lee'));
+      await user.type(verticalJumpCell('Jordan Lee'), '6:42.5');
+      expect(verticalJumpCell('Jordan Lee')).not.toHaveAttribute('aria-invalid', 'true');
+      await user.click(saveButton());
+
+      await waitFor(() => expect(refetchMeasurements).toHaveBeenCalled());
+      expect(sentItems()).toEqual([
+        { userId: 'ath-1', metric: 'MILE_RUN', value: 402.5, date: '2026-03-10T00:00:00.000Z', replaceMeasurementId: 'm1' },
+      ]);
+      expect(saveButton()).toBeDisabled();
+    });
+
+    it('flags m:ss typed into a decimal metric as not a number', async () => {
+      const user = userEvent.setup();
+      render(<EventDataEntry />);
+      await user.type(verticalJumpCell('Jordan Lee'), '6:42');
+      expect(verticalJumpCell('Jordan Lee')).toHaveAttribute('aria-invalid', 'true');
+      expect(saveButton()).toBeDisabled();
+    });
+
     it('appends a retyped multi-trial cell as a new trial and shows the trial count', async () => {
       const user = userEvent.setup();
       measurementsState.data = [saved('t2', 'ath-1', 'VERTICAL_JUMP', 30), saved('t1', 'ath-1', 'VERTICAL_JUMP', 28)];

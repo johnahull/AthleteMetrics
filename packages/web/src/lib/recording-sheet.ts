@@ -7,6 +7,7 @@ import Papa from "papaparse";
 import { format as formatDate } from "date-fns";
 import { MQI_PATTERNS, MQI_TRANSITIONS, MQI_TOTAL_CODE, MQI_TRANSITION_TOTAL_CODE } from "@shared/mqi-entry-schema";
 import type { MetricValueBounds } from "@shared/measurement-value-validation";
+import { formatDurationExact } from "@shared/duration-format";
 import { getEventMetricDisplay, type EventMetricWithSiteDetails } from "@/lib/event-metric-display";
 import { toCalendarDate } from "@/utils/date-utils";
 
@@ -26,6 +27,8 @@ export interface SheetMetric {
   unit?: string;
   /** Value bounds for the import check; set for Movement Quality scores (0 is a valid score) */
   bounds?: MetricValueBounds;
+  /** Time metric: written and read as m:ss, stored in seconds */
+  duration?: boolean;
 }
 
 /** Movement Quality scores: whole numbers 0-3 (used when the event metric carries no bounds) */
@@ -78,8 +81,11 @@ export interface RecordingSheet {
   athletes: SheetAthlete[];
 }
 
-/** A cell read from an uploaded file: its text, or why it cannot be used (a date, a formula error) */
-export type SheetCell = string | { error: string };
+/**
+ * A cell read from an uploaded file: its text, a time-of-day cell (seconds after midnight, Excel's reading of
+ * 7:15 typed into a General cell), or why it cannot be used (a date, a formula error)
+ */
+export type SheetCell = string | { error: string } | { time: number };
 
 /** Why a metric gets no sheet column, or null when it can be typed on the sheet */
 export function sheetExclusionReason(metric: EventMetricWithSiteDetails): string | null {
@@ -116,11 +122,22 @@ export function buildRecordingSheet(input: {
         .filter((m) => sheetExclusionReason(m) === null && !MQ_SCORE_CODES.has(m.metricCode))
         .map((m) => {
           const { code, label, unit } = getEventMetricDisplay(m);
-          return { code, label, unit };
+          return m.metricDetails?.displayFormat === "duration" ? { code, label, unit: "mm:ss", duration: true } : { code, label, unit };
         }),
       ...sheetMqMetrics(input.metrics.map((m) => m.metricCode), input.metrics),
     ],
-    athletes: input.athletes,
+    // Saved values of time metrics are pre-printed as m:ss
+    athletes: input.athletes.map((a) => {
+      if (!a.values) return a;
+      const values = { ...a.values };
+      input.metrics.forEach(({ metricCode, metricDetails }) => {
+        const v = values[metricCode];
+        if (metricDetails?.displayFormat === "duration" && v && Number.isFinite(Number(v))) {
+          values[metricCode] = formatDurationExact(Number(v));
+        }
+      });
+      return { ...a, values };
+    }),
   };
 }
 
@@ -174,8 +191,11 @@ export async function recordingSheetToXlsx(sheet: RecordingSheet): Promise<Uint8
   worksheet.getRow(headerRow).font = { bold: true };
   worksheet.getColumn(1).width = 38;
   worksheet.getColumn(2).width = 28;
-  sheet.metrics.forEach((_, i) => {
-    worksheet.getColumn(i + 3).width = 18;
+  sheet.metrics.forEach((metric, i) => {
+    const column = worksheet.getColumn(i + 3);
+    column.width = 18;
+    // Text, so Excel keeps 7:15 as typed instead of turning it into 7 hours 15 minutes
+    if (metric.duration) column.numFmt = "@";
   });
   for (let r = headerRow + 1; r <= worksheet.rowCount; r++) {
     worksheet.getCell(r, 1).font = { color: { argb: "FF808080" } };
@@ -254,9 +274,17 @@ export function parseCsvSheet(text: string): SheetCell[][] {
   return rows;
 }
 
+/** Day 0 of Excel's 1900 date system (as exceljs reads it) and of the 1904 system (Mac workbooks) */
+const EXCEL_DAY_ZERO = [Date.UTC(1899, 11, 30), Date.UTC(1904, 0, 1)];
+
 function readXlsxValue(value: unknown): SheetCell {
   if (value === null || value === undefined) return "";
-  if (value instanceof Date) return { error: "A date is not a result value" };
+  if (value instanceof Date) {
+    // A time with no date is day 0 plus the time; exceljs builds it in UTC
+    const day = Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate());
+    if (EXCEL_DAY_ZERO.includes(day)) return { time: (value.getTime() - day) / 1000 };
+    return { error: "A date is not a result value" };
+  }
   if (typeof value !== "object") return String(value);
   const v = value as Record<string, unknown>;
   if ("formula" in v || "sharedFormula" in v) {

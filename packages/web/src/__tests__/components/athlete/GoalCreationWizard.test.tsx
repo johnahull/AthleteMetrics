@@ -355,4 +355,39 @@ describe('GoalCreationWizard', () => {
       expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
     });
   });
+
+  describe('time (mm:ss) metrics', () => {
+    it('takes a target value as m:ss and creates the goal in seconds', async () => {
+      const onCreateGoal = vi.fn();
+      const user = userEvent.setup();
+      render(
+        <GoalCreationWizard
+          measurements={[
+            { metric: 'MILE_RUN', value: 420, date: '2024-01-01' },
+            { metric: 'MILE_RUN', value: 410, date: '2024-02-01' },
+          ]}
+          availableMetrics={['MILE_RUN']}
+          durationMetrics={['MILE_RUN']}
+          onCreateGoal={onCreateGoal}
+          onCancel={vi.fn()}
+        />
+      );
+
+      await user.click(screen.getByRole('button', { name: /MILE_RUN/ }));
+      await user.click(screen.getByText(/target value/i));
+      const targetInput = screen.getByLabelText(/target value/i);
+      expect(targetInput).toHaveAttribute('type', 'text');
+      await user.type(targetInput, '7:15');
+
+      const futureDate = new Date();
+      futureDate.setMonth(futureDate.getMonth() + 3);
+      const dateStr = futureDate.toISOString().split('T')[0];
+      const dateInput = screen.getByLabelText(/target date/i);
+      await user.clear(dateInput);
+      await user.type(dateInput, dateStr);
+      await user.click(screen.getByRole('button', { name: /create goal/i }));
+
+      expect(onCreateGoal).toHaveBeenCalledWith(expect.objectContaining({ metric: 'MILE_RUN', targetValue: 435 }));
+    });
+  });
 });

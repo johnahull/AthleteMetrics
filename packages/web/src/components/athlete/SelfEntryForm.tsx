@@ -30,6 +30,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
+import { DurationInput } from "@/components/duration-input";
 import { isMovementQualityMetric } from "@shared/peer-comparison-exclusions";
 
 // Form validation schema
@@ -100,6 +101,7 @@ export function SelfEntryForm({
   // Watch metric field outside render to avoid unnecessary re-renders
   const selectedMetricCode = useWatch({ control: form.control, name: 'metric' });
   const selectedMetric = selectableMetrics.find(m => m.code === selectedMetricCode);
+  const isDuration = selectedMetric?.displayFormat === 'duration';
 
   const handleSubmit = async (data: SelfEntryFormData) => {
     await onSubmit({
@@ -164,9 +166,19 @@ export function SelfEntryForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>
-                  Value{selectedMetric?.unit ? ` (${selectedMetric.unit})` : ''}
+                  Value{isDuration ? ' (m:ss)' : selectedMetric?.unit ? ` (${selectedMetric.unit})` : ''}
                 </FormLabel>
                 <FormControl>
+                  {isDuration ? (
+                    <DurationInput
+                      name={field.name}
+                      ref={field.ref}
+                      onBlur={field.onBlur}
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      disabled={isSubmitting}
+                    />
+                  ) : (
                   <Input
                     type="number"
                     step="0.01"
@@ -179,6 +191,7 @@ export function SelfEntryForm({
                     }}
                     value={field.value ?? ''}
                   />
+                  )}
                 </FormControl>
                 <FormMessage />
               </FormItem>

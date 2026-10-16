@@ -15,6 +15,7 @@ import type {
 import { validateFormula, detectCircularDependencies } from "./formula-service";
 import { getDerivedMetricCalculator } from "./derived-metric-calculator";
 import { db } from "../db";
+import { violatesDurationUnit, DURATION_UNIT_ERROR } from "@shared/duration-format";
 
 export interface SiteMetricFilters {
   includeInactive?: boolean;
@@ -190,6 +191,8 @@ export class MetricService extends BaseService {
         }
       }
 
+      if (violatesDurationUnit(validatedData)) throw new Error(DURATION_UNIT_ERROR);
+
       // Create metric
       await this.validateAnchorMetric(validatedData.calculationConfig?.anchorMetric, validatedData.dependentMetrics ?? []);
 
@@ -311,6 +314,16 @@ export class MetricService extends BaseService {
           dependents = stored && stored.length > 0 ? stored : null;
         }
         await this.validateAnchorMetric(validatedData.calculationConfig.anchorMetric, dependents);
+      }
+
+      if (validatedData.displayFormat !== undefined || validatedData.unit !== undefined) {
+        const stored = await this.storage.getSiteMetric(code);
+        if (stored && violatesDurationUnit({
+          unit: validatedData.unit ?? stored.unit,
+          displayFormat: validatedData.displayFormat ?? stored.displayFormat,
+        })) {
+          throw new Error(DURATION_UNIT_ERROR);
+        }
       }
 
       // Update metric

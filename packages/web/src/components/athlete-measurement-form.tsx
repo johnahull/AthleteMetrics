@@ -11,6 +11,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { insertMeasurementSchema, type InsertMeasurement } from "@shared/schema";
 import { Save } from "lucide-react";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
+import { DurationInput } from "@/components/duration-input";
 import { useAuth } from "@/lib/auth";
 import { isMovementQualityMetric } from "@shared/peer-comparison-exclusions";
 import { PairedInputFields } from "@/components/measurement/PairedInputFields";
@@ -103,6 +104,7 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
 
   const metric = form.watch("metric");
   const selectedMetric = availableMetrics.find((m) => m.code === metric);
+  const isDuration = selectedMetric?.displayFormat === "duration";
   // Get unit from metric config dynamically
   const units = availableMetrics.find(m => m.code === metric)?.unit || "";
 
@@ -213,6 +215,17 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
                     </FormLabel>
                     <div className="flex">
                       <FormControl>
+                        {isDuration ? (
+                          <DurationInput
+                            name={field.name}
+                            ref={field.ref}
+                            onBlur={field.onBlur}
+                            value={field.value}
+                            onValueChange={field.onChange}
+                            disabled={createMeasurementMutation.isPending}
+                            data-testid="input-measurement-value"
+                          />
+                        ) : (
                         <Input
                           {...field}
                           type="number"
@@ -224,8 +237,9 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
                           onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
                           value={field.value || ''}
                         />
+                        )}
                       </FormControl>
-                      {units && (
+                      {units && !isDuration && (
                         <div className="px-4 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600 text-sm">
                           {units}
                         </div>

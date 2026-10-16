@@ -5,6 +5,14 @@
 
 export type DisplayFormat = 'decimal' | 'duration';
 
+/** Duration metrics are stored in seconds, so their unit must be 's'. */
+export const DURATION_UNIT_ERROR = "Unit 's' is required for duration (mm:ss) metrics";
+
+/** True when a metric (the existing row merged with a patch) is duration with a unit other than 's'. */
+export function violatesDurationUnit(metric: { unit?: string | null; displayFormat?: DisplayFormat | null }): boolean {
+  return metric.displayFormat === 'duration' && metric.unit !== 's';
+}
+
 const PLAIN_SECONDS = /^\d+(\.\d+)?$/;
 const MIN_SEC = /^(\d+):([0-5]\d)(\.\d+)?$/;
 const HOUR_MIN_SEC = /^(\d+):([0-5]\d):([0-5]\d)(\.\d+)?$/;
@@ -41,6 +49,11 @@ export function formatDuration(seconds: number, decimals: number): string {
   return hours > 0
     ? `${sign}${hours}:${String(minutes).padStart(2, '0')}:${secText}`
     : `${sign}${minutes}:${secText}`;
+}
+
+/** m:ss with up to 3 decimals and no trailing zeros (402.5 -> "6:42.5", 435 -> "7:15"), for editing: never rounds a stored value */
+export function formatDurationExact(seconds: number): string {
+  return formatDuration(seconds, 3).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
 }
 
 export interface MeasurementFormat {

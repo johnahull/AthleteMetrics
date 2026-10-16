@@ -9,6 +9,8 @@ import { z } from "zod";
 import { requireAuth, requireOrganizationAccess, AuthenticatedRequest } from "../middleware";
 import { getCustomOrgMetricService } from "../services/custom-org-metric-service";
 import { rateLimit } from "express-rate-limit";
+import { displayFormatEnum } from "@shared/schema";
+import { DURATION_UNIT_ERROR } from "@shared/duration-format";
 
 // Rate limiters for metric operations
 const createMetricLimiter = rateLimit({
@@ -44,6 +46,7 @@ const createCustomMetricSchema = z.object({
   validationMin: z.number().optional(),
   validationMax: z.number().optional(),
   decimalPrecision: z.number().int().min(0).max(10).optional(),
+  displayFormat: z.enum(displayFormatEnum).default('decimal'),
   sportAssociations: z.array(z.string()).optional(),
   isDerived: z.boolean().optional(),
   formula: z.string().max(1000).optional(),
@@ -255,6 +258,9 @@ export function registerCustomOrgMetricRoutes(app: Express) {
           }
           if (error.message.includes('measurements exist')) {
             return res.status(409).json({ error: error.message });
+          }
+          if (error.message === DURATION_UNIT_ERROR) {
+            return res.status(400).json({ error: error.message });
           }
         }
         res.status(500).json({ error: "Failed to update custom metric" });

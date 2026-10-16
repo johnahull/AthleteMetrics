@@ -4,6 +4,7 @@
  * Nothing is saved here: the page applies the plan as unsaved cells and saves through the grid.
  */
 import { validateMeasurementValue } from "@shared/measurement-value-validation";
+import { formatDurationExact, parseDuration } from "@shared/duration-format";
 import {
   ATHLETE_NAME_HEADER,
   cellText,
@@ -156,18 +157,34 @@ export function planSheetImport(input: {
       const cell = row[col];
       const cellError = (raw: string, message: string) =>
         plan.cellErrors.push({ row: number, userId: id, metricCode: metric.code, raw, message });
-      if (typeof cell === "object") return cellError("", cell.error);
-      const raw = cellText(cell);
+      let raw: string;
+      if (typeof cell === "object") {
+        if ("error" in cell) return cellError("", cell.error);
+        if (!metric.duration) return cellError("", "A date is not a result value");
+        // Excel reads 7:15 typed into a General cell as 7 hours 15 minutes
+        if (cell.time >= 3600) {
+          return cellError(
+            formatDurationExact(cell.time),
+            "Excel read this time as hours:minutes. To enter 7 min 15 s, format the column as Text or type 0:07:15.",
+          );
+        }
+        raw = formatDurationExact(cell.time);
+      } else {
+        raw = cellText(cell);
+      }
       if (raw === "" || raw === "-") return; // no value: never clears a saved one
       if (raw.includes(",")) return cellError(raw, "Use a dot for decimals and no thousands separators (for example 4.52).");
-      const invalid = validateMeasurementValue(raw, metric.bounds, metric.code);
+      // A time column takes m:ss or plain seconds; everything is compared in seconds
+      const seconds = metric.duration ? parseDuration(raw) : Number(raw);
+      if (seconds === null) return cellError(raw, "Not a time: use m:ss (for example 6:42.5) or seconds.");
+      const invalid = validateMeasurementValue(metric.duration ? String(seconds) : raw, metric.bounds, metric.code);
       if (invalid) return cellError(raw, invalid);
 
       const savedValue = athlete.saved[metric.code];
       if (savedValue === undefined) {
         plan.cells.push({ userId: id, metricCode: metric.code, value: raw, kind: "imported" });
       } else {
-        const kind = Number(raw) === savedValue ? "unchanged" : "conflict";
+        const kind = seconds === savedValue ? "unchanged" : "conflict";
         plan.cells.push({ userId: id, metricCode: metric.code, value: raw, kind, savedValue });
       }
     });

@@ -424,3 +424,54 @@ describe('downloadRecordingSheet', () => {
     expect(revoke).toHaveBeenCalledWith('blob:sheet');
   });
 });
+
+describe('time (mm:ss) metrics', () => {
+  const mile = metric('MILE_RUN', { label: 'Mile Run', unit: 's', displayFormat: 'duration' });
+  const event = { id: 'ev-1', name: 'Spring Screen', startDate: '2026-03-10T00:00:00.000Z' };
+
+  it('gives a duration metric an (mm:ss) column and pre-prints saved seconds as m:ss', () => {
+    const sheet = buildRecordingSheet({
+      event,
+      metrics: [mile, metric('FLY10_TIME', { label: '10-Yard Fly' })],
+      athletes: [{ userId: 'ath-1', name: 'Jordan Lee', values: { MILE_RUN: '402.5', FLY10_TIME: '1.65' } }],
+    });
+    expect(sheet.metrics[0]).toEqual({ code: 'MILE_RUN', label: 'Mile Run', unit: 'mm:ss', duration: true });
+    expect(metricHeader(sheet.metrics[0])).toBe('Mile Run (mm:ss) [MILE_RUN]');
+    expect(sheet.athletes[0].values).toEqual({ MILE_RUN: '6:42.5', FLY10_TIME: '1.65' });
+  });
+
+  it('writes duration columns as Text in the XLSX so Excel does not turn 7:15 into a time of day', async () => {
+    const sheet = buildRecordingSheet({
+      event,
+      metrics: [mile, metric('FLY10_TIME', { label: '10-Yard Fly' })],
+      athletes: [{ userId: 'ath-1', name: 'Jordan Lee', values: { MILE_RUN: '435' } }, { userId: 'ath-2', name: 'Sam Park' }],
+    });
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load((await recordingSheetToXlsx(sheet)) as unknown as ArrayBuffer);
+    const ws = wb.worksheets[0];
+    expect(ws.getCell('C6').value).toBe('7:15');
+    expect(ws.getCell('C6').numFmt).toBe('@');
+    expect(ws.getCell('C7').numFmt).toBe('@'); // an empty cell to be typed in
+    expect(ws.getColumn(3).numFmt).toBe('@');
+    expect(ws.getCell('D6').numFmt).not.toBe('@');
+  });
+
+  it('reads a time-of-day cell as a time (both date systems) and still flags a real date', async () => {
+    for (const date1904 of [false, true]) {
+      const wb = new ExcelJS.Workbook();
+      wb.properties.date1904 = date1904;
+      const ws = wb.addWorksheet('Sheet');
+      const time = ws.getCell('A1');
+      time.value = 435.5 / 86400;
+      time.numFmt = 'mm:ss.0';
+      const hours = ws.getCell('B1');
+      hours.value = 7.25 / 24;
+      hours.numFmt = 'h:mm';
+      ws.getCell('C1').value = new Date(Date.UTC(2026, 2, 10));
+      const rows = await parseXlsxSheet((await wb.xlsx.writeBuffer()) as ArrayBuffer);
+      expect(rows[0][0], `date1904=${date1904}`).toEqual({ time: 435.5 });
+      expect(rows[0][1], `date1904=${date1904}`).toEqual({ time: 26100 });
+      expect(rows[0][2]).toEqual({ error: expect.stringMatching(/date/i) });
+    }
+  });
+});
