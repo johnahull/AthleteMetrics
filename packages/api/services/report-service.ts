@@ -278,13 +278,23 @@ export class ReportService extends BaseService {
    * looked up now, never stored, so old snapshots and later category edits both apply.
    */
   async orderForResponse<T>(data: T, organizationId?: string): Promise<T> {
-    const type = (data as { reportType?: string } | null)?.reportType;
-    if (type !== 'individual' && type !== 'team') return data;
-    const codes = (orderReportData(data as any, {}).metricGroups as MetricGroup[]).flatMap((g) => g.codes);
-    const { categories } = codes.length > 0
-      ? await this.getMetricLabelsAndUnits(codes, organizationId)
+    return (await this.orderManyForResponse([data], organizationId))[0];
+  }
+
+  /** orderForResponse for several reports of one organization, with a single category lookup. */
+  async orderManyForResponse<T>(items: T[], organizationId?: string): Promise<T[]> {
+    const isGeneric = (d: unknown) => {
+      const type = (d as { reportType?: string } | null)?.reportType;
+      return type === 'individual' || type === 'team';
+    };
+    const codes = new Set<string>();
+    for (const d of items) {
+      if (isGeneric(d)) (orderReportData(d as any, {}).metricGroups as MetricGroup[]).forEach(g => g.codes.forEach(c => codes.add(c)));
+    }
+    const { categories } = codes.size > 0
+      ? await this.getMetricLabelsAndUnits([...codes], organizationId)
       : { categories: {} };
-    return orderReportData(data as any, categories) as T;
+    return items.map(d => (isGeneric(d) ? orderReportData(d as any, categories) as T : d));
   }
 
   /**

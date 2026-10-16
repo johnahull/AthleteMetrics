@@ -1132,10 +1132,8 @@ export function registerReportRoutes(app: Express) {
           .where(eq(reportSnapshots.reportId, reportId))
           .orderBy(desc(reportSnapshots.createdAt));
 
-        res.json(await Promise.all(snapshots.map(async (s) => ({
-          ...s,
-          snapshotData: await reportService.orderForResponse(s.snapshotData, report.organizationId),
-        }))));
+        const ordered = await reportService.orderManyForResponse(snapshots.map((s) => s.snapshotData), report.organizationId);
+        res.json(snapshots.map((s, i) => ({ ...s, snapshotData: ordered[i] })));
       } catch (error) {
         console.error("Error fetching snapshots:", error);
         res.status(500).json({ message: "Failed to fetch snapshots" });

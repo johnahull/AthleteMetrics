@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { ReportService } from '../report-service';
 import { db } from '../../db';
 import { organizations, siteMetrics, customOrgMetrics } from '@shared/schema';
@@ -47,6 +47,23 @@ describe('ReportService metric categories and ordering', () => {
     const out: any = await service.orderForResponse(data, orgId);
     expect(Object.keys(out.athlete.measurements)).toEqual(['DASH_10YD', siteCode, customCode, 'ZZ_UNKNOWN']);
     expect(out.metricGroups.map((g: any) => g.group)).toEqual(['speed', 'power', 'strength', 'other']);
+  });
+
+  it('orderManyForResponse orders each report with one category lookup', async () => {
+    const mk = (codes: string[]) => ({
+      reportType: 'individual',
+      athlete: { measurements: Object.fromEntries(codes.map((c) => [c, { value: 1 }])), percentiles: {} },
+    });
+    const spy = vi.spyOn(service, 'getMetricLabelsAndUnits');
+    const [a, b, e]: any[] = await service.orderManyForResponse(
+      [mk([customCode, 'DASH_10YD']), mk([siteCode, 'ZZ_UNKNOWN']), { reportType: 'eval' }],
+      orgId,
+    );
+    expect(spy).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
+    expect(Object.keys(a.athlete.measurements)).toEqual(['DASH_10YD', customCode]);
+    expect(Object.keys(b.athlete.measurements)).toEqual([siteCode, 'ZZ_UNKNOWN']);
+    expect(e).toEqual({ reportType: 'eval' });
   });
 
   it('orderForResponse leaves eval and null data untouched', async () => {
