@@ -1029,7 +1029,7 @@ export function registerReportRoutes(app: Express) {
           return res.status(400).json({ message: "Invalid report type" });
         }
 
-        res.json(reportData);
+        res.json(await reportService.orderForResponse(reportData, report.organizationId));
       } catch (error) {
         console.error("Error generating report:", error);
         res.status(500).json({
@@ -1130,7 +1130,10 @@ export function registerReportRoutes(app: Express) {
           .where(eq(reportSnapshots.reportId, reportId))
           .orderBy(desc(reportSnapshots.createdAt));
 
-        res.json(snapshots);
+        res.json(await Promise.all(snapshots.map(async (s) => ({
+          ...s,
+          snapshotData: await reportService.orderForResponse(s.snapshotData, report.organizationId),
+        }))));
       } catch (error) {
         console.error("Error fetching snapshots:", error);
         res.status(500).json({ message: "Failed to fetch snapshots" });
@@ -1197,7 +1200,15 @@ export function registerReportRoutes(app: Express) {
       // helper guards the public PDF-export routes so they cannot diverge.
       if (!(await enforcePublicSnapshotAccess(req, res, snapshot))) return;
 
-      res.json(snapshot);
+      const [owner] = await db
+        .select({ organizationId: reports.organizationId })
+        .from(reports)
+        .where(eq(reports.id, snapshot.reportId))
+        .limit(1);
+      res.json({
+        ...snapshot,
+        snapshotData: await reportService.orderForResponse(snapshot.snapshotData, owner?.organizationId),
+      });
     } catch (error) {
       console.error("Error fetching public snapshot:", error);
       res.status(500).json({
@@ -3951,6 +3962,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     if (!isRenderableEvalModel(reportData.model)) throw new Error('Eval report model is unavailable');
     return renderEvalReportPdf(reportData.model, org);
   }
+  reportData = await new ReportService().orderForResponse(reportData, report.organizationId);
 
   const doc = new jsPDF({ compress: true });
   const isVisual = format === 'visual';
