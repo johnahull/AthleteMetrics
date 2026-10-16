@@ -5,6 +5,7 @@
  * device data imports (Dashr, OVR, etc.)
  */
 
+import { randomUUID } from 'crypto';
 import { db } from '../db';
 import {
   measurements,
@@ -428,6 +429,8 @@ export class DeviceImportService {
 
         for (const drill of previewAthlete.drills) {
           const date = defaultDate;
+          // One id for the drill row and its split rows: derived metrics can pair splits within one run
+          const runId = randomUUID();
 
           // Check for duplicates via in-memory lookup (pre-fetched above).
           // Only device-imported measurements are considered — manual entries are never touched.
@@ -459,6 +462,9 @@ export class DeviceImportService {
                   ? eq(measurements.eventId, batch.eventId)
                   : isNull(measurements.eventId),
                 sql`${measurements.importSource} IS NOT NULL`,
+                // A split code shared by two drills (DASH_10YD in the 20 and 30 yd dashes) must not wipe
+                // the rows an earlier drill of this same batch just inserted
+                or(isNull(measurements.importBatchId), ne(measurements.importBatchId, batchId)),
               ))
               .returning({ id: measurements.id });
             replaced += deleted.length;
@@ -490,6 +496,7 @@ export class DeviceImportService {
             teamContextAuto: false,
             calculationMetadata: {
               formula: 'direct_import',
+              runId,
               sourceValues: {},
               calculatedAt: new Date().toISOString(),
               triggeredBy: {
@@ -535,6 +542,7 @@ export class DeviceImportService {
                 calculationMetadata: {
                   formula: 'direct_import_split',
                   parentMetric: drill.metric,
+                  runId,
                   sourceValues: {},
                   calculatedAt: new Date().toISOString(),
                   triggeredBy: {
