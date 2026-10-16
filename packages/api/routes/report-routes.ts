@@ -3952,7 +3952,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     return renderEvalReportPdf(reportData.model, org);
   }
 
-  const doc = new jsPDF();
+  const doc = new jsPDF({ compress: true });
   const isVisual = format === 'visual';
 
   // Color schemes — use org branding colors if available
@@ -4029,7 +4029,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
   }
 
   // --- Header with optional logo and branding ---
-  let headerY = 20;
+  let headerY = 26; // below the 20pt title baseline (y=20), so "Generated:" does not overlap it
 
   if (org?.brandLogoUrl && reportData.reportType === 'team') {
     const logoData = await fetchLogoBase64(org.brandLogoUrl);
