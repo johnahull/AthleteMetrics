@@ -1063,6 +1063,8 @@ export class AnalyticsService {
     const metricMap = new Map<string, { label: string; metricType: string }>();
     metricsMetadata.forEach(m => metricMap.set(m.code, { label: m.label, metricType: m.metricType }));
 
+    const athleteIdList = sql.join(athleteIds.map(id => sql`${id}`), sql`, `);
+
     // Use SQL window functions to calculate decline in database
     const decliningQuery = sql<{
       athleteId: string;
@@ -1082,7 +1084,7 @@ export class AnalyticsService {
         FROM measurements m
         LEFT JOIN site_metrics sm ON sm.code = m.metric
         LEFT JOIN custom_org_metrics com ON com.code = m.metric AND com.organization_id = m.organization_id
-        WHERE m.user_id = ANY(${sql.raw(`ARRAY[${athleteIds.map(id => `'${id}'`).join(',')}]::text[]`)})
+        WHERE m.user_id IN (${athleteIdList})
           AND m.is_verified = true
       ),
       ranked_measurements AS (
@@ -1157,7 +1159,7 @@ export class AnalyticsService {
           MAX(date) as last_date,
           (CURRENT_DATE - MAX(date))::int as days_since
         FROM measurements
-        WHERE user_id = ANY(${sql.raw(`ARRAY[${athleteIds.map(id => `'${id}'`).join(',')}]::text[]`)})
+        WHERE user_id IN (${athleteIdList})
           AND is_verified = true
         GROUP BY user_id
       )
