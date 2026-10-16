@@ -24,7 +24,6 @@ import {
   teams,
   auditLogs,
   userOrganizations,
-  siteMetrics,
   MAX_INSIGHTS_LENGTH,
   type Report,
 } from "@shared/schema";
@@ -42,6 +41,7 @@ import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from "../utils/report-utils";
+import { getMetricTypes } from "../utils/metric-type";
 import { getPgErrorCode, PG_UNIQUE_VIOLATION } from "../lib/pg-error";
 import { calculateTierDistributions } from "@shared/benchmark-utils";
 import { requireRole } from "../permissions/middleware";
@@ -5040,15 +5040,8 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
       // Team report metrics (limited to MAX_METRICS)
       const statsToProcess = typedReportData.teamStatistics.slice(0, MAX_METRICS);
 
-      // Batch query metricType for all codes to avoid N+1 DB queries
-      const teamMetricCodes = statsToProcess.map(s => s.metric);
-      const teamMetricTypes = teamMetricCodes.length > 0
-        ? await db
-            .select({ code: siteMetrics.code, metricType: siteMetrics.metricType })
-            .from(siteMetrics)
-            .where(inArray(siteMetrics.code, teamMetricCodes))
-        : [];
-      const teamLowerIsBetterMap = new Map(teamMetricTypes.map(m => [m.code, m.metricType === 'lower_is_better']));
+      // One batch lookup (site metric first, then the report org's custom metric) to avoid N+1 DB queries
+      const teamMetricTypes = await getMetricTypes(statsToProcess.map(s => s.metric), report.organizationId);
 
       for (const stat of statsToProcess) {
         const metricCode = stat.metric;
@@ -5069,7 +5062,7 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
           label: typedReportData.metricLabels?.[metricCode] || metricCode, // Human-readable label
           values: limitedValues,
           unit: stat.units || "",
-          lowerIsBetter: teamLowerIsBetterMap.get(metricCode) ?? false,
+          lowerIsBetter: teamMetricTypes[metricCode] === 'lower_is_better',
         });
       }
     } else if (report.reportType === 'individual' && typedReportData.athlete) {
@@ -5078,16 +5071,10 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
       if (athlete.measurements) {
         const entries = Object.entries(athlete.measurements).slice(0, MAX_METRICS);
 
-        // Batch query unit and metricType for all codes to avoid N+1 DB queries
+        // Batch lookups of unit and type (site metric first, then the report org's custom metric) to avoid N+1
         const individualMetricCodes = entries.filter(([, v]) => typeof v === 'number').map(([code]) => code);
-        const individualMetricInfo = individualMetricCodes.length > 0
-          ? await db
-              .select({ code: siteMetrics.code, unit: siteMetrics.unit, metricType: siteMetrics.metricType })
-              .from(siteMetrics)
-              .where(inArray(siteMetrics.code, individualMetricCodes))
-          : [];
-        const individualUnitMap = new Map(individualMetricInfo.map(m => [m.code, m.unit || '']));
-        const individualLowerIsBetterMap = new Map(individualMetricInfo.map(m => [m.code, m.metricType === 'lower_is_better']));
+        const { units: individualUnits } = await reportService.getMetricLabelsAndUnits(individualMetricCodes, report.organizationId);
+        const individualMetricTypes = await getMetricTypes(individualMetricCodes, report.organizationId);
 
         for (const [metricCode, value] of entries) {
           if (typeof value === 'number') {
@@ -5095,8 +5082,8 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
               code: metricCode,
               label: typedReportData.metricLabels?.[metricCode] || metricCode, // Human-readable label
               values: [value],
-              unit: individualUnitMap.get(metricCode) || '',
-              lowerIsBetter: individualLowerIsBetterMap.get(metricCode) ?? false,
+              unit: individualUnits[metricCode] || '',
+              lowerIsBetter: individualMetricTypes[metricCode] === 'lower_is_better',
               percentile: athlete.percentiles?.[metricCode],
               teamAverage: athlete.teamAverages?.[metricCode],
             });
