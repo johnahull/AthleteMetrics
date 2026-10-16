@@ -44,10 +44,13 @@ const META = new Map([
   ['DASH_10YD', { unit: 's', lowerIsBetter: true }],
   ['FLY10_TIME', { unit: 's', lowerIsBetter: true }],
   ['JUMP_CMJ_HOH', { unit: 'in', lowerIsBetter: false }],
+  ['AGILITY_505_M', { unit: 's', lowerIsBetter: true }],
+  ['AGILITY_505_M_L', { unit: 's', lowerIsBetter: true }],
+  ['AGILITY_505_M_R', { unit: 's', lowerIsBetter: true }],
+  ['AGILITY_505_M_LSI', { unit: '%', lowerIsBetter: false }],
+  ['DASH_20YD', { unit: 's', lowerIsBetter: true }],
+  ['AGILITY_COD_DEFICIT_M_INTERP', { unit: 's', lowerIsBetter: true }],
   ['AGILITY_505_YD', { unit: 's', lowerIsBetter: true }],
-  ['AGILITY_505_YD_L', { unit: 's', lowerIsBetter: true }],
-  ['AGILITY_505_YD_R', { unit: 's', lowerIsBetter: true }],
-  ['AGILITY_505_YD_LSI', { unit: '%', lowerIsBetter: false }],
   ['MQI_TOTAL', { unit: 'pts', lowerIsBetter: false }],
   ['TOP_SPEED', { unit: 'mph', lowerIsBetter: false }],
   ['JUMP_BROAD', { unit: 'in', lowerIsBetter: false }],
@@ -132,22 +135,98 @@ describe('assembleEvalReportModel: retest', () => {
 });
 
 describe('assembleEvalReportModel: derived metrics', () => {
-  const legs = [row('AGILITY_505_YD_L', 2.6), row('AGILITY_505_YD_R', 2.8), row('AGILITY_505_YD_LSI', 50)];
+  const legs = [row('AGILITY_505_M_L', 2.6), row('AGILITY_505_M_R', 2.8), row('AGILITY_505_M_LSI', 50)];
 
   it('recomputes the LSI from the per-leg bests and agrees with the balance line', () => {
     const model = assembleEvalReportModel(
       input({ rows: legs, selection: { metricKeys: ['505', '505_LSI'] } }),
     );
-    const lsi = metric(model, 'AGILITY_505_YD_LSI')!;
+    const lsi = metric(model, 'AGILITY_505_M_LSI')!;
     expect(lsi.value).toBeCloseTo((2.6 / 2.8) * 100, 6);
     expect(model.freshAndHealthy.balance?.lsiPercent).toBeCloseTo(lsi.value, 6);
-    expect(metric(model, 'AGILITY_505_YD')!.value).toBe(2.6);
+    expect(metric(model, 'AGILITY_505_M')!.value).toBe(2.6);
   });
 
   it('omits the balance line when only one leg was tested', () => {
-    const model = assembleEvalReportModel(input({ rows: [row('AGILITY_505_YD_L', 2.6), row('AGILITY_505_YD_LSI', 99)] }));
+    const model = assembleEvalReportModel(input({ rows: [row('AGILITY_505_M_L', 2.6), row('AGILITY_505_M_LSI', 99)] }));
     expect(model.freshAndHealthy.balance).toBeUndefined();
-    expect(model.metrics.find((m) => m.code === 'AGILITY_505_YD_LSI')).toBeUndefined();
+    expect(model.metrics.find((m) => m.code === 'AGILITY_505_M_LSI')).toBeUndefined();
+  });
+});
+
+describe('assembleEvalReportModel: meter 5-0-5 and the interpolated COD deficit', () => {
+  const battery = [
+    row('AGILITY_505_M_L', 2.85),
+    row('AGILITY_505_M_R', 2.8),
+    row('DASH_10YD', 1.8),
+    row('DASH_20YD', 3.05),
+  ];
+
+  it('derives the deficit from the 20 yd split without showing the 20 yd split unless it is selected', () => {
+    const model = assembleEvalReportModel(input({ rows: battery, selection: { metricKeys: ['DASH_10', '505', 'COD_DEFICIT'] } }));
+    expect(metric(model, 'AGILITY_COD_DEFICIT_M_INTERP')!.value).toBeCloseTo(0.883, 6);
+    expect(metric(model, 'DASH_20YD')).toBeUndefined();
+    const withDash20 = assembleEvalReportModel(input({ rows: battery, selection: { metricKeys: ['DASH_20', 'COD_DEFICIT'] } }));
+    expect(metric(withDash20, 'DASH_20YD')!.value).toBe(3.05);
+  });
+
+  it('drops the deficit when the 20 yd split is missing', () => {
+    const rows = battery.filter((r) => r.metric !== 'DASH_20YD');
+    const model = assembleEvalReportModel(input({ rows, selection: { metricKeys: ['505', 'COD_DEFICIT'] } }));
+    expect(metric(model, 'AGILITY_COD_DEFICIT_M_INTERP')).toBeUndefined();
+    expect(model.selection.metricKeys).toEqual(['505']);
+  });
+
+  it('puts no yard 5-0-5 or deficit code anywhere in the model for meter data', () => {
+    const model = assembleEvalReportModel(
+      input({ rows: battery, selection: { metricKeys: ['DASH_10', '505', '505_LEFT', '505_RIGHT', '505_LSI', 'COD_DEFICIT'] } }),
+    );
+    expect(model.metrics.map((m) => m.code)).toEqual([
+      'DASH_10YD', 'AGILITY_505_M', 'AGILITY_505_M_L', 'AGILITY_505_M_R', 'AGILITY_505_M_LSI', 'AGILITY_COD_DEFICIT_M_INTERP',
+    ]);
+    expect(JSON.stringify(model)).not.toMatch(/AGILITY_[A-Z0-9_]*_YD/);
+  });
+
+  it('compares the 5-0-5 to the meter age-group average', () => {
+    const model = assembleEvalReportModel(
+      input({ rows: battery, benchmarks: [average('AGILITY_505_M', '2.9', 'lte')], selection: { metricKeys: ['505'] } }),
+    );
+    expect(metric(model, 'AGILITY_505_M')!.comparison).toMatchObject({ kind: 'average', status: 'at_or_better' });
+  });
+
+  it('skips the trend, without failing, when the prior event used the yard 5-0-5', () => {
+    const priorEvent = {
+      event: { id: 'event-earlier', date: '2026-03-01', userId: ATHLETE, organizationId: ORG },
+      rows: [row('AGILITY_505_YD', 2.9, { eventId: 'event-earlier' })],
+    };
+    const model = assembleEvalReportModel(input({ rows: battery, priorEvent, selection: { metricKeys: ['505'] } }));
+    expect(metric(model, 'AGILITY_505_M')!.trend).toBeNull();
+  });
+});
+
+describe('yard 5-0-5 rows after the switch to meter', () => {
+  const yard = [
+    row('AGILITY_505_YD', 2.6), row('AGILITY_505_YD_L', 2.5), row('AGILITY_505_YD_R', 2.4),
+    row('AGILITY_505_YD_LSI', 96), row('AGILITY_COD_DEFICIT_YD', 0.6),
+  ];
+
+  it('offers measured yard rows with plain labels and never a stored derived yard total', () => {
+    const offered = computeEvalDefaults(input({ rows: yard })).offered.available;
+    const byCode = Object.fromEntries(offered.map((o) => [o.code, o.label]));
+    expect(byCode).toMatchObject({
+      AGILITY_505_YD: '5-0-5 agility, yards',
+      AGILITY_505_YD_L: '5-0-5 agility, yards (left turn)',
+      AGILITY_505_YD_R: '5-0-5 agility, yards (right turn)',
+    });
+    expect(Object.keys(byCode)).not.toContain('AGILITY_505_YD_LSI');
+    expect(Object.keys(byCode)).not.toContain('AGILITY_COD_DEFICIT_YD');
+  });
+
+  it('does not show a stored derived yard total even when its code is requested', () => {
+    const model = assembleEvalReportModel(
+      input({ rows: yard, selection: { metricKeys: ['AGILITY_505_YD_L', 'AGILITY_505_YD_LSI', 'AGILITY_COD_DEFICIT_YD'] } }),
+    );
+    expect(model.metrics.map((m) => [m.code, m.label])).toEqual([['AGILITY_505_YD_L', '5-0-5 agility, yards (left turn)']]);
   });
 });
 
@@ -327,8 +406,8 @@ describe('assembleEvalReportModel: privacy', () => {
           row('DASH_10YD', 2.0),
           row('FLY10_TIME', 1.5),
           row('JUMP_CMJ_HOH', 14),
-          row('AGILITY_505_YD_L', 2.6),
-          row('AGILITY_505_YD_R', 2.8),
+          row('AGILITY_505_M_L', 2.6),
+          row('AGILITY_505_M_R', 2.8),
           row('MQI_TOTAL', 16),
         ],
         load: 'light',
@@ -341,14 +420,14 @@ describe('assembleEvalReportModel: privacy', () => {
 
 describe('computeEvalDefaults', () => {
   it('suggests the preset, the headline selection and the offered metrics', () => {
-    const d = computeEvalDefaults(input({ rows: [row('DASH_10YD', 2.0), row('JUMP_CMJ_HOH', 14), row('AGILITY_505_YD_L', 2.6)] }));
+    const d = computeEvalDefaults(input({ rows: [row('DASH_10YD', 2.0), row('JUMP_CMJ_HOH', 14), row('AGILITY_505_M_L', 2.6)] }));
     expect(d.selection.preset).toBe('high_school');
     expect(d.selection.metricKeys).toEqual(['DASH_10', 'CMJ_HOH']);
     expect(computeEvalDefaults(input({ rows: [row('DASH_10YD', 2.0), row('MQI_TOTAL', 10)] })).selection.metricKeys).toEqual(['DASH_10', 'MQI']);
     expect(d.load).toBeNull();
     expect(d.coachNote).toBeNull();
     expect(d.offered.headline.map((o) => o.code)).toEqual(['DASH_10YD', 'JUMP_CMJ_HOH']);
-    expect(d.offered.available.map((o) => o.code)).toContain('AGILITY_505_YD_L');
+    expect(d.offered.available.map((o) => o.code)).toContain('AGILITY_505_M_L');
   });
 });
 
@@ -435,10 +514,10 @@ describe('M3: noteFirst', () => {
 
 describe('M4: balance wording and gender', () => {
   const lsi: TierCandidateRow = {
-    metricCode: 'AGILITY_505_YD_LSI', gender: 'Female', sport: null, level: null, ageMin: null, ageMax: null,
+    metricCode: 'AGILITY_505_M_LSI', gender: 'Female', sport: null, level: null, ageMin: null, ageMax: null,
     name: 'LSI Normal', tierName: 'Normal', minValue: 95, maxValue: 100, comparisonOperator: 'range', tierGroupId: 'g', tierOrder: 1, _source: 'site',
   };
-  const legs = [row('AGILITY_505_YD_L', 2.6), row('AGILITY_505_YD_R', 3.0)];
+  const legs = [row('AGILITY_505_M_L', 2.6), row('AGILITY_505_M_R', 3.0)];
 
   it('judges the balance from the LSI set for a female athlete with no sport', () => {
     const model = assembleEvalReportModel(input({ rows: legs, athlete: { ...input().athlete, sport: null }, benchmarks: [lsi] }));

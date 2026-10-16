@@ -19,6 +19,13 @@ const dbUrl = process.env.DATABASE_URL || '';
 const isDisposableTestDb =
   process.env.NODE_ENV === 'test' && (/@(localhost|127\.0\.0\.1)[:/]/.test(dbUrl) || process.env.CI === 'true');
 
+// The 5-0-5 legs moved from the yard to the meter protocol after 0153 was applied (AM-FEAT-016 Revision
+// 2026-10-13, Change 2). The frozen SQL keeps the yard codes; only these pairs may disagree with the key map.
+const SUPERSEDED_PAIRS: Readonly<Record<string, string>> = {
+  '505_LEFT': 'AGILITY_505_YD_L',
+  '505_RIGHT': 'AGILITY_505_YD_R',
+};
+
 describe('Migration 0153: static analysis', () => {
   it('is idempotent in form', () => {
     expect(UP.match(/CREATE TABLE/g)).toHaveLength(2);
@@ -35,7 +42,12 @@ describe('Migration 0153: static analysis', () => {
     expect(rows.length).toBeGreaterThan(30);
     for (const [, key, code] of rows) {
       expect(isLogicalKey(key), key).toBe(true);
+      if (SUPERSEDED_PAIRS[key] === code) continue;
       expect(resolveTemplateKey(key), key).toBe(code);
+    }
+    for (const [key, code] of Object.entries(SUPERSEDED_PAIRS)) {
+      expect(rows.some(([, k, c]) => k === key && c === code), key).toBe(true);
+      expect(resolveTemplateKey(key), key).not.toBe(code);
     }
     const codes = rows.map((r) => r[2]);
     // No guessed codes: every seeded code is created by some other migration (RSI_105 and JUMP_CMJ_SL_L/R by 0156),
@@ -100,7 +112,9 @@ describe.skipIf(!isDisposableTestDb)('Migration 0153: against a disposable DB (r
 
   // CI builds its DB with db:push and the default seed only, so most codes the seed names do not exist there.
   // Create the missing ones inside the rolled-back transaction so the checks do not depend on manual migrations.
-  const SEED_CODES = [...new Set([...UP.matchAll(/^\s*\('([A-Z0-9_]+)',\s*'([A-Z0-9_]+)',\s*(?:true|false),\s*\d+\)/gm)].map((r) => r[2]))];
+  // Both the codes the SQL names and the codes its keys resolve to today (the 5-0-5 legs now resolve to meter codes).
+  const SEED_ROWS = [...UP.matchAll(/^\s*\('([A-Z0-9_]+)',\s*'([A-Z0-9_]+)',\s*(?:true|false),\s*\d+\)/gm)];
+  const SEED_CODES = [...new Set(SEED_ROWS.flatMap((r) => [r[2], resolveTemplateKey(r[1])]))];
   // RSI_105 stays absent, as it is when 0153 runs (0156 creates it later), so the seed skips it.
   const ensureSeedCodes = async (tx: any) => {
     await tx`DELETE FROM site_metrics WHERE code = 'RSI_105'`;
@@ -143,15 +157,15 @@ describe.skipIf(!isDisposableTestDb)('Migration 0153: against a disposable DB (r
       expect(new Set(metrics.map((m) => m.metricKey)).size).toBe(metrics.length);
       expect(metrics.some((m) => m.isRequired)).toBe(true);
       expect(metrics.some((m) => !m.isRequired)).toBe(true);
-      // yard protocol only
+      // The seed stores logical keys; the 5-0-5 keys now resolve to the meter protocol (AM-FEAT-016 Revision 2026-10-13)
       expect(codes.filter((c) => c.startsWith('AGILITY_505'))).toEqual(
-        expect.arrayContaining(['AGILITY_505_YD_L', 'AGILITY_505_YD_R']),
+        expect.arrayContaining(['AGILITY_505_M_L', 'AGILITY_505_M_R']),
       );
-      expect(codes.some((c) => /_M(_|$)/.test(c) && c.startsWith('AGILITY'))).toBe(false);
+      expect(codes.some((c) => /^AGILITY_.*_YD/.test(c))).toBe(false);
       // required first-class tests are there, derived totals are not
       expect(codes).toEqual(expect.arrayContaining(['JUMP_SJ_HEIGHT', 'JUMP_CMJ_HOH', 'VERTICAL_JUMP', 'DASH_40YD', 'FLY10_TIME', 'MQ_LIN_ACCEL']));
       expect(codes).not.toContain('MQI_TOTAL');
-      expect(codes).not.toContain('AGILITY_505_YD_LSI');
+      expect(codes).not.toContain('AGILITY_505_M_LSI');
       const derived = await tx`SELECT code FROM site_metrics WHERE code = ANY(${codes}) AND is_derived = true`;
       expect(derived).toHaveLength(0);
       const fly = metrics.find((m) => resolveTemplateKey(m.metricKey) === 'FLY10_TIME');

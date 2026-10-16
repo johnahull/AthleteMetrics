@@ -30,8 +30,8 @@ const MEASURED = [
   { metric: 'DASH_10YD', value: 1.9 },
   { metric: 'FLY10_TIME', value: 1.1 },
   { metric: 'JUMP_CMJ_HOH', value: 19 },
-  { metric: 'AGILITY_505_YD_L', value: 2.7 },
-  { metric: 'AGILITY_505_YD_R', value: 2.74 },
+  { metric: 'AGILITY_505_M_L', value: 2.7 },
+  { metric: 'AGILITY_505_M_R', value: 2.74 },
   { metric: 'VERTICAL_JUMP', value: 20 },
 ];
 

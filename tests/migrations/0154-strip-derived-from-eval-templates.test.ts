@@ -21,13 +21,33 @@ const dbUrl = process.env.DATABASE_URL || '';
 const isDisposableTestDb =
   process.env.NODE_ENV === 'test' && (/@(localhost|127\.0\.0\.1)[:/]/.test(dbUrl) || process.env.CI === 'true');
 
+// The 5-0-5 keys moved from the yard to the meter protocol after 0154 was applied (AM-FEAT-016 Revision
+// 2026-10-13, Change 2). The frozen SQL keeps the yard codes; only these pairs may disagree with the map.
+const SUPERSEDED_PAIRS: Readonly<Record<string, string>> = {
+  '505': 'AGILITY_505_YD',
+  '505_LEFT': 'AGILITY_505_YD_L',
+  '505_RIGHT': 'AGILITY_505_YD_R',
+  '505_LSI': 'AGILITY_505_YD_LSI',
+  COD_DEFICIT: 'AGILITY_COD_DEFICIT_YD',
+};
+
 describe('Migration 0154: static analysis', () => {
   // Direction matters: the map may grow after this migration was applied; what the SQL says must never contradict it.
   it('every (key, code) pair in the SQL still agrees with the API key map', () => {
     const block = UP.slice(UP.indexOf('INSERT INTO _eval_key_codes'), UP.indexOf(';', UP.indexOf('INSERT INTO _eval_key_codes')));
     const pairs = [...block.matchAll(/\('([A-Z0-9_]+)',\s*'([A-Z0-9_]+)'\)/g)];
     expect(pairs.length).toBeGreaterThan(30);
-    for (const [, key, code] of pairs) expect(TEMPLATE_METRIC_CODES[key], key).toBe(code);
+    for (const [, key, code] of pairs) {
+      if (SUPERSEDED_PAIRS[key] === code) continue;
+      expect(TEMPLATE_METRIC_CODES[key], key).toBe(code);
+    }
+  });
+  it('lists only superseded pairs the SQL really has, and the map no longer uses them', () => {
+    const block = UP.slice(UP.indexOf('INSERT INTO _eval_key_codes'), UP.indexOf(';', UP.indexOf('INSERT INTO _eval_key_codes')));
+    for (const [key, code] of Object.entries(SUPERSEDED_PAIRS)) {
+      expect(block, key).toContain(`('${key}', '${code}')`);
+      expect(TEMPLATE_METRIC_CODES[key], key).not.toBe(code);
+    }
   });
   it('is idempotent in form and runs no BEGIN/COMMIT of its own', () => {
     expect(UP).toMatch(/DROP TABLE IF EXISTS pg_temp\._eval_key_codes/);
