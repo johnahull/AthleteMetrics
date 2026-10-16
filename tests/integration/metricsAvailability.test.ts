@@ -174,6 +174,9 @@ describe.skip('Metrics Availability', () => {
   it('should return zeros for organization with no data', async () => {
     const availability = await analyticsService.getMetricsAvailability('nonexistent-org');
 
+    // Object.values on {} would pass vacuously, so also pin specific codes
+    expect(availability.FLY10_TIME ?? 0).toBe(0);
+    expect(availability.VERTICAL_JUMP ?? 0).toBe(0);
     Object.values(availability).forEach(count => {
       expect(count).toBe(0);
     });

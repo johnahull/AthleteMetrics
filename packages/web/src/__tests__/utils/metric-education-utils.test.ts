@@ -6,7 +6,6 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { resolveMetricType } from '@shared/analytics-types';
 import {
   getMetricEducation,
   getMetricContext,
@@ -385,10 +384,21 @@ describe('metric-education-utils', () => {
       expect(getMetricContext(300, 'MILE_RUN', null, undefined, 'lower_is_better')).toBeNull();
     });
 
-    it('the built-in table gives the same results with its own type as with no type', () => {
-      const codes = ['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505_M', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'TOP_SPEED', 'RSI'];
-      for (const code of codes) {
-        const type = resolveMetricType(code);
+    it('the built-in table gives the same results as the seeded DB type', () => {
+      // Literal copy of metricType per code in scripts/seed-default-metrics.ts, so a change to the built-in array shows up here
+      const seededTypes = {
+        FLY10_TIME: 'lower_is_better',
+        VERTICAL_JUMP: 'higher_is_better',
+        AGILITY_505_M: 'lower_is_better',
+        AGILITY_505_YD: 'lower_is_better',
+        AGILITY_5105: 'lower_is_better',
+        T_TEST: 'lower_is_better',
+        DASH_40YD: 'lower_is_better',
+        TOP_SPEED: 'higher_is_better',
+        RSI: 'higher_is_better',
+      } as const;
+      for (const [code, type] of Object.entries(seededTypes)) {
+        expect(isLowerBetterMetric(code)).toBe(type === 'lower_is_better');
         for (const value of [0.9, 1.2, 2.4, 4.6, 10.2, 19, 27, 40]) {
           for (const gender of [undefined, 'female'] as const) {
             expect(getPercentileRanking(value, code, undefined, gender, type)).toEqual(getPercentileRanking(value, code, undefined, gender));
