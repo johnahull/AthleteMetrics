@@ -467,6 +467,48 @@ describe('FLY10_TIME derivation', () => {
   });
 });
 
+describe('derived fly values use gate splits of one row only', () => {
+  // The Lucy Ortiz row: Final Time 4.08 disagrees with the 30 yd gate (4.09) by 0.01 s.
+  const LUCY =
+    '10/13/2026 17:27:42,Lucy,,Ortiz,Dash,,Imperial,,1.69,10,,2.95,20,,4.09,30,,5.23,40,,,,,,,,4.08,30,15.04 (mph),,,,,,,,,,,,,,,,,,,,,,,,,,,,';
+
+  it('FLY10_TIME is 30 yd gate minus 20 yd gate (1.14), never Final Time minus a gate (1.13)', () => {
+    const fly = parser.parse(makeCsv([LUCY])).athletes[0].drills.find(d => d.metric === 'FLY10_TIME');
+    expect(fly?.value).toBe(1.14);
+  });
+
+  it('falls back to Final Time when the row has no gate at 30 yd', () => {
+    const csv = makeCsv([
+      '10/13/2026 17:27:42,Lucy,,Ortiz,Dash,,Imperial,,1.69,10,,2.95,20,,,,,,,,,,,,,,4.08,30,,,,,,,,,,,,,,,,,,,,,,,,,,,,',
+    ]);
+    const fly = parser.parse(csv).athletes[0].drills.find(d => d.metric === 'FLY10_TIME');
+    expect(fly?.value).toBe(1.13);
+  });
+
+  it('FLY10_TIME_RI10 uses the 20 yd gate when the row has one, else Final Time', () => {
+    const dash20 = (gate20: string) => {
+      const cols = new Array(57).fill('');
+      Object.assign(cols, { 0: '10/13/2026 17:27:42', 1: 'Lucy', 3: 'Ortiz', 4: 'Dash', 6: 'Imperial', 8: '1.69', 9: '10', 26: '2.94', 27: '20' });
+      if (gate20) Object.assign(cols, { 11: gate20, 12: '20' });
+      return parser.parse(makeCsv([cols.join(',')])).athletes[0].drills.find(d => d.metric === 'FLY10_TIME_RI10')?.value;
+    };
+    // 2.95 - 1.69 from the gate, not 2.94 - 1.69 from Final Time
+    expect(dash20('2.95')).toBe(1.26);
+    expect(dash20('')).toBe(1.25);
+  });
+
+  it('each derived fly comes from one row, never a split of another run', () => {
+    // 30 yd run (final 4.48, 20 yd gate 3.19) and a 40 yd run with its own 20 / 30 yd gates
+    const result = parser.parse(makeCsv([
+      '01/01/2025 10:00:00,John,,Doe,Dash,,Imperial,,1.110000,5.000000,,1.870000,10.000000,,3.190000,20.000000,,,,,,,,,,,4.480000,30.000000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,',
+      '01/01/2025 10:05:00,John,,Doe,Dash,,Imperial,,1.800000,10.000000,,3.100000,20.000000,,4.200000,30.000000,,,,,,,,,,,5.200000,40.000000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,',
+    ]));
+    const fly = result.athletes[0].drills.find(d => d.metric === 'FLY10_TIME');
+    expect(fly?.value).toBe(1.1);
+    expect(fly?.derivedFrom).toContain('DASH_40YD');
+  });
+});
+
 // ============================================================================
 // Metric (meters) units support — 10/20/30/40m protocol
 // ============================================================================
