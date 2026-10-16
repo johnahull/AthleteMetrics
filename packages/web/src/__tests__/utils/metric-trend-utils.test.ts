@@ -284,4 +284,22 @@ describe('metric-trend-utils', () => {
       expect(best).toBe(1.40);
     });
   });
+
+  describe('metric type from the metric list', () => {
+    // MILE_RUN is not in the hard-coded lower-is-better list
+    const runs = [
+      { value: 360, date: '2024-03-01' },
+      { value: 362, date: '2024-02-15' },
+      { value: 420, date: '2024-02-01' },
+      { value: 425, date: '2024-01-01' },
+    ];
+
+    it('calculateMetricTrend treats falling times as improving when the type says lower is better', () => {
+      expect(calculateMetricTrend(runs, 'MILE_RUN', 'lower_is_better')?.trend).toBe('improving');
+    });
+
+    it('getBestValue takes the lowest value when the type says lower is better', () => {
+      expect(getBestValue(runs, 'MILE_RUN', 'lower_is_better')).toBe(360);
+    });
+  });
 });

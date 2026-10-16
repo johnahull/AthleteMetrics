@@ -154,11 +154,11 @@ function textLines(doc: jsPDF, text: string, width: number, size: number): strin
   return doc.splitTextToSize(text, width) as string[];
 }
 
-function drawCollegeNote(doc: jsPDF, value: number, unit: string, withBarNote: boolean, x: number, y: number): void {
+function drawCollegeNote(doc: jsPDF, value: number, m: EvalMetricResult, withBarNote: boolean, x: number, y: number): void {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
   doc.setTextColor(...MUTED);
-  const note = `${SECTION_TITLES.collegeStandard} ${formatValue(value, unit)}${withBarNote ? ` ${PDF_COPY.collegeNoteSuffix}` : ""}`;
+  const note = `${SECTION_TITLES.collegeStandard} ${formatValue(value, m.unit, m.displayFormat)}${withBarNote ? ` ${PDF_COPY.collegeNoteSuffix}` : ""}`;
   doc.text(note, x, y);
 }
 
@@ -176,9 +176,9 @@ function buildMetricRow(m: EvalMetricResult, showCollege: boolean, primary: Rgb,
       doc.setFontSize(10);
       doc.text(m.label, MARGIN, y + 4);
       doc.setFontSize(13);
-      doc.text(formatValue(m.value, m.unit), MARGIN, y + 11);
+      doc.text(formatValue(m.value, m.unit, m.displayFormat), MARGIN, y + 11);
       if (!avg) {
-        if (college) drawCollegeNote(doc, college.averageValue, m.unit, false, GAUGE_X, y + 11);
+        if (college) drawCollegeNote(doc, college.averageValue, m, false, GAUGE_X, y + 11);
         return;
       }
       record("gauge", y, y + height);
@@ -220,8 +220,8 @@ function buildMetricRow(m: EvalMetricResult, showCollege: boolean, primary: Rgb,
       doc.setTextColor(...MUTED);
       doc.text(PDF_COPY.barBehind, GAUGE_X, barY + BAR_H + 4.5);
       doc.text(PDF_COPY.barAhead, GAUGE_X + GAUGE_W, barY + BAR_H + 4.5, { align: "right" });
-      doc.text(`${PDF_COPY.averageLabel} ${formatValue(avg.averageValue, m.unit)}`, midX, barY + BAR_H + 4.5, { align: "center" });
-      if (college) drawCollegeNote(doc, college.averageValue, m.unit, true, GAUGE_X, barY + BAR_H + 9);
+      doc.text(`${PDF_COPY.averageLabel} ${formatValue(avg.averageValue, m.unit, m.displayFormat)}`, midX, barY + BAR_H + 4.5, { align: "center" });
+      if (college) drawCollegeNote(doc, college.averageValue, m, true, GAUGE_X, barY + BAR_H + 9);
     },
   };
 }
@@ -324,7 +324,7 @@ function buildSections(doc: jsPDF, model: EvalReportModel, primary: Rgb, seconda
     .filter((m) => m.trend)
     .map<Row>((m) => {
       const t = m.trend!;
-      const amount = formatValue(Math.abs(t.change), m.unit);
+      const amount = formatValue(Math.abs(t.change), m.unit, m.displayFormat);
       const text =
         t.direction === "improved" ? `${PDF_COPY.trendImproved} ${amount}` : t.direction === "declined" ? `${PDF_COPY.trendDeclined} ${amount}` : PDF_COPY.trendUnchanged;
       return {

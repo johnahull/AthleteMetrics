@@ -2,6 +2,9 @@
  * Family-facing Fresh & Healthy wording shared by the eval PDF (api) and the web report view,
  * so the two surfaces cannot drift apart (AM-FEAT-019).
  */
+
+import { formatDuration, type DisplayFormat } from "./duration-format";
+
 export const LOAD_LABELS = {
   light: "Light week",
   medium: "Medium week",
@@ -28,7 +31,8 @@ export function balanceText(balance: { status: string; label: string; lsiPercent
 }
 
 /** A metric value with its unit. Seconds always show two decimals so 1.90 and 1.85 line up; other units are trimmed to at most two. */
-export function formatValue(value: number, unit: string): string {
+export function formatValue(value: number, unit: string, displayFormat?: DisplayFormat): string {
+  if (displayFormat === "duration") return formatDuration(value, 1);
   const text = unit === "s" ? value.toFixed(2) : String(Math.round(value * 100) / 100);
   return unit === "%" ? `${text}%` : `${text} ${unit}`;
 }

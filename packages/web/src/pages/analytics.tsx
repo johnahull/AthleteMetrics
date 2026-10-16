@@ -24,6 +24,7 @@ import { Gender, SoccerPosition, type Team, type Measurement } from "@shared/sch
 import { isLowerIsBetterMetric } from "@shared/analytics-types";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { useMetricLabels } from "@/hooks/use-metric-labels";
+import { formatMeasurement } from "@shared/duration-format";
 
 // Edit measurement form schema
 const editMeasurementSchema = z.object({
@@ -41,7 +42,7 @@ const editMeasurementSchema = z.object({
 
 export default function Analytics() {
   const labels = useContextualLabels();
-  const { getLabel: getMetricLabel } = useMetricLabels();
+  const { getLabel: getMetricLabel, formats: metricFormats } = useMetricLabels();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -774,7 +775,9 @@ export default function Analytics() {
                         </span>
                       </td>
                       <td className="px-4 py-3 font-mono text-gray-900">
-                        {formatValueWithUnit(measurement.value, measurement.units)}
+                        {metricFormats[measurement.metric]
+                          ? formatMeasurement(Number(measurement.value), metricFormats[measurement.metric])
+                          : formatValueWithUnit(measurement.value, measurement.units)}
                       </td>
                       <td className="px-4 py-3 text-gray-600 font-mono">
                         {measurement.age}

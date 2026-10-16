@@ -166,3 +166,11 @@ describe('TierProgressChart', () => {
     expect(container).toBeEmptyDOMElement();
   });
 });
+
+describe('TierProgressChart: duration (mm:ss) metric', () => {
+  it('shows the value and distance to the next tier as m:ss', () => {
+    const format = { unit: 's', displayFormat: 'duration' as const, decimalPrecision: 1 };
+    render(<TierProgressChart label="Mile" metricCode="MILE" comparison={{ ...comparison, athleteValue: 402.5, distanceToNextTier: 4.2 }} unit="s" format={format} />);
+    expect(screen.getByText(/You: 6:42\.5 · Varsity · 0:04\.2 to Elite/)).toBeInTheDocument();
+  });
+});

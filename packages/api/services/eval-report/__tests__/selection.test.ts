@@ -12,7 +12,7 @@ const bestsOf = (...codes: string[]) => new Map(codes.map((c) => [c, 1]));
 
 describe('defaultHeadlineKeys', () => {
   it('is the six headline metrics when all have data', () => {
-    const bests = bestsOf('DASH_10YD', 'FLY10_TIME', 'JUMP_CMJ_HOH', 'AGILITY_505_YD', 'AGILITY_505_YD_LSI', 'MQI_TOTAL', 'POWER_EUR');
+    const bests = bestsOf('DASH_10YD', 'FLY10_TIME', 'JUMP_CMJ_HOH', 'AGILITY_505_M', 'AGILITY_505_M_LSI', 'MQI_TOTAL', 'POWER_EUR');
     expect(defaultHeadlineKeys(bests)).toEqual(['DASH_10', 'FLY_10', 'CMJ_HOH', '505', '505_LSI', 'MQI']);
   });
 
@@ -133,7 +133,7 @@ describe('offeredMetrics', () => {
       'HEIGHT_IN',
       'WEIGHT_LBS',
       'SPRINT_V0',
-      'AGILITY_505_YD_L',
+      'AGILITY_505_M_L',
     ]),
   );
 
@@ -145,7 +145,7 @@ describe('offeredMetrics', () => {
 
   it('offers a headline metric only when it has its own data', () => {
     expect(offered.headline.map((m) => m.key)).not.toContain('505_LSI');
-    expect(offered.available.map((m) => m.code)).toContain('AGILITY_505_YD_L');
+    expect(offered.available.map((m) => m.code)).toContain('AGILITY_505_M_L');
   });
 
   it('never drops a measured metric, including ones outside the key map', () => {

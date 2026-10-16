@@ -24,6 +24,7 @@ import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { PairedInputFields } from "@/components/measurement/PairedInputFields";
 import { LastSetContextLine } from "@/components/measurement/LastSetContextLine";
 import { parseFieldError } from "@/lib/parse-field-error";
+import { DurationInput } from "@/components/duration-input";
 
 // Create dynamic measurement schema that accepts any metric string
 // Backend will validate against org-enabled metrics
@@ -195,6 +196,7 @@ export default function MeasurementForm() {
   // Get unit from metric config dynamically
   const units = availableMetrics.find(m => m.code === metric)?.unit || "";
   const selectedMetric = availableMetrics.find(m => m.code === metric);
+  const isDuration = selectedMetric?.displayFormat === "duration";
 
   // Query for calculation preview for derived metrics
   const { data: calculationPreview, isFetching: isPreviewFetching } = useQuery({
@@ -517,6 +519,17 @@ export default function MeasurementForm() {
                   </FormLabel>
                   <div className="flex">
                     <FormControl>
+                      {isDuration ? (
+                        <DurationInput
+                          name={field.name}
+                          ref={field.ref}
+                          onBlur={field.onBlur}
+                          value={field.value}
+                          onValueChange={field.onChange}
+                          disabled={createMeasurementMutation.isPending}
+                          data-testid="measurement-value"
+                        />
+                      ) : (
                       <Input
                         {...field}
                         type="number"
@@ -528,8 +541,9 @@ export default function MeasurementForm() {
                         onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
                         value={field.value || ''}
                       />
+                      )}
                     </FormControl>
-                    {units && (
+                    {units && !isDuration && (
                       <div className="px-4 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600 text-sm">
                         {units}
                       </div>

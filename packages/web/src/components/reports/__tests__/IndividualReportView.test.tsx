@@ -32,8 +32,13 @@ const report = {
   config: { athleteId: 'ath-1', timeframe: { type: 'preset', preset: 'all_time' }, metrics: ['VERTICAL_JUMP'] },
 } as unknown as Report;
 
-function renderWith(reportConfig: Record<string, unknown>, measurements: Record<string, number> = { VERTICAL_JUMP: 27.5 }) {
+function renderWith(
+  reportConfig: Record<string, unknown>,
+  measurements: Record<string, number> = { VERTICAL_JUMP: 27.5 },
+  extra: { metricFormats?: Record<string, unknown>; teamAverages?: Record<string, number> } = {},
+) {
   const data = {
+    metricFormats: extra.metricFormats,
     reportType: 'individual',
     reportConfig: { metrics: ['VERTICAL_JUMP'], ...reportConfig },
     generatedAt: '2024-03-15T00:00:00Z',
@@ -45,7 +50,7 @@ function renderWith(reportConfig: Record<string, unknown>, measurements: Record<
       userName: 'Test Athlete',
       measurements,
       percentiles: { VERTICAL_JUMP: 80 },
-      teamAverages: { VERTICAL_JUMP: 24 },
+      teamAverages: extra.teamAverages ?? { VERTICAL_JUMP: 24 },
       benchmarkComparisons: {},
     },
   };
@@ -92,5 +97,21 @@ describe('IndividualReportView — no measurements', () => {
     expect(screen.queryByText(/no measurements recorded/i)).not.toBeInTheDocument();
     expect(screen.getByTestId('insights')).toBeInTheDocument();
     expect(screen.getByTestId('glossary')).toBeInTheDocument();
+  });
+});
+
+describe('IndividualReportView — duration (mm:ss) metrics', () => {
+  it('shows the best result and group average as m:ss', () => {
+    renderWith({}, { VERTICAL_JUMP: 402.5 }, {
+      metricFormats: { VERTICAL_JUMP: { unit: 's', displayFormat: 'duration', decimalPrecision: 1 } },
+      teamAverages: { VERTICAL_JUMP: 410 },
+    });
+    expect(screen.getByText('6:42.5')).toBeInTheDocument();
+    expect(screen.getByText('6:50.0')).toBeInTheDocument();
+  });
+
+  it('keeps report data saved without metricFormats as before', () => {
+    renderWith({}, { VERTICAL_JUMP: 27.5 });
+    expect(screen.getByText('27.50 in')).toBeInTheDocument();
   });
 });

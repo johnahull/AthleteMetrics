@@ -26,6 +26,7 @@ import {
 import { DistributionBoxPlot } from '@/components/charts/DistributionBoxPlot';
 import { formatValueWithUnit } from '@/lib/metrics';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
+import { formatMeasurement } from '@shared/duration-format';
 import { AthleteMetricExplanation } from './AthleteMetricExplanation';
 import type { MetricExplanation } from '@shared/metric-explanations';
 
@@ -89,6 +90,7 @@ export function PeerMetricCard({
   explanation,
 }: PeerMetricCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const { formats, getUnit } = useMetricLabels();
 
   // Fetch detailed distribution data when expanded
   const {
@@ -101,14 +103,15 @@ export function PeerMetricCard({
   );
 
   const displayName = explanation?.title ?? result.metric;
-  const { getUnit } = useMetricLabels();
-  const units = getUnit(result.metric);
+  const durationFormat = formats[result.metric];
+  // A duration value is shown as m:ss, which carries no unit
+  const units = durationFormat ? '' : getUnit(result.metric);
   const percentileLabel = getPercentileLabel(result.percentile);
 
   // Safe formatting helper for numeric values
   const formatValue = (value: number | undefined | null): string => {
     if (value === undefined || value === null || isNaN(value)) return '—';
-    return value.toFixed(2);
+    return durationFormat ? formatMeasurement(value, durationFormat) : value.toFixed(2);
   };
 
   // Handle insufficient data state
@@ -239,6 +242,7 @@ export function PeerMetricCard({
                   metricName={displayName}
                   lowerIsBetter={lowerIsBetter}
                   height={100}
+                  format={durationFormat}
                 />
               ) : (
                 <div className="h-20 flex items-center justify-center text-sm text-gray-400">

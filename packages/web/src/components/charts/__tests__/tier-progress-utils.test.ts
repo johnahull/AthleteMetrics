@@ -241,3 +241,13 @@ describe('evaluateTierStanding', () => {
     expect(cmp.distanceToNextTier).toBeCloseTo(0.25, 2);
   });
 });
+
+describe('captions for duration (mm:ss) metrics', () => {
+  const format = { unit: 's', displayFormat: 'duration' as const, decimalPrecision: 1 };
+  it('nextTierCaption gives the distance as m:ss', () => {
+    expect(nextTierCaption({ ...cmp, distanceToNextTier: 4.2 }, 's', format)).toBe('0:04.2 to Elite');
+  });
+  it('benchmarkStandingCaption gives the difference as m:ss', () => {
+    expect(benchmarkStandingCaption({ meetsOrExceeds: false, athleteValue: 402.5, benchmarkValue: 390 } as BenchmarkComparison, 's', format)).toBe('✗ Misses by 0:12.5');
+  });
+});

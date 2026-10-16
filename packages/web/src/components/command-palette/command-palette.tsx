@@ -14,6 +14,7 @@ import { anyOrgGrants } from '@/lib/org-roles';
 import { getCommandActions, filterActionsByQuery, filterActionsByPermissions } from '@/lib/command-palette-actions';
 import { getRecentItems, addRecentItem, type RecentItem } from '@/lib/recent-items';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
+import { formatMeasurement } from "@shared/duration-format";
 import { User, Users, Activity, Clock } from 'lucide-react';
 
 export function CommandPalette() {
@@ -21,7 +22,7 @@ export function CommandPalette() {
   const [query, setQuery] = useState('');
   const [, setLocation] = useLocation();
   const { user, userOrganizations } = useAuth();
-  const { getLabel } = useMetricLabels();
+  const { getLabel, formats } = useMetricLabels();
 
   // Navigation function compatible with wouter
   const navigate = (path: string) => setLocation(path);
@@ -208,7 +209,8 @@ export function CommandPalette() {
                 <div className="flex flex-col">
                   <span>{measurement.athleteName}</span>
                   <span className="text-xs text-muted-foreground">
-                    {getLabel(measurement.metric)} • {measurement.value} • {measurement.date}
+                    {getLabel(measurement.metric)} •{" "}
+                    {formats[measurement.metric] ? formatMeasurement(Number(measurement.value), formats[measurement.metric]) : measurement.value} • {measurement.date}
                   </span>
                 </div>
               </CommandItem>

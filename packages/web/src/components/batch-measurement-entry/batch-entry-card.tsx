@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { useFormContext } from 'react-hook-form';
+import { useFormContext, Controller } from 'react-hook-form';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAvailableMetrics } from '@/hooks/use-available-metrics';
+import { DurationInput } from '@/components/duration-input';
 
 interface BatchEntryCardProps {
   fields: any[];
@@ -14,7 +15,7 @@ interface BatchEntryCardProps {
 
 export function BatchEntryCard({ fields, deleteRow }: BatchEntryCardProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const { register } = useFormContext();
+  const { register, control, watch } = useFormContext();
 
   const { data: athletes = [] } = useQuery<any[]>({
     queryKey: ['/api/athletes'],
@@ -27,6 +28,8 @@ export function BatchEntryCard({ fields, deleteRow }: BatchEntryCardProps) {
   }
 
   const currentField = fields[currentIndex];
+  const currentMetric = watch(`measurements.${currentIndex}.metric`);
+  const isDuration = availableMetrics.find((m) => m.code === currentMetric)?.displayFormat === 'duration';
   const canGoPrevious = currentIndex > 0;
   const canGoNext = currentIndex < fields.length - 1;
 
@@ -117,13 +120,32 @@ export function BatchEntryCard({ fields, deleteRow }: BatchEntryCardProps) {
             {/* Value Input */}
             <div>
               <label className="text-sm font-medium mb-1 block">Value</label>
+              {isDuration ? (
+                <Controller
+                  key={currentIndex}
+                  control={control}
+                  name={`measurements.${currentIndex}.value`}
+                  render={({ field }) => (
+                    <DurationInput
+                      name={field.name}
+                      ref={field.ref}
+                      onBlur={field.onBlur}
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      data-testid="batch-card-value"
+                    />
+                  )}
+                />
+              ) : (
               <Input
                 type="number"
                 step="0.01"
                 {...register(`measurements.${currentIndex}.value`, {
                   valueAsNumber: true,
                 })}
+                data-testid="batch-card-value"
               />
+              )}
             </div>
 
             {/* Notes Input */}

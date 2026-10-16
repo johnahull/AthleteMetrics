@@ -18,6 +18,8 @@ import { filterToBestPerPlayer } from "@shared/analytics-utils";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
+import { useMetricLabels } from "@/hooks/use-metric-labels";
+import { formatMeasurement } from "@shared/duration-format";
 import { Filter, X, ChevronLeft, ChevronRight, Calendar, Building2, AlertCircle, User, Download, CheckSquare, XSquare, ArrowUpDown } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -188,6 +190,7 @@ export default function AdminMeasurementsPage() {
 
   // Fetch available metrics from database (includes derived metrics)
   const { metrics: availableMetrics } = useAvailableMetrics();
+  const { formats: metricFormats } = useMetricLabels();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -1323,7 +1326,9 @@ export default function AdminMeasurementsPage() {
                           </Badge>
                         </TableCell>
                         <TableCell className="font-medium">
-                          {formatValueWithUnit(measurement.value, measurement.units)}
+                          {metricFormats[measurement.metric]
+                            ? formatMeasurement(Number(measurement.value), metricFormats[measurement.metric])
+                            : formatValueWithUnit(measurement.value, measurement.units)}
                         </TableCell>
                         <TableCell>{measurement.age}</TableCell>
                         <TableCell>

@@ -6,7 +6,7 @@
 
 import { sql } from "drizzle-orm";
 import { pgTable, varchar, integer, decimal, timestamp, boolean, unique, index, text, jsonb } from "drizzle-orm/pg-core";
-import { metricTypeEnum, organizationTypeEnum } from "../enums";
+import { metricTypeEnum, organizationTypeEnum, displayFormatEnum } from "../enums";
 import { organizations, users } from "./core";
 
 /** Date matching / source selection config for derived metrics (site and custom org). */
@@ -48,6 +48,8 @@ export const siteMetrics = pgTable("site_metrics", {
   validationMin: decimal("validation_min", { precision: 10, scale: 3 }), // Minimum valid value
   validationMax: decimal("validation_max", { precision: 10, scale: 3 }), // Maximum valid value
   decimalPrecision: integer("decimal_precision").default(3).notNull(), // Decimal places for display
+  // 'duration': stored in seconds (unit 's'), entered and shown as mm:ss
+  displayFormat: text("display_format", { enum: displayFormatEnum }).default('decimal').notNull(),
   // Display settings
   color: varchar("color", { length: 20 }), // Hex color or Tailwind class
   icon: varchar("icon", { length: 50 }), // Icon identifier
@@ -151,6 +153,7 @@ export const customOrgMetrics = pgTable("custom_org_metrics", {
   validationMin: decimal("validation_min", { precision: 10, scale: 3 }),
   validationMax: decimal("validation_max", { precision: 10, scale: 3 }),
   decimalPrecision: integer("decimal_precision").default(3).notNull(),
+  displayFormat: text("display_format", { enum: displayFormatEnum }).default('decimal').notNull(),
 
   // Sport associations
   sportAssociations: text("sport_associations").array(),

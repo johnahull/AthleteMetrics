@@ -429,3 +429,67 @@ describe('Movement Quality columns', () => {
     expect(result.warnings).toEqual(['Column "MQI [MQI_TOTAL]" was ignored: MQI is calculated from the Movement Quality scores.']);
   });
 });
+
+describe('planSheetImport: time (mm:ss) columns', () => {
+  const MILE: SheetMetric = { code: 'MILE_RUN', label: 'Mile Run', unit: 'mm:ss', duration: true };
+  const MILE_HEADER = [ATHLETE_ID_HEADER, 'Athlete', 'Mile Run (mm:ss) [MILE_RUN]', 'Vertical Jump (in) [VERTICAL_JUMP]'];
+  const planMile = (cells: SheetCell[], saved: Record<string, number> = {}) =>
+    plan([MILE_HEADER, ['ath-1', 'Jordan Lee', ...cells]], {
+      metrics: [MILE, METRICS[0]],
+      athletes: athletes({ 'ath-1': saved }),
+    });
+
+  it('reads m:ss and plain seconds, and compares them with the saved seconds', () => {
+    expect(planMile(['6:42.5']).cells).toEqual([{ userId: 'ath-1', metricCode: 'MILE_RUN', value: '6:42.5', kind: 'imported' }]);
+    expect(planMile(['402.5']).cells[0]).toMatchObject({ value: '402.5', kind: 'imported' });
+    expect(planMile(['6:42.5'], { MILE_RUN: 402.5 }).cells[0]).toMatchObject({ kind: 'unchanged', savedValue: 402.5 });
+    expect(planMile(['06:42.50'], { MILE_RUN: 402.5 }).cells[0]).toMatchObject({ kind: 'unchanged' });
+    expect(planMile(['6:43'], { MILE_RUN: 402.5 }).cells[0]).toMatchObject({ kind: 'conflict' });
+  });
+
+  it('refuses a cell that is not a time', () => {
+    const result = planMile(['6:60']);
+    expect(result.cells).toEqual([]);
+    expect(result.cellErrors).toEqual([
+      expect.objectContaining({ metricCode: 'MILE_RUN', raw: '6:60', message: expect.stringMatching(/m:ss/) }),
+    ]);
+  });
+
+  it('takes a time cell under an hour as m:ss', () => {
+    expect(planMile([{ time: 435 }]).cells).toEqual([{ userId: 'ath-1', metricCode: 'MILE_RUN', value: '7:15', kind: 'imported' }]);
+    expect(planMile([{ time: 435 }], { MILE_RUN: 435 }).cells[0]).toMatchObject({ kind: 'unchanged' });
+  });
+
+  it('refuses a time cell with hours (Excel read 7:15 as 7 h 15 min)', () => {
+    const result = planMile([{ time: 26100 }]);
+    expect(result.cells).toEqual([]);
+    expect(result.cellErrors[0].message).toMatch(/format the column as Text or type 0:07:15/);
+  });
+
+  it('refuses a time cell in a decimal column as before', () => {
+    const result = planMile(['', { time: 30 }]);
+    expect(result.cellErrors).toEqual([expect.objectContaining({ metricCode: 'VERTICAL_JUMP', message: expect.stringMatching(/date/i) })]);
+  });
+
+  it('matches a "Mile Run (mm:ss)" header without the code', () => {
+    const result = plan([[ATHLETE_ID_HEADER, 'Athlete', 'Mile Run (mm:ss)'], ['ath-1', 'Jordan Lee', '6:42']], { metrics: [MILE] });
+    expect(result.warnings).toEqual([]);
+    expect(result.cells[0]).toMatchObject({ metricCode: 'MILE_RUN', value: '6:42' });
+  });
+
+  it('round-trips a downloaded XLSX with a saved time', async () => {
+    const sheet = buildRecordingSheet({
+      event: { id: 'ev-1', name: 'Spring Screen', startDate: '2026-03-10T00:00:00.000Z' },
+      metrics: [{ metricCode: 'MILE_RUN', metricDetails: { label: 'Mile Run', unit: 's', category: null, displayFormat: 'duration' } }],
+      athletes: [{ userId: 'ath-1', name: 'Jordan Lee', values: { MILE_RUN: '402.5' } }],
+    });
+    const buffer = await recordingSheetToXlsx(sheet);
+    const rows = await parseXlsxSheet(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer);
+    const result = planSheetImport({
+      rows, format: 'xlsx', eventId: 'ev-1', metrics: sheet.metrics, ignoredMetrics: [],
+      athletes: athletes({ 'ath-1': { MILE_RUN: 402.5 } }),
+    });
+    expect(result.cellErrors).toEqual([]);
+    expect(result.cells).toEqual([{ userId: 'ath-1', metricCode: 'MILE_RUN', value: '6:42.5', kind: 'unchanged', savedValue: 402.5 }]);
+  });
+});

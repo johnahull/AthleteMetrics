@@ -26,7 +26,7 @@ export function formatEvalEventDate(eventDate: string | undefined | null): strin
 
 function formatValue(m: EvalMetricResultView): string {
   if (typeof m.value !== "number" || Number.isNaN(m.value)) return "";
-  return m.unit ? formatValueWithUnit(m.value, m.unit) : String(Math.round(m.value * 100) / 100);
+  return m.unit ? formatValueWithUnit(m.value, m.unit, m.displayFormat) : String(Math.round(m.value * 100) / 100);
 }
 
 /** Percent of the way to the best tier for a tier comparison; null when there is nothing to draw */
@@ -140,7 +140,7 @@ export function EvalReportBody({ model }: { model: EvalReportModelView }) {
                   <p className="text-xs text-muted-foreground">
                     {m.trend.direction === "unchanged"
                       ? "Unchanged since the last evaluation"
-                      : `${m.trend.direction === "improved" ? "Improved" : "Declined"} by ${formatValueWithUnit(Math.abs(m.trend.change), m.unit)} since the last evaluation`}
+                      : `${m.trend.direction === "improved" ? "Improved" : "Declined"} by ${formatValueWithUnit(Math.abs(m.trend.change), m.unit, m.displayFormat)} since the last evaluation`}
                   </p>
                 )}
               </div>

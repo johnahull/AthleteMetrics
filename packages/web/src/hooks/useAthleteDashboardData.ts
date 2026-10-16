@@ -21,6 +21,7 @@ import {
   generateActivityTimeline,
 } from '@/utils/athlete-dashboard-utils';
 import { LOWER_IS_BETTER_METRICS } from '@/lib/metrics';
+import type { MetricType } from '@shared/analytics-types';
 import { useMetricLabels } from './use-metric-labels';
 import type { Measurement } from '@shared/schema';
 
@@ -97,7 +98,7 @@ export function useAthleteDashboardData(
   const measurementsQuery = useAthleteMeasurements(athleteId, { enabled, includeUnverified });
 
   // Resolve metric codes to user-facing labels
-  const { getLabel, labels: metricLabels } = useMetricLabels();
+  const { getLabel, labels: metricLabels, formats: metricFormats, types: metricTypes } = useMetricLabels();
 
   // Calculate dashboard data from measurements
   // Group measurements by metric inline to avoid duplicate API calls
@@ -131,10 +132,10 @@ export function useAthleteDashboardData(
     const lastMeasurementDate = getLastMeasurementDate(measurements);
 
     // Calculate personal records
-    const personalRecords = calculatePersonalRecords(measurements, metricLabels);
+    const personalRecords = calculatePersonalRecords(measurements, metricLabels, metricFormats, metricTypes);
 
     // Generate activity timeline
-    const activityTimeline = generateActivityTimeline(measurements, metricLabels);
+    const activityTimeline = generateActivityTimeline(measurements, metricLabels, metricFormats, metricTypes);
 
     // Calculate metric progress for each metric
     const metricProgress: MetricProgress[] = availableMetrics.map((metric) => {
@@ -155,7 +156,7 @@ export function useAthleteDashboardData(
           : 0;
 
       // Calculate trend
-      const { trend, trendPercent } = calculateTrend(metric, sortedMeasurements);
+      const { trend, trendPercent } = calculateTrend(metric, sortedMeasurements, metricTypes[metric]);
 
       return {
         metric,
@@ -177,7 +178,7 @@ export function useAthleteDashboardData(
       measurements,
       availableMetrics,
     };
-  }, [measurementsQuery.data, athleteQuery.data, getLabel, metricLabels]);
+  }, [measurementsQuery.data, athleteQuery.data, getLabel, metricLabels, metricFormats, metricTypes]);
 
   return {
     data: dashboardData,
@@ -192,18 +193,21 @@ export function useAthleteDashboardData(
 
 /**
  * Calculate trend direction and percentage
- * Uses LOWER_IS_BETTER_METRICS from shared constants
+ * Uses the metric's type when known, otherwise LOWER_IS_BETTER_METRICS from shared constants
  */
 function calculateTrend(
   metric: string,
-  measurements: Array<{ value: number; date: string }>
+  measurements: Array<{ value: number; date: string }>,
+  metricType?: MetricType
 ): { trend: 'improving' | 'steady' | 'declining'; trendPercent: number } {
   if (measurements.length < 2) {
     return { trend: 'steady', trendPercent: 0 };
   }
 
   // Cast to readonly string[] to allow string parameter in includes()
-  const isLowerBetter = (LOWER_IS_BETTER_METRICS as readonly string[]).includes(metric);
+  const isLowerBetter = metricType
+    ? metricType === 'lower_is_better'
+    : (LOWER_IS_BETTER_METRICS as readonly string[]).includes(metric);
 
   // Compare last value to average of previous values
   const currentValue = measurements[measurements.length - 1].value;

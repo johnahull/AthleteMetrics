@@ -25,6 +25,7 @@ import { useBatchMeasurementForm } from '@/components/batch-measurement-entry/us
 import { useAuth } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
+import { formatMeasurement } from '@shared/duration-format';
 import { RESPONSIVE_BREAKPOINTS } from '@shared/constants';
 import type { UserOrganization } from '@shared/schema';
 import { formatValueWithUnit } from "@/lib/metrics";
@@ -39,7 +40,7 @@ const ImportBatchHistory = lazy(() => import('@/components/device-import').then(
 export default function DataEntry() {
   const { toast } = useToast();
   const { user } = useAuth();
-  const { getLabel } = useMetricLabels();
+  const { getLabel, formats } = useMetricLabels();
   const canDeviceImport = user?.isSiteAdmin || user?.role === 'org_admin' || user?.role === 'coach';
   const isMobile = useMediaQuery(`(max-width: ${RESPONSIVE_BREAKPOINTS.MOBILE_BREAKPOINT - 1}px)`);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -396,7 +397,10 @@ export default function DataEntry() {
                       <p className="font-medium text-gray-900">{measurement.user.fullName}</p>
                       <div className="flex items-center gap-x-4 text-sm text-gray-600">
                         <span>
-                          {getLabel(measurement.metric)}: {formatValueWithUnit(measurement.value, measurement.units)}
+                          {getLabel(measurement.metric)}:{" "}
+                          {formats[measurement.metric]
+                            ? formatMeasurement(Number(measurement.value), formats[measurement.metric])
+                            : formatValueWithUnit(measurement.value, measurement.units)}
                         </span>
                         <span>•</span>
                         <span>{measurement.date}</span>

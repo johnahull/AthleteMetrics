@@ -138,5 +138,16 @@ describe('Metric Constants - Fallback Behavior', () => {
       expect(getProgressionStatus('VERTICAL_JUMP', 28, 30)).toBe('improved');
       expect(getProgressionStatus('VERTICAL_JUMP', 30, 28)).toBe('declined');
     });
+
+    it('takes the direction from the metric type for a metric outside the built-in list', () => {
+      // MILE_RUN is not in LOWER_IS_BETTER_METRICS; only its type says lower is better
+      expect(getProgressionStatus('MILE_RUN', 400, 360, 'lower_is_better')).toBe('improved');
+      expect(getProgressionStatus('MILE_RUN', 360, 400, 'lower_is_better')).toBe('declined');
+    });
+
+    it('lets the metric type override the built-in list', () => {
+      expect(isLowerBetter('FLY10_TIME', 'higher_is_better')).toBe(false);
+      expect(isLowerBetter('MILE_RUN', 'lower_is_better')).toBe(true);
+    });
   });
 });

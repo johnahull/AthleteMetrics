@@ -41,6 +41,7 @@ import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 import { ResponsiveChartWrapper } from './responsive-chart-wrapper';
 import { mergeChartOptions } from '@/utils/responsive-chart-options';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { formatMeasurement } from '@shared/duration-format';
 
 // Chart.js components are registered globally in lib/chart-setup.ts
 
@@ -345,7 +346,11 @@ export function MultiLineChart({
             });
 
             if (point) {
-              const unit = getMetricConfig(metric)?.unit || '';
+              const metricConfig = getMetricConfig(metric);
+              const unit = metricConfig?.unit || '';
+              if (metricConfig?.displayFormat === 'duration') {
+                return [`Actual: ${formatMeasurement(point.value, metricConfig)}`];
+              }
               // Show dual format for FLY10_TIME
               if (isFly10Metric(metric)) {
                 return [`Actual: ${formatFly10Dual(point.value, 'time-first')}`];
@@ -500,7 +505,7 @@ export function MultiLineChart({
             <div className="grid grid-cols-1 gap-2">
               {multiLineData.metrics.map((metric, index) => {
                 const metricConfig = getMetricConfig(metric);
-                const unit = metricConfig?.unit || '';
+                const unit = metricConfig?.displayFormat === 'duration' ? 'mm:ss' : metricConfig?.unit || '';
                 const label = metricConfig?.label || metric;
                 const isLowerBetter = metricConfig?.lowerIsBetter;
                 const style = getMetricStyle(index);

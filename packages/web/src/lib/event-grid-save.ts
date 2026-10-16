@@ -1,3 +1,5 @@
+import { parseDuration } from "@shared/duration-format";
+
 /** POST /api/events/:id/measurements/bulk takes at most 200 items per request */
 export const MAX_BULK_ITEMS = 200;
 /** Express rejects JSON bodies over 100 kB with a 413: stay well under it */
@@ -27,19 +29,29 @@ export function chunkBulkItems<T>(items: T[], maxItems = MAX_BULK_ITEMS, maxByte
   return chunks;
 }
 
+/** The number in a grid cell: m:ss or seconds for a time (duration) metric, otherwise a plain number. Null when empty or invalid. */
+export function cellNumber(cell: { value: string; isDuration?: boolean }): number | null {
+  if (cell.isDuration) return parseDuration(cell.value);
+  return cell.value !== "" && !isNaN(Number(cell.value)) ? Number(cell.value) : null;
+}
+
+/** A dirty cell with a number, also one the server rejected last time (its error is cleared on send) */
+export const isSendable = (cell: { isDirty: boolean; value: string; isDuration?: boolean }) =>
+  cell.isDirty && cellNumber(cell) !== null;
+
 /**
  * Fields of a cell whose value `sent` was saved as row `savedId`: it replaced the cell's only row, or
  * was added as a new trial. A cell edited again while the request was in flight keeps its new value
  * and stays dirty.
  */
 export function savedCellPatch(
-  sent: { value: string; savedCount: number },
+  sent: { value: string; savedCount: number; isDuration?: boolean },
   current: { value: string },
   savedId: string,
   replaced: boolean,
 ): { originalValue: number; savedMeasurementId: string; savedCount: number; isDirty: boolean; error?: undefined } {
   return {
-    originalValue: Number(sent.value),
+    originalValue: cellNumber(sent) ?? Number(sent.value),
     savedMeasurementId: savedId,
     savedCount: replaced ? sent.savedCount : sent.savedCount + 1,
     // Dirty against the value now saved, also when it was typed back to the old value meanwhile

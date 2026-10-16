@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useArchiveCustomOrgMetric, useRestoreCustomOrgMetric } from "@/lib/custom-metrics-api";
 import { useToast } from "@/hooks/use-toast";
-import { Edit, Archive, RotateCcw, Ruler, Calculator, Tag } from "lucide-react";
+import { Edit, Archive, RotateCcw, Ruler, Calculator, Tag, Timer } from "lucide-react";
 import type { CustomOrgMetric } from "@shared/schema";
 import {
   AlertDialog,
@@ -107,6 +107,12 @@ export function CustomOrgMetricCard({
               <div className="flex flex-wrap gap-2 mt-2">
                 <Badge variant={metricTypeBadgeVariant}>{metricTypeLabel}</Badge>
                 <Badge variant="outline">Custom</Badge>
+                {metric.displayFormat === "duration" && (
+                  <Badge variant="outline" className="flex items-center gap-1">
+                    <Timer className="h-3 w-3" />
+                    Time (mm:ss)
+                  </Badge>
+                )}
                 {metric.isDerived && (
                   <Badge variant="secondary" className="flex items-center gap-1">
                     <Calculator className="h-3 w-3" />

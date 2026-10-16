@@ -16,10 +16,13 @@ import { Button } from '@/components/ui/button';
 import { Loader2, AlertCircle, ArrowLeft, Calendar, MapPin } from 'lucide-react';
 import { format } from 'date-fns';
 import { toCalendarDate } from "@/utils/date-utils";
+import { useMetricLabels } from '@/hooks/use-metric-labels';
+import { formatMeasurement } from '@shared/duration-format';
 
 export default function EventResults() {
   const { eventId } = useParams();
   const { user } = useAuth();
+  const { formats } = useMetricLabels();
 
   // Fetch event details
   const {
@@ -149,10 +152,12 @@ export default function EventResults() {
                     </div>
                     <div className="text-right">
                       <div className="text-2xl font-bold text-blue-600">
-                        {measurement.value}
+                        {formats[measurement.metric]
+                          ? formatMeasurement(Number(measurement.value), formats[measurement.metric])
+                          : measurement.value}
                       </div>
                       <div className="text-sm text-gray-500">
-                        {measurement.metricUnits || ''}
+                        {formats[measurement.metric] ? '' : measurement.metricUnits || ''}
                       </div>
                     </div>
                   </div>

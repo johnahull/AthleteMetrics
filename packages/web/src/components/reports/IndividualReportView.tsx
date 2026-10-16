@@ -34,6 +34,7 @@ import { TierProgressChart } from "@/components/charts/TierProgressChart";
 import { BenchmarkStandingBar } from "@/components/charts/BenchmarkStandingBar";
 import { format } from "date-fns";
 import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
+import { formatMeasurement } from "@shared/duration-format";
 import { extractAthleteId } from "./report-utils";
 import type { Report } from "@/types/report-types";
 
@@ -115,7 +116,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
     );
   }
 
-  const { athlete, metricLabels, metricUnits, metricExplanations, trends, distributions } = reportData;
+  const { athlete, metricLabels, metricUnits, metricFormats, metricExplanations, trends, distributions } = reportData;
   const measurementCodes = athlete?.measurements ? Object.keys(athlete.measurements) : [];
   const sel = resolveChartSelection(reportData.reportConfig);
   const showComparison = isGroupComparisonOn(reportData.reportConfig);
@@ -226,6 +227,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                   const benchmarks = athlete.benchmarkComparisons[metricCode] || [];
                   const metricLabel = metricLabels?.[metricCode] || metricCode;
                   const unit = metricUnits?.[metricCode] || '';
+                  const durationFormat = metricFormats?.[metricCode];
 
                   return (
                     <TableRow key={metricCode}>
@@ -237,7 +239,9 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                       </TableCell>
                       <TableCell>
                         {typeof value === 'number'
-                          ? (isFly10Metric(metricCode)
+                          ? (durationFormat
+                              ? formatMeasurement(value, durationFormat)
+                              : isFly10Metric(metricCode)
                               ? formatFly10Dual(value)
                               : `${value.toFixed(2)}${unit ? ` ${unit}` : ''}`)
                           : "N/A"}
@@ -245,7 +249,9 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                       {showComparison && (
                         <TableCell>
                           {teamAverage !== undefined
-                            ? (isFly10Metric(metricCode)
+                            ? (durationFormat
+                                ? formatMeasurement(teamAverage, durationFormat)
+                                : isFly10Metric(metricCode)
                                 ? formatFly10Dual(teamAverage)
                                 : `${teamAverage.toFixed(2)}${unit ? ` ${unit}` : ''}`)
                             : "N/A"}
@@ -276,6 +282,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                                         nextTierName={b.nextTierName}
                                         distanceToNextTier={b.distanceToNextTier}
                                         unit={unit}
+                                        format={durationFormat}
                                         showProgress={true}
                                       />
                                     </div>
@@ -288,7 +295,9 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                                 ) : (
                                   <div className="text-sm">
                                     <span className="font-medium">{b.benchmarkName}:</span>{" "}
-                                    {isFly10Metric(metricCode)
+                                    {durationFormat
+                                      ? formatMeasurement(b.benchmarkValue, durationFormat)
+                                      : isFly10Metric(metricCode)
                                       ? formatFly10Dual(b.benchmarkValue)
                                       : `${b.benchmarkValue.toFixed(2)}${unit ? ` ${unit}` : ''}`}
                                     <Badge
@@ -342,6 +351,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                     metricCode={code}
                     comparison={tiered}
                     unit={metricUnits?.[code]}
+                    format={metricFormats?.[code]}
                   />
                 );
               }
@@ -352,6 +362,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                   metricCode={code}
                   comparison={c}
                   unit={metricUnits?.[code]}
+                  format={metricFormats?.[code]}
                 />
               ));
             })}
@@ -360,7 +371,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
       )}
 
       {sel.trends && trends && Object.keys(trends).length > 0 && (
-        <TrendSection trends={trends} metricLabels={metricLabels} metricUnits={metricUnits} />
+        <TrendSection trends={trends} metricLabels={metricLabels} metricUnits={metricUnits} metricFormats={metricFormats} />
       )}
 
       {sel.distribution && distributions && Object.keys(distributions).length > 0 && (
@@ -369,6 +380,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
           distributions={distributions}
           metricLabels={metricLabels}
           metricUnits={metricUnits}
+          metricFormats={metricFormats}
           percentiles={athlete.percentiles}
           comparisonLabel={reportData.comparisonLabel}
         />

@@ -5,14 +5,17 @@ import type { TeamReportTrends } from '@shared/report-trends-types';
 import { BenchmarkTrendChart } from '@/components/charts/BenchmarkTrendChart';
 import { MAX_FAINT_ATHLETES } from '@/components/charts/trend-utils';
 import { TrendAtAGlanceCards } from './TrendAtAGlanceCards';
+import type { MeasurementFormat } from '@shared/duration-format';
 
 interface TeamTrendSectionProps {
   trends: TeamReportTrends;
   metricLabels?: Record<string, string>;
   metricUnits?: Record<string, string>;
+  /** Duration (mm:ss) metrics only; others keep their unit display */
+  metricFormats?: Record<string, MeasurementFormat>;
 }
 
-export function TeamTrendSection({ trends, metricLabels = {}, metricUnits = {} }: TeamTrendSectionProps) {
+export function TeamTrendSection({ trends, metricLabels = {}, metricUnits = {}, metricFormats = {} }: TeamTrendSectionProps) {
   const entries = useMemo(() => Object.entries(trends), [trends]);
   // Stabilize each chart's faint-athlete series so BenchmarkTrendChart's own
   // useMemo (keyed on this array) doesn't invalidate on every parent render.
@@ -34,7 +37,7 @@ export function TeamTrendSection({ trends, metricLabels = {}, metricUnits = {} }
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <TrendAtAGlanceCards entries={entries} metricLabels={metricLabels} metricUnits={metricUnits} />
+        <TrendAtAGlanceCards entries={entries} metricLabels={metricLabels} metricUnits={metricUnits} metricFormats={metricFormats} />
 
         {/* Detail charts: team-average bold line + up to 8 faint athlete lines */}
         <div className="space-y-8">
@@ -50,6 +53,7 @@ export function TeamTrendSection({ trends, metricLabels = {}, metricUnits = {} }
               }}
               label={metricLabels[code] || code}
               unit={metricUnits[code]}
+              format={metricFormats[code]}
               backgroundSeries={backgroundSeriesByMetric[code]}
             />
           ))}

@@ -398,3 +398,35 @@ describe('filenameFor', () => {
     expect(fn).toBe('athlete-2026-04-19.md');
   });
 });
+
+describe('renderMarkdown: duration (mm:ss) metrics', () => {
+  const data = () =>
+    sampleData({
+      currentSnapshot: [{ metricCode: 'MILE_RUN', metricLabel: 'Mile Run', value: 402.5, units: 's', date: '2026-03-14' }],
+      measurementHistory: { MILE_RUN: [{ date: '2026-03-14', value: 402.5, units: 's' }] },
+      activeGoals: [
+        {
+          metricCode: 'MILE_RUN', metricLabel: 'Mile Run', goalType: 'minimize',
+          baselineValue: 420, currentValue: 402.5, targetValue: 390, targetDate: '2026-08-01', units: 's', notes: null,
+        },
+      ],
+      metricGlossary: {
+        MILE_RUN: { label: 'Mile Run', units: 's', explanation: 'One mile for time.', displayFormat: 'duration', decimalPrecision: 1 },
+      },
+    });
+
+  it('shows snapshot, history and goal values as mm:ss', () => {
+    const md = renderMarkdown(data());
+    expect(md).toContain('| Mile Run | 6:42.5 | mm:ss | 2026-03-14 |');
+    expect(md).toContain('### Mile Run (mm:ss)');
+    expect(md).toContain('| 2026-03-14 | 6:42.5 |');
+    expect(md).toContain('baseline 7:00.0 → current 6:42.5 → target 6:30.0 by 2026-08-01');
+    expect(md).not.toContain('402.5');
+  });
+
+  it('keeps raw seconds in the JSON export', () => {
+    const json = renderJson(data());
+    expect(json.currentSnapshot[0].value).toBe(402.5);
+    expect(json.metricGlossary.MILE_RUN.displayFormat).toBe('duration');
+  });
+});

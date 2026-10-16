@@ -3,6 +3,8 @@
  * Comprehensive type system for sophisticated analytics and charting
  */
 
+import type { DisplayFormat } from './duration-format';
+
 // Core analysis types
 export type AnalysisType = 'individual' | 'intra_group' | 'multi_group';
 export type TimeframeType = 'best' | 'trends';
@@ -429,6 +431,8 @@ export interface DynamicMetricConfig {
   isDerived?: boolean;
   formula?: string;
   dependentMetrics?: string[];
+  displayFormat?: DisplayFormat;
+  decimalPrecision?: number;
 }
 
 // Organization-specific metric configuration
@@ -464,6 +468,7 @@ export const LOWER_IS_BETTER_METRICS = [
   'AGILITY_505_YD_R',
   'AGILITY_COD_DEFICIT_M',
   'AGILITY_COD_DEFICIT_YD',
+  'AGILITY_COD_DEFICIT_M_INTERP',
   'AGILITY_5105',
   'AGILITY_5105_L',
   'AGILITY_5105_R',

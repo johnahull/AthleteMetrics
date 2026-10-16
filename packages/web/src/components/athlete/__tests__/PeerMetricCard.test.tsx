@@ -7,6 +7,7 @@ vi.mock('@/hooks/use-metric-labels', () => ({
     labels: {},
     getLabel: (code: string) => code,
     getUnit: (code: string) => (code === 'FLY10_TIME' ? 's' : ''),
+    formats: {},
     isLoading: false,
   }),
 }));

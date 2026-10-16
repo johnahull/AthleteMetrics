@@ -661,6 +661,14 @@ describe('MetricService', () => {
     });
   });
 
+  describe('bulkUpdateMetricsForOrganization', () => {
+    it('should reject a non-member', async () => {
+      await expect(
+        metricService.bulkUpdateMetricsForOrganization(testOrgId, { enable: [], disable: ['X'] }, regularUserId)
+      ).rejects.toThrow(/Unauthorized: No access to organization/);
+    });
+  });
+
   describe('enableMetricForOrganization', () => {
     it('should enable a metric for organization as site admin', async () => {
       const newCode = `ENABLE_ME_${Date.now()}`;

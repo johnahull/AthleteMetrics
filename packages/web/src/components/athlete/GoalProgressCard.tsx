@@ -28,6 +28,7 @@ import {
   isGoalAchieved,
 } from '@/utils/goal-utils';
 import { getMetricEducation, formatMetricValue } from '@/utils/metric-education-utils';
+import { formatMeasurement } from '@shared/duration-format';
 
 interface GoalProgressCardProps {
   goal: Goal;
@@ -42,11 +43,11 @@ export function GoalProgressCard({
   onAbandon,
   compact = false,
 }: GoalProgressCardProps) {
-  const { getUnit } = useMetricLabels();
+  const { getUnit, formats, types: metricTypes } = useMetricLabels();
   const unit = getUnit(goal.metric);
-  const progress = calculateGoalProgress(goal);
+  const progress = calculateGoalProgress(goal, metricTypes?.[goal.metric]);
   const daysRemaining = getDaysRemaining(goal.targetDate);
-  const achieved = isGoalAchieved(goal);
+  const achieved = isGoalAchieved(goal, metricTypes?.[goal.metric]);
   const education = getMetricEducation(goal.metric);
   const metricName = education?.name || goal.metric;
 
@@ -97,12 +98,14 @@ export function GoalProgressCard({
     );
   };
 
-  // Format current value display
+  // Format current value display (m:ss for a duration metric)
   const formatCurrentDisplay = () => {
     if (goal.goalType === GoalType.CONSISTENCY) {
       return String(goal.currentValue);
     }
-    return formatMetricValue(goal.currentValue, goal.metric, unit);
+    return formats[goal.metric]
+      ? formatMeasurement(goal.currentValue, formats[goal.metric])
+      : formatMetricValue(goal.currentValue, goal.metric, unit);
   };
 
   // Format days remaining text
@@ -154,7 +157,7 @@ export function GoalProgressCard({
           <div>
             <p className="text-sm text-gray-500">Target</p>
             <p data-testid="goal-target" className="text-xl font-bold text-gray-900">
-              {formatGoalTarget(goal, unit)}
+              {formatGoalTarget(goal, unit, formats[goal.metric])}
             </p>
           </div>
           <div className="text-right">

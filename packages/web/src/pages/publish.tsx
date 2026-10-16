@@ -22,6 +22,7 @@ import jsPDF from "jspdf";
 import { useToast } from "@/hooks/use-toast";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
 import { useMetricLabels } from "@/hooks/use-metric-labels";
+import { formatMeasurement } from "@shared/duration-format";
 import { StatisticsSummaryCard, type DistributionMode } from "@/components/analytics/StatisticsSummaryCard";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 
@@ -29,7 +30,7 @@ export default function Publish() {
   const labels = useContextualLabels();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { getLabel: getMetricLabel } = useMetricLabels();
+  const { getLabel: getMetricLabel, formats: metricFormats, types: metricTypes } = useMetricLabels();
 
   // Get available metrics using centralized hook (filters by active+enabled)
   const { metrics: availableMetrics } = useAvailableMetrics();
@@ -186,7 +187,9 @@ export default function Publish() {
     if (!measurements) return [];
 
     const athleteBest = new Map();
-    const isTimeBased = isLowerIsBetterMetric(filters.metric);
+    const isTimeBased = metricTypes[filters.metric]
+      ? metricTypes[filters.metric] === 'lower_is_better'
+      : isLowerIsBetterMetric(filters.metric);
 
     measurements.forEach((measurement: any) => {
       const athleteId = measurement.user.id;
@@ -218,14 +221,16 @@ export default function Publish() {
         return bValue - aValue; // descending for others (higher is better)
       }
     });
-  }, [measurements, filters.metric]);
+  }, [measurements, filters.metric, metricTypes]);
 
   // PERFORMANCE: Memoize expensive sorting to prevent recomputation on every render
   // All measurements sorted (for both "best by measurement" and "all" views)
   const allMeasurementsSorted = useMemo(() => {
     if (!measurements) return [];
 
-    const isTimeBased = isLowerIsBetterMetric(filters.metric);
+    const isTimeBased = metricTypes[filters.metric]
+      ? metricTypes[filters.metric] === 'lower_is_better'
+      : isLowerIsBetterMetric(filters.metric);
     return [...measurements].sort((a: any, b: any) => {
       const aValue = parseFloat(a.value);
       const bValue = parseFloat(b.value);
@@ -236,7 +241,7 @@ export default function Publish() {
         return bValue - aValue; // descending for others (higher is better)
       }
     });
-  }, [measurements, filters.metric]);
+  }, [measurements, filters.metric, metricTypes]);
 
   // Sort handler
   const handleSort = (column: string) => {
@@ -429,7 +434,13 @@ export default function Publish() {
       pdf.text(`${index + 1}`, 20, yPos);
       pdf.text(measurement.user.fullName, 40, yPos);
       pdf.text(teamNames, 100, yPos);
-      pdf.text(formatValueWithUnit(measurement.value, measurement.units), 140, yPos);
+      pdf.text(
+        metricFormats[filters.metric]
+          ? formatMeasurement(parseFloat(measurement.value), metricFormats[filters.metric])
+          : formatValueWithUnit(measurement.value, measurement.units),
+        140,
+        yPos,
+      );
       pdf.text(new Date(measurement.date).toLocaleDateString(), 170, yPos);
 
       yPos += 12;
@@ -942,7 +953,9 @@ export default function Publish() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-gray-900">
-                            {formatValueWithUnit(measurement.value, measurement.units)}
+                            {metricFormats[filters.metric]
+                              ? formatMeasurement(parseFloat(measurement.value), metricFormats[filters.metric])
+                              : formatValueWithUnit(measurement.value, measurement.units)}
                           </span>
                           <span className={`px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800`}>
                             {getMetricLabel(filters.metric)}
@@ -1017,7 +1030,10 @@ export default function Publish() {
                       <li key={m.id} className="flex items-center justify-between py-1 border-b border-gray-200 last:border-0">
                         <span className="font-medium text-gray-900">{m.user.fullName}</span>
                         <span className="text-gray-600">
-                          {formatValueWithUnit(m.value, m.units)} • {new Date(m.date).toLocaleDateString()}
+                          {metricFormats[filters.metric]
+                            ? formatMeasurement(parseFloat(m.value), metricFormats[filters.metric])
+                            : formatValueWithUnit(m.value, m.units)}{" "}
+                          • {new Date(m.date).toLocaleDateString()}
                         </span>
                       </li>
                     ))

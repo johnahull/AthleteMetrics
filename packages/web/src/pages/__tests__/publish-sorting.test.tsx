@@ -32,6 +32,8 @@ vi.mock('@/hooks/use-available-metrics', () => ({
       { code: 'FLY10_TIME', label: 'Fly-10 Time', unit: 's', category: 'Speed' },
       { code: 'VERTICAL_JUMP', label: 'Vertical Jump', unit: 'in', category: 'Power' },
       { code: 'DASH_40YD', label: '40-Yard Dash', unit: 's', category: 'Speed' },
+      // Not in the hard-coded lower-is-better list: only metricType says lower is better
+      { code: 'MILE_RUN', label: 'Mile Run', unit: 's', category: 'Speed', metricType: 'lower_is_better' },
     ],
     isLoading: false,
   }),
@@ -734,6 +736,24 @@ describe('Publish Page - Column Sorting', () => {
         expect(names[0]).toContain('Apple');
         expect(names[1]).toContain('Mango');
         expect(names[2]).toContain('Zebra');
+      });
+    });
+  });
+
+  describe('Ranking direction from the metric list', () => {
+    it('ranks the fastest time first for a lower-is-better metric outside the built-in list', async () => {
+      setupFetchMocks([
+        { ...mockMeasurements[0], metric: 'MILE_RUN', value: '400.0' },
+        { ...mockMeasurements[1], metric: 'MILE_RUN', value: '360.0' },
+      ]);
+      renderWithProviders(<Publish />);
+
+      fireEvent.click(screen.getByTestId('select-metric'));
+      fireEvent.click(await screen.findByRole('option', { name: 'Mile Run' }));
+
+      await waitFor(() => {
+        const rows = within(screen.getByRole('table')).getAllByRole('row');
+        expect(within(rows[1]).getAllByRole('cell')[2]?.textContent).toContain('Bob Brown');
       });
     });
   });
