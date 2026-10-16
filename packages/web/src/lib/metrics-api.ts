@@ -307,7 +307,7 @@ export function useOrganizationMetrics(organizationId: string, enabledOnly = fal
 }
 
 /**
- * Apply an org-metric write to the cached lists without refetching them: each refetch spends the
+ * Apply org-metric writes to the cached lists without refetching them: each refetch spends the
  * per-user API rate-limit budget. The full list is patched from the response; other variants
  * (enabledOnly) are refetched only if a mounted component is watching them. A metric missing from the cached list needs its joined
  * siteMetric, so that case falls back to a normal refetch.
@@ -315,21 +315,58 @@ export function useOrganizationMetrics(organizationId: string, enabledOnly = fal
 export function applyOrgMetricUpdate(
   queryClient: QueryClient,
   organizationId: string,
-  updated: OrganizationMetric
-) {
+  updates: OrganizationMetric[]
+): Promise<void> {
   const fullKey = ['organizationMetrics', organizationId, false];
   const cached = queryClient.getQueryData<(OrganizationMetric & { siteMetric: SiteMetric })[]>(fullKey);
-  const known = cached?.some((m) => m.metricCode === updated.metricCode);
+  const byCode = new Map(updates.map((u) => [u.metricCode, u]));
+  const allKnown = !!cached && updates.every((u) => cached.some((m) => m.metricCode === u.metricCode));
 
-  if (known) {
+  if (allKnown) {
     queryClient.setQueryData(
       fullKey,
-      cached!.map((m) => (m.metricCode === updated.metricCode ? { ...m, ...updated } : m))
+      cached!.map((m) => (byCode.has(m.metricCode) ? { ...m, ...byCode.get(m.metricCode)! } : m))
     );
-    queryClient.invalidateQueries({ queryKey: ['organizationMetrics', organizationId, true], refetchType: 'active' });
-  } else {
-    queryClient.invalidateQueries({ queryKey: ['organizationMetrics', organizationId] });
+    return queryClient.invalidateQueries({ queryKey: ['organizationMetrics', organizationId, true], refetchType: 'active' });
   }
+  return queryClient.invalidateQueries({ queryKey: ['organizationMetrics', organizationId] });
+}
+
+/**
+ * Enable and disable many metrics for an organization in one request
+ */
+export async function bulkUpdateOrganizationMetrics(
+  organizationId: string,
+  changes: { enable: string[]; disable: string[] }
+): Promise<OrganizationMetric[]> {
+  const response = await fetch(`/api/organizations/${organizationId}/metrics/bulk-update`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(changes),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.message || 'Failed to update metrics');
+  }
+
+  return response.json();
+}
+
+/**
+ * Hook to enable and disable many metrics for an organization in one request
+ */
+export function useBulkUpdateOrganizationMetrics() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ organizationId, enable, disable }: { organizationId: string; enable: string[]; disable: string[] }) =>
+      bulkUpdateOrganizationMetrics(organizationId, { enable, disable }),
+    // Returned so mutateAsync waits for the refetch: the card clears its staged state right after,
+    // and the switches must not fall back to stale saved state in between
+    onSuccess: (updated, variables) =>
+      applyOrgMetricUpdate(queryClient, variables.organizationId, updated),
+  });
 }
 
 /**
@@ -342,7 +379,7 @@ export function useEnableMetricForOrganization() {
     mutationFn: ({ organizationId, metricCode }: { organizationId: string; metricCode: string }) =>
       enableMetricForOrganization(organizationId, metricCode),
     onSuccess: (updated, variables) => {
-      applyOrgMetricUpdate(queryClient, variables.organizationId, updated);
+      applyOrgMetricUpdate(queryClient, variables.organizationId, [updated]);
     },
   });
 }
@@ -357,7 +394,7 @@ export function useDisableMetricForOrganization() {
     mutationFn: ({ organizationId, metricCode }: { organizationId: string; metricCode: string }) =>
       disableMetricForOrganization(organizationId, metricCode),
     onSuccess: (updated, variables) => {
-      applyOrgMetricUpdate(queryClient, variables.organizationId, updated);
+      applyOrgMetricUpdate(queryClient, variables.organizationId, [updated]);
     },
   });
 }
@@ -379,7 +416,7 @@ export function useUpdateOrganizationMetric() {
       data: Partial<UpdateOrganizationMetric>;
     }) => updateOrganizationMetric(organizationId, metricCode, data),
     onSuccess: (updated, variables) => {
-      applyOrgMetricUpdate(queryClient, variables.organizationId, updated);
+      applyOrgMetricUpdate(queryClient, variables.organizationId, [updated]);
     },
   });
 }

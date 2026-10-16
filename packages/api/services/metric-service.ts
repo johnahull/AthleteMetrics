@@ -729,6 +729,54 @@ export class MetricService extends BaseService {
       return this.handleError(error, "MetricService.bulkEnableMetricsForOrganization");
     }
   }
+
+  /**
+   * Enable and disable many metrics for an organization in one request (org admin or site admin)
+   */
+  async bulkUpdateMetricsForOrganization(
+    organizationId: string,
+    changes: { enable: string[]; disable: string[] },
+    requestingUserId: string
+  ): Promise<OrganizationMetric[]> {
+    try {
+      const isSiteAdmin = await this.isSiteAdmin(requestingUserId);
+      if (!isSiteAdmin) {
+        const hasAccess = await this.validateOrganizationAccess(
+          requestingUserId,
+          organizationId,
+          false
+        );
+        if (!hasAccess) {
+          throw new Error(`Unauthorized: No access to organization ${organizationId}`);
+        }
+      }
+
+      const results = await this.storage.bulkUpdateMetricsForOrganization(organizationId, changes);
+
+      try {
+        await this.storage.createAuditLog({
+          userId: requestingUserId,
+          action: 'org_metrics_bulk_updated',
+          resourceType: 'organization',
+          resourceId: organizationId,
+          details: JSON.stringify(changes),
+          ipAddress: null,
+          userAgent: null,
+        });
+      } catch (auditError) {
+        console.error('CRITICAL: Failed to create audit log for org_metrics_bulk_updated:', {
+          error: auditError,
+          userId: requestingUserId,
+          organizationId,
+          changes,
+        });
+      }
+
+      return results;
+    } catch (error) {
+      return this.handleError(error, "MetricService.bulkUpdateMetricsForOrganization");
+    }
+  }
 }
 
 export const metricService = new MetricService();
