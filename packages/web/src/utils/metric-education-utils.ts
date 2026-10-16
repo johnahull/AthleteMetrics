@@ -360,8 +360,10 @@ export function formatMetricValue(value: number, metric: string, unit?: string |
     case 'AGILITY_5105':
     case 'T_TEST':
     case 'DASH_40YD':
-    case 'RSI':
       return formatValueWithUnit(value.toFixed(2), unit);
+    case 'RSI':
+      // Dimensionless ratio: never print a unit
+      return value.toFixed(2);
     case 'VERTICAL_JUMP':
     case 'TOP_SPEED':
       return formatValueWithUnit(value.toFixed(1), unit);

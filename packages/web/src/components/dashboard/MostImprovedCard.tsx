@@ -73,7 +73,7 @@ export function MostImprovedCard({
 
   const isLoading = metricsLoading || mostImprovedLoading;
   const improvements = mostImprovedData?.improvements || [];
-  const improvedUnit = metrics.find((m) => m.code === (mostImprovedData?.metric || effectiveMetric))?.unit;
+  const improvedUnit = metrics.find((m) => m.code === (mostImprovedData?.metric || effectiveMetric))?.unit ?? '';
 
   // Handle athlete click
   const handleAthleteClick = (athleteId: string) => {

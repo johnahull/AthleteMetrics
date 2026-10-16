@@ -74,7 +74,7 @@ export function LeaderboardWidget({
 
   const isLoading = metricsLoading || leaderboardLoading;
   const rankings = leaderboardData?.rankings || [];
-  const rankedUnit = metrics.find((m) => m.code === (leaderboardData?.metric || effectiveMetric))?.unit;
+  const rankedUnit = metrics.find((m) => m.code === (leaderboardData?.metric || effectiveMetric))?.unit ?? '';
 
   // Get rank badge styling
   const getRankBadgeClass = (rank: number): string => {

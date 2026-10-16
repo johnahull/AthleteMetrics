@@ -158,6 +158,10 @@ describe('metric-education-utils', () => {
       expect(formatMetricValue(2.15, 'RSI')).toBe('2.15');
     });
 
+    it('should never append a unit to RSI', () => {
+      expect(formatMetricValue(2.15, 'RSI', 's')).toBe('2.15');
+    });
+
     it('should not invent a unit when none is supplied', () => {
       expect(formatMetricValue(1.234, 'FLY10_TIME')).toBe('1.23');
     });
