@@ -137,6 +137,12 @@ describe('metric-education-utils', () => {
     it('should return false for unknown metrics', () => {
       expect(isLowerBetterMetric('UNKNOWN')).toBe(false);
     });
+
+    it('lets the metric type decide, for built-ins and custom codes', () => {
+      expect(isLowerBetterMetric('FLY10_TIME', 'higher_is_better')).toBe(false);
+      expect(isLowerBetterMetric('ORG_SPRINT', 'lower_is_better')).toBe(true);
+      expect(isLowerBetterMetric('HEIGHT', 'tracking')).toBe(false);
+    });
   });
 
   describe('formatMetricValue', () => {

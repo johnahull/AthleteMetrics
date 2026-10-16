@@ -25,7 +25,7 @@ import {
   PeerComparisonFilters,
   type ComparisonScope,
 } from '@/components/athlete/PeerComparisonFilters';
-import { isLowerIsBetterMetric } from '@shared/analytics-types';
+import { isLowerBetterType } from '@shared/analytics-types';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
 import { PeerMetricCard, type BenchmarkStatus } from '@/components/athlete/PeerMetricCard';
 import { useAthleteMetricExplanations } from '@/hooks/useAthleteMetricExplanations';
@@ -305,11 +305,7 @@ export default function MyPeerComparisonPage() {
                   result={result}
                   benchmark={benchmarksByMetric.get(result.metric)}
                   filters={effectiveFilters}
-                  lowerIsBetter={
-                    metricTypes?.[result.metric]
-                      ? metricTypes[result.metric] === 'lower_is_better'
-                      : isLowerIsBetterMetric(result.metric)
-                  }
+                  lowerIsBetter={isLowerBetterType(result.metric, metricTypes?.[result.metric])}
                   explanation={metricExplanations[result.metric]}
                 />
               ))}

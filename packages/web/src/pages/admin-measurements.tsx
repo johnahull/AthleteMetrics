@@ -189,7 +189,7 @@ export default function AdminMeasurementsPage() {
 
   // Fetch available metrics from database (includes derived metrics)
   const { metrics: availableMetrics } = useAvailableMetrics();
-  const { formats: metricFormats } = useMetricLabels();
+  const { formats: metricFormats, types: metricTypes } = useMetricLabels();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -648,7 +648,7 @@ export default function AdminMeasurementsPage() {
 
     const applyMode = (items: Measurement[], metric: string) =>
       statisticsMode === 'best'
-        ? filterToBestPerPlayer(items, metric, (m) => m.userId, (m) => parseFloat(m.value))
+        ? filterToBestPerPlayer(items, metric, (m) => m.userId, (m) => parseFloat(m.value), metricTypes[metric])
         : items;
 
     if (watchedFilters.metric) {
@@ -690,7 +690,7 @@ export default function AdminMeasurementsPage() {
         </div>
       );
     }
-  }, [measurements, watchedFilters.metric, distributionMode, statisticsMode]);
+  }, [measurements, watchedFilters.metric, distributionMode, statisticsMode, metricTypes]);
 
   // Access control check
   if (!user?.isSiteAdmin) {

@@ -133,7 +133,7 @@ function determineTrend(percentChange: number, metric: string, metricType?: Metr
     return 'steady';
   }
 
-  const lowerIsBetter = metricType ? metricType === 'lower_is_better' : isLowerBetter(metric);
+  const lowerIsBetter = isLowerBetter(metric, metricType);
 
   if (lowerIsBetter) {
     // For time-based metrics, negative change is improving
@@ -189,7 +189,7 @@ export function getBestValue(
 ): number | null {
   if (measurements.length === 0) return null;
 
-  const lowerIsBetter = metricType ? metricType === 'lower_is_better' : isLowerBetter(metric);
+  const lowerIsBetter = isLowerBetter(metric, metricType);
 
   const values = measurements.map((m) => parseFloat(String(m.value)));
 

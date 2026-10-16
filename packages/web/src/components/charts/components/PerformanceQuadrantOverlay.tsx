@@ -7,6 +7,7 @@
 
 import React from 'react';
 import { getPerformanceQuadrantLabels } from '@/utils/chart-calculations';
+import { useMetricLabels } from '@/hooks/use-metric-labels';
 
 interface PerformanceQuadrantOverlayProps {
   xMetric: string;
@@ -19,7 +20,8 @@ export const PerformanceQuadrantOverlay = React.memo(function PerformanceQuadran
   yMetric,
   className = ''
 }: PerformanceQuadrantOverlayProps) {
-  const labels = getPerformanceQuadrantLabels(xMetric, yMetric);
+  const { types } = useMetricLabels();
+  const labels = getPerformanceQuadrantLabels(xMetric, yMetric, types[xMetric], types[yMetric]);
 
   const colorClasses = {
     green: 'bg-green-50 border-green-200 text-green-800',

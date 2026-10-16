@@ -6,10 +6,10 @@
 import React, { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { calculateStatistics } from '@shared/analytics-utils';
-import { getMetricUnits, getMetricType } from '@/lib/metrics';
+import { getMetricUnits } from '@/lib/metrics';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
 import { formatMeasurement } from '@shared/duration-format';
-import type { MetricType } from '@shared/analytics-types';
+import { resolveMetricType, type MetricType } from '@shared/analytics-types';
 
 /**
  * Distribution mode for displaying percentile breakdowns
@@ -24,7 +24,7 @@ interface StatisticsSummaryCardProps {
   metric: string;
   title?: string;
   distributionMode?: DistributionMode;
-  /** Override metric type from DB (for custom metrics). Falls back to getMetricType(). */
+  /** Override metric type from DB. Falls back to the metric list, then resolveMetricType(). */
   metricType?: MetricType;
 }
 
@@ -44,9 +44,9 @@ export function StatisticsSummaryCard({
   distributionMode = 'quartiles',
   metricType: metricTypeOverride,
 }: StatisticsSummaryCardProps) {
-  const { getLabel, formats } = useMetricLabels();
-  // Resolve metric direction: DB override > fallback chain
-  const metricDirection = metricTypeOverride || getMetricType(metric);
+  const { getLabel, formats, types } = useMetricLabels();
+  // Resolve metric direction: prop override > metric list > fallback
+  const metricDirection = resolveMetricType(metric, metricTypeOverride ?? types[metric]);
   // Extract numeric values from measurements (already filtered by caller)
   // Memoize to prevent unnecessary recalculations
   const stats = useMemo(() => {

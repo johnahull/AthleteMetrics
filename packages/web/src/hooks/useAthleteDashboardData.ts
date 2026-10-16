@@ -20,8 +20,7 @@ import {
   calculatePersonalRecords,
   generateActivityTimeline,
 } from '@/utils/athlete-dashboard-utils';
-import { LOWER_IS_BETTER_METRICS } from '@/lib/metrics';
-import type { MetricType } from '@shared/analytics-types';
+import { isLowerBetterType, type MetricType } from '@shared/analytics-types';
 import { useMetricLabels } from './use-metric-labels';
 import type { Measurement } from '@shared/schema';
 
@@ -193,7 +192,7 @@ export function useAthleteDashboardData(
 
 /**
  * Calculate trend direction and percentage
- * Uses the metric's type when known, otherwise LOWER_IS_BETTER_METRICS from shared constants
+ * Uses the metric's type when known (see resolveMetricType)
  */
 function calculateTrend(
   metric: string,
@@ -204,10 +203,7 @@ function calculateTrend(
     return { trend: 'steady', trendPercent: 0 };
   }
 
-  // Cast to readonly string[] to allow string parameter in includes()
-  const isLowerBetter = metricType
-    ? metricType === 'lower_is_better'
-    : (LOWER_IS_BETTER_METRICS as readonly string[]).includes(metric);
+  const isLowerBetter = isLowerBetterType(metric, metricType);
 
   // Compare last value to average of previous values
   const currentValue = measurements[measurements.length - 1].value;

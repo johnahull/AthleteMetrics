@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { VALID_METRICS, MetricType } from '../schema/constants';
-import { LOWER_IS_BETTER_METRICS } from '../analytics-types';
+import { resolveMetricType } from '../analytics-types';
 import { COMMON_METRICS } from '../import-types';
 
 const RETIRED = ['AGILITY_505', 'AGILITY_505_L', 'AGILITY_505_R', 'AGILITY_505_LSI'];
@@ -39,12 +39,11 @@ describe('AM-FEAT-016 metric codes', () => {
     expect((MetricType as Record<string, string>).AGILITY_COD_DEFICIT_YD).toBe('AGILITY_COD_DEFICIT_YD');
   });
 
-  it('LOWER_IS_BETTER_METRICS has AGILITY_505_M/_YD and the deficit codes, not the retired code', () => {
-    const list = LOWER_IS_BETTER_METRICS as readonly string[];
+  it('the lower-is-better fallback covers AGILITY_505_M/_YD and the deficit codes, not the retired code', () => {
     for (const code of ['AGILITY_505_M', 'AGILITY_505_YD', ...DEFICIT_CODES]) {
-      expect(list).toContain(code);
+      expect(resolveMetricType(code)).toBe('lower_is_better');
     }
-    for (const code of RETIRED) expect(list).not.toContain(code);
+    for (const code of RETIRED) expect(resolveMetricType(code)).toBe('higher_is_better');
   });
 
   it('COMMON_METRICS lists both protocol 5-0-5 codes', () => {

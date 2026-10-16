@@ -113,7 +113,7 @@ export function MetricProgressCard({
   const durationFormat = formats[metric];
   const isTracking = metricType === 'tracking';
   // The metric list knows new and custom metrics; the built-in list is the fallback
-  const lowerIsBetter = metricType ? metricType === 'lower_is_better' : isLowerBetter(metric);
+  const lowerIsBetter = isLowerBetter(metric, metricType);
 
   // Trigger confetti for recent PRs
   useEffect(() => {
