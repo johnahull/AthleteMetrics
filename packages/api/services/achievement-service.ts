@@ -59,7 +59,7 @@ export class AchievementService {
   }
 
   /**
-   * Check for PR-related badges
+   * Check for PR-related badges. Callers must pass org-scoped, verified rows (see getOrgHistory).
    */
   async checkPRBadges(
     userId: string,
@@ -123,11 +123,12 @@ export class AchievementService {
    */
   async checkConsistencyBadges(
     userId: string,
-    organizationId: string
+    organizationId: string,
+    orgMeasurements?: Measurement[]
   ): Promise<Array<{ code: string; metadata?: any }>> {
     const achievements: Array<{ code: string; metadata?: any }> = [];
 
-    const allMeasurements = await this.getOrgHistory(userId, organizationId);
+    const allMeasurements = orgMeasurements ?? await this.getOrgHistory(userId, organizationId);
 
     // FIRST_MEASUREMENT: First measurement ever
     if (allMeasurements.length === 1) {
@@ -201,11 +202,14 @@ export class AchievementService {
   async checkImprovementBadges(
     userId: string,
     organizationId: string,
-    metric: string
+    metric: string,
+    orgMeasurements?: Measurement[]
   ): Promise<Array<{ code: string; metadata?: any }>> {
     const achievements: Array<{ code: string; metadata?: any }> = [];
 
-    const metricMeasurements = await this.getOrgHistory(userId, organizationId, metric);
+    const metricMeasurements = orgMeasurements
+      ? orgMeasurements.filter(m => m.metric === metric)
+      : await this.getOrgHistory(userId, organizationId, metric);
 
     if (metricMeasurements.length < 2) {
       return achievements;
@@ -341,7 +345,8 @@ export class AchievementService {
    */
   async checkAllAroundPR(
     userId: string,
-    organizationId: string
+    organizationId: string,
+    orgMeasurements?: Measurement[]
   ): Promise<Array<{ code: string; metadata?: any }>> {
     const achievements: Array<{ code: string; metadata?: any }> = [];
 
@@ -356,7 +361,7 @@ export class AchievementService {
       'RSI',
     ];
 
-    const allMeasurements = await this.getOrgHistory(userId, organizationId);
+    const allMeasurements = orgMeasurements ?? await this.getOrgHistory(userId, organizationId);
     const metricsWithData = new Set(allMeasurements.map(m => m.metric));
 
     // The 5-0-5 slot is satisfied by either protocol (meters or yards).
@@ -395,15 +400,15 @@ export class AchievementService {
       newAchievements.push(...prBadges);
 
       // Check consistency badges
-      const consistencyBadges = await this.checkConsistencyBadges(userId, organizationId);
+      const consistencyBadges = await this.checkConsistencyBadges(userId, organizationId, allMeasurements);
       newAchievements.push(...consistencyBadges);
 
       // Check improvement badges for this metric
-      const improvementBadges = await this.checkImprovementBadges(userId, organizationId, measurement.metric);
+      const improvementBadges = await this.checkImprovementBadges(userId, organizationId, measurement.metric, allMeasurements);
       newAchievements.push(...improvementBadges);
 
       // Check all-around PR
-      const allAroundBadges = await this.checkAllAroundPR(userId, organizationId);
+      const allAroundBadges = await this.checkAllAroundPR(userId, organizationId, allMeasurements);
       newAchievements.push(...allAroundBadges);
 
       // Award each achievement (if not already unlocked)

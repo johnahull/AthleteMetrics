@@ -713,5 +713,19 @@ describe('AchievementService', () => {
       expect(result.length).toBeGreaterThan(0);
       expect(storage.getMeasurements).toHaveBeenCalled();
     });
+
+    it('fetches the measurement history once per run', async () => {
+      const rows = [
+        { id: 'a', userId: mockUserId, organizationId: mockOrgId, metric: 'FLY10_TIME', value: '1.2', date: new Date().toISOString(), isVerified: true },
+        { id: 'b', userId: mockUserId, organizationId: mockOrgId, metric: 'FLY10_TIME', value: '1.1', date: new Date().toISOString(), isVerified: true },
+      ] as any;
+      vi.mocked(storage.getMeasurements).mockClear();
+      vi.mocked(storage.getMeasurements).mockResolvedValue(rows);
+      vi.mocked(storage.checkAchievementExists).mockResolvedValue(true);
+
+      await service.checkAchievements(mockUserId, mockOrgId, rows[1]);
+
+      expect(storage.getMeasurements).toHaveBeenCalledTimes(1);
+    });
   });
 });
