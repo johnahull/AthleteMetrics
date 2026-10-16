@@ -63,6 +63,14 @@ describe('useMetricLabels', () => {
     expect(result.current.getLabel('CUSTOM_DEADLIFT_1RM')).toBe('CUSTOM DEADLIFT 1RM');
   });
 
+  it('returns error from the underlying useAvailableMetrics', () => {
+    mockAvailableMetrics.error = new Error('Failed to fetch metrics');
+
+    const { result } = renderHook(() => useMetricLabels());
+
+    expect(result.current.error?.message).toBe('Failed to fetch metrics');
+  });
+
   it('returns isLoading from the underlying useAvailableMetrics', () => {
     mockAvailableMetrics.isLoading = true;
 
