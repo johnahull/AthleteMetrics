@@ -17,6 +17,22 @@ import { ZodError } from "zod";
 import { isSiteAdmin } from "../utils/auth-helpers";
 import { isLowerBetter } from "../utils/metric-type";
 
+/**
+ * A target value goal must aim past the baseline, in the metric's direction.
+ * goals.metric references site_metrics, so no organization is needed.
+ * @returns The 400 message when the target is not better, else null
+ */
+async function targetNotBetterMessage(goal: { goalType?: string; metric: string; targetValue: unknown; baselineValue: unknown }): Promise<string | null> {
+  if (goal.goalType !== 'target_value') return null;
+  const target = Number(goal.targetValue);
+  const baseline = Number(goal.baselineValue);
+  const lowerIsBetter = await isLowerBetter(goal.metric);
+  if (lowerIsBetter ? target >= baseline : target <= baseline) {
+    return `Target must be better than the baseline (${lowerIsBetter ? 'lower' : 'higher'} for this metric)`;
+  }
+  return null;
+}
+
 // UUID validation regex
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -232,16 +248,9 @@ export function registerGoalRoutes(app: Express) {
         }
       }
 
-      // A target value goal must aim past the baseline. goals.metric references site_metrics, so no org is needed
-      if (validatedData.goalType === 'target_value') {
-        const target = Number(validatedData.targetValue);
-        const baseline = Number(finalBaselineValue);
-        const lowerIsBetter = await isLowerBetter(validatedData.metric);
-        if (lowerIsBetter ? target >= baseline : target <= baseline) {
-          return res.status(400).json({
-            message: `Target must be better than the baseline (${lowerIsBetter ? 'lower' : 'higher'} for this metric)`
-          });
-        }
+      const targetMessage = await targetNotBetterMessage({ ...validatedData, baselineValue: finalBaselineValue });
+      if (targetMessage) {
+        return res.status(400).json({ message: targetMessage });
       }
 
       // Set currentValue to baselineValue initially
@@ -298,6 +307,16 @@ export function registerGoalRoutes(app: Express) {
         return res.status(403).json({
           message: "Access denied"
         });
+      }
+
+      // Re-check the merged goal only when the patch changes what the check reads, so a status or notes
+      // update of an older goal is never blocked
+      const { metric, goalType, targetValue, baselineValue } = validatedData;
+      if ([metric, goalType, targetValue, baselineValue].some(v => v !== undefined)) {
+        const targetMessage = await targetNotBetterMessage({ ...existingGoal, ...validatedData });
+        if (targetMessage) {
+          return res.status(400).json({ message: targetMessage });
+        }
       }
 
       // If status is being changed to 'achieved', set achievedAt timestamp
