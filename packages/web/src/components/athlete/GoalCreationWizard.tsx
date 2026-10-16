@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
+import { format } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -449,7 +450,7 @@ export function GoalCreationWizard({
                 type="date"
                 value={targetDate}
                 onChange={(e) => handleTargetDateChange(e.target.value)}
-                min={new Date().toISOString().split('T')[0]}
+                min={format(new Date(), 'yyyy-MM-dd')}
                 aria-describedby={errors.date ? 'date-error' : undefined}
               />
               {errors.date && (

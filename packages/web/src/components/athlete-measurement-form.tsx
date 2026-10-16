@@ -1,4 +1,5 @@
 import { useForm } from "react-hook-form";
+import { format } from "date-fns";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -54,7 +55,7 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
     resolver: zodResolver(dynamicMeasurementSchema),
     defaultValues: {
       userId: athleteId,
-      date: new Date().toISOString().split('T')[0],
+      date: format(new Date(), 'yyyy-MM-dd'),
       metric: firstMetricCode,
       value: 0,
       notes: "",

@@ -6,6 +6,7 @@
  */
 
 import { useForm, useWatch } from "react-hook-form";
+import { format } from "date-fns";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { AlertCircle } from "lucide-react";
@@ -92,7 +93,7 @@ export function SelfEntryForm({
     defaultValues: {
       metric: '' as SelfEntryFormData['metric'], // Empty string triggers validation on submit
       value: undefined as unknown as number, // undefined triggers validation on submit
-      date: new Date().toISOString().split('T')[0], // Default to today
+      date: format(new Date(), 'yyyy-MM-dd'), // Default to today
       notes: '',
     },
   });
@@ -197,7 +198,7 @@ export function SelfEntryForm({
                     type="date"
                     disabled={isSubmitting}
                     {...field}
-                    max={new Date().toISOString().split('T')[0]}
+                    max={format(new Date(), 'yyyy-MM-dd')}
                   />
                 </FormControl>
                 <FormMessage />

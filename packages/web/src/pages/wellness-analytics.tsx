@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { format } from 'date-fns';
 import { useAuth } from '@/lib/auth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -43,8 +44,8 @@ export default function WellnessAnalytics() {
 
   // Filter state
   const [filters, setFilters] = useState({
-    dateFrom: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    dateTo: new Date().toISOString().split('T')[0],
+    dateFrom: format(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd'),
+    dateTo: format(new Date(), 'yyyy-MM-dd'),
     teamIds: [] as string[],
     athleteIds: [] as string[],
     questionIds: [] as string[],
@@ -101,8 +102,8 @@ export default function WellnessAnalytics() {
 
   const handleClearFilters = () => {
     setFilters({
-      dateFrom: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      dateTo: new Date().toISOString().split('T')[0],
+      dateFrom: format(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd'),
+      dateTo: format(new Date(), 'yyyy-MM-dd'),
       teamIds: [],
       athleteIds: [],
       questionIds: [],

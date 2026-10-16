@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { format } from 'date-fns';
 import { useForm } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -36,7 +37,7 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
   const [expiryDate, setExpiryDate] = useState(() => {
     const date = new Date();
     date.setDate(date.getDate() + 7);
-    return date.toISOString().split('T')[0];
+    return format(date, 'yyyy-MM-dd');
   });
   const [showQRCode, setShowQRCode] = useState(false);
   const [createdRequest, setCreatedRequest] = useState<any>(null);
@@ -421,7 +422,7 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
                           type="date"
                           value={endDate}
                           onChange={(e) => setEndDate(e.target.value)}
-                          min={new Date().toISOString().split('T')[0]}
+                          min={format(new Date(), 'yyyy-MM-dd')}
                           className="w-44"
                           disabled={endMode !== 'date'}
                           data-testid="input-end-date"

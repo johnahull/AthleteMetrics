@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { format } from "date-fns";
 import { toCalendarDate } from "@/utils/date-utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -138,13 +139,13 @@ export default function Analytics() {
       const now = new Date();
       if (filters.dateRange === "last7") {
         const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        params.append('dateFrom', weekAgo.toISOString().split('T')[0]);
+        params.append('dateFrom', format(weekAgo, 'yyyy-MM-dd'));
       } else if (filters.dateRange === "last30") {
         const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        params.append('dateFrom', monthAgo.toISOString().split('T')[0]);
+        params.append('dateFrom', format(monthAgo, 'yyyy-MM-dd'));
       } else if (filters.dateRange === "last90") {
         const quarterAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-        params.append('dateFrom', quarterAgo.toISOString().split('T')[0]);
+        params.append('dateFrom', format(quarterAgo, 'yyyy-MM-dd'));
       }
 
       // Add organization context for proper filtering

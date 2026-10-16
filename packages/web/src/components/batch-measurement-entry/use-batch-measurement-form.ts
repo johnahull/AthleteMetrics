@@ -1,4 +1,5 @@
 import { useForm, useFieldArray } from 'react-hook-form';
+import { format } from 'date-fns';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
 import { z } from 'zod';
@@ -108,7 +109,7 @@ export function useBatchMeasurementForm() {
 
   // Add a new row
   const addRow = useCallback(() => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = format(new Date(), 'yyyy-MM-dd');
     const lastRow = fields[fields.length - 1];
 
     append({
