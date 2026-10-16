@@ -309,6 +309,7 @@ export function MetricProgressCard({
               metric={metric}
               value={currentValue ?? 0}
               compact
+              metricType={metricType}
             >
               <span
                 data-testid="current-value"
@@ -378,6 +379,7 @@ export function MetricProgressCard({
               metric={metric}
               value={personalRecord?.value ?? bestValue ?? 0}
               compact
+              metricType={metricType}
             >
               <span
                 data-testid="pr-value"

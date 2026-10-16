@@ -377,13 +377,14 @@ export function getPercentileRanking(
   value: number,
   metric: string,
   ageGroup?: string,
-  gender?: 'male' | 'female'
+  gender?: 'male' | 'female',
+  metricType?: MetricType
 ): PercentileResult | null {
   const benchmarks =
     gender === 'female' ? BENCHMARKS_FEMALE[metric] : BENCHMARKS_MALE[metric];
   if (!benchmarks) return null;
 
-  const lowerIsBetter = isLowerBetterMetric(metric);
+  const lowerIsBetter = isLowerBetterMetric(metric, metricType);
 
   // Calculate approximate percentile based on benchmarks
   let percentile: number;
@@ -473,13 +474,14 @@ export function getPercentileRanking(
 export function getBenchmarkComparison(
   value: number,
   metric: string,
-  gender?: 'male' | 'female'
+  gender?: 'male' | 'female',
+  metricType?: MetricType
 ): BenchmarkResult | null {
   const benchmarks =
     gender === 'female' ? BENCHMARKS_FEMALE[metric] : BENCHMARKS_MALE[metric];
   if (!benchmarks) return null;
 
-  const lowerIsBetter = isLowerBetterMetric(metric);
+  const lowerIsBetter = isLowerBetterMetric(metric, metricType);
   let level: BenchmarkLevel;
   let description: string;
 
@@ -518,12 +520,13 @@ export function getMetricContext(
   value: number,
   metric: string,
   athleteData: AthleteMetricData | null,
-  gender?: 'male' | 'female'
+  gender?: 'male' | 'female',
+  metricType?: MetricType
 ): MetricContext | null {
   // Validate metric exists
   if (!METRIC_EDUCATION[metric]) return null;
 
-  const lowerIsBetter = isLowerBetterMetric(metric);
+  const lowerIsBetter = isLowerBetterMetric(metric, metricType);
 
   // Calculate PR comparison
   let comparisonToPR: PRComparison | null = null;
@@ -597,7 +600,7 @@ export function getMetricContext(
   return {
     comparisonToPR,
     comparisonToRecent,
-    percentile: getPercentileRanking(value, metric, undefined, gender),
-    benchmark: getBenchmarkComparison(value, metric, gender),
+    percentile: getPercentileRanking(value, metric, undefined, gender, metricType),
+    benchmark: getBenchmarkComparison(value, metric, gender, metricType),
   };
 }

@@ -1529,7 +1529,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
       // m:ss values carry no unit
       unit: metricConfig?.displayFormat === 'duration' ? '' : metricConfig?.unit || ''
     };
-  }, [selectedGroups, data, getMetricConfig]); // METRIC_CONFIG is a static constant, not included in deps
+  }, [selectedGroups, data, getMetricConfig]);
 
   // Add error boundary wrapper for chart rendering
   return (

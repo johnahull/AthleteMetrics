@@ -25,7 +25,6 @@ import { isSiteAdmin } from "@shared/auth-utils";
 import { z } from "zod";
 import bcrypt from "bcrypt";
 import { AccessController } from "./access-control";
-import { METRIC_CONFIG } from "@shared/analytics-types";
 import { AuthSecurity } from "./auth/security";
 import { validateAIProviderConfiguration } from "./services/ai-insights-service";
 import { registerAllRoutes } from "./routes/index";
@@ -142,13 +141,6 @@ const canAccessOrganization = async (user: SessionUser | null | undefined, organ
 
 const hasRole = (user: SessionUser | null | undefined, role: string): boolean => {
   return user?.role === role;
-};
-
-// Helper to get default unit for a metric from METRIC_CONFIG
-const getDefaultUnit = (metric: string): string => {
-  const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-  // Use nullish coalescing to allow empty string units (e.g., RSI)
-  return config?.unit ?? 's'; // Default to seconds if metric not found
 };
 
 // Unified invitation permission checker

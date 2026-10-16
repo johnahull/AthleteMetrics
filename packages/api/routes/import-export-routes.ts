@@ -16,7 +16,6 @@ import { findBestAthleteMatch, type MatchingCriteria, type MatchResult } from ".
 import { isSiteAdmin } from "@shared/auth-utils";
 import { parseImportValue, formatMeasurement } from "@shared/duration-format";
 import { OCR_REQUIRED_CHOICE_MESSAGES, type OcrRequiredChoice } from "@shared/ocr-types";
-import { METRIC_CONFIG } from "@shared/analytics-types";
 import { COMMON_METRICS, type ImportResult } from "@shared/import-types";
 import { globalAthleteService } from "../services/global-athlete-service";
 import { isValidEmail } from "@shared/email-validation";
@@ -137,16 +136,13 @@ interface MeasurementFilters {
 }
 
 // Helper to get default unit for a metric
-// Prioritizes DB-defined metrics, falls back to legacy METRIC_CONFIG for backwards compatibility
+// DB-defined metric unit, else seconds
 const getDefaultUnit = (metric: string, metricsMap?: Map<string, SiteMetric>): string => {
   if (metricsMap) {
     const siteMetric = metricsMap.get(metric.toUpperCase());
     if (siteMetric && siteMetric.unit !== null) return siteMetric.unit;
   }
-  // Fallback to legacy METRIC_CONFIG for backwards compatibility
-  const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-  // Use nullish coalescing to allow empty string units (e.g., RSI)
-  return config?.unit ?? 's'; // Default to seconds if metric not found
+  return 's'; // Default to seconds if metric not found
 };
 
 // Phone number validation function

@@ -68,7 +68,7 @@ describe('Chart Export Utilities - TDD', () => {
 
   describe('generateExportFilename', () => {
     it('should generate CSV filename with correct format', () => {
-      // NOTE: METRIC_CONFIG is now empty - labels come from database via metricLabelMap parameter
+      // Labels come from the database via the metricLabelMap parameter
       const filename = generateExportFilename(
         'box_plot',
         { primary: 'FLY10_TIME', additional: [] },
@@ -90,7 +90,7 @@ describe('Chart Export Utilities - TDD', () => {
     });
 
     it('should handle multiple metrics in filename', () => {
-      // NOTE: METRIC_CONFIG is now empty - labels come from database via metricLabelMap parameter
+      // Labels come from the database via the metricLabelMap parameter
       const filename = generateExportFilename(
         'multi_line',
         { primary: 'FLY10_TIME', additional: ['VERTICAL_JUMP', 'RSI'] },
@@ -333,7 +333,7 @@ describe('Chart Export Utilities - TDD', () => {
     });
 
     it('should export MultiMetricData[] as CSV', () => {
-      // NOTE: METRIC_CONFIG is now empty - labels come from database via metricLabelMap parameter
+      // Labels come from the database via the metricLabelMap parameter
       const mockMultiMetric: MultiMetricData[] = [
         {
           athleteId: 'athlete-1',
