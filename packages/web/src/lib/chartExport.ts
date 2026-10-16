@@ -207,7 +207,16 @@ export async function getChartPngDataUrl(containerElement: HTMLElement): Promise
  * Trend charts carry data-chart-metric={metricCode}.
  * Report charts carry data-report-chart={metricCode} with optional data-report-chart-title={title}.
  */
-export async function captureTrendCharts(): Promise<Array<{ metricCode: string; dataUrl: string; title?: string }>> {
+export interface CapturedChart {
+  metricCode: string;
+  dataUrl: string;
+  title?: string;
+  /** Metric group of a per-metric chart (data-metric-group); absent on section-level charts. */
+  group?: string;
+  groupLabel?: string;
+}
+
+export async function captureTrendCharts(): Promise<CapturedChart[]> {
   const all = Array.from(document.querySelectorAll<HTMLElement>('[data-chart-metric], [data-report-chart]'));
 
   // Keep only leaf-most capture targets: skip any element that CONTAINS another
@@ -225,8 +234,10 @@ export async function captureTrendCharts(): Promise<Array<{ metricCode: string; 
       const metricCode = node.getAttribute('data-chart-metric') || node.getAttribute('data-report-chart') || '';
       if (!metricCode) return null;
       const title = node.getAttribute('data-report-chart-title') || undefined;
+      const group = node.getAttribute('data-metric-group') || undefined;
+      const groupLabel = node.getAttribute('data-metric-group-label') || undefined;
       try {
-        return { metricCode, dataUrl: await getChartPngDataUrl(node), title } as { metricCode: string; dataUrl: string; title?: string };
+        return { metricCode, dataUrl: await getChartPngDataUrl(node), title, group, groupLabel } as CapturedChart;
       } catch (error) {
         devLog.error(`Failed to capture trend chart for ${metricCode}:`, error);
         return null;
@@ -234,7 +245,7 @@ export async function captureTrendCharts(): Promise<Array<{ metricCode: string; 
     }),
   );
 
-  return results.filter((r): r is { metricCode: string; dataUrl: string; title?: string } => r !== null);
+  return results.filter((r): r is CapturedChart => r !== null);
 }
 
 /**

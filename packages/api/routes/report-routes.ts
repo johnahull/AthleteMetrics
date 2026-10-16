@@ -9,7 +9,7 @@ import rateLimit from "express-rate-limit";
 import { buildMeasurementRows, buildBenchmarkRows } from "./pdf-metric-rows";
 import { ReportService } from "../services/report-service";
 import { createReportsFromInput, ReportCreateError } from "../services/report-create";
-import { planChartPageBreaks } from "./pdf-chart-layout";
+import { planChartPageBreaks, chartGroupHeadings, addHeadingHeights } from "./pdf-chart-layout";
 import { requireAuth, requireAIEnabled, type AuthenticatedRequest } from "../middleware";
 import { storage } from "../storage";
 import {
@@ -3822,12 +3822,16 @@ const MAX_CHART_IMAGES = 60;
  * data-URL entries so a bad/oversized payload degrades gracefully instead of
  * crashing the export or pinning the event loop.
  */
-function normalizeChartImages(raw: unknown): Array<{ metricCode: string; dataUrl: string; title?: string }> {
+interface ChartImage { metricCode: string; dataUrl: string; title?: string; group?: string; groupLabel?: string }
+const MAX_GROUP_TEXT_LENGTH = 60;
+const CHART_HEADING_HEIGHT = 8;
+
+function normalizeChartImages(raw: unknown): ChartImage[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .slice(0, MAX_CHART_IMAGES)
     .filter(
-      (img): img is { metricCode: string; dataUrl: string; title?: string } =>
+      (img): img is ChartImage =>
         !!img &&
         typeof img.metricCode === 'string' &&
         typeof img.dataUrl === 'string' &&
@@ -3836,12 +3840,16 @@ function normalizeChartImages(raw: unknown): Array<{ metricCode: string; dataUrl
         img.dataUrl.startsWith('data:image/png;base64,') &&
         // Validate title is a string if present
         (img.title === undefined || typeof img.title === 'string'),
-    );
+    )
+    .map((img) => {
+      const bounded = (v: unknown) => (typeof v === 'string' && v.length > 0 ? v.slice(0, MAX_GROUP_TEXT_LENGTH) : undefined);
+      return { ...img, group: bounded(img.group), groupLabel: bounded(img.groupLabel) };
+    });
 }
 
 function addTrendChartsToPdf(
   doc: jsPDF,
-  chartImages: Array<{ metricCode: string; dataUrl: string; title?: string }>,
+  chartImages: ChartImage[],
   metricLabels: Record<string, string> = {},
 ): void {
   if (!chartImages.length) return;
@@ -3857,7 +3865,7 @@ function addTrendChartsToPdf(
   // bytes throws inside getImageProperties; isolating it here means one bad capture
   // is dropped rather than aborting the whole PDF with a 500.
   const measured: Array<{
-    img: { metricCode: string; dataUrl: string; title?: string };
+    img: ChartImage;
     imgHeight: number;
     blockHeight: number;
   }> = [];
@@ -3874,13 +3882,23 @@ function addTrendChartsToPdf(
 
   // Pass 2: pack as many charts per page as fit by vertical space (no fixed
   // per-page count), then flow them down the pages.
-  const breaks = planChartPageBreaks(measured.map((m) => m.blockHeight), usableHeight);
+  const headings = chartGroupHeadings(measured.map((m) => m.img));
+  const breaks = planChartPageBreaks(
+    addHeadingHeights(measured.map((m) => m.blockHeight), headings, CHART_HEADING_HEIGHT),
+    usableHeight,
+  );
   doc.addPage();
   let yPos = startY;
   measured.forEach(({ img, imgHeight }, i) => {
     if (breaks[i]) {
       doc.addPage();
       yPos = startY;
+    }
+    if (headings[i]) {
+      doc.setFontSize(12);
+      doc.setTextColor(100, 116, 139);
+      doc.text(headings[i]!.toUpperCase(), margin, yPos);
+      yPos += CHART_HEADING_HEIGHT;
     }
     doc.setFontSize(14);
     doc.setTextColor(40, 40, 40);
@@ -3957,7 +3975,7 @@ async function sendEvalReportPdf(user: { id: string; isSiteAdmin?: boolean; role
   res.send(Buffer.from(pdf.output("arraybuffer")));
 }
 
-async function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified', org?: ReportOrg, chartImages: Array<{ metricCode: string; dataUrl: string; title?: string }> = []): Promise<jsPDF> {
+async function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified', org?: ReportOrg, chartImages: ChartImage[] = []): Promise<jsPDF> {
   // AM-FEAT-019: a public eval snapshot carries its frozen model
   if (reportData?.reportType === EVAL_REPORT_TYPE) {
     if (!isRenderableEvalModel(reportData.model)) throw new Error('Eval report model is unavailable');
