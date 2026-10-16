@@ -55,10 +55,7 @@ const selfEntrySchema = z.object({
     .min(1, "Date is required")
     .refine((dateStr) => {
       if (!dateStr) return true; // Let min() handle empty string
-      const date = new Date(dateStr);
-      const today = new Date();
-      today.setHours(23, 59, 59, 999); // End of today
-      return date <= today;
+      return dateStr <= format(new Date(), 'yyyy-MM-dd'); // 'YYYY-MM-DD' compares as a string
     }, "Date cannot be in the future"),
   notes: z.string().optional(),
 });

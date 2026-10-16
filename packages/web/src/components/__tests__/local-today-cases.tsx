@@ -1,17 +1,19 @@
 /**
- * Shared cases: "today" defaults use the viewer's
+ * Shared cases: "today" defaults and "not in the future" checks use the viewer's
  * LOCAL day, not the UTC day. `now` is chosen so the two differ in the zone
  * under test. Imported by per-timezone test files.
  */
 import React from 'react';
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import MeasurementForm from '@/components/measurement-form';
 import AthleteMeasurementForm from '@/components/athlete-measurement-form';
 import WellnessDashboard from '@/pages/wellness-dashboard';
 import { SelfEntryForm } from '@/components/athlete/SelfEntryForm';
+import { EditMeasurementModal } from '@/components/athlete/EditMeasurementModal';
+import { GoalCreationWizard } from '@/components/athlete/GoalCreationWizard';
 
 vi.mock('@/lib/auth', () => ({ useAuth: () => ({ user: { id: 'coach-1', role: 'coach' } }) }));
 vi.mock('@/hooks/use-toast', () => ({ useToast: () => ({ toast: vi.fn() }) }));
@@ -79,6 +81,57 @@ export function describeLocalTodayCases(zone: string, now: string, today: string
       const dateInput = screen.getByLabelText(/date/i);
       expect(dateInput).toHaveValue(today);
       expect(dateInput).toHaveAttribute('max', today);
+    });
+
+    it('SelfEntryForm accepts the local today and rejects the local tomorrow', async () => {
+      render(<SelfEntryForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
+      const dateInput = screen.getByLabelText(/date/i);
+      fireEvent.click(screen.getByRole('button', { name: /submit/i }));
+      await waitFor(() => expect(screen.getAllByText(/required/i).length).toBeGreaterThan(0));
+      expect(screen.queryByText(/cannot be in the future/i)).not.toBeInTheDocument();
+
+      fireEvent.change(dateInput, { target: { value: tomorrow } });
+      fireEvent.click(screen.getByRole('button', { name: /submit/i }));
+      await waitFor(() => expect(screen.getByText(/cannot be in the future/i)).toBeInTheDocument());
+    });
+
+    it('EditMeasurementModal accepts the local today and rejects the local tomorrow', async () => {
+      const onSave = vi.fn();
+      render(
+        <EditMeasurementModal
+          open
+          measurement={{ id: 'm1', metric: 'FLY10_TIME', value: '1.23', date: today, notes: '' } as any}
+          onSave={onSave}
+          onClose={vi.fn()}
+        />
+      );
+      fireEvent.click(screen.getByRole('button', { name: /save/i }));
+      await waitFor(() => expect(onSave).toHaveBeenCalled());
+
+      fireEvent.change(screen.getByLabelText(/date/i), { target: { value: tomorrow } });
+      fireEvent.click(screen.getByRole('button', { name: /save/i }));
+      await waitFor(() => expect(screen.getByText(/cannot be in the future/i)).toBeInTheDocument());
+    });
+
+    it('GoalCreationWizard rejects the local today and accepts the local tomorrow', () => {
+      render(
+        <GoalCreationWizard
+          measurements={[{ metric: 'FLY10_TIME', value: 1.2, date: '2024-01-01' }] as any}
+          availableMetrics={['FLY10_TIME']}
+          onCreateGoal={vi.fn()}
+          onCancel={vi.fn()}
+        />
+      );
+      fireEvent.click(screen.getByRole('button', { name: /10-Yard Fly/i }));
+      fireEvent.click(screen.getByText(/target value/i));
+      const dateInput = screen.getByLabelText(/target date/i);
+      expect(dateInput).toHaveAttribute('min', today);
+
+      fireEvent.change(dateInput, { target: { value: today } });
+      expect(screen.getByText(/date must be in the future/i)).toBeInTheDocument();
+
+      fireEvent.change(dateInput, { target: { value: tomorrow } });
+      expect(screen.queryByText(/date must be in the future/i)).not.toBeInTheDocument();
     });
   });
 }

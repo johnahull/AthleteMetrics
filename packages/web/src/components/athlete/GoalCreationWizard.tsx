@@ -141,11 +141,8 @@ export function GoalCreationWizard({
   const validateTargetDate = (date: string): string | null => {
     if (!date) return 'Please select a target date';
 
-    const targetDateObj = new Date(date);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    if (targetDateObj <= today) {
+    // 'YYYY-MM-DD' compares as a string
+    if (date <= format(new Date(), 'yyyy-MM-dd')) {
       return 'Date must be in the future';
     }
 

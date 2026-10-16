@@ -8,6 +8,7 @@
 import React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { format } from 'date-fns';
 import { z } from 'zod';
 import {
   Dialog,
@@ -42,12 +43,7 @@ const editMeasurementSchema = z.object({
     .string()
     .min(1, 'Date is required')
     .refine(
-      (dateStr) => {
-        const date = new Date(dateStr);
-        const today = new Date();
-        today.setHours(23, 59, 59, 999);
-        return date <= today;
-      },
+      (dateStr) => dateStr <= format(new Date(), 'yyyy-MM-dd'), // 'YYYY-MM-DD' compares as a string
       { message: 'Date cannot be in the future' }
     ),
   notes: z.string().optional(),
