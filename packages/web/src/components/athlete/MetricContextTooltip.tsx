@@ -31,6 +31,7 @@ import {
   getMetricEducation,
   AthleteMetricData,
 } from '@/utils/metric-education-utils';
+import type { MetricType } from '@shared/analytics-types';
 
 interface MetricContextTooltipProps {
   metric: string;
@@ -39,6 +40,8 @@ interface MetricContextTooltipProps {
   athleteData?: AthleteMetricData | null;
   gender?: 'male' | 'female';
   compact?: boolean;
+  /** The metric's type from the metric list; without it the built-in array decides */
+  metricType?: MetricType;
 }
 
 export function MetricContextTooltip({
@@ -48,9 +51,10 @@ export function MetricContextTooltip({
   athleteData = null,
   gender,
   compact = false,
+  metricType,
 }: MetricContextTooltipProps) {
   const education = getMetricEducation(metric);
-  const context = getMetricContext(value, metric, athleteData, gender);
+  const context = getMetricContext(value, metric, athleteData, gender, metricType);
 
   // For unknown metrics, just render children without tooltip
   if (!education || !context) {

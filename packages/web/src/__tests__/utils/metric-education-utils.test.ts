@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { resolveMetricType } from '@shared/analytics-types';
 import {
   getMetricEducation,
   getMetricContext,
@@ -346,6 +347,55 @@ describe('metric-education-utils', () => {
     it('should return null for unknown metric', () => {
       const context = getMetricContext(10, 'UNKNOWN_METRIC', mockAthleteData);
       expect(context).toBeNull();
+    });
+  });
+
+  describe('metric type from the metric list', () => {
+    const athleteData = { personalBest: 30, recentAverage: 28, measurementCount: 5, lastMeasurement: 29 };
+
+    it('a lower_is_better type makes the benchmark helpers rank lower values better', () => {
+      // VERTICAL_JUMP is higher-is-better in the built-in array, so only the type can flip it
+      expect(getBenchmarkComparison(20, 'VERTICAL_JUMP', undefined, 'lower_is_better')?.level).toBe('elite');
+      expect(getBenchmarkComparison(20, 'VERTICAL_JUMP')?.level).toBe('developing');
+      expect(getPercentileRanking(20, 'VERTICAL_JUMP', undefined, undefined, 'lower_is_better')!.percentile).toBeGreaterThanOrEqual(95);
+      expect(getPercentileRanking(20, 'VERTICAL_JUMP')!.percentile).toBeLessThan(40);
+    });
+
+    it('a higher_is_better type wins over the built-in array', () => {
+      expect(getBenchmarkComparison(1.3, 'FLY10_TIME', undefined, 'higher_is_better')?.level).toBe('elite');
+      expect(getBenchmarkComparison(1.3, 'FLY10_TIME')?.level).toBe('developing');
+    });
+
+    it('getMetricContext passes the type to the PR, trend, percentile and benchmark', () => {
+      const typed = getMetricContext(25, 'VERTICAL_JUMP', athleteData, undefined, 'lower_is_better');
+      expect(typed?.comparisonToPR?.isNewPersonalBest).toBe(true);
+      expect(typed?.comparisonToRecent?.trend).toBe('improving');
+      expect(typed?.benchmark?.level).toBe('elite');
+
+      const untyped = getMetricContext(25, 'VERTICAL_JUMP', athleteData);
+      expect(untyped?.comparisonToPR?.isNewPersonalBest).toBe(false);
+      expect(untyped?.comparisonToRecent?.trend).toBe('declining');
+    });
+
+    it('a MILE_RUN lower_is_better type is lower-is-better although MILE_RUN is not in the array', () => {
+      expect(isLowerBetterMetric('MILE_RUN')).toBe(false);
+      expect(isLowerBetterMetric('MILE_RUN', 'lower_is_better')).toBe(true);
+      // No static table entry: the table helpers still have nothing to say about it
+      expect(getBenchmarkComparison(300, 'MILE_RUN', undefined, 'lower_is_better')).toBeNull();
+      expect(getMetricContext(300, 'MILE_RUN', null, undefined, 'lower_is_better')).toBeNull();
+    });
+
+    it('the built-in table gives the same results with its own type as with no type', () => {
+      const codes = ['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505_M', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'TOP_SPEED', 'RSI'];
+      for (const code of codes) {
+        const type = resolveMetricType(code);
+        for (const value of [0.9, 1.2, 2.4, 4.6, 10.2, 19, 27, 40]) {
+          for (const gender of [undefined, 'female'] as const) {
+            expect(getPercentileRanking(value, code, undefined, gender, type)).toEqual(getPercentileRanking(value, code, undefined, gender));
+            expect(getBenchmarkComparison(value, code, gender, type)).toEqual(getBenchmarkComparison(value, code, gender));
+          }
+        }
+      }
     });
   });
 });
