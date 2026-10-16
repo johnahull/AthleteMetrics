@@ -36,9 +36,15 @@ export async function sortAthletesByMetric(athletes: any[], metricCode: string, 
  * @param athlete - Athlete object with benchmark comparisons
  * @param metricCode - The metric code to check
  * @param organizationId - The report's organization, to resolve its custom metrics
+ * @param lowerIsBetter - The metric's direction, when the caller already resolved it (looked up only if omitted)
  * @returns The name of the highest benchmark tier met, or null if none
  */
-export async function getBenchmarkLabel(athlete: any, metricCode: string, organizationId?: string): Promise<string | null> {
+export async function getBenchmarkLabel(
+  athlete: any,
+  metricCode: string,
+  organizationId?: string,
+  lowerIsBetter?: boolean,
+): Promise<string | null> {
   const comparisons = athlete.benchmarkComparisons?.[metricCode];
   if (!comparisons || comparisons.length === 0) return null;
 
@@ -57,9 +63,9 @@ export async function getBenchmarkLabel(athlete: any, metricCode: string, organi
   }
 
   // Fall back to single-value benchmark logic
-  const lowerIsBetter = await isLowerBetter(metricCode, organizationId);
+  const lowerBetter = lowerIsBetter ?? await isLowerBetter(metricCode, organizationId);
   const sortedComparisons = [...comparisons].sort((a: any, b: any) => {
-    return lowerIsBetter ? a.benchmarkValue - b.benchmarkValue : b.benchmarkValue - a.benchmarkValue;
+    return lowerBetter ? a.benchmarkValue - b.benchmarkValue : b.benchmarkValue - a.benchmarkValue;
   });
 
   for (const comparison of sortedComparisons) {

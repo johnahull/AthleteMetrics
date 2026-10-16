@@ -4285,8 +4285,10 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
         const displayedAthletes = sortedAthletes.slice(0, PDF_LIMITS.MAX_ATHLETES_PER_METRIC);
 
         if (displayedAthletes.length > 0) {
+          // Resolve the direction once per metric, not once per athlete
+          const lowerIsBetter = await isLowerBetter(stat.metric, report.organizationId);
           const benchmarkLabels = await Promise.all(
-            displayedAthletes.map((athlete: any) => getBenchmarkLabel(athlete, stat.metric, report.organizationId)),
+            displayedAthletes.map((athlete: any) => getBenchmarkLabel(athlete, stat.metric, report.organizationId, lowerIsBetter)),
           );
           // Collect tier color for each row's benchmark column
           const rowTierColors: (string | null)[] = [];
