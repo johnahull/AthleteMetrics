@@ -121,7 +121,7 @@ export function LastSetContextLine({ athleteId, metric }: LastSetContextLineProp
  */
 function formatRelativeOrShortDate(isoDate: string): string {
   const date = toCalendarDate(isoDate);
-  if (!date) return isoDate;
+  if (!date) return '';
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const dateMidnight = new Date(date);

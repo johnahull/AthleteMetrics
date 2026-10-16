@@ -196,8 +196,8 @@ export function BenchmarkProgressChart({
   const firstSnapshot = data.snapshots[0];
   const lastSnapshot = data.snapshots[data.snapshots.length - 1];
   const ariaDescription = `Line chart showing ${data.benchmarkName} achievement rate over time. ` +
-    `Starting at ${firstSnapshot.achievementRate.toFixed(1)}% on ${toCalendarDate(firstSnapshot.date)?.toLocaleDateString()}, ` +
-    `ending at ${lastSnapshot.achievementRate.toFixed(1)}% on ${toCalendarDate(lastSnapshot.date)?.toLocaleDateString()} ` +
+    `Starting at ${firstSnapshot.achievementRate.toFixed(1)}% on ${toCalendarDate(firstSnapshot.date)?.toLocaleDateString() ?? ''}, ` +
+    `ending at ${lastSnapshot.achievementRate.toFixed(1)}% on ${toCalendarDate(lastSnapshot.date)?.toLocaleDateString() ?? ''} ` +
     `across ${data.snapshots.length} data points.`;
 
   return (
