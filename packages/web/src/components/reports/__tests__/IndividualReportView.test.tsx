@@ -115,3 +115,59 @@ describe('IndividualReportView — duration (mm:ss) metrics', () => {
     expect(screen.getByText('27.50 in')).toBeInTheDocument();
   });
 });
+
+describe('IndividualReportView — metric groups', () => {
+  const metricGroups = [
+    { group: 'speed', label: 'Speed', codes: ['DASH_10YD'] },
+    { group: 'power', label: 'Power', codes: ['VERTICAL_JUMP'] },
+  ];
+
+  function renderGrouped() {
+    const data = {
+      reportType: 'individual',
+      reportConfig: { metrics: ['VERTICAL_JUMP', 'DASH_10YD'] },
+      generatedAt: '2024-03-15T00:00:00Z',
+      metricLabels: { VERTICAL_JUMP: 'Vertical Jump', DASH_10YD: '10 Yard Dash' },
+      metricUnits: { VERTICAL_JUMP: 'in', DASH_10YD: 's' },
+      metricExplanations: {},
+      metricGroups,
+      athlete: {
+        userName: 'Test Athlete',
+        measurements: { DASH_10YD: 1.7, VERTICAL_JUMP: 27.5 },
+        percentiles: {},
+        benchmarkComparisons: {
+          DASH_10YD: [{ benchmarkName: 'B', benchmarkValue: 1.8, athleteValue: 1.7, meetsOrExceeds: true }],
+          VERTICAL_JUMP: [{ benchmarkName: 'B', benchmarkValue: 20, athleteValue: 27.5, meetsOrExceeds: true }],
+        },
+      },
+    };
+    vi.mocked(useGenerateReport).mockReturnValue({
+      mutate: (_vars: unknown, opts: { onSuccess: (d: unknown) => void }) => opts.onSuccess(data),
+      isPending: false,
+      isError: false,
+    } as any);
+    return render(
+      <QueryClientProvider client={new QueryClient()}>
+        <IndividualReportView report={report} />
+      </QueryClientProvider>,
+    );
+  }
+
+  it('renders a rowgroup heading per group in the performance table, in order', () => {
+    renderGrouped();
+    const table = screen.getByRole('table');
+    const headings = table.querySelectorAll('th[scope="rowgroup"]');
+    expect(Array.from(headings).map((h) => h.textContent)).toEqual(['Speed', 'Power']);
+    expect(headings[0].getAttribute('colspan')).toBe('5');
+    const text = table.textContent!;
+    expect(text.indexOf('Speed')).toBeLessThan(text.indexOf('10 Yard Dash'));
+    expect(text.indexOf('10 Yard Dash')).toBeLessThan(text.indexOf('Power'));
+    expect(text.indexOf('Power')).toBeLessThan(text.indexOf('Vertical Jump'));
+  });
+
+  it('renders group headings in the benchmark standing card', () => {
+    renderGrouped();
+    expect(screen.getByText('Benchmark Standing')).toBeInTheDocument();
+    expect(Array.from(document.querySelectorAll('h4')).map((h) => h.textContent)).toEqual(['Speed', 'Power']);
+  });
+});

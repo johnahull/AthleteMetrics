@@ -1,6 +1,7 @@
 import type { MetricExplanation } from '@shared/metric-explanations';
 import type { ReportTrends, ReportDistributions, TeamReportTrends, TeamReportDistributions } from '@shared/report-trends-types';
 import type { ReportFvProfile } from '@shared/report-fv-types';
+import type { MetricGroup } from '@shared/metric-order';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
 import type { ChartSelection, TeamChartSelection } from '@shared/report-charts';
 import type { DisplayFormat, MeasurementFormat } from '@shared/duration-format';
@@ -124,6 +125,8 @@ export interface TeamReportData {
   teamTrends?: TeamReportTrends;
   teamDistributions?: TeamReportDistributions;
   comparisonLabel?: string;
+  /** Metric groups in display order; absent on data from before grouping existed */
+  metricGroups?: MetricGroup[];
 }
 
 export interface IndividualAthleteData {
@@ -155,6 +158,8 @@ export interface IndividualReportData {
   distributions?: ReportDistributions;
   fvProfile?: ReportFvProfile; // present only when charts.fvProfile is selected and the sprint-FV flag is on
   comparisonLabel?: string; // cohort name for the "Where You Stand" caption (undefined = org-wide)
+  /** Metric groups in display order; absent on data from before grouping existed */
+  metricGroups?: MetricGroup[];
 }
 
 export type PdfFormat = 'visual' | 'simplified';

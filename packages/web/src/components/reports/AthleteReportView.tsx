@@ -47,6 +47,8 @@ import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
 import { formatMeasurement } from "@shared/duration-format";
+import { MetricGroupRowHeading } from "./MetricGroupHeading";
+import { groupedCodes } from "@/lib/metric-groups";
 import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from "@/lib/report-utils";
 import {
   getPerformanceColor,
@@ -225,8 +227,11 @@ function AthleteIndividualReportView({ report }: { report: Report }) {
                   <TableHead>Benchmark Comparisons</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>
-                {Object.entries(athlete.measurements).map(([metricCode, value]) => {
+              {groupedCodes(Object.keys(athlete.measurements), reportData.metricGroups).map((g) => (
+                <TableBody key={g.group ?? 'all'}>
+                  <MetricGroupRowHeading label={g.label} colSpan={3 + (showComparison ? 2 : 0)} />
+                  {g.codes.map((metricCode) => {
+                    const value = athlete.measurements[metricCode];
                   const percentile = athlete.percentiles[metricCode];
                   const teamAverage = athlete.teamAverages?.[metricCode];
                   const benchmarks = athlete.benchmarkComparisons[metricCode] || [];
@@ -285,8 +290,9 @@ function AthleteIndividualReportView({ report }: { report: Report }) {
                       </TableCell>
                     </TableRow>
                   );
-                })}
-              </TableBody>
+                  })}
+                </TableBody>
+              ))}
             </Table>
           </CardContent>
         </Card>

@@ -22,6 +22,9 @@ import { Lock } from "lucide-react";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { useToast } from "@/hooks/use-toast";
 import { MetricExplanation } from "@/components/reports/MetricExplanation";
+import { MetricGroupRowHeading, MetricGroupHeading } from "@/components/reports/MetricGroupHeading";
+import { groupedCodes } from "@/lib/metric-groups";
+import type { MetricGroup } from "@shared/metric-order";
 import { ReportMetricsGlossary } from "@/components/reports/ReportMetricsGlossary";
 import { TrendSection } from "@/components/reports/TrendSection";
 import { PercentileRadarSection } from "@/components/reports/PercentileRadarSection";
@@ -88,6 +91,7 @@ export default function PublicReport() {
   const metricLabels = (snapshotData.metricLabels ?? {}) as Record<string, string>;
   const metricUnits = (snapshotData.metricUnits ?? {}) as Record<string, string>;
   // Duration (mm:ss) metrics only; absent on snapshots taken before it existed
+  const metricGroups = snapshotData.metricGroups as MetricGroup[] | undefined;
   const metricFormats = snapshotData.metricFormats as Record<string, MeasurementFormat> | undefined;
   const trends = snapshotData.trends as ReportTrends | undefined;
   const fvProfile = snapshotData.fvProfile as ReportFvProfile | undefined;
@@ -427,8 +431,11 @@ export default function PublicReport() {
                         <TableHead>Benchmark Comparisons</TableHead>
                       </TableRow>
                     </TableHeader>
-                    <TableBody>
-                      {Object.entries(athlete.measurements).map(([metricCode, value]) => {
+                    {groupedCodes(Object.keys(athlete.measurements), metricGroups).map((g) => (
+                      <TableBody key={g.group ?? 'all'}>
+                        <MetricGroupRowHeading label={g.label} colSpan={3 + (showComparison ? 2 : 0)} />
+                        {g.codes.map((metricCode) => {
+                          const value = athlete.measurements[metricCode];
                         const percentile = athlete.percentiles?.[metricCode];
                         const teamAverage = athlete.teamAverages?.[metricCode];
                         const benchmarks = athlete.benchmarkComparisons?.[metricCode] || [];
@@ -510,8 +517,9 @@ export default function PublicReport() {
                             </TableCell>
                           </TableRow>
                         );
-                      })}
-                    </TableBody>
+                        })}
+                      </TableBody>
+                    ))}
                   </Table>
                 </CardContent>
               </Card>
@@ -533,7 +541,11 @@ export default function PublicReport() {
               <Card>
                 <CardHeader><CardTitle>Benchmark Standing</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
-                  {Object.entries(athlete.benchmarkComparisons).map(([code, comps]: [string, any]) => {
+                  {groupedCodes(Object.keys(athlete.benchmarkComparisons), metricGroups).map((g) => (
+                    <div key={g.group ?? 'all'} className="space-y-4">
+                      <MetricGroupHeading label={g.label} />
+                      {g.codes.map((code) => {
+                        const comps: any = athlete.benchmarkComparisons[code];
                     const list = comps || [];
                     const tiered = list.find((c: any) => c.allTiers && c.allTiers.length > 0);
                     if (tiered) {
@@ -558,7 +570,9 @@ export default function PublicReport() {
                         format={metricFormats?.[code]}
                       />
                     ));
-                  })}
+                      })}
+                    </div>
+                  ))}
                 </CardContent>
               </Card>
             )}

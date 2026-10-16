@@ -24,6 +24,8 @@ import { ShareReportDialog } from "./ShareReportDialog";
 import { SendReportToAthleteDialog } from "./SendReportToAthleteDialog";
 import { CoachingInsightsCard } from "./CoachingInsightsCard";
 import { MetricExplanation } from "./MetricExplanation";
+import { MetricGroupRowHeading, MetricGroupHeading } from "./MetricGroupHeading";
+import { groupedCodes } from "@/lib/metric-groups";
 import { ReportMetricsGlossary } from "./ReportMetricsGlossary";
 import { TrendSection } from "@/components/reports/TrendSection";
 import { PercentileRadarSection } from "@/components/reports/PercentileRadarSection";
@@ -220,8 +222,11 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                   <TableHead>Benchmark Comparisons</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>
-                {Object.entries(athlete.measurements).map(([metricCode, value]) => {
+              {groupedCodes(Object.keys(athlete.measurements), reportData.metricGroups).map((g) => (
+                <TableBody key={g.group ?? 'all'}>
+                  <MetricGroupRowHeading label={g.label} colSpan={3 + (showComparison ? 2 : 0)} />
+                  {g.codes.map((metricCode) => {
+                    const value = athlete.measurements[metricCode];
                   const percentile = athlete.percentiles[metricCode];
                   const teamAverage = athlete.teamAverages?.[metricCode];
                   const benchmarks = athlete.benchmarkComparisons[metricCode] || [];
@@ -317,8 +322,9 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                       </TableCell>
                     </TableRow>
                   );
-                })}
-              </TableBody>
+                  })}
+                </TableBody>
+              ))}
             </Table>
           </CardContent>
         </Card>
@@ -340,7 +346,11 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
         <Card>
           <CardHeader><CardTitle>Benchmark Standing</CardTitle></CardHeader>
           <CardContent className="space-y-4">
-            {Object.entries(athlete.benchmarkComparisons).map(([code, comps]: [string, any]) => {
+            {groupedCodes(Object.keys(athlete.benchmarkComparisons), reportData.metricGroups).map((g) => (
+              <div key={g.group ?? 'all'} className="space-y-4">
+                <MetricGroupHeading label={g.label} />
+                {g.codes.map((code) => {
+                  const comps: any = athlete.benchmarkComparisons[code];
               const list = comps || [];
               const tiered = list.find((c: any) => c.allTiers && c.allTiers.length > 0);
               if (tiered) {
@@ -365,7 +375,9 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                   format={metricFormats?.[code]}
                 />
               ));
-            })}
+                })}
+              </div>
+            ))}
           </CardContent>
         </Card>
       )}
