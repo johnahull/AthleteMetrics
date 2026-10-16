@@ -55,6 +55,6 @@ export function isLowerIsBetter(metric: string): boolean {
  * %, inch (") and foot (') marks attach without a space; no unit gives the bare value.
  */
 export function formatValueWithUnit(value: string | number, unit?: string | null): string {
-  if (!unit) return `${value}`;
+  if (!unit || `${value}`.trim() === '') return `${value}`;
   return /^[%"']/.test(unit) ? `${value}${unit}` : `${value} ${unit}`;
 }

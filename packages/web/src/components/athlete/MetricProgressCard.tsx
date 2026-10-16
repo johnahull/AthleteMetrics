@@ -359,7 +359,7 @@ export function MetricProgressCard({
 
           {/* PR Display - uses personalRecord if available, otherwise bestValue.
               Hidden for tracking metrics: they have no "best" direction. */}
-          {!isTracking && (
+          {!isTracking && (personalRecord?.value != null || bestValue != null) && (
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1.5">
               <Trophy className="h-4 w-4 text-yellow-600" />

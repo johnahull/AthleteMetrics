@@ -19,4 +19,9 @@ describe('formatValueWithUnit', () => {
     expect(formatValueWithUnit(1.8, null)).toBe('1.8');
     expect(formatValueWithUnit(1.8)).toBe('1.8');
   });
+
+  it('returns blank value unchanged, without a lone unit', () => {
+    expect(formatValueWithUnit('', 's')).toBe('');
+    expect(formatValueWithUnit('  ', 's')).toBe('  ');
+  });
 });
