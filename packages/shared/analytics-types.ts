@@ -416,7 +416,6 @@ export const CHART_SELECTION_MATRIX: Record<string, Record<string, Record<string
 export type MetricType = 'lower_is_better' | 'higher_is_better' | 'tracking';
 
 // Dynamic metric configuration interface
-// This replaces the hardcoded METRIC_CONFIG with API-fetched data
 export interface DynamicMetricConfig {
   code: string;
   label: string;
@@ -441,11 +440,6 @@ export interface OrganizationMetricConfig extends DynamicMetricConfig {
   customLabel?: string;
   displayOrder?: number;
 }
-
-// Legacy: Metric units and labels (DEPRECATED - use API-fetched metrics instead)
-// Database (site_metrics table) is now the single source of truth
-// Use useMetricConfig hook to fetch metric configuration
-export const METRIC_CONFIG: Record<string, { label: string; unit: string; metricType: MetricType }> = {};
 
 /**
  * LAST-RESORT FALLBACK ONLY. The metric's own `metricType` (site_metrics /

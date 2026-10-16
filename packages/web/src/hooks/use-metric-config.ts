@@ -1,6 +1,5 @@
 /**
  * Hook for accessing dynamic metric configurations in charts and other components
- * Falls back to static METRIC_CONFIG for backward compatibility
  */
 
 import { useMemo } from 'react';
@@ -8,14 +7,13 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
 import { useOrganizationMetrics } from '@/lib/metrics-api';
 import { useCustomOrgMetrics } from '@/lib/custom-metrics-api';
-import { METRIC_CONFIG } from '@shared/analytics-types';
 import type { DynamicMetricConfig, MetricType } from '@shared/analytics-types';
 import type { DisplayFormat } from '@shared/duration-format';
 
 interface MetricConfigLookup {
   /**
    * Get metric configuration by code
-   * Returns dynamic config if available, falls back to static METRIC_CONFIG
+   * Returns the dynamic config, or null for an unknown code
    */
   getMetricConfig: (code: string) => {
     label: string;
@@ -165,18 +163,6 @@ export function useMetricConfig(): MetricConfigLookup {
           category: dynamicConfig.category,
           displayFormat: dynamicConfig.displayFormat ?? 'decimal',
           decimalPrecision: dynamicConfig.decimalPrecision,
-        };
-      }
-
-      // Fall back to static METRIC_CONFIG for backward compatibility
-      const staticConfig = METRIC_CONFIG[code as keyof typeof METRIC_CONFIG];
-      if (staticConfig) {
-        return {
-          label: staticConfig.label,
-          unit: staticConfig.unit,
-          metricType: staticConfig.metricType,
-          lowerIsBetter: staticConfig.metricType === 'lower_is_better',
-          displayFormat: 'decimal' as const,
         };
       }
 

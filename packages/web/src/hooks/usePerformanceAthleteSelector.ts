@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
 import { useAthleteSelector } from './useAthleteSelector';
-import { METRIC_CONFIG } from '@shared/analytics-types';
 import type { TrendData } from '@shared/analytics-types';
 import { safeNumber } from '@shared/utils/number-conversion';
 import { CHART_CONFIG } from '@/constants/chart-config';
@@ -26,9 +25,10 @@ export function usePerformanceAthleteSelector({
 }: UsePerformanceAthleteSelectorOptions) {
   // Process athlete data with performance metrics
   const athleteOptions = useMemo(() => {
-    const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-    const lowerIsBetter = metricConfig?.metricType === 'lower_is_better';
-    const isTracking = metricConfig?.metricType === 'tracking';
+    // shortcut: no metric type reaches this hook, so every metric ranks higher-is-better (unchanged
+    // behaviour; the old static label map was always empty). Pass the metric type in to fix.
+    const lowerIsBetter = false;
+    const isTracking = false;
 
     return data.map(trend => {
       // Calculate best value for this athlete using safe conversion
@@ -98,10 +98,8 @@ export function usePerformanceAthleteSelector({
     onSelectionChange(randomIds);
   };
 
-  // Get metric configuration
-  const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-  const unit = metricConfig?.unit || '';
-  const metricLabel = metricConfig?.label || metric;
+  const unit = '';
+  const metricLabel = metric;
 
   return {
     ...selectorState,
@@ -116,7 +114,6 @@ export function usePerformanceAthleteSelector({
     selectRandom,
 
     // Metric info
-    metricConfig,
     unit,
     metricLabel,
 
