@@ -25,6 +25,7 @@ describe('ReportService metric categories and ordering', () => {
   });
 
   afterAll(async () => {
+    await db.delete(customOrgMetrics).where(eq(customOrgMetrics.organizationId, orgId));
     await db.delete(siteMetrics).where(eq(siteMetrics.code, siteCode));
     await db.delete(organizations).where(eq(organizations.id, orgId));
   });

@@ -32,7 +32,7 @@ import { evaluateTierBenchmark as evaluateTierBenchmarkPure } from './benchmark-
 import { getMetricType } from '../utils/metric-type';
 import { type MetricExplanation } from '@shared/metric-explanations';
 import { isPeerComparisonExcludedMetric } from '@shared/peer-comparison-exclusions';
-import { orderReportData, type MetricGroup } from '@shared/metric-order';
+import { orderReportData, collectMetricCodes } from '@shared/metric-order';
 import { getMetricExplanationsMap } from './metric-explanation-service';
 import { assembleTrends } from './report-trends';
 import { computeDistribution } from './report-distributions';
@@ -289,7 +289,7 @@ export class ReportService extends BaseService {
     };
     const codes = new Set<string>();
     for (const d of items) {
-      if (isGeneric(d)) (orderReportData(d as any, {}).metricGroups as MetricGroup[]).forEach(g => g.codes.forEach(c => codes.add(c)));
+      if (isGeneric(d)) collectMetricCodes(d as any).forEach(c => codes.add(c));
     }
     const { categories } = codes.size > 0
       ? await this.getMetricLabelsAndUnits([...codes], organizationId)

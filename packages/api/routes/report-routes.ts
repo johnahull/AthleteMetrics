@@ -234,9 +234,9 @@ const bulkOperationLimiter = rateLimit({
   },
 });
 
-export function registerReportRoutes(app: Express) {
-  const reportService = new ReportService();
+const reportService = new ReportService();
 
+export function registerReportRoutes(app: Express) {
   /**
    * Create a new report
    * POST /api/reports
@@ -3980,7 +3980,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     if (!isRenderableEvalModel(reportData.model)) throw new Error('Eval report model is unavailable');
     return renderEvalReportPdf(reportData.model, org);
   }
-  reportData = await new ReportService().orderForResponse(reportData, report.organizationId);
+  reportData = await reportService.orderForResponse(reportData, report.organizationId);
 
   const doc = new jsPDF();
   const isVisual = format === 'visual';

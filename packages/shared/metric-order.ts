@@ -108,6 +108,19 @@ function reorderKeys<T>(map: unknown, position: Map<string, number>): T {
 const ATHLETE_KEYED = ["measurements", "percentiles", "eventPercentiles", "teamAverages", "benchmarkComparisons"];
 const TOP_KEYED = ["trends", "distributions", "teamTrends", "teamDistributions"];
 
+const reportAthletes = (data: Obj): Obj[] =>
+  [data.athlete, ...(Array.isArray(data.athleteRankings) ? data.athleteRankings : [])].filter(isObj);
+
+/** Every metric code a report carries, scanned without copying it (the same fields orderReportData re-orders). */
+export function collectMetricCodes(data: Obj): Set<string> {
+  const codes = new Set<string>();
+  if (!isObj(data)) return codes;
+  for (const a of reportAthletes(data)) for (const f of ATHLETE_KEYED) if (isObj(a[f])) Object.keys(a[f]).forEach((c) => codes.add(c));
+  for (const f of TOP_KEYED) if (isObj(data[f])) Object.keys(data[f]).forEach((c) => codes.add(c));
+  if (Array.isArray(data.teamStatistics)) for (const s of data.teamStatistics) if (s?.metric) codes.add(s.metric);
+  return codes;
+}
+
 /**
  * Copy of a report with metric-keyed maps re-inserted in group order, plus `metricGroups`. Input is not mutated.
  * Limit: JS orders integer-like keys (a custom code such as "1600") ascending regardless of insertion, so
@@ -118,14 +131,7 @@ export function orderReportData<T extends Obj>(
   categories: Record<string, string | null | undefined>,
 ): T & { metricGroups: MetricGroup[] } {
   if (!isObj(data)) return data as any;
-  const athletes: Obj[] = [data.athlete, ...(Array.isArray(data.athleteRankings) ? data.athleteRankings : [])].filter(isObj);
-
-  const codes = new Set<string>();
-  for (const a of athletes) for (const f of ATHLETE_KEYED) if (isObj(a[f])) Object.keys(a[f]).forEach((c) => codes.add(c));
-  for (const f of TOP_KEYED) if (isObj(data[f])) Object.keys(data[f]).forEach((c) => codes.add(c));
-  if (Array.isArray(data.teamStatistics)) for (const s of data.teamStatistics) if (s?.metric) codes.add(s.metric);
-
-  const metricGroups = groupMetricCodes([...codes], categories);
+  const metricGroups = groupMetricCodes([...collectMetricCodes(data)], categories);
   const position = new Map(metricGroups.flatMap((g) => g.codes).map((c, i) => [c, i]));
 
   const orderAthlete = (a: Obj): Obj => {

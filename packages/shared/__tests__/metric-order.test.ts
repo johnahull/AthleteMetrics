@@ -3,6 +3,7 @@ import {
   METRIC_GROUP_ORDER,
   normalizeCategory,
   sortCodesByGroups,
+  collectMetricCodes,
   groupMetricCodes,
   orderReportData,
 } from "../metric-order";
@@ -153,5 +154,36 @@ describe("sortCodesByGroups", () => {
   it("keeps codes the groups do not list at the end, and passes through without groups", () => {
     expect(sortCodesByGroups(["X", "DASH_10YD"], groups)).toEqual(["DASH_10YD", "X"]);
     expect(sortCodesByGroups(["B", "A"], undefined)).toEqual(["B", "A"]);
+  });
+});
+
+describe("collectMetricCodes", () => {
+  const m = (...codes: string[]) => Object.fromEntries(codes.map((c) => [c, 1]));
+  const viaOrder = (data: any) => orderReportData(data, {}).metricGroups.flatMap((g) => g.codes).sort();
+
+  it("finds the same codes orderReportData groups, on an individual report", () => {
+    const data = {
+      reportType: "individual",
+      athlete: { measurements: m("A", "B"), percentiles: m("C"), benchmarkComparisons: m("D") },
+      trends: m("E"),
+      distributions: m("A"),
+    };
+    expect([...collectMetricCodes(data)].sort()).toEqual(viaOrder(data));
+  });
+
+  it("finds the same codes on a team report", () => {
+    const data = {
+      reportType: "team",
+      teamStatistics: [{ metric: "A" }, { metric: "B" }],
+      athleteRankings: [{ measurements: m("C"), benchmarkComparisons: m("D") }],
+      teamTrends: m("E"),
+      teamDistributions: m("F"),
+    };
+    expect([...collectMetricCodes(data)].sort()).toEqual(viaOrder(data));
+  });
+
+  it("is empty for non-objects and empty reports", () => {
+    expect(collectMetricCodes(null as any).size).toBe(0);
+    expect(collectMetricCodes({ reportType: "team" }).size).toBe(0);
   });
 });

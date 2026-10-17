@@ -34,7 +34,7 @@ export function planChartPageBreaks(blockHeights: number[], usableHeight: number
 export function chartGroupHeadings(charts: Array<{ group?: string; groupLabel?: string; section?: string }>): Array<string | null> {
   let previous: string | undefined;
   return charts.map(({ group, groupLabel, section }) => {
-    // The run is per section, so a new section starts with a heading even when its group is the same
+    // The run is per section (the `|` separator assumes section ids never contain `|`), so a new section starts with a heading even when its group is the same
     const key = group ? `${section ?? ''}|${group}` : undefined;
     const heading = key && key !== previous ? (groupLabel || group!) : null;
     previous = key;
