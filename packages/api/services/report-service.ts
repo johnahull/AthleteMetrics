@@ -32,7 +32,7 @@ import { evaluateTierBenchmark as evaluateTierBenchmarkPure } from './benchmark-
 import { getMetricType } from '../utils/metric-type';
 import { type MetricExplanation } from '@shared/metric-explanations';
 import { isPeerComparisonExcludedMetric } from '@shared/peer-comparison-exclusions';
-import { orderReportData, collectMetricCodes } from '@shared/metric-order';
+import { orderReportData, collectMetricCodes, isGenericReport } from '@shared/metric-order';
 import { getMetricExplanationsMap } from './metric-explanation-service';
 import { assembleTrends } from './report-trends';
 import { computeDistribution } from './report-distributions';
@@ -283,18 +283,14 @@ export class ReportService extends BaseService {
 
   /** orderForResponse for several reports of one organization, with a single category lookup. */
   async orderManyForResponse<T>(items: T[], organizationId?: string): Promise<T[]> {
-    const isGeneric = (d: unknown) => {
-      const type = (d as { reportType?: string } | null)?.reportType;
-      return type === 'individual' || type === 'team';
-    };
     const codes = new Set<string>();
     for (const d of items) {
-      if (isGeneric(d)) collectMetricCodes(d as any).forEach(c => codes.add(c));
+      if (isGenericReport(d)) collectMetricCodes(d as any).forEach(c => codes.add(c));
     }
     const { categories } = codes.size > 0
       ? await this.getMetricLabelsAndUnits([...codes], organizationId)
       : { categories: {} };
-    return items.map(d => (isGeneric(d) ? orderReportData(d as any, categories) as T : d));
+    return items.map(d => (isGenericReport(d) ? orderReportData(d as any, categories) as T : d));
   }
 
   /**

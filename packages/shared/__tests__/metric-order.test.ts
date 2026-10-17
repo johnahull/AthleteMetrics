@@ -4,6 +4,7 @@ import {
   normalizeCategory,
   sortCodesByGroups,
   collectMetricCodes,
+  isGenericReport,
   groupMetricCodes,
   orderReportData,
 } from "../metric-order";
@@ -185,5 +186,15 @@ describe("collectMetricCodes", () => {
   it("is empty for non-objects and empty reports", () => {
     expect(collectMetricCodes(null as any).size).toBe(0);
     expect(collectMetricCodes({ reportType: "team" }).size).toBe(0);
+  });
+});
+
+describe("isGenericReport", () => {
+  it("is true only for individual and team reports", () => {
+    expect(isGenericReport({ reportType: "individual" })).toBe(true);
+    expect(isGenericReport({ reportType: "team" })).toBe(true);
+    expect(isGenericReport({ reportType: "eval" })).toBe(false);
+    expect(isGenericReport(null)).toBe(false);
+    expect(isGenericReport("x")).toBe(false);
   });
 });

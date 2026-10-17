@@ -1,4 +1,3 @@
-// packages/api/routes/pdf-metric-rows.ts
 import type { MetricGroup } from '@shared/metric-order';
 
 export type PdfCell = string | { content: string; colSpan: number; styles: { fontStyle: 'bold'; fillColor: [number, number, number] } };
