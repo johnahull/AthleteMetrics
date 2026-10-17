@@ -338,7 +338,8 @@ function checkOutlier(metric: string, value: number): string | null {
  * Derive FLY10_TIME / FLY10M_TIME from an athlete's dash drill splits.
  *
  * FLY10 = time at 30(yd|m) − time at 20(yd|m) — the "flying 10" segment
- * after initial acceleration. A separate derivation runs per unit system;
+ * after initial acceleration. Both times are gates of the same row; Final Time
+ * stands in for the 30 gate only when the row has none. A separate derivation runs per unit system;
  * yards dashes produce FLY10_TIME, meters dashes produce FLY10M_TIME.
  * When multiple candidates exist in the same unit, picks the fastest.
  */
@@ -364,11 +365,12 @@ function deriveFly10ForAthlete(
     let source: string | undefined;
 
     if (drill.metric === dash30) {
-      // 30(yd|m) dash: FLY10 = finalTime − split at 20(yd|m)
+      // 30(yd|m) dash: FLY10 = gate at 30 − gate at 20, both clocks of this one row. The
+      // Final Time is only used when the row has no gate at 30 (it can differ from the gate by 0.01 s).
       const split20 = drill.splits.find(s => s.metric === dash20);
       if (split20) {
         time20 = split20.value;
-        time30 = drill.value;
+        time30 = drill.splits.find(s => s.metric === dash30)?.value ?? drill.value;
         source = dash30;
       }
     } else if (drill.metric === dash40) {
@@ -417,7 +419,9 @@ function deriveFly10Ri10ForAthlete(drills: ParsedDrillResult[]): ParsedDrillResu
     if (drill.metric !== MetricType.DASH_20YD) continue;
     const split10 = drill.splits?.find(s => s.metric === MetricType.DASH_10YD);
     if (!split10) continue;
-    const value = parseFloat((drill.value - split10.value).toFixed(3));
+    // Gate at 20 when the row has one, else Final Time (see deriveFly10ForAthlete)
+    const end = drill.splits?.find(s => s.metric === MetricType.DASH_20YD)?.value ?? drill.value;
+    const value = parseFloat((end - split10.value).toFixed(3));
     if (value > 0 && (best === null || value < best)) best = value;
   }
   if (best === null) return null;

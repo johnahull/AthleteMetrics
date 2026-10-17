@@ -4,6 +4,8 @@ import { BoxPlotChart } from '@/components/charts/BoxPlotChart';
 import { buildStatisticalSummary } from '@/components/charts/chart-stats-utils';
 import type { TeamReportDistributions } from '@shared/report-trends-types';
 import type { ChartDataPoint } from '@shared/analytics-types';
+import { MetricGroupBlocks } from './MetricGroupHeading';
+import type { MetricGroup } from '@shared/metric-order';
 
 interface Props {
   distributions: TeamReportDistributions;
@@ -15,9 +17,10 @@ interface Props {
    *  `teamName || 'Independent'` fallback incorrectly labels every athlete
    *  as unaffiliated. */
   teamName?: string;
+  metricGroups?: MetricGroup[];
 }
 
-export function TeamBoxSwarmSection({ distributions, metricLabels = {}, generatedAt, teamName }: Props) {
+export function TeamBoxSwarmSection({ distributions, metricLabels = {}, generatedAt, teamName, metricGroups }: Props) {
   const entries = Object.entries(distributions).filter(([, dist]) => dist.athletes.length >= 2);
   if (entries.length === 0) return null;
 
@@ -28,7 +31,13 @@ export function TeamBoxSwarmSection({ distributions, metricLabels = {}, generate
         <CardDescription>The spread of every athlete's performance per metric</CardDescription>
       </CardHeader>
       <CardContent className="space-y-10">
-        {entries.map(([code, dist]) => {
+        <MetricGroupBlocks
+          codes={entries.map(([code]) => code)}
+          metricGroups={metricGroups}
+          section="team-boxswarm"
+          className="space-y-10"
+          render={(code) => {
+          const dist = distributions[code];
           const label = metricLabels[code] || code;
           const points: ChartDataPoint[] = dist.athletes.map((a) => ({
             athleteId: a.athleteId,
@@ -57,7 +66,8 @@ export function TeamBoxSwarmSection({ distributions, metricLabels = {}, generate
               </div>
             </div>
           );
-        })}
+          }}
+        />
       </CardContent>
     </Card>
   );

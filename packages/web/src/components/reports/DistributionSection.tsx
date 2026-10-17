@@ -2,6 +2,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { ReportDistributions, MetricDistribution } from '@shared/report-trends-types';
 import { computeHistogram, percentBetterThanPeers } from './histogram-utils';
 import { formatMeasurement, type MeasurementFormat } from '@shared/duration-format';
+import { MetricGroupBlocks } from './MetricGroupHeading';
+import type { MetricGroup } from '@shared/metric-order';
 
 interface Props {
   athleteName: string;
@@ -14,6 +16,7 @@ interface Props {
   percentiles?: Record<string, number>;
   /** Name of the peer cohort (e.g. "Varsity (Male, WR)"); falls back to "your group". */
   comparisonLabel?: string;
+  metricGroups?: MetricGroup[];
 }
 
 /** Compact number: integers as-is, otherwise one decimal. */
@@ -124,6 +127,7 @@ export function DistributionSection({
   metricFormats = {},
   percentiles = {},
   comparisonLabel,
+  metricGroups,
 }: Props) {
   const entries = Object.entries(distributions);
   if (entries.length === 0) return null;
@@ -136,22 +140,29 @@ export function DistributionSection({
         <CardTitle>Where You Stand (vs {groupLabel})</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        {entries.map(([code, dist]) => {
-          const label = metricLabels[code] || code;
-          return (
-            <MetricHistogram
-              key={code}
-              dist={dist}
-              label={label}
-              unit={metricUnits[code]}
-              format={metricFormats[code]}
-              percentile={percentiles[code]}
-              groupLabel={groupLabel}
-              captureCode={code}
-              captureTitle={`${label} — where ${athleteName} stands`}
-            />
-          );
-        })}
+        <MetricGroupBlocks
+          codes={entries.map(([code]) => code)}
+          metricGroups={metricGroups}
+          section="distribution"
+          className="space-y-6"
+          render={(code) => {
+            const dist = distributions[code];
+            const label = metricLabels[code] || code;
+            return (
+              <MetricHistogram
+                key={code}
+                dist={dist}
+                label={label}
+                unit={metricUnits[code]}
+                format={metricFormats[code]}
+                percentile={percentiles[code]}
+                groupLabel={groupLabel}
+                captureCode={code}
+                captureTitle={`${label} — where ${athleteName} stands`}
+              />
+            );
+          }}
+        />
       </CardContent>
     </Card>
   );

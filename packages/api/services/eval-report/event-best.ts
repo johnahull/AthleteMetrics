@@ -10,6 +10,8 @@ export interface EventMeasurementRow {
   organizationId: string | null;
   metric: string;
   value: string | number;
+  /** Recency tiebreak for same-run selection; absent in fixtures */
+  createdAt?: Date | string;
 }
 
 export function eventBests(

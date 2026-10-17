@@ -6,9 +6,11 @@
 import express, { type Express } from "express";
 import { DEFAULT_AI_MODEL_KEY, getAIModel } from "@shared/ai-models";
 import rateLimit from "express-rate-limit";
+import { sortCodesByGroups, isGenericReport } from "@shared/metric-order";
+import { buildMeasurementRows, buildBenchmarkRows } from "./pdf-metric-rows";
 import { ReportService } from "../services/report-service";
 import { createReportsFromInput, ReportCreateError } from "../services/report-create";
-import { planChartPageBreaks } from "./pdf-chart-layout";
+import { planChartPageBreaks, chartGroupHeadings, addHeadingHeights } from "./pdf-chart-layout";
 import { requireAuth, requireAIEnabled, type AuthenticatedRequest } from "../middleware";
 import { storage } from "../storage";
 import {
@@ -232,9 +234,9 @@ const bulkOperationLimiter = rateLimit({
   },
 });
 
-export function registerReportRoutes(app: Express) {
-  const reportService = new ReportService();
+const reportService = new ReportService();
 
+export function registerReportRoutes(app: Express) {
   /**
    * Create a new report
    * POST /api/reports
@@ -1029,7 +1031,7 @@ export function registerReportRoutes(app: Express) {
           return res.status(400).json({ message: "Invalid report type" });
         }
 
-        res.json(reportData);
+        res.json(await reportService.orderForResponse(reportData, report.organizationId));
       } catch (error) {
         console.error("Error generating report:", error);
         res.status(500).json({
@@ -1130,7 +1132,8 @@ export function registerReportRoutes(app: Express) {
           .where(eq(reportSnapshots.reportId, reportId))
           .orderBy(desc(reportSnapshots.createdAt));
 
-        res.json(snapshots);
+        const ordered = await reportService.orderManyForResponse(snapshots.map((s) => s.snapshotData), report.organizationId);
+        res.json(snapshots.map((s, i) => ({ ...s, snapshotData: ordered[i] })));
       } catch (error) {
         console.error("Error fetching snapshots:", error);
         res.status(500).json({ message: "Failed to fetch snapshots" });
@@ -1197,7 +1200,18 @@ export function registerReportRoutes(app: Express) {
       // helper guards the public PDF-export routes so they cannot diverge.
       if (!(await enforcePublicSnapshotAccess(req, res, snapshot))) return;
 
-      res.json(snapshot);
+      // Eval snapshots are not re-ordered, so skip the owner lookup for them
+      const [owner] = isGenericReport(snapshot.snapshotData)
+        ? await db
+            .select({ organizationId: reports.organizationId })
+            .from(reports)
+            .where(eq(reports.id, snapshot.reportId))
+            .limit(1)
+        : [];
+      res.json({
+        ...snapshot,
+        snapshotData: await reportService.orderForResponse(snapshot.snapshotData, owner?.organizationId),
+      });
     } catch (error) {
       console.error("Error fetching public snapshot:", error);
       res.status(500).json({
@@ -3810,12 +3824,16 @@ const MAX_CHART_IMAGES = 60;
  * data-URL entries so a bad/oversized payload degrades gracefully instead of
  * crashing the export or pinning the event loop.
  */
-function normalizeChartImages(raw: unknown): Array<{ metricCode: string; dataUrl: string; title?: string }> {
+export interface ChartImage { metricCode: string; dataUrl: string; title?: string; group?: string; groupLabel?: string; section?: string }
+const MAX_GROUP_TEXT_LENGTH = 60;
+const CHART_HEADING_HEIGHT = 8;
+
+export function normalizeChartImages(raw: unknown): ChartImage[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .slice(0, MAX_CHART_IMAGES)
     .filter(
-      (img): img is { metricCode: string; dataUrl: string; title?: string } =>
+      (img): img is ChartImage =>
         !!img &&
         typeof img.metricCode === 'string' &&
         typeof img.dataUrl === 'string' &&
@@ -3824,12 +3842,16 @@ function normalizeChartImages(raw: unknown): Array<{ metricCode: string; dataUrl
         img.dataUrl.startsWith('data:image/png;base64,') &&
         // Validate title is a string if present
         (img.title === undefined || typeof img.title === 'string'),
-    );
+    )
+    .map((img) => {
+      const bounded = (v: unknown) => (typeof v === 'string' && v.length > 0 ? v.slice(0, MAX_GROUP_TEXT_LENGTH) : undefined);
+      return { ...img, group: bounded(img.group), groupLabel: bounded(img.groupLabel), section: bounded(img.section) };
+    });
 }
 
-function addTrendChartsToPdf(
+export function addTrendChartsToPdf(
   doc: jsPDF,
-  chartImages: Array<{ metricCode: string; dataUrl: string; title?: string }>,
+  chartImages: ChartImage[],
   metricLabels: Record<string, string> = {},
 ): void {
   if (!chartImages.length) return;
@@ -3845,7 +3867,7 @@ function addTrendChartsToPdf(
   // bytes throws inside getImageProperties; isolating it here means one bad capture
   // is dropped rather than aborting the whole PDF with a 500.
   const measured: Array<{
-    img: { metricCode: string; dataUrl: string; title?: string };
+    img: ChartImage;
     imgHeight: number;
     blockHeight: number;
   }> = [];
@@ -3862,7 +3884,11 @@ function addTrendChartsToPdf(
 
   // Pass 2: pack as many charts per page as fit by vertical space (no fixed
   // per-page count), then flow them down the pages.
-  const breaks = planChartPageBreaks(measured.map((m) => m.blockHeight), usableHeight);
+  const headings = chartGroupHeadings(measured.map((m) => m.img));
+  const breaks = planChartPageBreaks(
+    addHeadingHeights(measured.map((m) => m.blockHeight), headings, CHART_HEADING_HEIGHT),
+    usableHeight,
+  );
   doc.addPage();
   let yPos = startY;
   measured.forEach(({ img, imgHeight }, i) => {
@@ -3870,11 +3896,17 @@ function addTrendChartsToPdf(
       doc.addPage();
       yPos = startY;
     }
+    if (headings[i]) {
+      doc.setFontSize(12);
+      doc.setTextColor(100, 116, 139);
+      doc.text(headings[i]!.toUpperCase(), margin, yPos);
+      yPos += CHART_HEADING_HEIGHT;
+    }
     doc.setFontSize(14);
     doc.setTextColor(40, 40, 40);
     doc.text(img.title || metricLabels[img.metricCode] || img.metricCode, margin, yPos);
     yPos += 6;
-    doc.addImage(img.dataUrl, 'PNG', margin, yPos, imgWidth, imgHeight);
+    doc.addImage(img.dataUrl, 'PNG', margin, yPos, imgWidth, imgHeight, undefined, 'FAST');
     yPos += imgHeight + 10;
   });
 }
@@ -3945,12 +3977,13 @@ async function sendEvalReportPdf(user: { id: string; isSiteAdmin?: boolean; role
   res.send(Buffer.from(pdf.output("arraybuffer")));
 }
 
-async function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified', org?: ReportOrg, chartImages: Array<{ metricCode: string; dataUrl: string; title?: string }> = []): Promise<jsPDF> {
+async function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified', org?: ReportOrg, chartImages: ChartImage[] = []): Promise<jsPDF> {
   // AM-FEAT-019: a public eval snapshot carries its frozen model
   if (reportData?.reportType === EVAL_REPORT_TYPE) {
     if (!isRenderableEvalModel(reportData.model)) throw new Error('Eval report model is unavailable');
     return renderEvalReportPdf(reportData.model, org);
   }
+  reportData = await reportService.orderForResponse(reportData, report.organizationId);
 
   const doc = new jsPDF();
   const isVisual = format === 'visual';
@@ -3980,7 +4013,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     if (org?.brandLogoUrl) {
       const logoData = await fetchLogoBase64(org.brandLogoUrl);
       if (logoData) {
-        doc.addImage(`data:${logoData.mimeType};base64,${logoData.base64}`, logoData.ext, (pageWidth - 60) / 2, 50, 60, 40);
+        doc.addImage(`data:${logoData.mimeType};base64,${logoData.base64}`, logoData.ext, (pageWidth - 60) / 2, 50, 60, 40, undefined, 'FAST');
         logoRendered = true;
       }
     }
@@ -4029,12 +4062,12 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
   }
 
   // --- Header with optional logo and branding ---
-  let headerY = 20;
+  let headerY = 26; // below the 20pt title baseline (y=20), so "Generated:" does not overlap it
 
   if (org?.brandLogoUrl && reportData.reportType === 'team') {
     const logoData = await fetchLogoBase64(org.brandLogoUrl);
     if (logoData) {
-      doc.addImage(`data:${logoData.mimeType};base64,${logoData.base64}`, logoData.ext, 14, 10, 30, 20);
+      doc.addImage(`data:${logoData.mimeType};base64,${logoData.base64}`, logoData.ext, 14, 10, 30, 20, undefined, 'FAST');
       doc.setFontSize(20);
       if (isVisual || org?.brandPrimaryColor) {
         doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
@@ -4414,16 +4447,15 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
 
     if (athlete.measurements) {
       const showPercentile = isGroupComparisonOn(reportData.reportConfig);
-      const measurementRows = Object.entries(athlete.measurements).map(
-        ([metric, value]: [string, any]) => {
-          const label = reportData.metricLabels?.[metric] || metric;
-          const unit = reportData.metricUnits?.[metric] || '';
-          const formatted = durationText(metric, value) ?? `${value.toFixed(2)}${unit ? ` ${unit}` : ''}`;
-          return showPercentile
-            ? [label, formatted, athlete.percentiles[metric]?.toFixed(1) || "N/A"]
-            : [label, formatted];
-        }
-      );
+      const measurementRows = buildMeasurementRows({
+        measurements: athlete.measurements,
+        percentiles: athlete.percentiles,
+        labels: reportData.metricLabels ?? {},
+        units: reportData.metricUnits ?? {},
+        showPercentile,
+        durationText,
+        metricGroups: reportData.metricGroups,
+      });
 
       autoTable(doc, {
         startY: yPos,
@@ -4438,64 +4470,16 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
 
     // Benchmark comparisons
     if (athlete.benchmarkComparisons) {
-      const singleValueRows: any[] = [];
-      // Tier data: keep metadata alongside cells for color styling
-      const tierData: Array<{
-        cells: string[];
-        tierColor: string;
-        tierOrder: number;
-      }> = [];
-
-      Object.entries(athlete.benchmarkComparisons).forEach(
-        ([metric, comparisons]: [string, any]) => {
-          const label = reportData.metricLabels?.[metric] || metric;
-          const unit = reportData.metricUnits?.[metric] || '';
-          comparisons.forEach((comp: any) => {
-            if (comp.tierName) {
-              // Tier benchmark: show tier name + distance to next
-              let tierLabel = comp.tierName;
-              if (comp.isBestTier) {
-                tierLabel += ' [Best]';
-              } else if (comp.distanceToNextTier != null && comp.nextTierName) {
-                const dist = comp.distanceToNextTier < 1
-                  ? comp.distanceToNextTier.toFixed(2)
-                  : comp.distanceToNextTier.toFixed(1);
-                tierLabel += ` (${durationText(metric, comp.distanceToNextTier) ?? `${dist}${unit ? ` ${unit}` : ''}`} to ${comp.nextTierName})`;
-              }
-              // Prefix with rank indicator
-              const rankPrefix = comp.tierOrder ? `#${comp.tierOrder} ` : '';
-              // Append per-tier coaching note when present (migration 0137).
-              // Newline-separated so autoTable wraps it as secondary text below
-              // the tier label.
-              const tierCellText = comp.coachingNote
-                ? `${rankPrefix}${tierLabel}\n${comp.coachingNote}`
-                : `${rankPrefix}${tierLabel}`;
-              tierData.push({
-                cells: [
-                  label,
-                  comp.tierGroupName || comp.benchmarkName,
-                  tierCellText,
-                  durationText(metric, comp.athleteValue) ?? `${comp.athleteValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
-                ],
-                tierColor: comp.tierColor || 'gray',
-                tierOrder: comp.tierOrder || 99,
-              });
-            } else {
-              // Single-value benchmark: existing format
-              singleValueRows.push([
-                label,
-                comp.benchmarkName,
-                durationText(metric, comp.benchmarkValue) ?? `${comp.benchmarkValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
-                durationText(metric, comp.athleteValue) ?? `${comp.athleteValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
-                comp.meetsOrExceeds ? "Yes" : "No",
-              ]);
-            }
-          });
-        }
-      );
+      const { tierRows, tierColors, singleRows: singleValueRows } = buildBenchmarkRows({
+        benchmarkComparisons: athlete.benchmarkComparisons,
+        labels: reportData.metricLabels ?? {},
+        units: reportData.metricUnits ?? {},
+        durationText,
+        metricGroups: reportData.metricGroups,
+      });
 
       // Render tier benchmarks table with color-coded tier cells
-      if (tierData.length > 0) {
+      if (tierRows.length > 0) {
         doc.setFontSize(14);
         doc.text("Benchmark Tiers", 14, yPos);
         yPos += 10;
@@ -4503,7 +4487,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
         autoTable(doc, {
           startY: yPos,
           head: [["Metric", "Tier Group", "Tier", "Actual"]],
-          body: tierData.map(d => d.cells),
+          body: tierRows,
           theme: isVisual ? "striped" : "grid",
           headStyles: { fillColor: colors.primary },
           styles: { fontSize: 9 },
@@ -4512,8 +4496,8 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
             const rowIdx = data.row.index;
             const colIdx = data.column.index;
             // Color the "Tier" column (index 2) with the tier's color tint
-            if (colIdx === 2 && rowIdx < tierData.length) {
-              const colorName = tierData[rowIdx].tierColor;
+            const colorName = tierColors[rowIdx];
+            if (colIdx === 2 && colorName) {
               data.cell.styles.fillColor = tierTint(colorName);
               data.cell.styles.fontStyle = 'bold';
             }
@@ -4752,9 +4736,9 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     }
   };
   if (reportData.reportType === 'team' && Array.isArray(reportData.teamStatistics)) {
-    for (const stat of reportData.teamStatistics) pushCode(stat?.metric);
+    for (const code of sortCodesByGroups(reportData.teamStatistics.map((s: any) => s?.metric), reportData.metricGroups)) pushCode(code);
   } else if (reportData.reportType === 'individual' && reportData.athlete?.measurements) {
-    for (const code of Object.keys(reportData.athlete.measurements)) pushCode(code);
+    for (const code of sortCodesByGroups(Object.keys(reportData.athlete.measurements), reportData.metricGroups)) pushCode(code);
   }
   // Fallback: include any explanation keys that weren't already ordered
   for (const code of Object.keys(glossaryExplanations)) pushCode(code);
