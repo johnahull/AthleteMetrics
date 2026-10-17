@@ -32,7 +32,11 @@ const UNRECOMPUTED_DERIVED = ["AGILITY_505_YD_LSI", "AGILITY_COD_DEFICIT_YD", "A
  * The headline 5-0-5 is the faster leg, or the better of that and a directly recorded 5-0-5.
  * Meter 5-0-5 codes only; a yard 5-0-5 code is never mixed in.
  */
-export function recomputeDerived(bests: ReadonlyMap<string, number>): Map<string, number> {
+export function recomputeDerived(
+  bests: ReadonlyMap<string, number>,
+  /** The 10 yd and 20 yd splits of ONE run, when the event has such a pair; else the per-metric bests are used */
+  splitPair?: { dash10: number; dash20: number } | null,
+): Map<string, number> {
   const out = new Map(bests);
   for (const stored of UNRECOMPUTED_DERIVED) out.delete(stored);
   const code = (key: Parameters<typeof metricCode>[0]) => metricCode(key);
@@ -51,10 +55,10 @@ export function recomputeDerived(bests: ReadonlyMap<string, number>): Map<string
   set("505_LSI", both(left, right, lsiPercent));
   set("CMJ_SL_ASYM", both(get("CMJ_SL_LEFT"), get("CMJ_SL_RIGHT"), cmjAsymmetryPercent));
   set("EUR", both(get("CMJ_HOH"), get("SQUAT_JUMP"), (cmj, sj) => (sj > 0 ? cmj / sj : null)));
-  const dash10 = get("DASH_10");
-  const dash20 = get("DASH_20");
-  // Uses the per-metric bests, so the best 10 yd and best 20 yd can come from different reps. The stored
-  // AGILITY_COD_DEFICIT_M_INTERP pairs them within one run (sameRunInputs), so this value differs from it when runs differ.
+  // The pair comes from one run when the event has one (as the stored AGILITY_COD_DEFICIT_M_INTERP does,
+  // sameRunInputs); otherwise, and for rows without a run id, the per-metric bests, which can come from different reps.
+  const dash10 = splitPair?.dash10 ?? get("DASH_10");
+  const dash20 = splitPair?.dash20 ?? get("DASH_20");
   // Splits out of order (20 yd not slower than 10 yd) give no 10 m time
   const tenMetre = both(dash10, dash20, (d10, d20) => (d20 > d10 ? d10 + TEN_M_INTERP * (d20 - d10) : null));
   const deficit = both(fasterLeg ?? undefined, tenMetre ?? undefined, (leg, tenM) => leg - tenM);
