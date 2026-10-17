@@ -5,7 +5,7 @@
 -- 21:670-678; 113 college-age women, Brower gates, upright self-start, clock started at first movement). The
 -- gap grows with distance: the seeded D1 40 yd average (5.10 s) is faster than anyone in that sample.
 --
--- Re-sourced (value, description, is_active = true), time = distance / speed with 9.144 m per 10 yd:
+-- Re-sourced (value, description, is_active = true), time = distance / speed over the paper's gate distances (18.3 / 27.4 / 36.6 m):
 --   D1 Average          20 yd 3.33 | 30 yd 4.61 | 40 yd 5.85 (median speed)
 --   D1 Top 25%          40 yd 5.70 (75th-percentile speed 6.42 m/s)
 --   HS MS (11-13)       40 yd 6.15 | HS JV (14-15) 40 yd 5.94 | HS Varsity (16-18) 40 yd Average 5.90
@@ -30,9 +30,9 @@ BEGIN
   FOR r IN
     SELECT * FROM (VALUES
       ('DASH_20YD', 'Soccer D1 Average', 3.33::numeric,
-       '~3.33s. Vescovi 2011 (Scand J Med Sci Sports 21:670-678): n=113 college-age (18-21 yr) high-level US women. Brower infrared gates, upright self-start (athlete starts when ready), clock started at first movement (first-movement trigger). Mean cumulative speed 5.50 m/s over 18.3 m; time = distance / speed. Confidence: MEDIUM-HIGH; provisional - replace with BTA internal data at N>=30.'),
+       '~3.33s. Vescovi 2011 (Scand J Med Sci Sports 21:670-678): n=113 college-age (18-21 yr) high-level US women. Brower infrared gates, upright self-start (athlete starts when ready), clock started at first movement (first-movement trigger). Mean cumulative speed 5.50 m/s over 18.3 m; time = distance / speed (mean-speed conversion overstates time by ~0.01 s). Confidence: MEDIUM-HIGH; provisional - replace with BTA internal data at N>=30.'),
       ('DASH_30YD', 'Soccer D1 Average', 4.61::numeric,
-       '~4.61s. Vescovi 2011 (Scand J Med Sci Sports 21:670-678): n=113 college-age (18-21 yr) high-level US women. Brower infrared gates, upright self-start (athlete starts when ready), clock started at first movement (first-movement trigger). Mean cumulative speed 5.94 m/s over 27.4 m; time = distance / speed. Confidence: MEDIUM-HIGH; provisional - replace with BTA internal data at N>=30.'),
+       '~4.61s. Vescovi 2011 (Scand J Med Sci Sports 21:670-678): n=113 college-age (18-21 yr) high-level US women. Brower infrared gates, upright self-start (athlete starts when ready), clock started at first movement (first-movement trigger). Mean cumulative speed 5.94 m/s over 27.4 m; time = distance / speed (mean-speed conversion overstates time by ~0.01 s). Confidence: MEDIUM-HIGH; provisional - replace with BTA internal data at N>=30.'),
       ('DASH_40YD', 'Soccer D1 Average', 5.85::numeric,
        '~5.85s. Vescovi 2011 (Scand J Med Sci Sports 21:670-678): n=113 college-age (18-21 yr) high-level US women. Brower infrared gates, upright self-start (athlete starts when ready), clock started at first movement (first-movement trigger). Median speed 6.26 m/s over 36.6 m (the mean, 6.24 m/s, gives 5.87 s); time = distance / speed. Confidence: MEDIUM-HIGH; provisional - replace with BTA internal data at N>=30.'),
       ('DASH_40YD', 'Soccer D1 Top 25%', 5.70::numeric,
