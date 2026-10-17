@@ -170,6 +170,47 @@ describe('assembleEvalReportModel: meter 5-0-5 and the interpolated COD deficit'
     expect(metric(withDash20, 'DASH_20YD')!.value).toBe(3.05);
   });
 
+  describe('10 yd / 20 yd pair from one run', () => {
+    const legs = [row('AGILITY_505_M_L', 2.6), row('AGILITY_505_M_R', 2.7)];
+    const split = (metric: string, value: number, runId?: string) =>
+      row(metric, value, runId ? { calculationMetadata: { runId, formula: 'direct_import_split' } } : {});
+    const cod = (rows: EvalMeasurementRow[], keys = ['DASH_10', 'DASH_20', 'COD_DEFICIT']) =>
+      assembleEvalReportModel(input({ rows, selection: { metricKeys: keys } }));
+
+    it('takes both splits from one run when the best of each are in different runs (matches the stored value)', () => {
+      const rows = [
+        ...legs,
+        split('DASH_10YD', 1.69, 'A'), split('DASH_20YD', 2.95, 'A'),
+        split('DASH_10YD', 1.73, 'B'), split('DASH_20YD', 2.85, 'B'),
+      ];
+      const model = cod(rows);
+      // Run A: 2.6 - (1.69 + 0.0936 x 1.26) = 0.792, as the stored AGILITY_COD_DEFICIT_M_INTERP; not 0.801 from 1.69 + 2.85
+      expect(metric(model, 'AGILITY_COD_DEFICIT_M_INTERP')!.value).toBeCloseTo(0.792064, 6);
+      // The splits themselves still show the athlete's best of each
+      expect(metric(model, 'DASH_10YD')!.value).toBe(1.69);
+      expect(metric(model, 'DASH_20YD')!.value).toBe(2.85);
+    });
+
+    it('falls back to the per-metric bests when no single run has both splits', () => {
+      const rows = [...legs, split('DASH_10YD', 1.69, 'A'), split('DASH_20YD', 2.85, 'B')];
+      expect(metric(cod(rows), 'AGILITY_COD_DEFICIT_M_INTERP')!.value).toBeCloseTo(2.6 - (1.69 + 0.0936 * (2.85 - 1.69)), 6);
+    });
+
+    it('keeps the best of each for rows without a run id', () => {
+      const rows = [
+        ...legs,
+        split('DASH_10YD', 1.69), split('DASH_20YD', 2.95),
+        split('DASH_10YD', 1.73), split('DASH_20YD', 2.85),
+      ];
+      expect(metric(cod(rows), 'AGILITY_COD_DEFICIT_M_INTERP')!.value).toBeCloseTo(2.6 - (1.69 + 0.0936 * (2.85 - 1.69)), 6);
+    });
+
+    it('still drops a pair that falls outside the 0 to 2.0 s range', () => {
+      const rows = [...legs, split('DASH_10YD', 0.3, 'A'), split('DASH_20YD', 0.5, 'A')];
+      expect(metric(cod(rows), 'AGILITY_COD_DEFICIT_M_INTERP')).toBeUndefined();
+    });
+  });
+
   it('drops the deficit when the 20 yd split is missing', () => {
     const rows = battery.filter((r) => r.metric !== 'DASH_20YD');
     const model = assembleEvalReportModel(input({ rows, selection: { metricKeys: ['505', 'COD_DEFICIT'] } }));

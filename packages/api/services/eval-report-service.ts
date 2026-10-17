@@ -11,6 +11,7 @@ import { measurements, siteBenchmarks, siteMetrics, users, events, type Event } 
 import type { EvalSelectionInput } from "@shared/eval-report-config";
 import type { DisplayFormat } from "@shared/duration-format";
 import { eventCalendarDate } from "./event-measurements-service";
+import { selectSameRunSources } from "./same-run-sources";
 import { movementBand } from "./eval-report/mqi-band";
 import {
   EVAL_METRIC_CODES,
@@ -44,6 +45,8 @@ import {
 type Db = typeof database;
 
 export interface EvalMeasurementRow extends EventMeasurementRow {
+  /** Device-import run id lives here (calculationMetadata.runId) */
+  calculationMetadata?: unknown;
   units: string;
   teamNameSnapshot: string | null;
 }
@@ -76,7 +79,12 @@ function scopedBests(input: EvalAssemblyInput, eventId: string, rows: readonly E
   const isLower = (code: string) => input.metricMeta.get(code)?.lowerIsBetter ?? false;
   const scope = { eventId, userId: input.athlete.id, organizationId: input.event.organizationId };
   const scoped = rows.filter((r) => r.eventId === eventId && r.userId === scope.userId && r.organizationId === scope.organizationId);
-  return { scoped, bests: recomputeDerived(eventBests(scope, scoped, isLower)) };
+  // The COD deficit pairs the 10 yd and 20 yd splits within one run, like the stored value; the displayed
+  // splits stay the athlete's best of each
+  const [code10, code20] = [metricCode("DASH_10"), metricCode("DASH_20")];
+  const pair = selectSameRunSources(scoped, [code10, code20], (code) => !isLower(code));
+  const splitPair = pair && { dash10: Number(pair.get(code10)!.value), dash20: Number(pair.get(code20)!.value) };
+  return { scoped, bests: recomputeDerived(eventBests(scope, scoped, isLower), splitPair) };
 }
 
 function ageOf(input: EvalAssemblyInput): number | null {
@@ -271,6 +279,7 @@ export async function loadEvalReportInputs(
         value: measurements.value,
         units: measurements.units,
         teamNameSnapshot: measurements.teamNameSnapshot,
+        calculationMetadata: measurements.calculationMetadata,
       })
       .from(measurements)
       .where(

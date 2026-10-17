@@ -1,4 +1,10 @@
-import type { Measurement } from '@shared/schema';
+/** The fields of a measurement row the selection reads; a Measurement and the eval report's rows both fit. */
+export interface SameRunRow {
+  metric: string;
+  value: string | number;
+  createdAt?: Date | string;
+  calculationMetadata?: unknown;
+}
 
 /**
  * Same-run source selection for derived metrics (calculationConfig.sameRunInputs).
@@ -11,12 +17,12 @@ import type { Measurement } from '@shared/schema';
 /** Rows without a run id (manual entry, imports before run ids) share one pool: the old best-of-each rule. */
 const NO_RUN = '';
 
-export function sameRunKey(m: Pick<Measurement, 'calculationMetadata'>): string {
+export function sameRunKey(m: Pick<SameRunRow, 'calculationMetadata'>): string {
   const runId = (m.calculationMetadata as { runId?: unknown } | null)?.runId;
   return typeof runId === 'string' ? runId : NO_RUN;
 }
 
-const isGateSplit = (m: Pick<Measurement, 'calculationMetadata'>) =>
+const isGateSplit = (m: Pick<SameRunRow, 'calculationMetadata'>) =>
   (m.calculationMetadata as { formula?: unknown } | null)?.formula === 'direct_import_split';
 
 /**
@@ -27,26 +33,38 @@ const isGateSplit = (m: Pick<Measurement, 'calculationMetadata'>) =>
  *
  * @param rows candidate rows of the codes (already filtered for user, date, verification and visibility)
  */
-export function selectSameRunSources(
-  rows: Measurement[],
+export function selectSameRunSources<T extends SameRunRow>(
+  rows: readonly T[],
   codes: string[],
   higherIsBetter: (code: string) => boolean
-): Map<string, Measurement> | null {
-  const runs = new Map<string, Measurement[]>();
+): Map<string, T> | null {
+  const runs = new Map<string, T[]>();
   for (const r of rows) {
     const key = sameRunKey(r);
     runs.set(key, [...(runs.get(key) ?? []), r]);
   }
 
-  const better = (code: string, a: Measurement, b: Measurement) => {
-    const d = parseFloat(a.value) - parseFloat(b.value);
+  const num = (r: SameRunRow) => (typeof r.value === 'number' ? r.value : parseFloat(r.value));
+  const time = (r: SameRunRow) => (r.createdAt ? new Date(r.createdAt).getTime() : 0);
+
+  const better = (code: string, a: T, b: T) => {
+    const d = num(a) - num(b);
     if (d !== 0) return higherIsBetter(code) ? d > 0 : d < 0;
-    return a.createdAt > b.createdAt;
+    return time(a) > time(b);
   };
 
-  let best: Map<string, Measurement> | null = null;
+  const beats = (a: Map<string, T>, b: Map<string, T>) => {
+    for (const code of codes) {
+      const d = num(a.get(code)!) - num(b.get(code)!);
+      if (d !== 0) return higherIsBetter(code) ? d > 0 : d < 0;
+    }
+    const newest = (m: Map<string, T>) => [...m.values()].reduce((latest, r) => Math.max(latest, time(r)), 0);
+    return newest(a) > newest(b);
+  };
+
+  let best: Map<string, T> | null = null;
   for (const [runKey, runRows] of runs) {
-    const sources = new Map<string, Measurement>();
+    const sources = new Map<string, T>();
     for (const code of codes) {
       const ofCode = runRows.filter((r) => r.metric === code);
       // A run's drill row carries the Final Time and its split row the gate time: two clocks that differ
@@ -58,21 +76,7 @@ export function selectSameRunSources(
       }
     }
     if (sources.size < codes.length) continue;
-    if (!best || beats(sources, best, codes, higherIsBetter)) best = sources;
+    if (!best || beats(sources, best)) best = sources;
   }
   return best;
-}
-
-function beats(
-  a: Map<string, Measurement>,
-  b: Map<string, Measurement>,
-  codes: string[],
-  higherIsBetter: (code: string) => boolean
-): boolean {
-  for (const code of codes) {
-    const d = parseFloat(a.get(code)!.value) - parseFloat(b.get(code)!.value);
-    if (d !== 0) return higherIsBetter(code) ? d > 0 : d < 0;
-  }
-  const newest = (m: Map<string, Measurement>) => [...m.values()].reduce((latest, r) => Math.max(latest, new Date(r.createdAt).getTime()), 0);
-  return newest(a) > newest(b);
 }
