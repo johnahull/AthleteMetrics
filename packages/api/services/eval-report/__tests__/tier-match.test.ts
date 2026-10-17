@@ -299,3 +299,17 @@ describe('matchCollegeStandard', () => {
     expect(matchCollegeStandard({ ...args, metricCode: 'POWER_EUR', candidates: [d1Row({ metricCode: 'POWER_EUR' })] })).toBeNull();
   });
 });
+
+describe('a metric with no candidate rows (every row switched off, AM-FEAT-022)', () => {
+  // The loader passes only is_active rows, so a metric whose rows are all inactive reaches the matchers with
+  // candidates for OTHER metrics (or none). The report then shows value and unit with no gauge and no error.
+  const others = [avgRow({ metricCode: 'DASH_10YD' }), d1Row({ metricCode: 'DASH_10YD' })];
+  for (const candidates of [[], others]) {
+    it(`gives no age-group tier and no college standard (${candidates.length} candidates, none for the metric)`, () => {
+      const group = () => matchTierGroup({ metricCode: 'DASH_30YD', value: 4.7, lowerIsBetter: true, athlete: girl, eventDate: EVENT, candidates });
+      expect(group).not.toThrow();
+      expect(group()).toBeNull();
+      expect(matchCollegeStandard({ metricCode: 'DASH_30YD', value: 4.7, athlete: girl, candidates })).toBeNull();
+    });
+  }
+});

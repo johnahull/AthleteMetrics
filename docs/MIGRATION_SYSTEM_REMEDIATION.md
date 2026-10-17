@@ -20,6 +20,7 @@
 > 0161 (AGILITY_COD_DEFICIT_M_INTERP, metric 5-0-5 minus a 10 m time interpolated from the 10 / 20 yd splits, AM-FEAT-016 revision) is provisional: renumber at merge if another branch lands 0161 first (file, `_down`, test, tracking row, this line).
 > 0162 (display_format 'decimal' | 'duration' on site_metrics and custom_org_metrics, mm:ss metrics) is provisional: renumber at merge if another branch lands 0162 first (file, `_down`, test, tracking row, this line).
 > 0163 (AGILITY_COD_DEFICIT_M_INTERP sameRunInputs: the 10 / 20 yd splits come from one device-import run) is provisional: renumber at merge if another branch lands 0163 first (file, `_down`, test, tracking row, this line).
+> 0164 (women's-soccer 20 / 30 / 40 yd benchmarks re-sourced from Vescovi 2011 or switched off, AM-FEAT-022) is provisional: renumber at merge if another branch lands 0164 first (file, `_down`, tests `migration-0164-*` and `eval-report-yard-sprint-corrected`, tracking row, this line).
 
 ## Current State (2025-10-30)
 
