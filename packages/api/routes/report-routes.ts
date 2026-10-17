@@ -3903,7 +3903,7 @@ export function addTrendChartsToPdf(
     doc.setTextColor(40, 40, 40);
     doc.text(img.title || metricLabels[img.metricCode] || img.metricCode, margin, yPos);
     yPos += 6;
-    doc.addImage(img.dataUrl, 'PNG', margin, yPos, imgWidth, imgHeight);
+    doc.addImage(img.dataUrl, 'PNG', margin, yPos, imgWidth, imgHeight, undefined, 'FAST');
     yPos += imgHeight + 10;
   });
 }
@@ -3982,7 +3982,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
   }
   reportData = await new ReportService().orderForResponse(reportData, report.organizationId);
 
-  const doc = new jsPDF({ compress: true });
+  const doc = new jsPDF();
   const isVisual = format === 'visual';
 
   // Color schemes — use org branding colors if available
@@ -4010,7 +4010,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     if (org?.brandLogoUrl) {
       const logoData = await fetchLogoBase64(org.brandLogoUrl);
       if (logoData) {
-        doc.addImage(`data:${logoData.mimeType};base64,${logoData.base64}`, logoData.ext, (pageWidth - 60) / 2, 50, 60, 40);
+        doc.addImage(`data:${logoData.mimeType};base64,${logoData.base64}`, logoData.ext, (pageWidth - 60) / 2, 50, 60, 40, undefined, 'FAST');
         logoRendered = true;
       }
     }
@@ -4064,7 +4064,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
   if (org?.brandLogoUrl && reportData.reportType === 'team') {
     const logoData = await fetchLogoBase64(org.brandLogoUrl);
     if (logoData) {
-      doc.addImage(`data:${logoData.mimeType};base64,${logoData.base64}`, logoData.ext, 14, 10, 30, 20);
+      doc.addImage(`data:${logoData.mimeType};base64,${logoData.base64}`, logoData.ext, 14, 10, 30, 20, undefined, 'FAST');
       doc.setFontSize(20);
       if (isVisual || org?.brandPrimaryColor) {
         doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);

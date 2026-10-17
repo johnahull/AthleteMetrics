@@ -38,7 +38,6 @@ const BUILT_IN_CODES: Partial<Record<MetricGroupId, readonly string[]>> = {
   agility: [
     "AGILITY_505_M", "AGILITY_505_M_L", "AGILITY_505_M_R",
     "AGILITY_505_YD", "AGILITY_505_YD_L", "AGILITY_505_YD_R",
-    "AGILITY_505", "AGILITY_505_L", "AGILITY_505_R",
     "AGILITY_5105", "AGILITY_5105_L", "AGILITY_5105_R", "T_TEST",
     "AGILITY_COD_DEFICIT_M_INTERP", "AGILITY_COD_DEFICIT_M", "AGILITY_COD_DEFICIT_YD",
   ],
@@ -52,7 +51,7 @@ const BUILT_IN_CODES: Partial<Record<MetricGroupId, readonly string[]>> = {
   strength: ["STRENGTH_SQUAT", "SQUAT_1RM", "SQUAT_1RM_KG"],
   movement: [
     "MQI_TOTAL", "MQI",
-    "AGILITY_505_M_LSI", "AGILITY_505_YD_LSI", "AGILITY_505_LSI",
+    "AGILITY_505_M_LSI", "AGILITY_505_YD_LSI",
     "JUMP_CMJ_SL_ASYM", "RSI_ASYM",
   ],
   body_composition: ["BODY_HEIGHT", "BODY_WEIGHT", "HEIGHT", "HEIGHT_IN", "WEIGHT", "WEIGHT_LBS"],
