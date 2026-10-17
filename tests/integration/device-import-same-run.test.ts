@@ -82,7 +82,7 @@ describe('device import: derived split inputs come from one run', () => {
   const runIds = (sources: Array<{ calculationMetadata: any }>) => new Set(sources.map((s) => s.calculationMetadata?.runId));
 
   beforeAll(async () => {
-    const inserted = await db.execute(sql`
+    const inserted = await db.execute<{ code: string }>(sql`
       INSERT INTO site_metrics (code, label, category, unit, metric_type, is_system_default, is_active, display_order, decimal_precision)
       VALUES
         ('DASH_10YD', 'Test 10 yd', 'Speed', 's', 'lower_is_better', false, true, 920, 3),
@@ -90,7 +90,7 @@ describe('device import: derived split inputs come from one run', () => {
       ON CONFLICT (code) DO NOTHING
       RETURNING code
     `);
-    createdMetrics.push(...(Array.from(inserted) as unknown as Array<{ code: string }>).map((r) => r.code));
+    createdMetrics.push(...inserted.map((r) => r.code));
     await db.execute(sql`
       INSERT INTO site_metrics (
         code, label, category, unit, metric_type, is_system_default, is_active, display_order, decimal_precision,

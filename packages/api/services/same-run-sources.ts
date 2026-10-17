@@ -73,6 +73,6 @@ function beats(
     const d = parseFloat(a.get(code)!.value) - parseFloat(b.get(code)!.value);
     if (d !== 0) return higherIsBetter(code) ? d > 0 : d < 0;
   }
-  const newest = (m: Map<string, Measurement>) => Math.max(...[...m.values()].map((r) => new Date(r.createdAt).getTime()));
+  const newest = (m: Map<string, Measurement>) => [...m.values()].reduce((latest, r) => Math.max(latest, new Date(r.createdAt).getTime()), 0);
   return newest(a) > newest(b);
 }
