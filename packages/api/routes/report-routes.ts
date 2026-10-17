@@ -7,7 +7,7 @@ import express, { type Express } from "express";
 import { DEFAULT_AI_MODEL_KEY, getAIModel } from "@shared/ai-models";
 import rateLimit from "express-rate-limit";
 import { sortCodesByGroups, isGenericReport } from "@shared/metric-order";
-import { buildMeasurementRows, buildBenchmarkRows } from "./pdf-metric-rows";
+import { buildMeasurementRows, buildBenchmarkRows, buildStatsRows, buildAchievementRows, groupLabelFor } from "./pdf-metric-rows";
 import { ReportService } from "../services/report-service";
 import { createReportsFromInput, ReportCreateError } from "../services/report-create";
 import { planChartPageBreaks, chartGroupHeadings, addHeadingHeights } from "./pdf-chart-layout";
@@ -4142,7 +4142,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
 
     const summaryRows = [
       ["Athletes Tested", `${reportData.athleteCount || 0}`],
-      ["Metrics", reportData.teamStatistics?.map((s: any) => s.metric).join(', ') || "N/A"],
+      ["Metrics", reportData.teamStatistics?.map((s: any) => reportData.metricLabels?.[s.metric] || s.metric).join(', ') || "N/A"],
     ];
 
     autoTable(doc, {
@@ -4163,14 +4163,12 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     yPos += 10;
 
     if (reportData.teamStatistics && reportData.teamStatistics.length > 0) {
-      const statsRows = reportData.teamStatistics.map((stat: any) => [
-        stat.metric,
-        stat.average !== null ? (durationText(stat.metric, stat.average) ?? stat.average.toFixed(2)) : "N/A",
-        stat.median !== null ? (durationText(stat.metric, stat.median) ?? stat.median.toFixed(2)) : "N/A",
-        stat.min !== null ? (durationText(stat.metric, stat.min) ?? stat.min.toFixed(2)) : "N/A",
-        stat.max !== null ? (durationText(stat.metric, stat.max) ?? stat.max.toFixed(2)) : "N/A",
-        stat.topPerformer?.userName || "N/A",
-      ]);
+      const statsRows = buildStatsRows({
+        stats: reportData.teamStatistics,
+        labels: reportData.metricLabels || {},
+        durationText,
+        metricGroups: reportData.metricGroups,
+      });
 
       autoTable(doc, {
         startY: yPos,
@@ -4204,13 +4202,12 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
         doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
         yPos += 10;
 
-        const benchmarkRows = benchmarkAchievements.map((achievement: any) => [
-          achievement.metric,
-          achievement.benchmarkName,
-          durationText(achievement.metric, achievement.benchmarkValue) ?? `${achievement.benchmarkValue.toFixed(2)} ${achievement.units}`,
-          achievement.count.toString(),
-          `${achievement.percentage.toFixed(0)}%`,
-        ]);
+        const benchmarkRows = buildAchievementRows({
+          achievements: benchmarkAchievements,
+          labels: reportData.metricLabels || {},
+          durationText,
+          metricGroups: reportData.metricGroups,
+        });
 
         autoTable(doc, {
           startY: yPos,
@@ -4299,6 +4296,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
       doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
       yPos += 10;
 
+      let lastGroupLabel: string | null = null;
       for (const stat of reportData.teamStatistics) {
         // Check if we need a new page for each metric
         if (yPos > 200) {
@@ -4306,9 +4304,20 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
           yPos = 20;
         }
 
+        // teamStatistics is already in group order: print a group heading only when the group changes
+        const groupLabel = groupLabelFor(stat.metric, reportData.metricGroups);
+        if (groupLabel && groupLabel !== lastGroupLabel) {
+          doc.setFontSize(12);
+          doc.setTextColor(100, 100, 100);
+          doc.text(groupLabel.toUpperCase(), 14, yPos);
+          yPos += 6;
+        }
+        lastGroupLabel = groupLabel;
+
         doc.setFontSize(14);
         if (isVisual) doc.setTextColor(colors.secondary[0], colors.secondary[1], colors.secondary[2]);
-        doc.text(stat.metric, 14, yPos);
+        else doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+        doc.text(reportData.metricLabels?.[stat.metric] || stat.metric, 14, yPos);
         doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
         yPos += 6;
 

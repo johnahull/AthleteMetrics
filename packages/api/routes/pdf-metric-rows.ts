@@ -118,3 +118,47 @@ export function buildBenchmarkRows(args: {
   });
   return { tierRows, tierColors, singleRows };
 }
+
+/** Group heading text for a metric, or null when it is ungrouped / the data predates grouping. */
+export function groupLabelFor(code: string, metricGroups: MetricGroup[] | undefined): string | null {
+  return metricGroups?.find((g) => g.codes.includes(code))?.label ?? null;
+}
+
+/** Team "Performance Snapshot" rows: label, average, median, min, max, top performer. */
+export function buildStatsRows(args: {
+  stats: Array<{ metric: string; average: number | null; median: number | null; min: number | null; max: number | null; topPerformer?: { userName?: string } | null }>;
+  labels: Record<string, string>;
+  durationText: DurationText;
+  metricGroups?: MetricGroup[];
+}): PdfRow[] {
+  const { stats, labels, durationText, metricGroups } = args;
+  const fmt = (metric: string, v: number | null) => (v !== null ? (durationText(metric, v) ?? v.toFixed(2)) : 'N/A');
+  const out: PdfRow[] = [];
+  groupedRows(Object.fromEntries(stats.map((s) => [s.metric, s])), metricGroups, 6, (metric, s) => [[
+    labels[metric] || metric,
+    fmt(metric, s.average), fmt(metric, s.median), fmt(metric, s.min), fmt(metric, s.max),
+    s.topPerformer?.userName || 'N/A',
+  ]], (rows, heading) => out.push(...(heading ? [heading] : []), ...rows));
+  return out;
+}
+
+/** Team "Benchmark Achievement Summary" rows, grouped by metric group (several achievements per metric). */
+export function buildAchievementRows(args: {
+  achievements: Array<{ metric: string; benchmarkName: string; benchmarkValue: number; units: string; count: number; percentage: number }>;
+  labels: Record<string, string>;
+  durationText: DurationText;
+  metricGroups?: MetricGroup[];
+}): PdfRow[] {
+  const { achievements, labels, durationText, metricGroups } = args;
+  const byMetric: Record<string, typeof achievements> = {};
+  for (const a of achievements) (byMetric[a.metric] ??= []).push(a);
+  const out: PdfRow[] = [];
+  groupedRows(byMetric, metricGroups, 5, (metric, list) => list.map((a) => [
+    labels[metric] || metric,
+    a.benchmarkName,
+    durationText(metric, a.benchmarkValue) ?? `${a.benchmarkValue.toFixed(2)} ${a.units}`,
+    a.count.toString(),
+    `${a.percentage.toFixed(0)}%`,
+  ]), (rows, heading) => out.push(...(heading ? [heading] : []), ...rows));
+  return out;
+}
