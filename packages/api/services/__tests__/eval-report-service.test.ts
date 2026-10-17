@@ -205,7 +205,7 @@ describe('assembleEvalReportModel: meter 5-0-5 and the interpolated COD deficit'
       expect(metric(cod(rows), 'AGILITY_COD_DEFICIT_M_INTERP')!.value).toBeCloseTo(2.6 - (1.69 + 0.0936 * (2.85 - 1.69)), 6);
     });
 
-    it('still drops a pair that falls outside the 0 to 2.0 s range', () => {
+    it('drops the deficit when the computed value exceeds 2.0 s', () => {
       const rows = [...legs, split('DASH_10YD', 0.3, 'A'), split('DASH_20YD', 0.5, 'A')];
       expect(metric(cod(rows), 'AGILITY_COD_DEFICIT_M_INTERP')).toBeUndefined();
     });

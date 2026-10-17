@@ -280,6 +280,7 @@ export async function loadEvalReportInputs(
         units: measurements.units,
         teamNameSnapshot: measurements.teamNameSnapshot,
         calculationMetadata: measurements.calculationMetadata,
+        createdAt: measurements.createdAt,
       })
       .from(measurements)
       .where(
