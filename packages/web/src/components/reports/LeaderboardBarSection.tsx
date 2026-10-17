@@ -28,6 +28,7 @@ export function LeaderboardBarSection({ athleteRankings, teamStatistics, metricL
     .filter(({ sorted }) => sorted.length > 0);
 
   if (rows.length === 0) return null;
+  const rowByMetric = new Map(rows.map((r) => [r.stat.metric, r]));
 
   return (
     <Card>
@@ -42,7 +43,7 @@ export function LeaderboardBarSection({ athleteRankings, teamStatistics, metricL
           section="leaderboard"
           className="space-y-10"
           render={(code) => {
-          const { stat, sorted } = rows.find((r) => r.stat.metric === code)!;
+          const { stat, sorted } = rowByMetric.get(code)!;
           const label = metricLabels[stat.metric] || stat.metric;
           const points: ChartDataPoint[] = sorted.map((athlete) => ({
             athleteId: athlete.userId,
