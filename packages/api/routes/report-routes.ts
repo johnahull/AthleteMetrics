@@ -6,7 +6,7 @@
 import express, { type Express } from "express";
 import { DEFAULT_AI_MODEL_KEY, getAIModel } from "@shared/ai-models";
 import rateLimit from "express-rate-limit";
-import { sortCodesByGroups } from "@shared/metric-order";
+import { sortCodesByGroups, isGenericReport } from "@shared/metric-order";
 import { buildMeasurementRows, buildBenchmarkRows } from "./pdf-metric-rows";
 import { ReportService } from "../services/report-service";
 import { createReportsFromInput, ReportCreateError } from "../services/report-create";
@@ -1200,11 +1200,14 @@ export function registerReportRoutes(app: Express) {
       // helper guards the public PDF-export routes so they cannot diverge.
       if (!(await enforcePublicSnapshotAccess(req, res, snapshot))) return;
 
-      const [owner] = await db
-        .select({ organizationId: reports.organizationId })
-        .from(reports)
-        .where(eq(reports.id, snapshot.reportId))
-        .limit(1);
+      // Eval snapshots are not re-ordered, so skip the owner lookup for them
+      const [owner] = isGenericReport(snapshot.snapshotData)
+        ? await db
+            .select({ organizationId: reports.organizationId })
+            .from(reports)
+            .where(eq(reports.id, snapshot.reportId))
+            .limit(1)
+        : [];
       res.json({
         ...snapshot,
         snapshotData: await reportService.orderForResponse(snapshot.snapshotData, owner?.organizationId),

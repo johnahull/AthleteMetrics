@@ -108,6 +108,12 @@ function reorderKeys<T>(map: unknown, position: Map<string, number>): T {
 const ATHLETE_KEYED = ["measurements", "percentiles", "eventPercentiles", "teamAverages", "benchmarkComparisons"];
 const TOP_KEYED = ["trends", "distributions", "teamTrends", "teamDistributions"];
 
+/** Individual and team reports are the ones orderReportData applies to (eval snapshots carry a frozen model). */
+export const isGenericReport = (data: unknown): boolean => {
+  const type = (data as { reportType?: unknown } | null)?.reportType;
+  return type === "individual" || type === "team";
+};
+
 const reportAthletes = (data: Obj): Obj[] =>
   [data.athlete, ...(Array.isArray(data.athleteRankings) ? data.athleteRankings : [])].filter(isObj);
 
@@ -136,6 +142,8 @@ export function orderReportData<T extends Obj>(
 
   const orderAthlete = (a: Obj): Obj => {
     const out: Obj = { ...a };
+    // All-digit custom codes are listed first by JS whatever the insertion order: iterate metricGroups[].codes
+    // (or sortCodesByGroups), never Object.keys(), when exact order matters.
     for (const f of ATHLETE_KEYED) if (f in a) out[f] = reorderKeys(a[f], position);
     return out;
   };
