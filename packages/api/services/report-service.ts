@@ -32,6 +32,7 @@ import { evaluateTierBenchmark as evaluateTierBenchmarkPure } from './benchmark-
 import { getMetricType } from '../utils/metric-type';
 import { type MetricExplanation } from '@shared/metric-explanations';
 import { isPeerComparisonExcludedMetric } from '@shared/peer-comparison-exclusions';
+import { orderReportData, collectMetricCodes } from '@shared/metric-order';
 import { getMetricExplanationsMap } from './metric-explanation-service';
 import { assembleTrends } from './report-trends';
 import { computeDistribution } from './report-distributions';
@@ -214,16 +215,19 @@ export class ReportService extends BaseService {
     labels: Record<string, string>;
     units: Record<string, string>;
     formats: Record<string, MeasurementFormat>;
+    categories: Record<string, string>;
   }> {
     const labels: Record<string, string> = {};
     const units: Record<string, string> = {};
     const formats: Record<string, MeasurementFormat> = {};
+    const categories: Record<string, string> = {};
 
     // Fetch all metrics in one query
     const metrics = await db
       .select({
         code: siteMetrics.code,
         label: siteMetrics.label,
+        category: siteMetrics.category,
         unit: siteMetrics.unit,
         displayFormat: siteMetrics.displayFormat,
         decimalPrecision: siteMetrics.decimalPrecision,
@@ -238,6 +242,7 @@ export class ReportService extends BaseService {
         .select({
           code: customOrgMetrics.code,
           label: customOrgMetrics.label,
+          category: customOrgMetrics.category,
           unit: customOrgMetrics.unit,
           displayFormat: customOrgMetrics.displayFormat,
           decimalPrecision: customOrgMetrics.decimalPrecision,
@@ -249,6 +254,7 @@ export class ReportService extends BaseService {
     for (const metric of metrics) {
       labels[metric.code] = metric.label;
       units[metric.code] = metric.unit || '';
+      if (metric.category) categories[metric.code] = metric.category;
       if (metric.displayFormat === 'duration') {
         formats[metric.code] = { unit: metric.unit, displayFormat: 'duration', decimalPrecision: metric.decimalPrecision };
       }
@@ -264,7 +270,31 @@ export class ReportService extends BaseService {
       }
     }
 
-    return { labels, units, formats };
+    return { labels, units, formats, categories };
+  }
+
+  /**
+   * Re-orders a served individual/team report into metric groups (see shared/metric-order). Categories are
+   * looked up now, never stored, so old snapshots and later category edits both apply.
+   */
+  async orderForResponse<T>(data: T, organizationId?: string): Promise<T> {
+    return (await this.orderManyForResponse([data], organizationId))[0];
+  }
+
+  /** orderForResponse for several reports of one organization, with a single category lookup. */
+  async orderManyForResponse<T>(items: T[], organizationId?: string): Promise<T[]> {
+    const isGeneric = (d: unknown) => {
+      const type = (d as { reportType?: string } | null)?.reportType;
+      return type === 'individual' || type === 'team';
+    };
+    const codes = new Set<string>();
+    for (const d of items) {
+      if (isGeneric(d)) collectMetricCodes(d as any).forEach(c => codes.add(c));
+    }
+    const { categories } = codes.size > 0
+      ? await this.getMetricLabelsAndUnits([...codes], organizationId)
+      : { categories: {} };
+    return items.map(d => (isGeneric(d) ? orderReportData(d as any, categories) as T : d));
   }
 
   /**

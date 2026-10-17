@@ -379,7 +379,7 @@ export function registerEventReportRoutes(app: Express) {
 
         return res.status(201).json({
           report: newReport,
-          data: generatedData,
+          data: await reportService.orderForResponse(generatedData, newReport.organizationId),
           generatedAt: new Date().toISOString(),
         });
       } catch (error: unknown) {
