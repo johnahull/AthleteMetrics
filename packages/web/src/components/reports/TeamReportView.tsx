@@ -533,9 +533,8 @@ export function TeamReportView({ report }: TeamReportViewProps) {
               <MetricGroupHeading label={g.label} />
               {g.codes.map((code) => {
             const stat = statByMetric.get(code)!;
+            // codesWithAthletes already dropped metrics nobody recorded
             const sortedAthletes = sortAthletesByMetric(athleteRankings, stat.metric, metricTypes?.[stat.metric]);
-
-            if (sortedAthletes.length === 0) return null;
 
             return (
               <Card key={stat.metric}>

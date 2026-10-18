@@ -4297,7 +4297,10 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
       yPos += 10;
 
       let lastGroupLabel: string | null = null;
-      for (const stat of reportData.teamStatistics) {
+      // Sort by group here rather than trusting the caller, so a group heading is never skipped or repeated
+      const statByMetric = new Map<string, any>(reportData.teamStatistics.map((s: any) => [s.metric, s]));
+      const orderedStats = sortCodesByGroups([...statByMetric.keys()], reportData.metricGroups).map((code) => statByMetric.get(code));
+      for (const stat of orderedStats) {
         // Check if we need a new page for each metric
         if (yPos > 200) {
           doc.addPage();
