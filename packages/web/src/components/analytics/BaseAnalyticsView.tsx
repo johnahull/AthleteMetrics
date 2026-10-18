@@ -33,6 +33,7 @@ import type { AnalysisType, AnalyticsFilters, AnalyticsResponse, BenchmarkLine, 
 import type { BenchmarkComparison } from '@shared/benchmark-types';
 import { User, Users, BarChart3 } from 'lucide-react';
 import { devLog } from '@/utils/dev-logger';
+import type { FilterContext } from '@/components/benchmarks/benchmark-filtering';
 
 // Chart types that support benchmark line overlays
 const BENCHMARK_COMPATIBLE_CHART_TYPES: ChartType[] = [
@@ -77,6 +78,9 @@ interface BaseAnalyticsViewProps {
   // Initial state
   initialFilters?: Partial<AnalyticsFilters>;
 
+  /** Starting sport / gender chips for the benchmark pickers; defaults to the single selected gender filter */
+  benchmarkContext?: FilterContext;
+
   className?: string;
   children?: React.ReactNode;
 }
@@ -96,6 +100,7 @@ function BaseAnalyticsViewContent({
   customToolbar,
   onAnalyticsDataChange,
   onError,
+  benchmarkContext,
   className,
   children
 }: Omit<BaseAnalyticsViewProps, 'organizationId' | 'userId' | 'requireRole'>) {
@@ -142,6 +147,13 @@ function BaseAnalyticsViewContent({
     analyticsData: state.analyticsData,
     isMainAnalyticsLoading: state.isLoading
   });
+
+  const selectedGenders = state.filters.genders;
+  const singleGender = selectedGenders?.length === 1 ? selectedGenders[0] : undefined;
+  const benchmarkPickerContext = React.useMemo<FilterContext | undefined>(
+    () => benchmarkContext ?? (singleGender ? { gender: singleGender } : undefined),
+    [benchmarkContext, singleGender]
+  );
 
   // State for benchmark selection
   const [selectedBenchmarkIds, setSelectedBenchmarkIds] = React.useState<string[]>([]);
@@ -641,6 +653,7 @@ function BaseAnalyticsViewContent({
                     selectedBenchmarkIds={selectedBenchmarkIds}
                     onSelectionChange={setSelectedBenchmarkIds}
                     labelPrefix={['scatter_plot', 'connected_scatter'].includes(state.selectedChartType) ? 'Y-Axis' : undefined}
+                    context={benchmarkPickerContext}
                   />
                 )}
                 {/* Secondary metric benchmarks (X-axis in scatter plots) */}
@@ -654,6 +667,7 @@ function BaseAnalyticsViewContent({
                     selectedBenchmarkIds={selectedBenchmarkIds}
                     onSelectionChange={setSelectedBenchmarkIds}
                     labelPrefix="X-Axis"
+                    context={benchmarkPickerContext}
                   />
                 )}
               </div>

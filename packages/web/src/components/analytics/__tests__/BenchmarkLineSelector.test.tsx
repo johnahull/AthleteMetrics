@@ -261,7 +261,7 @@ describe('BenchmarkLineSelector', () => {
     expect(onSelectionChange).toHaveBeenCalledWith(['benchmark-2']);
   });
 
-  it('provides "Select All" functionality', async () => {
+  it('provides "Select visible" functionality', async () => {
     const user = userEvent.setup();
     const onSelectionChange = vi.fn();
 
@@ -282,13 +282,13 @@ describe('BenchmarkLineSelector', () => {
       </TestWrapper>
     );
 
-    const selectAllButton = screen.getByText(/select all/i);
+    const selectAllButton = screen.getByRole('button', { name: 'Select visible' });
     await user.click(selectAllButton);
 
     expect(onSelectionChange).toHaveBeenCalledWith(['benchmark-1', 'benchmark-2', 'benchmark-3']);
   });
 
-  it('provides "Clear All" functionality', async () => {
+  it('provides "Clear visible" functionality', async () => {
     const user = userEvent.setup();
     const onSelectionChange = vi.fn();
 
@@ -309,7 +309,7 @@ describe('BenchmarkLineSelector', () => {
       </TestWrapper>
     );
 
-    const clearAllButton = screen.getByText(/clear all/i);
+    const clearAllButton = screen.getByRole('button', { name: 'Clear visible' });
     await user.click(clearAllButton);
 
     expect(onSelectionChange).toHaveBeenCalledWith([]);
@@ -336,7 +336,7 @@ describe('BenchmarkLineSelector', () => {
     expect(screen.getByText(/no benchmarks/i)).toBeInTheDocument();
   });
 
-  it('disables "Select All" when all benchmarks already selected', () => {
+  it('disables "Select visible" when all benchmarks already selected', () => {
     vi.mocked(useBenchmarksForMetric).mockReturnValue({
       data: mockBenchmarks,
       isLoading: false,
@@ -354,11 +354,11 @@ describe('BenchmarkLineSelector', () => {
       </TestWrapper>
     );
 
-    const selectAllButton = screen.getByText(/select all/i);
+    const selectAllButton = screen.getByRole('button', { name: 'Select visible' });
     expect(selectAllButton).toBeDisabled();
   });
 
-  it('disables "Clear All" when no benchmarks selected', () => {
+  it('disables "Clear visible" when no benchmarks selected', () => {
     vi.mocked(useBenchmarksForMetric).mockReturnValue({
       data: mockBenchmarks,
       isLoading: false,
@@ -376,7 +376,57 @@ describe('BenchmarkLineSelector', () => {
       </TestWrapper>
     );
 
-    const clearAllButton = screen.getByText(/clear all/i);
+    const clearAllButton = screen.getByRole('button', { name: 'Clear visible' });
     expect(clearAllButton).toBeDisabled();
+  });
+
+  it('"Select visible" keeps the other metric\'s selected ids', async () => {
+    vi.mocked(useBenchmarksForMetric).mockReturnValue({
+      data: mockBenchmarks,
+      isLoading: false,
+      error: null
+    } as any);
+    const onSelectionChange = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <TestWrapper>
+        <BenchmarkLineSelector
+          organizationId="org-1"
+          metricCode="FLY10_TIME"
+          selectedBenchmarkIds={['other-metric-id']}
+          onSelectionChange={onSelectionChange}
+        />
+      </TestWrapper>
+    );
+
+    await user.type(screen.getByRole('searchbox'), 'elite');
+    await user.click(screen.getByRole('button', { name: 'Select visible' }));
+    expect(onSelectionChange).toHaveBeenLastCalledWith(['other-metric-id', 'benchmark-1', 'benchmark-3']);
+  });
+
+  it('offers a Gender chip built from the benchmark filters', async () => {
+    vi.mocked(useBenchmarksForMetric).mockReturnValue({
+      data: mockBenchmarks,
+      isLoading: false,
+      error: null
+    } as any);
+    const user = userEvent.setup();
+
+    render(
+      <TestWrapper>
+        <BenchmarkLineSelector
+          organizationId="org-1"
+          metricCode="FLY10_TIME"
+          selectedBenchmarkIds={[]}
+          onSelectionChange={vi.fn()}
+        />
+      </TestWrapper>
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Female' }));
+    expect(screen.getByText('Female Elite')).toBeInTheDocument();
+    expect(screen.queryByText('College Ready')).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Level' })).not.toBeInTheDocument();
   });
 });

@@ -17,6 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Benchmark sport/position filter bugs
 
+## [0.28.0] - 2026-10-17
+
+### Added
+- Team reports match individual reports: metric labels instead of raw codes and metric-group headings in the PDF and web view, plus an empty state when no athlete has measurements (#649)
+- Benchmark and benchmark-set pickers are searchable and filterable, with group headings, filter chips and smart default filters (#650)
+
+### Fixed
+- Women's soccer 20/30/40 yd benchmarks are corrected to the Vescovi 2011 electronic-timing data; rows without a source are switched off (`is_active=false`). Manual migration `0164` (#648)
+
 ## [0.26.0] - 2026-10-16
 
 ### Added

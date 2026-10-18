@@ -10,8 +10,8 @@ export { BenchmarkSetForm } from "./BenchmarkSetForm";
 export { BenchmarkSetCard } from "./BenchmarkSetCard";
 export { BenchmarkSetList } from "./BenchmarkSetList";
 export { BenchmarkSetDetail } from "./BenchmarkSetDetail";
+export { BenchmarkSetCombobox } from "./BenchmarkSetCombobox";
 export {
-  BenchmarkSetPicker,
   BenchmarkSetQuickLoad,
   BenchmarkSetPreview,
 } from "./BenchmarkSetPicker";

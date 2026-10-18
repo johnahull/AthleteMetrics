@@ -4,6 +4,7 @@
  *
  * Uses React Query for automatic caching, deduplication, and background refetching
  */
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
 import { getAthleteUserId } from '@/lib/athlete-utils';
@@ -22,9 +23,19 @@ interface AthleteTeamResponse {
   organizationId?: string;
 }
 
+interface AthleteProfileContext {
+  teams: AthleteTeam[];
+  gender?: string;
+  sports: string[];
+}
+
 interface UseAthleteTeamsResult {
   teams: AthleteTeam[];
   teamIds: string[];
+  /** The athlete's own gender, if set */
+  gender?: string;
+  /** The athlete's own sports; /api/athletes/:id returns no per-team sport */
+  sports: string[];
   isLoading: boolean;
   error: string | null;
 }
@@ -37,7 +48,7 @@ export function useAthleteTeams(): UseAthleteTeamsResult {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['athlete-teams', athleteUserId],
-    queryFn: async (): Promise<AthleteTeam[]> => {
+    queryFn: async (): Promise<AthleteProfileContext> => {
       if (!athleteUserId) {
         throw new Error('User not authenticated');
       }
@@ -60,15 +71,19 @@ export function useAthleteTeams(): UseAthleteTeamsResult {
       const athleteData = await response.json();
 
       // Extract teams from the athlete data
-      if (athleteData.teams && Array.isArray(athleteData.teams)) {
-        return athleteData.teams.map((team: AthleteTeamResponse) => ({
-          id: team.id,
-          name: team.name,
-          organizationId: team.organization?.id || team.organizationId || ''
-        }));
-      }
+      const teams: AthleteTeam[] = Array.isArray(athleteData.teams)
+        ? athleteData.teams.map((team: AthleteTeamResponse) => ({
+            id: team.id,
+            name: team.name,
+            organizationId: team.organization?.id || team.organizationId || ''
+          }))
+        : [];
 
-      return [];
+      return {
+        teams,
+        gender: athleteData.gender || undefined,
+        sports: Array.isArray(athleteData.sports) ? athleteData.sports : [],
+      };
     },
     enabled: Boolean(athleteUserId),
     staleTime: STALE_TIME.DEFAULT, // 5 minutes - teams don't change frequently
@@ -77,13 +92,15 @@ export function useAthleteTeams(): UseAthleteTeamsResult {
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
   });
 
-  const teams = data || [];
-  // React Query maintains referential stability for cached data, no memoization needed
-  const teamIds = teams.map(team => team.id);
+  const teams = useMemo(() => data?.teams ?? [], [data]);
+  const teamIds = useMemo(() => teams.map(team => team.id), [teams]);
+  const sports = useMemo(() => data?.sports ?? [], [data]);
 
   return {
     teams,
     teamIds,
+    gender: data?.gender,
+    sports,
     isLoading,
     error: error ? (error instanceof Error ? error.message : String(error)) : null
   };

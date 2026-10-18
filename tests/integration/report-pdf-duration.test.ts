@@ -128,4 +128,12 @@ describe('report PDFs: duration metrics', () => {
     expect(text).not.toContain('402.50');
     expect(text).toContain('24.50');
   });
+
+  it('team PDF names metrics by label, never by raw code', async () => {
+    const text = await pdfText('team');
+    expect(text).toContain('Mile');
+    expect(text).toContain('Jump');
+    expect(text).not.toContain(MILE);
+    expect(text).not.toContain(JUMP);
+  });
 });

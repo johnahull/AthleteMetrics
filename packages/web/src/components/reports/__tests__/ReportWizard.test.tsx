@@ -663,7 +663,9 @@ describe('ReportWizard Component', () => {
 
       // Should show custom benchmarks
       await waitFor(() => {
-        expect(screen.getByText('Custom Benchmarks')).toBeInTheDocument();
+        // Site and custom benchmarks share one searchable list
+        expect(screen.getByRole('searchbox', { name: /search benchmarks/i })).toBeInTheDocument();
+        expect(screen.getByText('D1 College Standard')).toBeInTheDocument();
         expect(screen.getByText('Club Average - Boys')).toBeInTheDocument();
         expect(screen.getByText('Elite Level - Girls')).toBeInTheDocument();
       });
@@ -781,6 +783,52 @@ describe('ReportWizard Component', () => {
       // Should NOT contain organization_benchmarks IDs
       expect(callArgs.config.benchmarks.custom).not.toContain('org-bench-1');
       expect(callArgs.config.benchmarks.custom).not.toContain('org-bench-2');
+    });
+
+    it('splits the merged selection back into site and custom benchmarks by type', async () => {
+      renderWithQueryClient(
+        <ReportWizard open={true} onClose={mockOnClose} onSuccess={mockOnSuccess} />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Team Report')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByLabelText(/Team Report/i, { exact: false }));
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+
+      await waitFor(() => {
+        fireEvent.change(screen.getByLabelText(/Report Name/i), { target: { value: 'Test Report' } });
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+
+      await waitFor(() => {
+        fireEvent.click(screen.getAllByRole('checkbox')[0]);
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+
+      // Interleave: custom, site, custom
+      await waitFor(() => {
+        expect(screen.getByLabelText(/Club Average - Boys/i)).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByLabelText(/Club Average - Boys/i));
+      fireEvent.click(screen.getByLabelText(/D1 College Standard/i));
+      fireEvent.click(screen.getByLabelText(/Elite Level - Girls/i));
+
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Create Report/i }));
+
+      await waitFor(() => {
+        expect(mockCreateReportMutate).toHaveBeenCalled();
+      });
+
+      const { benchmarks } = mockCreateReportMutate.mock.calls[0][0].config;
+      expect(benchmarks.site).toEqual(['site-bench-1']);
+      expect(benchmarks.custom).toEqual(['custom-bench-1', 'custom-bench-2']);
     });
 
     it('should handle empty custom benchmarks', async () => {
