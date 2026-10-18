@@ -14,6 +14,14 @@ import { BenchmarkSetQuickLoad } from '@/components/benchmark-sets';
 import { BenchmarkChecklist } from '@/components/benchmarks/BenchmarkChecklist';
 import type { FilterContext } from '@/components/benchmarks/benchmark-filtering';
 
+type LineBenchmark = NonNullable<ReturnType<typeof useBenchmarksForMetric>['data']>[number];
+
+// Module-level so BenchmarkChecklist's memos keep stable accessor props across renders
+const getBenchmarkKey = (b: LineBenchmark) => b.id;
+const getBenchmarkLabel = (b: LineBenchmark) => b.name;
+const getBenchmarkMeta = (b: LineBenchmark) => ({ gender: b.filters?.gender });
+const noGroup = () => '';
+
 interface BenchmarkLineSelectorProps {
   organizationId: string;
   metricCode: string;
@@ -169,10 +177,10 @@ export const BenchmarkLineSelector = React.memo(function BenchmarkLineSelector({
         </span>
         <BenchmarkChecklist
           items={benchmarks}
-          getKey={(b) => b.id}
-          getLabel={(b) => b.name}
-          getMeta={(b) => ({ gender: b.filters?.gender })}
-          groupBy={() => ''}
+          getKey={getBenchmarkKey}
+          getLabel={getBenchmarkLabel}
+          getMeta={getBenchmarkMeta}
+          groupBy={noGroup}
           selected={selectedBenchmarkIds}
           onChange={onSelectionChange}
           context={context}

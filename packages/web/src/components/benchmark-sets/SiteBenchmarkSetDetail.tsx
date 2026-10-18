@@ -59,6 +59,12 @@ interface SiteBenchmarkSetDetailProps {
   setId: string;
 }
 
+// Module-level so BenchmarkChecklist's memos keep stable accessor props across renders
+const getBenchmarkKey = (b: SiteBenchmark) => b.id;
+const getBenchmarkLabel = (b: SiteBenchmark) => b.name;
+const getBenchmarkMeta = (b: SiteBenchmark) => ({ metricCode: b.metricCode, gender: b.gender, level: b.level, source: b.benchmarkSource });
+const noGroup = () => "";
+
 export function SiteBenchmarkSetDetail({ setId }: SiteBenchmarkSetDetailProps) {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -448,10 +454,10 @@ export function SiteBenchmarkSetDetail({ setId }: SiteBenchmarkSetDetailProps) {
             ) : (
               <BenchmarkChecklist
                 items={availableBenchmarks}
-                getKey={(b) => b.id}
-                getLabel={(b) => b.name}
-                getMeta={(b) => ({ metricCode: b.metricCode, gender: b.gender, level: b.level, source: b.benchmarkSource })}
-                groupBy={() => ""}
+                getKey={getBenchmarkKey}
+                getLabel={getBenchmarkLabel}
+                getMeta={getBenchmarkMeta}
+                groupBy={noGroup}
                 selected={[...selectedBenchmarkIds]}
                 onChange={(ids) => setSelectedBenchmarkIds(new Set(ids))}
                 listClassName="max-h-[45vh]"

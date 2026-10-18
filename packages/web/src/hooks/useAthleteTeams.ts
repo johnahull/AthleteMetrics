@@ -92,9 +92,8 @@ export function useAthleteTeams(): UseAthleteTeamsResult {
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
   });
 
-  const teams = data?.teams || [];
-  // React Query maintains referential stability for cached data, no memoization needed
-  const teamIds = teams.map(team => team.id);
+  const teams = useMemo(() => data?.teams ?? [], [data]);
+  const teamIds = useMemo(() => teams.map(team => team.id), [teams]);
   const sports = useMemo(() => data?.sports ?? [], [data]);
 
   return {

@@ -43,6 +43,16 @@ import type { OrganizationBenchmarkWithDetails } from "@shared/schema";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { DEFAULT_CHART_SELECTION } from "@shared/report-charts";
 
+// Module-level so BenchmarkChecklist's memos keep stable accessor props across renders
+const getBenchmarkKey = (b: OrganizationBenchmarkWithDetails) => b.benchmarkId;
+const getBenchmarkLabel = (b: OrganizationBenchmarkWithDetails) => b.name;
+const getBenchmarkMeta = (b: OrganizationBenchmarkWithDetails) => ({
+  metricCode: b.metricCode,
+  gender: b.gender,
+  level: b.level,
+  tierGroupId: b.tierGroupId,
+});
+
 const reportConfigSchema = z.object({
   reportType: z.enum(["team", "individual"]),
   name: z.string().min(1, "Report name is required"),
@@ -104,6 +114,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const {
     register,
     watch,
+    getValues,
     setValue,
     handleSubmit,
     formState: { errors, dirtyFields },
@@ -238,12 +249,18 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
         ids,
         new Set(siteBenchmarks.map((b) => b.benchmarkId)),
         new Set(customBenchmarks.map((b) => b.benchmarkId)),
-        { site: watch("siteBenchmarks") || [], custom: watch("customBenchmarks") || [] },
+        { site: getValues("siteBenchmarks") || [], custom: getValues("customBenchmarks") || [] },
       );
       setValue("siteBenchmarks", site);
       setValue("customBenchmarks", custom);
     },
-    [siteBenchmarks, customBenchmarks, watch, setValue],
+    [siteBenchmarks, customBenchmarks, getValues, setValue],
+  );
+  const watchedSiteIds = watch("siteBenchmarks");
+  const watchedCustomIds = watch("customBenchmarks");
+  const selectedBenchmarkIds = useMemo(
+    () => [...(watchedSiteIds || []), ...(watchedCustomIds || [])],
+    [watchedSiteIds, watchedCustomIds],
   );
 
   // Chart selection items shown in the step-8 "Charts to include" panel.
@@ -740,15 +757,10 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                       {allBenchmarks.length > 0 && (
                         <BenchmarkChecklist
                           items={allBenchmarks}
-                          getKey={(b) => b.benchmarkId}
-                          getLabel={(b) => b.name}
-                          getMeta={(b) => ({
-                            metricCode: b.metricCode,
-                            gender: b.gender,
-                            level: b.level,
-                            tierGroupId: b.tierGroupId,
-                          })}
-                          selected={[...(watch("siteBenchmarks") || []), ...(watch("customBenchmarks") || [])]}
+                          getKey={getBenchmarkKey}
+                          getLabel={getBenchmarkLabel}
+                          getMeta={getBenchmarkMeta}
+                          selected={selectedBenchmarkIds}
                           onChange={handleBenchmarkSelection}
                           context={benchmarkListContext}
                           renderDetail={(b) => (
