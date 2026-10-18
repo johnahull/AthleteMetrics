@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { splitBenchmarkSelection } from "../benchmark-selection";
+import { splitBenchmarkSelection, resolveBenchmarkSelection } from "../benchmark-selection";
 
 describe("splitBenchmarkSelection", () => {
   const site = new Set(["s1", "s2"]);
@@ -19,5 +19,24 @@ describe("splitBenchmarkSelection", () => {
         custom: ["stale-custom"],
       }),
     ).toEqual({ site: ["stale-site"], custom: ["stale-custom"] });
+  });
+});
+
+describe("resolveBenchmarkSelection", () => {
+  const item = (benchmarkId: string, benchmarkType: "site" | "custom") => ({ benchmarkId, benchmarkType });
+
+  it("unions set items with individual picks, split by type and deduped", () => {
+    const sets = [
+      { items: [item("s1", "site"), item("c1", "custom")] },
+      { items: [item("s1", "site"), item("s2", "site")] },
+    ];
+    expect(resolveBenchmarkSelection(sets, ["s2", "s3"], ["c1", "c2"])).toEqual({
+      site: ["s1", "s2", "s3"],
+      custom: ["c1", "c2"],
+    });
+  });
+
+  it("returns only the picks when no set is chosen", () => {
+    expect(resolveBenchmarkSelection([], ["s1"], [])).toEqual({ site: ["s1"], custom: [] });
   });
 });

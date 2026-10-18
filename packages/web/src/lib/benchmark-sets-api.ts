@@ -73,6 +73,11 @@ export async function fetchBenchmarkSets(
   return response.json();
 }
 
+/** True for the error fetchBenchmarkSet throws when the set is gone (it attaches the HTTP status). */
+export function isBenchmarkSetNotFound(error: unknown): boolean {
+  return (error as { status?: number } | null)?.status === 404;
+}
+
 /**
  * Fetch a single benchmark set with its items
  */
@@ -86,7 +91,8 @@ export async function fetchBenchmarkSet(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'Failed to fetch benchmark set' }));
-    throw new Error(error.message || 'Failed to fetch benchmark set');
+    // status lets callers tell a deleted set (404) from a transient failure
+    throw Object.assign(new Error(error.message || 'Failed to fetch benchmark set'), { status: response.status });
   }
 
   return response.json();
