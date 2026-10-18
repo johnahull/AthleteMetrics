@@ -7,7 +7,7 @@ import express, { type Express } from "express";
 import { DEFAULT_AI_MODEL_KEY, getAIModel } from "@shared/ai-models";
 import rateLimit from "express-rate-limit";
 import { sortCodesByGroups, isGenericReport } from "@shared/metric-order";
-import { buildMeasurementRows, buildBenchmarkRows } from "./pdf-metric-rows";
+import { buildMeasurementRows, buildBenchmarkRows, buildStatsRows, buildAchievementRows, groupLabelFor } from "./pdf-metric-rows";
 import { ReportService } from "../services/report-service";
 import { createReportsFromInput, ReportCreateError } from "../services/report-create";
 import { planChartPageBreaks, chartGroupHeadings, addHeadingHeights } from "./pdf-chart-layout";
@@ -4142,7 +4142,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
 
     const summaryRows = [
       ["Athletes Tested", `${reportData.athleteCount || 0}`],
-      ["Metrics", reportData.teamStatistics?.map((s: any) => s.metric).join(', ') || "N/A"],
+      ["Metrics", reportData.teamStatistics?.map((s: any) => reportData.metricLabels?.[s.metric] || s.metric).join(', ') || "N/A"],
     ];
 
     autoTable(doc, {
@@ -4163,14 +4163,12 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     yPos += 10;
 
     if (reportData.teamStatistics && reportData.teamStatistics.length > 0) {
-      const statsRows = reportData.teamStatistics.map((stat: any) => [
-        stat.metric,
-        stat.average !== null ? (durationText(stat.metric, stat.average) ?? stat.average.toFixed(2)) : "N/A",
-        stat.median !== null ? (durationText(stat.metric, stat.median) ?? stat.median.toFixed(2)) : "N/A",
-        stat.min !== null ? (durationText(stat.metric, stat.min) ?? stat.min.toFixed(2)) : "N/A",
-        stat.max !== null ? (durationText(stat.metric, stat.max) ?? stat.max.toFixed(2)) : "N/A",
-        stat.topPerformer?.userName || "N/A",
-      ]);
+      const statsRows = buildStatsRows({
+        stats: reportData.teamStatistics,
+        labels: reportData.metricLabels || {},
+        durationText,
+        metricGroups: reportData.metricGroups,
+      });
 
       autoTable(doc, {
         startY: yPos,
@@ -4204,13 +4202,12 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
         doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
         yPos += 10;
 
-        const benchmarkRows = benchmarkAchievements.map((achievement: any) => [
-          achievement.metric,
-          achievement.benchmarkName,
-          durationText(achievement.metric, achievement.benchmarkValue) ?? `${achievement.benchmarkValue.toFixed(2)} ${achievement.units}`,
-          achievement.count.toString(),
-          `${achievement.percentage.toFixed(0)}%`,
-        ]);
+        const benchmarkRows = buildAchievementRows({
+          achievements: benchmarkAchievements,
+          labels: reportData.metricLabels || {},
+          durationText,
+          metricGroups: reportData.metricGroups,
+        });
 
         autoTable(doc, {
           startY: yPos,
@@ -4299,16 +4296,33 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
       doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
       yPos += 10;
 
-      for (const stat of reportData.teamStatistics) {
+      let lastGroupLabel: string | null = null;
+      // Sort by group here rather than trusting the caller, so a group heading is never skipped or repeated
+      const statByMetric = new Map<string, any>(reportData.teamStatistics.map((s: any) => [s.metric, s]));
+      const orderedStats = sortCodesByGroups([...statByMetric.keys()], reportData.metricGroups).map((code) => statByMetric.get(code)).filter(Boolean);
+      for (const stat of orderedStats) {
         // Check if we need a new page for each metric
         if (yPos > 200) {
           doc.addPage();
           yPos = 20;
+          lastGroupLabel = null;
         }
+
+        // Print a group heading when the group changes, and again at the top of a new page
+        const groupLabel = groupLabelFor(stat.metric, reportData.metricGroups);
+        if (groupLabel && groupLabel !== lastGroupLabel) {
+          doc.setFontSize(12);
+          doc.setTextColor(100, 100, 100);
+          doc.text(groupLabel.toUpperCase(), 14, yPos);
+          doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+          yPos += 6;
+        }
+        // An ungrouped metric must not make the next grouped one reprint its heading
+        if (groupLabel) lastGroupLabel = groupLabel;
 
         doc.setFontSize(14);
         if (isVisual) doc.setTextColor(colors.secondary[0], colors.secondary[1], colors.secondary[2]);
-        doc.text(stat.metric, 14, yPos);
+        doc.text(reportData.metricLabels?.[stat.metric] || stat.metric, 14, yPos);
         doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
         yPos += 6;
 

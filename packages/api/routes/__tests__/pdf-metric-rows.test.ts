@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildMeasurementRows, buildBenchmarkRows } from '../pdf-metric-rows';
+import { buildMeasurementRows, buildBenchmarkRows, buildStatsRows, buildAchievementRows, groupLabelFor } from '../pdf-metric-rows';
 
 const groups = [
   { group: 'speed', label: 'Speed', codes: ['DASH_10YD', 'DASH_20YD'] },
@@ -105,5 +105,60 @@ describe('buildBenchmarkRows', () => {
   it('returns empty arrays when nothing applies', () => {
     expect(buildBenchmarkRows({ benchmarkComparisons: {}, labels, units, durationText, metricGroups: groups }))
       .toEqual({ tierRows: [], tierColors: [], singleRows: [] });
+  });
+});
+
+describe('buildStatsRows', () => {
+  const stat = (metric: string, average: number | null) => ({
+    metric, average, median: average, min: average, max: average, topPerformer: average === null ? null : { userName: 'Ann' },
+  });
+
+  it('uses labels, heads each group, and keeps N/A for missing values', () => {
+    const rows = buildStatsRows({
+      stats: [stat('DASH_10YD', 1.7), stat('DASH_20YD', null), stat('JUMP_CMJ_HOH', 20)],
+      labels, durationText, metricGroups: groups,
+    });
+    expect(rows).toEqual([
+      [heading('Speed', 6)],
+      ['10 yd', '1.70', '1.70', '1.70', '1.70', 'Ann'],
+      ['20 yd', 'N/A', 'N/A', 'N/A', 'N/A', 'N/A'],
+      [heading('Power', 6)],
+      ['CMJ', '20.00', '20.00', '20.00', '20.00', 'Ann'],
+    ]);
+  });
+
+  it('prints durations via durationText and adds no headings without metricGroups', () => {
+    const rows = buildStatsRows({
+      stats: [stat('DASH_10YD', 402.5)], labels, durationText: (m, v) => (m === 'DASH_10YD' ? `${v}!` : null),
+    });
+    expect(rows).toEqual([['10 yd', '402.5!', '402.5!', '402.5!', '402.5!', 'Ann']]);
+  });
+});
+
+describe('buildAchievementRows', () => {
+  const ach = (metric: string, count: number) => ({
+    metric, benchmarkName: 'Elite', benchmarkValue: 2, units: 's', count, percentage: 50,
+  });
+
+  it('labels metrics and orders them by group, keeping per-metric order', () => {
+    const rows = buildAchievementRows({
+      achievements: [ach('JUMP_CMJ_HOH', 3), ach('DASH_10YD', 5), ach('DASH_10YD', 2)],
+      labels, durationText, metricGroups: groups,
+    });
+    expect(rows).toEqual([
+      [heading('Speed', 5)],
+      ['10 yd', 'Elite', '2.00 s', '5', '50%'],
+      ['10 yd', 'Elite', '2.00 s', '2', '50%'],
+      [heading('Power', 5)],
+      ['CMJ', 'Elite', '2.00 s', '3', '50%'],
+    ]);
+  });
+});
+
+describe('groupLabelFor', () => {
+  it('returns the group label for a code, null when ungrouped or no groups', () => {
+    expect(groupLabelFor('DASH_20YD', groups)).toBe('Speed');
+    expect(groupLabelFor('NOPE', groups)).toBeNull();
+    expect(groupLabelFor('DASH_20YD', undefined)).toBeNull();
   });
 });

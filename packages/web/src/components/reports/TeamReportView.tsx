@@ -51,6 +51,8 @@ import { formatMeasurement } from "@shared/duration-format";
 import type { Report, TeamReportData, TeamStatistic, AthleteRanking, PdfFormat, TeamReportConfig } from "@/types/report-types";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { resolveTeamChartSelection } from "@shared/report-charts";
+import { MetricGroupRowHeading, MetricGroupHeading } from "./MetricGroupHeading";
+import { groupedCodes } from "@/lib/metric-groups";
 import { TeamTrendSection } from "./TeamTrendSection";
 import { TeamBenchmarkStandingSection } from "./TeamBenchmarkStandingSection";
 import { TeamBoxSwarmSection } from "./TeamBoxSwarmSection";
@@ -148,6 +150,13 @@ export function TeamReportView({ report }: TeamReportViewProps) {
   const { teamStatistics, athleteRankings, generatedAt, metricLabels, metricUnits, metricFormats, metricExplanations, teamTrends, teamDistributions } = reportData;
   const resolveLabel = (code: string) => metricLabels?.[code] ?? getLabel(code);
   const teamMetricCodes = Array.isArray(teamStatistics) ? teamStatistics.map((s: TeamStatistic) => s.metric) : [];
+  const statByMetric = new Map<string, TeamStatistic>(Array.isArray(teamStatistics) ? teamStatistics.map((s: TeamStatistic) => [s.metric, s]) : []);
+  // A metric nobody has a value for gets no card, so it must not leave its group heading behind
+  const sortedByMetric = new Map<string, AthleteRanking[]>(
+    teamMetricCodes.map((c: string) => [c, sortAthletesByMetric(athleteRankings, c, metricTypes?.[c])]),
+  );
+  const codesWithAthletes = teamMetricCodes.filter((c: string) => sortedByMetric.get(c)!.length > 0);
+  const hasMeasurements = Array.isArray(athleteRankings) && athleteRankings.length > 0;
   const sel = resolveTeamChartSelection(report.config as TeamReportConfig);
   // Resolved once and passed to the leaderboard/distribution charts below —
   // every athlete plotted in those charts is already scoped to this report's
@@ -276,13 +285,22 @@ export function TeamReportView({ report }: TeamReportViewProps) {
       </Card>
 
       {/* Coaching Insights */}
-      <CoachingInsightsCard
-        reportId={report.id}
-        initialInsights={report.coachingInsights}
-        generatedAt={report.coachingInsightsGeneratedAt}
-        model={report.coachingInsightsModel}
-        aiEnabled={aiEnabled || false}
-      />
+      {!hasMeasurements && (
+        <Card>
+          <CardContent className="py-10 text-center text-muted-foreground">
+            No measurements recorded for this {labels.team.toLowerCase()} in this report yet.
+          </CardContent>
+        </Card>
+      )}
+      {(hasMeasurements || report.coachingInsights) && (
+        <CoachingInsightsCard
+          reportId={report.id}
+          initialInsights={report.coachingInsights}
+          generatedAt={report.coachingInsightsGeneratedAt}
+          model={report.coachingInsightsModel}
+          aiEnabled={aiEnabled || false}
+        />
+      )}
 
       {/* Team Statistics */}
       {Array.isArray(teamStatistics) && teamStatistics.length > 0 && (
@@ -303,8 +321,12 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                   <TableHead>Range</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>
-                {teamStatistics.map((stat: TeamStatistic) => {
+              {groupedCodes(teamMetricCodes, reportData.metricGroups).map((g) => (
+              <TableBody key={g.group ?? 'all'}>
+                <MetricGroupRowHeading label={g.label} colSpan={4 + benchmarkColumns.length} />
+                {g.codes.map((code) => {
+                  const stat = statByMetric.get(code);
+                  if (!stat) return null;
                   // Create a map of benchmark data for this metric (supports both single-value and range benchmarks)
                   const benchmarkMap = new Map<string, { value: number | null; minValue?: number | null; maxValue?: number | null; tierColor?: string }>();
                   if (stat.benchmarks && Array.isArray(stat.benchmarks)) {
@@ -385,6 +407,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                   );
                 })}
               </TableBody>
+              ))}
             </Table>
           </CardContent>
         </Card>
@@ -509,135 +532,141 @@ export function TeamReportView({ report }: TeamReportViewProps) {
       {Array.isArray(teamStatistics) && teamStatistics.length > 0 && Array.isArray(athleteRankings) && athleteRankings.length > 0 && (
         <div className="space-y-6">
           <h2 className="text-xl font-semibold">Individual Performance by Metric</h2>
-          {teamStatistics.map((stat: TeamStatistic) => {
-            const sortedAthletes = sortAthletesByMetric(athleteRankings, stat.metric, metricTypes?.[stat.metric]);
+          {groupedCodes(codesWithAthletes, reportData.metricGroups).map((g) => (
+            <div key={g.group ?? 'all'} className="space-y-6">
+              <MetricGroupHeading label={g.label} />
+              {g.codes.map((code) => {
+                const stat = statByMetric.get(code);
+                if (!stat) return null;
+                // codesWithAthletes already dropped metrics nobody recorded
+                const sortedAthletes = sortedByMetric.get(code)!;
 
-            if (sortedAthletes.length === 0) return null;
-
-            return (
-              <Card key={stat.metric}>
-                <CardHeader>
-                  <CardTitle>{resolveLabel(stat.metric)}</CardTitle>
-                  <CardDescription>
-                    {labels.team} Average: {stat.average !== null ? (metricFormats?.[stat.metric] ? formatMeasurement(stat.average, metricFormats[stat.metric]) : `${stat.average.toFixed(2)} ${stat.units || ''}`) : 'N/A'}
-                    {stat.standardDeviation !== null && ` | SD: ±${metricFormats?.[stat.metric] ? formatMeasurement(stat.standardDeviation, metricFormats[stat.metric]) : `${stat.standardDeviation.toFixed(2)} ${stat.units || ''}`}`}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-16">Rank</TableHead>
-                        <TableHead>Athlete</TableHead>
-                        <TableHead>Value</TableHead>
-                        <TableHead>Percentile</TableHead>
-                        <TableHead>Deviation from Avg</TableHead>
-                        <TableHead>Z-Score</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {sortedAthletes.map((athlete: AthleteRanking, idx: number) => {
-                        const value = athlete.measurements[stat.metric];
-                        const percentile = athlete.percentiles?.[stat.metric];
-                        const percentileColor = getPerformanceColor(percentile);
-                        const quartileBadge = getQuartileBadge(percentile);
-
-                        // Get benchmark label and metric direction
-                        const benchmarkLabel = getBenchmarkLabel(athlete, stat.metric, metricTypes?.[stat.metric]);
-                        const lowerIsBetter = isLowerBetter(stat.metric, metricTypes?.[stat.metric]);
-
-                        // Calculate deviation statistics
-                        const { deviation, percentDiff, zScore, deviationColor, zScoreColor } =
-                          calculateDeviationStats(value, stat.average, stat.standardDeviation, lowerIsBetter);
-
-                        return (
-                          <TableRow key={athlete.userId}>
-                            <TableCell>
-                              <Badge
-                                variant={idx === 0 ? "default" : idx === 1 ? "secondary" : idx === 2 ? "outline" : "secondary"}
-                                className={
-                                  idx === 0 ? "bg-yellow-500 text-white" :
-                                  idx === 1 ? "bg-gray-400 text-white" :
-                                  idx === 2 ? "bg-orange-600 text-white" : ""
-                                }
-                              >
-                                #{idx + 1}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="font-medium">
-                              <div className="flex items-center gap-2">
-                                <span>{athlete.userName}</span>
-                                {(() => {
-                                  // Check for tier benchmark comparison first
-                                  const comps = athlete.benchmarkComparisons?.[stat.metric];
-                                  const tierComp = comps?.find((c: any) => c.tierName);
-                                  if (tierComp) {
-                                    return <TierBadgeCompact tierName={tierComp.tierName!} tierColor={tierComp.tierColor || 'gray'} />;
-                                  }
-                                  if (benchmarkLabel) {
-                                    return (
-                                      <Badge variant="secondary" className="text-xs font-normal">
-                                        {benchmarkLabel}
-                                      </Badge>
-                                    );
-                                  }
-                                  return null;
-                                })()}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              {value !== null && value !== undefined
-                                ? (isFly10Metric(stat.metric)
-                                    ? formatFly10Dual(value)
-                                    : (metricFormats?.[stat.metric] ? formatMeasurement(value, metricFormats[stat.metric]) : `${value.toFixed(2)} ${stat.units || ''}`))
-                                : "N/A"}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                {percentile !== undefined ? (
-                                  <span className={`font-semibold ${percentileColor}`}>
-                                    {percentile.toFixed(0)}th
-                                  </span>
-                                ) : (
-                                  "N/A"
-                                )}
-                                {quartileBadge && (
-                                  <Badge variant={quartileBadge.variant} className="text-xs">
-                                    {quartileBadge.label}
-                                  </Badge>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              {deviation !== null && percentDiff !== null ? (
-                                <span className={`font-semibold ${deviationColor}`}>
-                                  {deviation > 0 ? '+' : ''}{metricFormats?.[stat.metric] ? formatMeasurement(deviation, metricFormats[stat.metric]) : `${deviation.toFixed(2)} ${stat.units || ''}`}
-                                  <span className="text-xs ml-1">
-                                    ({percentDiff > 0 ? '+' : ''}{percentDiff.toFixed(1)}%)
-                                  </span>
-                                </span>
-                              ) : (
-                                "N/A"
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {zScore !== null ? (
-                                <span className={`font-semibold ${zScoreColor}`}>
-                                  {zScore > 0 ? '+' : ''}{zScore.toFixed(2)}σ
-                                </span>
-                              ) : (
-                                "N/A"
-                              )}
-                            </TableCell>
+                return (
+                  <Card key={stat.metric}>
+                    <CardHeader>
+                      <CardTitle>{resolveLabel(stat.metric)}</CardTitle>
+                      <CardDescription>
+                        {labels.team} Average: {stat.average !== null ? (metricFormats?.[stat.metric] ? formatMeasurement(stat.average, metricFormats[stat.metric]) : `${stat.average.toFixed(2)} ${stat.units || ''}`) : 'N/A'}
+                        {stat.standardDeviation !== null && ` | SD: ±${metricFormats?.[stat.metric] ? formatMeasurement(stat.standardDeviation, metricFormats[stat.metric]) : `${stat.standardDeviation.toFixed(2)} ${stat.units || ''}`}`}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-16">Rank</TableHead>
+                            <TableHead>Athlete</TableHead>
+                            <TableHead>Value</TableHead>
+                            <TableHead>Percentile</TableHead>
+                            <TableHead>Deviation from Avg</TableHead>
+                            <TableHead>Z-Score</TableHead>
                           </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            );
-          })}
+                        </TableHeader>
+                        <TableBody>
+                          {sortedAthletes.map((athlete: AthleteRanking, idx: number) => {
+                            const value = athlete.measurements[stat.metric];
+                            const percentile = athlete.percentiles?.[stat.metric];
+                            const percentileColor = getPerformanceColor(percentile);
+                            const quartileBadge = getQuartileBadge(percentile);
+
+                            // Get benchmark label and metric direction
+                            const benchmarkLabel = getBenchmarkLabel(athlete, stat.metric, metricTypes?.[stat.metric]);
+                            const lowerIsBetter = isLowerBetter(stat.metric, metricTypes?.[stat.metric]);
+
+                            // Calculate deviation statistics
+                            const { deviation, percentDiff, zScore, deviationColor, zScoreColor } =
+                              calculateDeviationStats(value, stat.average, stat.standardDeviation, lowerIsBetter);
+
+                            return (
+                              <TableRow key={athlete.userId}>
+                                <TableCell>
+                                  <Badge
+                                    variant={idx === 0 ? "default" : idx === 1 ? "secondary" : idx === 2 ? "outline" : "secondary"}
+                                    className={
+                                      idx === 0 ? "bg-yellow-500 text-white" :
+                                      idx === 1 ? "bg-gray-400 text-white" :
+                                      idx === 2 ? "bg-orange-600 text-white" : ""
+                                    }
+                                  >
+                                    #{idx + 1}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="font-medium">
+                                  <div className="flex items-center gap-2">
+                                    <span>{athlete.userName}</span>
+                                    {(() => {
+                                      // Check for tier benchmark comparison first
+                                      const comps = athlete.benchmarkComparisons?.[stat.metric];
+                                      const tierComp = comps?.find((c: any) => c.tierName);
+                                      if (tierComp) {
+                                        return <TierBadgeCompact tierName={tierComp.tierName!} tierColor={tierComp.tierColor || 'gray'} />;
+                                      }
+                                      if (benchmarkLabel) {
+                                        return (
+                                          <Badge variant="secondary" className="text-xs font-normal">
+                                            {benchmarkLabel}
+                                          </Badge>
+                                        );
+                                      }
+                                      return null;
+                                    })()}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  {value !== null && value !== undefined
+                                    ? (isFly10Metric(stat.metric)
+                                        ? formatFly10Dual(value)
+                                        : (metricFormats?.[stat.metric] ? formatMeasurement(value, metricFormats[stat.metric]) : `${value.toFixed(2)} ${stat.units || ''}`))
+                                    : "N/A"}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    {percentile !== undefined ? (
+                                      <span className={`font-semibold ${percentileColor}`}>
+                                        {percentile.toFixed(0)}th
+                                      </span>
+                                    ) : (
+                                      "N/A"
+                                    )}
+                                    {quartileBadge && (
+                                      <Badge variant={quartileBadge.variant} className="text-xs">
+                                        {quartileBadge.label}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  {deviation !== null && percentDiff !== null ? (
+                                    <span className={`font-semibold ${deviationColor}`}>
+                                      {deviation > 0 ? '+' : ''}{metricFormats?.[stat.metric] ? formatMeasurement(deviation, metricFormats[stat.metric]) : `${deviation.toFixed(2)} ${stat.units || ''}`}
+                                      <span className="text-xs ml-1">
+                                        ({percentDiff > 0 ? '+' : ''}{percentDiff.toFixed(1)}%)
+                                      </span>
+                                    </span>
+                                  ) : (
+                                    "N/A"
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {zScore !== null ? (
+                                    <span className={`font-semibold ${zScoreColor}`}>
+                                      {zScore > 0 ? '+' : ''}{zScore.toFixed(2)}σ
+                                    </span>
+                                  ) : (
+                                    "N/A"
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          ))}
         </div>
       )}
 
