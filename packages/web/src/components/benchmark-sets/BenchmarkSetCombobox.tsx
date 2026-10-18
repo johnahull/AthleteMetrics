@@ -141,73 +141,72 @@ export function BenchmarkSetCombobox({
       <PopoverContent className="w-[min(400px,calc(100vw-2rem))] p-0" align="start">
         {/* Chips live outside <Command>: cmdk would turn Enter on a chip into "select highlighted set" */}
         <div className="flex max-h-(--radix-popover-content-available-height) flex-col">
-    {(Object.keys(available) as ChipType[]).length > 0 && (
-      <div role="group" aria-label="Filter benchmark sets" className="shrink-0 border-b p-2 space-y-1.5">
-        {(Object.keys(CHIP_LABELS) as ChipType[]).map((type) =>
-          available[type] ? (
-            <div key={type} className="flex flex-wrap items-center gap-1">
-              <span className="text-xs text-muted-foreground w-12 shrink-0">{CHIP_LABELS[type]}</span>
-              {available[type]!.map((v) => {
-                const pressed = chips[type]?.includes(v) ?? false;
-                return (
-                  <button
-                    key={v}
-                    type="button"
-                    aria-pressed={pressed}
-                    onClick={() => toggleChip(type, v)}
-                    className={cn(
-                      "rounded-full border px-2 py-0.5 text-xs",
-                      pressed ? "bg-primary text-primary-foreground" : "hover:bg-muted",
-                    )}
-                  >
-                    {v}
-                  </button>
-                );
-              })}
+          {(Object.keys(available) as ChipType[]).length > 0 && (
+            <div role="group" aria-label="Filter benchmark sets" className="shrink-0 border-b p-2 space-y-1.5">
+              {(Object.keys(CHIP_LABELS) as ChipType[]).map((type) =>
+                available[type] ? (
+                  <div key={type} className="flex flex-wrap items-center gap-1">
+                    <span className="text-xs text-muted-foreground w-12 shrink-0">{CHIP_LABELS[type]}</span>
+                    {available[type]!.map((v) => {
+                      const pressed = chips[type]?.includes(v) ?? false;
+                      return (
+                        <button
+                          key={v}
+                          type="button"
+                          aria-pressed={pressed}
+                          onClick={() => toggleChip(type, v)}
+                          className={cn(
+                            "rounded-full border px-2 py-0.5 text-xs",
+                            pressed ? "bg-primary text-primary-foreground" : "hover:bg-muted",
+                          )}
+                        >
+                          {v}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null,
+              )}
+              {hasChips && (
+                <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setUserChips({})}>
+                  Clear filters
+                </Button>
+              )}
             </div>
-          ) : null,
-        )}
-        {hasChips && (
-          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setUserChips({})}>
-            Clear filters
-          </Button>
-        )}
-      </div>
-    )}
+          )}
           <Command shouldFilter={false} className="min-h-0">
-          <CommandInput placeholder="Search sets..." value={query} onValueChange={setQuery} />
-          <CommandList>
-            <CommandEmpty>{error ? "Failed to load sets. Please try again." : "No benchmark sets found."}</CommandEmpty>
-            {groups.map((group) => (
-              <CommandGroup key={group.key} heading={group.key}>
-                {group.items.map((set) => (
-                  <CommandItem
-                    key={set.id}
-                    value={set.id}
-                    keywords={[set.name, group.key, set.level ?? "", set.gender ?? "", set.description ?? ""]}
-                    onSelect={() => {
-                      onChange(set.id);
-                      setOpen(false);
-                    }}
-                    className="cursor-pointer"
-                  >
-                    <Check className={cn("h-4 w-4", value === set.id ? "opacity-100" : "opacity-0")} />
-                    <div className="flex-1 min-w-0">
-                      <div className="truncate font-medium">{set.name}</div>
-                      <div className="text-xs text-muted-foreground truncate">
-                        {[group.key === NO_SPORT ? null : group.key, set.level, set.gender]
-                          .filter(Boolean)
-                          .join(" · ")}
+            <CommandInput placeholder="Search sets..." value={query} onValueChange={setQuery} />
+            <CommandList>
+              <CommandEmpty>{error ? "Failed to load sets. Please try again." : "No benchmark sets found."}</CommandEmpty>
+              {groups.map((group) => (
+                <CommandGroup key={group.key} heading={group.key}>
+                  {group.items.map((set) => (
+                    <CommandItem
+                      key={set.id}
+                      value={set.id}
+                      onSelect={() => {
+                        onChange(set.id);
+                        setOpen(false);
+                      }}
+                      className="cursor-pointer"
+                    >
+                      <Check className={cn("h-4 w-4", value === set.id ? "opacity-100" : "opacity-0")} />
+                      <div className="flex-1 min-w-0">
+                        <div className="truncate font-medium">{set.name}</div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          {[group.key === NO_SPORT ? null : group.key, set.level, set.gender]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </div>
                       </div>
-                    </div>
-                    <Badge variant="outline" className="text-xs shrink-0">
-                      {set.organizationId == null ? "Site" : "Org"}
-                    </Badge>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            ))}
-          </CommandList>
+                      <Badge variant="outline" className="text-xs shrink-0">
+                        {set.organizationId == null ? "Site" : "Org"}
+                      </Badge>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              ))}
+            </CommandList>
           </Command>
         </div>
       </PopoverContent>

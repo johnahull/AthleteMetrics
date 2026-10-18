@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -227,16 +227,19 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
 
   // One merged picker; split the chosen benchmarkIds back into the two form fields by type
   const allBenchmarks = useMemo(() => [...siteBenchmarks, ...customBenchmarks], [siteBenchmarks, customBenchmarks]);
-  const handleBenchmarkSelection = (ids: string[]) => {
-    const { site, custom } = splitBenchmarkSelection(
-      ids,
-      new Set(siteBenchmarks.map((b) => b.benchmarkId)),
-      new Set(customBenchmarks.map((b) => b.benchmarkId)),
-      { site: watch("siteBenchmarks") || [], custom: watch("customBenchmarks") || [] },
-    );
-    setValue("siteBenchmarks", site);
-    setValue("customBenchmarks", custom);
-  };
+  const handleBenchmarkSelection = useCallback(
+    (ids: string[]) => {
+      const { site, custom } = splitBenchmarkSelection(
+        ids,
+        new Set(siteBenchmarks.map((b) => b.benchmarkId)),
+        new Set(customBenchmarks.map((b) => b.benchmarkId)),
+        { site: watch("siteBenchmarks") || [], custom: watch("customBenchmarks") || [] },
+      );
+      setValue("siteBenchmarks", site);
+      setValue("customBenchmarks", custom);
+    },
+    [siteBenchmarks, customBenchmarks, watch, setValue],
+  );
 
   // Chart selection items shown in the step-8 "Charts to include" panel.
   // Individual and team reports show different chart sets (team doesn't use

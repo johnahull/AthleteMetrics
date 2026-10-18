@@ -4,7 +4,6 @@
  */
 
 import React, { useCallback, useMemo } from 'react';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -59,25 +58,6 @@ export const BenchmarkLineSelector = React.memo(function BenchmarkLineSelector({
     return `benchmark-selector-${base}`;
   }, [metricCode]);
 
-  // Handle "Select All" - adds this metric's benchmarks to existing selection
-  const handleSelectAll = useCallback(() => {
-    if (benchmarks) {
-      const currentMetricIds = new Set(benchmarks.map(b => b.id));
-      // Keep existing selections from other metrics, add all from this metric
-      const existingOtherMetrics = selectedBenchmarkIds.filter(id => !currentMetricIds.has(id));
-      onSelectionChange([...existingOtherMetrics, ...benchmarks.map(b => b.id)]);
-    }
-  }, [benchmarks, selectedBenchmarkIds, onSelectionChange]);
-
-  // Handle "Clear All" - only clears this metric's benchmarks
-  const handleClearAll = useCallback(() => {
-    if (benchmarks) {
-      const currentMetricIds = new Set(benchmarks.map(b => b.id));
-      // Keep selections from other metrics
-      onSelectionChange(selectedBenchmarkIds.filter(id => !currentMetricIds.has(id)));
-    }
-  }, [benchmarks, selectedBenchmarkIds, onSelectionChange]);
-
   // Handle loading benchmarks from a set - filters to only include benchmarks available for this metric
   const handleLoadFromSet = useCallback((setBenchmarkIds: { id: string; type: 'site' | 'custom' }[]) => {
     if (benchmarks) {
@@ -123,17 +103,6 @@ export const BenchmarkLineSelector = React.memo(function BenchmarkLineSelector({
 
     return badges;
   }, []);
-
-  // Memoize selection state calculations (metric-specific)
-  const { allSelected, noneSelected } = useMemo(() => {
-    if (!benchmarks) return { allSelected: false, noneSelected: true };
-    const currentMetricIds = new Set(benchmarks.map(b => b.id));
-    const selectedFromThisMetric = selectedBenchmarkIds.filter(id => currentMetricIds.has(id));
-    return {
-      allSelected: selectedFromThisMetric.length === benchmarks.length,
-      noneSelected: selectedFromThisMetric.length === 0
-    };
-  }, [benchmarks, selectedBenchmarkIds]);
 
   // Loading state
   if (isLoading) {
@@ -190,24 +159,6 @@ export const BenchmarkLineSelector = React.memo(function BenchmarkLineSelector({
             onLoadSet={handleLoadFromSet}
             context={context}
           />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSelectAll}
-            disabled={allSelected}
-            aria-label="Select all benchmarks"
-          >
-            Select All
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleClearAll}
-            disabled={noneSelected}
-            aria-label="Clear all benchmark selections"
-          >
-            Clear All
-          </Button>
         </div>
       </div>
 

@@ -232,10 +232,10 @@ export function BenchmarkChecklist<T>({
             Clear filters
           </Button>
         )}
-        <Button type="button" variant="outline" size="sm" onClick={() => addKeys(visibleKeys)} disabled={visible.length === 0}>
+        <Button type="button" variant="outline" size="sm" onClick={() => addKeys(visibleKeys)} disabled={visibleKeys.every((k) => selectedSet.has(k))}>
           Select visible
         </Button>
-        <Button type="button" variant="outline" size="sm" onClick={() => removeKeys(visibleKeys)} disabled={visible.length === 0}>
+        <Button type="button" variant="outline" size="sm" onClick={() => removeKeys(visibleKeys)} disabled={!visibleKeys.some((k) => selectedSet.has(k))}>
           Clear visible
         </Button>
       </div>
