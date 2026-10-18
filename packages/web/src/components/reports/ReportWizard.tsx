@@ -2,16 +2,21 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useQuery } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { useQuery, useQueries } from "@tanstack/react-query";
+import { apiRequest, STALE_TIME } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
 import { useCreateReport } from "@/hooks/use-reports";
 import { useOrganizationMetrics } from "@/lib/metrics-api";
 import { useOrganizationBenchmarks } from "@/lib/benchmarks-api";
-import { useBenchmarkSets, useBenchmarkSet } from "@/lib/benchmark-sets-api";
+import { useBenchmarkSets, fetchBenchmarkSet, benchmarkSetKeys } from "@/lib/benchmark-sets-api";
+import { useReportTemplates, useDeleteReportTemplate, type ReportTemplate } from "@/lib/report-templates-api";
 import { BenchmarkSetPreview } from "@/components/benchmark-sets";
 import { BenchmarkChecklist } from "@/components/benchmarks/BenchmarkChecklist";
-import { splitBenchmarkSelection } from "./benchmark-selection";
+import { splitBenchmarkSelection, resolveBenchmarkSelection } from "./benchmark-selection";
+import { templateToFormValues, formToTemplate, templateCharts } from "./report-template";
+import { SaveReportTemplateDialog } from "./SaveReportTemplateDialog";
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { BenchmarkSetCombobox } from "@/components/benchmark-sets/BenchmarkSetCombobox";
 import {
   Dialog,
@@ -36,7 +41,8 @@ import {
 } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { ChevronLeft, ChevronRight, Layers, List, Users } from "lucide-react";
+import { AlertTriangle, ChevronLeft, ChevronRight, Trash2, Users, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { TeamAthleteSelector } from "@/components/ui/team-athlete-selector";
 import type { OrganizationBenchmarkWithDetails } from "@shared/schema";
@@ -107,9 +113,12 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const [step, setStep] = useState(1);
   const totalSteps = 8;
 
-  // Benchmark selection mode: 'individual' for checkboxes, 'set' for selecting from a benchmark set
-  const [benchmarkSelectionMode, setBenchmarkSelectionMode] = useState<'individual' | 'set'>('individual');
-  const [selectedBenchmarkSetId, setSelectedBenchmarkSetId] = useState<string | null>(null);
+  // Benchmark sets combine with the individual picks; the report gets the deduped union
+  const [selectedBenchmarkSetIds, setSelectedBenchmarkSetIds] = useState<string[]>([]);
+  // Template the form was prefilled from (step 1), and how many of its items no longer exist
+  const [loadedTemplate, setLoadedTemplate] = useState<ReportTemplate | null>(null);
+  const [droppedCount, setDroppedCount] = useState(0);
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
 
   const {
     register,
@@ -205,7 +214,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   );
 
   // Fetch benchmark sets for the organization
-  const { data: benchmarkSets, isLoading: benchmarkSetsLoading } = useBenchmarkSets(
+  const { data: benchmarkSets, isLoading: benchmarkSetsLoading, error: benchmarkSetsError } = useBenchmarkSets(
     organizationContext || ""
   );
 
@@ -224,11 +233,36 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   );
   const benchmarkListContext = useMemo(() => ({ gender: wizardGender }), [wizardGender]);
 
-  // Fetch selected benchmark set details
-  const { data: selectedBenchmarkSet } = useBenchmarkSet(
-    organizationContext || "",
-    selectedBenchmarkSetId || ""
-  );
+  // Fetch every selected set; Create / Save-as-template wait for all of them to load
+  const setQueries = useQueries({
+    queries: selectedBenchmarkSetIds.map((setId) => ({
+      queryKey: benchmarkSetKeys.detail(organizationContext || "", setId),
+      queryFn: () => fetchBenchmarkSet(organizationContext || "", setId),
+      staleTime: STALE_TIME.STATIC,
+      enabled: !!organizationContext,
+    })),
+  });
+  const setsReady = setQueries.every((q) => q.isSuccess);
+  const setsFailed = setQueries.some((q) => q.isError);
+
+  const { data: templates } = useReportTemplates(organizationContext || "");
+  const deleteTemplate = useDeleteReportTemplate();
+  const { toast } = useToast();
+  // A template is applied against these lists, so wait for them (a missing list would look like "all gone")
+  const templateListsReady = !metricsLoading && !benchmarksLoading && !benchmarkSetsLoading;
+  const templateListsFailed = !!(metricsError || benchmarksError || benchmarkSetsError);
+
+  // A set deleted since the template was saved (404) is dropped and counted as no longer available
+  const goneSetIds = setQueries
+    .map((q, i) => ((q.error as { status?: number } | null)?.status === 404 ? selectedBenchmarkSetIds[i] : null))
+    .filter((id): id is string => !!id);
+  const goneKey = goneSetIds.join(",");
+  useEffect(() => {
+    if (!goneKey) return;
+    const gone = goneKey.split(",");
+    setSelectedBenchmarkSetIds((ids) => ids.filter((id) => !gone.includes(id)));
+    setDroppedCount((c) => c + gone.length);
+  }, [goneKey]);
 
   // Separate site and custom benchmarks from the enabled benchmarks (memoized for performance)
   const siteBenchmarks = useMemo(
@@ -262,6 +296,59 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     () => [...(watchedSiteIds || []), ...(watchedCustomIds || [])],
     [watchedSiteIds, watchedCustomIds],
   );
+
+  // Overlapping sets can bring several tier groups for one metric; the team badge and PDF show only the first
+  const multiTierGroup = useMemo(() => {
+    if (!setsReady) return false;
+    const { site, custom } = resolveBenchmarkSelection(
+      setQueries.map((q) => q.data!),
+      watchedSiteIds || [],
+      watchedCustomIds || [],
+    );
+    const chosen = new Set([...site, ...custom]);
+    const groups = new Map<string, Set<string>>();
+    for (const b of allBenchmarks) {
+      if (!chosen.has(b.benchmarkId) || !b.tierGroupId) continue;
+      groups.set(b.metricCode, (groups.get(b.metricCode) ?? new Set()).add(b.tierGroupId));
+    }
+    return Array.from(groups.values()).some((g) => g.size > 1);
+  }, [setsReady, setQueries, watchedSiteIds, watchedCustomIds, allBenchmarks]);
+
+  const applyTemplate = (template: ReportTemplate, type: "team" | "individual") => {
+    const { values, droppedCount: dropped } = templateToFormValues(template, type, {
+      enabledMetricCodes: new Set((metrics ?? []).map((m) => m.metricCode)),
+      availableSetIds: new Set((benchmarkSets ?? []).map((s) => s.id)),
+      enabledBenchmarkIds: {
+        site: new Set(siteBenchmarks.map((b) => b.benchmarkId)),
+        custom: new Set(customBenchmarks.map((b) => b.benchmarkId)),
+      },
+    });
+    setValue("metrics", values.metrics);
+    setValue("siteBenchmarks", values.siteBenchmarks);
+    setValue("customBenchmarks", values.customBenchmarks);
+    setValue("charts", values.charts);
+    setSelectedBenchmarkSetIds(values.benchmarkSetIds);
+    setLoadedTemplate(template);
+    setDroppedCount(dropped);
+  };
+
+  const handleTemplateChange = (id: string) => {
+    const template = templates?.find((t) => t.id === id);
+    if (template) {
+      applyTemplate(template, reportType);
+    } else {
+      setLoadedTemplate(null);
+      setDroppedCount(0);
+    }
+  };
+
+  const handleReportTypeChange = (value: "team" | "individual") => {
+    setValue("reportType", value);
+    // Charts are stored per report type: show the new type's choices, keep the rest as picked
+    if (loadedTemplate) {
+      setValue("charts", templateCharts(loadedTemplate, value));
+    }
+  };
 
   // Chart selection items shown in the step-8 "Charts to include" panel.
   // Individual and team reports show different chart sets (team doesn't use
@@ -335,7 +422,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       return;
     }
 
-    if (!organizationContext) {
+    if (!organizationContext || !setsReady) {
       return;
     }
 
@@ -360,27 +447,14 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       ...(data.reportType === "individual" && { groupComparison: data.groupComparison }),
     };
 
-    // Handle benchmarks - either from set or individual selection
-    if (benchmarkSelectionMode === 'set' && selectedBenchmarkSet?.items?.length) {
-      // Using a benchmark set - extract benchmark IDs from set items
-      const siteBenchmarkIds = selectedBenchmarkSet.items
-        .filter(item => item.benchmarkType === 'site')
-        .map(item => item.benchmarkId);
-      const customBenchmarkIds = selectedBenchmarkSet.items
-        .filter(item => item.benchmarkType === 'custom')
-        .map(item => item.benchmarkId);
-
+    // Sets and individual picks combine into one deduped list; the sets are recorded for traceability
+    const sets = setQueries.map((q) => q.data!);
+    const { site, custom } = resolveBenchmarkSelection(sets, data.siteBenchmarks || [], data.customBenchmarks || []);
+    if (site.length || custom.length) {
       config.benchmarks = {
-        site: siteBenchmarkIds,
-        custom: customBenchmarkIds,
-        // Store set reference for traceability
-        setId: selectedBenchmarkSet.id,
-        setName: selectedBenchmarkSet.name,
-      };
-    } else if (data.siteBenchmarks?.length || data.customBenchmarks?.length) {
-      config.benchmarks = {
-        site: data.siteBenchmarks,
-        custom: data.customBenchmarks,
+        site,
+        custom,
+        ...(sets.length && { setIds: sets.map((s) => s.id), setNames: sets.map((s) => s.name) }),
       };
     }
 
@@ -482,7 +556,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
               <Label>Report Type</Label>
               <RadioGroup
                 value={reportType}
-                onValueChange={(value) => setValue("reportType", value as any)}
+                onValueChange={(value) => handleReportTypeChange(value as "team" | "individual")}
               >
                 <div className="flex items-center gap-x-2 border rounded-lg p-4 cursor-pointer hover:bg-accent">
                   <RadioGroupItem value="team" id="team" />
@@ -505,6 +579,53 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
               </RadioGroup>
               {errors.reportType && (
                 <p className="text-sm text-destructive">{errors.reportType.message}</p>
+              )}
+
+              {templates && templates.length > 0 && (
+                <div className="grid gap-y-2">
+                  <Label htmlFor="report-template">Start from template (optional)</Label>
+                  <div className="flex items-center gap-x-2">
+                    <Select value={loadedTemplate?.id ?? "none"} onValueChange={handleTemplateChange} disabled={!templateListsReady || templateListsFailed}>
+                      <SelectTrigger id="report-template">
+                        <SelectValue placeholder="None" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        {templates.map((t) => (
+                          <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {loadedTemplate && (
+                      <ConfirmationDialog
+                        title="Delete template?"
+                        description={`"${loadedTemplate.name}" will be removed for everyone in your organization. Existing reports are not affected.`}
+                        confirmText="Delete"
+                        onConfirm={() =>
+                          deleteTemplate.mutate(loadedTemplate.id, {
+                            onSuccess: () => handleTemplateChange("none"),
+                            onError: () =>
+                              toast({ title: "Could not delete the template", description: "Please try again.", variant: "destructive" }),
+                          })
+                        }
+                      >
+                        <Button type="button" variant="outline" size="icon" aria-label="Delete template">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </ConfirmationDialog>
+                    )}
+                  </div>
+                  {templateListsFailed && (
+                    <p role="alert" className="text-sm text-destructive">
+                      Templates are unavailable because metrics, benchmarks or benchmark sets failed to load.
+                    </p>
+                  )}
+                  {loadedTemplate && droppedCount > 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      {droppedCount} {droppedCount === 1 ? "item is" : "items are"} no longer available and {droppedCount === 1 ? "was" : "were"} left out.
+                    </p>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -671,115 +792,108 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
             <div className="grid gap-y-4">
               <Label>Benchmarks (Optional)</Label>
               <p className="text-sm text-muted-foreground">
-                Select benchmarks to compare against in the report
+                Add benchmark sets, pick individual benchmarks, or both. The report uses everything chosen.
               </p>
 
-              {/* Selection Mode Toggle */}
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant={benchmarkSelectionMode === 'individual' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => {
-                    setBenchmarkSelectionMode('individual');
-                    setSelectedBenchmarkSetId(null);
-                  }}
-                >
-                  <List className="h-4 w-4 mr-2" />
-                  Select Individual
-                </Button>
-                <Button
-                  type="button"
-                  variant={benchmarkSelectionMode === 'set' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => {
-                    setBenchmarkSelectionMode('set');
-                    // Clear individual selections when switching to set mode
-                    setValue("siteBenchmarks", []);
-                    setValue("customBenchmarks", []);
-                  }}
-                  disabled={!benchmarkSets || benchmarkSets.length === 0}
-                >
-                  <Layers className="h-4 w-4 mr-2" />
-                  Select from Set
-                </Button>
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium leading-none">Benchmark sets</h3>
+                {selectedBenchmarkSetIds.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {selectedBenchmarkSetIds.map((setId, idx) => {
+                      const name = setQueries[idx]?.data?.name ?? benchmarkSets?.find((s) => s.id === setId)?.name ?? "Benchmark set";
+                      return (
+                        <Badge key={setId} variant="secondary" className="gap-1">
+                          {name}
+                          <button
+                            type="button"
+                            aria-label={`Remove ${name}`}
+                            className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            onClick={() => setSelectedBenchmarkSetIds((ids) => ids.filter((id) => id !== setId))}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                )}
+                {!benchmarkSetsLoading && benchmarkSets && benchmarkSets.length > 0 && (
+                  <BenchmarkSetCombobox
+                    organizationId={organizationContext || ""}
+                    value={null}
+                    onChange={(id) =>
+                      id && setSelectedBenchmarkSetIds((ids) => (ids.includes(id) ? ids : [...ids, id]))
+                    }
+                    context={benchmarkSetContext}
+                    placeholder="Add a benchmark set"
+                  />
+                )}
+                {setQueries.map((q, idx) => {
+                  const setId = selectedBenchmarkSetIds[idx];
+                  if (q.isError) {
+                    return (
+                      <div key={setId} role="alert" className="border border-destructive rounded-lg p-3 text-sm text-destructive">
+                        Failed to load a benchmark set. Remove it or retry before continuing.
+                        <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => q.refetch()}>
+                          Retry
+                        </Button>
+                      </div>
+                    );
+                  }
+                  return q.data ? (
+                    <BenchmarkSetPreview key={setId} set={q.data} />
+                  ) : (
+                    <div key={setId} role="status" aria-label="Loading benchmark set" className="flex justify-center py-4">
+                      <LoadingSpinner />
+                    </div>
+                  );
+                })}
+                {multiTierGroup && (
+                  <div role="alert" className="flex items-start gap-x-2 border border-amber-500/50 rounded-lg p-3 text-sm">
+                    <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-amber-600" />
+                    <span>
+                      The chosen sets include more than one tier group for the same metric. Tier distribution
+                      charts show all of them, but the team table badge and PDF label use only the first.
+                    </span>
+                  </div>
+                )}
               </div>
 
-              {/* Set Selection Mode */}
-              {benchmarkSelectionMode === 'set' && (
-                <div className="space-y-4">
-                  {benchmarkSetsLoading ? (
-                    <div className="flex justify-center py-8">
-                      <LoadingSpinner />
-                    </div>
-                  ) : !benchmarkSets || benchmarkSets.length === 0 ? (
-                    <div className="border rounded-lg p-4 text-center text-muted-foreground">
-                      <p>No benchmark sets available</p>
-                      <p className="text-sm mt-1">Create benchmark sets in Benchmark Sets management</p>
-                    </div>
-                  ) : (
-                    <>
-                      <div>
-                        <Label className="mb-2 block">Select a Benchmark Set</Label>
-                        <BenchmarkSetCombobox
-                          organizationId={organizationContext || ""}
-                          value={selectedBenchmarkSetId}
-                          onChange={setSelectedBenchmarkSetId}
-                          context={benchmarkSetContext}
-                          placeholder="Choose a benchmark set"
-                        />
-                      </div>
-
-                      {/* Preview of selected set */}
-                      {selectedBenchmarkSet && (
-                        <BenchmarkSetPreview set={selectedBenchmarkSet} />
-                      )}
-                    </>
-                  )}
+              <h3 className="text-sm font-medium leading-none">Individual benchmarks</h3>
+              {benchmarksLoading ? (
+                <div className="flex justify-center py-8">
+                  <LoadingSpinner />
                 </div>
-              )}
-
-              {/* Individual Selection Mode */}
-              {benchmarkSelectionMode === 'individual' && (
+              ) : (
                 <>
-                  {benchmarksLoading ? (
-                    <div className="flex justify-center py-8">
-                      <LoadingSpinner />
+                  {benchmarksError && (
+                    <div className="border border-destructive rounded-lg p-4 text-center">
+                      <p className="text-sm text-destructive">Failed to load benchmarks</p>
                     </div>
-                  ) : (
-                    <>
-                      {benchmarksError && (
-                        <div className="border border-destructive rounded-lg p-4 text-center">
-                          <p className="text-sm text-destructive">Failed to load benchmarks</p>
-                        </div>
-                      )}
+                  )}
 
-                      {allBenchmarks.length > 0 && (
-                        <BenchmarkChecklist
-                          items={allBenchmarks}
-                          getKey={getBenchmarkKey}
-                          getLabel={getBenchmarkLabel}
-                          getMeta={getBenchmarkMeta}
-                          selected={selectedBenchmarkIds}
-                          onChange={handleBenchmarkSelection}
-                          context={benchmarkListContext}
-                          renderDetail={(b) => (
-                            <span className="text-xs text-muted-foreground">
-                              {b.benchmarkType === "site" ? "Site" : "Custom"}
-                            </span>
-                          )}
-                        />
+                  {allBenchmarks.length > 0 && (
+                    <BenchmarkChecklist
+                      items={allBenchmarks}
+                      getKey={getBenchmarkKey}
+                      getLabel={getBenchmarkLabel}
+                      getMeta={getBenchmarkMeta}
+                      selected={selectedBenchmarkIds}
+                      onChange={handleBenchmarkSelection}
+                      context={benchmarkListContext}
+                      renderDetail={(b) => (
+                        <span className="text-xs text-muted-foreground">
+                          {b.benchmarkType === "site" ? "Site" : "Custom"}
+                        </span>
                       )}
+                    />
+                  )}
 
-                      {!benchmarksError &&
-                       (!siteBenchmarks || siteBenchmarks.length === 0) &&
-                       (!customBenchmarks || customBenchmarks.length === 0) && (
-                        <div className="border rounded-lg p-4 text-center text-muted-foreground">
-                          <p>No enabled benchmarks available</p>
-                          <p className="text-sm mt-1">You can skip this step or enable benchmarks in Settings</p>
-                        </div>
-                      )}
-                    </>
+                  {!benchmarksError && allBenchmarks.length === 0 && (
+                    <div className="border rounded-lg p-4 text-center text-muted-foreground">
+                      <p>No enabled benchmarks available</p>
+                      <p className="text-sm mt-1">You can skip this step or enable benchmarks in Settings</p>
+                    </div>
                   )}
                 </>
               )}
@@ -1028,13 +1142,30 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                 <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
             ) : (
-              <Button type="submit" disabled={createReport.isPending}>
-                {createReport.isPending ? <LoadingSpinner /> : "Create Report"}
-              </Button>
+              <div className="flex gap-x-2">
+                <Button type="button" variant="outline" onClick={() => setSaveTemplateOpen(true)} disabled={!setsReady || setsFailed || selectedMetrics.length === 0}>
+                  Save as template
+                </Button>
+                <Button type="submit" disabled={createReport.isPending || !setsReady || setsFailed}>
+                  {createReport.isPending ? <LoadingSpinner /> : "Create Report"}
+                </Button>
+              </div>
             )}
           </div>
         </form>
       </DialogContent>
+      <SaveReportTemplateDialog
+        open={saveTemplateOpen}
+        onClose={() => setSaveTemplateOpen(false)}
+        organizationId={organizationContext || ""}
+        payload={formToTemplate(
+          { ...getValues(), benchmarkSetIds: selectedBenchmarkSetIds },
+          reportType,
+          loadedTemplate ?? undefined,
+        )}
+        loadedTemplate={loadedTemplate ?? undefined}
+        onSaved={setLoadedTemplate}
+      />
     </Dialog>
   );
 }

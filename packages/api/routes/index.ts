@@ -44,6 +44,7 @@ import { registerEventMeasurementsRoutes } from "./event-measurements-routes";
 import { registerEventResultsRoutes } from "./event-results-routes";
 import { registerEventReportRoutes } from "./event-report-routes";
 import { registerEvalTemplateRoutes } from "./eval-template-routes";
+import { registerReportTemplateRoutes } from "./report-template-routes";
 import enhancedAuthRoutes from "./enhanced-auth";
 import { registerPushNotificationRoutes } from "./push-notification-routes";
 import { registerNotificationPreferencesRoutes } from "./notification-preferences-routes";
@@ -202,6 +203,7 @@ export function registerAllRoutes(app: Express) {
 
   // Eval battery templates and org eval report settings (AM-FEAT-019)
   registerEvalTemplateRoutes(app);
+  registerReportTemplateRoutes(app);
 
   // Event report routes (event-specific reports with event percentiles)
   registerEventReportRoutes(app);
