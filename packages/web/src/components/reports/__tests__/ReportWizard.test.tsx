@@ -1021,6 +1021,14 @@ describe('ReportWizard Component', () => {
     };
     const render_ = () => renderWithQueryClient(<ReportWizard open={true} onClose={mockOnClose} onSuccess={mockOnSuccess} />);
 
+    it('tells the coach where to create a template when the organization has none', async () => {
+      wiz.templates = [];
+      render_();
+      expect(await screen.findByText(/No templates yet/i)).toBeInTheDocument();
+      expect(screen.getByText(/Save as template/i)).toBeInTheDocument();
+      expect(screen.queryByRole('combobox', { name: /Start from template/i })).not.toBeInTheDocument();
+    });
+
     it('prefills metrics, sets, picks and charts from a template and notes what is gone', async () => {
       wiz.sets = [{ id: 'set-a', name: 'Set A' }];
       wiz.setDetails['set-a'] = loaded(setWith('set-a', 'Set A', [['custom-bench-1', 'custom']]));

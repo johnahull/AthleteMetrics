@@ -581,6 +581,11 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                 <p className="text-sm text-destructive">{errors.reportType.message}</p>
               )}
 
+              {templates && templates.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  No templates yet. Choose your metrics and benchmarks, then click Save as template on the last step to reuse them next time.
+                </p>
+              )}
               {templates && templates.length > 0 && (
                 <div className="grid gap-y-2">
                   <Label htmlFor="report-template">Start from template (optional)</Label>
