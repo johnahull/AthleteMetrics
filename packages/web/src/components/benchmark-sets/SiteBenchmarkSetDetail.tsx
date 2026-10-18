@@ -49,10 +49,8 @@ import {
   Layers,
   Globe,
   Loader2,
-  Check,
 } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
-import { cn } from "@/lib/utils";
+import { BenchmarkChecklist } from "@/components/benchmarks/BenchmarkChecklist";
 import { useToast } from "@/hooks/use-toast";
 import { SiteBenchmarkSetForm } from "./SiteBenchmarkSetForm";
 import type { SiteBenchmark } from "@shared/schema";
@@ -110,19 +108,6 @@ export function SiteBenchmarkSetDetail({ setId }: SiteBenchmarkSetDetailProps) {
     const existingIds = new Set(benchmarkSet.items.map((item) => item.benchmarkId));
     return siteBenchmarks.filter((b) => !existingIds.has(b.id));
   }, [siteBenchmarks, benchmarkSet]);
-
-  // Toggle benchmark selection in the add dialog
-  const handleToggleBenchmark = (benchmarkId: string) => {
-    setSelectedBenchmarkIds(prev => {
-      const next = new Set(prev);
-      if (next.has(benchmarkId)) {
-        next.delete(benchmarkId);
-      } else {
-        next.add(benchmarkId);
-      }
-      return next;
-    });
-  };
 
   // Handle adding selected benchmarks to the set (batch add)
   const handleAddSelected = async () => {
@@ -455,61 +440,35 @@ export function SiteBenchmarkSetDetail({ setId }: SiteBenchmarkSetDetailProps) {
               {selectedBenchmarkIds.size > 0 && ` (${selectedBenchmarkIds.size} selected)`}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto py-4">
+          <div className="flex-1 min-h-0 overflow-hidden py-4">
             {availableBenchmarks.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">
                 All site benchmarks are already in this set.
               </p>
             ) : (
-              <div className="space-y-2">
-                {availableBenchmarks.map((benchmark) => {
-                  const isSelected = selectedBenchmarkIds.has(benchmark.id);
-                  return (
-                    <div
-                      key={benchmark.id}
-                      data-benchmark-id={benchmark.id}
-                      role="checkbox"
-                      aria-checked={isSelected}
-                      aria-label={`Select ${benchmark.name}`}
-                      tabIndex={0}
-                      onClick={() => handleToggleBenchmark(benchmark.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === ' ' || e.key === 'Enter') {
-                          e.preventDefault();
-                          handleToggleBenchmark(benchmark.id);
-                        }
-                      }}
-                      className={cn(
-                        "w-full flex items-center gap-3 p-3 border rounded-lg cursor-pointer text-left transition-colors",
-                        isSelected
-                          ? "bg-primary/10 border-primary"
-                          : "hover:bg-muted"
-                      )}
-                    >
-                      <Checkbox
-                        checked={isSelected}
-                        onCheckedChange={() => handleToggleBenchmark(benchmark.id)}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      <div className="flex-1">
-                        <div className="font-medium">{benchmark.name}</div>
-                        <div className="text-sm text-muted-foreground flex items-center gap-2">
-                          <Badge variant="outline" className="text-xs">Site</Badge>
-                          {benchmark.metricCode && <span>{benchmark.metricCode}</span>}
-                          {benchmark.benchmarkValue && (
-                            <span>
-                              {benchmark.comparisonOperator === "lte" ? "≤" :
-                               benchmark.comparisonOperator === "gte" ? "≥" : "="}
-                              {" "}{benchmark.benchmarkValue}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      {isSelected && <Check className="h-5 w-5 text-primary" />}
-                    </div>
-                  );
-                })}
-              </div>
+              <BenchmarkChecklist
+                items={availableBenchmarks}
+                getKey={(b) => b.id}
+                getLabel={(b) => b.name}
+                getMeta={(b) => ({ metricCode: b.metricCode, gender: b.gender, level: b.level, source: b.benchmarkSource })}
+                groupBy={() => ""}
+                selected={[...selectedBenchmarkIds]}
+                onChange={(ids) => setSelectedBenchmarkIds(new Set(ids))}
+                listClassName="max-h-[45vh]"
+                renderDetail={(b) => (
+                  <div className="text-sm text-muted-foreground flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs">Site</Badge>
+                    {b.metricCode && <span>{b.metricCode}</span>}
+                    {b.benchmarkValue && (
+                      <span>
+                        {b.comparisonOperator === "lte" ? "≤" :
+                         b.comparisonOperator === "gte" ? "≥" : "="}
+                        {" "}{b.benchmarkValue}
+                      </span>
+                    )}
+                  </div>
+                )}
+              />
             )}
           </div>
           <DialogFooter>

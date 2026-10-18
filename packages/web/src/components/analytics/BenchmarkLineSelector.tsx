@@ -4,7 +4,6 @@
  */
 
 import React, { useCallback, useMemo } from 'react';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -13,6 +12,8 @@ import { useBenchmarksForMetric } from '@/lib/benchmarks-api';
 import { useMetricConfig } from '@/hooks/use-metric-config';
 import { formatMeasurement } from '@shared/duration-format';
 import { BenchmarkSetQuickLoad } from '@/components/benchmark-sets';
+import { BenchmarkChecklist } from '@/components/benchmarks/BenchmarkChecklist';
+import type { FilterContext } from '@/components/benchmarks/benchmark-filtering';
 
 interface BenchmarkLineSelectorProps {
   organizationId: string;
@@ -21,6 +22,8 @@ interface BenchmarkLineSelectorProps {
   onSelectionChange: (benchmarkIds: string[]) => void;
   /** Optional label prefix (e.g., "Y-Axis" or "X-Axis") */
   labelPrefix?: string;
+  /** Smart-default filter chips (e.g. the athlete's gender) */
+  context?: FilterContext;
 }
 
 /**
@@ -32,7 +35,8 @@ export const BenchmarkLineSelector = React.memo(function BenchmarkLineSelector({
   metricCode,
   selectedBenchmarkIds,
   onSelectionChange,
-  labelPrefix
+  labelPrefix,
+  context
 }: BenchmarkLineSelectorProps) {
   const { data: benchmarks, isLoading, error } = useBenchmarksForMetric(organizationId, metricCode);
   const { getMetricConfig } = useMetricConfig();
@@ -54,15 +58,6 @@ export const BenchmarkLineSelector = React.memo(function BenchmarkLineSelector({
     const base = metricCode.toLowerCase().replace(/[^a-z0-9]/g, '-');
     return `benchmark-selector-${base}`;
   }, [metricCode]);
-
-  // Handle individual checkbox toggle - memoized for performance
-  const handleToggle = useCallback((benchmarkId: string) => {
-    const isSelected = selectedBenchmarkIds.includes(benchmarkId);
-    const newSelection = isSelected
-      ? selectedBenchmarkIds.filter(id => id !== benchmarkId)
-      : [...selectedBenchmarkIds, benchmarkId];
-    onSelectionChange(newSelection);
-  }, [selectedBenchmarkIds, onSelectionChange]);
 
   // Handle "Select All" - adds this metric's benchmarks to existing selection
   const handleSelectAll = useCallback(() => {
@@ -193,6 +188,7 @@ export const BenchmarkLineSelector = React.memo(function BenchmarkLineSelector({
           <BenchmarkSetQuickLoad
             organizationId={organizationId}
             onLoadSet={handleLoadFromSet}
+            context={context}
           />
           <Button
             variant="outline"
@@ -216,64 +212,44 @@ export const BenchmarkLineSelector = React.memo(function BenchmarkLineSelector({
       </div>
 
       {/* Benchmark list */}
-      <div
-        className="space-y-2 max-h-64 overflow-y-auto border rounded-md p-3 bg-gray-50"
-        role="group"
-        aria-labelledby={selectorId}
-        aria-describedby={`${selectorId}-hint`}
-      >
+      <div role="group" aria-labelledby={selectorId} aria-describedby={`${selectorId}-hint`}>
         <span id={`${selectorId}-hint`} className="sr-only">
           Select benchmarks to display as horizontal lines on the chart
         </span>
-        {benchmarks.map((benchmark) => {
-          const isSelected = selectedBenchmarkIds.includes(benchmark.id);
-          const filterBadges = formatFilters(benchmark.filters);
-
-          return (
-            <div
-              key={benchmark.id}
-              className="flex items-start gap-x-3 p-2 rounded hover:bg-gray-100"
-            >
-              <Checkbox
-                id={`benchmark-${benchmark.id}`}
-                checked={isSelected}
-                onCheckedChange={() => handleToggle(benchmark.id)}
-                className="mt-1"
-                aria-describedby={`benchmark-desc-${benchmark.id}`}
-              />
-              <div className="flex-1">
-                <label
-                  htmlFor={`benchmark-${benchmark.id}`}
-                  className="text-sm font-medium cursor-pointer"
-                >
-                  {benchmark.name}
-                </label>
-                <div
-                  id={`benchmark-desc-${benchmark.id}`}
-                  className="flex items-center gap-2 mt-1"
-                >
-                  <span className="text-sm text-muted-foreground">
-                    {benchmark.comparisonOperator === 'range' && benchmark.minValue != null && benchmark.maxValue != null
-                      ? `Target: ${target(benchmark.minValue)} - ${target(benchmark.maxValue)}${unit}`
-                      : benchmark.benchmarkValue != null
-                        ? `Target: ${target(benchmark.benchmarkValue)}${unit} (${benchmark.comparisonOperator === 'lte' ? '≤' : benchmark.comparisonOperator === 'gte' ? '≥' : '='})`
-                        : 'Range benchmark'
-                    }
-                  </span>
-                  {filterBadges.length > 0 && (
-                    <div className="flex gap-1" aria-label="Demographic filters">
-                      {filterBadges.map((badge, index) => (
-                        <Badge key={index} variant="secondary" className="text-xs">
-                          {badge}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                </div>
+        <BenchmarkChecklist
+          items={benchmarks}
+          getKey={(b) => b.id}
+          getLabel={(b) => b.name}
+          getMeta={(b) => ({ gender: b.filters?.gender })}
+          groupBy={() => ''}
+          selected={selectedBenchmarkIds}
+          onChange={onSelectionChange}
+          context={context}
+          renderDetail={(benchmark) => {
+            const filterBadges = formatFilters(benchmark.filters);
+            return (
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-sm text-muted-foreground">
+                  {benchmark.comparisonOperator === 'range' && benchmark.minValue != null && benchmark.maxValue != null
+                    ? `Target: ${target(benchmark.minValue)} - ${target(benchmark.maxValue)}${unit}`
+                    : benchmark.benchmarkValue != null
+                      ? `Target: ${target(benchmark.benchmarkValue)}${unit} (${benchmark.comparisonOperator === 'lte' ? '≤' : benchmark.comparisonOperator === 'gte' ? '≥' : '='})`
+                      : 'Range benchmark'
+                  }
+                </span>
+                {filterBadges.length > 0 && (
+                  <div className="flex gap-1" aria-label="Demographic filters">
+                    {filterBadges.map((badge, index) => (
+                      <Badge key={index} variant="secondary" className="text-xs">
+                        {badge}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-          );
-        })}
+            );
+          }}
+        />
       </div>
     </div>
   );
