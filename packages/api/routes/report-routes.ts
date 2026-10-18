@@ -4299,7 +4299,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
       let lastGroupLabel: string | null = null;
       // Sort by group here rather than trusting the caller, so a group heading is never skipped or repeated
       const statByMetric = new Map<string, any>(reportData.teamStatistics.map((s: any) => [s.metric, s]));
-      const orderedStats = sortCodesByGroups([...statByMetric.keys()], reportData.metricGroups).map((code) => statByMetric.get(code));
+      const orderedStats = sortCodesByGroups([...statByMetric.keys()], reportData.metricGroups).map((code) => statByMetric.get(code)).filter(Boolean);
       for (const stat of orderedStats) {
         // Check if we need a new page for each metric
         if (yPos > 200) {
@@ -4314,13 +4314,14 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
           doc.setFontSize(12);
           doc.setTextColor(100, 100, 100);
           doc.text(groupLabel.toUpperCase(), 14, yPos);
+          doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
           yPos += 6;
         }
-        lastGroupLabel = groupLabel;
+        // An ungrouped metric must not make the next grouped one reprint its heading
+        if (groupLabel) lastGroupLabel = groupLabel;
 
         doc.setFontSize(14);
         if (isVisual) doc.setTextColor(colors.secondary[0], colors.secondary[1], colors.secondary[2]);
-        else doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
         doc.text(reportData.metricLabels?.[stat.metric] || stat.metric, 14, yPos);
         doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
         yPos += 6;
