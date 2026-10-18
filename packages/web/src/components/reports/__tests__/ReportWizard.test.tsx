@@ -1243,7 +1243,8 @@ describe('ReportWizard Component', () => {
     });
 
     it('shows the server message when saving fails with a 400', async () => {
-      wiz.createTemplate.mockRejectedValue(new Error('400: {"message":"Name is too long"}'));
+      // The real route answers { error: "Invalid template", details: zod.flatten() }
+      wiz.createTemplate.mockRejectedValue(new Error('400: {"error":"Invalid template","details":{"formErrors":[],"fieldErrors":{"name":["Name is too long"]}}}'));
       render_();
       await toBenchmarks();
       toLastStep();

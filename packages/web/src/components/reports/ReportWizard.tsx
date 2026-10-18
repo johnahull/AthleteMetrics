@@ -256,10 +256,11 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const goneSetIds = setQueries
     .map((q, i) => ((q.error as { status?: number } | null)?.status === 404 ? selectedBenchmarkSetIds[i] : null))
     .filter((id): id is string => !!id);
-  const goneKey = goneSetIds.join(",");
+  // JSON key: a stable dependency that needs no delimiter, so any id round-trips
+  const goneKey = JSON.stringify(goneSetIds);
   useEffect(() => {
-    if (!goneKey) return;
-    const gone = goneKey.split(",");
+    const gone: string[] = JSON.parse(goneKey);
+    if (gone.length === 0) return;
     setSelectedBenchmarkSetIds((ids) => ids.filter((id) => !gone.includes(id)));
     setDroppedCount((c) => c + gone.length);
   }, [goneKey]);
@@ -337,6 +338,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     if (template) {
       applyTemplate(template, reportType);
     } else {
+      // Choosing "None" detaches the template; the form keeps whatever it seeded (and any edits)
       setLoadedTemplate(null);
       setDroppedCount(0);
     }

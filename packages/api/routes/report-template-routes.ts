@@ -37,7 +37,9 @@ export function registerReportTemplateRoutes(app: Express) {
 
   app.post("/api/organizations/:orgId/report-templates", requireAuth, writeLimiter, async (req, res) => {
     try {
-      if (!(await svc.isOrgWriter(userOf(req), req.params.orgId)) || !(await svc.organizationExists(req.params.orgId))) return res.status(404).json(NOT_FOUND);
+      if (!(await svc.isOrgWriter(userOf(req), req.params.orgId))) return res.status(404).json(NOT_FOUND);
+      // A member's org exists by FK; only a site admin can name an org that does not
+      if (userOf(req).isSiteAdmin && !(await svc.organizationExists(req.params.orgId))) return res.status(404).json(NOT_FOUND);
       const parsed = createReportTemplateSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid template", details: parsed.error.flatten() });
       return res.status(201).json(await svc.createTemplate(req.params.orgId, userOf(req).id, parsed.data));

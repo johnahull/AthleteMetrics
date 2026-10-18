@@ -31,11 +31,13 @@ interface SaveReportTemplateDialogProps {
   onSaved: (template: ReportTemplate) => void;
 }
 
-/** apiRequest errors read "400: <body>"; the body is usually JSON with a message. */
+/** apiRequest errors read "400: <body>"; the route's body is { error, details: zod.flatten() }. */
 function serverMessage(error: string): string | undefined {
   const body = error.slice(error.indexOf(":") + 1).trim();
   try {
-    return JSON.parse(body).message || undefined;
+    const parsed = JSON.parse(body);
+    const fieldMessages = Object.values(parsed.details?.fieldErrors ?? {}).flat() as string[];
+    return fieldMessages[0] || parsed.details?.formErrors?.[0] || parsed.error || undefined;
   } catch {
     return body || undefined;
   }
