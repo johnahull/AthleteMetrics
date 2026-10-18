@@ -50,7 +50,8 @@ export function useUpdateReportTemplate() {
       const res = await apiRequest("PATCH", `/api/report-templates/${id}`, data);
       return res.json();
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: reportTemplateKeys.all }),
+    // The row names its organization, so only that list is refetched
+    onSuccess: (row) => queryClient.invalidateQueries({ queryKey: reportTemplateKeys.list(row.organizationId) }),
   });
 }
 

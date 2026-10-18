@@ -253,6 +253,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const templateListsFailed = !!(metricsError || benchmarksError || benchmarkSetsError);
 
   // A set deleted since the template was saved (404) is dropped and counted as no longer available
+  // Invariant: setQueries[i] is the query for selectedBenchmarkSetIds[i] (useQueries keeps input order)
   const goneSetIds = setQueries
     .map((q, i) => ((q.error as { status?: number } | null)?.status === 404 ? selectedBenchmarkSetIds[i] : null))
     .filter((id): id is string => !!id);
