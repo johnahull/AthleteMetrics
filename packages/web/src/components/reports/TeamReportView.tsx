@@ -152,7 +152,10 @@ export function TeamReportView({ report }: TeamReportViewProps) {
   const teamMetricCodes = Array.isArray(teamStatistics) ? teamStatistics.map((s: TeamStatistic) => s.metric) : [];
   const statByMetric = new Map<string, TeamStatistic>(Array.isArray(teamStatistics) ? teamStatistics.map((s: TeamStatistic) => [s.metric, s]) : []);
   // A metric nobody has a value for gets no card, so it must not leave its group heading behind
-  const codesWithAthletes = teamMetricCodes.filter((c: string) => sortAthletesByMetric(athleteRankings, c, metricTypes?.[c]).length > 0);
+  const sortedByMetric = new Map<string, AthleteRanking[]>(
+    teamMetricCodes.map((c: string) => [c, sortAthletesByMetric(athleteRankings, c, metricTypes?.[c])]),
+  );
+  const codesWithAthletes = teamMetricCodes.filter((c: string) => sortedByMetric.get(c)!.length > 0);
   const hasMeasurements = Array.isArray(athleteRankings) && athleteRankings.length > 0;
   const sel = resolveTeamChartSelection(report.config as TeamReportConfig);
   // Resolved once and passed to the leaderboard/distribution charts below —
@@ -322,7 +325,8 @@ export function TeamReportView({ report }: TeamReportViewProps) {
               <TableBody key={g.group ?? 'all'}>
                 <MetricGroupRowHeading label={g.label} colSpan={4 + benchmarkColumns.length} />
                 {g.codes.map((code) => {
-                  const stat = statByMetric.get(code)!;
+                  const stat = statByMetric.get(code);
+                  if (!stat) return null;
                   // Create a map of benchmark data for this metric (supports both single-value and range benchmarks)
                   const benchmarkMap = new Map<string, { value: number | null; minValue?: number | null; maxValue?: number | null; tierColor?: string }>();
                   if (stat.benchmarks && Array.isArray(stat.benchmarks)) {
@@ -532,9 +536,10 @@ export function TeamReportView({ report }: TeamReportViewProps) {
             <div key={g.group ?? 'all'} className="space-y-6">
               <MetricGroupHeading label={g.label} />
               {g.codes.map((code) => {
-                const stat = statByMetric.get(code)!;
+                const stat = statByMetric.get(code);
+                if (!stat) return null;
                 // codesWithAthletes already dropped metrics nobody recorded
-                const sortedAthletes = sortAthletesByMetric(athleteRankings, stat.metric, metricTypes?.[stat.metric]);
+                const sortedAthletes = sortedByMetric.get(code)!;
 
                 return (
                   <Card key={stat.metric}>
