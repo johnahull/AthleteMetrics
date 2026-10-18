@@ -622,6 +622,9 @@ AthleteMetrics supports Google and Apple OAuth authentication via Passport.js as
 
 **Documentation:** See `docs/OAUTH_AUTHENTICATION.md` for comprehensive setup guide, user flows, and future enhancements.
 
+### Report Templates
+Org-wide saved metrics + benchmark sets/picks + chart choices that prefill the report wizard; wizard step 6 accepts several benchmark sets. See `docs/REPORT_TEMPLATES.md`.
+
 ### Eval Report (AM-FEAT-019)
 Coach-generated, family-facing PDF for one athlete at one evaluation event. Each generation is a saved `reports` row with `reportType = 'eval'` whose `config` holds the frozen `EvalReportModel`; snapshots, shares and public links reuse the existing report plumbing. Data is event-, athlete-, organization- and verified-only; derived metrics are recomputed from per-leg bests; age-group sets are single "Average" rows, so the comparison is above/below average and the PDF never prints tier names. No wellness data; MQI is a band word only.
 

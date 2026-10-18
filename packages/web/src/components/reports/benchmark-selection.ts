@@ -18,3 +18,20 @@ export function splitBenchmarkSelection(
   }
   return { site, custom };
 }
+
+/**
+ * Final benchmark ids for a report: every chosen set's items plus the individual picks,
+ * split by item type and deduped (first occurrence wins).
+ */
+export function resolveBenchmarkSelection(
+  sets: ReadonlyArray<{ items: ReadonlyArray<{ benchmarkId: string; benchmarkType: string }> }>,
+  site: string[],
+  custom: string[],
+): { site: string[]; custom: string[] } {
+  const fromSets = (type: string) =>
+    sets.flatMap((s) => s.items.filter((i) => i.benchmarkType === type).map((i) => i.benchmarkId));
+  return {
+    site: Array.from(new Set([...fromSets("site"), ...site])),
+    custom: Array.from(new Set([...fromSets("custom"), ...custom])),
+  };
+}

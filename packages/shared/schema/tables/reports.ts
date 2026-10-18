@@ -1,13 +1,14 @@
 /**
  * Reports Tables
  *
- * reports, reportSnapshots, reportBenchmarks
+ * reports, reportSnapshots, reportBenchmarks, reportTemplates
  */
 
 import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, integer, decimal, timestamp, date, boolean, unique, index, jsonb, time } from "drizzle-orm/pg-core";
 import { organizations, teams, users } from "./core";
 import { siteMetrics } from "./metrics";
+import type { ChartSelection, TeamChartSelection } from "../../report-charts";
 
 export const reports = pgTable("reports", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -176,3 +177,25 @@ export const reportShares = pgTable("report_shares", {
     .on(table.athleteId)
     .where(sql`${table.dismissedAt} IS NULL`),
 }));
+
+/** Saved metric + benchmark + chart choices a coach picks in the report wizard (migration 0166). */
+export const reportTemplates = pgTable("report_templates", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id", { length: 36 }).notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 200 }).notNull(),
+  description: text("description"),
+  metrics: jsonb("metrics").$type<string[]>().notNull(),
+  // Sets are stored by id, so a new report picks up the set's current contents
+  benchmarkSetIds: jsonb("benchmark_set_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  siteBenchmarkIds: jsonb("site_benchmark_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  customBenchmarkIds: jsonb("custom_benchmark_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  charts: jsonb("charts").$type<{ team?: Partial<TeamChartSelection>; individual?: Partial<ChartSelection> }>().notNull().default(sql`'{}'::jsonb`),
+  createdBy: varchar("created_by", { length: 36 }).references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("report_templates_org_idx").on(table.organizationId),
+  orgNameUniq: unique("report_templates_org_name_uniq").on(table.organizationId, table.name),
+}));
+
+export type ReportTemplate = typeof reportTemplates.$inferSelect;

@@ -17,6 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Benchmark sport/position filter bugs
 
+## [0.29.0] - 2026-10-18
+
+### Added
+- Report templates: save a report's configuration as a template and reuse it; reports can now use multiple benchmark sets. Migration `0166` (#654)
+
+### Fixed
+- Seeded squat jump benchmarks removed. Migration `0165` (#653)
+
 ## [0.28.0] - 2026-10-17
 
 ### Added
