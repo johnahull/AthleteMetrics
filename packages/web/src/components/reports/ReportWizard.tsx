@@ -200,13 +200,18 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
 
   // Default the set picker's chips: sport only when the org's teams agree on one, gender only when chosen
   const wizardGender = watch("gender");
-  const teamSports = Array.from(new Set<string>(
-    (teams ?? []).map((t: { sport?: string | null }) => t.sport).filter((v: unknown): v is string => !!v)
-  ));
-  const benchmarkSetContext = {
-    sports: teamSports.length === 1 ? teamSports : undefined,
-    gender: wizardGender,
-  };
+  const teamSports = useMemo(
+    () =>
+      Array.from(new Set<string>(
+        (teams ?? []).map((t: { sport?: string | null }) => t.sport).filter((v: unknown): v is string => !!v)
+      )),
+    [teams],
+  );
+  const benchmarkSetContext = useMemo(
+    () => ({ sports: teamSports.length === 1 ? teamSports : undefined, gender: wizardGender }),
+    [teamSports, wizardGender],
+  );
+  const benchmarkListContext = useMemo(() => ({ gender: wizardGender }), [wizardGender]);
 
   // Fetch selected benchmark set details
   const { data: selectedBenchmarkSet } = useBenchmarkSet(
@@ -745,7 +750,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                           })}
                           selected={[...(watch("siteBenchmarks") || []), ...(watch("customBenchmarks") || [])]}
                           onChange={handleBenchmarkSelection}
-                          context={{ gender: wizardGender }}
+                          context={benchmarkListContext}
                           renderDetail={(b) => (
                             <span className="text-xs text-muted-foreground">
                               {b.benchmarkType === "site" ? "Site" : "Custom"}

@@ -114,11 +114,13 @@ export function BenchmarkSetCombobox({
     );
   }, [sets, chips, getMeta, query, sportName]);
 
-  const toggleChip = (type: ChipType, chipValue: string) => {
-    const current = chips[type] ?? [];
-    const next = current.includes(chipValue) ? current.filter((v) => v !== chipValue) : [...current, chipValue];
-    setUserChips({ ...chips, [type]: next });
-  };
+  const toggleChip = (type: ChipType, chipValue: string) =>
+    setUserChips((prev) => {
+      const base = prev ?? chips;
+      const current = base[type] ?? [];
+      const next = current.includes(chipValue) ? current.filter((v) => v !== chipValue) : [...current, chipValue];
+      return { ...base, [type]: next };
+    });
 
   const selected = sets?.find((s) => s.id === value);
 

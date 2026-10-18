@@ -101,7 +101,6 @@ export function BenchmarkChecklist<T>({
   );
 
   const selectedSet = useMemo(() => new Set(selected), [selected]);
-  const keyOf = (item: T) => getKey(item);
   const groupKey = (item: T) => (groupBy ? groupBy(item) : getMeta(item).metricCode ?? "");
   const groups = useMemo(
     () => groupItems(visible, groupKey, undefined, (a, b) => a.localeCompare(b)),
@@ -109,10 +108,12 @@ export function BenchmarkChecklist<T>({
     [visible, groupBy, getMeta],
   );
 
+  // Functional update so two toggles in one batch both land (the first touch starts from the shown chips)
   const toggleChip = (type: ChipType, value: string) =>
-    setUserChips(() => {
-      const current = chips[type] ?? [];
-      return { ...chips, [type]: current.includes(value) ? current.filter((v) => v !== value) : [...current, value] };
+    setUserChips((prev) => {
+      const base = prev ?? chips;
+      const current = base[type] ?? [];
+      return { ...base, [type]: current.includes(value) ? current.filter((v) => v !== value) : [...current, value] };
     });
 
   const hasActiveChips = Object.values(chips).some((v) => v && v.length > 0);
@@ -124,7 +125,7 @@ export function BenchmarkChecklist<T>({
   };
   const toggle = (key: string, checked: boolean) => (checked ? addKeys([key]) : removeKeys([key]));
 
-  const visibleKeys = visible.map(keyOf);
+  const visibleKeys = visible.map(getKey);
 
   const tierTotals = useMemo(() => {
     const totals = new Map<string, number>();
@@ -136,7 +137,7 @@ export function BenchmarkChecklist<T>({
   }, [items, getMeta]);
 
   const renderRow = (item: T) => {
-    const key = keyOf(item);
+    const key = getKey(item);
     const id = `${uid}-${key}`;
     return (
       <div key={key} className="flex items-start gap-x-2 py-1">
@@ -168,7 +169,7 @@ export function BenchmarkChecklist<T>({
     return (
       <>
         {[...tierGroups].map(([tierId, tiers]) => {
-          const keys = tiers.map(keyOf);
+          const keys = tiers.map(getKey);
           const count = keys.filter((k) => selectedSet.has(k)).length;
           const id = `${uid}-${groupId}-tier-${tierId}`;
           const name = getTierGroupLabel ? getTierGroupLabel(tiers) : deriveTierGroupName(getLabel(tiers[0]));
@@ -243,7 +244,7 @@ export function BenchmarkChecklist<T>({
         {groups.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No benchmarks match.</p>}
         {groups.map(({ key, items: list }) => {
           const headingId = `${uid}-heading-${key}`;
-          const heading = key ? `${getMetricConfig(key)?.label ?? key} (${list.filter((i) => selectedSet.has(keyOf(i))).length}/${list.length})` : null;
+          const heading = key ? `${getMetricConfig(key)?.label ?? key} (${list.filter((i) => selectedSet.has(getKey(i))).length}/${list.length})` : null;
           return (
             <div key={key} role="group" aria-labelledby={heading ? headingId : undefined}>
               {heading && (

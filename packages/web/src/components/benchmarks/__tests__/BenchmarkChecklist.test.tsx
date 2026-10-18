@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { useState } from "react";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, within, fireEvent, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { BenchmarkChecklist } from "../BenchmarkChecklist";
 
@@ -92,6 +92,17 @@ describe("BenchmarkChecklist", () => {
     expect(spy).toHaveBeenLastCalledWith(["d", "a", "b"]);
     await userEvent.click(screen.getByRole("button", { name: "Clear visible" }));
     expect(spy).toHaveBeenLastCalledWith(["d"]);
+  });
+
+  it("keeps both chips when two are toggled in the same batch", () => {
+    render(<Harness />);
+    const levelGroup = screen.getByRole("group", { name: "Level" });
+    act(() => {
+      fireEvent.click(within(levelGroup).getByRole("button", { name: "College" }));
+      fireEvent.click(within(levelGroup).getByRole("button", { name: "Club" }));
+    });
+    expect(within(levelGroup).getByRole("button", { name: "College" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(levelGroup).getByRole("button", { name: "Club" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("does not offer Select all / Clear all", () => {
