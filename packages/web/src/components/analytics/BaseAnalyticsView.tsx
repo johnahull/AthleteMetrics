@@ -150,7 +150,7 @@ function BaseAnalyticsViewContent({
 
   const selectedGenders = state.filters.genders;
   const singleGender = selectedGenders?.length === 1 ? selectedGenders[0] : undefined;
-  const setPickerContext = React.useMemo<FilterContext | undefined>(
+  const benchmarkPickerContext = React.useMemo<FilterContext | undefined>(
     () => benchmarkContext ?? (singleGender ? { gender: singleGender } : undefined),
     [benchmarkContext, singleGender]
   );
@@ -653,7 +653,7 @@ function BaseAnalyticsViewContent({
                     selectedBenchmarkIds={selectedBenchmarkIds}
                     onSelectionChange={setSelectedBenchmarkIds}
                     labelPrefix={['scatter_plot', 'connected_scatter'].includes(state.selectedChartType) ? 'Y-Axis' : undefined}
-                    context={setPickerContext}
+                    context={benchmarkPickerContext}
                   />
                 )}
                 {/* Secondary metric benchmarks (X-axis in scatter plots) */}
@@ -667,7 +667,7 @@ function BaseAnalyticsViewContent({
                     selectedBenchmarkIds={selectedBenchmarkIds}
                     onSelectionChange={setSelectedBenchmarkIds}
                     labelPrefix="X-Axis"
-                    context={setPickerContext}
+                    context={benchmarkPickerContext}
                   />
                 )}
               </div>

@@ -101,10 +101,14 @@ export function BenchmarkChecklist<T>({
   );
 
   const selectedSet = useMemo(() => new Set(selected), [selected]);
-  const groupKey = (item: T) => (groupBy ? groupBy(item) : getMeta(item).metricCode ?? "");
   const groups = useMemo(
-    () => groupItems(visible, groupKey, undefined, (a, b) => a.localeCompare(b)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    () =>
+      groupItems(
+        visible,
+        (item) => (groupBy ? groupBy(item) : getMeta(item).metricCode ?? ""),
+        undefined,
+        (a, b) => a.localeCompare(b),
+      ),
     [visible, groupBy, getMeta],
   );
 
