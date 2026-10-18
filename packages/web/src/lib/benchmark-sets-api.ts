@@ -73,6 +73,11 @@ export async function fetchBenchmarkSets(
   return response.json();
 }
 
+/** True for the error fetchBenchmarkSet throws when the set is gone (it attaches the HTTP status). */
+export function isBenchmarkSetNotFound(error: unknown): boolean {
+  return (error as { status?: number } | null)?.status === 404;
+}
+
 /**
  * Fetch a single benchmark set with its items
  */

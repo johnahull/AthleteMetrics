@@ -143,6 +143,11 @@ describe('report templates', () => {
       const res = await as('siteAdmin').post(`/api/organizations/${randomUUID()}/report-templates`).send(body('ghost'));
       expect(res.status).toBe(404);
     });
+
+    it('404 on list too when the organization does not exist (site admin)', async () => {
+      const res = await as('siteAdmin').get(`/api/organizations/${randomUUID()}/report-templates`);
+      expect(res.status).toBe(404);
+    });
   });
 
   describe('authorization', () => {

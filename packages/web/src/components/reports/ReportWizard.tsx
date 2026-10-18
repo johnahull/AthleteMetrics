@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useCreateReport } from "@/hooks/use-reports";
 import { useOrganizationMetrics } from "@/lib/metrics-api";
 import { useOrganizationBenchmarks } from "@/lib/benchmarks-api";
-import { useBenchmarkSets, fetchBenchmarkSet, benchmarkSetKeys } from "@/lib/benchmark-sets-api";
+import { useBenchmarkSets, fetchBenchmarkSet, benchmarkSetKeys, isBenchmarkSetNotFound } from "@/lib/benchmark-sets-api";
 import { useReportTemplates, useDeleteReportTemplate, type ReportTemplate } from "@/lib/report-templates-api";
 import { BenchmarkSetPreview } from "@/components/benchmark-sets";
 import { BenchmarkChecklist } from "@/components/benchmarks/BenchmarkChecklist";
@@ -255,7 +255,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   // A set deleted since the template was saved (404) is dropped and counted as no longer available
   // Invariant: setQueries[i] is the query for selectedBenchmarkSetIds[i] (useQueries keeps input order)
   const goneSetIds = setQueries
-    .map((q, i) => ((q.error as { status?: number } | null)?.status === 404 ? selectedBenchmarkSetIds[i] : null))
+    .map((q, i) => (isBenchmarkSetNotFound(q.error) ? selectedBenchmarkSetIds[i] : null))
     .filter((id): id is string => !!id);
   // JSON key: a stable dependency that needs no delimiter, so any id round-trips
   const goneKey = JSON.stringify(goneSetIds);

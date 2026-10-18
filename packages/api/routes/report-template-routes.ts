@@ -26,9 +26,15 @@ function handleError(res: Response, error: unknown) {
 export function registerReportTemplateRoutes(app: Express) {
   const userOf = (req: Request) => req.user as SessionUser;
 
+  /** The caller writes in this organization. A member's org exists by FK; only a site admin can name a missing one. */
+  async function canUseOrg(req: Request) {
+    if (!(await svc.isOrgWriter(userOf(req), req.params.orgId))) return false;
+    return !userOf(req).isSiteAdmin || (await svc.organizationExists(req.params.orgId));
+  }
+
   app.get("/api/organizations/:orgId/report-templates", requireAuth, readLimiter, async (req, res) => {
     try {
-      if (!(await svc.isOrgWriter(userOf(req), req.params.orgId))) return res.status(404).json(NOT_FOUND);
+      if (!(await canUseOrg(req))) return res.status(404).json(NOT_FOUND);
       return res.json(await svc.listTemplates(req.params.orgId));
     } catch (e) {
       return handleError(res, e);
@@ -37,9 +43,7 @@ export function registerReportTemplateRoutes(app: Express) {
 
   app.post("/api/organizations/:orgId/report-templates", requireAuth, writeLimiter, async (req, res) => {
     try {
-      if (!(await svc.isOrgWriter(userOf(req), req.params.orgId))) return res.status(404).json(NOT_FOUND);
-      // A member's org exists by FK; only a site admin can name an org that does not
-      if (userOf(req).isSiteAdmin && !(await svc.organizationExists(req.params.orgId))) return res.status(404).json(NOT_FOUND);
+      if (!(await canUseOrg(req))) return res.status(404).json(NOT_FOUND);
       const parsed = createReportTemplateSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid template", details: parsed.error.flatten() });
       return res.status(201).json(await svc.createTemplate(req.params.orgId, userOf(req).id, parsed.data));
