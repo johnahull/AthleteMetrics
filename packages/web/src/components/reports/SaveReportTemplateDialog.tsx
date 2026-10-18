@@ -127,6 +127,7 @@ export function SaveReportTemplateDialog({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
+              maxLength={2000}
             />
           </div>
           {error && (
