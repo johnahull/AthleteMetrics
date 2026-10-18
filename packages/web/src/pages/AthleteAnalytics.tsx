@@ -18,7 +18,9 @@ export function AthleteAnalytics() {
   // ALL HOOKS MUST BE CALLED FIRST - No early returns before hooks!
   const labels = useContextualLabels();
   const { user, organizationContext } = useAuth();
-  const { teamIds, isLoading: teamsLoading, error: teamsError } = useAthleteTeams();
+  const { teamIds, gender, sports, isLoading: teamsLoading, error: teamsError } = useAthleteTeams();
+
+  const benchmarkContext = React.useMemo(() => ({ gender, sports }), [gender, sports]);
 
   // Header actions for athlete-specific view
   const headerActions = (
@@ -145,6 +147,7 @@ export function AthleteAnalytics() {
       showIndividualAthleteSelection={true} // Show selector to allow athlete selection
       showAnalysisTypeTabs={false} // Hide analysis type tabs for athletes
       initialFilters={initialFilters} // Pre-select athlete's teams
+      benchmarkContext={benchmarkContext}
       className="athlete-analytics"
     />
   );

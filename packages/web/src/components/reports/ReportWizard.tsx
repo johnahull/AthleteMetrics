@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -10,6 +10,9 @@ import { useOrganizationMetrics } from "@/lib/metrics-api";
 import { useOrganizationBenchmarks } from "@/lib/benchmarks-api";
 import { useBenchmarkSets, useBenchmarkSet } from "@/lib/benchmark-sets-api";
 import { BenchmarkSetPreview } from "@/components/benchmark-sets";
+import { BenchmarkChecklist } from "@/components/benchmarks/BenchmarkChecklist";
+import { splitBenchmarkSelection } from "./benchmark-selection";
+import { BenchmarkSetCombobox } from "@/components/benchmark-sets/BenchmarkSetCombobox";
 import {
   Dialog,
   DialogContent,
@@ -37,9 +40,18 @@ import { ChevronLeft, ChevronRight, Layers, List, Users } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { TeamAthleteSelector } from "@/components/ui/team-athlete-selector";
 import type { OrganizationBenchmarkWithDetails } from "@shared/schema";
-import { deriveTierGroupName } from "./report-utils";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { DEFAULT_CHART_SELECTION } from "@shared/report-charts";
+
+// Module-level so BenchmarkChecklist's memos keep stable accessor props across renders
+const getBenchmarkKey = (b: OrganizationBenchmarkWithDetails) => b.benchmarkId;
+const getBenchmarkLabel = (b: OrganizationBenchmarkWithDetails) => b.name;
+const getBenchmarkMeta = (b: OrganizationBenchmarkWithDetails) => ({
+  metricCode: b.metricCode,
+  gender: b.gender,
+  level: b.level,
+  tierGroupId: b.tierGroupId,
+});
 
 const reportConfigSchema = z.object({
   reportType: z.enum(["team", "individual"]),
@@ -102,6 +114,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const {
     register,
     watch,
+    getValues,
     setValue,
     handleSubmit,
     formState: { errors, dirtyFields },
@@ -196,6 +209,21 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     organizationContext || ""
   );
 
+  // Default the set picker's chips: sport only when the org's teams agree on one, gender only when chosen
+  const wizardGender = watch("gender");
+  const teamSports = useMemo(
+    () =>
+      Array.from(new Set<string>(
+        (teams ?? []).map((t: { sport?: string | null }) => t.sport).filter((v: unknown): v is string => !!v)
+      )),
+    [teams],
+  );
+  const benchmarkSetContext = useMemo(
+    () => ({ sports: teamSports.length === 1 ? teamSports : undefined, gender: wizardGender }),
+    [teamSports, wizardGender],
+  );
+  const benchmarkListContext = useMemo(() => ({ gender: wizardGender }), [wizardGender]);
+
   // Fetch selected benchmark set details
   const { data: selectedBenchmarkSet } = useBenchmarkSet(
     organizationContext || "",
@@ -213,70 +241,27 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     [enabledBenchmarks]
   );
 
-  // Helper to render grouped benchmark checkboxes (used for both site and custom)
-  const renderBenchmarkCheckboxes = (benchmarks: any[], fieldName: "siteBenchmarks" | "customBenchmarks", idPrefix: string) => {
-    const tierGroups = new Map<string, any[]>();
-    const individualBenchmarks: any[] = [];
-    for (const benchmark of benchmarks) {
-      if (benchmark.tierGroupId) {
-        const group = tierGroups.get(benchmark.tierGroupId) || [];
-        group.push(benchmark);
-        tierGroups.set(benchmark.tierGroupId, group);
-      } else {
-        individualBenchmarks.push(benchmark);
-      }
-    }
-    return (
-      <>
-        {Array.from(tierGroups.entries()).map(([groupId, tiers]) => {
-          const groupName = tiers[0]?.name ? deriveTierGroupName(tiers[0].name) : groupId;
-          const tierIds = tiers.map(t => t.benchmarkId);
-          const selectedIds = watch(fieldName) || [];
-          const allSelected = tierIds.every(id => selectedIds.includes(id));
-          const someSelected = !allSelected && tierIds.some(id => selectedIds.includes(id));
-          return (
-            <div key={groupId} className="flex items-center gap-x-2">
-              <Checkbox
-                id={`${idPrefix}-group-${groupId}`}
-                checked={someSelected ? 'indeterminate' : allSelected}
-                onCheckedChange={(checked) => {
-                  const current = watch(fieldName) || [];
-                  if (checked) {
-                    setValue(fieldName, [...new Set([...current, ...tierIds])]);
-                  } else {
-                    setValue(fieldName, current.filter((id: string) => !tierIds.includes(id)));
-                  }
-                }}
-              />
-              <Label htmlFor={`${idPrefix}-group-${groupId}`} className="cursor-pointer">
-                {groupName} <span className="text-muted-foreground text-xs">({tiers.length} tiers)</span>
-              </Label>
-            </div>
-          );
-        })}
-        {individualBenchmarks.map((benchmark: any) => (
-          <div key={benchmark.id} className="flex items-center gap-x-2">
-            <Checkbox
-              id={`${idPrefix}-${benchmark.id}`}
-              checked={watch(fieldName)?.includes(benchmark.benchmarkId)}
-              onCheckedChange={(checked) => {
-                const current = watch(fieldName) || [];
-                setValue(
-                  fieldName,
-                  checked
-                    ? [...current, benchmark.benchmarkId]
-                    : current.filter((id: string) => id !== benchmark.benchmarkId)
-                );
-              }}
-            />
-            <Label htmlFor={`${idPrefix}-${benchmark.id}`} className="cursor-pointer">
-              {benchmark.name}
-            </Label>
-          </div>
-        ))}
-      </>
-    );
-  };
+  // One merged picker; split the chosen benchmarkIds back into the two form fields by type
+  const allBenchmarks = useMemo(() => [...siteBenchmarks, ...customBenchmarks], [siteBenchmarks, customBenchmarks]);
+  const handleBenchmarkSelection = useCallback(
+    (ids: string[]) => {
+      const { site, custom } = splitBenchmarkSelection(
+        ids,
+        new Set(siteBenchmarks.map((b) => b.benchmarkId)),
+        new Set(customBenchmarks.map((b) => b.benchmarkId)),
+        { site: getValues("siteBenchmarks") || [], custom: getValues("customBenchmarks") || [] },
+      );
+      setValue("siteBenchmarks", site);
+      setValue("customBenchmarks", custom);
+    },
+    [siteBenchmarks, customBenchmarks, getValues, setValue],
+  );
+  const watchedSiteIds = watch("siteBenchmarks");
+  const watchedCustomIds = watch("customBenchmarks");
+  const selectedBenchmarkIds = useMemo(
+    () => [...(watchedSiteIds || []), ...(watchedCustomIds || [])],
+    [watchedSiteIds, watchedCustomIds],
+  );
 
   // Chart selection items shown in the step-8 "Charts to include" panel.
   // Individual and team reports show different chart sets (team doesn't use
@@ -736,29 +721,13 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                     <>
                       <div>
                         <Label className="mb-2 block">Select a Benchmark Set</Label>
-                        <Select
-                          value={selectedBenchmarkSetId || ""}
-                          onValueChange={(value) => {
-                            setSelectedBenchmarkSetId(value || null);
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Choose a benchmark set" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {benchmarkSets.map((set) => (
-                              <SelectItem key={set.id} value={set.id}>
-                                <div className="flex items-center gap-2">
-                                  <Layers className="h-4 w-4 text-muted-foreground" />
-                                  <span>{set.name}</span>
-                                  {set.sport && (
-                                    <span className="text-xs text-muted-foreground">({set.sport})</span>
-                                  )}
-                                </div>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <BenchmarkSetCombobox
+                          organizationId={organizationContext || ""}
+                          value={selectedBenchmarkSetId}
+                          onChange={setSelectedBenchmarkSetId}
+                          context={benchmarkSetContext}
+                          placeholder="Choose a benchmark set"
+                        />
                       </div>
 
                       {/* Preview of selected set */}
@@ -785,22 +754,21 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                         </div>
                       )}
 
-                      {siteBenchmarks && siteBenchmarks.length > 0 && (
-                        <div>
-                          <h4 className="font-medium mb-2">Site Benchmarks</h4>
-                          <div className="space-y-2 border rounded-lg p-4 max-h-48 overflow-y-auto">
-                            {renderBenchmarkCheckboxes(siteBenchmarks, "siteBenchmarks", "site")}
-                          </div>
-                        </div>
-                      )}
-
-                      {customBenchmarks && customBenchmarks.length > 0 && (
-                        <div>
-                          <h4 className="font-medium mb-2">Custom Benchmarks</h4>
-                          <div className="space-y-2 border rounded-lg p-4 max-h-48 overflow-y-auto">
-                            {renderBenchmarkCheckboxes(customBenchmarks, "customBenchmarks", "custom")}
-                          </div>
-                        </div>
+                      {allBenchmarks.length > 0 && (
+                        <BenchmarkChecklist
+                          items={allBenchmarks}
+                          getKey={getBenchmarkKey}
+                          getLabel={getBenchmarkLabel}
+                          getMeta={getBenchmarkMeta}
+                          selected={selectedBenchmarkIds}
+                          onChange={handleBenchmarkSelection}
+                          context={benchmarkListContext}
+                          renderDetail={(b) => (
+                            <span className="text-xs text-muted-foreground">
+                              {b.benchmarkType === "site" ? "Site" : "Custom"}
+                            </span>
+                          )}
+                        />
                       )}
 
                       {!benchmarksError &&
