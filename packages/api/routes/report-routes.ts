@@ -4305,9 +4305,10 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
         if (yPos > 200) {
           doc.addPage();
           yPos = 20;
+          lastGroupLabel = null;
         }
 
-        // teamStatistics is already in group order: print a group heading only when the group changes
+        // Print a group heading when the group changes, and again at the top of a new page
         const groupLabel = groupLabelFor(stat.metric, reportData.metricGroups);
         if (groupLabel && groupLabel !== lastGroupLabel) {
           doc.setFontSize(12);
