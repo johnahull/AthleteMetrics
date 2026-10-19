@@ -23,6 +23,7 @@
 > 0164 (women's-soccer 20 / 30 / 40 yd benchmarks re-sourced from Vescovi 2011 or switched off, AM-FEAT-022) is provisional: renumber at merge if another branch lands 0164 first (file, `_down`, tests `migration-0164-*` and `eval-report-yard-sprint-corrected`, tracking row, this line).
 > 0165 (removes the 12 seeded JUMP_SJ_HEIGHT benchmarks and their set items; metric, EUR and measurements stay) is provisional: renumber at merge if another branch lands 0165 first (file, `_down`, test, tracking row, this line).
 > 0166 (report_templates: saved metrics, benchmark sets and chart choices for the report wizard) is provisional: renumber at merge if another branch lands 0166 first (file, `_down`, test `migration-0166-report-templates`, tracking row, this line).
+> 0167 (renames the 16 EUR / RSI tier benchmarks seeded by 0137 to `<Group> - <Tier>` so the group label is EUR, RSI Left, RSI Right or RSI Asymmetry; 0137 must not be replayed after it) is provisional: renumber at merge if another branch lands 0167 first (file, `_down`, test `migration-0167-rename-eur-rsi-tier-groups`, tracking row, this line).
 
 ## Current State (2025-10-30)
 

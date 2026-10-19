@@ -120,6 +120,22 @@ describe('evaluateTierBenchmark', () => {
     expect(c.tierName).toBe('Varsity');
     expect(c.coachingNote).toBe('Push harder');
   });
+
+  it('labels the EUR group "EUR" with the tier names as migration 0167 renames them', () => {
+    const tg = 'e0eeeeee-0137-4eee-9eee-eeeeeeeeeeee';
+    const eurTiers = [
+      { tierGroupId: tg, tierName: 'Elite reactive', tierColor: 'green', tierOrder: 1, minValue: '1.25', maxValue: '1.5', name: 'EUR - Elite Reactive (>1.25)' },
+      { tierGroupId: tg, tierName: 'Trained reactive', tierColor: 'blue', tierOrder: 2, minValue: '1.15', maxValue: '1.249', name: 'EUR - Trained Reactive (1.15–1.25)' },
+      { tierGroupId: tg, tierName: 'Functional SSC use', tierColor: 'gray', tierOrder: 3, minValue: '1.05', maxValue: '1.149', name: 'EUR - Functional SSC Use (1.05–1.15)' },
+      { tierGroupId: tg, tierName: 'Concentric-dominant', tierColor: 'yellow', tierOrder: 4, minValue: '0', maxValue: '1.049', name: 'EUR - Concentric Dominant (<1.05)' },
+    ];
+    const c = evaluateTierBenchmark(1.02, false, eurTiers)!;
+    expect(c.benchmarkName).toBe('EUR');
+    expect(c.tierName).toBe('Concentric-dominant');
+    expect(c.nextTierName).toBe('Functional SSC use');
+    expect(c.distanceToNextTier).toBeCloseTo(0.03);
+    expect(c.isBestTier).toBe(false);
+  });
 });
 
 describe('selectTierGroup', () => {
