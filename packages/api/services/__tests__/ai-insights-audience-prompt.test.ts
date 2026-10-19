@@ -58,10 +58,16 @@ describe('buildPrompt audience branches', () => {
       const data = makeBaseReportData({ audience: 'coach' });
       const prompt = buildPrompt(data);
 
-      expect(prompt).toContain('**Summary**');
-      expect(prompt).toContain("**What's Going Well**");
-      expect(prompt).toContain('**What to Work On**');
-      expect(prompt).toContain('**Next Steps**');
+      expect(prompt).toContain('\n## Summary\n');
+      expect(prompt).toContain("\n## What's Going Well\n");
+      expect(prompt).toContain('\n## What to Work On\n');
+      expect(prompt).toContain('\n## Next Steps\n');
+    });
+
+    it('gives team reports more room than individual ones', () => {
+      const prompt = buildPrompt(makeBaseReportData({ reportType: 'team', athleteName: undefined }));
+
+      expect(prompt).toContain('200-350 words');
     });
 
     it('should request 150-250 words for coach audience', () => {
@@ -94,10 +100,10 @@ describe('buildPrompt audience branches', () => {
       const data = makeBaseReportData({ audience: 'athlete' });
       const prompt = buildPrompt(data);
 
-      expect(prompt).toContain('**Summary**');
-      expect(prompt).toContain("**What's Going Well**");
-      expect(prompt).toContain('**What to Work On**');
-      expect(prompt).not.toContain('**Next Steps**');
+      expect(prompt).toContain('\n## Summary\n');
+      expect(prompt).toContain("\n## What's Going Well\n");
+      expect(prompt).toContain('\n## What to Work On\n');
+      expect(prompt).not.toContain('\n## Next Steps\n');
     });
 
     it('should request 150-200 words for athlete audience', () => {
@@ -143,11 +149,11 @@ describe('buildPrompt audience branches', () => {
       const data = makeBaseReportData({ audience: 'parent' });
       const prompt = buildPrompt(data);
 
-      expect(prompt).toContain("**What the numbers mean**");
-      expect(prompt).toContain("**What's Going Well**");
-      expect(prompt).toContain('**What to Work On**');
+      expect(prompt).toContain("\n## What the numbers mean\n");
+      expect(prompt).toContain("\n## What's Going Well\n");
+      expect(prompt).toContain('\n## What to Work On\n');
       expect(prompt).not.toContain('**Why Continued Training Matters**');
-      expect(prompt).not.toContain('**Next Steps**');
+      expect(prompt).not.toContain('\n## Next Steps\n');
     });
 
     it('should use the athlete first name throughout', () => {

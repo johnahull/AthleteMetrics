@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildPrompt, ReportData, SYSTEM_PROMPT } from '../ai-insights-service';
+import { buildPrompt, INSIGHT_HEADINGS, ReportData, SYSTEM_PROMPT } from '../ai-insights-service';
 
 /**
  * buildPrompt: no fake trend arrows, team spread stats, the real comparison group,
@@ -155,5 +155,56 @@ describe('buildPrompt event context', () => {
 
   it('prints the name alone when there is no date', () => {
     expect(buildPrompt(individual({ eventName: 'Combine' }))).toContain('- Event: Combine\n');
+  });
+});
+
+describe('buildPrompt output spec', () => {
+  it.each(['coach', 'athlete', 'parent'] as const)('lists the fixed %s headings as heading lines, in order', (audience) => {
+    const prompt = buildPrompt(individual({ audience }));
+    const positions = INSIGHT_HEADINGS[audience].map(h => prompt.indexOf(`\n## ${h}\n`));
+    expect(positions.every(p => p > prompt.indexOf('</report_data>'))).toBe(true);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+  });
+
+  it('tells the model to use exactly those headings as level-2 headings', () => {
+    expect(SYSTEM_PROMPT).toMatch(/exactly the headings .* level-2 markdown heading/);
+  });
+});
+
+describe('grounded recommendations (system prompt)', () => {
+  it('requires every claim to cite a metric and its value', () => {
+    expect(SYSTEM_PROMPT).toContain('names the metric and cites its value');
+  });
+
+  it('ties next steps to a named metric gap and allows general advice only with a gap', () => {
+    expect(SYSTEM_PROMPT).toMatch(/ties to a named metric gap from the Key Facts or Areas of Concern/);
+    expect(SYSTEM_PROMPT).toMatch(/general training advice only attached to such a gap/i);
+  });
+
+  it('says to state when the data is limited', () => {
+    expect(SYSTEM_PROMPT).toMatch(/data is limited.*say so/);
+  });
+});
+
+describe('buildPrompt framing by report type', () => {
+  it('frames a team report as aggregate-only', () => {
+    expect(buildPrompt(team())).toContain('This is a team report');
+    expect(buildPrompt(individual())).not.toContain('This is a team report');
+  });
+
+  it('frames an event report as one testing event', () => {
+    expect(buildPrompt(individual({ eventName: 'Combine' }))).toContain('one testing event');
+    expect(buildPrompt(individual())).not.toContain('one testing event');
+  });
+
+  it('frames a report with change over time as a trend report', () => {
+    const trend = individual({ keyFacts: ['Biggest change: Fly, improved 2.0% (from 1.50 s to 1.47 s)'] });
+    expect(buildPrompt(trend)).toContain('includes history over time');
+    expect(buildPrompt(individual())).not.toContain('includes history over time');
+  });
+
+  it('puts the framing after the data, with the instructions', () => {
+    const prompt = buildPrompt(team());
+    expect(prompt.indexOf('This is a team report')).toBeGreaterThan(prompt.indexOf('</report_data>'));
   });
 });
