@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { openaiSpy, anthropicSpy, googleSpy } = vi.hoisted(() => ({
+const { openaiSpy, anthropicSpy, googleSpy, googleModelSpy } = vi.hoisted(() => ({
   openaiSpy: vi.fn(),
   anthropicSpy: vi.fn(),
   googleSpy: vi.fn(),
+  googleModelSpy: vi.fn(),
 }));
 
 vi.mock('openai', () => ({
@@ -14,11 +15,29 @@ vi.mock('@anthropic-ai/sdk', () => ({
 }));
 vi.mock('@google/generative-ai', () => ({
   GoogleGenerativeAI: vi.fn().mockImplementation(() => ({
-    getGenerativeModel: () => ({ generateContent: googleSpy }),
+    getGenerativeModel: googleModelSpy.mockImplementation(() => ({ generateContent: googleSpy })),
   })),
 }));
+// No Google or legacy-style OpenAI model is selectable today; add one of each so those request shapes stay tested
+vi.mock('@shared/ai-models', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@shared/ai-models')>();
+  return {
+    ...original,
+    AI_MODEL_REGISTRY: [
+      ...original.AI_MODEL_REGISTRY,
+      {
+        key: 'gemini-test', provider: 'google', apiModelId: 'gemini-test', label: 'Gemini Test', description: 'test',
+        tier: 'budget', costPer1M: { input: 0, output: 0 }, requestStyle: 'legacy', selectable: true,
+      },
+      {
+        key: 'gpt-legacy-test', provider: 'openai', apiModelId: 'gpt-legacy-test', label: 'GPT Legacy Test', description: 'test',
+        tier: 'budget', costPer1M: { input: 0, output: 0 }, requestStyle: 'legacy', selectable: true,
+      },
+    ],
+  };
+});
 
-import { AI_MODELS, generateCoachingInsights, ReportData } from '../ai-insights-service';
+import { AI_MODELS, generateCoachingInsights, ReportData, SYSTEM_PROMPT } from '../ai-insights-service';
 
 // Request shape per provider / request style (see packages/shared/ai-models.ts)
 
@@ -89,8 +108,21 @@ describe('request parameters', () => {
     await generateCoachingInsights('claude-haiku-4.5', reportData);
     const params = anthropicSpy.mock.calls[0][0];
     expect(params.model).toBe('claude-haiku-4-5-20251001');
-    expect(params.temperature).toBe(0.7);
+    expect(params.temperature).toBe(0.3);
     expect(params.max_tokens).toBe(2048);
+  });
+
+  it('sends a low temperature for legacy-style OpenAI models', async () => {
+    await generateCoachingInsights('gpt-legacy-test' as any, reportData);
+    const params = openaiSpy.mock.calls[0][0];
+    expect(params.temperature).toBe(0.3);
+    expect(params.max_tokens).toBe(2048);
+    expect(params).not.toHaveProperty('reasoning_effort');
+  });
+
+  it('sends a low temperature to Google', async () => {
+    await generateCoachingInsights('gemini-test' as any, reportData);
+    expect(googleSpy.mock.calls[0][0].generationConfig).toMatchObject({ temperature: 0.3, maxOutputTokens: 2048 });
   });
 
   it('omits temperature for no-sampling Anthropic models', async () => {
@@ -102,6 +134,31 @@ describe('request parameters', () => {
     // Sonnet 5.5 runs adaptive thinking (effort high) by default and thinking tokens count against
     // max_tokens; between_tools is the documented way to keep thinking off for a plain generation
     expect(params.thinking).toEqual({ type: 'between_tools' });
+  });
+
+  it('sends the shared system prompt as the OpenAI system message and the data as the user message', async () => {
+    await generateCoachingInsights('gpt-6-luna', reportData);
+    const [system, user] = openaiSpy.mock.calls[0][0].messages;
+    expect(system).toEqual({ role: 'system', content: SYSTEM_PROMPT });
+    expect(user.role).toBe('user');
+    expect(user.content).toContain('<report_data>');
+    expect(user.content).not.toContain(SYSTEM_PROMPT);
+  });
+
+  it('sends the shared system prompt as the Anthropic system parameter', async () => {
+    await generateCoachingInsights('claude-sonnet-5.5', reportData);
+    const params = anthropicSpy.mock.calls[0][0];
+    expect(params.system).toBe(SYSTEM_PROMPT);
+    expect(params.messages).toEqual([{ role: 'user', content: expect.stringContaining('<report_data>') }]);
+  });
+
+  it('sends the shared system prompt as the Google systemInstruction', async () => {
+    googleModelSpy.mockClear();
+    expect(await generateCoachingInsights('gemini-test' as any, reportData)).toBe('insights');
+    expect(googleModelSpy).toHaveBeenCalledWith({ model: 'gemini-test', systemInstruction: SYSTEM_PROMPT });
+    const request = googleSpy.mock.calls[0][0];
+    expect(request.contents).toEqual([{ role: 'user', parts: [{ text: expect.stringContaining('<report_data>') }] }]);
+    expect(request.contents[0].parts[0].text).not.toContain(SYSTEM_PROMPT);
   });
 
   it('does not send a thinking config for legacy-style Anthropic models', async () => {

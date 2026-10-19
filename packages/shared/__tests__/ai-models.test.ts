@@ -110,11 +110,11 @@ describe('findModelsNearRetirement', () => {
 
 describe('estimateCostPer100Reports', () => {
   it('prices the assumed tokens per report at the per-million rates, times 100 reports', () => {
-    // 1,000 input + 1,000 output tokens per report
-    expect(ESTIMATED_TOKENS_PER_REPORT).toEqual({ input: 1000, output: 1000 });
-    expect(estimateCostPer100Reports({ input: 0.1, output: 0.5 })).toBeCloseTo(0.06, 6); // GPT-6 Luna
-    expect(estimateCostPer100Reports({ input: 2, output: 10 })).toBeCloseTo(1.2, 6); // GPT-6 Sol / Sonnet 5.5
-    expect(estimateCostPer100Reports({ input: 1, output: 5 })).toBeCloseTo(0.6, 6); // Haiku 4.5
+    // 1,300 input + 1,000 output tokens per report
+    expect(ESTIMATED_TOKENS_PER_REPORT).toEqual({ input: 1300, output: 1000 });
+    expect(estimateCostPer100Reports({ input: 0.1, output: 0.5 })).toBeCloseTo(0.063, 6); // GPT-6 Luna
+    expect(estimateCostPer100Reports({ input: 2, output: 10 })).toBeCloseTo(1.26, 6); // GPT-6 Sol / Sonnet 5.5
+    expect(estimateCostPer100Reports({ input: 1, output: 5 })).toBeCloseTo(0.63, 6); // Haiku 4.5
   });
 
   it('scales linearly with price', () => {

@@ -7,15 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- Organization custom metrics feature (#291)
-- Sport and position filters for benchmarks (#290)
+## [0.30.0] - 2026-10-19
 
-### Changed
-- Split schema.ts into domain-based file structure (#289)
+### Added
+- AI insights: shared system prompt, grounded recommendations, trend improvements and event context in the prompt, plus an offline eval harness (`scripts/eval-ai-insights.ts`) (#659, #660)
 
 ### Fixed
-- Benchmark sport/position filter bugs
+- AI insights prompt now grounded in real stats, benchmark facts and data limits (#658)
+- EUR / RSI tier benchmarks renamed so the athlete profile shows the right group label (EUR, RSI Left, RSI Right, RSI Asymmetry). Migration `0167` (#657)
+
+### Changed
+- Dependencies: @radix-ui/react-slider 1.6.1, @radix-ui/react-radio-group 1.5.1, @tanstack/react-query 5.104.3 (#662, #663, #664)
 
 ## [0.29.0] - 2026-10-18
 
