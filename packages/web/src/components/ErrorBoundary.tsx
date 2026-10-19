@@ -11,12 +11,16 @@ interface Props {
   children: ReactNode;
   fallback?: ReactNode;
   onError?: (error: Error, errorInfo: ErrorInfo) => void;
+  /** When this value changes (e.g. the route path; query-string-only changes do not count), a shown error is cleared and children render again */
+  resetKey?: string;
 }
 
 interface State {
   hasError: boolean;
   error?: Error;
   errorId: string;
+  /** The resetKey the current state was derived from */
+  resetKey?: string;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
@@ -24,11 +28,18 @@ export class ErrorBoundary extends Component<Props, State> {
     super(props);
     this.state = { 
       hasError: false,
-      errorId: Math.random().toString(36).substr(2, 9)
+      errorId: Math.random().toString(36).substr(2, 9),
+      resetKey: props.resetKey
     };
   }
 
-  static getDerivedStateFromError(error: Error): State {
+  // Clears the error in the same render the key changes, so children are not rendered (and logged) twice
+  static getDerivedStateFromProps(props: Props, state: State): Partial<State> | null {
+    if (props.resetKey === state.resetKey) return null;
+    return { resetKey: props.resetKey, ...(state.hasError ? { hasError: false, error: undefined } : {}) };
+  }
+
+  static getDerivedStateFromError(error: Error): Partial<State> {
     return { 
       hasError: true, 
       error,

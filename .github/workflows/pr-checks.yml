@@ -30,6 +30,9 @@ jobs:
       - name: Run type check
         run: npm run check
 
+      - name: Check rules of hooks
+        run: npm run lint:hooks
+
   tests:
     name: Unit Tests
     runs-on: ubuntu-latest

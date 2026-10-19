@@ -132,6 +132,11 @@ function AthleteIndividualReportView({ report }: { report: Report }) {
     }
   };
 
+  // Backstop label resolution with the org's currently-active metric labels —
+  // see the matching block in AthleteTeamReportView below for rationale.
+  // A hook, so it must run before the early returns below.
+  const { getLabel } = useMetricLabels();
+
   if (generateReport.isPending || !reportData) {
     return <ReportLoadingState message="Loading report..." />;
   }
@@ -147,9 +152,6 @@ function AthleteIndividualReportView({ report }: { report: Report }) {
 
   const { athlete, metricLabels, metricUnits, metricFormats } = reportData;
   const showComparison = isGroupComparisonOn(reportData.reportConfig);
-  // Backstop label resolution with the org's currently-active metric labels —
-  // see the matching block in AthleteTeamReportView below for rationale.
-  const { getLabel } = useMetricLabels();
   const resolveLabel = (code: string) => metricLabels?.[code] ?? getLabel(code);
 
   return (
@@ -347,6 +349,11 @@ function AthleteTeamReportView({ report }: { report: Report }) {
     downloadPdf({ format });
   };
 
+  // Backstop label resolution with the org's currently-active metric labels in
+  // case the report payload omits a code (e.g. custom org metric added after
+  // the report ran but before it rendered). A hook, so it must run before the early returns.
+  const { getLabel, types: metricTypes } = useMetricLabels();
+
   if (generateReport.isPending || !reportData) {
     return <ReportLoadingState message="Loading report..." />;
   }
@@ -361,10 +368,6 @@ function AthleteTeamReportView({ report }: { report: Report }) {
   }
 
   const { teamStatistics, athleteRankings, generatedAt, metricLabels, metricUnits, metricFormats } = reportData;
-  // Backstop label resolution with the org's currently-active metric labels in
-  // case the report payload omits a code (e.g. custom org metric added after
-  // the report ran but before it rendered).
-  const { getLabel, types: metricTypes } = useMetricLabels();
   const resolveLabel = (code: string) => metricLabels?.[code] ?? getLabel(code);
 
   // Collect all unique benchmark names

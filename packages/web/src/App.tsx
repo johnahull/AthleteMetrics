@@ -1,9 +1,10 @@
 import React, { Suspense, useEffect } from "react";
-import { Switch, Route, Redirect } from "wouter";
+import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { RouteWrapper } from "./components/RouteWrapper";
 import { AuthProvider } from "./lib/auth";
@@ -602,6 +603,7 @@ function Router() {
 
 function AppContent() {
   const { isHelpOpen, closeHelp } = useCommandPalette();
+  const [location] = useLocation();
 
   return (
     <Layout>
@@ -612,7 +614,19 @@ function AppContent() {
       <KeyboardShortcutsHelp isOpen={isHelpOpen} onClose={closeHelp} />
       <PWAInstallPrompt />
       <OnboardingTour />
-      <Router />
+      {/* Without this a render error on any route unmounts the whole tree and leaves a blank screen */}
+      <ErrorBoundary
+        resetKey={location}
+        fallback={
+          <div className="container mx-auto py-8" role="alert">
+            <p className="font-medium">Something went wrong loading this page.</p>
+            <p className="text-sm text-muted-foreground mt-1">Try reloading, or use the menu to go somewhere else.</p>
+            <Button variant="outline" className="mt-4" onClick={() => window.location.reload()}>Reload</Button>
+          </div>
+        }
+      >
+        <Router />
+      </ErrorBoundary>
     </Layout>
   );
 }
