@@ -131,6 +131,15 @@ describe('checkInsights on recorded samples', () => {
     expect(failures).toContain("missing headings: What's Going Well");
   });
 
+  it('flags past-tense change words without history, but not training advice that uses bare verbs', () => {
+    const data = { ...golden('individual-benchmarks').data, audience: 'coach' as const };
+    const failures = (output: string) => checkInsights({ output, data }).find(f => f.startsWith('change over time'));
+    expect(failures('Speed dropped and the jump increased; agility regressed, power grew, rose, fell, gained and lost ground.'))
+      .toBe('change over time claimed without history: dropped, increased, regressed, grew, rose, fell, gained, lost');
+    expect(failures('Sprint work aims to increase top speed and decrease ground contact time; drop-in jumps help you gain power.'))
+      .toBeUndefined();
+  });
+
   it('reports small integers separately: they are weak evidence of grounding', () => {
     const failures = checkInsights({
       output: '## Summary\nx\n## What\'s Going Well\nx\n## What to Work On\n2 gaps\n## Next Steps\nx',

@@ -53,9 +53,13 @@ export function unmeasuredQualities(output: string): string[] {
   return output.match(/\b(?:effort|attitude|coachab\w*|works? hard|lazy|motivat\w*)\b/gi) ?? [];
 }
 
-/** Words that describe change over time (only allowed when the report has history). */
+/**
+ * Words that describe change over time (only allowed when the report has history). Past-tense forms
+ * only: bare verbs such as "increase" also appear in legitimate training advice.
+ */
 function changeWords(output: string): string[] {
-  return [...new Set(output.match(/\b(?:improv\w*|declin\w*|since (?:the )?last)\b/gi) ?? [])];
+  const pattern = /\b(?:improv\w*|declin\w*|since (?:the )?last|increased|decreased|dropped|regressed|grew|rose|fell|gained|lost|slowed|worsened|dipped)\b/gi;
+  return [...new Set(output.match(pattern) ?? [])];
 }
 
 /** Names (or name parts of 3+ letters) that appear in the output as whole words, ignoring case. */
