@@ -402,12 +402,65 @@ describe('buildReportDataForAI — trends', () => {
       },
     };
     const data = await buildReportDataForAI(trendsOn(teamReport), 'u1', service(teamData({ teamTrends })));
-    expect(data.improvements).toEqual([{ metric: 'Vertical Jump', improvement: 'team average improved 5.0% (from 24.00 in to 25.20 in)' }]);
-    expect(data.keyFacts).toContain('Biggest change: Vertical Jump, team average improved 5.0% (from 24.00 in to 25.20 in)');
+    // The athletes tested can differ between dates, so the wording says whose average it is
+    expect(data.improvements).toEqual([{ metric: 'Vertical Jump', improvement: 'team average (athletes tested on each date) improved 5.0% (from 24.00 in to 25.20 in)' }]);
+    expect(data.keyFacts).toContain('Biggest change: Vertical Jump, team average (athletes tested on each date) improved 5.0% (from 24.00 in to 25.20 in)');
     expect(data.dataConfidence).toContain('history over time for 1 metric');
     const prompt = buildPrompt(data);
     expect(prompt).not.toContain('Hidden Athlete');
     expect(prompt).not.toContain('40.00');
+  });
+
+  const delta = (from: number, to: number, pct: number) => ({
+    series: [{ date: '2024-01-15', value: from }, { date: '2024-03-15', value: to }], direction: 'higher', delta: { from, to, pct },
+  });
+
+  it('skips no-baseline, NaN and below-print-precision deltas; none can win Biggest change', async () => {
+    const data = await buildReportDataForAI(trendsOn(individualReport), 'u1', service(individualData({
+      trends: { VERTICAL_JUMP: delta(0, 27.5, 0), FLY10_TIME: delta(1.5, 1.52, NaN) },
+    })));
+    expect(data.improvements).toEqual([]);
+    expect(JSON.stringify(data)).not.toContain('declined');
+    expect(data.keyFacts!.join()).not.toContain('Biggest change');
+
+    const tiny = await buildReportDataForAI(trendsOn(individualReport), 'u1', service(individualData({
+      trends: { VERTICAL_JUMP: delta(27.5, 27.51, 0.04), FLY10_TIME: delta(1.52, 1.52, -0.049) },
+    })));
+    expect(tiny.improvements).toEqual([]);
+    expect(JSON.stringify(tiny)).not.toContain('0.0%');
+    expect(tiny.keyFacts!.join()).not.toContain('Biggest change');
+  });
+
+  it('a trend for a metric not in the prompt is ignored, also by the data-confidence counts', async () => {
+    const data = await buildReportDataForAI(trendsOn(individualReport), 'u1', service(individualData({
+      trends: { MILE_TIME: { ...delta(400, 380, 5), series: [{ date: '2024-01-01', value: 400 }, { date: '2024-02-01', value: 390 }, { date: '2024-03-01', value: 380 }] } },
+    })));
+    expect(data.improvements).toEqual([]);
+    expect(data.dataConfidence).toContain('no history over time');
+  });
+
+  it('declines only: Biggest change is a decline', async () => {
+    const data = await buildReportDataForAI(trendsOn(individualReport), 'u1', service(individualData({
+      trends: { VERTICAL_JUMP: delta(28, 27.5, -1.7857) },
+    })));
+    expect(data.improvements).toEqual([]);
+    expect(data.keyFacts).toContain('Biggest change: Vertical Jump, declined 1.8% (from 28.00 in to 27.50 in)');
+  });
+
+  it('Biggest change is chosen by absolute value, not by order or sign', async () => {
+    const data = await buildReportDataForAI(trendsOn(individualReport), 'u1', service(individualData({
+      trends: { VERTICAL_JUMP: delta(28, 28.5, 1.7857), FLY10_TIME: { ...delta(1.5, 1.6, -6.6667), direction: 'lower' } },
+    })));
+    expect(data.keyFacts).toContain('Biggest change: 10-Yard Fly, declined 6.7% (from 1.50 s to 1.60 s)');
+  });
+
+  it('team: trends but no teamStatistics and no athletes gives no change and no crash', async () => {
+    const teamTrends = { VERTICAL_JUMP: { teamSeries: [{ date: '2024-01-01', value: 24 }, { date: '2024-02-01', value: 25.2 }], athleteSeries: [], direction: 'higher', delta: { from: 24, to: 25.2, pct: 5 } } };
+    const data = await buildReportDataForAI(trendsOn(teamReport), 'u1', service(teamData({
+      teamTrends, teamStatistics: undefined, athleteRankings: [], athleteCount: 0,
+    })));
+    expect(data.improvements).toEqual([]);
+    expect(data.dataConfidence).toBe('0 athletes; no history over time in this report (best value per athlete); no benchmarks');
   });
 
   it('team: legacy report (no charts) shows no team trend', async () => {
@@ -429,6 +482,23 @@ describe('buildReportDataForAI — event context', () => {
       expect(data.eventDate).toBe('3/1/2024');
       expect(buildPrompt(data)).toContain('- Event: Spring Combine (3/1/2024)');
     });
+
+  it('an ISO string date (UTC midnight) prints the same calendar day', async () => {
+    const data = await buildReportDataForAI(individualReport, 'u1', service(individualData({
+      eventContext: { ...eventContext, eventDate: '2024-03-01T00:00:00.000Z' },
+    })));
+    expect(data.eventDate).toBe('3/1/2024');
+  });
+
+  it('an invalid date is dropped, the name stays', async () => {
+    const data = await buildReportDataForAI(individualReport, 'u1', service(individualData({
+      eventContext: { ...eventContext, eventDate: 'not a date' },
+    })));
+    expect(data.eventDate).toBeUndefined();
+    const prompt = buildPrompt(data);
+    expect(prompt).toContain('- Event: Spring Combine\n');
+    expect(prompt).not.toContain('Invalid Date');
+  });
 
   it('no event: no event line', async () => {
     const data = await buildReportDataForAI(individualReport, 'u1', service(individualData()));

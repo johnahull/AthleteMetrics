@@ -5200,7 +5200,8 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
       rank(singleShares, 'Strongest benchmark result', 'Biggest benchmark gap');
       rank(tierShares, 'Best tier result', 'Biggest tier gap');
 
-      const trendMetrics = Object.values(teamTrends || {}).filter(t => (t.teamSeries?.length ?? 0) >= 2).length;
+      // Only metrics in the prompt count
+      const trendMetrics = metrics.filter(m => (teamTrends?.[m.code]?.teamSeries?.length ?? 0) >= 2).length;
       sampleText = plural(typedReportData.athleteCount || 0, 'athlete');
       historyText = trendMetrics > 0
         ? `history over time for ${plural(trendMetrics, 'metric')}`
@@ -5262,8 +5263,9 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
         keyFacts.push(`Biggest gap: ${percentileGap.label}, ${ordinal(percentileGap.percentile!)} percentile vs ${group}`);
       }
 
-      const series = Object.values(trends || {}).filter(t => (t.series?.length ?? 0) >= 2);
-      const sessions = new Set(series.flatMap(t => t.series!.map(p => p.date))).size;
+      // Only metrics in the prompt count
+      const series = metrics.map(m => trends?.[m.code]?.series ?? []).filter(s => s.length >= 2);
+      const sessions = new Set(series.flatMap(s => s.map(p => p.date))).size;
       sampleText = series.length > 0
         ? plural(sessions, 'testing session')
         : metrics.length > 0 ? 'Best value per metric only' : 'No measurements in this report';
@@ -5276,8 +5278,11 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
     let biggestChange: { pct: number; fact: string } | undefined;
     for (const m of metrics) {
       const d = (report.reportType === 'team' ? teamTrends : trends)?.[m.code]?.delta;
-      if (!d || !d.pct) continue; // no trend, no change, or no baseline (from = 0)
-      const text = `${report.reportType === 'team' ? 'team average ' : ''}${d.pct > 0 ? 'improved' : 'declined'} ${Math.abs(d.pct).toFixed(1)}% (from ${withUnit(d.from, m.unit)} to ${withUnit(d.to, m.unit)})`;
+      // No trend, NaN, no baseline (from = 0 gives pct 0) or a change that prints as 0.0%
+      if (!d || !Number.isFinite(d.pct) || Math.abs(d.pct) < 0.05) continue;
+      // The team average on each date is over the athletes tested that day, which can differ.
+      // Values stay in seconds for durations, like the metric lines above.
+      const text = `${report.reportType === 'team' ? 'team average (athletes tested on each date) ' : ''}${d.pct > 0 ? 'improved' : 'declined'} ${Math.abs(d.pct).toFixed(1)}% (from ${withUnit(d.from, m.unit)} to ${withUnit(d.to, m.unit)})`;
       if (d.pct > 0) improvements.push({ metric: m.label, improvement: text });
       else concerns.push({ metric: m.label, concern: text });
       if (!biggestChange || Math.abs(d.pct) > Math.abs(biggestChange.pct)) {
@@ -5310,7 +5315,9 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
       timeframe,
       eventName: typedReportData.eventContext?.eventName,
       // Event dates are calendar dates stored as UTC midnight
-      eventDate: typedReportData.eventContext?.eventDate ? formatCalendarDate(typedReportData.eventContext.eventDate) : undefined,
+      eventDate: typedReportData.eventContext?.eventDate && !isNaN(new Date(typedReportData.eventContext.eventDate).getTime())
+        ? formatCalendarDate(typedReportData.eventContext.eventDate)
+        : undefined,
       metrics,
       improvements,
       concerns,
