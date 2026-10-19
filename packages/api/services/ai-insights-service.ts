@@ -621,7 +621,7 @@ export function buildPrompt(reportData: ReportData): string {
   prompt += `- Organization: ${organizationName}\n`;
   prompt += `- Report: ${reportName}\n`;
   prompt += `- Type: ${reportType === "team" ? "Team Performance" : "Individual Athlete"}\n`;
-  prompt += `- Timeframe: ${reportData.timeframe}\n`;
+  prompt += `- Timeframe: ${sanitizeForPrompt(reportData.timeframe)}\n`;
   const eventName = sanitizeForPrompt(reportData.eventName ?? '');
   if (eventName) {
     const eventDate = sanitizeForPrompt(reportData.eventDate ?? '');
