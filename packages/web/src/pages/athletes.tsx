@@ -25,11 +25,10 @@ import { useSports, usePositionsForSports } from "@/lib/sports-api";
 import { ProfileMergeWizard } from "@/components/athletes";
 import { downloadDashrXlsx, sanitizeDashrFilename } from "@/utils/dashr-export";
 
+// Athletes are sent to their own profile; the management page (and its queries) only mounts for everyone else
 export default function Athletes() {
-  const responsiveMode = useResponsiveMode();
-  const labels = useContextualLabels();
-  const { user, organizationContext, userOrganizations } = useAuth();
-  const [location, setLocation] = useLocation();
+  const { user } = useAuth();
+  const [, setLocation] = useLocation();
 
   // Get user's primary role to check access
   const { data: userOrganizationsData } = useQuery({
@@ -41,18 +40,6 @@ export default function Athletes() {
       return response.json();
     }
   });
-
-  // Get effective organization ID - same pattern as dashboard and other pages
-  const getEffectiveOrganizationId = () => {
-    if (organizationContext) return organizationContext;
-    const isSiteAdmin = user?.isSiteAdmin || false;
-    if (!isSiteAdmin && Array.isArray(userOrganizations) && userOrganizations.length > 0) {
-      return userOrganizations[0].organizationId;
-    }
-    return null;
-  };
-
-  const effectiveOrganizationId = getEffectiveOrganizationId();
 
   // Use session role as primary source, fallback to organization role, then 'athlete'
   const primaryRole = user?.role || (Array.isArray(userOrganizationsData) && userOrganizationsData.length > 0 ? userOrganizationsData[0]?.role : 'athlete');
@@ -66,10 +53,30 @@ export default function Athletes() {
     }
   }, [isSiteAdmin, primaryRole, user?.id, setLocation]);
 
-  // Don't render management UI for athletes
   if (!isSiteAdmin && primaryRole === "athlete") {
     return null;
   }
+
+  return <AthletesManagement />;
+}
+
+function AthletesManagement() {
+  const responsiveMode = useResponsiveMode();
+  const labels = useContextualLabels();
+  const { user, organizationContext, userOrganizations } = useAuth();
+  const [location, setLocation] = useLocation();
+
+  // Get effective organization ID - same pattern as dashboard and other pages
+  const getEffectiveOrganizationId = () => {
+    if (organizationContext) return organizationContext;
+    const isSiteAdmin = user?.isSiteAdmin || false;
+    if (!isSiteAdmin && Array.isArray(userOrganizations) && userOrganizations.length > 0) {
+      return userOrganizations[0].organizationId;
+    }
+    return null;
+  };
+
+  const effectiveOrganizationId = getEffectiveOrganizationId();
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);

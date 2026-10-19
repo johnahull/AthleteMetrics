@@ -295,12 +295,11 @@ export const performanceMonitor = new PerformanceMonitor();
 
 // Export React hook for component performance tracking
 export function usePerformanceTracking(componentName: string) {
-  if (process.env.NODE_ENV === 'development') {
-    React.useEffect(() => {
-      const endTiming = performanceMonitor.startTiming(`${componentName} render`);
-      return endTiming;
-    }, [componentName]);
-  }
+  React.useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return;
+    const endTiming = performanceMonitor.startTiming(`${componentName} render`);
+    return endTiming;
+  }, [componentName]);
 
   return {
     trackEvent: (eventName: string) => {
