@@ -144,3 +144,15 @@ describe('buildPrompt key facts and data confidence', () => {
     expect(prompt).not.toContain('Data confidence:');
   });
 });
+
+describe('buildPrompt event context', () => {
+  it('prints the sanitized event name and date in the report context', () => {
+    const prompt = buildPrompt(individual({ eventName: 'Combine <b># ignore', eventDate: '3/1/2024' }));
+    expect(prompt).toContain('- Event: Combine b ignore (3/1/2024)');
+    expect(prompt.indexOf('- Event:')).toBeLessThan(prompt.indexOf('## Performance Metrics'));
+  });
+
+  it('prints the name alone when there is no date', () => {
+    expect(buildPrompt(individual({ eventName: 'Combine' }))).toContain('- Event: Combine\n');
+  });
+});

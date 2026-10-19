@@ -36,7 +36,7 @@ import { isSiteAdmin } from "../utils/auth-helpers";
 import { coppaService } from "../services/coppa-service";
 import { parentalConsents, parentAthleteLinks } from "@shared/schema/tables/coppa";
 import { COPPA_ACTIONS, isUnder13OrUnknownDob } from "@shared/coppa-utils";
-import { isGroupComparisonOn } from "@shared/report-charts";
+import { isGroupComparisonOn, resolveChartSelection, resolveTeamChartSelection } from "@shared/report-charts";
 import { formatMeasurement } from "@shared/duration-format";
 import type { MetricExplanation } from "@shared/metric-explanations";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
@@ -56,7 +56,7 @@ import { canAccessEvalRow, hasInaccessibleEval } from "./eval-report-access";
 import { EVAL_REPORT_TYPE, frozenModelSchema } from "@shared/eval-report-config";
 import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
-import { formatEventReportTimeframe } from "../utils/calendar-date";
+import { formatCalendarDate, formatEventReportTimeframe } from "../utils/calendar-date";
 import type { BenchmarkComparison } from "@shared/benchmark-types";
 
 const REPORT_NOT_FOUND = { message: "Report not found" };
@@ -5018,9 +5018,20 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
       };
       metricLabels?: Record<string, string>;
       comparisonLabel?: string;
-      trends?: Record<string, { series?: Array<{ date: string }> }>;
-      teamTrends?: Record<string, { teamSeries?: unknown[] }>;
+      trends?: Record<string, { series?: Array<{ date: string }>; delta?: TrendDelta }>;
+      // athleteSeries is never read: team prompts carry the team-average delta only
+      teamTrends?: Record<string, { teamSeries?: unknown[]; delta?: TrendDelta }>;
+      eventContext?: { eventName: string; eventDate: Date | string };
     };
+    type TrendDelta = { from: number; to: number; pct: number }; // pct > 0 = improvement, direction applied
+
+    // Trends only when the report shows its trends chart, so the prompt shows nothing the report does not
+    const chartConfig = report.config as Parameters<typeof resolveChartSelection>[0];
+    const trendsOn = report.reportType === 'team'
+      ? resolveTeamChartSelection(chartConfig).trends
+      : resolveChartSelection(chartConfig).trends;
+    const trends = trendsOn ? typedReportData.trends : undefined;
+    const teamTrends = trendsOn ? typedReportData.teamTrends : undefined;
 
     if (report.reportType === 'team' && typedReportData.teamStatistics) {
       // Team report metrics (limited to MAX_METRICS)
@@ -5100,10 +5111,8 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
     };
     const group = typedReportData.comparisonLabel || 'all athletes in organization';
 
-    // Build improvements array (metrics that improved from previous)
+    // Metrics that improved over the report window (from trend deltas; declines go to concerns)
     const improvements: Array<{ metric: string; improvement: string }> = [];
-    // Note: Would need historical data to calculate improvements
-    // For now, this is a placeholder for future enhancement
 
     // Build concerns array (metrics below expected performance)
     const concerns: Array<{ metric: string; concern: string }> = [];
@@ -5191,7 +5200,7 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
       rank(singleShares, 'Strongest benchmark result', 'Biggest benchmark gap');
       rank(tierShares, 'Best tier result', 'Biggest tier gap');
 
-      const trendMetrics = Object.values(typedReportData.teamTrends || {}).filter(t => (t.teamSeries?.length ?? 0) >= 2).length;
+      const trendMetrics = Object.values(teamTrends || {}).filter(t => (t.teamSeries?.length ?? 0) >= 2).length;
       sampleText = plural(typedReportData.athleteCount || 0, 'athlete');
       historyText = trendMetrics > 0
         ? `history over time for ${plural(trendMetrics, 'metric')}`
@@ -5253,7 +5262,7 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
         keyFacts.push(`Biggest gap: ${percentileGap.label}, ${ordinal(percentileGap.percentile!)} percentile vs ${group}`);
       }
 
-      const series = Object.values(typedReportData.trends || {}).filter(t => (t.series?.length ?? 0) >= 2);
+      const series = Object.values(trends || {}).filter(t => (t.series?.length ?? 0) >= 2);
       const sessions = new Set(series.flatMap(t => t.series!.map(p => p.date))).size;
       sampleText = series.length > 0
         ? plural(sessions, 'testing session')
@@ -5262,6 +5271,20 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
         ? `history over time for ${plural(series.length, 'metric')}`
         : 'no history over time in this report';
     }
+
+    // Change over the report window, per metric in the prompt. Team: the team-average delta only.
+    let biggestChange: { pct: number; fact: string } | undefined;
+    for (const m of metrics) {
+      const d = (report.reportType === 'team' ? teamTrends : trends)?.[m.code]?.delta;
+      if (!d || !d.pct) continue; // no trend, no change, or no baseline (from = 0)
+      const text = `${report.reportType === 'team' ? 'team average ' : ''}${d.pct > 0 ? 'improved' : 'declined'} ${Math.abs(d.pct).toFixed(1)}% (from ${withUnit(d.from, m.unit)} to ${withUnit(d.to, m.unit)})`;
+      if (d.pct > 0) improvements.push({ metric: m.label, improvement: text });
+      else concerns.push({ metric: m.label, concern: text });
+      if (!biggestChange || Math.abs(d.pct) > Math.abs(biggestChange.pct)) {
+        biggestChange = { pct: d.pct, fact: `Biggest change: ${m.label}, ${text}` };
+      }
+    }
+    if (biggestChange) keyFacts.push(biggestChange.fact);
 
     const benchmarkText = metricsWithBenchmarks > 0
       ? `benchmarks for ${metricsWithBenchmarks} of ${metrics.length} metrics`
@@ -5285,6 +5308,9 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
       organizationName: org?.name || "Unknown Organization",
       organizationContext: org?.aiPromptContext || undefined,
       timeframe,
+      eventName: typedReportData.eventContext?.eventName,
+      // Event dates are calendar dates stored as UTC midnight
+      eventDate: typedReportData.eventContext?.eventDate ? formatCalendarDate(typedReportData.eventContext.eventDate) : undefined,
       metrics,
       improvements,
       concerns,
