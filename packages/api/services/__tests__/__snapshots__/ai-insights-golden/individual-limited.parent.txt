@@ -36,4 +36,4 @@ AVOID: Jargon (percentile ranks are OK, but explain what they mean), negative fr
 
 Use the athlete's first name (Riley) throughout.
 
-Keep it to 200-300 words.
+Keep it to 60-300 words.

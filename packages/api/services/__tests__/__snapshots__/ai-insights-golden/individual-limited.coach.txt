@@ -32,4 +32,4 @@ Provide coaching insights in markdown format with these sections:
 ## Next Steps
 (2-3 specific, actionable training recommendations, each naming the metric gap it targets)
 
-Keep it short (150-250 words total). Be direct and objective. Use bullet points and **bold** for emphasis. Avoid technical jargon.
+Keep it short (60-250 words total). Be direct and objective. Use bullet points and **bold** for emphasis. Avoid technical jargon.

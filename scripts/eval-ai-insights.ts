@@ -5,6 +5,7 @@
  * ai-insights-golden.ts) with generateCoachingInsights, runs the output checks
  * (packages/api/services/ai-insights-eval.ts) and prints a report. Exits 1 when any output fails.
  *
+ * Run from the repository root:
  *   AI_EVAL_MODEL=claude-haiku-4.5 ANTHROPIC_API_KEY=... npx tsx scripts/eval-ai-insights.ts
  *
  * AI_EVAL_OUT=<dir> also saves each output as <case>.<audience>.md (e.g. to record new samples).
@@ -13,10 +14,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   AI_MODELS,
-  buildPrompt,
   generateCoachingInsights,
   isModelAvailable,
-  SYSTEM_PROMPT,
   type AIModelKey,
 } from "../packages/api/services/ai-insights-service";
 import { checkInsights } from "../packages/api/services/ai-insights-eval";
@@ -43,13 +42,7 @@ for (const c of GOLDEN_CASES) {
     try {
       const output = await generateCoachingInsights(modelKey as AIModelKey, data);
       if (outDir) writeFileSync(join(outDir, `${label}.md`), output);
-      const failures = checkInsights({
-        output,
-        prompt: `${SYSTEM_PROMPT}\n${buildPrompt(data)}`,
-        reportType: data.reportType,
-        audience,
-        athleteNames: c.rosterNames,
-      });
+      const failures = checkInsights({ output, data, athleteNames: c.rosterNames });
       if (failures.length > 0) failed++;
       console.log(`${failures.length === 0 ? "PASS" : "FAIL"} ${label}`);
       for (const f of failures) console.log(`     - ${f}`);

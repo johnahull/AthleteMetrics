@@ -14,6 +14,7 @@ GROUNDING:
 - Every observation names the metric and cites its value from the report data
 - Every item under What to Work On and Next Steps ties to a named metric gap from the Key Facts or Areas of Concern
 - Give general training advice only attached to such a gap, never on its own
+- If there is no gap in the Key Facts or Areas of Concern, write one line saying so under that heading instead of inventing one
 - If the data is limited (few metrics, no benchmarks or no history), say so in one sentence instead of guessing
 
 IMPORTANT CONSTRAINTS:

@@ -96,7 +96,7 @@ ALTER TABLE reports ADD CONSTRAINT reports_coaching_insights_model_check
   - `AnthropicProvider` - Anthropic SDK
 - **Model Configuration**: `AI_MODELS` object with pricing, tiers, descriptions
 - **Context-Rich Prompts**: Performance data, athlete details, benchmarks
-- **Prompt structure**: one shared `SYSTEM_PROMPT` (role, audience rules, output format, grounding and constraints) sent by every provider; `buildPrompt` builds the user message (fenced `<report_data>`, then framing for team / event / trend reports and the audience instructions). Output uses fixed `## ` headings per audience (`INSIGHT_HEADINGS`) and word ranges from `insightWordRange` (team 200-350). Temperature 0.3 where the model accepts one.
+- **Prompt structure**: one shared `SYSTEM_PROMPT` (role, audience rules, output format, grounding and constraints) sent by every provider; `buildPrompt` builds the user message (fenced `<report_data>`, then framing for team / event / trend reports and the audience instructions). Output uses fixed `## ` headings per audience (`INSIGHT_HEADINGS`) and word ranges from `insightWordRange` (team 200-350; minimum 60 when there are no benchmarks and no history). Organization Context sits inside the fence and cannot change the rules or the output format. Temperature 0.3 where the model accepts one.
 
 #### API Routes
 
@@ -211,7 +211,7 @@ ALTER TABLE reports ADD CONSTRAINT reports_coaching_insights_model_check
 ### Prompt Eval Harness
 - **Golden set**: `packages/api/services/__tests__/fixtures/ai-insights-golden.ts` (team, individual and event reports, with and without trends and benchmarks; team = coach only, individual = coach/athlete/parent).
 - **Prompt snapshots** (CI, no network): `ai-insights-golden.test.ts` snapshots every built prompt to `__snapshots__/ai-insights-golden/`. A prompt change is a snapshot diff to review; accept it with `npx vitest run -u <file>`.
-- **Output checks**: `packages/api/services/ai-insights-eval.ts` (every number in the output appears in the input, no athlete names in team outputs, the audience headings, word range). `ai-insights-eval.test.ts` proves them on recorded good and bad samples in `fixtures/ai-insights-samples/`.
+- **Output checks**: `packages/api/services/ai-insights-eval.ts` (every number in the output appears in the fenced report data, with small integers reported separately as a weak check; no invented sets/reps/durations; no athlete names in team outputs; no comments on effort or attitude; no change-over-time words without history; the audience `## ` headings in order, no extras; word range). `ai-insights-eval.test.ts` proves them on recorded good and bad samples in `fixtures/ai-insights-samples/`.
 - **Live run (optional, paid, not in CI)**: `AI_EVAL_MODEL=<model key> <PROVIDER>_API_KEY=... npx tsx scripts/eval-ai-insights.ts` generates insights for the golden set and prints the check results; `AI_EVAL_OUT=<dir>` saves the outputs.
 - **Rubric review (manual only)**: for a prompt or model change, read the live outputs (or have a separate judge model grade them) for accuracy against the data, usefulness of the next steps and audience tone. This is not automated and not a CI gate.
 

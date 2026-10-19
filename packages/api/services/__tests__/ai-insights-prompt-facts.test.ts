@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildPrompt, INSIGHT_HEADINGS, ReportData, SYSTEM_PROMPT } from '../ai-insights-service';
+import { BIGGEST_CHANGE_PREFIX, buildPrompt, INSIGHT_HEADINGS, insightWordRange, isLimitedData, ReportData, SYSTEM_PROMPT } from '../ai-insights-service';
 
 /**
  * buildPrompt: no fake trend arrows, team spread stats, the real comparison group,
@@ -198,7 +198,7 @@ describe('buildPrompt framing by report type', () => {
   });
 
   it('frames a report with change over time as a trend report', () => {
-    const trend = individual({ keyFacts: ['Biggest change: Fly, improved 2.0% (from 1.50 s to 1.47 s)'] });
+    const trend = individual({ keyFacts: [`${BIGGEST_CHANGE_PREFIX} Fly, improved 2.0% (from 1.50 s to 1.47 s)`] });
     expect(buildPrompt(trend)).toContain('includes history over time');
     expect(buildPrompt(individual())).not.toContain('includes history over time');
   });
@@ -206,5 +206,40 @@ describe('buildPrompt framing by report type', () => {
   it('puts the framing after the data, with the instructions', () => {
     const prompt = buildPrompt(team());
     expect(prompt.indexOf('This is a team report')).toBeGreaterThan(prompt.indexOf('</report_data>'));
+  });
+});
+
+describe('event and trend framing together', () => {
+  // Trends follow the chart selection, not the event filter, so an event report can carry deltas
+  it('does not tell the model to ignore earlier results when the report has history', () => {
+    const prompt = buildPrompt(individual({ eventName: 'Combine', keyFacts: [`${BIGGEST_CHANGE_PREFIX} Fly, improved 2.0% (from 1.50 s to 1.47 s)`] }));
+    expect(prompt).toContain('one testing event');
+    expect(prompt).toContain('includes history over time');
+    expect(prompt).not.toContain('not against earlier results');
+  });
+
+  it('keeps the event-only wording without history', () => {
+    expect(buildPrompt(individual({ eventName: 'Combine' }))).toContain('not against earlier results');
+  });
+});
+
+describe('limited data', () => {
+  const limited = 'Best value per metric only; no history over time in this report; no benchmarks';
+
+  it('is limited when there are no benchmarks and no history', () => {
+    expect(isLimitedData(individual({ dataConfidence: limited }))).toBe(true);
+    expect(isLimitedData(individual({ dataConfidence: 'Best value per metric only; no history over time in this report; benchmarks for 1 of 1 metrics' }))).toBe(false);
+    expect(isLimitedData(individual())).toBe(false);
+  });
+
+  it('lowers the word minimum for limited data', () => {
+    expect(insightWordRange('individual', 'coach', true)).toEqual([60, 250]);
+    expect(insightWordRange('team', 'coach', true)).toEqual([60, 350]);
+    expect(buildPrompt(individual({ dataConfidence: limited }))).toContain('60-250 words');
+    expect(buildPrompt(individual())).toContain('150-250 words');
+  });
+
+  it('tells the model to say so in one line when there is no gap', () => {
+    expect(SYSTEM_PROMPT).toMatch(/no gap in the Key Facts or Areas of Concern.*one line saying so/);
   });
 });
