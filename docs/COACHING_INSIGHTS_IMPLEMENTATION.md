@@ -96,6 +96,7 @@ ALTER TABLE reports ADD CONSTRAINT reports_coaching_insights_model_check
   - `AnthropicProvider` - Anthropic SDK
 - **Model Configuration**: `AI_MODELS` object with pricing, tiers, descriptions
 - **Context-Rich Prompts**: Performance data, athlete details, benchmarks
+- **Prompt structure**: one shared `SYSTEM_PROMPT` (role, audience rules, output format, grounding and constraints) sent by every provider; `buildPrompt` builds the user message (fenced `<report_data>`, then framing for team / event / trend reports and the audience instructions). Output uses fixed `## ` headings per audience (`INSIGHT_HEADINGS`) and word ranges from `insightWordRange` (team 200-350). Temperature 0.3 where the model accepts one.
 
 #### API Routes
 

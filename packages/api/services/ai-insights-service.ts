@@ -175,7 +175,7 @@ class GoogleProvider implements AIProvider {
           {
             contents: [{ role: "user", parts: [{ text: user }] }],
             generationConfig: {
-              temperature: 0.7,
+              temperature: 0.3,
               topP: 0.95,
               topK: 40,
               maxOutputTokens: 2048,
@@ -267,7 +267,7 @@ class OpenAIProvider implements AIProvider {
         requestParams.max_completion_tokens = 2048;
       } else {
         // Older models use traditional parameters
-        requestParams.temperature = 0.7;
+        requestParams.temperature = 0.3;
         requestParams.max_tokens = 2048;
       }
 
@@ -346,7 +346,7 @@ class AnthropicProvider implements AIProvider {
             // works without tools: "Without tools, the response contains only text."
             // https://platform.claude.com/docs/en/models/sonnet-5-5/migration-guide#turn-off-up-front-thinking
             { thinking: { type: "between_tools" } as unknown as Anthropic.ThinkingConfigParam }
-          : { temperature: 0.7 }),
+          : { temperature: 0.3 }),
         system,
         messages: [
           {

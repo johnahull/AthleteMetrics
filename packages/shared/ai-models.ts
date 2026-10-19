@@ -198,8 +198,9 @@ export function findModelsNearRetirement(
 
 /**
  * Rough token usage of one coaching-insights report, used only for the admin cost estimate.
- * An 8-metric buildPrompt prompt is roughly 950 (team) to 1,250 (individual) tokens (characters / 4),
- * so the input figure below is at the low end; the response is capped at 2,048 tokens.
+ * An 8-metric prompt (shared SYSTEM_PROMPT, about 460 tokens, plus the buildPrompt user message) is
+ * roughly 1,300 tokens or more (characters / 4), so the input figure below is at the low end; the
+ * response is capped at 2,048 tokens and asked for at most 350 words.
  * Reasoning models (GPT-5/6) also bill hidden reasoning tokens as output, so real cost can be higher.
  */
 export const ESTIMATED_TOKENS_PER_REPORT = { input: 1000, output: 1000 } as const;

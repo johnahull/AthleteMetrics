@@ -18,7 +18,7 @@ vi.mock('@google/generative-ai', () => ({
     getGenerativeModel: googleModelSpy.mockImplementation(() => ({ generateContent: googleSpy })),
   })),
 }));
-// No Google model is selectable today; add one so the Google request shape stays tested
+// No Google or legacy-style OpenAI model is selectable today; add one of each so those request shapes stay tested
 vi.mock('@shared/ai-models', async (importOriginal) => {
   const original = await importOriginal<typeof import('@shared/ai-models')>();
   return {
@@ -27,6 +27,10 @@ vi.mock('@shared/ai-models', async (importOriginal) => {
       ...original.AI_MODEL_REGISTRY,
       {
         key: 'gemini-test', provider: 'google', apiModelId: 'gemini-test', label: 'Gemini Test', description: 'test',
+        tier: 'budget', costPer1M: { input: 0, output: 0 }, requestStyle: 'legacy', selectable: true,
+      },
+      {
+        key: 'gpt-legacy-test', provider: 'openai', apiModelId: 'gpt-legacy-test', label: 'GPT Legacy Test', description: 'test',
         tier: 'budget', costPer1M: { input: 0, output: 0 }, requestStyle: 'legacy', selectable: true,
       },
     ],
@@ -104,8 +108,21 @@ describe('request parameters', () => {
     await generateCoachingInsights('claude-haiku-4.5', reportData);
     const params = anthropicSpy.mock.calls[0][0];
     expect(params.model).toBe('claude-haiku-4-5-20251001');
-    expect(params.temperature).toBe(0.7);
+    expect(params.temperature).toBe(0.3);
     expect(params.max_tokens).toBe(2048);
+  });
+
+  it('sends a low temperature for legacy-style OpenAI models', async () => {
+    await generateCoachingInsights('gpt-legacy-test' as any, reportData);
+    const params = openaiSpy.mock.calls[0][0];
+    expect(params.temperature).toBe(0.3);
+    expect(params.max_tokens).toBe(2048);
+    expect(params).not.toHaveProperty('reasoning_effort');
+  });
+
+  it('sends a low temperature to Google', async () => {
+    await generateCoachingInsights('gemini-test' as any, reportData);
+    expect(googleSpy.mock.calls[0][0].generationConfig).toMatchObject({ temperature: 0.3, maxOutputTokens: 2048 });
   });
 
   it('omits temperature for no-sampling Anthropic models', async () => {
