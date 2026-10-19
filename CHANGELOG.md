@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.1] - 2026-10-19
+
+### Fixed
+- Athletes opening a shared individual or team report from My Reports got a blank screen; the report views called a hook after their loading early return (#669)
+- A render error on any page now shows a fallback with a Reload button instead of blanking the whole app (#669)
+- Hooks called after an early return in the athletes, metrics management, sidebar, coaching insights and box plot components (#669)
+
+### Added
+- `npm run lint:hooks` (ESLint, `react-hooks/rules-of-hooks` only), run in CI in the type check job (#669)
+
+### Changed
+- Dev dependencies: eslint 10, eslint-plugin-react-hooks 7, typescript-eslint 8 (#669)
+
 ## [0.30.0] - 2026-10-19
 
 ### Added
