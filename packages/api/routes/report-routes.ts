@@ -5082,11 +5082,22 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
       const suffix = r % 100 >= 11 && r % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][r % 10] ?? 'th';
       return `${r}${suffix}`;
     };
+    const withUnit = (value: number, unit: string) => (unit ? `${value.toFixed(2)} ${unit}` : value.toFixed(2));
     const tierText = (c: BenchmarkComparison) => `${c.tierName} tier of ${c.tierGroupName || c.benchmarkName}`;
     const tierGapText = (c: BenchmarkComparison, m: (typeof metrics)[number]) =>
       c.nextTierName && c.distanceToNextTier != null
-        ? `; needs ${c.distanceToNextTier.toFixed(2)} ${m.unit} ${m.lowerIsBetter ? 'less' : 'more'} to reach ${c.nextTierName}`
+        ? `; needs ${withUnit(c.distanceToNextTier, m.unit)} ${m.lowerIsBetter ? 'less' : 'more'} to reach ${c.nextTierName}`
         : '';
+    // Where a tier row sits inside its OWN group (allTiers is sorted best first): index and group size
+    const tierIndex = (c: BenchmarkComparison) => {
+      const i = c.allTiers?.findIndex(t => t.tierName === c.tierName) ?? -1;
+      return i < 0 ? undefined : { i, n: c.allTiers!.length };
+    };
+    // 0 = best tier, 1 = bottom tier; comparable across groups of different sizes
+    const tierPosition = (c: BenchmarkComparison) => {
+      const idx = tierIndex(c);
+      return idx ? idx.i / Math.max(idx.n - 1, 1) : c.isBestTier ? 0 : 0.5;
+    };
     const group = typedReportData.comparisonLabel || 'all athletes in organization';
 
     // Build improvements array (metrics that improved from previous)
@@ -5105,30 +5116,29 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
 
     if (report.reportType === 'team') {
       // Aggregates only (no per-athlete rows): share meeting each single-value benchmark,
-      // and the tier distribution for each tier group
-      const shares: Array<{ metric: string; share: number; text: string }> = [];
+      // and the tier distribution for each tier group. The two kinds of share are not
+      // comparable, so each is ranked on its own.
+      type Share = { metric: string; share: number; text: string };
+      const singleShares: Share[] = [];
+      const tierShares: Share[] = [];
       const rankings = typedReportData.athleteRankings || [];
 
       for (const m of metrics) {
         const single = new Map<string, { met: number; total: number }>();
-        type TierTally = { counts: Map<string, { n: number; order: number }>; best: number; bestName?: string; total: number };
+        type TierTally = { counts: Map<string, { n: number; order: number }>; bottomName?: string; total: number };
         const tiers = new Map<string, TierTally>();
 
         for (const athlete of rankings) {
           for (const c of athlete.benchmarkComparisons?.[m.code] || []) {
             if (c.comparisonOperator === 'range') {
               const key = c.tierGroupName || c.benchmarkName;
-              const t: TierTally = tiers.get(key) || { counts: new Map(), best: 0, total: 0 };
+              const t: TierTally = tiers.get(key) || { counts: new Map(), total: 0 };
               const tierName = c.tierName || 'Unknown';
               const entry = t.counts.get(tierName) || { n: 0, order: c.tierOrder ?? Number.MAX_SAFE_INTEGER };
               entry.n++;
               t.counts.set(tierName, entry);
               t.total++;
-              if (c.isBestTier) {
-                t.best++;
-                t.bestName = c.tierName;
-              }
-              t.bestName ??= c.allTiers?.[0]?.tierName;
+              t.bottomName ??= c.allTiers?.[c.allTiers.length - 1]?.tierName;
               tiers.set(key, t);
             } else {
               const s = single.get(c.benchmarkName) || { met: 0, total: 0 };
@@ -5145,7 +5155,7 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
           const text = `${pct(s.met, s.total)}% of athletes meet ${name} (${s.met}/${s.total})`;
           benchmarkComparisons.push({ metric: m.label, performance: text });
           if (s.met / s.total < 0.5) concerns.push({ metric: m.label, concern: text });
-          shares.push({ metric: m.label, share: s.met / s.total, text });
+          singleShares.push({ metric: m.label, share: s.met / s.total, text });
         }
         for (const [name, t] of tiers) {
           const distribution = [...t.counts.entries()]
@@ -5153,20 +5163,33 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
             .map(([tierName, { n }]) => `${tierName} ${n}`)
             .join(', ');
           benchmarkComparisons.push({ metric: m.label, performance: `${name}: ${distribution} (of ${plural(t.total, 'athlete')})` });
-          shares.push({
+          // Without allTiers the bottom tier is unknown: the distribution line is all we can say
+          if (!t.bottomName) continue;
+          const bottom = t.counts.get(t.bottomName)?.n ?? 0;
+          if (bottom / t.total > 0.5) {
+            concerns.push({
+              metric: m.label,
+              concern: `${pct(bottom, t.total)}% of athletes in the bottom tier (${t.bottomName}) of ${name} (${bottom}/${t.total})`,
+            });
+          }
+          const above = t.total - bottom;
+          tierShares.push({
             metric: m.label,
-            share: t.best / t.total,
-            text: `${pct(t.best, t.total)}% of athletes in the top tier (${t.bestName || 'top'}) of ${name} (${t.best}/${t.total})`,
+            share: above / t.total,
+            text: `${pct(above, t.total)}% of athletes above the bottom tier (${t.bottomName}) of ${name} (${above}/${t.total})`,
           });
         }
       }
 
-      if (shares.length > 0) {
+      const rank = (shares: Share[], strongestTitle: string, gapTitle: string) => {
+        if (shares.length === 0) return;
         const sorted = [...shares].sort((a, b) => b.share - a.share);
-        keyFacts.push(`Strongest benchmark result: ${sorted[0].metric}, ${sorted[0].text}`);
+        keyFacts.push(`${strongestTitle}: ${sorted[0].metric}, ${sorted[0].text}`);
         const gap = sorted[sorted.length - 1];
-        if (sorted.length > 1 && gap.metric !== sorted[0].metric) keyFacts.push(`Biggest gap: ${gap.metric}, ${gap.text}`);
-      }
+        if (gap.metric !== sorted[0].metric) keyFacts.push(`${gapTitle}: ${gap.metric}, ${gap.text}`);
+      };
+      rank(singleShares, 'Strongest benchmark result', 'Biggest benchmark gap');
+      rank(tierShares, 'Best tier result', 'Biggest tier gap');
 
       const trendMetrics = Object.values(typedReportData.teamTrends || {}).filter(t => (t.teamSeries?.length ?? 0) >= 2).length;
       sampleText = plural(typedReportData.athleteCount || 0, 'athlete');
@@ -5187,8 +5210,12 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
         for (const c of comparisons) {
           if (c.comparisonOperator === 'range') {
             tierRows.push({ m, c });
-            benchmarkComparisons.push({ metric: m.label, performance: tierText(c) });
-            if (!c.isBestTier) concerns.push({ metric: m.label, concern: tierText(c) + tierGapText(c, m) });
+            benchmarkComparisons.push({ metric: m.label, performance: tierText(c) + tierGapText(c, m) });
+            // Only the lower half of its own group is a concern; a higher non-best tier is a next step
+            const idx = tierIndex(c);
+            if (idx && idx.n > 1 && idx.i >= idx.n / 2) {
+              concerns.push({ metric: m.label, concern: tierText(c) + tierGapText(c, m) });
+            }
           } else {
             singleTotal++;
             if (c.meetsOrExceeds) {
@@ -5196,7 +5223,7 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
             } else {
               concerns.push({
                 metric: m.label,
-                concern: `Below ${c.benchmarkName} benchmark (${c.benchmarkValue} ${m.unit}); athlete ${value.toFixed(2)} ${m.unit}`,
+                concern: `Below ${c.benchmarkName} benchmark (${withUnit(c.benchmarkValue, m.unit)}); athlete ${withUnit(value, m.unit)}`,
               });
             }
           }
@@ -5209,7 +5236,7 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
       // Strongest: highest percentile, else best tier. Biggest gap: lowest tier (with distance), else lowest percentile.
       const withPercentile = metrics.filter(m => m.percentile !== undefined)
         .sort((a, b) => b.percentile! - a.percentile!);
-      const byTier = [...tierRows].sort((a, b) => (a.c.tierOrder ?? 0) - (b.c.tierOrder ?? 0));
+      const byTier = [...tierRows].sort((a, b) => tierPosition(a.c) - tierPosition(b.c));
       let strongest: string | undefined;
       if (withPercentile.length > 0) {
         strongest = withPercentile[0].label;
@@ -5222,13 +5249,15 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
       const percentileGap = withPercentile[withPercentile.length - 1];
       if (tierGap && tierGap.m.label !== strongest) {
         keyFacts.push(`Biggest gap: ${tierGap.m.label}, ${tierText(tierGap.c)}${tierGapText(tierGap.c, tierGap.m)}`);
-      } else if (!tierGap && percentileGap && percentileGap.label !== strongest) {
+      } else if (percentileGap && percentileGap.label !== strongest) {
         keyFacts.push(`Biggest gap: ${percentileGap.label}, ${ordinal(percentileGap.percentile!)} percentile vs ${group}`);
       }
 
       const series = Object.values(typedReportData.trends || {}).filter(t => (t.series?.length ?? 0) >= 2);
       const sessions = new Set(series.flatMap(t => t.series!.map(p => p.date))).size;
-      sampleText = series.length > 0 ? plural(sessions, 'testing session') : 'Best value per metric only';
+      sampleText = series.length > 0
+        ? plural(sessions, 'testing session')
+        : metrics.length > 0 ? 'Best value per metric only' : 'No measurements in this report';
       historyText = series.length > 0
         ? `history over time for ${plural(series.length, 'metric')}`
         : 'no history over time in this report';

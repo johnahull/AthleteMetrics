@@ -591,7 +591,8 @@ export function buildPrompt(reportData: ReportData): string {
     prompt += `## Performance Metrics\n`;
     reportData.metrics.forEach((metric) => {
       const label = sanitizeForPrompt(metric.label);
-      const unit = sanitizeForPrompt(metric.unit);
+      // Leading space only when there is a unit, so a unitless metric has no double space
+      const unit = sanitizeForPrompt(metric.unit) ? ` ${sanitizeForPrompt(metric.unit)}` : '';
       const direction = metric.lowerIsBetter ? "lower is better" : "higher is better";
       // No trend arrow: values are one best value (individual), not a time series
       const avgValue = metric.values.length > 0
@@ -599,8 +600,8 @@ export function buildPrompt(reportData: ReportData): string {
         : "N/A";
 
       let metricLine = metric.average !== undefined
-        ? `- ${label}: average ${metric.average.toFixed(2)} ${unit}, median ${metric.median?.toFixed(2) ?? 'N/A'}, range ${metric.min?.toFixed(2) ?? 'N/A'}-${metric.max?.toFixed(2) ?? 'N/A'}, SD ${metric.standardDeviation?.toFixed(2) ?? 'N/A'} (${direction})`
-        : `- ${label}: ${avgValue} ${unit} (${direction})`;
+        ? `- ${label}: average ${metric.average.toFixed(2)}${unit}, median ${metric.median?.toFixed(2) ?? 'N/A'}, range ${metric.min?.toFixed(2) ?? 'N/A'}-${metric.max?.toFixed(2) ?? 'N/A'}, SD ${metric.standardDeviation?.toFixed(2) ?? 'N/A'} (${direction})`
+        : `- ${label}: ${avgValue}${unit} (${direction})`;
 
       // Add peer-group average comparison for individual reports
       if (metric.teamAverage !== undefined && metric.percentile !== undefined) {
@@ -611,7 +612,7 @@ export function buildPrompt(reportData: ReportData): string {
         const comparison = metric.lowerIsBetter
           ? (diff < 0 ? "better than" : diff > 0 ? "worse than" : "equal to")
           : (diff > 0 ? "better than" : diff < 0 ? "worse than" : "equal to");
-        metricLine += `\n  - Average of ${group}: ${teamAvg} ${unit} (athlete is ${diffStr}, ${comparison} the average)`;
+        metricLine += `\n  - Average of ${group}: ${teamAvg}${unit} (athlete is ${diffStr}, ${comparison} the average)`;
         metricLine += `\n  - Percentile: ${metric.percentile.toFixed(1)}th (compared to ${group})`;
       }
 
