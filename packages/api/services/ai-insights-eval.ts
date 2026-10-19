@@ -110,7 +110,10 @@ export function checkInsights(input: {
 
   // Small integers (counts such as "2 of 3") are in most report data, so they prove little
   const numbers = ungroundedNumbers(output, prompt);
-  const isSmall = (n: string) => Number.isInteger(toNumber(n)) && Math.abs(toNumber(n)) <= 3;
+  const isSmall = (n: string) => {
+    const v = toNumber(n);
+    return Number.isInteger(v) && Math.abs(v) <= 3;
+  };
   const large = numbers.filter((n) => !isSmall(n));
   const small = numbers.filter(isSmall);
   if (large.length > 0) failures.push(`numbers not in the report data: ${large.join(", ")}`);
