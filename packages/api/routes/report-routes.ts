@@ -9,6 +9,7 @@ import rateLimit from "express-rate-limit";
 import { sortCodesByGroups, isGenericReport } from "@shared/metric-order";
 import { buildMeasurementRows, buildBenchmarkRows, buildStatsRows, buildAchievementRows, groupLabelFor } from "./pdf-metric-rows";
 import { ReportService } from "../services/report-service";
+import { BIGGEST_CHANGE_PREFIX } from "../services/ai-insights-service";
 import { createReportsFromInput, ReportCreateError } from "../services/report-create";
 import { planChartPageBreaks, chartGroupHeadings, addHeadingHeights } from "./pdf-chart-layout";
 import { requireAuth, requireAIEnabled, type AuthenticatedRequest } from "../middleware";
@@ -5286,7 +5287,7 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
       if (d.pct > 0) improvements.push({ metric: m.label, improvement: text });
       else concerns.push({ metric: m.label, concern: text });
       if (!biggestChange || Math.abs(d.pct) > Math.abs(biggestChange.pct)) {
-        biggestChange = { pct: d.pct, fact: `Biggest change: ${m.label}, ${text}` };
+        biggestChange = { pct: d.pct, fact: `${BIGGEST_CHANGE_PREFIX} ${m.label}, ${text}` };
       }
     }
     if (biggestChange) keyFacts.push(biggestChange.fact);
