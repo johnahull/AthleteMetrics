@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { ErrorBoundary } from '../ErrorBoundary';
 
@@ -8,6 +8,8 @@ function Boom({ explode }: { explode: boolean }) {
 }
 
 describe('ErrorBoundary resetKey', () => {
+  afterEach(() => vi.restoreAllMocks());
+
   it('shows the fallback after a render error and clears it when resetKey changes', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(console, 'group').mockImplementation(() => {});

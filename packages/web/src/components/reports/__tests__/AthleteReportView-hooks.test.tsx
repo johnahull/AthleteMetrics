@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { AthleteReportView } from '../AthleteReportView';
 import type { Report, IndividualReportData, TeamReportData } from '@/types/report-types';
@@ -43,6 +43,8 @@ const report = (reportType: string): Report =>
   }) as unknown as Report;
 
 describe('AthleteReportView hook order', () => {
+  beforeEach(() => { payload = individualData; });
+
   it('renders an individual report once its data arrives (no hook-count change)', async () => {
     payload = individualData;
     render(<AthleteReportView report={report('individual')} />);

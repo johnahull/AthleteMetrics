@@ -187,7 +187,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
   // Get user's organizations for context
   const { data: userOrganizations } = useQuery<UserOrganization[]>({
     queryKey: ["/api/auth/me/organizations"],
-    enabled: !!userData?.id && !userData.isSiteAdmin,
+    enabled: !!userData?.id && !userData?.isSiteAdmin,
   });
 
   // Fetch site settings to check wellness module status
