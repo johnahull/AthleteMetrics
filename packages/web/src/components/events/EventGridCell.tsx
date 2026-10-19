@@ -75,7 +75,7 @@ export function EventGridCell({
       id={inputId}
       data-state={state}
       type="text"
-      inputMode="decimal"
+      inputMode={cell.isDuration ? "text" : "decimal"}
       value={cell.value}
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}

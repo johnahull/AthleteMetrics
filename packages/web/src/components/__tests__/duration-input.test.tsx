@@ -43,11 +43,11 @@ function Harness({ initial, onValue }: { initial?: number; onValue: (n: number |
 }
 
 describe("DurationInput", () => {
-  it("is a text input with a decimal keypad", () => {
+  it("is a text input with the full keyboard (decimal keypad has no colon)", () => {
     render(<Harness onValue={() => {}} />);
     const input = screen.getByTestId("dur");
     expect(input).toHaveAttribute("type", "text");
-    expect(input).toHaveAttribute("inputMode", "decimal");
+    expect(input).toHaveAttribute("inputMode", "text");
   });
 
   it("emits seconds for m:ss and plain seconds", async () => {

@@ -52,7 +52,7 @@ export const DurationInput = React.forwardRef<HTMLInputElement, DurationInputPro
           {...props}
           ref={ref}
           type="text"
-          inputMode="decimal"
+          inputMode="text"
           placeholder={placeholder}
           value={text}
           onChange={(e) => {
