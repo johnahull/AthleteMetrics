@@ -57,6 +57,7 @@ import { EVAL_REPORT_TYPE, frozenModelSchema } from "@shared/eval-report-config"
 import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { formatEventReportTimeframe } from "../utils/calendar-date";
+import type { BenchmarkComparison } from "@shared/benchmark-types";
 
 const REPORT_NOT_FOUND = { message: "Report not found" };
 
@@ -4931,18 +4932,16 @@ function calculateBenchmarkAchievements(athleteRankings: any[], teamStatistics?:
 /**
  * Build report data structure for AI insights generation
  *
- * Includes data size limits to prevent extremely large payloads:
+ * Includes a data size limit to prevent extremely large payloads:
  * - MAX_METRICS: 20 metrics maximum
- * - MAX_ATHLETES: 100 athletes maximum for team reports
- * - MAX_VALUES_PER_METRIC: 100 values per metric
+ * Team metrics come from the full-roster teamStatistics; team prompts carry aggregates only, never
+ * athlete names (insights are stored and shared with athletes and parents).
  *
  * Exported only so the integration test can assert the prompt data; routes should not import it.
  */
 export async function buildReportDataForAI(report: Report, userId: string, reportService: ReportService): Promise<import("../services/ai-insights-service").ReportData> {
   // Data size limits to prevent large AI payloads
   const MAX_METRICS = 20;
-  const MAX_ATHLETES = 100;
-  const MAX_VALUES_PER_METRIC = 100;
 
   try {
     // Fetch organization details
@@ -4985,25 +4984,22 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
     );
 
     // Build metrics array from report data
-    const metrics: Array<{
-      code: string;
-      label: string;
-      values: number[];
-      unit: string;
-      lowerIsBetter: boolean;
-      percentile?: number;
-      teamAverage?: number;
-    }> = [];
+    const metrics: import("../services/ai-insights-service").ReportData["metrics"] = [];
 
     // Cast reportData to typed object for accessing properties
     // The report service returns different structures for team vs individual reports
     const typedReportData = reportData as {
-      teamStatistics?: Array<{ metric: string; units?: string }>;
+      teamStatistics?: Array<{
+        metric: string;
+        average: number;
+        median: number;
+        min: number;
+        max: number;
+        standardDeviation: number;
+        units?: string;
+      }>;
       athleteRankings?: Array<{
-        userId: string;
-        userName: string;
-        measurements?: Record<string, number>;
-        benchmarkComparisons?: Record<string, Array<{ meetsOrExceeds: boolean }>>;
+        benchmarkComparisons?: Record<string, BenchmarkComparison[]>;
       }>;
       athleteCount?: number;
       teamIds?: string[];
@@ -5011,30 +5007,22 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
         userId: string;
         userName?: string;
         fullName?: string;
-        position?: string;
+        positions?: string[];
         age?: number;
         gender?: string;
         sports?: string[];
         measurements?: Record<string, number>;
         percentiles?: Record<string, number>;
         teamAverages?: Record<string, number>;
-        benchmarkComparisons?: Record<string, Array<{ meetsOrExceeds: boolean }>>;
+        benchmarkComparisons?: Record<string, BenchmarkComparison[]>;
       };
-      benchmarkComparisons?: Array<{
-        metric: string;
-        benchmarkName: string;
-        benchmarkValue: number;
-        meetsOrExceeds: boolean;
-      }>;
       metricLabels?: Record<string, string>;
+      comparisonLabel?: string;
+      trends?: Record<string, { series?: Array<{ date: string }> }>;
+      teamTrends?: Record<string, { teamSeries?: unknown[] }>;
     };
 
     if (report.reportType === 'team' && typedReportData.teamStatistics) {
-      // Limit athlete rankings to prevent large payloads
-      const limitedAthleteRankings = typedReportData.athleteRankings
-        ? typedReportData.athleteRankings.slice(0, MAX_ATHLETES)
-        : [];
-
       // Team report metrics (limited to MAX_METRICS)
       const statsToProcess = typedReportData.teamStatistics.slice(0, MAX_METRICS);
 
@@ -5043,24 +5031,18 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
 
       for (const stat of statsToProcess) {
         const metricCode = stat.metric;
-        const values: number[] = [];
-
-        // Extract individual values from athlete rankings (limited)
-        for (const athlete of limitedAthleteRankings) {
-          if (athlete.measurements && athlete.measurements[metricCode] !== undefined) {
-            values.push(athlete.measurements[metricCode]);
-          }
-        }
-
-        // Limit values per metric
-        const limitedValues = values.slice(0, MAX_VALUES_PER_METRIC);
-
+        // Spread from teamStatistics (full roster), not from athleteRankings values
         metrics.push({
           code: metricCode,
           label: typedReportData.metricLabels?.[metricCode] || metricCode, // Human-readable label
-          values: limitedValues,
+          values: [],
           unit: stat.units || "",
           lowerIsBetter: teamMetricTypes[metricCode] === 'lower_is_better',
+          average: stat.average,
+          median: stat.median,
+          min: stat.min,
+          max: stat.max,
+          standardDeviation: stat.standardDeviation,
         });
       }
     } else if (report.reportType === 'individual' && typedReportData.athlete) {
@@ -5090,6 +5072,34 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
       }
     }
 
+    // Benchmark rows are read only for metrics in the prompt. Tier rows (comparisonOperator 'range')
+    // carry the tier midpoint in benchmarkValue and "upper half" in meetsOrExceeds, so neither is
+    // used as a threshold for them: tierName / nextTierName / distanceToNextTier instead.
+    const pct = (n: number, total: number) => Math.round((n / total) * 100);
+    const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    const ordinal = (n: number) => {
+      const r = Math.round(n);
+      const suffix = r % 100 >= 11 && r % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][r % 10] ?? 'th';
+      return `${r}${suffix}`;
+    };
+    const withUnit = (value: number, unit: string) => (unit ? `${value.toFixed(2)} ${unit}` : value.toFixed(2));
+    const tierText = (c: BenchmarkComparison) => `${c.tierName} tier of ${c.tierGroupName || c.benchmarkName}`;
+    const tierGapText = (c: BenchmarkComparison, m: (typeof metrics)[number]) =>
+      c.nextTierName && c.distanceToNextTier != null
+        ? `; needs ${withUnit(c.distanceToNextTier, m.unit)} ${m.lowerIsBetter ? 'less' : 'more'} to reach ${c.nextTierName}`
+        : '';
+    // Where a tier row sits inside its OWN group (allTiers is sorted best first): index and group size
+    const tierIndex = (c: BenchmarkComparison) => {
+      const i = c.allTiers?.findIndex(t => t.tierName === c.tierName) ?? -1;
+      return i < 0 ? undefined : { i, n: c.allTiers!.length };
+    };
+    // 0 = best tier, 1 = bottom tier; comparable across groups of different sizes
+    const tierPosition = (c: BenchmarkComparison) => {
+      const idx = tierIndex(c);
+      return idx ? idx.i / Math.max(idx.n - 1, 1) : c.isBestTier ? 0 : 0.5;
+    };
+    const group = typedReportData.comparisonLabel || 'all athletes in organization';
+
     // Build improvements array (metrics that improved from previous)
     const improvements: Array<{ metric: string; improvement: string }> = [];
     // Note: Would need historical data to calculate improvements
@@ -5097,57 +5107,166 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
 
     // Build concerns array (metrics below expected performance)
     const concerns: Array<{ metric: string; concern: string }> = [];
-    if (typedReportData.benchmarkComparisons) {
-      // Identify metrics below benchmarks
-      for (const comparison of typedReportData.benchmarkComparisons) {
-        if (!comparison.meetsOrExceeds) {
-          concerns.push({
-            metric: comparison.metric,
-            concern: `Below ${comparison.benchmarkName} benchmark (${comparison.benchmarkValue})`,
-          });
-        }
-      }
-    }
-
     // Build benchmark comparisons array
     const benchmarkComparisons: Array<{ metric: string; performance: string }> = [];
-    if (report.reportType === 'team' && typedReportData.athleteRankings) {
-      // Calculate team benchmark achievement rate
-      const benchmarkStats = new Map<string, { total: number; met: number }>();
+    const keyFacts: string[] = [];
+    let metricsWithBenchmarks = 0;
+    let historyText: string;
+    let sampleText: string;
 
-      for (const athlete of typedReportData.athleteRankings) {
-        if (athlete.benchmarkComparisons) {
-          for (const [metric, comparisons] of Object.entries(athlete.benchmarkComparisons)) {
-            if (!benchmarkStats.has(metric)) {
-              benchmarkStats.set(metric, { total: 0, met: 0 });
-            }
-            const stats = benchmarkStats.get(metric)!;
-            for (const comp of comparisons) {
-              stats.total++;
-              if (comp.meetsOrExceeds) stats.met++;
+    if (report.reportType === 'team') {
+      // Aggregates only (no per-athlete rows): share meeting each single-value benchmark,
+      // and the tier distribution for each tier group. The two kinds of share are not
+      // comparable, so each is ranked on its own.
+      type Share = { metric: string; share: number; text: string };
+      const singleShares: Share[] = [];
+      const tierShares: Share[] = [];
+      const rankings = typedReportData.athleteRankings || [];
+
+      for (const m of metrics) {
+        const single = new Map<string, { met: number; total: number }>();
+        type TierTally = { counts: Map<string, { n: number; order: number }>; bottomName?: string; total: number };
+        const tiers = new Map<string, TierTally>();
+
+        for (const athlete of rankings) {
+          for (const c of athlete.benchmarkComparisons?.[m.code] || []) {
+            if (c.comparisonOperator === 'range') {
+              const key = c.tierGroupName || c.benchmarkName;
+              const t: TierTally = tiers.get(key) || { counts: new Map(), total: 0 };
+              const tierName = c.tierName || 'Unknown';
+              const entry = t.counts.get(tierName) || { n: 0, order: c.tierOrder ?? Number.MAX_SAFE_INTEGER };
+              entry.n++;
+              t.counts.set(tierName, entry);
+              t.total++;
+              t.bottomName ??= c.allTiers?.[c.allTiers.length - 1]?.tierName;
+              tiers.set(key, t);
+            } else {
+              const s = single.get(c.benchmarkName) || { met: 0, total: 0 };
+              s.total++;
+              if (c.meetsOrExceeds) s.met++;
+              single.set(c.benchmarkName, s);
             }
           }
         }
+
+        if (single.size > 0 || tiers.size > 0) metricsWithBenchmarks++;
+
+        for (const [name, s] of single) {
+          const text = `${pct(s.met, s.total)}% of athletes meet ${name} (${s.met}/${s.total})`;
+          benchmarkComparisons.push({ metric: m.label, performance: text });
+          if (s.met / s.total < 0.5) concerns.push({ metric: m.label, concern: text });
+          singleShares.push({ metric: m.label, share: s.met / s.total, text });
+        }
+        for (const [name, t] of tiers) {
+          const distribution = [...t.counts.entries()]
+            .sort((a, b) => a[1].order - b[1].order)
+            .map(([tierName, { n }]) => `${tierName} ${n}`)
+            .join(', ');
+          benchmarkComparisons.push({ metric: m.label, performance: `${name}: ${distribution} (of ${plural(t.total, 'athlete')})` });
+          // Without allTiers the bottom tier is unknown: the distribution line is all we can say
+          if (!t.bottomName) continue;
+          const bottom = t.counts.get(t.bottomName)?.n ?? 0;
+          if (bottom / t.total > 0.5) {
+            concerns.push({
+              metric: m.label,
+              concern: `${pct(bottom, t.total)}% of athletes in the bottom tier (${t.bottomName}) of ${name} (${bottom}/${t.total})`,
+            });
+          }
+          const above = t.total - bottom;
+          tierShares.push({
+            metric: m.label,
+            share: above / t.total,
+            text: `${pct(above, t.total)}% of athletes above the bottom tier (${t.bottomName}) of ${name} (${above}/${t.total})`,
+          });
+        }
       }
 
-      for (const [metric, stats] of benchmarkStats) {
-        const percentage = Math.round((stats.met / stats.total) * 100);
-        benchmarkComparisons.push({
-          metric,
-          performance: `${percentage}% of athletes meet benchmarks (${stats.met}/${stats.total})`,
-        });
+      const rank = (shares: Share[], strongestTitle: string, gapTitle: string) => {
+        if (shares.length === 0) return;
+        const sorted = [...shares].sort((a, b) => b.share - a.share);
+        keyFacts.push(`${strongestTitle}: ${sorted[0].metric}, ${sorted[0].text}`);
+        const gap = sorted[sorted.length - 1];
+        if (gap.metric !== sorted[0].metric) keyFacts.push(`${gapTitle}: ${gap.metric}, ${gap.text}`);
+      };
+      rank(singleShares, 'Strongest benchmark result', 'Biggest benchmark gap');
+      rank(tierShares, 'Best tier result', 'Biggest tier gap');
+
+      const trendMetrics = Object.values(typedReportData.teamTrends || {}).filter(t => (t.teamSeries?.length ?? 0) >= 2).length;
+      sampleText = plural(typedReportData.athleteCount || 0, 'athlete');
+      historyText = trendMetrics > 0
+        ? `history over time for ${plural(trendMetrics, 'metric')}`
+        : 'no history over time in this report (best value per athlete)';
+    } else {
+      const athlete = typedReportData.athlete;
+      const tierRows: Array<{ m: (typeof metrics)[number]; c: BenchmarkComparison }> = [];
+
+      for (const m of metrics) {
+        const comparisons = athlete?.benchmarkComparisons?.[m.code] || [];
+        if (comparisons.length > 0) metricsWithBenchmarks++;
+        const value = m.values[0];
+        let singleTotal = 0;
+        let singleMet = 0;
+
+        for (const c of comparisons) {
+          if (c.comparisonOperator === 'range') {
+            tierRows.push({ m, c });
+            benchmarkComparisons.push({ metric: m.label, performance: tierText(c) + tierGapText(c, m) });
+            // Only the lower half of its own group is a concern; a higher non-best tier is a next step
+            const idx = tierIndex(c);
+            if (idx && idx.n > 1 && idx.i >= idx.n / 2) {
+              concerns.push({ metric: m.label, concern: tierText(c) + tierGapText(c, m) });
+            }
+          } else {
+            singleTotal++;
+            if (c.meetsOrExceeds) {
+              singleMet++;
+            } else {
+              concerns.push({
+                metric: m.label,
+                concern: `Below ${c.benchmarkName} benchmark (${withUnit(c.benchmarkValue, m.unit)}); athlete ${withUnit(value, m.unit)}`,
+              });
+            }
+          }
+        }
+        if (singleTotal > 0) {
+          benchmarkComparisons.push({ metric: m.label, performance: `Meets ${singleMet}/${singleTotal} benchmarks` });
+        }
       }
-    } else if (report.reportType === 'individual' && typedReportData.athlete?.benchmarkComparisons) {
-      // Individual benchmark comparisons
-      for (const [metric, comparisons] of Object.entries(typedReportData.athlete.benchmarkComparisons)) {
-        const metComparisons = comparisons.filter(c => c.meetsOrExceeds);
-        const totalComparisons = comparisons.length;
-        benchmarkComparisons.push({
-          metric,
-          performance: `Meets ${metComparisons.length}/${totalComparisons} benchmarks`,
-        });
+
+      // Strongest: highest percentile, else best tier. Biggest gap: lowest tier (with distance), else lowest percentile.
+      const withPercentile = metrics.filter(m => m.percentile !== undefined)
+        .sort((a, b) => b.percentile! - a.percentile!);
+      const byTier = [...tierRows].sort((a, b) => tierPosition(a.c) - tierPosition(b.c));
+      let strongest: string | undefined;
+      if (withPercentile.length > 0) {
+        strongest = withPercentile[0].label;
+        keyFacts.push(`Strongest metric: ${strongest}, ${ordinal(withPercentile[0].percentile!)} percentile vs ${group}`);
+      } else if (byTier.length > 0) {
+        strongest = byTier[0].m.label;
+        keyFacts.push(`Strongest metric: ${strongest}, ${tierText(byTier[0].c)}`);
       }
+      const tierGap = byTier.filter(r => !r.c.isBestTier).pop();
+      const percentileGap = withPercentile[withPercentile.length - 1];
+      if (tierGap && tierGap.m.label !== strongest) {
+        keyFacts.push(`Biggest gap: ${tierGap.m.label}, ${tierText(tierGap.c)}${tierGapText(tierGap.c, tierGap.m)}`);
+      } else if (percentileGap && percentileGap.label !== strongest) {
+        keyFacts.push(`Biggest gap: ${percentileGap.label}, ${ordinal(percentileGap.percentile!)} percentile vs ${group}`);
+      }
+
+      const series = Object.values(typedReportData.trends || {}).filter(t => (t.series?.length ?? 0) >= 2);
+      const sessions = new Set(series.flatMap(t => t.series!.map(p => p.date))).size;
+      sampleText = series.length > 0
+        ? plural(sessions, 'testing session')
+        : metrics.length > 0 ? 'Best value per metric only' : 'No measurements in this report';
+      historyText = series.length > 0
+        ? `history over time for ${plural(series.length, 'metric')}`
+        : 'no history over time in this report';
     }
+
+    const benchmarkText = metricsWithBenchmarks > 0
+      ? `benchmarks for ${metricsWithBenchmarks} of ${metrics.length} metrics`
+      : 'no benchmarks';
+    const dataConfidence = `${sampleText}; ${historyText}; ${benchmarkText}`;
 
     // Extract and validate audience from report config
     // athlete/parent audiences only apply to individual reports — team reports always use coach
@@ -5170,6 +5289,9 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
       improvements,
       concerns,
       benchmarkComparisons,
+      comparisonLabel: typedReportData.comparisonLabel,
+      keyFacts,
+      dataConfidence,
       audience,
     };
 
@@ -5199,7 +5321,7 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
     // Add individual-specific data
     if (report.reportType === 'individual' && typedReportData.athlete) {
       aiReportData.athleteName = typedReportData.athlete.userName || typedReportData.athlete.fullName;
-      aiReportData.athletePosition = typedReportData.athlete.position;
+      aiReportData.athletePosition = typedReportData.athlete.positions?.join(', ') || undefined;
       aiReportData.athleteAge = typedReportData.athlete.age;
       aiReportData.athleteGender = typedReportData.athlete.gender;
       // Extract sport from athlete.sports array (use first sport)
