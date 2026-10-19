@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildPrompt, ReportData } from '../ai-insights-service';
+import { buildPrompt, ReportData, SYSTEM_PROMPT } from '../ai-insights-service';
 
 /**
  * Unit tests for the audience-specific prompt branches in buildPrompt().
@@ -233,24 +233,12 @@ describe('buildPrompt audience branches', () => {
   });
 
   describe('all audiences share common constraints', () => {
-    const audiences: Array<ReportData['audience']> = ['coach', 'athlete', 'parent'];
-
-    audiences.forEach((audience) => {
-      it(`should include IMPORTANT CONSTRAINTS for "${audience}" audience`, () => {
-        const data = makeBaseReportData({ audience });
-        const prompt = buildPrompt(data);
-
-        expect(prompt).toContain('IMPORTANT CONSTRAINTS');
-        expect(prompt).toContain('Base ALL observations strictly on the provided metrics');
-        expect(prompt).toContain('Do NOT comment on effort, attitude, coachability');
-      });
-    });
-
-    it('should include IMPORTANT CONSTRAINTS for undefined audience (default)', () => {
-      const data = makeBaseReportData();
-      const prompt = buildPrompt(data);
-
-      expect(prompt).toContain('IMPORTANT CONSTRAINTS');
+    // The constraints live in the shared system prompt, sent with every request
+    it('puts the constraints in the system prompt, not in the per-report user message', () => {
+      expect(SYSTEM_PROMPT).toContain('IMPORTANT CONSTRAINTS');
+      expect(SYSTEM_PROMPT).toContain('Base ALL observations strictly on the provided metrics');
+      expect(SYSTEM_PROMPT).toContain('Do NOT comment on effort, attitude, coachability');
+      expect(buildPrompt(makeBaseReportData())).not.toContain('IMPORTANT CONSTRAINTS');
     });
   });
 });

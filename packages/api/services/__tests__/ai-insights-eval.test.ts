@@ -8,7 +8,7 @@ import {
   missingHeadings,
   ungroundedNumbers,
 } from '../ai-insights-eval';
-import { buildPrompt } from '../ai-insights-service';
+import { buildPrompt, SYSTEM_PROMPT } from '../ai-insights-service';
 import { GOLDEN_CASES } from './fixtures/ai-insights-golden';
 
 /**
@@ -19,7 +19,7 @@ import { GOLDEN_CASES } from './fixtures/ai-insights-golden';
 const sample = (file: string) => readFileSync(join(__dirname, 'fixtures/ai-insights-samples', file), 'utf8');
 const golden = (name: string) => GOLDEN_CASES.find(c => c.name === name)!;
 const promptFor = (name: string, audience: 'coach' | 'athlete' | 'parent' = 'coach') =>
-  buildPrompt({ ...golden(name).data, audience });
+  `${SYSTEM_PROMPT}\n${buildPrompt({ ...golden(name).data, audience })}`;
 
 describe('ungroundedNumbers', () => {
   it('passes numbers that appear in the prompt, in any decimal formatting', () => {

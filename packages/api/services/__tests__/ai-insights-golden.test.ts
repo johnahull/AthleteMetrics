@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildPrompt } from '../ai-insights-service';
+import { buildPrompt, SYSTEM_PROMPT } from '../ai-insights-service';
 import { athleteNamesIn } from '../ai-insights-eval';
 import { GOLDEN_CASES, goldenAudiences } from './fixtures/ai-insights-golden';
 
@@ -9,6 +9,10 @@ import { GOLDEN_CASES, goldenAudiences } from './fixtures/ai-insights-golden';
  */
 
 describe('golden prompts', () => {
+  it('system prompt', async () => {
+    await expect(SYSTEM_PROMPT).toMatchFileSnapshot('./__snapshots__/ai-insights-golden/system.txt');
+  });
+
   for (const c of GOLDEN_CASES) {
     for (const audience of goldenAudiences(c)) {
       it(`${c.name} (${audience})`, async () => {

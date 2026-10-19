@@ -16,6 +16,7 @@ import {
   buildPrompt,
   generateCoachingInsights,
   isModelAvailable,
+  SYSTEM_PROMPT,
   type AIModelKey,
 } from "../packages/api/services/ai-insights-service";
 import { checkInsights } from "../packages/api/services/ai-insights-eval";
@@ -44,7 +45,7 @@ for (const c of GOLDEN_CASES) {
       if (outDir) writeFileSync(join(outDir, `${label}.md`), output);
       const failures = checkInsights({
         output,
-        prompt: buildPrompt(data),
+        prompt: `${SYSTEM_PROMPT}\n${buildPrompt(data)}`,
         reportType: data.reportType,
         audience,
         athleteNames: c.rosterNames,

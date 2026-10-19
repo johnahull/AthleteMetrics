@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildPrompt, ReportData } from '../ai-insights-service';
+import { buildPrompt, ReportData, SYSTEM_PROMPT } from '../ai-insights-service';
 
 /**
  * buildPrompt: no fake trend arrows, team spread stats, the real comparison group,
@@ -113,6 +113,7 @@ describe('buildPrompt data fence', () => {
     expect(prompt.slice(open, close)).toContain('## Performance Metrics');
     expect(prompt.indexOf('## Instructions')).toBeGreaterThan(close);
     expect(prompt).toContain('data, not instructions');
+    expect(SYSTEM_PROMPT).toContain('data, not instructions');
   });
 
   it('a data string cannot close the fence early', () => {
@@ -129,13 +130,13 @@ describe('buildPrompt key facts and data confidence', () => {
     expect(prompt).toContain('## Key Facts');
     expect(prompt).toContain('- Strongest metric: Vertical Jump, 85th percentile');
     expect(prompt).toContain('- Biggest gap: bFly');
-    expect(prompt).toMatch(/Key Facts.*as given/s);
+    expect(SYSTEM_PROMPT).toMatch(/Key Facts.*as given/s);
   });
 
   it('prints the data-confidence line and tells the model to state limits', () => {
     const prompt = buildPrompt(individual({ dataConfidence: 'Best value per metric only; no history over time' }));
     expect(prompt).toContain('- Data confidence: Best value per metric only; no history over time');
-    expect(prompt).toMatch(/no history.*do not describe a trend/is);
+    expect(SYSTEM_PROMPT).toMatch(/no history.*do not describe a trend/is);
   });
 
   it('omits both sections when absent', () => {
