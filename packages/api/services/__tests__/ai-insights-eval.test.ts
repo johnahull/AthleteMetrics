@@ -140,6 +140,15 @@ describe('checkInsights on recorded samples', () => {
       .toBeUndefined();
   });
 
+  it('flags claims that a change happened, not advice that mentions improving', () => {
+    const data = { ...golden('individual-benchmarks').data, audience: 'coach' as const };
+    const failures = (output: string) => checkInsights({ output, data }).find(f => f.startsWith('change over time'));
+    expect(failures('Work to improve your sprint time; keep improving the jump. There is room for improvement, and a decline in power would show on a retest.'))
+      .toBeUndefined();
+    expect(failures('Jordan improved 5% since the last test and the jump declined.'))
+      .toBe('change over time claimed without history: improved, since the last, declined');
+  });
+
   it('reports small integers separately: they are weak evidence of grounding', () => {
     const failures = checkInsights({
       output: '## Summary\nx\n## What\'s Going Well\nx\n## What to Work On\n2 gaps\n## Next Steps\nx',

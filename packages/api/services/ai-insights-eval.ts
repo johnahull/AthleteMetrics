@@ -54,11 +54,12 @@ export function unmeasuredQualities(output: string): string[] {
 }
 
 /**
- * Words that describe change over time (only allowed when the report has history). Past-tense forms
- * only: bare verbs such as "increase" also appear in legitimate training advice.
+ * Claims that a change happened (only allowed when the report has history): past-tense forms and
+ * "since (the) last". Other forms such as "improve", "improving" or "a decline in" also appear in
+ * legitimate training advice, so they are not flagged.
  */
 function changeWords(output: string): string[] {
-  const pattern = /\b(?:improv\w*|declin\w*|since (?:the )?last|increased|decreased|dropped|regressed|grew|rose|fell|gained|lost|slowed|worsened|dipped)\b/gi;
+  const pattern = /\b(?:improved|declined|since (?:the )?last|increased|decreased|dropped|regressed|grew|rose|fell|gained|lost|slowed|worsened|dipped)\b/gi;
   return [...new Set(output.match(pattern) ?? [])];
 }
 
@@ -102,6 +103,7 @@ export function checkInsights(input: {
   athleteNames?: string[]; // roster of a team report: none may appear
 }): string[] {
   const { output, data } = input;
+  // Team reports are always written for coaches (buildReportDataForAI ignores any other audience for them)
   const audience = data.reportType === "team" ? "coach" : data.audience ?? "coach";
   const prompt = buildPrompt({ ...data, audience });
   const failures: string[] = [];
