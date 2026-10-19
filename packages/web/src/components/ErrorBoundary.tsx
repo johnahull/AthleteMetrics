@@ -39,7 +39,7 @@ export class ErrorBoundary extends Component<Props, State> {
     return { resetKey: props.resetKey, ...(state.hasError ? { hasError: false, error: undefined } : {}) };
   }
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): Partial<State> {
     return { 
       hasError: true, 
       error,

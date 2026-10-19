@@ -179,7 +179,14 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
   return navigation;
 };
 
+// The wrapper keeps SidebarContent's data hooks from running (unauthenticated) when there is no user
 export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
+  const { user } = useAuth();
+  if (!user) return null;
+  return <SidebarContent onNavigate={onNavigate} />;
+}
+
+function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const [location] = useLocation();
   const { user: userData, logout } = useAuth();
   const labels = useContextualLabels(); // Get contextual labels
