@@ -207,6 +207,13 @@ ALTER TABLE reports ADD CONSTRAINT reports_coaching_insights_model_check
   - `PinnedReportsSection.test.tsx`
   - `RecentReportsSection.test.tsx`
 
+### Prompt Eval Harness
+- **Golden set**: `packages/api/services/__tests__/fixtures/ai-insights-golden.ts` (team, individual and event reports, with and without trends and benchmarks; team = coach only, individual = coach/athlete/parent).
+- **Prompt snapshots** (CI, no network): `ai-insights-golden.test.ts` snapshots every built prompt to `__snapshots__/ai-insights-golden/`. A prompt change is a snapshot diff to review; accept it with `npx vitest run -u <file>`.
+- **Output checks**: `packages/api/services/ai-insights-eval.ts` (every number in the output appears in the input, no athlete names in team outputs, the audience headings, word range). `ai-insights-eval.test.ts` proves them on recorded good and bad samples in `fixtures/ai-insights-samples/`.
+- **Live run (optional, paid, not in CI)**: `AI_EVAL_MODEL=<model key> <PROVIDER>_API_KEY=... npx tsx scripts/eval-ai-insights.ts` generates insights for the golden set and prints the check results; `AI_EVAL_OUT=<dir>` saves the outputs.
+- **Rubric review (manual only)**: for a prompt or model change, read the live outputs (or have a separate judge model grade them) for accuracy against the data, usefulness of the next steps and audience tone. This is not automated and not a CI gate.
+
 ## Environment Configuration
 
 ### Required Environment Variables

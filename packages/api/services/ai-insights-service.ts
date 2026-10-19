@@ -474,6 +474,19 @@ export interface ReportData {
   audience?: 'coach' | 'athlete' | 'parent';
 }
 
+/** Fixed output headings per audience, so the web card and the PDF render every report the same way. */
+export const INSIGHT_HEADINGS: Record<NonNullable<ReportData['audience']>, string[]> = {
+  coach: ['Summary', "What's Going Well", 'What to Work On', 'Next Steps'],
+  athlete: ['Summary', "What's Going Well", 'What to Work On'],
+  parent: ['What the numbers mean', "What's Going Well", 'What to Work On'],
+};
+
+/** Word range for the insights of one report: team reports get more room than individual ones. */
+export function insightWordRange(reportType: ReportData['reportType'], audience: ReportData['audience'] = 'coach'): [number, number] {
+  if (reportType === 'team') return [200, 350];
+  return audience === 'athlete' ? [150, 200] : audience === 'parent' ? [200, 300] : [150, 250];
+}
+
 /**
  * Generate coaching insights for a performance report
  */
