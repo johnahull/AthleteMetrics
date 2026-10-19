@@ -45,17 +45,10 @@ import { useSports } from "@/lib/sports-api";
 import type { SiteMetric } from "@shared/schema";
 import MetricFormDialog from "@/components/metric-form-dialog";
 
+// The admin check wraps the page so non-admins never mount its site-admin-only queries
 export default function MetricsManagementPage() {
-  const { toast } = useToast();
   const { user } = useAuth();
-  const [selectedMetric, setSelectedMetric] = useState<SiteMetric | null>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [toggleDialogOpen, setToggleDialogOpen] = useState(false);
-  const [formDialogOpen, setFormDialogOpen] = useState(false);
-  const [metricToEdit, setMetricToEdit] = useState<SiteMetric | null>(null);
-  const [derivedFilter, setDerivedFilter] = useState<'all' | 'derived' | 'source'>('all');
 
-  // Redirect if not site admin
   if (!user?.isSiteAdmin) {
     return (
       <div className="container mx-auto py-8">
@@ -70,6 +63,18 @@ export default function MetricsManagementPage() {
       </div>
     );
   }
+
+  return <MetricsManagement />;
+}
+
+function MetricsManagement() {
+  const { toast } = useToast();
+  const [selectedMetric, setSelectedMetric] = useState<SiteMetric | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [toggleDialogOpen, setToggleDialogOpen] = useState(false);
+  const [formDialogOpen, setFormDialogOpen] = useState(false);
+  const [metricToEdit, setMetricToEdit] = useState<SiteMetric | null>(null);
+  const [derivedFilter, setDerivedFilter] = useState<'all' | 'derived' | 'source'>('all');
 
   const { data: allMetrics, isLoading } = useSiteMetrics(true); // Include inactive
   const { data: sports } = useSports();

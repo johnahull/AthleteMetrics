@@ -184,15 +184,10 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
   const { user: userData, logout } = useAuth();
   const labels = useContextualLabels(); // Get contextual labels
 
-  // Don't render sidebar if no user data
-  if (!userData) {
-    return null;
-  }
-
   // Get user's organizations for context
   const { data: userOrganizations } = useQuery<UserOrganization[]>({
     queryKey: ["/api/auth/me/organizations"],
-    enabled: !!userData.id && !userData.isSiteAdmin,
+    enabled: !!userData?.id && !userData.isSiteAdmin,
   });
 
   // Fetch site settings to check wellness module status
@@ -202,7 +197,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
     : "/api/site-settings/public";
   const { data: siteSettings } = useQuery<SiteSettings>({
     queryKey: [siteSettingsEndpoint],
-    enabled: !!userData.id,
+    enabled: !!userData?.id,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
 
@@ -210,7 +205,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
   const organizationId = userOrganizations?.[0]?.organizationId;
   const { data: organization } = useQuery<Organization>({
     queryKey: [`/api/organizations/${organizationId}`],
-    enabled: !!organizationId && !userData.isSiteAdmin,
+    enabled: !!organizationId && !userData?.isSiteAdmin,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
 
@@ -219,6 +214,11 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
 
   // Fetch unread report count for athletes only
   const { data: unreadReportCount } = useUnreadReportCount();
+
+  // Don't render sidebar if no user data (after the hooks above, so their order never changes)
+  if (!userData) {
+    return null;
+  }
 
   // Use the role from user session data
   const userRole = userData?.role || 'athlete';

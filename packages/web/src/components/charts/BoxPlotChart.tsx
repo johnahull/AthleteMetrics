@@ -1436,18 +1436,6 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
     };
   }, []);
 
-  if (!boxPlotData) {
-    return (
-      <div className="flex items-center justify-center h-64 text-muted-foreground">
-        No data available for box plot
-      </div>
-    );
-  }
-
-  // Use the processed data for the chart
-  const chartData = boxPlotData;
-  const chartOptions = options;
-
   // Calculate multi-group statistics grid data
   const multiGroupStats = useMemo(() => {
     if (!selectedGroups || selectedGroups.length < 2 || !data || data.length === 0) {
@@ -1530,6 +1518,18 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
       unit: metricConfig?.displayFormat === 'duration' ? '' : metricConfig?.unit || ''
     };
   }, [selectedGroups, data, getMetricConfig]);
+
+  if (!boxPlotData) {
+    return (
+      <div className="flex items-center justify-center h-64 text-muted-foreground">
+        No data available for box plot
+      </div>
+    );
+  }
+
+  // Use the processed data for the chart
+  const chartData = boxPlotData;
+  const chartOptions = options;
 
   // Add error boundary wrapper for chart rendering
   return (
