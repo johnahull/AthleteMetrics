@@ -1,7 +1,0 @@
-{
-  "tool_name": "mcp__railway__get-logs",
-  "tool_input_preview": "{\"projectId\":\"57eae6a6-d436-460e-a265-2b8efb970629\",\"types\":[\"http\"],\"filter\":\"@path:/api/my/reports\",\"limit\":30}",
-  "error": "Provide either deploymentId, or serviceId (environmentId is optional and defaults to the project's production environment).",
-  "timestamp": "2026-10-19T17:41:04.209Z",
-  "retry_count": 1
-}

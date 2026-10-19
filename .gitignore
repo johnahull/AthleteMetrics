@@ -103,3 +103,6 @@ E2E_*.md
 
 # Git worktrees (local dev isolation, not repo content)
 .worktrees/
+
+# oh-my-claudecode agent state
+**/.omc/

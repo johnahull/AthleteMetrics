@@ -3,6 +3,6 @@ import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
 
 export default [
-  { ignores: ['.claude/**', '**/dist/**', 'coverage/**'] },
+  { ignores: ['.claude/**', '**/.omc/**', '**/dist/**', 'coverage/**'] },
   { files: ['packages/web/src/**/*.{ts,tsx}'], languageOptions: { parser: tseslint.parser }, linterOptions: { reportUnusedDisableDirectives: 'off' }, plugins: { 'react-hooks': reactHooks }, rules: { 'react-hooks/rules-of-hooks': 'error' } },
 ];
