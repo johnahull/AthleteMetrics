@@ -433,6 +433,8 @@ export interface ReportData {
 
   // Common report data
   timeframe: string;
+  eventName?: string;
+  eventDate?: string; // already formatted as a calendar date (UTC)
   metrics: Array<{
     code: string;
     label: string;
@@ -556,6 +558,11 @@ export function buildPrompt(reportData: ReportData): string {
   prompt += `- Report: ${reportName}\n`;
   prompt += `- Type: ${reportType === "team" ? "Team Performance" : "Individual Athlete"}\n`;
   prompt += `- Timeframe: ${reportData.timeframe}\n`;
+  const eventName = sanitizeForPrompt(reportData.eventName ?? '');
+  if (eventName) {
+    const eventDate = sanitizeForPrompt(reportData.eventDate ?? '');
+    prompt += `- Event: ${eventName}${eventDate ? ` (${eventDate})` : ''}\n`;
+  }
   if (reportData.dataConfidence) prompt += `- Data confidence: ${sanitizeForPrompt(reportData.dataConfidence)}\n`;
 
   // Team-specific context

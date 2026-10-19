@@ -142,7 +142,7 @@ describe('buildReportDataForAI — team', () => {
   });
 
   it('data confidence says history exists when team trends are present', async () => {
-    const data = await buildReportDataForAI(teamReport, 'u1', service(teamData({
+    const data = await buildReportDataForAI({ ...teamReport, config: { ...teamReport.config, charts: { trends: true } } }, 'u1', service(teamData({
       teamTrends: { VERTICAL_JUMP: { teamSeries: [{ date: '2024-01-01', value: 1 }, { date: '2024-02-01', value: 2 }] } },
     })));
     expect(data.dataConfidence).toContain('history over time for 1 metric');
@@ -201,7 +201,7 @@ describe('buildReportDataForAI — individual', () => {
     const none = await buildReportDataForAI(individualReport, 'u1', service(individualData()));
     expect(none.dataConfidence).toBe('Best value per metric only; no history over time in this report; benchmarks for 2 of 2 metrics');
 
-    const withTrends = await buildReportDataForAI(individualReport, 'u1', service(individualData({
+    const withTrends = await buildReportDataForAI({ ...individualReport, config: { ...individualReport.config, charts: { trends: true } } }, 'u1', service(individualData({
       trends: { VERTICAL_JUMP: { series: [{ date: '2024-01-15', value: 24 }, { date: '2024-03-15', value: 27.5 }] } },
     })));
     expect(withTrends.dataConfidence).toBe('2 testing sessions; history over time for 1 metric; benchmarks for 2 of 2 metrics');
@@ -361,5 +361,147 @@ describe('buildReportDataForAI — individual tier position and formatting', () 
     const data = await buildReportDataForAI(individualReport, 'u1', withRows({}, { measurements: {} }));
     expect(data.metrics).toEqual([]);
     expect(data.dataConfidence).toBe('No measurements in this report; no history over time in this report; no benchmarks');
+  });
+});
+
+describe('buildReportDataForAI — trends', () => {
+  const trendsOn = (r: any) => ({ ...r, config: { ...r.config, charts: { trends: true } } });
+  // Lower-is-better FLY10 went 1.60 -> 1.52 (5% better); higher-is-better VJ went 28 -> 27.5 (1.8% worse)
+  const trends = {
+    FLY10_TIME: { series: [{ date: '2024-01-15', value: 1.6 }, { date: '2024-03-15', value: 1.52 }], direction: 'lower', delta: { from: 1.6, to: 1.52, pct: 5 } },
+    VERTICAL_JUMP: { series: [{ date: '2024-01-15', value: 28 }, { date: '2024-03-15', value: 27.5 }], direction: 'higher', delta: { from: 28, to: 27.5, pct: -1.7857 } },
+  };
+
+  it('individual: improvements and declines come from trend deltas, direction already applied', async () => {
+    const data = await buildReportDataForAI(trendsOn(individualReport), 'u1', service(individualData({ trends })));
+    expect(data.improvements).toEqual([{ metric: '10-Yard Fly', improvement: 'improved 5.0% (from 1.60 s to 1.52 s)' }]);
+    expect(data.concerns).toContainEqual({ metric: 'Vertical Jump', concern: 'declined 1.8% (from 28.00 in to 27.50 in)' });
+    expect(data.keyFacts).toContain('Biggest change: 10-Yard Fly, improved 5.0% (from 1.60 s to 1.52 s)');
+  });
+
+  it('individual: trends present but the trends chart is off, so the prompt shows no change and no history', async () => {
+    const data = await buildReportDataForAI(individualReport, 'u1', service(individualData({ trends })));
+    expect(data.improvements).toEqual([]);
+    expect(JSON.stringify(data)).not.toContain('declined');
+    expect(data.keyFacts!.join()).not.toContain('Biggest change');
+    expect(data.dataConfidence).toContain('no history over time');
+  });
+
+  it('individual: legacy showTrends turns trends on', async () => {
+    const legacy = { ...individualReport, config: { ...individualReport.config, showTrends: true } };
+    const data = await buildReportDataForAI(legacy, 'u1', service(individualData({ trends })));
+    expect(data.improvements).toHaveLength(1);
+  });
+
+  it('team: change comes from the team-average delta only, never athlete series', async () => {
+    const teamTrends = {
+      VERTICAL_JUMP: {
+        teamSeries: [{ date: '2024-01-01', value: 24 }, { date: '2024-02-01', value: 25.2 }],
+        athleteSeries: [{ athleteId: 'x', athleteName: 'Hidden Athlete', series: [{ date: '2024-01-01', value: 40 }] }],
+        direction: 'higher', delta: { from: 24, to: 25.2, pct: 5 },
+      },
+    };
+    const data = await buildReportDataForAI(trendsOn(teamReport), 'u1', service(teamData({ teamTrends })));
+    // The athletes tested can differ between dates, so the wording says whose average it is
+    expect(data.improvements).toEqual([{ metric: 'Vertical Jump', improvement: 'team average (athletes tested on each date) improved 5.0% (from 24.00 in to 25.20 in)' }]);
+    expect(data.keyFacts).toContain('Biggest change: Vertical Jump, team average (athletes tested on each date) improved 5.0% (from 24.00 in to 25.20 in)');
+    expect(data.dataConfidence).toContain('history over time for 1 metric');
+    const prompt = buildPrompt(data);
+    expect(prompt).not.toContain('Hidden Athlete');
+    expect(prompt).not.toContain('40.00');
+  });
+
+  const delta = (from: number, to: number, pct: number) => ({
+    series: [{ date: '2024-01-15', value: from }, { date: '2024-03-15', value: to }], direction: 'higher', delta: { from, to, pct },
+  });
+
+  it('skips no-baseline, NaN and below-print-precision deltas; none can win Biggest change', async () => {
+    const data = await buildReportDataForAI(trendsOn(individualReport), 'u1', service(individualData({
+      trends: { VERTICAL_JUMP: delta(0, 27.5, 0), FLY10_TIME: delta(1.5, 1.52, NaN) },
+    })));
+    expect(data.improvements).toEqual([]);
+    expect(JSON.stringify(data)).not.toContain('declined');
+    expect(data.keyFacts!.join()).not.toContain('Biggest change');
+
+    const tiny = await buildReportDataForAI(trendsOn(individualReport), 'u1', service(individualData({
+      trends: { VERTICAL_JUMP: delta(27.5, 27.51, 0.04), FLY10_TIME: delta(1.52, 1.52, -0.049) },
+    })));
+    expect(tiny.improvements).toEqual([]);
+    expect(JSON.stringify(tiny)).not.toContain('0.0%');
+    expect(tiny.keyFacts!.join()).not.toContain('Biggest change');
+  });
+
+  it('a trend for a metric not in the prompt is ignored, also by the data-confidence counts', async () => {
+    const data = await buildReportDataForAI(trendsOn(individualReport), 'u1', service(individualData({
+      trends: { MILE_TIME: { ...delta(400, 380, 5), series: [{ date: '2024-01-01', value: 400 }, { date: '2024-02-01', value: 390 }, { date: '2024-03-01', value: 380 }] } },
+    })));
+    expect(data.improvements).toEqual([]);
+    expect(data.dataConfidence).toContain('no history over time');
+  });
+
+  it('declines only: Biggest change is a decline', async () => {
+    const data = await buildReportDataForAI(trendsOn(individualReport), 'u1', service(individualData({
+      trends: { VERTICAL_JUMP: delta(28, 27.5, -1.7857) },
+    })));
+    expect(data.improvements).toEqual([]);
+    expect(data.keyFacts).toContain('Biggest change: Vertical Jump, declined 1.8% (from 28.00 in to 27.50 in)');
+  });
+
+  it('Biggest change is chosen by absolute value, not by order or sign', async () => {
+    const data = await buildReportDataForAI(trendsOn(individualReport), 'u1', service(individualData({
+      trends: { VERTICAL_JUMP: delta(28, 28.5, 1.7857), FLY10_TIME: { ...delta(1.5, 1.6, -6.6667), direction: 'lower' } },
+    })));
+    expect(data.keyFacts).toContain('Biggest change: 10-Yard Fly, declined 6.7% (from 1.50 s to 1.60 s)');
+  });
+
+  it('team: trends but no teamStatistics and no athletes gives no change and no crash', async () => {
+    const teamTrends = { VERTICAL_JUMP: { teamSeries: [{ date: '2024-01-01', value: 24 }, { date: '2024-02-01', value: 25.2 }], athleteSeries: [], direction: 'higher', delta: { from: 24, to: 25.2, pct: 5 } } };
+    const data = await buildReportDataForAI(trendsOn(teamReport), 'u1', service(teamData({
+      teamTrends, teamStatistics: undefined, athleteRankings: [], athleteCount: 0,
+    })));
+    expect(data.improvements).toEqual([]);
+    expect(data.dataConfidence).toBe('0 athletes; no history over time in this report (best value per athlete); no benchmarks');
+  });
+
+  it('team: legacy report (no charts) shows no team trend', async () => {
+    const teamTrends = { VERTICAL_JUMP: { teamSeries: [{ date: '2024-01-01', value: 24 }, { date: '2024-02-01', value: 25.2 }], athleteSeries: [], direction: 'higher', delta: { from: 24, to: 25.2, pct: 5 } } };
+    const data = await buildReportDataForAI(teamReport, 'u1', service(teamData({ teamTrends })));
+    expect(data.improvements).toEqual([]);
+    expect(data.dataConfidence).toContain('no history over time');
+  });
+});
+
+describe('buildReportDataForAI — event context', () => {
+  // Calendar date stored as UTC midnight: must print as Mar 1, not Feb 29, west of UTC
+  const eventContext = { eventId: 'e1', eventName: 'Spring Combine', eventDate: new Date('2024-03-01T00:00:00Z'), participantCount: 12 };
+
+  it.each([['individual', individualReport, individualData], ['team', teamReport, teamData]] as const)(
+    '%s: event name and UTC calendar date reach the prompt', async (_t, report, build) => {
+      const data = await buildReportDataForAI(report, 'u1', service(build({ eventContext })));
+      expect(data.eventName).toBe('Spring Combine');
+      expect(data.eventDate).toBe('3/1/2024');
+      expect(buildPrompt(data)).toContain('- Event: Spring Combine (3/1/2024)');
+    });
+
+  it('an ISO string date (UTC midnight) prints the same calendar day', async () => {
+    const data = await buildReportDataForAI(individualReport, 'u1', service(individualData({
+      eventContext: { ...eventContext, eventDate: '2024-03-01T00:00:00.000Z' },
+    })));
+    expect(data.eventDate).toBe('3/1/2024');
+  });
+
+  it('an invalid date is dropped, the name stays', async () => {
+    const data = await buildReportDataForAI(individualReport, 'u1', service(individualData({
+      eventContext: { ...eventContext, eventDate: 'not a date' },
+    })));
+    expect(data.eventDate).toBeUndefined();
+    const prompt = buildPrompt(data);
+    expect(prompt).toContain('- Event: Spring Combine\n');
+    expect(prompt).not.toContain('Invalid Date');
+  });
+
+  it('no event: no event line', async () => {
+    const data = await buildReportDataForAI(individualReport, 'u1', service(individualData()));
+    expect(buildPrompt(data)).not.toContain('- Event:');
   });
 });
