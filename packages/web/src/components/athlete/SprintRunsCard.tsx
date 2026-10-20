@@ -93,7 +93,7 @@ export function SprintRunsCard({ measurements, className }: SprintRunsCardProps)
 
   return (
     <Card className={className ? `bg-white ${className}` : "bg-white"}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+      <CardHeader className="flex flex-row items-center justify-between">
         <h2 id="sprint-runs-heading" className="text-xl font-semibold text-gray-900">Sprint runs</h2>
         {hasBoth && (
           <ToggleGroup
