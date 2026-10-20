@@ -312,6 +312,24 @@ describe('report-utils', () => {
       expect(calculateBenchmarkAchievements(undefined as any)).toEqual([]);
     });
 
+    it('should count an athlete once per benchmark even when met on several metrics', () => {
+      const athleteRankings: AthleteRanking[] = [
+        {
+          userId: 'athlete-1',
+          userName: 'John Doe',
+          measurements: { FLY10_TIME: 1.3, VERTICAL_JUMP: 30 },
+          benchmarkComparisons: {
+            FLY10_TIME: [{ benchmarkName: 'Average', benchmarkValue: 1.8, meetsOrExceeds: true }],
+            VERTICAL_JUMP: [{ benchmarkName: 'Average', benchmarkValue: 20, meetsOrExceeds: true }],
+          },
+        },
+      ];
+
+      const achievements = calculateBenchmarkAchievements(athleteRankings);
+
+      expect(achievements).toEqual([{ tier: 'Average', count: 1, percentage: 100 }]);
+    });
+
     it('should count athletes meeting each benchmark correctly', () => {
       const athleteRankings: AthleteRanking[] = [
         {
