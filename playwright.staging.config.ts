@@ -7,7 +7,13 @@ import { readFileSync } from 'node:fs';
  * excluded so the E2E job gates only on tests that pass. Run them with E2E_QUARANTINE=include.
  * Fix a test, then delete its line; never add new entries without an issue.
  */
-const quarantined: string[] = JSON.parse(readFileSync(new URL('./tests/e2e/quarantine.json', import.meta.url), 'utf8'));
+const quarantined: string[] = (() => {
+  try {
+    return JSON.parse(readFileSync(new URL('./tests/e2e/quarantine.json', import.meta.url), 'utf8'));
+  } catch (error) {
+    throw new Error(`Cannot load tests/e2e/quarantine.json (restore it with git checkout): ${error}`);
+  }
+})();
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // Playwright greps "<project> <file> <describe...> <title>" joined by spaces.
 const quarantineGrepInvert = quarantined.length
