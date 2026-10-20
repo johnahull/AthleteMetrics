@@ -175,9 +175,9 @@ async function globalSetup(config: FullConfig) {
     console.log('✅ Primary login credentials verified');
 
     // Save authentication state for test reuse (prevents rate limiting)
-    const authDir = join(__dirname, '../../playwright/.auth');
+    const authDir = process.env.E2E_AUTH_FILE ? dirname(process.env.E2E_AUTH_FILE) : join(__dirname, '../../playwright/.auth');
     mkdirSync(authDir, { recursive: true });
-    const authFile = join(authDir, 'user.json');
+    const authFile = process.env.E2E_AUTH_FILE || join(authDir, 'user.json');
     await context.storageState({ path: authFile });
     console.log('💾 Authentication state saved for test reuse');
   } catch (error) {

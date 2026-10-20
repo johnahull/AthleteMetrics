@@ -1,4 +1,24 @@
 import { defineConfig, devices } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+
+/**
+ * Quarantine: tests listed in tests/e2e/quarantine.json (a spec file name, or "<spec file> › <describe> › <test>")
+ * fail deterministically on the CI setup (one shared admin account, see issue #490) and are
+ * excluded so the E2E job gates only on tests that pass. Run them with E2E_QUARANTINE=include.
+ * Fix a test, then delete its line; never add new entries without an issue.
+ */
+const quarantined: string[] = (() => {
+  try {
+    return JSON.parse(readFileSync(new URL('./tests/e2e/quarantine.json', import.meta.url), 'utf8'));
+  } catch (error) {
+    throw new Error(`Cannot load tests/e2e/quarantine.json (restore it with git checkout): ${error}`);
+  }
+})();
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// Playwright greps "<project> <file> <describe...> <title>" joined by spaces.
+const quarantineGrepInvert = quarantined.length
+  ? new RegExp(`(^|\\s)(${quarantined.map((e) => escapeRegExp(e.split(' › ').join(' ')) + (e.includes(' › ') ? '' : '(\\s.*)?')).join('|')})$`)
+  : undefined;
 
 /**
  * Playwright Configuration for Staging Environment Testing
@@ -19,6 +39,8 @@ export default defineConfig({
   // placeholders and are meant to be copied, not executed. Exclude them so they
   // don't register as failing specs.
   testIgnore: '**/templates/**',
+
+  grepInvert: process.env.E2E_QUARANTINE === 'include' ? undefined : quarantineGrepInvert,
 
   // Maximum time one test can run for (60 seconds)
   timeout: 60 * 1000,
@@ -89,7 +111,7 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         // Reuse authentication state created by global-setup.ts
-        storageState: './playwright/.auth/user.json',
+        storageState: process.env.E2E_AUTH_FILE || './playwright/.auth/user.json',
       },
     },
   ] : [
@@ -97,7 +119,7 @@ export default defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-        storageState: './playwright/.auth/user.json',
+        storageState: process.env.E2E_AUTH_FILE || './playwright/.auth/user.json',
       },
     },
 
@@ -116,14 +138,14 @@ export default defineConfig({
       name: 'Mobile Chrome',
       use: {
         ...devices['Pixel 5'],
-        storageState: './playwright/.auth/user.json',
+        storageState: process.env.E2E_AUTH_FILE || './playwright/.auth/user.json',
       },
     },
     {
       name: 'Mobile Safari',
       use: {
         ...devices['iPhone 12'],
-        storageState: './playwright/.auth/user.json',
+        storageState: process.env.E2E_AUTH_FILE || './playwright/.auth/user.json',
       },
     },
   ],
