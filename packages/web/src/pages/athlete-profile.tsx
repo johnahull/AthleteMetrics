@@ -29,6 +29,7 @@ import { AthleteHomeHero } from "@/components/athlete/AthleteHomeHero";
 import { RecentActivityTimeline } from "@/components/athlete/RecentActivityTimeline";
 import { WellnessStatusCard } from "@/components/athlete/WellnessStatusCard";
 import { MetricProgressCard } from "@/components/athlete/MetricProgressCard";
+import { SprintRunsCard } from "@/components/athlete/SprintRunsCard";
 import {
   calculateMonthlyMeasurementCount,
   getLastMeasurementDate,
@@ -94,7 +95,7 @@ export default function AthleteProfile() {
     enabled: !!athleteId,
   });
 
-  const { data: measurements = [], isLoading: measurementsLoading } = useQuery({
+  const { data: measurements = [], isLoading: measurementsLoading } = useQuery<Measurement[]>({
     queryKey: ["/api/measurements", { athleteId }],
     queryFn: async () => {
       const response = await fetch(`/api/measurements?athleteId=${athleteId}`);
@@ -439,6 +440,8 @@ export default function AthleteProfile() {
           </div>
         </div>
       )}
+
+      <SprintRunsCard measurements={measurements} className="mb-8" />
 
       {/* Contact Information */}
       {((athlete?.emails && athlete.emails.length > 0) || (athlete?.phoneNumbers && athlete.phoneNumbers.length > 0) || athlete?.parentEmail) && (
