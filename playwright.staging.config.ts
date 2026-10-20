@@ -47,7 +47,9 @@ export default defineConfig({
 
   // Test execution configuration
   fullyParallel: true, // Run tests in parallel for faster execution
-  workers: process.env.CI ? 4 : 4, // 4 workers in CI (optimized for speed with chromium-only), 4 locally
+  // 4 by default; use E2E_WORKERS=1 or 2 against a deployed site: all workers share a few accounts and
+  // the general API limiter (100 requests / 15 min per user) is spent within seconds.
+  workers: Number(process.env.E2E_WORKERS) || 4,
 
   // Retry strategy:
   // - CI environments (process.env.CI): 1 retry for network flakiness/staging server issues
