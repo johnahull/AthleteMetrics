@@ -6,6 +6,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { toCalendarDate } from '@/utils/date-utils';
 import {
   groupSprintRuns,
+  summarizeSprintRuns,
   type SprintRun,
   type SprintRunMeasurement,
   type SprintUnit,
@@ -24,6 +25,18 @@ const formatDate = (date: string) =>
 const intervalKey = (from: number, to: number) => `${from}-${to}`;
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+const minus = (seconds: number) => `−${Math.abs(seconds).toFixed(2)} s`;
+
+function SummaryStat({ label, value, note }: { label: string; value: string; note?: string }) {
+  return (
+    <div role="group" aria-label={label} className="rounded-lg border bg-gray-50 p-3">
+      <div className="text-sm text-gray-600">{label}</div>
+      <div className="text-2xl font-bold text-gray-900 tabular-nums">{value}</div>
+      {note && <div className="text-sm text-gray-600">{note}</div>}
+    </div>
+  );
+}
 
 const finalTime = (run: SprintRun) => run.gates.find(g => g.distance === run.finalDistance)?.time;
 
@@ -73,6 +86,7 @@ export function SprintRunsCard({ measurements, className }: SprintRunsCardProps)
   }, [runs]);
 
   const prKeys = useMemo(() => personalBestKeys(runs), [runs]);
+  const summary = useMemo(() => summarizeSprintRuns(runs), [runs]);
 
   if (runsByUnit.YD.length === 0 && runsByUnit.M.length === 0) return null;
 
@@ -110,6 +124,40 @@ export function SprintRunsCard({ measurements, className }: SprintRunsCardProps)
         )}
       </CardHeader>
       <CardContent>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+          {summary.bestFinal && (
+            <SummaryStat
+              label={`Best ${summary.bestFinal.distance} ${suffix}`}
+              value={`${summary.bestFinal.time.toFixed(2)} s`}
+              note={summary.bestFinal.delta !== null ? `${minus(summary.bestFinal.delta)} since ${formatDate(summary.bestFinal.sinceDate)}` : undefined}
+            />
+          )}
+          {summary.bestFly && (
+            <SummaryStat
+              label={`Best fly 10 (RI${summary.bestFly.runInYd})`}
+              value={`${summary.bestFly.time.toFixed(2)} s`}
+              note={summary.bestFly.delta !== null ? `${minus(summary.bestFly.delta)} since ${formatDate(summary.bestFly.sinceDate)}` : undefined}
+            />
+          )}
+          {summary.biggestGain && (
+            <SummaryStat
+              label="Biggest gain"
+              value={`${summary.biggestGain.from}–${summary.biggestGain.to} ${suffix}`}
+              note={minus(summary.biggestGain.gain)}
+            />
+          )}
+          <SummaryStat
+            label="Runs recorded"
+            value={String(summary.runCount)}
+            note={
+              summary.firstDate && summary.lastDate && summary.firstDate !== summary.lastDate
+                ? `${formatDate(summary.firstDate)} – ${formatDate(summary.lastDate)}`
+                : summary.firstDate
+                  ? formatDate(summary.firstDate)
+                  : undefined
+            }
+          />
+        </div>
         <p className="text-sm text-gray-600 mb-3">
           Cumulative gate times, then the time between gates. Green with a ▼ means faster than the same interval in the previous run.
         </p>

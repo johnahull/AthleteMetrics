@@ -135,3 +135,86 @@ export function groupSprintRuns(measurements: SprintRunMeasurement[], unit: Spri
 
   return runs.sort((a, b) => b.date.localeCompare(a.date) || a.key.localeCompare(b.key));
 }
+
+export interface SprintSummary {
+  runCount: number;
+  firstDate: string | null;
+  lastDate: string | null;
+  /** Fastest Final Time at the distance with most runs; delta is best minus the first run's time (null when best is the first) */
+  bestFinal: { distance: number; time: number; delta: number | null; sinceDate: string } | null;
+  /** Fastest 10 yd fly of the run-in with most runs (ties: 20, then 10, then 30 yd) */
+  bestFly: { runInYd: number; time: number; delta: number | null; sinceDate: string } | null;
+  /** The interval that improved most between its first and latest run */
+  biggestGain: { from: number; to: number; gain: number } | null;
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+const RUN_IN_PREFERENCE = [20, 10, 30];
+
+/** Best of a group of timed runs (newest first), with the change since the oldest one */
+function bestOf<T extends { time: number; date: string }>(group: T[]) {
+  const best = group.reduce((a, b) => (b.time < a.time ? b : a));
+  const first = group[group.length - 1];
+  return { best, first, delta: best === first ? null : round2(best.time - first.time) };
+}
+
+/**
+ * Headline numbers for a list of runs from groupSprintRuns (newest first, one unit). Pooled rows count as
+ * runs but are left out of the bests: they may mix attempts and have no Final Time or intervals.
+ */
+export function summarizeSprintRuns(runs: SprintRun[]): SprintSummary {
+  const measured = runs.filter(r => !r.pooled);
+
+  let bestFinal: SprintSummary['bestFinal'] = null;
+  const byDistance = new Map<number, { time: number; date: string }[]>();
+  for (const run of measured) {
+    const time = run.gates.find(g => g.distance === run.finalDistance)?.time;
+    if (!run.hasFinal || time === undefined) continue;
+    byDistance.set(run.finalDistance, [...(byDistance.get(run.finalDistance) ?? []), { time, date: run.date }]);
+  }
+  const distance = [...byDistance].sort((a, b) => b[1].length - a[1].length || b[0] - a[0])[0];
+  if (distance) {
+    const { best, first, delta } = bestOf(distance[1]);
+    bestFinal = { distance: distance[0], time: best.time, delta, sinceDate: first.date };
+  }
+
+  let bestFly: SprintSummary['bestFly'] = null;
+  const byRunIn = new Map<number, { time: number; date: string }[]>();
+  for (const run of measured) {
+    for (const i of run.intervals) {
+      if (i.runInYd !== undefined) byRunIn.set(i.runInYd, [...(byRunIn.get(i.runInYd) ?? []), { time: i.time, date: run.date }]);
+    }
+  }
+  const runIn = [...byRunIn].sort(
+    (a, b) => b[1].length - a[1].length || RUN_IN_PREFERENCE.indexOf(a[0]) - RUN_IN_PREFERENCE.indexOf(b[0]),
+  )[0];
+  if (runIn) {
+    const { best, first, delta } = bestOf(runIn[1]);
+    bestFly = { runInYd: runIn[0], time: best.time, delta, sinceDate: first.date };
+  }
+
+  let biggestGain: SprintSummary['biggestGain'] = null;
+  const byInterval = new Map<string, { from: number; to: number; times: number[] }>();
+  for (const run of measured) {
+    for (const i of run.intervals) {
+      const key = `${i.from}-${i.to}`;
+      const entry = byInterval.get(key) ?? { from: i.from, to: i.to, times: [] };
+      entry.times.push(i.time);
+      byInterval.set(key, entry);
+    }
+  }
+  for (const { from, to, times } of byInterval.values()) {
+    if (times.length < 2) continue;
+    const gain = round2(times[times.length - 1] - times[0]);
+    if (gain > 0 && (!biggestGain || gain > biggestGain.gain)) biggestGain = { from, to, gain };
+  }
+
+  return {
+    runCount: runs.length,
+    firstDate: runs.length ? runs[runs.length - 1].date : null,
+    lastDate: runs.length ? runs[0].date : null,
+    bestFinal,
+    bestFly,
+    biggestGain,
+  };
+}

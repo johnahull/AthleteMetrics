@@ -147,4 +147,39 @@ describe('SprintRunsCard', () => {
     rerender(<SprintRunsCard measurements={both.filter(r => !r.metric.endsWith('YD'))} />);
     expect(screen.getByRole('columnheader', { name: '10 m' })).toBeInTheDocument();
   });
+
+  it('shows summary cards: best final, best fly 10, biggest gain and runs recorded', () => {
+    render(<SprintRunsCard measurements={[...OLD, ...NEW]} />);
+    const best = screen.getByRole('group', { name: 'Best 40 yd' });
+    expect(within(best).getByText('5.49 s')).toBeInTheDocument();
+    expect(within(best).getByText('−0.22 s since Aug 29, 2026')).toBeInTheDocument();
+
+    const fly = screen.getByRole('group', { name: 'Best fly 10 (RI20)' });
+    expect(within(fly).getByText('1.20 s')).toBeInTheDocument();
+    expect(within(fly).getByText('−0.04 s since Aug 29, 2026')).toBeInTheDocument();
+
+    const gain = screen.getByRole('group', { name: 'Biggest gain' });
+    expect(within(gain).getByText('10–20 yd')).toBeInTheDocument();
+    expect(within(gain).getByText('−0.06 s')).toBeInTheDocument();
+
+    const count = screen.getByRole('group', { name: 'Runs recorded' });
+    expect(within(count).getByText('2')).toBeInTheDocument();
+    expect(within(count).getByText('Aug 29, 2026 – Oct 17, 2026')).toBeInTheDocument();
+  });
+
+  it('omits the best and gain cards that have no data (a single pooled run)', () => {
+    render(<SprintRunsCard measurements={[m({ metric: 'DASH_40YD', value: 5.6, date: '2026-10-17' })]} />);
+    expect(screen.queryByRole('group', { name: /^Best/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Biggest gain' })).not.toBeInTheDocument();
+    expect(within(screen.getByRole('group', { name: 'Runs recorded' })).getByText('1')).toBeInTheDocument();
+  });
+
+  it('summarizes the selected unit only', async () => {
+    const user = userEvent.setup();
+    const both = [...OLD, ...dash40('m', '2026-10-18', [1.9, 3.2, 4.4, 5.6], 'M')];
+    render(<SprintRunsCard measurements={both} />);
+    expect(screen.getByRole('group', { name: 'Best 40 m' })).toBeInTheDocument();
+    await user.click(screen.getByRole('radio', { name: /yards/i }));
+    expect(screen.getByRole('group', { name: 'Best 40 yd' })).toBeInTheDocument();
+  });
 });

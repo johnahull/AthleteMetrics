@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { groupSprintRuns, type SprintRunMeasurement } from '../sprint-runs';
+import { groupSprintRuns, summarizeSprintRuns, type SprintRunMeasurement } from '../sprint-runs';
 
 let n = 0;
 function m(o: {
@@ -208,5 +208,51 @@ describe('groupSprintRuns', () => {
       'YD',
     );
     expect(runs[0].intervals).toEqual([]);
+  });
+});
+
+describe('summarizeSprintRuns', () => {
+  const two = () =>
+    groupSprintRuns([...dash40('old', '2026-08-29', [1.92, 3.28, 4.52, 5.71]), ...dash40('new', '2026-10-17', [1.85, 3.15, 4.35, 5.49])], 'YD');
+
+  it('counts runs and gives the date range', () => {
+    const s = summarizeSprintRuns(two());
+    expect(s.runCount).toBe(2);
+    expect(s.firstDate).toBe('2026-08-29');
+    expect(s.lastDate).toBe('2026-10-17');
+  });
+
+  it('best final time is for the distance with most runs, with the change since the first run', () => {
+    const s = summarizeSprintRuns(two());
+    expect(s.bestFinal).toEqual({ distance: 40, time: 5.49, delta: -0.22, sinceDate: '2026-08-29' });
+  });
+
+  it('has no delta when the best run is the first one', () => {
+    const runs = groupSprintRuns([...dash40('old', '2026-08-29', [1.8, 3.1, 4.3, 5.4]), ...dash40('new', '2026-10-17', [1.85, 3.15, 4.35, 5.49])], 'YD');
+    expect(summarizeSprintRuns(runs).bestFinal).toEqual({ distance: 40, time: 5.4, delta: null, sinceDate: '2026-08-29' });
+  });
+
+  it('best fly 10 prefers the 20 yd run-in on a tie in run count', () => {
+    expect(summarizeSprintRuns(two()).bestFly).toEqual({ runInYd: 20, time: 1.2, delta: -0.04, sinceDate: '2026-08-29' });
+  });
+
+  it('biggest gain is the interval that improved most between its first and latest run', () => {
+    expect(summarizeSprintRuns(two()).biggestGain).toEqual({ from: 10, to: 20, gain: 0.06 });
+  });
+
+  it('has no best, fly or gain for a single run, and ignores pooled rows for bests', () => {
+    const one = summarizeSprintRuns(groupSprintRuns(dash40('a', '2026-10-17', [1.85, 3.15, 4.35, 5.49]), 'YD'));
+    expect(one.runCount).toBe(1);
+    expect(one.biggestGain).toBeNull();
+    expect(one.bestFinal?.delta).toBeNull();
+
+    const pooled = summarizeSprintRuns(groupSprintRuns([m({ metric: 'DASH_40YD', value: 5.6 })], 'YD'));
+    expect(pooled.runCount).toBe(1);
+    expect(pooled.bestFinal).toBeNull();
+    expect(pooled.bestFly).toBeNull();
+  });
+
+  it('is empty for no runs', () => {
+    expect(summarizeSprintRuns([])).toEqual({ runCount: 0, firstDate: null, lastDate: null, bestFinal: null, bestFly: null, biggestGain: null });
   });
 });
