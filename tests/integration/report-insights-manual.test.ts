@@ -125,11 +125,10 @@ async function insertReport(opts: {
 
 async function createOrg(ts: number, label: string, aiOn: boolean) {
   const name = `${TEST_PREFIX}${label}_${ts}`;
-  const result = await db.execute(
-    sql`INSERT INTO organizations (name, is_active, ai_enabled_by_site_admin, ai_enabled)
-        VALUES (${name}, true, ${aiOn}, ${aiOn}) RETURNING id`
-  );
-  return (result as any)[0].id as string;
+  const [org] = await db.insert(organizations)
+    .values({ name, isActive: true, aiEnabledBySiteAdmin: aiOn, aiEnabled: aiOn })
+    .returning({ id: organizations.id });
+  return org.id;
 }
 
 async function login(username: string) {

@@ -110,7 +110,7 @@ export function checkInsights(input: {
 
   // De-identification: the model must neither see the athlete's name nor leave the placeholder unfilled
   if (data.athleteName && athleteNamesIn(prompt, [data.athleteName]).length > 0) failures.push("athlete name in the prompt");
-  const placeholders = output.match(/\{\{[^}]*\}\}/g) ?? [];
+  const placeholders = output.match(/\{\{?[^{}]*\}?\}/g) ?? [];
   if (placeholders.length > 0) failures.push(`unfilled placeholder: ${[...new Set(placeholders)].join(", ")}`);
 
   // Small integers (counts such as "2 of 3") are in most report data, so they prove little

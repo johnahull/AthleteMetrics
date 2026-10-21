@@ -115,8 +115,10 @@ export function CoachingInsightsCard({
   const canGenerate = aiEnabled && aiConsentGranted === true;
 
   // COPPA: minor athlete without AI consent — show locked card so coaches
-  // understand why insights are unavailable (returning null would be confusing)
-  if (aiConsentGranted !== true) {
+  // understand why AI insights are unavailable (returning null would be confusing).
+  // Hand-written insights need no consent: the card offers Write Insights, and once text exists
+  // or the editor is open it falls through to the normal states (Generate/Regenerate stay hidden).
+  if (aiConsentGranted !== true && !hasInsights && !isEditing) {
     return (
       <Card className="border-amber-200 bg-amber-50">
         <CardHeader className="pb-3">
@@ -134,6 +136,12 @@ export function CoachingInsightsCard({
             processing has not been granted. A parent or guardian can enable this via the consent
             email they received during registration.
           </p>
+          <div className="mt-4">
+            <Button variant="outline" onClick={handleEdit}>
+              <Edit className="h-4 w-4 mr-2" />
+              Write Insights
+            </Button>
+          </div>
         </CardContent>
       </Card>
     );

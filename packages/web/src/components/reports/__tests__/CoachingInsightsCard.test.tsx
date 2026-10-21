@@ -76,6 +76,18 @@ describe('CoachingInsightsCard — COPPA locked state', () => {
     vi.clearAllMocks();
   });
 
+  it('still offers hand-written insights when AI is off and consent is missing', () => {
+    render(<CoachingInsightsCard {...baseProps} aiEnabled={false} aiConsentGranted={false} />);
+    expect(screen.getByRole('button', { name: /write insights/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /generate insights/i })).not.toBeInTheDocument();
+  });
+
+  it('lets a coach edit existing insights without consent, but not regenerate', () => {
+    render(<CoachingInsightsCard {...baseProps} initialInsights="Written by hand." aiConsentGranted={false} />);
+    expect(screen.getByRole('button', { name: /edit/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /regenerate/i })).not.toBeInTheDocument();
+  });
+
   it('renders the amber locked card when aiConsentGranted={false}', () => {
     render(<CoachingInsightsCard {...baseProps} aiConsentGranted={false} />);
 

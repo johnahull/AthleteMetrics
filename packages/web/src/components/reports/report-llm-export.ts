@@ -9,14 +9,8 @@ import { groupedCodes } from '@/lib/metric-groups';
 import { isGroupComparisonOn, resolveChartSelection } from '@shared/report-charts';
 import { formatMeasurement } from '@shared/duration-format';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
-import { slugify, todayIsoUtc, type LlmExportFormat } from '@/hooks/use-llm-export';
+import { slugify, todayIsoUtc, type LlmExportContent, type LlmExportFormat } from '@/hooks/use-llm-export';
 import type { IndividualReportData, Report } from '@/types/report-types';
-
-export interface LlmExportContent {
-  content: string;
-  filename: string;
-  mimeType: string;
-}
 
 type ReportData = IndividualReportData & {
   eventContext?: { eventName?: string; eventDate?: string };
