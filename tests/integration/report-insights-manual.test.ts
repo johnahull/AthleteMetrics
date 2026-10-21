@@ -193,6 +193,25 @@ describe('PATCH /api/reports/:id/insights — manual insights', () => {
     expect(row.coachingInsightsModel).toBeNull();
   });
 
+  it('succeeds for a coach in the report org whose primary (first) org gives only the athlete role', async () => {
+    const ts = Date.now();
+    const primaryOrg = await createOrg(ts, 'a_first', false);
+    const reportOrg = await createOrg(ts, 'b_second', false);
+    createdOrgIds.push(primaryOrg, reportOrg);
+    const user = await createUser('coach_inverse');
+    createdUserIds.push(user.id);
+    await addToOrg(user.id, primaryOrg, 'athlete');
+    await addToOrg(user.id, reportOrg, 'coach');
+    const report = await insertReport({ orgId: reportOrg, createdBy: user.id, reportType: 'individual', athleteId: user.id });
+    createdReportIds.push(report.id);
+    const cookie = await login(user.username);
+
+    const ok = await request(app).patch(`/api/reports/${report.id}/insights`).set('Cookie', cookie).send({ coachingInsights: 'Hand-written.' });
+    expect(ok.status).toBe(200);
+    const blank = await request(app).patch(`/api/reports/${report.id}/insights`).set('Cookie', cookie).send({ coachingInsights: '   ' });
+    expect(blank.status).toBe(400);
+  });
+
   it('403 for a coach of a different organization', async () => {
     const ts = Date.now();
     const myOrg = await createOrg(ts, 'c_mine', false);

@@ -1724,7 +1724,7 @@ export function registerReportRoutes(app: Express) {
    *
    * Requires: coach or above in the report's own organization; no AI needed (manual text)
    */
-  app.patch("/api/reports/:id/insights", reportLimiter, requireAuth, requireRole('coach'), async (req: AuthenticatedRequest, res) => {
+  app.patch("/api/reports/:id/insights", reportLimiter, requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const user = req.session.user;
       if (!user?.id) {
@@ -1761,7 +1761,7 @@ export function registerReportRoutes(app: Express) {
         });
       }
 
-      // requireRole('coach') checks the primary org; the write needs the role in the report's org
+      // The role in the report's own organization decides (requireRole would check the primary org only)
       if (!isMeasurementWriterRole(await getOrgRole(user, report.organizationId))) {
         return res.status(403).json({ message: "Access denied to this report" });
       }

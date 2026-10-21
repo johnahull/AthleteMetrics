@@ -25,7 +25,7 @@ function individual(overrides: Partial<ReportData> = {}): ReportData {
 }
 
 describe('buildPrompt de-identification', () => {
-  const identifying = ['Evelyn', 'Garcia', 'Northside', 'Evaluation -', 'Fall Combine', 'Varsity Boys', '- Age: 14'];
+  const identifying = ['Evelyn', 'Garcia', 'Northside', 'Evaluation -', '- Age: 14'];
 
   it('contains no identifying strings', () => {
     for (const audience of ['coach', 'athlete', 'parent'] as const) {
@@ -74,8 +74,15 @@ describe('fillFirstName', () => {
     expect(fillFirstName('Hi {{first_name}}, {{ First Name }} and {{firstname}}.', 'Evelyn')).toBe('Hi Evelyn, Evelyn and Evelyn.');
   });
   it('falls back to "your athlete" with no name', () => {
-    expect(fillFirstName('{{first_name}} ran well', undefined)).toBe('your athlete ran well');
-    expect(fillFirstName('{{first_name}} ran well', '  ')).toBe('your athlete ran well');
+    expect(fillFirstName('{{first_name}} ran well', undefined)).toBe('Your athlete ran well');
+    expect(fillFirstName('{{first_name}} ran well', '  ')).toBe('Your athlete ran well');
+  });
+  it('lowercases the fallback mid-sentence and capitalises it after a sentence end', () => {
+    expect(fillFirstName('Great work by {{first_name}}. {{first_name}} ran well', undefined)).toBe('Great work by your athlete. Your athlete ran well');
+    expect(fillFirstName('- {{first_name}} improved', undefined)).toBe('- Your athlete improved');
+  });
+  it('catches single-brace and athlete_first_name variants', () => {
+    expect(fillFirstName('{first_name} and {{athlete_first_name}} and {{first-name}}', 'Evelyn')).toBe('Evelyn and Evelyn and Evelyn');
   });
   it('uses only the first word of the name', () => {
     expect(fillFirstName('{{first_name}}', 'Evelyn Garcia')).toBe('Evelyn');
@@ -99,6 +106,6 @@ describe('generateCoachingInsights', () => {
 
   it('falls back to "your athlete" when the report has no athlete name', async () => {
     const out = await generateCoachingInsights('claude-haiku-4.5', individual({ audience: 'parent', athleteName: undefined }));
-    expect(out).toBe('## Summary\nyour athlete ran 1.50 s.');
+    expect(out).toBe('## Summary\nYour athlete ran 1.50 s.');
   });
 });

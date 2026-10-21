@@ -504,8 +504,13 @@ export function insightWordRange(
 
 /** Replace the {{first_name}} placeholder the prompt asks for (spacing and case tolerated). */
 export function fillFirstName(text: string, athleteName?: string): string {
-  const firstName = athleteName?.trim().split(/\s+/)[0] || 'your athlete';
-  return text.replace(/\{\{\s*first[_ ]?name\s*\}\}/gi, () => firstName);
+  const firstName = athleteName?.trim().split(/\s+/)[0];
+  // Single-brace and "athlete_first_name" variants are what models drift to when asked for {{first_name}}
+  return text.replace(/\{\{?\s*(?:athlete[_ ]?)?first[-_ ]?name\s*\}?\}/gi, (match, offset: number) => {
+    if (firstName) return firstName;
+    // "your athlete" opens a sentence in capitals: at the start of the text or after a sentence end or line break
+    return /(?:^|[.!?]\s+|\n)\s*(?:[-*#]+\s*)?$/.test(text.slice(0, offset)) ? 'Your athlete' : 'your athlete';
+  });
 }
 
 /** Age band sent to the model instead of the exact age. */

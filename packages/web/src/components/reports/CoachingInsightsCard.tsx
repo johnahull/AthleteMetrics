@@ -212,7 +212,7 @@ export function CoachingInsightsCard({
               <Button
                 size="sm"
                 onClick={handleSave}
-                disabled={updateMutation.isPending}
+                disabled={updateMutation.isPending || !editedContent.trim()}
               >
                 {updateMutation.isPending ? (
                   <>
