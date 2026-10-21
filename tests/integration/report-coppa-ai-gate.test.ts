@@ -413,9 +413,8 @@ describe('POST /api/reports/:id/generate-insights — team report, minor WITHOUT
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('ai_consent_required');
     expect(res.body.featureDisabled).toBe(true);
-    // The message should mention at least 1 minor without consent.
-    // The exact count varies depending on how many minors exist in the org —
-    // we only assert the pattern, not the specific number.
+    // Only report athletes (those with measurements in it) are counted, so both minors are in scope;
+    // we assert the pattern here and the exact count in the scoping tests below.
     expect(res.body.message).toMatch(/\d+\s+minor/i);
   });
 });
@@ -489,6 +488,7 @@ describe('POST /api/reports/:id/generate-insights — team report, minor without
       isMinor: true,
       parentEmail: `${TEST_PREFIX}par_in_${uid()}@example.com`,
     });
+    // No parentEmail or consent row on purpose: this minor must not matter because the report doesn't cover them
     const outside = await createUser('scoped_out', { coppaStatus: 'pending', isMinor: true });
     createdUserIds.push(inReport.id, outside.id);
     await addToOrg(inReport.id, org.id, 'athlete');
