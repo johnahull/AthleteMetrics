@@ -4943,6 +4943,7 @@ function calculateBenchmarkAchievements(athleteRankings: any[], teamStatistics?:
 export async function buildReportDataForAI(report: Report, userId: string, reportService: ReportService): Promise<import("../services/ai-insights-service").ReportData> {
   // Data size limits to prevent large AI payloads
   const MAX_METRICS = 20;
+  const MAX_HISTORY_POINTS = 30;
 
   try {
     // Fetch organization details
@@ -5372,11 +5373,15 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
 
       const history = metrics
         .filter(m => (trends?.[m.code]?.series?.length ?? 0) >= 2)
-        .map(m => ({ code: m.code, label: m.label, points: trends![m.code].series!.map(p => ({ date: p.date, value: p.value })) }));
+        .map(m => {
+          const points = trends![m.code].series!.map(p => ({ date: p.date, value: p.value }));
+          // Bound the prompt: keep the first point (the baseline the change figures start from) and the latest ones
+          return { code: m.code, label: m.label, points: points.length > MAX_HISTORY_POINTS ? [points[0], ...points.slice(1 - MAX_HISTORY_POINTS)] : points };
+        });
       if (history.length > 0) aiReportData.history = history;
 
       const distributions = metrics
-        .filter(m => typedReportData.distributions?.[m.code])
+        .filter(m => typedReportData.distributions?.[m.code]?.stats)
         .map(m => ({ code: m.code, label: m.label, ...typedReportData.distributions![m.code].stats }));
       if (distributions.length > 0) aiReportData.distributions = distributions;
 

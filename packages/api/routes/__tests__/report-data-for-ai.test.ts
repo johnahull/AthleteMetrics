@@ -533,6 +533,24 @@ describe('buildReportDataForAI — everything the individual report shows', () =
     ]);
   });
 
+  it('history over 30 points keeps the first point (the delta baseline) and the 29 most recent', async () => {
+    const series = Array.from({ length: 40 }, (_, i) => ({ date: `2024-01-${String(i + 1).padStart(2, '0')}`, value: 1.6 - i * 0.001 }));
+    const data = await buildReportDataForAI(chart(individualReport, { trends: true }), 'u1', service(individualData({
+      trends: { FLY10_TIME: { series, direction: 'lower', delta: { from: 1.6, to: 1.561, pct: 2.4 } } },
+    })));
+    const points = data.history![0].points;
+    expect(points).toHaveLength(30);
+    expect(points[0]).toEqual(series[0]);
+    expect(points.slice(1)).toEqual(series.slice(-29));
+  });
+
+  it('a distribution without stats is skipped instead of failing the prompt', async () => {
+    const data = await buildReportDataForAI(chart(individualReport, { distribution: true }), 'u1', service(individualData({
+      distributions: { FLY10_TIME: { values: [1.3], athleteValue: 1.5 } },
+    })));
+    expect(data.distributions).toBeUndefined();
+  });
+
   it('teams, composite index and F-V profile come from the report data', async () => {
     const fvProfile = { profileId: 'p1', date: '2024-02-01', distanceUnit: 'yards', f0Rel: '7.25', v0: '8.10', pmaxRel: '14.7', fvSlope: '-0.9', fitR2: null, analysisJson: null };
     const data = await buildReportDataForAI(individualReport, 'u1', service(individualData({
