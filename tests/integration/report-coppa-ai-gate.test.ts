@@ -43,6 +43,7 @@ import { reports } from '@shared/schema/tables/reports';
 import { measurements } from '@shared/schema/tables/measurements';
 import { eq, and, like, sql } from 'drizzle-orm';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
+import { purgeTestRows } from '../helpers/purge-test-rows';
 
 // ============================================================================
 // Mocks — must be declared before registerRoutes import
@@ -269,6 +270,8 @@ afterAll(async () => {
   for (const orgId of createdOrgIds) {
     await db.delete(organizations).where(eq(organizations.id, orgId)).catch(() => {});
   }
+  // measurements have no FKs, so deleting users/orgs leaves them behind (issue #539)
+  await purgeTestRows({ usernameLike: [`${TEST_PREFIX}%`], userIds: createdUserIds, orgIds: createdOrgIds });
   // Sweep by username prefix to catch any stragglers
   await db.delete(users).where(like(users.username, `${TEST_PREFIX}%`)).catch(() => {});
 });
