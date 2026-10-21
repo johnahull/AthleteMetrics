@@ -431,6 +431,12 @@ export interface ReportData {
   athleteAge?: number;
   athleteGender?: string;
   athleteSport?: string; // Sport from athlete.sports[0]
+  athleteTeams?: string[];
+  compositeIndex?: number;
+  // Individual reports: what the report's own charts show, only when those charts are on
+  history?: Array<{ code: string; label: string; points: Array<{ date: string; value: number }> }>;
+  distributions?: Array<{ code: string; label: string; min: number; q1: number; median: number; q3: number; max: number }>;
+  fvProfile?: { date: string; distanceUnit: string; f0Rel?: number; v0?: number; pmaxRel?: number; fvSlope?: number };
 
   // Common report data
   timeframe: string;
@@ -643,6 +649,8 @@ export function buildPrompt(reportData: ReportData): string {
     if (reportData.athletePosition) prompt += `- Position: ${sanitizeForPrompt(reportData.athletePosition)}\n`;
     if (reportData.athleteAge) prompt += `- Age: ${reportData.athleteAge}\n`;
     if (reportData.athleteGender) prompt += `- Gender: ${sanitizeForPrompt(reportData.athleteGender)}\n`;
+    if (reportData.athleteTeams?.length) prompt += `- Teams: ${reportData.athleteTeams.map((t) => sanitizeForPrompt(t, 100)).join(', ')}\n`;
+    if (reportData.compositeIndex !== undefined) prompt += `- Composite index: ${reportData.compositeIndex.toFixed(2)}\n`;
   }
 
   prompt += `\n`;
@@ -692,6 +700,41 @@ export function buildPrompt(reportData: ReportData): string {
     prompt += `\n`;
   }
 
+  // Dated values behind the trend chart
+  if (reportData.history && reportData.history.length > 0) {
+    prompt += `## History\n`;
+    reportData.history.forEach((h) => {
+      const unit = sanitizeForPrompt(reportData.metrics.find((m) => m.code === h.code)?.unit ?? '');
+      const points = h.points.map((p) => `${sanitizeForPrompt(p.date, 10)} ${p.value.toFixed(2)}`).join(', ');
+      prompt += `- ${sanitizeForPrompt(h.label)}${unit ? ` (${unit})` : ''}: ${points}\n`;
+    });
+    prompt += `\n`;
+  }
+
+  // Spread of the comparison group (the distribution chart); the peers' own values are not sent
+  if (reportData.distributions && reportData.distributions.length > 0) {
+    prompt += `## Peer Distribution\n`;
+    reportData.distributions.forEach((d) => {
+      prompt += `- ${sanitizeForPrompt(d.label)}: min ${d.min.toFixed(2)}, Q1 ${d.q1.toFixed(2)}, median ${d.median.toFixed(2)}, Q3 ${d.q3.toFixed(2)}, max ${d.max.toFixed(2)}\n`;
+    });
+    prompt += `\n`;
+  }
+
+  // Sprint force-velocity profile (the F-V chart)
+  if (reportData.fvProfile) {
+    const fv = reportData.fvProfile;
+    const parts = [
+      fv.f0Rel !== undefined && `F0 (relative force) ${fv.f0Rel.toFixed(2)} N/kg`,
+      fv.v0 !== undefined && `V0 ${fv.v0.toFixed(2)} m/s`,
+      fv.pmaxRel !== undefined && `Pmax (relative power) ${fv.pmaxRel.toFixed(2)} W/kg`,
+      fv.fvSlope !== undefined && `F-V slope ${fv.fvSlope.toFixed(2)}`,
+    ].filter(Boolean);
+    if (parts.length > 0) {
+      prompt += `## Force-Velocity Profile\n`;
+      prompt += `- Session ${sanitizeForPrompt(fv.date, 10)} (${sanitizeForPrompt(fv.distanceUnit, 20)}): ${parts.join(', ')}\n\n`;
+    }
+  }
+
   // Improvements
   if (reportData.improvements && reportData.improvements.length > 0) {
     prompt += `## Improvements Observed\n`;
@@ -737,7 +780,10 @@ export function buildPrompt(reportData: ReportData): string {
     prompt += `This report covers one testing event. Describe performance at that event against the comparison group and benchmarks${hasHistory ? '' : ', not against earlier results'}.\n\n`;
   }
   if (hasHistory) {
-    prompt += `This report includes history over time. Describe change only from the Improvements Observed and Areas of Concern lines and the Biggest change fact, with their values.\n\n`;
+    const historySection = reportData.history && reportData.history.length > 0
+      ? ` You may cite the dated values in the History section, but state a size of change only as given in those lines.`
+      : '';
+    prompt += `This report includes history over time. Describe change only from the Improvements Observed and Areas of Concern lines and the Biggest change fact, with their values.${historySection}\n\n`;
   }
 
   const [minWords, maxWords] = insightWordRange(reportType, audience, isLimitedData(reportData));

@@ -505,3 +505,59 @@ describe('buildReportDataForAI — event context', () => {
     expect(buildPrompt(data)).not.toContain('- Event:');
   });
 });
+
+describe('buildReportDataForAI — everything the individual report shows', () => {
+  const chart = (r: any, charts: Record<string, boolean>) => ({ ...r, config: { ...r.config, charts } });
+  const trends = {
+    FLY10_TIME: { series: [{ date: '2024-01-15', value: 1.6 }, { date: '2024-03-15', value: 1.52 }], direction: 'lower', delta: { from: 1.6, to: 1.52, pct: 5 } },
+    VERTICAL_JUMP: { series: [{ date: '2024-01-15', value: 28 }], direction: 'higher', delta: { from: 28, to: 28, pct: 0 } },
+    NOT_IN_PROMPT: { series: [{ date: '2024-01-15', value: 1 }, { date: '2024-03-15', value: 2 }], direction: 'higher', delta: { from: 1, to: 2, pct: 100 } },
+  };
+  const distributions = {
+    FLY10_TIME: { values: [1.3, 1.4, 1.5], athleteValue: 1.52, stats: { min: 1.3, q1: 1.35, median: 1.4, q3: 1.45, max: 1.5 }, direction: 'lower' },
+  };
+
+  it('history: dated series for metrics in the prompt with two or more points, only when trends are on', async () => {
+    const on = await buildReportDataForAI(chart(individualReport, { trends: true }), 'u1', service(individualData({ trends })));
+    expect(on.history).toEqual([
+      { code: 'FLY10_TIME', label: '10-Yard Fly', points: [{ date: '2024-01-15', value: 1.6 }, { date: '2024-03-15', value: 1.52 }] },
+    ]);
+    const off = await buildReportDataForAI(individualReport, 'u1', service(individualData({ trends })));
+    expect(off.history).toBeUndefined();
+  });
+
+  it('distributions: five-number summary per metric in the prompt, never the peers\' individual values', async () => {
+    const data = await buildReportDataForAI(chart(individualReport, { distribution: true }), 'u1', service(individualData({ distributions })));
+    expect(data.distributions).toEqual([
+      { code: 'FLY10_TIME', label: '10-Yard Fly', min: 1.3, q1: 1.35, median: 1.4, q3: 1.45, max: 1.5 },
+    ]);
+  });
+
+  it('teams, composite index and F-V profile come from the report data', async () => {
+    const fvProfile = { profileId: 'p1', date: '2024-02-01', distanceUnit: 'yards', f0Rel: '7.25', v0: '8.10', pmaxRel: '14.7', fvSlope: '-0.9', fitR2: null, analysisJson: null };
+    const data = await buildReportDataForAI(individualReport, 'u1', service(individualData({
+      athlete: { ...individualData().athlete, teams: ['Texas FC U18', 'Academy'], compositeIndex: 72.456 },
+      fvProfile,
+    })));
+    expect(data.athleteTeams).toEqual(['Texas FC U18', 'Academy']);
+    expect(data.compositeIndex).toBe(72.46);
+    expect(data.fvProfile).toEqual({ date: '2024-02-01', distanceUnit: 'yards', f0Rel: 7.25, v0: 8.1, pmaxRel: 14.7, fvSlope: -0.9 });
+  });
+
+  it('absent report data leaves the fields out', async () => {
+    const data = await buildReportDataForAI(individualReport, 'u1', service(individualData()));
+    expect(data.history).toBeUndefined();
+    expect(data.distributions).toBeUndefined();
+    expect(data.athleteTeams).toBeUndefined();
+    expect(data.compositeIndex).toBeUndefined();
+    expect(data.fvProfile).toBeUndefined();
+  });
+
+  it('a team report never carries the individual-only fields', async () => {
+    const data = await buildReportDataForAI(teamReport, 'u1', service(teamData({ trends, distributions, fvProfile: { date: 'x' } })));
+    expect(data.history).toBeUndefined();
+    expect(data.distributions).toBeUndefined();
+    expect(data.fvProfile).toBeUndefined();
+    expect(data.compositeIndex).toBeUndefined();
+  });
+});
