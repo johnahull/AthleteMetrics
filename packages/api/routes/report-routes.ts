@@ -5388,7 +5388,8 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
 
       const fv = typedReportData.fvProfile;
       if (fv) {
-        const num = (v: string | null) => (v === null || !Number.isFinite(Number(v)) ? undefined : Number(v));
+        // Number('') and Number('  ') are 0, which would read as a measured zero
+        const num = (v: string | null) => (v === null || v.trim() === '' || !Number.isFinite(Number(v)) ? undefined : Number(v));
         aiReportData.fvProfile = {
           date: fv.date, distanceUnit: fv.distanceUnit,
           f0Rel: num(fv.f0Rel), v0: num(fv.v0), pmaxRel: num(fv.pmaxRel), fvSlope: num(fv.fvSlope),

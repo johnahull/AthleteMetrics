@@ -29,6 +29,7 @@ describe('buildPrompt — everything the individual report shows', () => {
       history: [{ code: 'FLY10_TIME', label: '10-Yard Fly Time', points: [{ date: '2024-01-15', value: 1.6 }, { date: '2024-03-15', value: 1.52 }] }],
     }));
     expect(prompt).toContain('You may cite the dated values in the History section');
+    expect(prompt).toContain('only as given in the Improvements Observed and Areas of Concern lines and the Biggest change fact');
   });
 
   it('shows the peer spread as a five-number summary', () => {

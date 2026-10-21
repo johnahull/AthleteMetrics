@@ -567,6 +567,14 @@ describe('buildReportDataForAI — everything the individual report shows', () =
     expect(data.fvProfile).toEqual({ date: '2024-02-01', distanceUnit: 'yards', f0Rel: 7.25, v0: 8.1, pmaxRel: 14.7, fvSlope: -0.9 });
   });
 
+  it('an empty or blank F-V value is missing, not zero', async () => {
+    const fvProfile = { date: '2024-02-01', distanceUnit: 'yards', f0Rel: '', v0: '  ', pmaxRel: '14.7', fvSlope: null };
+    const data = await buildReportDataForAI(individualReport, 'u1', service(individualData({ fvProfile })));
+    expect(data.fvProfile).toEqual({ date: '2024-02-01', distanceUnit: 'yards', pmaxRel: 14.7 });
+    expect(data.fvProfile!.f0Rel).toBeUndefined();
+    expect(data.fvProfile!.v0).toBeUndefined();
+  });
+
   it('absent report data leaves the fields out', async () => {
     const data = await buildReportDataForAI(individualReport, 'u1', service(individualData()));
     expect(data.history).toBeUndefined();

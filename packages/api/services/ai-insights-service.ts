@@ -792,7 +792,7 @@ export function buildPrompt(reportData: ReportData): string {
   }
   if (hasHistory) {
     const historySection = reportData.history && reportData.history.length > 0
-      ? ` You may cite the dated values in the History section, but state a size of change only as given in those lines.`
+      ? ` You may cite the dated values in the History section, but state a size of change only as given in the Improvements Observed and Areas of Concern lines and the Biggest change fact.`
       : '';
     prompt += `This report includes history over time. Describe change only from the Improvements Observed and Areas of Concern lines and the Biggest change fact, with their values.${historySection}\n\n`;
   }
