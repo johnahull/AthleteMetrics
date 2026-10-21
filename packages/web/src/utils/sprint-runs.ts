@@ -4,7 +4,7 @@ export type SprintUnit = 'YD' | 'M';
 
 export type SprintRunMeasurement = Pick<
   Measurement,
-  'id' | 'metric' | 'value' | 'date' | 'isVerified' | 'organizationId' | 'importBatchId' | 'calculationMetadata'
+  'id' | 'metric' | 'value' | 'date' | 'isVerified' | 'organizationId' | 'importBatchId' | 'calculationMetadata' | 'notes'
 >;
 
 export interface SprintGate {
@@ -36,6 +36,8 @@ export interface SprintRun {
 
 const DASH_METRIC = /^DASH_(\d+)(YD|M)$/;
 const RUN_IN_STARTS_YD = [10, 20, 30];
+// Branch-era imports (before 2026-04-12) saved splits with only this note: no calculationMetadata
+const SPLIT_NOTE = /^Split from (DASH_\d+(?:YD|M))\b/;
 
 const round3 = (n: number) => parseFloat(n.toFixed(3));
 
@@ -46,6 +48,8 @@ interface RunDraft {
   gates: Map<number, number>;
   drillDistance?: number;
   drillTime?: number;
+  /** Drill rows seen: more than one means several attempts share the key, so the run is not one real run */
+  drillCount: number;
 }
 
 function keepFastest(map: Map<number, number>, distance: number, time: number) {
@@ -57,7 +61,8 @@ function keepFastest(map: Map<number, number>, distance: number, time: number) {
  * Group an athlete's device-imported dash rows into runs, newest first.
  *
  * A run is a drill row (Final Time) plus its split rows. Rows are keyed by calculationMetadata.runId; older
- * imports (no runId) by importBatchId + date + drill (a split's parentMetric); rows with neither (manual entry)
+ * imports (no runId) by importBatchId + date + drill (a split's parentMetric, or for the oldest imports the
+ * parent named in its "Split from DASH_30YD" note); rows with neither (manual entry)
  * are pooled per organization and date. Only verified rows in the requested unit are used. The unit comes from
  * the metric code suffix (the stored `units` is 's').
  */
@@ -73,14 +78,15 @@ export function groupSprintRuns(measurements: SprintRunMeasurement[], unit: Spri
 
     const distance = Number(match[1]);
     const meta = row.calculationMetadata;
-    const isSplit = meta?.formula === 'direct_import_split';
+    const noteParent = row.notes ? SPLIT_NOTE.exec(row.notes)?.[1] : undefined;
+    const isSplit = meta?.formula === 'direct_import_split' || (!meta?.formula && noteParent !== undefined);
 
     let key: string;
     let pooled = false;
     if (meta?.runId) {
       key = `run|${meta.runId}`;
     } else if (row.importBatchId) {
-      key = `batch|${row.importBatchId}|${row.date}|${meta?.parentMetric ?? row.metric}`;
+      key = `batch|${row.importBatchId}|${row.date}|${meta?.parentMetric ?? (isSplit ? noteParent : undefined) ?? row.metric}`;
     } else {
       key = `pool|${row.organizationId ?? ''}|${row.date}`;
       pooled = true;
@@ -88,15 +94,18 @@ export function groupSprintRuns(measurements: SprintRunMeasurement[], unit: Spri
 
     let draft = drafts.get(key);
     if (!draft) {
-      draft = { key, date: row.date, pooled, gates: new Map() };
+      draft = { key, date: row.date, pooled, gates: new Map(), drillCount: 0 };
       drafts.set(key, draft);
     }
 
     if (isSplit || pooled) {
       keepFastest(draft.gates, distance, time);
-    } else if (draft.drillTime === undefined || time < draft.drillTime) {
-      draft.drillDistance = distance;
-      draft.drillTime = time;
+    } else {
+      draft.drillCount += 1;
+      if (draft.drillTime === undefined || time < draft.drillTime) {
+        draft.drillDistance = distance;
+        draft.drillTime = time;
+      }
     }
   }
 
@@ -107,6 +116,8 @@ export function groupSprintRuns(measurements: SprintRunMeasurement[], unit: Spri
       draft.gates.set(draft.drillDistance, draft.drillTime);
     }
     if (draft.gates.size === 0) continue;
+    // Two attempts of one drill under one key (branch-era files have no run id): gates come from whichever was fastest
+    if (draft.drillCount > 1) draft.pooled = true;
 
     const gates = [...draft.gates].map(([distance, time]) => ({ distance, time })).sort((a, b) => a.distance - b.distance);
     const intervals: SprintInterval[] = [];
@@ -126,7 +137,7 @@ export function groupSprintRuns(measurements: SprintRunMeasurement[], unit: Spri
       date: draft.date,
       unit,
       finalDistance: draft.drillDistance ?? gates[gates.length - 1].distance,
-      hasFinal: draft.drillDistance !== undefined,
+      hasFinal: draft.drillDistance !== undefined && !draft.pooled,
       gates,
       intervals,
       pooled: draft.pooled,
@@ -217,4 +228,37 @@ export function summarizeSprintRuns(runs: SprintRun[]): SprintSummary {
     bestFly,
     biggestGain,
   };
+}
+
+export type SprintRange = 'all' | '6m' | '12m';
+
+/** Today's date in the local calendar as YYYY-MM-DD (toISOString would give the UTC day) */
+export function localDateString(d: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** The date `months` before `today` (YYYY-MM-DD), clamped to the last day of a shorter month */
+function monthsBefore(today: string, months: number): string {
+  const [y, m, d] = today.split('-').map(Number);
+  const index = y * 12 + (m - 1) - months;
+  const year = Math.floor(index / 12);
+  const month = index % 12;
+  const day = Math.min(d, new Date(year, month + 1, 0).getDate());
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+/** Runs on or after the same day `range` ago; calendar-date string compare, no timezone math */
+export function filterRunsByRange(runs: SprintRun[], range: SprintRange, today: string): SprintRun[] {
+  if (range === 'all') return runs;
+  const cutoff = monthsBefore(today, range === '6m' ? 6 : 12);
+  return runs.filter(r => r.date >= cutoff);
+}
+
+/** How an interval was derived, in stored (3 dp) precision so the arithmetic adds up */
+export function describeInterval(run: SprintRun, interval: SprintInterval): string {
+  const at = (distance: number) => run.gates.find(g => g.distance === distance)?.time ?? NaN;
+  const suffix = run.unit === 'YD' ? 'yd' : 'm';
+  const label = interval.runInYd !== undefined ? `RI${interval.runInYd} (fly 10)` : `${interval.from}–${interval.to} ${suffix} span`;
+  return `${label}: ${at(interval.to).toFixed(3)} − ${at(interval.from).toFixed(3)} = ${interval.time.toFixed(3)} s`;
 }

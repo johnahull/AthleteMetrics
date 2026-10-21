@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { groupSprintRuns, summarizeSprintRuns, type SprintRunMeasurement } from '../sprint-runs';
+import {
+  describeInterval,
+  filterRunsByRange,
+  groupSprintRuns,
+  localDateString,
+  summarizeSprintRuns,
+  type SprintRunMeasurement,
+} from '../sprint-runs';
 
 let n = 0;
 function m(o: {
@@ -12,6 +19,8 @@ function m(o: {
   batch?: string;
   verified?: boolean;
   org?: string | null;
+  notes?: string;
+  formula?: string;
 }): SprintRunMeasurement {
   n += 1;
   return {
@@ -22,9 +31,10 @@ function m(o: {
     isVerified: o.verified ?? true,
     organizationId: o.org === undefined ? 'org-1' : o.org,
     importBatchId: o.batch ?? null,
-    calculationMetadata: o.runId || o.split || o.parentMetric
+    notes: o.notes ?? null,
+    calculationMetadata: o.runId || o.split || o.parentMetric || o.formula
       ? {
-          formula: o.split ? 'direct_import_split' : 'direct_import',
+          formula: o.formula ?? (o.split ? 'direct_import_split' : 'direct_import'),
           sourceValues: {},
           calculatedAt: '2026-10-17T00:00:00Z',
           ...(o.runId ? { runId: o.runId } : {}),
@@ -254,5 +264,143 @@ describe('summarizeSprintRuns', () => {
 
   it('is empty for no runs', () => {
     expect(summarizeSprintRuns([])).toEqual({ runCount: 0, firstDate: null, lastDate: null, bestFinal: null, bestFly: null, biggestGain: null });
+  });
+});
+
+describe('groupSprintRuns: branch-era imports (batch id, no metadata, parent only in notes)', () => {
+  const legacy = (metric: string, value: number, notes: string) => m({ metric, value, date: '2026-04-10', batch: 'b1', notes });
+  const run30 = () => [
+    legacy('DASH_30YD', 4.7, 'Imported from f.csv'),
+    legacy('DASH_5YD', 1.03, 'Split from DASH_30YD — imported from f.csv'),
+    legacy('DASH_10YD', 1.84, 'Split from DASH_30YD — imported from f.csv'),
+    legacy('DASH_20YD', 3.34, 'Split from DASH_30YD — imported from f.csv'),
+  ];
+
+  it('joins the splits and the drill row into one run', () => {
+    const runs = groupSprintRuns(run30(), 'YD');
+    expect(runs).toHaveLength(1);
+    expect(runs[0].pooled).toBe(false);
+    expect(runs[0].hasFinal).toBe(true);
+    expect(runs[0].finalDistance).toBe(30);
+    expect(runs[0].gates).toEqual([
+      { distance: 5, time: 1.03 },
+      { distance: 10, time: 1.84 },
+      { distance: 20, time: 3.34 },
+      { distance: 30, time: 4.7 },
+    ]);
+    expect(runs[0].intervals).toEqual([
+      { from: 5, to: 10, time: 0.81 },
+      { from: 10, to: 20, time: 1.5, runInYd: 10 },
+      { from: 20, to: 30, time: 1.36, runInYd: 20 },
+    ]);
+  });
+
+  it('groups splits without a drill row by the parent named in the note', () => {
+    const runs = groupSprintRuns(run30().slice(1), 'YD');
+    expect(runs).toHaveLength(1);
+    expect(runs[0].hasFinal).toBe(false);
+    expect(runs[0].gates.map(g => g.distance)).toEqual([5, 10, 20]);
+  });
+
+  it('keeps two drills of one batch and day apart when their splits name different parents', () => {
+    const rows = [
+      legacy('DASH_20YD', 3.2, 'Imported from f.csv'),
+      legacy('DASH_10YD', 1.87, 'Split from DASH_20YD — imported from f.csv'),
+      ...run30().filter(r => r.metric !== 'DASH_10YD'),
+    ];
+    const runs = groupSprintRuns(rows, 'YD');
+    expect(runs).toHaveLength(2);
+    expect(runs.find(r => r.finalDistance === 20)?.gates.map(g => g.time)).toEqual([1.87, 3.2]);
+  });
+
+  it('uses the note parent only for splits: a row with another formula keeps its own key', () => {
+    const rows = [
+      m({ metric: 'DASH_30YD', value: 4.0, date: '2026-04-10', batch: 'b1', formula: 'direct_import' }),
+      m({ metric: 'DASH_10YD', value: 1.6, date: '2026-04-10', batch: 'b1', formula: 'direct_import', notes: 'Split from DASH_30YD — imported from f.csv' }),
+    ];
+    const runs = groupSprintRuns(rows, 'YD');
+    expect(runs).toHaveLength(2);
+    expect(runs.find(r => r.finalDistance === 30)?.gates).toEqual([{ distance: 30, time: 4.0 }]);
+  });
+
+  it('marks a run pooled (no intervals, no final) when one batch holds two attempts of the same drill on a day', () => {
+    const rows = [
+      ...run30(),
+      legacy('DASH_30YD', 4.9, 'Imported from f.csv'),
+      legacy('DASH_10YD', 1.9, 'Split from DASH_30YD — imported from f.csv'),
+    ];
+    const runs = groupSprintRuns(rows, 'YD');
+    expect(runs).toHaveLength(1);
+    expect(runs[0].pooled).toBe(true);
+    expect(runs[0].hasFinal).toBe(false);
+    expect(runs[0].intervals).toEqual([]);
+    expect(runs[0].gates.find(g => g.distance === 10)?.time).toBe(1.84);
+    expect(runs[0].gates.find(g => g.distance === 30)?.time).toBe(4.7);
+  });
+
+  it('does not merge real separate dashes of one batch (no split notes)', () => {
+    const rows = [
+      legacy('DASH_10YD', 1.84, 'Imported from f.csv'),
+      legacy('DASH_20YD', 3.34, 'Imported from f.csv'),
+      legacy('DASH_30YD', 4.7, 'Imported from f.csv'),
+    ];
+    expect(groupSprintRuns(rows, 'YD')).toHaveLength(3);
+  });
+});
+
+describe('localDateString', () => {
+  it('uses the local calendar date, not the UTC date', () => {
+    expect(localDateString(new Date(2026, 9, 20, 23, 30))).toBe('2026-10-20');
+    expect(localDateString(new Date(2026, 0, 5, 0, 5))).toBe('2026-01-05');
+  });
+});
+
+describe('filterRunsByRange', () => {
+  const at = (date: string) => groupSprintRuns([m({ metric: 'DASH_40YD', value: 5.5, date, runId: `r${date}` })], 'YD')[0];
+  const dates = (runs: ReturnType<typeof filterRunsByRange>) => runs.map(r => r.date);
+
+  it('keeps everything for all time', () => {
+    expect(filterRunsByRange([at('2020-01-01'), at('2026-10-01')], 'all', '2026-10-21')).toHaveLength(2);
+  });
+
+  it('keeps runs on or after the same day 12 months back', () => {
+    const runs = [at('2026-10-21'), at('2025-10-21'), at('2025-10-20')];
+    expect(dates(filterRunsByRange(runs, '12m', '2026-10-21'))).toEqual(['2026-10-21', '2025-10-21']);
+  });
+
+  it('keeps runs on or after the same day 6 months back', () => {
+    const runs = [at('2026-04-21'), at('2026-04-20')];
+    expect(dates(filterRunsByRange(runs, '6m', '2026-10-21'))).toEqual(['2026-04-21']);
+  });
+
+  it('clamps the day at month end (Aug 31 minus 6 months is Feb 28, or 29 in a leap year)', () => {
+    expect(dates(filterRunsByRange([at('2026-02-28'), at('2026-02-27')], '6m', '2026-08-31'))).toEqual(['2026-02-28']);
+    expect(dates(filterRunsByRange([at('2028-02-29'), at('2028-02-28')], '6m', '2028-08-31'))).toEqual(['2028-02-29']);
+  });
+
+  it('returns nothing when every run is older than the range', () => {
+    expect(filterRunsByRange([at('2020-01-01')], '12m', '2026-10-21')).toEqual([]);
+  });
+});
+
+describe('describeInterval', () => {
+  const run = () => groupSprintRuns(dash40('r', '2026-10-17', [1.85, 3.15, 4.35, 5.49]), 'YD')[0];
+
+  it('shows a fly 10 derivation in stored precision', () => {
+    const r = run();
+    const iv = r.intervals.find(i => i.runInYd === 20)!;
+    expect(describeInterval(r, iv)).toBe('RI20 (fly 10): 4.350 − 3.150 = 1.200 s');
+  });
+
+  it('shows other spans as a span', () => {
+    const r = groupSprintRuns(
+      [
+        m({ metric: 'DASH_30YD', value: 4.7, runId: 'x' }),
+        m({ metric: 'DASH_5YD', value: 1.03, runId: 'x', split: true, parentMetric: 'DASH_30YD' }),
+        m({ metric: 'DASH_10YD', value: 1.84, runId: 'x', split: true, parentMetric: 'DASH_30YD' }),
+      ],
+      'YD',
+    )[0];
+    expect(describeInterval(r, r.intervals[0])).toBe('5–10 yd span: 1.840 − 1.030 = 0.810 s');
   });
 });

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SprintRunsCard } from '../SprintRunsCard';
@@ -22,6 +22,7 @@ function m(o: {
     isVerified: true,
     organizationId: 'org-1',
     importBatchId: null,
+    notes: null,
     calculationMetadata: o.runId
       ? {
           formula: o.split ? 'direct_import_split' : 'direct_import',
@@ -48,6 +49,15 @@ const OLD = dash40('old', '2026-08-29', [1.92, 3.28, 4.52, 5.71]);
 const NEW = dash40('new', '2026-10-17', [1.85, 3.15, 4.35, 5.49]);
 
 describe('SprintRunsCard', () => {
+  // Only Date is faked (userEvent needs real timers): the range filter is relative to today
+  beforeAll(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 21, 12, 0, 0));
+  });
+  afterAll(() => {
+    vi.useRealTimers();
+  });
+
   it('renders nothing when the athlete has no dash runs', () => {
     const { container } = render(<SprintRunsCard measurements={[m({ metric: 'FLY10_TIME', value: 1.2, date: '2026-10-17' })]} />);
     expect(container).toBeEmptyDOMElement();
@@ -181,5 +191,103 @@ describe('SprintRunsCard', () => {
     expect(screen.getByRole('group', { name: 'Best 40 m' })).toBeInTheDocument();
     await user.click(screen.getByRole('radio', { name: /yards/i }));
     expect(screen.getByRole('group', { name: 'Best 40 yd' })).toBeInTheDocument();
+  });
+
+  describe('time range', () => {
+    const ANCIENT = dash40('ancient', '2024-01-01', [1.95, 3.4, 4.7, 6.0]);
+
+    it('defaults to the last 12 months and hides older runs', () => {
+      render(<SprintRunsCard measurements={[...ANCIENT, ...NEW]} />);
+      expect(screen.getByRole('radio', { name: 'Last 12 months' })).toBeChecked();
+      expect(screen.getAllByRole('row').slice(1)).toHaveLength(1);
+      expect(screen.queryByText('Jan 1, 2024')).not.toBeInTheDocument();
+    });
+
+    it('shows every run for All time and only recent ones for Last 6 months', async () => {
+      const user = userEvent.setup();
+      render(<SprintRunsCard measurements={[...ANCIENT, ...OLD, ...NEW]} />);
+      await user.click(screen.getByRole('radio', { name: 'All time' }));
+      expect(screen.getAllByRole('row').slice(1)).toHaveLength(3);
+      await user.click(screen.getByRole('radio', { name: 'Last 6 months' }));
+      // Aug 29 and Oct 17 are within 6 months of Oct 21, 2026
+      expect(screen.getAllByRole('row').slice(1)).toHaveLength(2);
+    });
+
+    it('also limits the summary cards to the range', async () => {
+      const user = userEvent.setup();
+      render(<SprintRunsCard measurements={[...ANCIENT, ...NEW]} />);
+      expect(within(screen.getByRole('group', { name: 'Runs recorded' })).getByText('1')).toBeInTheDocument();
+      await user.click(screen.getByRole('radio', { name: 'All time' }));
+      expect(within(screen.getByRole('group', { name: 'Runs recorded' })).getByText('2')).toBeInTheDocument();
+    });
+
+    it('keeps PR and the faster marker based on all runs, not only the visible ones', () => {
+      render(<SprintRunsCard measurements={[...dash40('best', '2025-01-01', [1.8, 3.1, 4.3, 5.4]), ...dash40('slow', '2025-02-01', [1.95, 3.4, 4.7, 6.0]), ...NEW]} />);
+      // Only NEW is visible (12 months back from Oct 21, 2026 is Oct 21, 2025)
+      const rows = screen.getAllByRole('row').slice(1);
+      expect(rows).toHaveLength(1);
+      // 5.49 is not the all-time best (5.40), so no PR
+      expect(within(rows[0]).queryByText('PR')).not.toBeInTheDocument();
+      // and it is faster than the previous (hidden) run on 30–40? 1.14 vs 1.30: yes
+      expect(rows[0].querySelectorAll('[data-faster="true"]').length).toBeGreaterThan(0);
+    });
+
+    it('says so, with a way out, when the range hides every run', async () => {
+      const user = userEvent.setup();
+      render(<SprintRunsCard measurements={ANCIENT} />);
+      expect(screen.getByText('No runs in the last 12 months')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /sprint runs/i })).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Show all time' }));
+      expect(screen.getAllByRole('row').slice(1)).toHaveLength(1);
+    });
+  });
+
+  describe('run detail', () => {
+    it('expands a run to show how each interval was derived, and collapses again', async () => {
+      const user = userEvent.setup();
+      render(<SprintRunsCard measurements={NEW} />);
+      const toggle = screen.getByRole('button', { name: /Oct 17, 2026/ });
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.queryByText(/RI20 \(fly 10\)/)).not.toBeInTheDocument();
+
+      await user.click(toggle);
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getByText('RI20 (fly 10): 4.350 − 3.150 = 1.200 s')).toBeInTheDocument();
+      expect(screen.getByText('RI10 (fly 10): 3.150 − 1.850 = 1.300 s')).toBeInTheDocument();
+
+      await user.click(toggle);
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.queryByText(/RI20 \(fly 10\)/)).not.toBeInTheDocument();
+    });
+
+    it('notes a partial run (no final time)', async () => {
+      const user = userEvent.setup();
+      const partial = [
+        m({ metric: 'DASH_10YD', value: 1.9, date: '2026-10-20', runId: 'p', split: true, parentMetric: 'DASH_40YD' }),
+        m({ metric: 'DASH_20YD', value: 3.2, date: '2026-10-20', runId: 'p', split: true, parentMetric: 'DASH_40YD' }),
+      ];
+      render(<SprintRunsCard measurements={partial} />);
+      await user.click(screen.getByRole('button', { name: /Oct 20, 2026/ }));
+      expect(screen.getByText('Partial run: no final time recorded')).toBeInTheDocument();
+    });
+
+    it('notes how a pooled row was built', async () => {
+      const user = userEvent.setup();
+      render(<SprintRunsCard measurements={[m({ metric: 'DASH_40YD', value: 5.6, date: '2026-10-17' })]} />);
+      await user.click(screen.getByRole('button', { name: /Oct 17, 2026/ }));
+      expect(screen.getByText('Mixed attempts: fastest time per distance across the day')).toBeInTheDocument();
+    });
+
+    it('spans every column and links the button to its detail row', async () => {
+      const user = userEvent.setup();
+      render(<SprintRunsCard measurements={NEW} />);
+      const toggle = screen.getByRole('button', { name: /Oct 17, 2026/ });
+      expect(toggle).not.toHaveAttribute('aria-controls');
+      await user.click(toggle);
+      const detail = document.getElementById(toggle.getAttribute('aria-controls')!)!;
+      expect(detail).toBeInTheDocument();
+      // date + 4 gates + 3 intervals
+      expect(detail.querySelector('td')).toHaveAttribute('colspan', '8');
+    });
   });
 });
