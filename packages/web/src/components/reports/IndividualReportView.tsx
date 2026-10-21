@@ -20,6 +20,8 @@ import { TierBadge } from "@/components/benchmarks/TierBadge";
 import { FileDown, Share2, Send } from "lucide-react";
 import { LlmExportButton } from "@/components/athletes/LlmExportButton";
 import { useAuth } from "@/lib/auth";
+import { getOrgRole } from "@/lib/org-roles";
+import { buildReportLlmExport } from "./report-llm-export";
 import { ShareReportDialog } from "./ShareReportDialog";
 import { SendReportToAthleteDialog } from "./SendReportToAthleteDialog";
 import { CoachingInsightsCard } from "./CoachingInsightsCard";
@@ -51,11 +53,12 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
   const generateReport = useGenerateReport(report.id);
   const [reportData, setReportData] = useState<any>(null);
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, userOrganizations } = useAuth();
 
   // LLM export is a coaching tool — athletes don't see the button even on their own report.
-  const canExportForLlm =
-    !!user && (user.isSiteAdmin || user.role === "coach" || user.role === "org_admin");
+  // Judged by the role in the report's own organization, not the session role (first org by name).
+  const orgRole = getOrgRole(user, userOrganizations, report.organizationId);
+  const canExportForLlm = orgRole === "site_admin" || orgRole === "coach" || orgRole === "org_admin";
 
   // Determine if AI is enabled for this organization
   const { data: organization } = useQuery<{ aiEnabled?: boolean; aiEnabledBySiteAdmin?: boolean }>({
@@ -171,6 +174,8 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                   // — it is the athlete's display name, not a login handle,
                   // despite the field name suggesting otherwise.
                   athleteName={athlete?.userName}
+                  label="report"
+                  buildContent={(f) => buildReportLlmExport(report, reportData, f)}
                 />
               )}
               <Button variant="outline" onClick={handleDownloadPDF} disabled={isPdfDownloading}>

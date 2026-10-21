@@ -133,7 +133,6 @@ export const GOLDEN_CASES: GoldenCase[] = [
       athleteAge: 16,
       athleteGender: 'Male',
       athleteSport: 'Soccer',
-      comparisonLabel: 'Varsity Boys',
       metrics: [
         { code: 'FLY10_TIME', label: '10-Yard Fly', values: [1.24], unit: 's', lowerIsBetter: true, percentile: 78, teamAverage: 1.31 },
         { code: 'VERTICAL_JUMP', label: 'Vertical Jump', values: [23], unit: 'in', lowerIsBetter: false, percentile: 41, teamAverage: 24.2 },
@@ -191,7 +190,7 @@ export const GOLDEN_CASES: GoldenCase[] = [
       reportName: 'Fall Combine Results',
       organizationName: 'Northside Athletics',
       timeframe: '9/14/2025 to 9/14/2025',
-      eventName: 'Fall Combine',
+      isEventReport: true,
       eventDate: '9/14/2025',
       athleteName: 'Sam Patel',
       athleteAge: 17,

@@ -2780,7 +2780,7 @@ export const insertSiteSettingsSchema = createInsertSchema(siteSettings).omit({
 
 // Report Insights validation schemas
 export const updateReportInsightsSchema = z.object({
-  coachingInsights: z.string().min(1, "Insights cannot be empty").max(10000, "Insights must be 10000 characters or less"),
+  coachingInsights: z.string().trim().min(1, "Insights cannot be empty").max(10000, "Insights must be 10000 characters or less"),
 });
 
 export const generateReportInsightsSchema = z.object({
