@@ -296,6 +296,7 @@ export class ReportService extends BaseService {
   /**
    * Athletes a team report covers: those with a measurement matching its filters, timeframe and event.
    * Same selection generateTeamReport uses, so consent gates see exactly who the AI would be shown.
+   * Runs the measurement query on its own: call it only for a gate, not right before generateTeamReport.
    */
   async getTeamReportAthleteIds(report: Pick<Report, 'organizationId' | 'config'>): Promise<string[]> {
     const config = report.config as ReportConfig;

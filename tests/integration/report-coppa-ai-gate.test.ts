@@ -488,8 +488,12 @@ describe('POST /api/reports/:id/generate-insights — team report, minor without
       isMinor: true,
       parentEmail: `${TEST_PREFIX}par_in_${uid()}@example.com`,
     });
-    // No parentEmail or consent row on purpose: this minor must not matter because the report doesn't cover them
-    const outside = await createUser('scoped_out', { coppaStatus: 'pending', isMinor: true });
+    // No consent row on purpose: this minor must not matter because the report doesn't cover them
+    const outside = await createUser('scoped_out', {
+      coppaStatus: 'pending',
+      isMinor: true,
+      parentEmail: `${TEST_PREFIX}par_out_${uid()}@example.com`,
+    });
     createdUserIds.push(inReport.id, outside.id);
     await addToOrg(inReport.id, org.id, 'athlete');
     await addToOrg(outside.id, org.id, 'athlete');
