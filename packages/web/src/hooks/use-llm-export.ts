@@ -18,7 +18,18 @@ export type LlmExportFormat = 'markdown' | 'json';
 interface UseLlmExportOptions {
   athleteId: string;
   athleteName?: string | null;
+  /**
+   * Local content source. When given, copy/download use it instead of the
+   * athlete-wide server export (the report page exports report content only).
+   */
+  buildContent?: (format: LlmExportFormat) => LlmExportContent;
   onError?: (error: Error) => void;
+}
+
+export interface LlmExportContent {
+  content: string;
+  filename: string;
+  mimeType: string;
 }
 
 interface CopyResult {
@@ -37,7 +48,7 @@ const EXPORT_URL = (athleteId: string, format: LlmExportFormat) =>
 
 const SLUG_FALLBACK = 'athlete';
 
-function slugify(name: string | null | undefined): string {
+export function slugify(name: string | null | undefined): string {
   if (!name) return SLUG_FALLBACK;
   const withoutDiacritics = name
     .normalize('NFD')
@@ -63,7 +74,7 @@ function slugify(name: string | null | undefined): string {
  * fallback path rather than surfacing `Content-Disposition`, so we mirror the
  * server's filename convention exactly to keep artifacts consistent.
  */
-function todayIsoUtc(): string {
+export function todayIsoUtc(): string {
   const now = new Date();
   const yyyy = now.getUTCFullYear();
   const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
@@ -116,14 +127,16 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
 export function useLlmExport({
   athleteId,
   athleteName,
+  buildContent,
   onError,
 }: UseLlmExportOptions): UseLlmExportReturn {
   const [isDownloading, setIsDownloading] = useState(false);
 
   const copy = useCallback(async (): Promise<CopyResult> => {
     try {
-      const response = await fetchExport(athleteId, 'markdown');
-      const text = await response.text();
+      const local = buildContent?.('markdown');
+      const response = local ? null : await fetchExport(athleteId, 'markdown');
+      const text = local ? local.content : await response!.text();
 
       const canUseClipboard =
         typeof navigator !== 'undefined' &&
@@ -137,10 +150,10 @@ export function useLlmExport({
       }
 
       // Clipboard unavailable — fall back to download so the coach still gets the data.
-      const filename = filenameFromResponse(
-        response,
-        `${slugify(athleteName)}-${todayIsoUtc()}.md`,
-      );
+      const fallback = `${slugify(athleteName)}-${todayIsoUtc()}.md`;
+      const filename = local
+        ? local.filename
+        : filenameFromResponse(response!, fallback);
       triggerBlobDownload(new Blob([text], { type: 'text/markdown' }), filename);
       return { ok: true, clipboardFallback: true };
     } catch (err) {
@@ -149,12 +162,17 @@ export function useLlmExport({
       onError?.(error);
       return { ok: false };
     }
-  }, [athleteId, athleteName, onError]);
+  }, [athleteId, athleteName, buildContent, onError]);
 
   const download = useCallback(
     async (format: LlmExportFormat): Promise<boolean> => {
       setIsDownloading(true);
       try {
+        const local = buildContent?.(format);
+        if (local) {
+          triggerBlobDownload(new Blob([local.content], { type: local.mimeType }), local.filename);
+          return true;
+        }
         const response = await fetchExport(athleteId, format);
         const blob = await response.blob();
         const ext = format === 'markdown' ? 'md' : 'json';
@@ -171,7 +189,7 @@ export function useLlmExport({
         setIsDownloading(false);
       }
     },
-    [athleteId, athleteName, onError],
+    [athleteId, athleteName, buildContent, onError],
   );
 
   return { copy, download, isDownloading };

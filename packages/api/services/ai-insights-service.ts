@@ -431,7 +431,6 @@ export interface ReportData {
   athleteAge?: number;
   athleteGender?: string;
   athleteSport?: string; // Sport from athlete.sports[0]
-  athleteTeams?: string[];
   compositeIndex?: number;
   // Individual reports: what the report's own charts show, only when those charts are on
   history?: Array<{ code: string; label: string; points: Array<{ date: string; value: number }> }>;
@@ -440,7 +439,7 @@ export interface ReportData {
 
   // Common report data
   timeframe: string;
-  eventName?: string;
+  isEventReport?: boolean; // one testing event; the event name is deliberately not sent to the model
   eventDate?: string; // already formatted as a calendar date (UTC)
   metrics: Array<{
     code: string;
@@ -457,7 +456,6 @@ export interface ReportData {
     max?: number;
     standardDeviation?: number;
   }>;
-  comparisonLabel?: string; // peer group for percentile/average lines (undefined = whole organization)
 
   // Precomputed in code so the model narrates them instead of doing the maths
   keyFacts?: string[];
@@ -509,6 +507,27 @@ export function insightWordRange(
   return [limited ? 60 : min, max];
 }
 
+/** Replace the {{first_name}} placeholder the prompt asks for (spacing and case tolerated). */
+export function fillFirstName(text: string, athleteName?: string): string {
+  const firstName = athleteName?.trim().split(/\s+/)[0];
+  // Single-brace and "athlete_first_name" variants are what models drift to when asked for {{first_name}}
+  return text.replace(/\{\{?\s*(?:athlete[_ ]?)?first[-_ ]?name\s*\}?\}/gi, (match, offset: number) => {
+    if (firstName) return firstName;
+    // "your athlete" opens a sentence in capitals: at the start of the text or after a sentence end or line break
+    return /(?:^|[.!?]\s+|\n)\s*(?:[-*#]+\s*)?$/.test(text.slice(0, offset)) ? 'Your athlete' : 'your athlete';
+  });
+}
+
+/** Age band sent to the model instead of the exact age. */
+function ageBand(age: number): string {
+  if (age < 10) return 'U10';
+  if (age <= 12) return '10-12';
+  if (age <= 14) return '13-14';
+  if (age <= 16) return '15-16';
+  if (age <= 18) return '17-18';
+  return 'adult';
+}
+
 /**
  * Generate coaching insights for a performance report
  */
@@ -525,7 +544,8 @@ export async function generateCoachingInsights(
     const provider = createProvider(modelKey);
     const insights = await provider.generateInsights(SYSTEM_PROMPT, buildPrompt(reportData));
 
-    return insights;
+    // The prompt carries a {{first_name}} placeholder instead of the name; fill it from the report data
+    return fillFirstName(insights, reportData.athleteName);
   } catch (error) {
     console.error("Error generating coaching insights:", error);
     // Return sanitized error message to prevent information leakage
@@ -599,10 +619,6 @@ export const SYSTEM_PROMPT = [
 export function buildPrompt(reportData: ReportData): string {
   const { reportType } = reportData;
 
-  // Sanitize user-provided content to prevent prompt injection
-  const reportName = sanitizeForPrompt(reportData.reportName);
-  const organizationName = sanitizeForPrompt(reportData.organizationName);
-
   let prompt = '';
 
   prompt += `Analyze the following ${reportType} performance report and provide actionable coaching insights.\n\n`;
@@ -624,32 +640,27 @@ export function buildPrompt(reportData: ReportData): string {
 
   // Report context
   prompt += `## Report Context\n`;
-  prompt += `- Organization: ${organizationName}\n`;
-  prompt += `- Report: ${reportName}\n`;
   prompt += `- Type: ${reportType === "team" ? "Team Performance" : "Individual Athlete"}\n`;
   prompt += `- Timeframe: ${sanitizeForPrompt(reportData.timeframe)}\n`;
-  const eventName = sanitizeForPrompt(reportData.eventName ?? '');
-  if (eventName) {
+  const isEventReport = reportData.isEventReport === true;
+  if (isEventReport) {
     const eventDate = sanitizeForPrompt(reportData.eventDate ?? '');
-    prompt += `- Event: ${eventName}${eventDate ? ` (${eventDate})` : ''}\n`;
+    if (eventDate) prompt += `- Event date: ${eventDate}\n`;
   }
   if (reportData.dataConfidence) prompt += `- Data confidence: ${sanitizeForPrompt(reportData.dataConfidence)}\n`;
 
   // Team-specific context
-  if (reportType === "team" && reportData.teamName) {
-    prompt += `- Team: ${sanitizeForPrompt(reportData.teamName)}\n`;
+  if (reportType === "team") {
     if (reportData.teamSport) prompt += `- Sport: ${sanitizeForPrompt(reportData.teamSport)}\n`;
     prompt += `- Athletes: ${reportData.athleteCount || "N/A"}\n`;
   }
 
   // Individual-specific context
-  if (reportType === "individual" && reportData.athleteName) {
-    prompt += `- Athlete: ${sanitizeForPrompt(reportData.athleteName)}\n`;
+  if (reportType === "individual") {
     if (reportData.athleteSport) prompt += `- Sport: ${sanitizeForPrompt(reportData.athleteSport)}\n`;
     if (reportData.athletePosition) prompt += `- Position: ${sanitizeForPrompt(reportData.athletePosition)}\n`;
-    if (reportData.athleteAge) prompt += `- Age: ${reportData.athleteAge}\n`;
+    if (reportData.athleteAge) prompt += `- Age band: ${ageBand(reportData.athleteAge)}\n`;
     if (reportData.athleteGender) prompt += `- Gender: ${sanitizeForPrompt(reportData.athleteGender)}\n`;
-    if (reportData.athleteTeams?.length) prompt += `- Teams: ${reportData.athleteTeams.map((t) => sanitizeForPrompt(t, 100)).join(', ')}\n`;
     if (reportData.compositeIndex !== undefined) prompt += `- Composite index: ${reportData.compositeIndex.toFixed(2)}\n`;
   }
 
@@ -666,7 +677,7 @@ export function buildPrompt(reportData: ReportData): string {
 
   // Performance metrics
   if (reportData.metrics.length > 0) {
-    const group = sanitizeForPrompt(reportData.comparisonLabel ?? '') || 'all athletes in organization';
+    const group = 'the comparison group';
     prompt += `## Performance Metrics\n`;
     reportData.metrics.forEach((metric) => {
       const label = sanitizeForPrompt(metric.label);
@@ -776,7 +787,7 @@ export function buildPrompt(reportData: ReportData): string {
   // buildReportDataForAI adds a "Biggest change" fact only when a metric changed over the report window.
   // Trends follow the chart selection, not the event filter, so an event report can have history too.
   const hasHistory = reportData.keyFacts?.some((fact) => fact.startsWith(BIGGEST_CHANGE_PREFIX)) ?? false;
-  if (eventName) {
+  if (isEventReport) {
     prompt += `This report covers one testing event. Describe performance at that event against the comparison group and benchmarks${hasHistory ? '' : ', not against earlier results'}.\n\n`;
   }
   if (hasHistory) {
@@ -788,10 +799,9 @@ export function buildPrompt(reportData: ReportData): string {
 
   const [minWords, maxWords] = insightWordRange(reportType, audience, isLimitedData(reportData));
 
-  // Extract first name once for use across audience branches
-  const firstName = reportData.athleteName
-    ? sanitizeForPrompt(reportData.athleteName, 100).split(' ')[0] || null
-    : null;
+  // The model writes a placeholder; generateCoachingInsights fills in the real first name afterwards.
+  // Fixed text, not run through sanitizeForPrompt (it strips underscores).
+  const FIRST_NAME_PLACEHOLDER = '{{first_name}}';
 
   if (audience === 'parent') {
     prompt += `You are writing for PARENTS of youth athletes, NOT coaches or trainers.\n\n`;
@@ -801,9 +811,7 @@ export function buildPrompt(reportData: ReportData): string {
     prompt += `## What to Work On\n(frame as growth opportunities, not deficiencies)\n\n`;
     prompt += `TONE: Encouraging, professional, data-backed. Like a doctor explaining test results — clear, honest, but not alarming.\n\n`;
     prompt += `AVOID: Jargon (percentile ranks are OK, but explain what they mean), negative framing, comparisons that might discourage.\n\n`;
-    if (firstName) {
-      prompt += `Use the athlete's first name (${firstName}) throughout.\n\n`;
-    }
+    prompt += `Use the athlete's first name throughout by writing the literal placeholder ${FIRST_NAME_PLACEHOLDER} wherever the name belongs.\n\n`;
     prompt += `Keep it to ${minWords}-${maxWords} words.\n`;
   } else if (audience === 'athlete') {
     prompt += `You are writing directly TO the athlete. Use "you" language.\n\n`;
@@ -813,9 +821,7 @@ export function buildPrompt(reportData: ReportData): string {
     prompt += `## What to Work On\n(Frame as challenges to attack, not weaknesses. Athletes want to know what to chase)\n\n`;
     prompt += `TONE: Direct, confident, and energizing — like a coach who believes in you giving you your game plan. Speak to them as a competitor. Acknowledge effort where the data shows improvement. Be honest but never deflating.\n\n`;
     prompt += `AVOID: Clinical or passive language, hedging ("you might want to consider..."), generic praise ("great job!"), talking down to them. Athletes respect realness — show them the data backs up what you're saying.\n\n`;
-    if (firstName) {
-      prompt += `Use the athlete's first name (${firstName}) to keep it personal.\n\n`;
-    }
+    prompt += `Use the athlete's first name to keep it personal by writing the literal placeholder ${FIRST_NAME_PLACEHOLDER} wherever the name belongs.\n\n`;
     // Note: athlete audience intentionally omits a "Next Steps" section — "What to Work On"
     // already implies action (it tells the athlete what to chase). Adding a separate next-steps
     // block would be redundant and dilute the direct, competitor-facing tone.
