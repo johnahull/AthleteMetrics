@@ -40,6 +40,7 @@ import { users, organizations } from '@shared/schema/tables/core';
 import { userOrganizations } from '@shared/schema/tables/membership';
 import { parentalConsents, parentAthleteLinks } from '@shared/schema/tables/coppa';
 import { reports } from '@shared/schema/tables/reports';
+import { measurements } from '@shared/schema/tables/measurements';
 import { eq, and, like, sql } from 'drizzle-orm';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 
@@ -151,6 +152,20 @@ async function addToOrg(userId: string, orgId: string, role: string) {
     organizationId: orgId,
     role,
   }).onConflictDoNothing();
+}
+
+/** Give an athlete one FLY10_TIME measurement in an org, so a team report covers them */
+async function addMeasurement(userId: string, orgId: string, submittedBy: string) {
+  await db.insert(measurements).values({
+    userId,
+    submittedBy,
+    organizationId: orgId,
+    date: new Date().toISOString().split('T')[0],
+    age: 15,
+    metric: 'FLY10_TIME',
+    value: '1.500',
+    units: 's',
+  });
 }
 
 /** Insert a report row directly */
@@ -376,8 +391,10 @@ describe('POST /api/reports/:id/generate-insights — team report, minor WITHOUT
     const consent1 = await insertConfirmedConsent(minor1.id, minor1.parentEmail!, true);
     const consent2 = await insertConfirmedConsent(minor2.id, minor2.parentEmail!, false);
     createdConsentIds.push(consent1.id, consent2.id);
+    await addMeasurement(minor1.id, testOrg.id, adminUserId);
+    await addMeasurement(minor2.id, testOrg.id, adminUserId);
 
-    // Team report (no specific athleteId — covers the whole org)
+    // Team report (no specific athleteId — covers every athlete with a measurement in it)
     const report = await insertReport({
       orgId: testOrg.id,
       createdBy: adminUserId,
@@ -432,6 +449,8 @@ describe('POST /api/reports/:id/generate-insights — team report, all minors ha
     const consentA = await insertConfirmedConsent(minorA.id, minorA.parentEmail!, true);
     const consentB = await insertConfirmedConsent(minorB.id, minorB.parentEmail!, true);
     createdConsentIds.push(consentA.id, consentB.id);
+    await addMeasurement(minorA.id, isolatedOrg.id, adminUserId);
+    await addMeasurement(minorB.id, isolatedOrg.id, adminUserId);
 
     const report = await insertReport({
       orgId: isolatedOrg.id,
@@ -450,5 +469,63 @@ describe('POST /api/reports/:id/generate-insights — team report, all minors ha
     if (res.status === 403) {
       expect(res.body.code).not.toBe('ai_consent_required');
     }
+  });
+});
+
+// ============================================================================
+// Regression — team report only gates on athletes IN the report, not the whole org
+// ============================================================================
+
+describe('POST /api/reports/:id/generate-insights — team report, minor without consent outside the report', () => {
+  it('does NOT block when the unconsented minor has no measurements in the report', async () => {
+    const org = await createOrgWithAI(Date.now() + 2);
+    createdOrgIds.push(org.id);
+
+    const inReport = await createUser('scoped_in', {
+      coppaStatus: 'consented',
+      isMinor: true,
+      parentEmail: `${TEST_PREFIX}par_in_${uid()}@example.com`,
+    });
+    const outside = await createUser('scoped_out', { coppaStatus: 'pending', isMinor: true });
+    createdUserIds.push(inReport.id, outside.id);
+    await addToOrg(inReport.id, org.id, 'athlete');
+    await addToOrg(outside.id, org.id, 'athlete');
+
+    const consent = await insertConfirmedConsent(inReport.id, inReport.parentEmail!, true);
+    createdConsentIds.push(consent.id);
+    await addMeasurement(inReport.id, org.id, adminUserId);
+
+    const report = await insertReport({ orgId: org.id, createdBy: adminUserId, reportType: 'team' });
+    createdReportIds.push(report.id);
+
+    const res = await request(app)
+      .post(`/api/reports/${report.id}/generate-insights`)
+      .set('Cookie', adminCookie)
+      .send({});
+
+    expect(res.body.code).not.toBe('ai_consent_required');
+  });
+
+  it('counts only the report athletes without consent', async () => {
+    const org = await createOrgWithAI(Date.now() + 3);
+    createdOrgIds.push(org.id);
+
+    const tested = await createUser('count_tested', { coppaStatus: 'pending', isMinor: true });
+    const bystander = await createUser('count_bystander', { coppaStatus: 'pending', isMinor: true });
+    createdUserIds.push(tested.id, bystander.id);
+    await addToOrg(tested.id, org.id, 'athlete');
+    await addToOrg(bystander.id, org.id, 'athlete');
+    await addMeasurement(tested.id, org.id, adminUserId);
+
+    const report = await insertReport({ orgId: org.id, createdBy: adminUserId, reportType: 'team' });
+    createdReportIds.push(report.id);
+
+    const res = await request(app)
+      .post(`/api/reports/${report.id}/generate-insights`)
+      .set('Cookie', adminCookie)
+      .send({});
+
+    expect(res.status).toBe(403);
+    expect(res.body.message).toMatch(/^AI coaching insights blocked: 1 minor/);
   });
 });

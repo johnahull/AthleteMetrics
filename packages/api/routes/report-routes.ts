@@ -1586,13 +1586,11 @@ export function registerReportRoutes(app: Express) {
           });
         }
       } else if (report.reportType === 'team') {
-        // For team/org reports, check ALL minor athletes in the organization.
-        // If any minor lacks AI consent, block the report generation.
-        // Uses batch query (2 queries) instead of per-user queries (2*N).
-        const orgUsers = await storage.getOrganizationUsers(report.organizationId);
-        const minorIds = orgUsers
-          .filter(ou => ou.user?.isMinor)
-          .map(ou => ou.user!.id);
+        // For team reports, check the minor athletes the report covers (not the whole organization).
+        // If any lacks AI consent, block the report generation.
+        // Uses batch queries instead of per-user queries (2*N).
+        const athleteIds = await reportService.getTeamReportAthleteIds(report);
+        const minorIds = await coppaService.filterMinorIds(athleteIds);
         const minorsWithoutConsent = await coppaService.getMinorsWithoutAIConsent(minorIds);
         if (minorsWithoutConsent.length > 0) {
           return res.status(403).json({
