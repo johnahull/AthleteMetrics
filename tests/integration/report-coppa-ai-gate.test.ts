@@ -517,6 +517,7 @@ describe('POST /api/reports/:id/generate-insights — team report, minor without
     const org = await createOrgWithAI(Date.now() + 3);
     createdOrgIds.push(org.id);
 
+    // No parentEmail: getMinorsWithoutAIConsent keys on coppaStatus, and these minors never reach a consent row
     const tested = await createUser('count_tested', { coppaStatus: 'pending', isMinor: true });
     const bystander = await createUser('count_bystander', { coppaStatus: 'pending', isMinor: true });
     createdUserIds.push(tested.id, bystander.id);
