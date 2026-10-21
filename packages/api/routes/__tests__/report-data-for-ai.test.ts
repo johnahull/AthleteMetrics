@@ -173,16 +173,18 @@ describe('buildReportDataForAI — individual', () => {
     ]);
   });
 
-  it('passes the comparison label through', async () => {
+  it('never sends the comparison label to the prompt, only a generic one', async () => {
     const data = await buildReportDataForAI(individualReport, 'u1', service(individualData()));
-    expect(data.comparisonLabel).toBe('Varsity Boys');
-    expect(buildPrompt(data)).toContain('compared to Varsity Boys');
+    expect(data).not.toHaveProperty('comparisonLabel');
+    const prompt = buildPrompt(data);
+    expect(prompt).toContain('compared to the comparison group');
+    expect(prompt).not.toContain('Varsity Boys');
   });
 
   it('key facts: strongest by percentile, biggest gap tier-aware with direction applied', async () => {
     const data = await buildReportDataForAI(individualReport, 'u1', service(individualData()));
     expect(data.keyFacts).toEqual([
-      'Strongest metric: Vertical Jump, 85th percentile vs Varsity Boys',
+      'Strongest metric: Vertical Jump, 85th percentile vs the comparison group',
       'Biggest gap: 10-Yard Fly, Developing tier of Speed Tiers; needs 0.12 s less to reach Advanced',
     ]);
   });
@@ -192,8 +194,8 @@ describe('buildReportDataForAI — individual', () => {
     d.athlete.benchmarkComparisons = {} as any;
     const data = await buildReportDataForAI(individualReport, 'u1', service({ ...d, comparisonLabel: undefined }));
     expect(data.keyFacts).toEqual([
-      'Strongest metric: Vertical Jump, 85th percentile vs all athletes in organization',
-      'Biggest gap: 10-Yard Fly, 30th percentile vs all athletes in organization',
+      'Strongest metric: Vertical Jump, 85th percentile vs the comparison group',
+      'Biggest gap: 10-Yard Fly, 30th percentile vs the comparison group',
     ]);
   });
 
@@ -331,8 +333,8 @@ describe('buildReportDataForAI — individual tier position and formatting', () 
   it('falls back to the percentile gap when the tier gap is on the strongest metric', async () => {
     const data = await buildReportDataForAI(individualReport, 'u1', withRows({ VERTICAL_JUMP: [tier('Developing', 3, 'Advanced', 1.5)] }));
     expect(data.keyFacts).toEqual([
-      'Strongest metric: Vertical Jump, 85th percentile vs Varsity Boys',
-      'Biggest gap: 10-Yard Fly, 30th percentile vs Varsity Boys',
+      'Strongest metric: Vertical Jump, 85th percentile vs the comparison group',
+      'Biggest gap: 10-Yard Fly, 30th percentile vs the comparison group',
     ]);
   });
 
@@ -476,11 +478,14 @@ describe('buildReportDataForAI — event context', () => {
   const eventContext = { eventId: 'e1', eventName: 'Spring Combine', eventDate: new Date('2024-03-01T00:00:00Z'), participantCount: 12 };
 
   it.each([['individual', individualReport, individualData], ['team', teamReport, teamData]] as const)(
-    '%s: event name and UTC calendar date reach the prompt', async (_t, report, build) => {
+    '%s: UTC calendar date reaches the prompt, the event name does not', async (_t, report, build) => {
       const data = await buildReportDataForAI(report, 'u1', service(build({ eventContext })));
-      expect(data.eventName).toBe('Spring Combine');
+      expect(data.isEventReport).toBe(true);
+      expect(data).not.toHaveProperty('eventName');
       expect(data.eventDate).toBe('3/1/2024');
-      expect(buildPrompt(data)).toContain('- Event: Spring Combine (3/1/2024)');
+      const prompt = buildPrompt(data);
+      expect(prompt).toContain('- Event date: 3/1/2024');
+      expect(prompt).not.toContain('Spring Combine');
     });
 
   it('an ISO string date (UTC midnight) prints the same calendar day', async () => {
@@ -496,12 +501,13 @@ describe('buildReportDataForAI — event context', () => {
     })));
     expect(data.eventDate).toBeUndefined();
     const prompt = buildPrompt(data);
-    expect(prompt).toContain('- Event: Spring Combine\n');
+    expect(prompt).not.toContain('Event date');
     expect(prompt).not.toContain('Invalid Date');
   });
 
   it('no event: no event line', async () => {
     const data = await buildReportDataForAI(individualReport, 'u1', service(individualData()));
-    expect(buildPrompt(data)).not.toContain('- Event:');
+    expect(data.isEventReport).toBe(false);
+    expect(buildPrompt(data)).not.toContain('Event date');
   });
 });

@@ -111,10 +111,8 @@ export function CoachingInsightsCard({
   }, [handleGenerate]);
 
   // Early returns come after every hook so the hook order never changes between renders
-  // Don't render if AI is not enabled site-wide
-  if (!aiEnabled) {
-    return null;
-  }
+  // Manual write/edit never needs AI; only Generate/Regenerate do
+  const canGenerate = aiEnabled && aiConsentGranted === true;
 
   // COPPA: minor athlete without AI consent — show locked card so coaches
   // understand why insights are unavailable (returning null would be confusing)
@@ -141,8 +139,8 @@ export function CoachingInsightsCard({
     );
   }
 
-  // State 1: Not Generated
-  if (!hasInsights && !isGenerating) {
+  // State 1: Not Generated (an open editor on an empty card falls through to State 4)
+  if (!hasInsights && !isGenerating && !isEditing) {
     return (
       <Card>
         <CardHeader>
@@ -154,13 +152,22 @@ export function CoachingInsightsCard({
         <CardContent>
           <div className="text-center py-8 space-y-4">
             <p className="text-muted-foreground">
-              Generate insights to get personalized coaching recommendations based on this
-              report's performance data.
+              {aiEnabled
+                ? "Write insights, or generate them to get personalized coaching recommendations based on this report's performance data."
+                : "Add coaching insights for this report."}
             </p>
-            <Button onClick={handleGenerate}>
-              <Sparkles className="h-4 w-4 mr-2" />
-              Generate Insights
-            </Button>
+            <div className="flex justify-center gap-2">
+              <Button variant={canGenerate ? "outline" : "default"} onClick={handleEdit}>
+                <Edit className="h-4 w-4 mr-2" />
+                Write Insights
+              </Button>
+              {canGenerate && (
+                <Button onClick={handleGenerate}>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Generate Insights
+                </Button>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -260,15 +267,17 @@ export function CoachingInsightsCard({
               <Edit className="h-4 w-4 mr-2" />
               Edit
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRegenerate}
-              disabled={isGenerating}
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${isGenerating ? 'animate-spin' : ''}`} />
-              Regenerate
-            </Button>
+            {canGenerate && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRegenerate}
+                disabled={isGenerating}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${isGenerating ? 'animate-spin' : ''}`} />
+                Regenerate
+              </Button>
+            )}
           </div>
         </div>
       </CardHeader>
@@ -278,7 +287,7 @@ export function CoachingInsightsCard({
         </div>
         <div className="flex items-center gap-2 pt-4 border-t text-sm text-muted-foreground">
           <span>
-            Generated on:{" "}
+            Evaluation Written:{" "}
             {generatedAt
               ? new Date(generatedAt).toLocaleString("en-US", {
                   month: "short",

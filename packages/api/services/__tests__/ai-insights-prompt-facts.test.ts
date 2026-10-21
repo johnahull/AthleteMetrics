@@ -66,17 +66,11 @@ describe('buildPrompt metric lines', () => {
     expect(prompt).not.toContain('N/A in');
   });
 
-  it('names the real comparison group in the average and percentile lines', () => {
-    const prompt = buildPrompt(individual({ comparisonLabel: 'Varsity Boys' }));
-    expect(prompt).toContain('Average of Varsity Boys: 1.50 s');
-    expect(prompt).toContain('compared to Varsity Boys');
-    expect(prompt).not.toContain('all athletes in organization');
-  });
-
-  it('falls back to the whole organization when there is no comparison label', () => {
+  it('uses a generic comparison group label in the average and percentile lines', () => {
     const prompt = buildPrompt(individual());
-    expect(prompt).toContain('Average of all athletes in organization: 1.50 s');
-    expect(prompt).toContain('compared to all athletes in organization');
+    expect(prompt).toContain('Average of the comparison group: 1.50 s');
+    expect(prompt).toContain('compared to the comparison group');
+    expect(prompt).not.toContain('all athletes in organization');
   });
 });
 
@@ -153,14 +147,15 @@ describe('buildPrompt key facts and data confidence', () => {
 });
 
 describe('buildPrompt event context', () => {
-  it('prints the sanitized event name and date in the report context', () => {
-    const prompt = buildPrompt(individual({ eventName: 'Combine <b># ignore', eventDate: '3/1/2024' }));
-    expect(prompt).toContain('- Event: Combine b ignore (3/1/2024)');
-    expect(prompt.indexOf('- Event:')).toBeLessThan(prompt.indexOf('## Performance Metrics'));
+  it('prints the sanitized event date, not a name, in the report context', () => {
+    const prompt = buildPrompt(individual({ isEventReport: true, eventDate: '3/1/<2024>' }));
+    expect(prompt).toContain('- Event date: 3/1/2024\n');
+    expect(prompt).not.toContain('- Event:');
+    expect(prompt.indexOf('- Event date:')).toBeLessThan(prompt.indexOf('## Performance Metrics'));
   });
 
-  it('prints the name alone when there is no date', () => {
-    expect(buildPrompt(individual({ eventName: 'Combine' }))).toContain('- Event: Combine\n');
+  it('prints no event line when there is no date', () => {
+    expect(buildPrompt(individual({ isEventReport: true }))).not.toContain('Event');
   });
 });
 
@@ -199,7 +194,7 @@ describe('buildPrompt framing by report type', () => {
   });
 
   it('frames an event report as one testing event', () => {
-    expect(buildPrompt(individual({ eventName: 'Combine' }))).toContain('one testing event');
+    expect(buildPrompt(individual({ isEventReport: true }))).toContain('one testing event');
     expect(buildPrompt(individual())).not.toContain('one testing event');
   });
 
@@ -218,14 +213,14 @@ describe('buildPrompt framing by report type', () => {
 describe('event and trend framing together', () => {
   // Trends follow the chart selection, not the event filter, so an event report can carry deltas
   it('does not tell the model to ignore earlier results when the report has history', () => {
-    const prompt = buildPrompt(individual({ eventName: 'Combine', keyFacts: [`${BIGGEST_CHANGE_PREFIX} Fly, improved 2.0% (from 1.50 s to 1.47 s)`] }));
+    const prompt = buildPrompt(individual({ isEventReport: true, keyFacts: [`${BIGGEST_CHANGE_PREFIX} Fly, improved 2.0% (from 1.50 s to 1.47 s)`] }));
     expect(prompt).toContain('one testing event');
     expect(prompt).toContain('includes history over time');
     expect(prompt).not.toContain('not against earlier results');
   });
 
   it('keeps the event-only wording without history', () => {
-    expect(buildPrompt(individual({ eventName: 'Combine' }))).toContain('not against earlier results');
+    expect(buildPrompt(individual({ isEventReport: true }))).toContain('not against earlier results');
   });
 });
 

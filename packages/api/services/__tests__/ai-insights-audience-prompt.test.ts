@@ -113,18 +113,13 @@ describe('buildPrompt audience branches', () => {
       expect(prompt).toContain('150-200 words');
     });
 
-    it('should use the athlete first name when available', () => {
+    it('should ask for the first-name placeholder, never the real name', () => {
       const data = makeBaseReportData({ audience: 'athlete', athleteName: 'Jordan Smith' });
       const prompt = buildPrompt(data);
 
-      expect(prompt).toContain("athlete's first name (Jordan)");
-    });
-
-    it('should skip first-name instruction when athleteName is missing', () => {
-      const data = makeBaseReportData({ audience: 'athlete', athleteName: undefined });
-      const prompt = buildPrompt(data);
-
-      expect(prompt).not.toContain("athlete's first name");
+      expect(prompt).toContain("athlete's first name");
+      expect(prompt).toContain('{{first_name}}');
+      expect(prompt).not.toContain('Jordan');
     });
 
     it('should not contain parent-specific or coach-specific language', () => {
@@ -156,25 +151,15 @@ describe('buildPrompt audience branches', () => {
       expect(prompt).not.toContain('\n## Next Steps\n');
     });
 
-    it('should use the athlete first name throughout', () => {
+    it('should ask for the first-name placeholder throughout, never the real name', () => {
       const data = makeBaseReportData({
         audience: 'parent',
         athleteName: 'Jordan Smith',
       });
       const prompt = buildPrompt(data);
 
-      expect(prompt).toContain('Jordan');
-      expect(prompt).toContain("athlete's first name (Jordan)");
-    });
-
-    it('should handle athlete with single-word name', () => {
-      const data = makeBaseReportData({
-        audience: 'parent',
-        athleteName: 'Zendaya',
-      });
-      const prompt = buildPrompt(data);
-
-      expect(prompt).toContain("athlete's first name (Zendaya)");
+      expect(prompt).toContain('{{first_name}}');
+      expect(prompt).not.toContain('Jordan');
     });
 
     it('should request 200-300 words for parent audience', () => {
@@ -214,7 +199,7 @@ describe('buildPrompt audience branches', () => {
       expect(prompt).not.toContain('You are writing directly TO the athlete');
     });
 
-    it('should skip first-name instruction when athleteName is missing', () => {
+    it('should keep the placeholder instruction when athleteName is missing (filled with the fallback later)', () => {
       const data = makeBaseReportData({
         audience: 'parent',
         athleteName: undefined,
@@ -222,19 +207,7 @@ describe('buildPrompt audience branches', () => {
       const prompt = buildPrompt(data);
 
       expect(prompt).toContain('PARENTS of youth athletes');
-      expect(prompt).not.toContain("athlete's first name");
-    });
-
-    it('should skip first-name instruction when sanitized name is empty', () => {
-      // A name composed entirely of markdown special chars sanitizes to ''
-      const data = makeBaseReportData({
-        audience: 'parent',
-        athleteName: '***',
-      });
-      const prompt = buildPrompt(data);
-
-      expect(prompt).not.toContain("athlete's first name ()");
-      expect(prompt).not.toContain("athlete's first name");
+      expect(prompt).toContain('{{first_name}}');
     });
   });
 

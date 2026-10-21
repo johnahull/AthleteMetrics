@@ -161,6 +161,19 @@ describe('checkInsights on recorded samples', () => {
     expect(check('individual-limited-coach-good.md', 'individual-limited')).toEqual([]);
   });
 
+  it('flags an unfilled {{first_name}} placeholder in the output', () => {
+    const failures = checkInsights({
+      output: '## Summary\n{{first_name}} x\n## What\'s Going Well\nx\n## What to Work On\nx\n## Next Steps\nx',
+      data: { ...golden('individual-limited').data, audience: 'coach' },
+    });
+    expect(failures).toContain('unfilled placeholder: {{first_name}}');
+  });
+
+  it('flags the athlete name appearing in the prompt', () => {
+    const data = { ...golden('individual-limited').data, audience: 'coach' as const, keyFacts: ['Riley Chen led the group'] };
+    expect(checkInsights({ output: 'x', data })).toContain('athlete name in the prompt');
+  });
+
   it('does not check names on individual outputs (the athlete is named on purpose)', () => {
     expect(checkInsights({
       output: sample('individual-coach-good.md'),

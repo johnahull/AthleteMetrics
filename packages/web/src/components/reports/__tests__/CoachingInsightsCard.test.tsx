@@ -20,7 +20,7 @@
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { CoachingInsightsCard } from '../CoachingInsightsCard';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
@@ -201,14 +201,56 @@ describe('CoachingInsightsCard — default prop value (COPPA trap documentation)
   });
 });
 
-// ── aiEnabled=false guard (pre-COPPA check) ──────────────────────────────────
+// ── Manual insights (no AI required) ─────────────────────────────────────────
 
-describe('CoachingInsightsCard — aiEnabled=false returns null before COPPA check', () => {
-  it('renders nothing when aiEnabled={false} regardless of aiConsentGranted', () => {
-    const { container } = render(
-      <CoachingInsightsCard {...baseProps} aiEnabled={false} aiConsentGranted={true} />
+describe('CoachingInsightsCard — manual write/edit', () => {
+  it('renders with AI disabled: Write Insights shown, Generate hidden', () => {
+    render(<CoachingInsightsCard {...baseProps} aiEnabled={false} />);
+
+    expect(screen.getByText('Coaching Insights')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /write insights/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /generate insights/i })).not.toBeInTheDocument();
+  });
+
+  it('shows both Write and Generate when AI is enabled', () => {
+    render(<CoachingInsightsCard {...baseProps} aiEnabled={true} />);
+
+    expect(screen.getByRole('button', { name: /write insights/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /generate insights/i })).toBeInTheDocument();
+  });
+
+  it('Write Insights opens the editor', () => {
+    render(<CoachingInsightsCard {...baseProps} aiEnabled={false} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /write insights/i }));
+
+    expect(screen.getByTestId('insights-editor')).toBeInTheDocument();
+  });
+
+  it('with AI disabled and insights present: Edit shown, Regenerate hidden', () => {
+    render(
+      <CoachingInsightsCard
+        {...baseProps}
+        aiEnabled={false}
+        initialInsights="Hand-written."
+        generatedAt="2025-01-15T10:00:00Z"
+      />
     );
 
-    expect(container.firstChild).toBeNull();
+    expect(screen.getByRole('button', { name: /edit/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /regenerate/i })).not.toBeInTheDocument();
+  });
+
+  it('labels the footer "Evaluation Written:"', () => {
+    render(
+      <CoachingInsightsCard
+        {...baseProps}
+        initialInsights="Text."
+        generatedAt="2025-01-15T10:00:00Z"
+      />
+    );
+
+    expect(screen.getByText(/Evaluation Written:/)).toBeInTheDocument();
+    expect(screen.queryByText(/Generated on:/)).not.toBeInTheDocument();
   });
 });

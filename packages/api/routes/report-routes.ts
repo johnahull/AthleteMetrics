@@ -1722,9 +1722,9 @@ export function registerReportRoutes(app: Express) {
    * Update coaching insights for a report (manual edit)
    * PATCH /api/reports/:id/insights
    *
-   * Requires: Coach or above role, AI enabled for organization (both flags)
+   * Requires: coach or above in the report's own organization; no AI needed (manual text)
    */
-  app.patch("/api/reports/:id/insights", reportLimiter, requireAuth, requireRole('coach'), requireAIEnabled, async (req: AuthenticatedRequest, res) => {
+  app.patch("/api/reports/:id/insights", reportLimiter, requireAuth, requireRole('coach'), async (req: AuthenticatedRequest, res) => {
     try {
       const user = req.session.user;
       if (!user?.id) {
@@ -1759,6 +1759,11 @@ export function registerReportRoutes(app: Express) {
         return res.status(403).json({
           message: "Access denied to this report"
         });
+      }
+
+      // requireRole('coach') checks the primary org; the write needs the role in the report's org
+      if (!isMeasurementWriterRole(await getOrgRole(user, report.organizationId))) {
+        return res.status(403).json({ message: "Access denied to this report" });
       }
 
       // Use transaction to ensure atomic update of report and audit log
@@ -4734,7 +4739,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
       const modelText = report.coachingInsightsModel
         ? ` (${getAIModel(report.coachingInsightsModel)?.label ?? report.coachingInsightsModel})`
         : '';
-      doc.text(`Generated: ${generatedDate}${modelText}`, 14, yPos);
+      doc.text(`Evaluation Written: ${generatedDate}${modelText}`, 14, yPos);
       doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
       yPos += 10;
     }
@@ -5110,7 +5115,8 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
       const idx = tierIndex(c);
       return idx ? idx.i / Math.max(idx.n - 1, 1) : c.isBestTier ? 0 : 0.5;
     };
-    const group = typedReportData.comparisonLabel || 'all athletes in organization';
+    // Generic on purpose: the on-screen label can be a team or cohort name, which the AI prompt must not carry
+    const group = 'the comparison group';
 
     // Metrics that improved over the report window (from trend deltas; declines go to concerns)
     const improvements: Array<{ metric: string; improvement: string }> = [];
@@ -5314,7 +5320,7 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
       organizationName: org?.name || "Unknown Organization",
       organizationContext: org?.aiPromptContext || undefined,
       timeframe,
-      eventName: typedReportData.eventContext?.eventName,
+      isEventReport: !!typedReportData.eventContext,
       // Event dates are calendar dates stored as UTC midnight
       eventDate: typedReportData.eventContext?.eventDate && !isNaN(new Date(typedReportData.eventContext.eventDate).getTime())
         ? formatCalendarDate(typedReportData.eventContext.eventDate)
@@ -5323,7 +5329,6 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
       improvements,
       concerns,
       benchmarkComparisons,
-      comparisonLabel: typedReportData.comparisonLabel,
       keyFacts,
       dataConfidence,
       audience,
