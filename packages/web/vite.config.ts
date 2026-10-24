@@ -21,7 +21,7 @@ export default defineConfig({
       strategies: 'injectManifest',
       srcDir: 'src',
       filename: 'sw.ts',
-      includeAssets: ['icon-192.svg', 'icon-512.svg', 'icon-192.png', 'icon-512.png'],
+      includeAssets: ['icon-192.png', 'icon-512.png', 'icon-maskable-192.png', 'icon-maskable-512.png', 'apple-touch-icon.png'],
       manifest: {
         name: 'AthleteMetrics',
         short_name: 'AthleteMetrics',
@@ -31,7 +31,6 @@ export default defineConfig({
         display: 'standalone',
         start_url: '/',
         icons: [
-          // PNG fallbacks for Safari and older browsers
           {
             src: 'icon-192.png',
             sizes: '192x192',
@@ -44,31 +43,18 @@ export default defineConfig({
             type: 'image/png',
             purpose: 'any'
           },
-          // Maskable PNG icons for Android
+          // Maskable PNG icons for Android (glyph kept inside the safe zone)
           {
-            src: 'icon-192.png',
+            src: 'icon-maskable-192.png',
             sizes: '192x192',
             type: 'image/png',
             purpose: 'maskable'
           },
           {
-            src: 'icon-512.png',
+            src: 'icon-maskable-512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable'
-          },
-          // SVG icons for modern browsers
-          {
-            src: 'icon-192.svg',
-            sizes: '192x192',
-            type: 'image/svg+xml',
-            purpose: 'any maskable'
-          },
-          {
-            src: 'icon-512.svg',
-            sizes: '512x512',
-            type: 'image/svg+xml',
-            purpose: 'any maskable'
           }
         ]
       },
