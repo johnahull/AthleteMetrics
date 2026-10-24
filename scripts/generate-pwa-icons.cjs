@@ -14,16 +14,17 @@ const path = require('path');
 const master = path.resolve(__dirname, 'icon-source/runner-master.png');
 const publicDir = path.resolve(__dirname, '../packages/web/public');
 const WHITE = { r: 255, g: 255, b: 255, alpha: 1 };
-const CLEAR = { r: 0, g: 0, b: 0, alpha: 0 };
+const CLEAR = { r: 255, g: 255, b: 255, alpha: 0 };
 
-// glyph = share of the canvas the longer glyph side fills; maskable needs the
-// glyph inside the 80% safe circle, so it gets a smaller share on a solid bg
+// glyph = share of the canvas the longer glyph side fills. Maskable needs the
+// glyph inside the 40%-radius safe circle: the trimmed runner is 251x207, so at
+// 0.6 its corners sit ~38.9% from centre (0.62 would be ~40.2%, just outside).
 const targets = [
   { file: 'favicon.png', size: 64, glyph: 0.94, background: WHITE },
   { file: 'icon-192.png', size: 192, glyph: 0.9, background: CLEAR },
   { file: 'icon-512.png', size: 512, glyph: 0.9, background: CLEAR },
-  { file: 'icon-maskable-192.png', size: 192, glyph: 0.62, background: WHITE },
-  { file: 'icon-maskable-512.png', size: 512, glyph: 0.62, background: WHITE },
+  { file: 'icon-maskable-192.png', size: 192, glyph: 0.6, background: WHITE },
+  { file: 'icon-maskable-512.png', size: 512, glyph: 0.6, background: WHITE },
   // iOS paints transparency black, so this one must be opaque
   { file: 'apple-touch-icon.png', size: 180, glyph: 0.8, background: WHITE },
 ];
