@@ -99,12 +99,13 @@ export function SprintRunsCard({ measurements, className }: SprintRunsCardProps)
 
   const prKeys = useMemo(() => personalBestKeys(allRuns), [allRuns]);
   const summary = useMemo(() => summarizeSprintRuns(runs), [runs]);
+  const indexByKey = useMemo(() => new Map(allRuns.map((r, i) => [r.key, i])), [allRuns]);
 
   if (runsByUnit.YD.length === 0 && runsByUnit.M.length === 0) return null;
 
   // Seconds faster than the same interval in the next-older run (an earlier date) that has it, as displayed (2 dp)
   const fasterBy = (run: SprintRun, from: number, to: number): number | null => {
-    const index = allRuns.indexOf(run);
+    const index = indexByKey.get(run.key) ?? -1;
     const current = run.intervals.find(i => i.from === from && i.to === to);
     if (!current) return null;
     for (let j = index + 1; j < allRuns.length; j++) {
