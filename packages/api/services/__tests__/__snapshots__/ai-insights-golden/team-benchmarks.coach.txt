@@ -9,12 +9,9 @@ The Organization Context describes this organization's training preferences. App
 We train speed first, with two sprint sessions a week.
 
 ## Report Context
-- Organization: Northside Athletics
-- Report: Varsity Preseason Testing
 - Type: Team Performance
 - Timeframe: 8/1/2025 to 8/31/2025
 - Data confidence: 24 athletes; no history over time in this report (best value per athlete); benchmarks for 2 of 2 metrics
-- Team: Varsity Boys
 - Sport: Soccer
 - Athletes: 24
 

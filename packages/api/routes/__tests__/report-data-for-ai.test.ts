@@ -173,16 +173,18 @@ describe('buildReportDataForAI — individual', () => {
     ]);
   });
 
-  it('passes the comparison label through', async () => {
+  it('never sends the comparison label to the prompt, only a generic one', async () => {
     const data = await buildReportDataForAI(individualReport, 'u1', service(individualData()));
-    expect(data.comparisonLabel).toBe('Varsity Boys');
-    expect(buildPrompt(data)).toContain('compared to Varsity Boys');
+    expect(data).not.toHaveProperty('comparisonLabel');
+    const prompt = buildPrompt(data);
+    expect(prompt).toContain('compared to the comparison group');
+    expect(prompt).not.toContain('Varsity Boys');
   });
 
   it('key facts: strongest by percentile, biggest gap tier-aware with direction applied', async () => {
     const data = await buildReportDataForAI(individualReport, 'u1', service(individualData()));
     expect(data.keyFacts).toEqual([
-      'Strongest metric: Vertical Jump, 85th percentile vs Varsity Boys',
+      'Strongest metric: Vertical Jump, 85th percentile vs the comparison group',
       'Biggest gap: 10-Yard Fly, Developing tier of Speed Tiers; needs 0.12 s less to reach Advanced',
     ]);
   });
@@ -192,8 +194,8 @@ describe('buildReportDataForAI — individual', () => {
     d.athlete.benchmarkComparisons = {} as any;
     const data = await buildReportDataForAI(individualReport, 'u1', service({ ...d, comparisonLabel: undefined }));
     expect(data.keyFacts).toEqual([
-      'Strongest metric: Vertical Jump, 85th percentile vs all athletes in organization',
-      'Biggest gap: 10-Yard Fly, 30th percentile vs all athletes in organization',
+      'Strongest metric: Vertical Jump, 85th percentile vs the comparison group',
+      'Biggest gap: 10-Yard Fly, 30th percentile vs the comparison group',
     ]);
   });
 
@@ -331,8 +333,8 @@ describe('buildReportDataForAI — individual tier position and formatting', () 
   it('falls back to the percentile gap when the tier gap is on the strongest metric', async () => {
     const data = await buildReportDataForAI(individualReport, 'u1', withRows({ VERTICAL_JUMP: [tier('Developing', 3, 'Advanced', 1.5)] }));
     expect(data.keyFacts).toEqual([
-      'Strongest metric: Vertical Jump, 85th percentile vs Varsity Boys',
-      'Biggest gap: 10-Yard Fly, 30th percentile vs Varsity Boys',
+      'Strongest metric: Vertical Jump, 85th percentile vs the comparison group',
+      'Biggest gap: 10-Yard Fly, 30th percentile vs the comparison group',
     ]);
   });
 
@@ -476,11 +478,14 @@ describe('buildReportDataForAI — event context', () => {
   const eventContext = { eventId: 'e1', eventName: 'Spring Combine', eventDate: new Date('2024-03-01T00:00:00Z'), participantCount: 12 };
 
   it.each([['individual', individualReport, individualData], ['team', teamReport, teamData]] as const)(
-    '%s: event name and UTC calendar date reach the prompt', async (_t, report, build) => {
+    '%s: UTC calendar date reaches the prompt, the event name does not', async (_t, report, build) => {
       const data = await buildReportDataForAI(report, 'u1', service(build({ eventContext })));
-      expect(data.eventName).toBe('Spring Combine');
+      expect(data.isEventReport).toBe(true);
+      expect(data).not.toHaveProperty('eventName');
       expect(data.eventDate).toBe('3/1/2024');
-      expect(buildPrompt(data)).toContain('- Event: Spring Combine (3/1/2024)');
+      const prompt = buildPrompt(data);
+      expect(prompt).toContain('- Event date: 3/1/2024');
+      expect(prompt).not.toContain('Spring Combine');
     });
 
   it('an ISO string date (UTC midnight) prints the same calendar day', async () => {
@@ -496,12 +501,93 @@ describe('buildReportDataForAI — event context', () => {
     })));
     expect(data.eventDate).toBeUndefined();
     const prompt = buildPrompt(data);
-    expect(prompt).toContain('- Event: Spring Combine\n');
+    expect(prompt).not.toContain('Event date');
     expect(prompt).not.toContain('Invalid Date');
   });
 
   it('no event: no event line', async () => {
     const data = await buildReportDataForAI(individualReport, 'u1', service(individualData()));
-    expect(buildPrompt(data)).not.toContain('- Event:');
+    expect(data.isEventReport).toBe(false);
+    expect(buildPrompt(data)).not.toContain('Event date');
+  });
+});
+
+describe('buildReportDataForAI — everything the individual report shows', () => {
+  const chart = (r: any, charts: Record<string, boolean>) => ({ ...r, config: { ...r.config, charts } });
+  const trends = {
+    FLY10_TIME: { series: [{ date: '2024-01-15', value: 1.6 }, { date: '2024-03-15', value: 1.52 }], direction: 'lower', delta: { from: 1.6, to: 1.52, pct: 5 } },
+    VERTICAL_JUMP: { series: [{ date: '2024-01-15', value: 28 }], direction: 'higher', delta: { from: 28, to: 28, pct: 0 } },
+    NOT_IN_PROMPT: { series: [{ date: '2024-01-15', value: 1 }, { date: '2024-03-15', value: 2 }], direction: 'higher', delta: { from: 1, to: 2, pct: 100 } },
+  };
+  const distributions = {
+    FLY10_TIME: { values: [1.3, 1.4, 1.5], athleteValue: 1.52, stats: { min: 1.3, q1: 1.35, median: 1.4, q3: 1.45, max: 1.5 }, direction: 'lower' },
+  };
+
+  it('history: dated series for metrics in the prompt with two or more points, only when trends are on', async () => {
+    const on = await buildReportDataForAI(chart(individualReport, { trends: true }), 'u1', service(individualData({ trends })));
+    expect(on.history).toEqual([
+      { code: 'FLY10_TIME', label: '10-Yard Fly', points: [{ date: '2024-01-15', value: 1.6 }, { date: '2024-03-15', value: 1.52 }] },
+    ]);
+    const off = await buildReportDataForAI(individualReport, 'u1', service(individualData({ trends })));
+    expect(off.history).toBeUndefined();
+  });
+
+  it('distributions: five-number summary per metric in the prompt, never the peers\' individual values', async () => {
+    const data = await buildReportDataForAI(chart(individualReport, { distribution: true }), 'u1', service(individualData({ distributions })));
+    expect(data.distributions).toEqual([
+      { code: 'FLY10_TIME', label: '10-Yard Fly', min: 1.3, q1: 1.35, median: 1.4, q3: 1.45, max: 1.5 },
+    ]);
+  });
+
+  it('history over 30 points keeps the first point (the delta baseline) and the 29 most recent', async () => {
+    const series = Array.from({ length: 40 }, (_, i) => ({ date: `2024-01-${String(i + 1).padStart(2, '0')}`, value: 1.6 - i * 0.001 }));
+    const data = await buildReportDataForAI(chart(individualReport, { trends: true }), 'u1', service(individualData({
+      trends: { FLY10_TIME: { series, direction: 'lower', delta: { from: 1.6, to: 1.561, pct: 2.4 } } },
+    })));
+    const points = data.history![0].points;
+    expect(points).toHaveLength(30);
+    expect(points[0]).toEqual(series[0]);
+    expect(points.slice(1)).toEqual(series.slice(-29));
+  });
+
+  it('a distribution without stats is skipped instead of failing the prompt', async () => {
+    const data = await buildReportDataForAI(chart(individualReport, { distribution: true }), 'u1', service(individualData({
+      distributions: { FLY10_TIME: { values: [1.3], athleteValue: 1.5 } },
+    })));
+    expect(data.distributions).toBeUndefined();
+  });
+
+  it('composite index and F-V profile come from the report data', async () => {
+    const fvProfile = { profileId: 'p1', date: '2024-02-01', distanceUnit: 'yards', f0Rel: '7.25', v0: '8.10', pmaxRel: '14.7', fvSlope: '-0.9', fitR2: null, analysisJson: null };
+    const data = await buildReportDataForAI(individualReport, 'u1', service(individualData({
+      athlete: { ...individualData().athlete, compositeIndex: 72.456 },
+      fvProfile,
+    })));
+    expect(data.compositeIndex).toBe(72.46);
+    expect(data.fvProfile).toEqual({ date: '2024-02-01', distanceUnit: 'yards', f0Rel: 7.25, v0: 8.1, pmaxRel: 14.7, fvSlope: -0.9 });
+  });
+
+  it('an empty or blank F-V value is missing, not zero', async () => {
+    const fvProfile = { date: '2024-02-01', distanceUnit: 'yards', f0Rel: '', v0: '  ', pmaxRel: '14.7', fvSlope: null };
+    const data = await buildReportDataForAI(individualReport, 'u1', service(individualData({ fvProfile })));
+    expect(data.fvProfile).toEqual({ date: '2024-02-01', distanceUnit: 'yards', pmaxRel: 14.7 });
+    expect(data.fvProfile!.f0Rel).toBeUndefined();
+    expect(data.fvProfile!.v0).toBeUndefined();
+  });
+
+  it('absent report data leaves the fields out', async () => {
+    const data = await buildReportDataForAI(individualReport, 'u1', service(individualData()));
+    expect(data.history).toBeUndefined();
+    expect(data.distributions).toBeUndefined();
+    expect(data.compositeIndex).toBeUndefined();
+    expect(data.fvProfile).toBeUndefined();
+  });
+
+  it('a team report never carries the individual-only fields', async () => {
+    const data = await buildReportDataForAI(teamReport, 'u1', service(teamData({ trends, distributions, fvProfile: { date: 'x' } })));
+    expect(data.history).toBeUndefined();
+    expect(data.distributions).toBeUndefined();
+    expect(data.fvProfile).toBeUndefined();
+    expect(data.compositeIndex).toBeUndefined();
   });
 });

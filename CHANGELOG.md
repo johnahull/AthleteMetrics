@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-10-20
+
+### Added
+- Dashr import derives a fly 10 from every pair of dash gates 10 yd apart. A 40yd dash with 10/20/30 gates now yields RI10, FLY10_TIME and RI30. The fastest in-range candidate wins, and a direct Flying measurement suppresses the derived one. Meters are unchanged (#676)
+
+### Fixed
+- Time inputs have full keyboard support, so the m:ss colon is typeable (#672)
+- Benchmark achievement summary counts each athlete once per benchmark (#674)
+
+### Changed
+- CI: failing E2E specs are quarantined (`tests/e2e/quarantine.json`) so the E2E suite can gate (#673)
+- CI: the full Playwright suite no longer runs against deployed staging (#675)
+
 ## [0.30.1] - 2026-10-19
 
 ### Fixed

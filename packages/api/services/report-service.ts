@@ -294,6 +294,25 @@ export class ReportService extends BaseService {
   }
 
   /**
+   * Athletes a team report covers: those with a measurement matching its filters, timeframe and event.
+   * Same selection generateTeamReport uses, so consent gates see exactly who the AI would be shown.
+   * Runs the measurement query on its own: call it only for a gate, not right before generateTeamReport.
+   */
+  async getTeamReportAthleteIds(report: Pick<Report, 'organizationId' | 'config'>): Promise<string[]> {
+    const config = report.config as ReportConfig;
+    const { startDate, endDate } = this.calculateDateRange(config.timeframe);
+    const rows = await this.getFilteredMeasurements(
+      report.organizationId,
+      config.metrics,
+      config.filters,
+      startDate,
+      endDate,
+      config.eventId
+    );
+    return [...new Set(rows.map((r) => r.measurement.userId))];
+  }
+
+  /**
    * Generate a team report with team-level aggregations and athlete rankings
    */
   async generateTeamReport(

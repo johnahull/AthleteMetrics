@@ -813,7 +813,7 @@ function ReadOnlyCoachingInsights({ insights, generatedAt, model }: ReadOnlyCoac
         </div>
         <div className="flex items-center gap-2 pt-4 border-t text-sm text-muted-foreground">
           <span>
-            Generated on:{" "}
+            Evaluation Written:{" "}
             {generatedAt
               ? new Date(generatedAt).toLocaleString("en-US", {
                   month: "short",

@@ -4,7 +4,7 @@
  * Used by the unit tests on recorded sample outputs and by scripts/eval-ai-insights.ts on live
  * outputs. They catch the failures that matter most for a shared report: numbers or training
  * prescriptions the model made up, athlete names in a team report, comments on unmeasured
- * qualities, change over time claimed without history, wrong headings (the web card and PDF expect
+ * qualities, an unfilled {{placeholder}}, the athlete's name in the prompt, change over time claimed without history, wrong headings (the web card and PDF expect
  * fixed sections) and length outside the range the prompt asks for.
  */
 
@@ -107,6 +107,11 @@ export function checkInsights(input: {
   const audience = data.reportType === "team" ? "coach" : data.audience ?? "coach";
   const prompt = buildPrompt({ ...data, audience });
   const failures: string[] = [];
+
+  // De-identification: the model must neither see the athlete's name nor leave the placeholder unfilled
+  if (data.athleteName && athleteNamesIn(prompt, [data.athleteName]).length > 0) failures.push("athlete name in the prompt");
+  const placeholders = output.match(/\{\{?[^{}]*\}?\}/g) ?? [];
+  if (placeholders.length > 0) failures.push(`unfilled placeholder: ${[...new Set(placeholders)].join(", ")}`);
 
   // Small integers (counts such as "2 of 3") are in most report data, so they prove little
   const numbers = ungroundedNumbers(output, prompt);

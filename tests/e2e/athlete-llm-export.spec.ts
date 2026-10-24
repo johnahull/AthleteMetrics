@@ -149,6 +149,12 @@ test.describe('Athlete LLM Export - End-to-End', () => {
     const copyButton = page.getByTestId('llm-export-copy');
     await expect(copyButton).toBeVisible({ timeout: 10000 });
 
+    // The report export is built in the browser from the data on screen.
+    const llmExportRequests: string[] = [];
+    page.on('request', (req) => {
+      if (req.url().includes('/llm-export')) llmExportRequests.push(req.url());
+    });
+
     await copyButton.click();
 
     // Gate the clipboard read on the UI confirmation, not on the network response.
@@ -161,9 +167,11 @@ test.describe('Athlete LLM Export - End-to-End', () => {
     const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
     // Shape-level assertion: catches content regressions (missing sections) without
     // coupling the test to every markdown formatting tweak.
-    expect(clipboardText).toContain('# Athlete Performance Export');
-    expect(clipboardText).toContain('## Athlete Profile');
-    expect(clipboardText).toContain('## Metric Glossary');
+    // Report-scoped export: report headings, never the athlete-wide export.
+    expect(llmExportRequests).toHaveLength(0);
+    expect(clipboardText).toContain('## Performance Summary');
+    expect(clipboardText).not.toContain('# Athlete Performance Export');
+    expect(clipboardText).not.toContain('## Athlete Profile');
     expect(clipboardText.length).toBeGreaterThan(100);
   });
 
@@ -216,8 +224,8 @@ test.describe('Athlete LLM Export - End-to-End', () => {
     const path = await download.path();
     expect(path).toBeTruthy();
     const contents = readFileSync(path!, 'utf-8');
-    expect(contents).toContain('# Athlete Performance Export');
-    expect(contents).toContain('## Athlete Profile');
+    expect(contents).toContain('## Performance Summary');
+    expect(contents).not.toContain('# Athlete Performance Export');
   });
 
   test('dropdown → Download as JSON triggers a .json download with the expected shape', async ({ page }) => {
@@ -244,17 +252,15 @@ test.describe('Athlete LLM Export - End-to-End', () => {
     const contents = readFileSync(path!, 'utf-8');
     const parsed = JSON.parse(contents);
 
-    // Sanity-check the AthleteLlmExport shape without asserting every field — the
-    // unit test covers exhaustive shape. E2E only needs to confirm the pipe is live.
-    expect(parsed).toHaveProperty('generatedAt');
+    // Report-scoped shape: report content only, no athlete-wide history/goals/wellness.
+    expect(parsed).toHaveProperty('report');
     expect(parsed).toHaveProperty('athlete');
-    expect(parsed.athlete).toHaveProperty('id');
-    expect(parsed.athlete).toHaveProperty('fullName');
-    expect(parsed).toHaveProperty('currentSnapshot');
-    expect(parsed).toHaveProperty('measurementHistory');
-    expect(parsed).toHaveProperty('activeGoals');
-    expect(parsed).toHaveProperty('recentWellness');
-    expect(parsed).toHaveProperty('metricGlossary');
+    expect(parsed.athlete).toHaveProperty('name');
+    expect(parsed).toHaveProperty('metrics');
+    expect(parsed).not.toHaveProperty('currentSnapshot');
+    expect(parsed).not.toHaveProperty('measurementHistory');
+    expect(parsed).not.toHaveProperty('activeGoals');
+    expect(parsed).not.toHaveProperty('recentWellness');
   });
 
   test('keyboard flow: Tab focuses the copy button, Enter triggers copy', async ({ page }) => {
@@ -280,7 +286,7 @@ test.describe('Athlete LLM Export - End-to-End', () => {
     await page.keyboard.press('Enter');
 
     // "Copied" label is the deterministic readiness signal — it's set after the
-    // hook finishes fetching AND writing to the clipboard.
+    // hook finishes writing to the clipboard.
     await expect(copyButton).toContainText('Copied', { timeout: 5000 });
   });
 

@@ -416,9 +416,9 @@ describe('individual PDF and AI report data — groupComparison', () => {
       expect(m.teamAverage).toBeUndefined();
       expect(m.percentile).toBeUndefined();
     }
-    expect(buildPrompt(offData)).not.toContain('compared to all athletes');
+    expect(buildPrompt(offData)).not.toContain('compared to the comparison group');
 
     const onData = await buildReportDataForAI(on as any, testCoach.id, new ReportService());
-    expect(buildPrompt(onData)).toContain('compared to all athletes');
+    expect(buildPrompt(onData)).toContain('compared to the comparison group');
   });
 });

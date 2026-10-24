@@ -632,6 +632,15 @@ export class CoppaService extends BaseService {
     return consent?.aiConsentGranted === true;
   }
 
+  /** Subset of the given user IDs that are minors. */
+  async filterMinorIds(userIds: string[]): Promise<string[]> {
+    if (userIds.length === 0) return [];
+    const rows = await db.select({ id: users.id })
+      .from(users)
+      .where(and(inArray(users.id, userIds), eq(users.isMinor, true)));
+    return rows.map(r => r.id);
+  }
+
   /**
    * Batch-check AI access for multiple minor athlete IDs.
    * Returns the set of IDs that CANNOT access AI (fail-closed).

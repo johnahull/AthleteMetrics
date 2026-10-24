@@ -1,4 +1,24 @@
 import { defineConfig, devices } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+
+/**
+ * Quarantine: tests listed in tests/e2e/quarantine.json (a spec file name, or "<spec file> › <describe> › <test>")
+ * fail deterministically on the CI setup (one shared admin account, see issue #490) and are
+ * excluded so the E2E job gates only on tests that pass. Run them with E2E_QUARANTINE=include.
+ * Fix a test, then delete its line; never add new entries without an issue.
+ */
+const quarantined: string[] = (() => {
+  try {
+    return JSON.parse(readFileSync(new URL('./tests/e2e/quarantine.json', import.meta.url), 'utf8'));
+  } catch (error) {
+    throw new Error(`Cannot load tests/e2e/quarantine.json (restore it with git checkout): ${error}`);
+  }
+})();
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// Playwright greps "<project> <file> <describe...> <title>" joined by spaces.
+const quarantineGrepInvert = quarantined.length
+  ? new RegExp(`(^|\\s)(${quarantined.map((e) => escapeRegExp(e.split(' › ').join(' ')) + (e.includes(' › ') ? '' : '(\\s.*)?')).join('|')})$`)
+  : undefined;
 
 /**
  * Playwright Configuration for Staging Environment Testing
@@ -20,12 +40,16 @@ export default defineConfig({
   // don't register as failing specs.
   testIgnore: '**/templates/**',
 
+  grepInvert: process.env.E2E_QUARANTINE === 'include' ? undefined : quarantineGrepInvert,
+
   // Maximum time one test can run for (60 seconds)
   timeout: 60 * 1000,
 
   // Test execution configuration
   fullyParallel: true, // Run tests in parallel for faster execution
-  workers: process.env.CI ? 4 : 4, // 4 workers in CI (optimized for speed with chromium-only), 4 locally
+  // 4 by default; use E2E_WORKERS=1 or 2 against a deployed site: all workers share a few accounts and
+  // the general API limiter (100 requests / 15 min per user) is spent within seconds.
+  workers: Number(process.env.E2E_WORKERS) || 4,
 
   // Retry strategy:
   // - CI environments (process.env.CI): 1 retry for network flakiness/staging server issues
@@ -89,7 +113,7 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         // Reuse authentication state created by global-setup.ts
-        storageState: './playwright/.auth/user.json',
+        storageState: process.env.E2E_AUTH_FILE || './playwright/.auth/user.json',
       },
     },
   ] : [
@@ -97,7 +121,7 @@ export default defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-        storageState: './playwright/.auth/user.json',
+        storageState: process.env.E2E_AUTH_FILE || './playwright/.auth/user.json',
       },
     },
 
@@ -116,14 +140,14 @@ export default defineConfig({
       name: 'Mobile Chrome',
       use: {
         ...devices['Pixel 5'],
-        storageState: './playwright/.auth/user.json',
+        storageState: process.env.E2E_AUTH_FILE || './playwright/.auth/user.json',
       },
     },
     {
       name: 'Mobile Safari',
       use: {
         ...devices['iPhone 12'],
-        storageState: './playwright/.auth/user.json',
+        storageState: process.env.E2E_AUTH_FILE || './playwright/.auth/user.json',
       },
     },
   ],
