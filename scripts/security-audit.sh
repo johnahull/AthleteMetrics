@@ -5,7 +5,12 @@ set -e
 # Runs npm audit and fails on critical or high severity vulnerabilities
 # Usage: ./scripts/security-audit.sh
 #
-# Excluded vulnerabilities: none. Every advisory that was excluded earlier (glob CLI, claude-code
+# Excluded vulnerabilities:
+# - GHSA-mrhx-c7xc-m3w5 (zod, high): memory exhaustion when validating oversized constrained
+#   collections. Every zod 3.x is affected and the fix is zod >= 4.6.6, a breaking upgrade
+#   (also needs drizzle-zod and @hookform/resolvers bumps). Not exploitable without very large
+#   payloads; request body size limits apply. Revisit: remove when the zod 4 migration lands.
+# Every other advisory that was excluded earlier (glob CLI, claude-code
 # workspace trust, esbuild Deno, the undici/jsdom chain) no longer matches anything in the
 # audit output, so the exclusions were pruned (issues #523, #562). To exclude an advisory again, add
 # its GHSA id to EXCLUDED_ADVISORIES below and document here why it does not apply to this project
@@ -29,7 +34,7 @@ npm audit --audit-level=moderate --json > audit-results.json || true
 
 # List of excluded vulnerability advisory IDs (false positives)
 # These are vulnerabilities that don't affect our usage patterns
-EXCLUDED_ADVISORIES=""
+EXCLUDED_ADVISORIES="GHSA-mrhx-c7xc-m3w5"
 
 # Validate that audit results were generated
 if [ ! -f "audit-results.json" ] || [ ! -s "audit-results.json" ]; then
