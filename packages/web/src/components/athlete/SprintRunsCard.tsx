@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { cn } from '@/lib/utils';
 import { toCalendarDate } from '@/utils/date-utils';
 import {
   describeInterval,
@@ -118,7 +119,7 @@ export function SprintRunsCard({ measurements, className }: SprintRunsCardProps)
   };
 
   return (
-    <Card className={className ? `bg-white ${className}` : "bg-white"}>
+    <Card className={cn("bg-white", className)}>
       <CardHeader className="flex flex-row items-center justify-between">
         <h2 id="sprint-runs-heading" className="text-xl font-semibold text-gray-900">Sprint runs</h2>
         <div className="flex flex-wrap items-center gap-2">
@@ -251,7 +252,7 @@ export function SprintRunsCard({ measurements, className }: SprintRunsCardProps)
                   return (
                     <TableCell
                       key={`i${i.from}-${i.to}`}
-                      className={`text-right tabular-nums ${gain !== null ? 'text-green-700 font-medium' : ''}`}
+                      className={cn('text-right tabular-nums', gain !== null && 'text-green-700 font-medium')}
                       data-faster={gain !== null ? 'true' : undefined}
                     >
                       {cell ? cell.time.toFixed(2) : '—'}

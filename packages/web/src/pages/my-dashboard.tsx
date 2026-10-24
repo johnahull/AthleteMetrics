@@ -225,7 +225,7 @@ export default function MyDashboardPage() {
         </div>
       )}
 
-      <SprintRunsCard measurements={dashboardData.measurements} />
+      <SprintRunsCard measurements={dashboardData.measurements} className="mb-8" />
 
       {/* Recent Activity (full size) */}
       <RecentActivityTimeline activities={dashboardData.activityTimeline} />

@@ -216,6 +216,7 @@ export function summarizeSprintRuns(runs: SprintRun[]): SprintSummary {
   }
   for (const { from, to, times } of byInterval.values()) {
     if (times.length < 2) continue;
+    // runs are newest first, so times[0] is the latest and the last entry is the oldest
     const gain = round2(times[times.length - 1] - times[0]);
     if (gain > 0 && (!biggestGain || gain > biggestGain.gain)) biggestGain = { from, to, gain };
   }
