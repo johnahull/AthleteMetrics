@@ -4946,6 +4946,7 @@ function calculateBenchmarkAchievements(athleteRankings: any[], teamStatistics?:
 export async function buildReportDataForAI(report: Report, userId: string, reportService: ReportService): Promise<import("../services/ai-insights-service").ReportData> {
   // Data size limits to prevent large AI payloads
   const MAX_METRICS = 20;
+  const MAX_HISTORY_POINTS = 30;
 
   try {
     // Fetch organization details
@@ -5015,6 +5016,7 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
         age?: number;
         gender?: string;
         sports?: string[];
+        compositeIndex?: number;
         measurements?: Record<string, number>;
         percentiles?: Record<string, number>;
         teamAverages?: Record<string, number>;
@@ -5022,7 +5024,9 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
       };
       metricLabels?: Record<string, string>;
       comparisonLabel?: string;
-      trends?: Record<string, { series?: Array<{ date: string }>; delta?: TrendDelta }>;
+      distributions?: Record<string, { stats: { min: number; q1: number; median: number; q3: number; max: number } }>;
+      fvProfile?: { date: string; distanceUnit: string; f0Rel: string | null; v0: string | null; pmaxRel: string | null; fvSlope: string | null };
+      trends?: Record<string, { series?: Array<{ date: string; value: number }>; delta?: TrendDelta }>;
       // athleteSeries is never read: team prompts carry the team-average delta only
       teamTrends?: Record<string, { teamSeries?: unknown[]; delta?: TrendDelta }>;
       eventContext?: { eventName: string; eventDate: Date | string };
@@ -5363,6 +5367,34 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
       aiReportData.athleteGender = typedReportData.athlete.gender;
       // Extract sport from athlete.sports array (use first sport)
       aiReportData.athleteSport = typedReportData.athlete.sports?.[0] || undefined;
+
+      // Everything else the report shows (each chart's data is present only when that chart is on)
+      const athlete = typedReportData.athlete;
+      if (typeof athlete.compositeIndex === 'number') aiReportData.compositeIndex = Math.round(athlete.compositeIndex * 100) / 100;
+
+      const history = metrics
+        .filter(m => (trends?.[m.code]?.series?.length ?? 0) >= 2)
+        .map(m => {
+          const points = trends![m.code].series!.map(p => ({ date: p.date, value: p.value }));
+          // Bound the prompt: keep the first point (the baseline the change figures start from) and the latest ones
+          return { code: m.code, label: m.label, points: points.length > MAX_HISTORY_POINTS ? [points[0], ...points.slice(1 - MAX_HISTORY_POINTS)] : points };
+        });
+      if (history.length > 0) aiReportData.history = history;
+
+      const distributions = metrics
+        .filter(m => typedReportData.distributions?.[m.code]?.stats)
+        .map(m => ({ code: m.code, label: m.label, ...typedReportData.distributions![m.code].stats }));
+      if (distributions.length > 0) aiReportData.distributions = distributions;
+
+      const fv = typedReportData.fvProfile;
+      if (fv) {
+        // Number('') and Number('  ') are 0, which would read as a measured zero
+        const num = (v: string | null) => (v === null || v.trim() === '' || !Number.isFinite(Number(v)) ? undefined : Number(v));
+        aiReportData.fvProfile = {
+          date: fv.date, distanceUnit: fv.distanceUnit,
+          f0Rel: num(fv.f0Rel), v0: num(fv.v0), pmaxRel: num(fv.pmaxRel), fvSlope: num(fv.fvSlope),
+        };
+      }
     }
 
     return aiReportData;
