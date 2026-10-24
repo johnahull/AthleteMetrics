@@ -28,25 +28,7 @@ async function generateVariants() {
   console.log('🔧 Generating web icons (transparent):');
   console.log(`   Source: am-logo-nobrand-transparent-gimp.png`);
 
-  await sharp(sourceNoBrandTransparent)
-    .ensureAlpha()  // Ensure alpha channel exists
-    .resize(192, 192, {
-      fit: 'contain',
-      background: { r: 255, g: 255, b: 255, alpha: 0 }  // Transparent white
-    })
-    .png({ compressionLevel: 9 })
-    .toFile(join(outputDir, 'icon-192.png'));
-  console.log(`  ✅ icon-192.png (192x192) - PWA home screen icon (transparent)`);
-
-  await sharp(sourceNoBrandTransparent)
-    .ensureAlpha()
-    .resize(512, 512, {
-      fit: 'contain',
-      background: { r: 255, g: 255, b: 255, alpha: 0 }
-    })
-    .png({ compressionLevel: 9 })
-    .toFile(join(outputDir, 'icon-512.png'));
-  console.log(`  ✅ icon-512.png (512x512) - PWA splash screen icon (transparent)`);
+  // icon-192.png / icon-512.png / favicon.png come from scripts/generate-pwa-icons.cjs
 
   await sharp(sourceNoBrandTransparent)
     .ensureAlpha()
@@ -57,20 +39,6 @@ async function generateVariants() {
     .png({ compressionLevel: 9 })
     .toFile(join(outputDir, 'logo-64.png'));
   console.log(`  ✅ logo-64.png (64x64) - Small icon (sidebar)`);
-
-  console.log('');
-  console.log('🔧 Generating favicon (with white background for visibility):');
-  console.log(`   Source: am-logo-nobrand-transparent-gimp.png`);
-
-  // Generate favicon with white background for browser tab visibility
-  await sharp(sourceNoBrandTransparent)
-    .resize(32, 32, {
-      fit: 'contain',
-      background: { r: 255, g: 255, b: 255, alpha: 1 }  // Solid white background
-    })
-    .png({ compressionLevel: 9 })
-    .toFile(join(outputDir, 'favicon.png'));
-  console.log(`  ✅ favicon.png (32x32) - Browser tab icon (white background)`);
 
   console.log('');
   console.log('🔧 Generating platform mockup icons (for showcase only):');
@@ -116,8 +84,8 @@ async function generateVariants() {
   console.log('✨ All logo variants generated successfully!');
   console.log('');
   console.log('📋 Summary:');
-  console.log('  Web icons (transparent): icon-192.png, icon-512.png, logo-64.png');
-  console.log('  Favicon (white bg): favicon.png');
+  console.log('  Web icons (transparent): logo-64.png');
+  console.log('  (favicon + PWA icons: see generate-pwa-icons.cjs)');
   console.log('  Full logo (with text): logo-128.png, logo-256.png');
   console.log('');
   console.log('ℹ️  Note: Web icons use transparent background for better web integration');
