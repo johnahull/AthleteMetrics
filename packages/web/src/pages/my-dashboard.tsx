@@ -28,6 +28,7 @@ import { RecentActivityTimeline } from '@/components/athlete/RecentActivityTimel
 import { WellnessStatusCard } from '@/components/athlete/WellnessStatusCard';
 import { PendingTasksBanner } from '@/components/athlete/PendingTasksBanner';
 import { MetricProgressCard } from '@/components/athlete/MetricProgressCard';
+import { SprintRunsCard } from '@/components/athlete/SprintRunsCard';
 import { AchievementsCard } from '@/components/athlete/AchievementsCard';
 import { GoalProgressCard } from '@/components/athlete/GoalProgressCard';
 import { PeerComparisonCard } from '@/components/athlete/PeerComparisonCard';
@@ -223,6 +224,8 @@ export default function MyDashboardPage() {
           })}
         </div>
       )}
+
+      <SprintRunsCard measurements={dashboardData.measurements} className="mb-8" />
 
       {/* Recent Activity (full size) */}
       <RecentActivityTimeline activities={dashboardData.activityTimeline} />

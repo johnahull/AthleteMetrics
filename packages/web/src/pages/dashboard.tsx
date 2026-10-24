@@ -11,6 +11,7 @@ import { useMetricLabels } from "@/hooks/use-metric-labels";
 import { formatMeasurement } from "@shared/duration-format";
 import { useAthleteDashboardData } from "@/hooks/useAthleteDashboardData";
 import { MetricProgressCard } from "@/components/athlete/MetricProgressCard";
+import { SprintRunsCard } from "@/components/athlete/SprintRunsCard";
 import { useDashboardTrends } from "@/hooks/use-dashboard-trends";
 import { KPICardWithTrend } from "@/components/kpi-card-with-trend";
 import { KPICardSkeleton, ChartSkeleton } from "@/components/ui/loading-states";
@@ -565,6 +566,11 @@ export default function Dashboard() {
             />
           ))}
         </div>
+      )}
+
+      {/* Sprint runs - athlete view only; renders nothing without dash runs */}
+      {effectiveOrganizationId && scope.view === 'athlete' && athleteDashboardData && (
+        <SprintRunsCard measurements={athleteDashboardData.measurements} className="mb-8" />
       )}
 
       {/* Charts Section - Only show when org is selected */}
