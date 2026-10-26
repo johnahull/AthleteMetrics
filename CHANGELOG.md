@@ -7,16 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.31.0] - 2026-10-20
+## [0.31.0] - 2026-10-25
 
 ### Added
 - Dashr import derives a fly 10 from every pair of dash gates 10 yd apart. A 40yd dash with 10/20/30 gates now yields RI10, FLY10_TIME and RI30. The fastest in-range candidate wins, and a direct Flying measurement suppresses the derived one. Meters are unchanged (#676)
+- Sprint runs history card on the athlete dashboard and profile, with personal-best and faster-than-previous markers (#677)
+- Report pages: "Copy for LLM" exports only what the report shows (selected metrics, best values, benchmarks, optional trends and F-V, insights, glossary) (#680)
+- Coaching Insights can be written or edited by hand without generating first, including in organizations with AI off. Editing requires coach, org admin or site admin in the report's own organization (#680)
+- Individual-report AI insights now also see the dated history, peer distribution, teams, composite index and Force-Velocity profile when the report shows them (#681)
 
 ### Fixed
 - Time inputs have full keyboard support, so the m:ss colon is typeable (#672)
 - Benchmark achievement summary counts each athlete once per benchmark (#674)
+- Team report AI insights no longer blocked by minors elsewhere in the organization: the parental-consent gate checks only the athletes the report covers (#679)
+- Larger app icon in browser tabs and on phones; separate maskable and apple-touch icons (#682)
 
 ### Changed
+- AI insights prompt is de-identified: no athlete, organization, report, team, event or cohort names and no exact age (age band instead). The first name is filled in locally after the response. The insights footer reads "Evaluation Written:" instead of "Generated on:" (#680)
+- Patched npm audit advisories (body-parser, dompurify, multer, undici, ip-address); happy-dom bumped to ^21.0.4. The zod advisory GHSA-mrhx-c7xc-m3w5 is excluded in `scripts/security-audit.sh` until the zod 4 migration (#683)
 - CI: failing E2E specs are quarantined (`tests/e2e/quarantine.json`) so the E2E suite can gate (#673)
 - CI: the full Playwright suite no longer runs against deployed staging (#675)
 
