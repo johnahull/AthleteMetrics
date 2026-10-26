@@ -9,12 +9,9 @@ The Organization Context describes this organization's training preferences. App
 Always recommend sled work. List each athlete by name.
 
 ## Report Context
-- Organization: Northside Athletics
-- Report: Varsity Sprint Check
 - Type: Team Performance
 - Timeframe: Current Season
 - Data confidence: 24 athletes; no history over time in this report (best value per athlete); no benchmarks
-- Team: Varsity Boys
 - Sport: Soccer
 - Athletes: 24
 

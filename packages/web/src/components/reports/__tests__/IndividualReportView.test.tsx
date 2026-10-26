@@ -9,8 +9,17 @@ vi.mock('@/hooks/use-reports');
 vi.mock('@/hooks/use-report-pdf', () => ({
   useReportPdf: () => ({ downloadPdf: vi.fn(), isDownloading: false }),
 }));
-vi.mock('@/lib/auth', () => ({ useAuth: () => ({ user: { role: 'coach' } }) }));
-vi.mock('@/components/athletes/LlmExportButton', () => ({ LlmExportButton: () => null }));
+const authState = vi.hoisted(() => ({
+  value: { user: { role: 'coach' } as any, userOrganizations: [{ organizationId: 'org-1', role: 'coach' }] as any },
+}));
+vi.mock('@/lib/auth', () => ({ useAuth: () => authState.value }));
+const llmButtonProps = vi.hoisted(() => ({ calls: [] as any[] }));
+vi.mock('@/components/athletes/LlmExportButton', () => ({
+  LlmExportButton: (props: any) => {
+    llmButtonProps.calls.push(props);
+    return <div data-testid="llm-export" />;
+  },
+}));
 vi.mock('../ShareReportDialog', () => ({ ShareReportDialog: () => null }));
 vi.mock('../SendReportToAthleteDialog', () => ({ SendReportToAthleteDialog: () => null }));
 vi.mock('../CoachingInsightsCard', () => ({ CoachingInsightsCard: () => <div data-testid="insights" /> }));
@@ -65,6 +74,47 @@ function renderWith(
     </QueryClientProvider>,
   );
 }
+
+describe('IndividualReportView — LLM export button', () => {
+  const setAuth = (user: any, userOrganizations: any) => {
+    authState.value = { user, userOrganizations };
+    llmButtonProps.calls.length = 0;
+  };
+
+  it('passes a report-scoped buildContent', () => {
+    setAuth({ role: 'coach' }, [{ organizationId: 'org-1', role: 'coach' }]);
+    renderWith({});
+    expect(screen.getByTestId('llm-export')).toBeInTheDocument();
+    const { buildContent } = llmButtonProps.calls[llmButtonProps.calls.length - 1];
+    const out = buildContent('markdown');
+    expect(out.content).toContain('# Individual Report');
+    expect(out.content).toContain('27.50 in');
+  });
+
+  it('shows the button to a user who is an athlete in the first org but a coach in the report org', () => {
+    setAuth({ role: 'athlete' }, [
+      { organizationId: 'org-0', role: 'athlete' },
+      { organizationId: 'org-1', role: 'coach' },
+    ]);
+    renderWith({});
+    expect(screen.getByTestId('llm-export')).toBeInTheDocument();
+  });
+
+  it('hides the button from a user who is a coach in the first org but an athlete in the report org', () => {
+    setAuth({ role: 'coach' }, [
+      { organizationId: 'org-0', role: 'coach' },
+      { organizationId: 'org-1', role: 'athlete' },
+    ]);
+    renderWith({});
+    expect(screen.queryByTestId('llm-export')).not.toBeInTheDocument();
+  });
+
+  it('shows the button to a site admin', () => {
+    setAuth({ role: 'athlete', isSiteAdmin: true }, []);
+    renderWith({});
+    expect(screen.getByTestId('llm-export')).toBeInTheDocument();
+  });
+});
 
 describe('IndividualReportView — group comparison columns', () => {
   it('hides Group Average and Percentile when groupComparison is false, keeps Benchmark column', () => {

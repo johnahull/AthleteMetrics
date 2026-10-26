@@ -247,9 +247,10 @@ export function calculateBenchmarkAchievements(
   }
 
   // Count how many athletes meet each benchmark
-  const benchmarkCounts: Record<string, number> = {};
+  // A set per benchmark so an athlete meeting it on several metrics counts once
+  const benchmarkAthletes: Record<string, Set<string>> = {};
   Array.from(allBenchmarkNames).forEach((benchmarkName) => {
-    benchmarkCounts[benchmarkName] = 0;
+    benchmarkAthletes[benchmarkName] = new Set();
   });
 
   // Track which athletes meet at least one benchmark
@@ -261,7 +262,7 @@ export function calculateBenchmarkAchievements(
       Object.values(athlete.benchmarkComparisons).forEach((comparisons) => {
         comparisons.forEach((comp) => {
           if (comp.meetsOrExceeds) {
-            benchmarkCounts[comp.benchmarkName]++;
+            benchmarkAthletes[comp.benchmarkName].add(athlete.userId);
             athletesWithBenchmarks.add(athlete.userId);
           }
         });
@@ -273,8 +274,8 @@ export function calculateBenchmarkAchievements(
   const achievements = Array.from(allBenchmarkNames)
     .map((benchmarkName) => ({
       tier: benchmarkName,
-      count: benchmarkCounts[benchmarkName],
-      percentage: (benchmarkCounts[benchmarkName] / athleteRankings.length) * 100,
+      count: benchmarkAthletes[benchmarkName].size,
+      percentage: (benchmarkAthletes[benchmarkName].size / athleteRankings.length) * 100,
     }))
     .filter((achievement) => achievement.count > 0) // Only show benchmarks that are met
     .sort((a, b) => b.count - a.count); // Sort by count descending

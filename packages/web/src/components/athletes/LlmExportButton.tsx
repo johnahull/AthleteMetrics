@@ -33,12 +33,16 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import { useLlmExport } from '@/hooks/use-llm-export';
+import { useLlmExport, type LlmExportContent, type LlmExportFormat } from '@/hooks/use-llm-export';
 import { useToast } from '@/hooks/use-toast';
 
 interface LlmExportButtonProps {
   athleteId: string;
   athleteName?: string | null;
+  /** Local content source (see useLlmExport); omit to export from the server. */
+  buildContent?: (format: LlmExportFormat) => LlmExportContent;
+  /** What is being exported, for aria text. Defaults to "athlete performance data". */
+  label?: string;
   className?: string;
 }
 
@@ -49,6 +53,8 @@ const CONFIRMATION_MS = 1500;
 export function LlmExportButton({
   athleteId,
   athleteName,
+  buildContent,
+  label: subject = 'athlete performance data',
   className,
 }: LlmExportButtonProps) {
   const { toast } = useToast();
@@ -58,6 +64,7 @@ export function LlmExportButton({
   const { copy, download, isDownloading } = useLlmExport({
     athleteId,
     athleteName,
+    buildContent,
     onError: (err) => {
       toast({
         variant: 'destructive',
@@ -139,7 +146,7 @@ export function LlmExportButton({
     <div
       className={cn('inline-flex rounded-md shadow-sm', className)}
       role="group"
-      aria-label="Export athlete data for LLM"
+      aria-label={`Export ${subject} for LLM`}
     >
       <Button
         type="button"
@@ -147,7 +154,7 @@ export function LlmExportButton({
         className="rounded-r-none border-r-0"
         disabled={disabled}
         onClick={handleCopy}
-        aria-label="Copy athlete performance data to clipboard for use with an LLM"
+        aria-label={`Copy ${subject} to clipboard for use with an LLM`}
         data-testid="llm-export-copy"
       >
         <Icon className={cn('h-4 w-4 mr-2', iconClass)} />

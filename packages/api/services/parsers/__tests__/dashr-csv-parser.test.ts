@@ -730,6 +730,8 @@ describe('FLY10 run-in variants', () => {
     dist: number;
     date?: string;
     split1?: [number, number];
+    // Gates 2..6 as [time, distance]
+    gates?: [number, number][];
   }): string {
     const f = new Array(HEADER.length).fill('');
     const set = (h: string, v: string) => (f[HEADER.indexOf(h)] = v);
@@ -743,6 +745,10 @@ describe('FLY10 run-in variants', () => {
       set('Split Time 1', opts.split1[0].toFixed(6));
       set('Split Distance 1', opts.split1[1].toFixed(6));
     }
+    opts.gates?.forEach(([t, d], i) => {
+      set(`Start Time ${i + 2}`, t.toFixed(6));
+      set(`Split Distance ${i + 2}`, d.toFixed(6));
+    });
     set('Final Time', opts.time.toFixed(6));
     set('Final Distance', opts.dist.toFixed(6));
     return f.join(',');
@@ -856,6 +862,87 @@ describe('FLY10 run-in variants', () => {
     it('does not derive RI10 from a 20m dash', () => {
       const result = drills([row({ type: 'Dash', units: 'Metric', time: 3.2, dist: 20, split1: [1.87, 10] })]);
       expect(result.athletes[0].drills.some(d => d.metric.startsWith('FLY10_TIME_RI'))).toBe(false);
+    });
+
+    const dash40 = (time = 5.2) =>
+      row({ type: 'Dash', time, dist: 40, split1: [1.8, 10], gates: [[3.1, 20], [4.3, 30]] });
+    const find = (result: ReturnType<typeof drills>, metric: string) =>
+      result.athletes[0].drills.filter(d => d.metric === metric);
+
+    it('derives RI10, RI20 and RI30 from every 10 yd gap of a 40yd dash', () => {
+      const result = drills([dash40()]);
+      for (const [metric, value] of [['FLY10_TIME_RI10', 1.3], ['FLY10_TIME', 1.2], ['FLY10_TIME_RI30', 0.9]] as const) {
+        const d = find(result, metric);
+        expect(d).toHaveLength(1);
+        expect(d[0].value).toBe(value);
+        expect(d[0].derivedFrom).toContain('DASH_40YD');
+      }
+    });
+
+    it('derives RI10 and FLY10_TIME but not RI30 from a 30yd dash', () => {
+      const result = drills([row({ type: 'Dash', time: 4.3, dist: 30, split1: [1.8, 10], gates: [[3.1, 20]] })]);
+      expect(find(result, 'FLY10_TIME_RI10')[0].value).toBe(1.3);
+      expect(find(result, 'FLY10_TIME')[0].value).toBe(1.2);
+      expect(find(result, 'FLY10_TIME_RI30')).toHaveLength(0);
+    });
+
+    it('keeps the fastest RI10 across several dashes', () => {
+      const result = drills([
+        row({ type: 'Dash', time: 3.2, dist: 20, split1: [1.87, 10] }), // 1.33
+        dash40(), // 1.30
+      ]);
+      const ri10 = find(result, 'FLY10_TIME_RI10');
+      expect(ri10).toHaveLength(1);
+      expect(ri10[0].value).toBe(1.3);
+    });
+
+    it('a direct RI30 fly suppresses only the derived RI30', () => {
+      const result = drills([row({ type: 'Flying', start: '30', time: 1.0, dist: 10 }), dash40()]);
+      const ri30 = find(result, 'FLY10_TIME_RI30');
+      expect(ri30).toHaveLength(1);
+      expect(ri30[0].derivedFrom).toBeUndefined();
+      expect(find(result, 'FLY10_TIME_RI10')).toHaveLength(1);
+      expect(find(result, 'FLY10_TIME')).toHaveLength(1);
+    });
+
+    it('prefers an in-range candidate over a faster outlier', () => {
+      const result = drills([
+        row({ type: 'Dash', time: 3.2, dist: 20, split1: [1.87, 10] }), // RI10 1.33
+        row({ type: 'Dash', time: 4.3, dist: 30, split1: [2.4, 10], gates: [[3.1, 20]] }), // RI10 0.70 (< 0.8)
+      ]);
+      const ri10 = find(result, 'FLY10_TIME_RI10');
+      expect(ri10).toHaveLength(1);
+      expect(ri10[0].value).toBe(1.33);
+      expect(ri10[0].isOutlier).toBeUndefined();
+    });
+
+    it('flags the derived value when every candidate is an outlier', () => {
+      const result = drills([row({ type: 'Dash', time: 4.3, dist: 30, split1: [2.4, 10], gates: [[3.1, 20]] })]);
+      const ri10 = find(result, 'FLY10_TIME_RI10');
+      expect(ri10[0].value).toBe(0.7);
+      expect(ri10[0].isOutlier).toBe(true);
+    });
+
+    it('uses the 40 yd gate over Final Time for RI30', () => {
+      const result = drills([
+        row({ type: 'Dash', time: 5.2, dist: 40, split1: [1.8, 10], gates: [[3.1, 20], [4.3, 30], [5.15, 40]] }),
+      ]);
+      expect(find(result, 'FLY10_TIME_RI30')[0].value).toBe(0.85);
+    });
+
+    it('a 40yd dash without a 20 yd gate still yields RI30 but not RI10 or FLY10_TIME', () => {
+      const result = drills([row({ type: 'Dash', time: 5.2, dist: 40, split1: [1.8, 10], gates: [[4.3, 30]] })]);
+      expect(find(result, 'FLY10_TIME_RI30')[0].value).toBe(0.9);
+      expect(find(result, 'FLY10_TIME_RI10')).toHaveLength(0);
+      expect(find(result, 'FLY10_TIME')).toHaveLength(0);
+    });
+
+    it('a 40m dash only yields FLY10M_TIME', () => {
+      const result = drills([
+        row({ type: 'Dash', units: 'Metric', time: 5.2, dist: 40, split1: [1.8, 10], gates: [[3.1, 20], [4.3, 30]] }),
+      ]);
+      expect(result.athletes[0].drills.some(d => d.metric.startsWith('FLY10_TIME'))).toBe(false);
+      expect(find(result, 'FLY10M_TIME')).toHaveLength(1);
     });
   });
 });

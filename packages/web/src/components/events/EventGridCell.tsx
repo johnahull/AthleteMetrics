@@ -12,6 +12,8 @@ import { canAddTrial, getCellState, type CellState } from "@/lib/event-grid-cell
 export interface EventGridCellValue {
   value: string;
   originalValue?: number;
+  /** Time (mm:ss) metric: needs a keyboard with a colon */
+  isDuration?: boolean;
   savedCount: number;
   isDirty: boolean;
   error?: string;
@@ -75,7 +77,7 @@ export function EventGridCell({
       id={inputId}
       data-state={state}
       type="text"
-      inputMode="decimal"
+      inputMode={cell.isDuration ? "text" : "decimal"}
       value={cell.value}
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}

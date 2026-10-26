@@ -335,24 +335,19 @@ function checkOutlier(metric: string, value: number): string | null {
 }
 
 /**
- * Derive FLY10_TIME / FLY10M_TIME from an athlete's dash drill splits.
+ * Derive FLY10M_TIME from an athlete's metric dash drill splits.
  *
- * FLY10 = time at 30(yd|m) − time at 20(yd|m) — the "flying 10" segment
- * after initial acceleration. Both times are gates of the same row; Final Time
- * stands in for the 30 gate only when the row has none. A separate derivation runs per unit system;
- * yards dashes produce FLY10_TIME, meters dashes produce FLY10M_TIME.
- * When multiple candidates exist in the same unit, picks the fastest.
+ * FLY10M = time at 30 m − time at 20 m, both gates of the same row; Final Time
+ * stands in for the 30 m gate only when the row has none. Meters only: yard flies
+ * are derived by deriveYardFly10sForAthlete. When multiple candidates exist, picks the fastest.
  */
-function deriveFly10ForAthlete(
-  drills: ParsedDrillResult[],
-  unit: 'YD' | 'M',
-): ParsedDrillResult | null {
-  const flyMetric = unit === 'M' ? MetricType.FLY10M_TIME : MetricType.FLY10_TIME;
-  const dash20 = unit === 'M' ? 'DASH_20M' : 'DASH_20YD';
-  const dash30 = unit === 'M' ? 'DASH_30M' : 'DASH_30YD';
-  const dash40 = unit === 'M' ? 'DASH_40M' : 'DASH_40YD';
+function deriveFly10MForAthlete(drills: ParsedDrillResult[]): ParsedDrillResult | null {
+  const flyMetric = MetricType.FLY10M_TIME;
+  const dash20 = 'DASH_20M';
+  const dash30 = 'DASH_30M';
+  const dash40 = 'DASH_40M';
 
-  // Skip if athlete already has a direct measurement in this unit system
+  // Skip if athlete already has a direct measurement
   if (drills.some(d => d.metric === flyMetric)) return null;
 
   const candidates: { value: number; source: string }[] = [];
@@ -408,32 +403,52 @@ function deriveFly10ForAthlete(
 }
 
 /**
- * Derive FLY10_TIME_RI10 from a 20yd dash with a 10yd split (20 - 10).
- * Yards only. Skipped when the athlete already has a direct FLY10_TIME_RI10.
+ * Derive every yard fly 10 from the gates of an athlete's yard dashes.
+ *
+ * Any two gates of one dash row 10 yd apart bound a fly 10 whose run-in is the
+ * start gate's distance (see FLY10_YD_BY_START). Final Time stands in for the gate at the
+ * dash's own distance only when the row has none. Per code the fastest in-range candidate
+ * wins (the fastest outlier only when none is in range), and a code the athlete already has
+ * as a direct measurement is skipped. Yards only. Gates are limited to the splits parse()
+ * keeps (known DASH_*YD codes: 5/10/20/30/40), so in practice 10-20, 20-30 and 30-40.
  */
-function deriveFly10Ri10ForAthlete(drills: ParsedDrillResult[]): ParsedDrillResult | null {
-  if (drills.some(d => d.metric === MetricType.FLY10_TIME_RI10)) return null;
+function deriveYardFly10sForAthlete(drills: ParsedDrillResult[]): ParsedDrillResult[] {
+  const have = new Set(drills.map(d => d.metric));
+  const best = new Map<string, { value: number; source: string; outlierReason: string | null }>();
 
-  let best: number | null = null;
   for (const drill of drills) {
-    if (drill.metric !== MetricType.DASH_20YD) continue;
-    const split10 = drill.splits?.find(s => s.metric === MetricType.DASH_10YD);
-    if (!split10) continue;
-    // Gate at 20 when the row has one, else Final Time (see deriveFly10ForAthlete)
-    const end = drill.splits?.find(s => s.metric === MetricType.DASH_20YD)?.value ?? drill.value;
-    const value = parseFloat((end - split10.value).toFixed(3));
-    if (value > 0 && (best === null || value < best)) best = value;
-  }
-  if (best === null) return null;
+    const dashDist = /^DASH_(\d+)YD$/.exec(drill.metric)?.[1];
+    if (!dashDist || !drill.splits) continue;
 
-  const outlierReason = checkOutlier(MetricType.FLY10_TIME_RI10, best);
-  return {
-    metric: MetricType.FLY10_TIME_RI10,
-    value: best,
+    const gates = new Map<number, number>();
+    for (const s of drill.splits) {
+      const dist = /^DASH_(\d+)YD$/.exec(s.metric)?.[1];
+      if (dist) gates.set(Number(dist), s.value);
+    }
+    if (!gates.has(Number(dashDist))) gates.set(Number(dashDist), drill.value);
+
+    for (const [start, metric] of Object.entries(FLY10_YD_BY_START)) {
+      const t0 = gates.get(Number(start));
+      const t1 = gates.get(Number(start) + 10);
+      if (t0 === undefined || t1 === undefined || have.has(metric)) continue;
+      const value = parseFloat((t1 - t0).toFixed(3));
+      if (value <= 0) continue;
+      const outlierReason = checkOutlier(metric, value);
+      const cur = best.get(metric);
+      // An in-range candidate beats an outlier; otherwise the faster one wins
+      if (!cur || (!!cur.outlierReason === !!outlierReason ? value < cur.value : !outlierReason)) {
+        best.set(metric, { value, source: drill.metric, outlierReason });
+      }
+    }
+  }
+
+  return [...best].map(([metric, { value, source, outlierReason }]) => ({
+    metric,
+    value,
     units: 's',
-    derivedFrom: `${MetricType.DASH_20YD} splits`,
+    derivedFrom: `${source} splits`,
     ...(outlierReason ? { isOutlier: true, outlierReason } : {}),
-  };
+  }));
 }
 
 /**
@@ -630,12 +645,9 @@ export class DashrCsvParser implements DeviceImportParser {
     // measurement exists. Each unit system is evaluated independently:
     // an athlete with both yards dashes and a metric dash gets both derived.
     for (const [, athlete] of athleteMap) {
-      const fly10Yd = deriveFly10ForAthlete(athlete.drills, 'YD');
-      if (fly10Yd) athlete.drills.push(fly10Yd);
-      const fly10M = deriveFly10ForAthlete(athlete.drills, 'M');
+      athlete.drills.push(...deriveYardFly10sForAthlete(athlete.drills));
+      const fly10M = deriveFly10MForAthlete(athlete.drills);
       if (fly10M) athlete.drills.push(fly10M);
-      const fly10Ri10 = deriveFly10Ri10ForAthlete(athlete.drills);
-      if (fly10Ri10) athlete.drills.push(fly10Ri10);
     }
 
     const athletes = Array.from(athleteMap.values());
