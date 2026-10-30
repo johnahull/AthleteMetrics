@@ -159,5 +159,10 @@ BEGIN
     RAISE EXCEPTION 'Migration 0169: expected 200 5-10-5 set items, got %', n;
   END IF;
 
+  SELECT count(*) INTO n FROM benchmark_sets WHERE id LIKE 'set-5105-%';
+  IF n <> 10 THEN
+    RAISE EXCEPTION 'Migration 0169: expected 10 5-10-5 benchmark sets, got %', n;
+  END IF;
+
   RAISE NOTICE 'Migration 0169: seeded 200 5-10-5 tier rows, 10 sets';
 END $$;

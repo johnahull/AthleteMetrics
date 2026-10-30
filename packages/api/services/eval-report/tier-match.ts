@@ -59,7 +59,7 @@ const NO_TIER_CODES: ReadonlySet<string> = new Set([
  */
 const AVERAGE_ONLY_CODES: ReadonlySet<string> = new Set(["AGILITY_5105"]);
 
-const YMD =/^(\d{4})-(\d{2})-(\d{2})$/;
+const YMD = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 /** Strict YYYY-MM-DD parse with a real calendar check (rejects 2012-02-30, 2013-02-29, 2012-04-31). */
 export function parseYmd(text: string): [number, number, number] | null {
