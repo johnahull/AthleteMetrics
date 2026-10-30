@@ -68,6 +68,7 @@ FROM (VALUES
   ('Female', 'SOFTBALL',   'sb'),
   ('Female', 'LACROSSE',   'lax')
 ) AS s(sex, sport, scode)
+-- level is 'HS' for the MS rows too: no dedicated MS level value exists, so HS is the catch-all
 JOIN (VALUES
   ('Male',   1, 'd1',   'NCAA D1 (19+)',            'D1', 19, NULL::int, 4.10, 4.25, 4.40),
   ('Male',   2, 'var',  'HS Varsity (16-18)',       'HS', 16, 18,        4.30, 4.50, 4.75),
@@ -134,6 +135,7 @@ ON CONFLICT (id) DO UPDATE SET
   is_template = EXCLUDED.is_template,
   updated_at = NOW();
 
+-- split_part(bm.id, '-', 3) is the sport code in 'b5105-<sex>-<scode>-...'
 INSERT INTO benchmark_set_items (id, set_id, benchmark_id, benchmark_type, display_order)
 SELECT 'bsi-' || bm.id, 'set-5105-' || lower(left(bm.gender, 1)) || '-' || split_part(bm.id, '-', 3), bm.id, 'site', bm.display_order
 FROM site_benchmarks bm
