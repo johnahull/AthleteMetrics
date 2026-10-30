@@ -65,6 +65,7 @@ export {
   insertEventInvitationSchema,
   insertEventMetricSchema,
   updateProfileSchema,
+  completeProfileSchema,
   changePasswordSchema,
   archiveTeamSchema,
   updateTeamMembershipSchema,

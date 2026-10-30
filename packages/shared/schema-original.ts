@@ -1526,6 +1526,12 @@ export const updateProfileSchema = z.object({
   parentEmail: z.string().email("Invalid email format").optional().nullable(),
 });
 
+export const completeProfileSchema = z.object({
+  birthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "birthDate must be in YYYY-MM-DD format").optional(),
+  email: z.string().trim().toLowerCase().email("Invalid email format").max(255).optional(),
+  parentEmail: z.string().trim().toLowerCase().email("Invalid email format").max(255).optional(),
+});
+
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, "Current password is required"),
   newPassword: z.string()

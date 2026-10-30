@@ -7,13 +7,20 @@ import type { Express } from "express";
 import { z } from "zod";
 import bcrypt from "bcrypt";
 import rateLimit from "express-rate-limit";
-import { eq } from "drizzle-orm";
+import { eq, and, or, isNull, ne, sql } from "drizzle-orm";
 import { storage } from "../storage";
 import { db } from "../db";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { isSiteAdmin } from "@shared/auth-utils";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
-import { updateProfileSchema, changePasswordSchema, userOrganizations } from "@shared/schema";
+import { updateProfileSchema, changePasswordSchema, completeProfileSchema, userOrganizations, users, sessions } from "@shared/schema";
+import { parentAthleteLinks } from "@shared/schema/tables/coppa";
+import { isUnder13, isMinorAge, isTeenMinor } from "@shared/coppa-utils";
+import { isPlaceholderEmail } from "@shared/email-utils";
+import { getMissingProfileFields } from "../services/profile-completion";
+import { coppaService } from "../services/coppa-service";
+import { emailService } from "../services/email-service";
+import { availabilityCheckLimiter } from "./registration-routes";
 import type { OnboardingStatusResponse } from "@shared/schema/types";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { handleParentEmailUpdate } from "../services/parent-link-helper";
@@ -457,6 +464,139 @@ export function registerProfileRoutes(app: Express) {
         console.error("Error changing password:", error);
         res.status(500).json({ message: "Failed to change password" });
       }
+    }
+  });
+
+  /**
+   * Complete the profile of an athlete who is missing a birthdate and/or a real email.
+   * Status is always re-read from the DB (never the session cache). Fields that are not
+   * missing are ignored. Under-13 athletes go to pending_consent and lose every session.
+   */
+  app.post("/api/profile/complete", availabilityCheckLimiter, requireAuth, async (req, res) => {
+    const userId = req.session.user!.id;
+    const parsed = completeProfileSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Validation error", errors: parsed.error.errors });
+    }
+    const body = parsed.data;
+    const fail = (status: number, message: string, field?: string) =>
+      ({ status, body: { message, ...(field ? { errors: [{ field, message }] } : {}) } });
+
+    try {
+      const outcome = await db.transaction(async (tx) => {
+        // Row lock serialises parallel submits for the same user.
+        const [user] = await tx.select().from(users).where(eq(users.id, userId)).for("update");
+        if (!user) return fail(404, "User not found");
+        const orgs = await tx.select({ role: userOrganizations.role, organizationId: userOrganizations.organizationId })
+          .from(userOrganizations).where(eq(userOrganizations.userId, userId));
+        const [link] = await tx.select({ id: parentAthleteLinks.id }).from(parentAthleteLinks)
+          .where(and(eq(parentAthleteLinks.parentUserId, userId), eq(parentAthleteLinks.isActive, true))).limit(1);
+        const missing = getMissingProfileFields(user, orgs, !!link);
+        if (missing.length === 0) return fail(409, "Profile is already complete");
+
+        const needDob = missing.includes("birthDate");
+        const needEmail = missing.includes("email");
+        const updates: Partial<typeof users.$inferInsert> = {};
+        let under13 = false;
+        let teen = false;
+        let parentEmail: string | undefined;
+
+        if (needEmail) {
+          if (!body.email || isPlaceholderEmail(body.email)) return fail(400, "A valid email is required.", "email");
+          const [taken] = await tx.select({ id: users.id }).from(users)
+            .where(and(sql`${body.email} = ANY(${users.emails})`, ne(users.id, userId), isNull(users.deletedAt))).limit(1);
+          if (taken) return fail(409, "That email is already in use.", "email");
+          updates.emails = [body.email];
+          updates.isEmailVerified = false;
+        }
+
+        if (needDob) {
+          const dob = body.birthDate;
+          if (!dob) return fail(400, "Birthdate is required.", "birthDate");
+          const [y, m, d] = dob.split("-").map(Number);
+          const probe = new Date(Date.UTC(y, m - 1, d));
+          let minor = false;
+          try {
+            if (probe.getUTCMonth() !== m - 1 || probe.getUTCDate() !== d) throw new Error("not a calendar date");
+            under13 = isUnder13(dob);
+            minor = isMinorAge(dob);
+            teen = isTeenMinor(dob);
+          } catch {
+            return fail(400, "Invalid date format or future date.", "birthDate");
+          }
+          const athleteEmail = updates.emails?.[0] ?? user.emails?.find((e) => !isPlaceholderEmail(e));
+          parentEmail = body.parentEmail;
+          if (under13 && !parentEmail) return fail(400, "Parent or guardian email is required for athletes under 13.", "parentEmail");
+          if (parentEmail && parentEmail === athleteEmail) return fail(400, "Parent email must differ from the athlete's email.", "parentEmail");
+          updates.birthDate = dob;
+          updates.birthYear = y;
+          updates.isMinor = minor;
+          if (minor && parentEmail) updates.parentEmail = parentEmail;
+          if (under13) updates.coppaStatus = "pending_consent";
+        }
+
+        // Conditional write: a concurrent session cannot overwrite a stored birthdate.
+        const where = needDob ? and(eq(users.id, userId), isNull(users.birthDate)) : eq(users.id, userId);
+        const written = await tx.update(users).set(updates).where(where).returning({ id: users.id });
+        if (written.length === 0) return fail(409, "Profile is already complete");
+
+        const athleteOrgId = orgs.find((o) => o.role === "athlete")?.organizationId ?? null;
+        return { ok: true as const, user, updates, under13, teen, parentEmail, athleteOrgId, needEmail };
+      });
+
+      if (!("ok" in outcome)) return res.status(outcome.status).json(outcome.body);
+      const { user, updates, under13, teen, parentEmail, athleteOrgId, needEmail } = outcome;
+
+      await storage.createAuditLog({
+        userId,
+        action: "profile_completed",
+        resourceType: "user",
+        resourceId: userId,
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent"),
+        details: JSON.stringify({ birthDateSet: !!updates.birthDate, emailSet: needEmail, under13 }),
+      });
+
+      if (under13 && parentEmail) {
+        const consent = await coppaService.initiateConsent({
+          athleteUserId: userId,
+          parentEmail,
+          organizationId: athleteOrgId ?? undefined,
+          ip: req.ip,
+          userAgent: req.get("user-agent"),
+        });
+        // Every session of this user ends, including the current one. sessions.user_id is only synced
+        // on a session's first request after login, so also match on the stored session payload.
+        await db.delete(sessions).where(or(eq(sessions.userId, userId), sql`${sessions.sess}->'user'->>'id' = ${userId}`));
+        await new Promise<void>((resolve) => req.session.destroy(() => resolve()));
+        return res.status(200).json({
+          success: true,
+          requiresParentalConsent: true,
+          message: consent.emailSent === false
+            ? "Thanks. We could not send the consent email to your parent. Please ask them to visit the consent page directly, or try again later."
+            : "Thanks. A consent email has been sent to your parent or guardian. You will be able to log in once they approve your account.",
+        });
+      }
+
+      if (teen && parentEmail) {
+        await handleParentEmailUpdate(userId, parentEmail, { firstName: user.firstName, birthDate: updates.birthDate as string }, athleteOrgId);
+      }
+
+      if (needEmail && updates.emails) {
+        const newEmail = updates.emails[0];
+        const { token } = await storage.createEmailVerificationToken(userId, newEmail);
+        emailService.sendEmailVerification(newEmail, {
+          userName: user.firstName,
+          verificationLink: `${process.env.APP_URL}/verify-email?token=${token}`,
+        }).catch((err: unknown) => console.error("[ProfileComplete] verification email failed:", err));
+        req.session.user = { ...req.session.user!, email: newEmail, emailVerified: false };
+      }
+      req.session.profileCheck = { userId, missing: [] };
+
+      return res.json({ success: true });
+    } catch (error) {
+      console.error("Error completing profile:", error);
+      return res.status(500).json({ message: "Failed to complete profile" });
     }
   });
 

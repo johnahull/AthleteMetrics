@@ -63,6 +63,8 @@ declare module 'express-session' {
       emailVerified?: boolean; // Added for enhanced auth
     };
     isImpersonating?: boolean;
+    /** Cache of a positive profile-completion check (see middleware/profile-completion-gate.ts) */
+    profileCheck?: { userId: string; missing: string[] };
     impersonationStartTime?: Date;
   }
 }

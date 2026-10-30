@@ -32,6 +32,8 @@ declare module "express-session" {
       emailVerified?: boolean;
     };
     isImpersonating?: boolean;
+    /** Cache of a positive profile-completion check (see middleware/profile-completion-gate.ts) */
+    profileCheck?: { userId: string; missing: string[] };
     impersonationStartTime?: Date;
     /**
      * Tracks whether the session's userId column in the database has been synced.
