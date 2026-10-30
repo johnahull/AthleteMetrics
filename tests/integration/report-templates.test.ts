@@ -80,6 +80,7 @@ describe('report templates', () => {
       [u[who]] = await db
         .insert(users)
         .values({
+          birthDate: '1990-01-01', // the profile gate requires a birthdate
           username: `${PREFIX}-${who}`,
           emails: [`${PREFIX}-${who}@test.com`],
           password: hashed,

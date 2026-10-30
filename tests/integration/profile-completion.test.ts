@@ -226,3 +226,120 @@ describe('POST /api/profile/complete', () => {
     });
   });
 });
+
+describe('profile completion gate', () => {
+  const API = '/api/teams';
+
+  it('blocks a no-DOB athlete on normal APIs with profile_incomplete', async () => {
+    const u = await makeUser('g-nodob');
+    const agent = await login(u.username);
+    const res = await agent.get(API);
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('profile_incomplete');
+    expect(res.body.missingFields).toEqual(['birthDate']);
+  });
+
+  it('/auth/me stays reachable and reports missingProfileFields', async () => {
+    const u = await makeUser('g-me');
+    const agent = await login(u.username);
+    const me = await agent.get('/api/auth/me');
+    expect(me.status).toBe(200);
+    expect(me.body.user.missingProfileFields).toEqual(['birthDate']);
+
+    const ok = await makeUser('g-me-ok', { birthDate: adultDob });
+    const okMe = await (await login(ok.username)).get('/api/auth/me');
+    expect(okMe.body.user.missingProfileFields).toEqual([]);
+  });
+
+  it('/auth/me of a consent-blocked session is 403 with the coppa code', async () => {
+    const u = await makeUser('g-me-coppa', { birthDate: yearsAgo(10) });
+    const agent = await login(u.username);
+    await db.update(users).set({ coppaStatus: 'pending_consent' }).where(eq(users.id, u.id));
+    const res = await agent.get('/api/auth/me');
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('coppa_pending_consent');
+  });
+
+  it('does not gate a coach without DOB', async () => {
+    const u = await makeUser('g-coach', { role: 'coach' });
+    const agent = await login(u.username);
+    const res = await agent.get(API);
+    expect(res.body?.code).not.toBe('profile_incomplete');
+    expect((await agent.get('/api/auth/me')).body.user.missingProfileFields).toEqual([]);
+  });
+
+  it('gates coach-in-A / athlete-in-B even when session role is coach', async () => {
+    const [orgB] = await db.insert(organizations).values({ name: `zz-pc-org-${tag}` }).returning({ id: organizations.id });
+    const u = await makeUser('g-dual', { role: 'coach' }); // coach in pc-org-*, sorts first
+    await db.insert(userOrganizations).values({ userId: u.id, organizationId: orgB.id, role: 'athlete' });
+    try {
+      const agent = await login(u.username);
+      const me = await agent.get('/api/auth/me');
+      expect(me.body.user.role).toBe('coach');
+      expect(me.body.user.missingProfileFields).toEqual(['birthDate']);
+      const res = await agent.get(API);
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('profile_incomplete');
+    } finally {
+      await db.delete(userOrganizations).where(eq(userOrganizations.organizationId, orgB.id));
+      await db.delete(organizations).where(eq(organizations.id, orgB.id));
+    }
+  });
+
+  it('does not gate an impersonated session', async () => {
+    const target = await makeUser('g-imp');
+    const [admin] = await db.insert(users).values({
+      username: `pc-${tag}-siteadmin`, firstName: 'Site', lastName: 'Admin', fullName: 'Site Admin',
+      emails: [`pc-${tag}-siteadmin@example.com`], password: hash, isSiteAdmin: true, isEmailVerified: true,
+    }).returning({ id: users.id });
+    userIds.push(admin.id);
+    const agent = await login(`pc-${tag}-siteadmin`);
+    const imp = await agent.post(`/api/admin/impersonate/${target.id}`);
+    expect(imp.status).toBe(200);
+    const res = await agent.get(API);
+    expect(res.body?.code).not.toBe('profile_incomplete');
+  });
+
+  it('gated session can still log in, log out, read public reports and check email', async () => {
+    const u = await makeUser('g-allow');
+    const agent = await login(u.username);
+    const pub = await agent.get('/api/public/reports/does-not-exist-token');
+    expect(pub.body?.code).not.toBe('profile_incomplete');
+    const check = await agent.get('/api/auth/check-email').query({ email: `free-${tag}@example.com` });
+    expect(check.body?.code).not.toBe('profile_incomplete');
+    expect(check.status).toBe(200);
+    const again = await agent.post('/api/auth/login').send({ username: u.username, password: PASSWORD });
+    expect(again.status).toBe(200);
+    expect((await agent.post('/api/auth/logout')).status).toBe(200);
+  });
+
+  it('completion unblocks the user', async () => {
+    const u = await makeUser('g-unblock');
+    const agent = await login(u.username);
+    expect((await agent.get(API)).body.code).toBe('profile_incomplete');
+    expect((await agent.post('/api/profile/complete').send({ birthDate: adultDob })).status).toBe(200);
+    const after = await agent.get(API);
+    expect(after.body?.code).not.toBe('profile_incomplete');
+    expect((await agent.get('/api/auth/me')).body.user.missingProfileFields).toEqual([]);
+  });
+
+  it('re-checks while incomplete: an outside fix unblocks without a new login', async () => {
+    const u = await makeUser('g-fix');
+    const agent = await login(u.username);
+    expect((await agent.get(API)).body.code).toBe('profile_incomplete');
+    await db.update(users).set({ birthDate: adultDob }).where(eq(users.id, u.id));
+    expect((await agent.get(API)).body?.code).not.toBe('profile_incomplete');
+  });
+
+  it.each(['pending_consent', 'needs_parent_email', 'consent_revoked'] as const)(
+    'a live session of a %s user is blocked by the gate',
+    async (status) => {
+      const u = await makeUser(`g-${status}`, { birthDate: yearsAgo(10) });
+      const agent = await login(u.username); // e.g. a session obtained before the status changed / via OAuth
+      await db.update(users).set({ coppaStatus: status }).where(eq(users.id, u.id));
+      const res = await agent.get(API);
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe(`coppa_${status}`);
+    },
+  );
+});
