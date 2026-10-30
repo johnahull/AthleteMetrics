@@ -34,7 +34,7 @@ describe('Migration 0168: static analysis', () => {
     for (const [id, order, tierName, cutoff] of TIERS) {
       // (?:(?!\n\n)[\s\S])*? stays inside one VALUES tuple (tuples are blank-line separated)
       const inTuple = '(?:(?!\\n\\n)[\\s\\S])*?';
-      expect(UP).toMatch(new RegExp(`'${id}'${inTuple}'lte', ${cutoff},${inTuple}'${TIER_GROUP_ID}'::uuid, ${order}, '${tierName}'`));
+      expect(UP).toMatch(new RegExp(`'${id}'${inTuple}'lte', ${String(cutoff).replace(".", "\\.")},${inTuple}'${TIER_GROUP_ID}'::uuid, ${order}, '${tierName}'`));
     }
     expect(UP.match(new RegExp(`'${TIER_GROUP_ID}'::uuid, \\d,`, 'g'))).toHaveLength(5);
     expect(UP.match(/'Male', 'HS'/g)).toHaveLength(5);
