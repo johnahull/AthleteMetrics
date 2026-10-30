@@ -20,6 +20,7 @@ BEGIN
 
   DELETE FROM measurements WHERE metric = 'HOP_SL_TRIPLE_LSI' AND is_calculated = true;
 
+  -- report_benchmarks copies benchmark values and has no FK to site_benchmarks, so deleting site rows cannot orphan it
   -- Items in any set (also organization sets that picked these tiers), before the benchmarks go
   DELETE FROM benchmark_set_items
    WHERE set_id = ANY(v_set_ids)
