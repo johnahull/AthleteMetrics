@@ -1,4 +1,4 @@
--- Migration 0169: seed 5-10-5 Pro Agility (AGILITY_5105) tier benchmarks, per sex x sport x level
+-- Migration 0170: seed 5-10-5 Pro Agility (AGILITY_5105) tier benchmarks, per sex x sport x level
 --
 -- Source: compiled norms table supplied by the product owner (electronic / FAT timing; hand-timed runs read
 -- about 0.15-0.25 s faster). No primary citation, so every row is marked provisional.
@@ -19,7 +19,7 @@
 -- The 0129 Female SOCCER / VOLLEYBALL single "Average" rows are left active: the eval report keeps comparing against
 -- the single Average (tier-match.ts ignores AGILITY_5105 tier groups) and saved report sets still reference them.
 -- Idempotent. The upsert never touches is_active, so a re-run does not re-enable a row an admin switched off.
--- Reversible: 0169_seed_5105_tier_benchmarks_down.sql.
+-- Reversible: 0170_seed_5105_tier_benchmarks_down.sql.
 -- Transaction: supplied by scripts/apply-manual-migrations.js, so no BEGIN/COMMIT here.
 -- Requires the AGILITY_5105 site_metrics row (0129 / seed-default-metrics).
 
@@ -153,18 +153,18 @@ BEGIN
   SELECT count(*) INTO n FROM site_benchmarks
    WHERE metric_code = 'AGILITY_5105' AND id LIKE 'b5105-%' AND tier_group_id IS NOT NULL;
   IF n <> 200 THEN
-    RAISE EXCEPTION 'Migration 0169: expected 200 5-10-5 tier rows, got %', n;
+    RAISE EXCEPTION 'Migration 0170: expected 200 5-10-5 tier rows, got %', n;
   END IF;
 
   SELECT count(*) INTO n FROM benchmark_set_items WHERE set_id LIKE 'set-5105-%';
   IF n <> 200 THEN
-    RAISE EXCEPTION 'Migration 0169: expected 200 5-10-5 set items, got %', n;
+    RAISE EXCEPTION 'Migration 0170: expected 200 5-10-5 set items, got %', n;
   END IF;
 
   SELECT count(*) INTO n FROM benchmark_sets WHERE id LIKE 'set-5105-%';
   IF n <> 10 THEN
-    RAISE EXCEPTION 'Migration 0169: expected 10 5-10-5 benchmark sets, got %', n;
+    RAISE EXCEPTION 'Migration 0170: expected 10 5-10-5 benchmark sets, got %', n;
   END IF;
 
-  RAISE NOTICE 'Migration 0169: seeded 200 5-10-5 tier rows, 10 sets';
+  RAISE NOTICE 'Migration 0170: seeded 200 5-10-5 tier rows, 10 sets';
 END $$;

@@ -1,5 +1,5 @@
 /**
- * Migration 0169: seed 5-10-5 (AGILITY_5105) tier benchmarks, one 4-tier group per sex x sport x level
+ * Migration 0170: seed 5-10-5 (AGILITY_5105) tier benchmarks, one 4-tier group per sex x sport x level
  * (200 rows, 10 sets). The 0129 Female SOCCER / VOLLEYBALL Average rows stay active (eval keeps using them).
  * Live checks run in a rolled-back transaction and only on a disposable test DB.
  */
@@ -14,7 +14,7 @@ import { matchTierGroup, type TierCandidateRow } from '../../packages/api/servic
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const read = (f: string) => fs.readFileSync(path.resolve(__dirname, '../../migrations', f), 'utf-8');
-const NAME = '0169_seed_5105_tier_benchmarks';
+const NAME = '0170_seed_5105_tier_benchmarks';
 const UP = read(`${NAME}.sql`);
 const DOWN = read(`${NAME}_down.sql`);
 
@@ -47,7 +47,7 @@ const SUPERSEDED = [
   ['hs-var-vb-agi5105', 'VOLLEYBALL', 16, 18],
 ] as const;
 
-describe('Migration 0169: static analysis', () => {
+describe('Migration 0170: static analysis', () => {
   it('has no transaction control and a guarded manual_migrations delete in down', () => {
     expect(UP).not.toMatch(/^\s*(BEGIN|COMMIT);/m);
     expect(DOWN).not.toMatch(/^\s*(BEGIN|COMMIT);/m);
@@ -77,7 +77,7 @@ const dbUrl = process.env.DATABASE_URL || '';
 const isDisposableTestDb =
   process.env.NODE_ENV === 'test' && (/@(localhost|127\.0\.0\.1)[:/]/.test(dbUrl) || process.env.CI === 'true');
 
-describe.skipIf(!isDisposableTestDb)('Migration 0169: against a disposable DB (rolled back)', () => {
+describe.skipIf(!isDisposableTestDb)('Migration 0170: against a disposable DB (rolled back)', () => {
   let sql: ReturnType<typeof postgres>;
   beforeAll(() => {
     sql = postgres(dbUrl, { max: 1 });
