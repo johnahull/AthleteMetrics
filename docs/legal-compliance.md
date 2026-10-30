@@ -22,6 +22,18 @@ AthleteMetrics is an athlete performance tracking platform that collects, stores
 - Enhanced consent for users under 13
 - State-specific compliance (California CCPA/CPRA, Illinois biometric laws)
 
+**Profile completion gate (birthdate and email for every athlete)**:
+- An athlete is a non-site-admin with any `athlete` org membership, or with no orgs and no active parent link. A coach in one org who is an athlete in another is gated.
+- If the athlete has no birthdate, or only placeholder emails (`@temp.local`, `@ocr-import.local`, `@placeholder.`), every API call except an allowlist returns `403 { code: "profile_incomplete", missingFields }`. The web app redirects to `/complete-profile`; `POST /api/profile/complete` saves the values. Code: `packages/api/middleware/profile-completion-gate.ts`, `packages/api/routes/profile-routes.ts`.
+- The gate also returns the `coppa_*` 403 codes for `pending_consent`, `needs_parent_email` and `consent_revoked`, so a session obtained through OAuth or enhanced-auth cannot bypass the consent check that only password login did. Only a positive "profile complete" result is cached in the session.
+- Impersonated sessions are not gated.
+- Known behaviour:
+  - Every CSV-imported athlete (placeholder email, often no birthdate) is gated at first login. Tell coaches before importing.
+  - A user with no orgs and no parent link counts as an athlete and is gated.
+  - An org athlete who turns out to be under 13 becomes `pending_consent`, loses all sessions and cannot log in until a parent consents. Coaches still see their data (same as the invitation path).
+  - A birthdate is write-once through this endpoint (`WHERE birth_date IS NULL`); later corrections go through an admin.
+  - The email-taken response (409) is rate limited with the registration availability limiter because it reveals whether an email exists.
+
 ### 2. Privacy Policy (Required)
 
 Must clearly disclose:
