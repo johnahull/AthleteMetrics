@@ -21,7 +21,7 @@ import { db } from '../../packages/api/db';
 import { users, organizations, userOrganizations, emailVerificationTokens } from '@shared/schema';
 import { coppaService } from '../../packages/api/services/coppa-service';
 import { storage } from '../../packages/api/storage';
-import { parentAthleteLinks } from '@shared/schema/tables/coppa';
+import { parentAthleteLinks, parentalConsents } from '@shared/schema/tables/coppa';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 
 vi.mock('../../packages/api/vite.js', () => ({
@@ -82,6 +82,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (userIds.length) {
+    await db.delete(parentalConsents).where(inArray(parentalConsents.athleteUserId, userIds)).catch(() => {});
     await db.delete(parentAthleteLinks).where(inArray(parentAthleteLinks.athleteUserId, userIds)).catch(() => {});
     await db.delete(emailVerificationTokens).where(inArray(emailVerificationTokens.userId, userIds)).catch(() => {});
     await db.delete(userOrganizations).where(inArray(userOrganizations.userId, userIds));
@@ -411,4 +412,95 @@ describe('profile completion gate', () => {
       expect(res.body.code).toBe(`coppa_${status}`);
     },
   );
+});
+
+describe('login responses carry missingProfileFields', () => {
+  it('POST /api/auth/login', async () => {
+    const u = await makeUser('lg-nodob');
+    const res = await request(app).post('/api/auth/login').send({ username: u.username, password: PASSWORD });
+    expect(res.status).toBe(200);
+    expect(res.body.user.missingProfileFields).toEqual(['birthDate']);
+    const ok = await makeUser('lg-ok', { birthDate: adultDob });
+    const res2 = await request(app).post('/api/auth/login').send({ username: ok.username, password: PASSWORD });
+    expect(res2.body.user.missingProfileFields).toEqual([]);
+  });
+
+  it('POST /api/enhanced-auth/login', async () => {
+    const u = await makeUser('lg-enh');
+    const res = await request(app).post('/api/enhanced-auth/login').send({ identifier: u.username, email: u.username, username: u.username, password: PASSWORD });
+    expect(res.status).toBe(200);
+    expect(res.body.user.missingProfileFields).toEqual(['birthDate']);
+  });
+});
+
+describe('gate allowlist narrowing and consent ordering', () => {
+  it('a profile-incomplete session is blocked on paths that are no longer allowlisted', async () => {
+    const u = await makeUser('al-gated');
+    const agent = await login(u.username);
+    const blocked = [
+      () => agent.get('/api/invitations/athletes'),
+      () => agent.post('/api/enhanced-auth/assign-role').send({}),
+      () => agent.post('/api/wellness/responses').send({}),
+      () => agent.post('/api/import/parse-csv').send({}),
+    ];
+    for (const call of blocked) {
+      const res = await call();
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('profile_incomplete');
+    }
+  });
+
+  it('a profile-incomplete session still reaches the invitation token endpoints', async () => {
+    const u = await makeUser('al-inv');
+    const agent = await login(u.username);
+    expect((await agent.get('/api/invitations/sometoken123')).body?.code).not.toBe('profile_incomplete');
+    expect((await agent.post('/api/invitations/sometoken123/accept').send({})).body?.code).not.toBe('profile_incomplete');
+  });
+
+  it('wellness magic-link submit without a session is not gated', async () => {
+    const res = await request(app).post('/api/wellness/responses').send({});
+    expect(res.body?.code).not.toBe('profile_incomplete');
+    expect(String(res.body?.code ?? '')).not.toMatch(/^coppa_/);
+  });
+
+  it('a consent-blocked session is blocked even on paths allowlisted for profile-incomplete', async () => {
+    const u = await makeUser('al-coppa', { birthDate: yearsAgo(10) });
+    const agent = await login(u.username);
+    await db.update(users).set({ coppaStatus: 'pending_consent' }).where(eq(users.id, u.id));
+    const res = await agent.get('/api/invitations/sometoken123');
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('coppa_pending_consent');
+    expect((await agent.get('/api/public/reports/nope')).body.code).toBe('coppa_pending_consent');
+    expect((await agent.post('/api/auth/logout')).status).toBe(200);
+  });
+});
+
+describe('cached-complete does not skip COPPA', () => {
+  it('a minor whose consent is revoked mid-session is blocked immediately', async () => {
+    const u = await makeUser('ca-minor', { birthDate: yearsAgo(15) });
+    await db.update(users).set({ isMinor: true, coppaStatus: 'consented' }).where(eq(users.id, u.id));
+    const agent = await login(u.username);
+    expect((await agent.get('/api/teams')).body?.code).not.toBe('profile_incomplete');
+    expect((await agent.get('/api/auth/me')).status).toBe(200);
+    await db.update(users).set({ coppaStatus: 'consent_revoked' }).where(eq(users.id, u.id));
+    const res = await agent.get('/api/teams');
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('coppa_consent_revoked');
+  });
+
+  it('coppaService.revokeConsent deletes every session of the athlete', async () => {
+    const u = await makeUser('ca-revoke', { birthDate: yearsAgo(15) });
+    await db.update(users).set({ isMinor: true, coppaStatus: 'consented' }).where(eq(users.id, u.id));
+    await db.insert(parentalConsents).values({
+      athleteUserId: u.id, parentEmail: `rv-${tag}@example.com`, tokenHash: `hash-${tag}-rv`,
+      status: 'confirmed', expiresAt: new Date(Date.now() + 86400000),
+    });
+    const a = await login(u.username);
+    const b = await login(u.username);
+    expect((await a.get('/api/auth/me')).status).toBe(200);
+    const r = await coppaService.revokeConsent(u.id, false, u.id);
+    expect(r.success).toBe(true);
+    expect((await a.get('/api/auth/me')).status).toBe(401);
+    expect((await b.get('/api/auth/me')).status).toBe(401);
+  });
 });

@@ -136,10 +136,11 @@ export function registerAuthRoutes(app: Express, options: AuthRoutesOptions = {}
 
       // Persist the regenerated session before responding so the Set-Cookie is
       // written before the body (avoids a race with the client's next request).
+      const { missing } = await resolveGateDecision(req);
       await saveSession(req);
 
       res.json({
-        user: req.session.user,
+        user: { ...req.session.user, missingProfileFields: missing },
         organizations,
         redirectUrl
       });

@@ -1,3 +1,6 @@
+import { eq, or, sql } from 'drizzle-orm';
+import { db } from '../db';
+import { sessions } from '@shared/schema';
 import type { Request } from 'express';
 
 /**
@@ -28,4 +31,12 @@ export async function saveSession(req: Request): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     req.session.save((err) => (err ? reject(err) : resolve()));
   });
+}
+
+/**
+ * Delete every stored session of a user. sessions.user_id is only synced on a session's first request
+ * after login, so this also matches on the stored session payload. `executor` may be a transaction.
+ */
+export async function deleteUserSessions(userId: string, executor: any = db): Promise<void> {
+  await executor.delete(sessions).where(or(eq(sessions.userId, userId), sql`${sessions.sess}->'user'->>'id' = ${userId}`));
 }

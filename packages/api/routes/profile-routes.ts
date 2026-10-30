@@ -18,6 +18,7 @@ import { parentAthleteLinks } from "@shared/schema/tables/coppa";
 import { isUnder13, isMinorAge, isTeenMinor } from "@shared/coppa-utils";
 import { isPlaceholderEmail } from "@shared/email-utils";
 import { getMissingProfileFields } from "../services/profile-completion";
+import { deleteUserSessions } from "../lib/session-helpers";
 import { coppaService } from "../services/coppa-service";
 import { emailService } from "../services/email-service";
 import { availabilityCheckLimiter } from "./registration-routes";
@@ -582,9 +583,8 @@ export function registerProfileRoutes(app: Express) {
           return res.status(500).json({ message: "We could not start the parental consent request. Please try again." });
         }
         if (needEmail && updates.emails) await sendNewEmailVerification(userId, user.firstName, updates.emails[0]);
-        // Only now end every session of this user, including the current one. sessions.user_id is only synced
-        // on a session's first request after login, so also match on the stored session payload.
-        await db.delete(sessions).where(or(eq(sessions.userId, userId), sql`${sessions.sess}->'user'->>'id' = ${userId}`));
+        // Only now end every session of this user, including the current one.
+        await deleteUserSessions(userId);
         await new Promise<void>((resolve) => req.session.destroy(() => resolve()));
         return res.status(200).json({
           success: true,
