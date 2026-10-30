@@ -51,7 +51,7 @@ const BUILT_IN_CODES: Partial<Record<MetricGroupId, readonly string[]>> = {
   strength: ["STRENGTH_SQUAT", "SQUAT_1RM", "SQUAT_1RM_KG"],
   movement: [
     "MQI_TOTAL", "MQI",
-    "AGILITY_505_M_LSI", "AGILITY_505_YD_LSI",
+    "AGILITY_505_M_LSI", "AGILITY_505_YD_LSI", "HOP_SL_TRIPLE_LSI",
     "JUMP_CMJ_SL_ASYM", "RSI_ASYM",
   ],
   body_composition: ["BODY_HEIGHT", "BODY_WEIGHT", "HEIGHT", "HEIGHT_IN", "WEIGHT", "WEIGHT_LBS"],
