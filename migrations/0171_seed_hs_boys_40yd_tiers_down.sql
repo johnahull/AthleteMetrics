@@ -5,7 +5,7 @@
 
 DELETE FROM benchmark_set_items WHERE set_id = 'set-hs-boys-40yd-ovr';
 DELETE FROM benchmark_sets WHERE id = 'set-hs-boys-40yd-ovr';
-DELETE FROM site_benchmarks WHERE id LIKE 'bench-hs-boys-40yd-%';
+DELETE FROM site_benchmarks WHERE id IN ('bench-hs-boys-40yd-elite', 'bench-hs-boys-40yd-excellent', 'bench-hs-boys-40yd-above-avg', 'bench-hs-boys-40yd-average', 'bench-hs-boys-40yd-below-avg');
 
 DO $$
 BEGIN
