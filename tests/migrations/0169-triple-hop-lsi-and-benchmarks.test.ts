@@ -56,6 +56,9 @@ describe('HOP_SL_TRIPLE_LSI formula', () => {
     expect(evaluateFormula(FORMULA, { hop_sl_triple_l: 16.2, hop_sl_triple_r: 18 })).toBeCloseTo(90, 6);
     expect(evaluateFormula(FORMULA, { hop_sl_triple_l: 15, hop_sl_triple_r: 15 })).toBe(100);
   });
+  it('gives null, not NaN, when both legs are 0 (0 / 0)', () => {
+    expect(evaluateFormula(FORMULA, { hop_sl_triple_l: 0, hop_sl_triple_r: 0 })).toBeNull();
+  });
 });
 
 describe.skipIf(!isDisposableTestDb)('Migration 0169: against a disposable DB (rolled back)', () => {
@@ -146,8 +149,12 @@ describe.skipIf(!isDisposableTestDb)('Migration 0169: against a disposable DB (r
       for (const b of r.dist) groups.set(b.tier_group_id, (groups.get(b.tier_group_id) ?? 0) + 1);
       expect([...groups.values()]).toEqual([4, 4, 4, 4]);
       // tiers of one group tile the range without gaps wider than the 0.001 step
-      const group = r.dist.filter((b: any) => b.gender === 'Female' && b.metric_code === 'HOP_SL_TRIPLE_L').sort((a: any, b: any) => a.tier_order - b.tier_order);
-      for (let i = 0; i < group.length - 1; i++) expect(num(group[i].min_value) - num(group[i + 1].max_value)).toBeCloseTo(0.001, 6);
+      for (const gender of ['Male', 'Female']) {
+        for (const code of ['HOP_SL_TRIPLE_L', 'HOP_SL_TRIPLE_R']) {
+          const group = r.dist.filter((b: any) => b.gender === gender && b.metric_code === code).sort((a: any, b: any) => a.tier_order - b.tier_order);
+          for (let i = 0; i < group.length - 1; i++) expect(num(group[i].min_value) - num(group[i + 1].max_value)).toBeCloseTo(0.001, 6);
+        }
+      }
       expect(r.items.filter((i: any) => i.set_id.startsWith('set-soccer')).map((i: any) => i.n)).toEqual([8, 8]);
     });
   });
