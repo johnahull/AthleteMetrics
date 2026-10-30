@@ -1,5 +1,5 @@
 /**
- * Migration 0168: seed a 5-tier HS boys DASH_40YD tier group (OVR Performance data, rolling start)
+ * Migration 0171: seed a 5-tier HS boys DASH_40YD tier group (OVR Performance data, rolling start)
  * and a site benchmark set holding it.
  * Live checks run in a rolled-back transaction and only on a disposable test DB.
  */
@@ -13,11 +13,11 @@ import { evaluateTierBenchmark } from '../../packages/api/services/benchmark-tie
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const read = (f: string) => fs.readFileSync(path.resolve(__dirname, '../../migrations', f), 'utf-8');
-const NAME = '0168_seed_hs_boys_40yd_tiers';
+const NAME = '0171_seed_hs_boys_40yd_tiers';
 const UP = read(`${NAME}.sql`);
 const DOWN = read(`${NAME}_down.sql`);
 
-const TIER_GROUP_ID = 'b0400000-0168-4000-8000-000000000040';
+const TIER_GROUP_ID = 'b0400000-0171-4000-8000-000000000040';
 const SET_ID = 'set-hs-boys-40yd-ovr';
 /** [id, tier order, tier name, cutoff] */
 const TIERS = [
@@ -29,7 +29,7 @@ const TIERS = [
 ] as const;
 const IDS = TIERS.map(([id]) => id);
 
-describe('Migration 0168: static analysis', () => {
+describe('Migration 0171: static analysis', () => {
   it('seeds the 5 tiers with their cutoffs in one tier group, boys HS, lte', () => {
     for (const [id, order, tierName, cutoff] of TIERS) {
       // (?:(?!\n\n)[\s\S])*? stays inside one VALUES tuple (tuples are blank-line separated)
@@ -62,7 +62,7 @@ const dbUrl = process.env.DATABASE_URL || '';
 const isDisposableTestDb =
   process.env.NODE_ENV === 'test' && (/@(localhost|127\.0\.0\.1)[:/]/.test(dbUrl) || process.env.CI === 'true');
 
-describe.skipIf(!isDisposableTestDb)('Migration 0168: against a disposable DB (rolled back)', () => {
+describe.skipIf(!isDisposableTestDb)('Migration 0171: against a disposable DB (rolled back)', () => {
   let sql: ReturnType<typeof postgres>;
   beforeAll(() => {
     sql = postgres(dbUrl, { max: 1 });

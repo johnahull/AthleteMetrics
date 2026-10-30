@@ -1,4 +1,4 @@
--- Migration 0168: HS boys 40-yard dash tier group + site benchmark set
+-- Migration 0171: HS boys 40-yard dash tier group + site benchmark set
 --
 -- Source: OVR Performance, "Average High School 40-Yard Dash" (boys, laser timing gates, rolling start).
 -- The source lists cumulative shares (<= time = % of athletes). Five cutoffs are seeded as an `lte` tier group:
@@ -24,23 +24,23 @@ INSERT INTO site_benchmarks (
 ) VALUES
   ('bench-hs-boys-40yd-elite', 'DASH_40YD', 'HS Boys 40 yd - Elite (≤4.60)',
    'OVR Performance HS boys 40-yard dash data, laser timed, rolling start: 4.60 s or faster = 1.2% of athletes. Rolling-start times run faster than standing-start times. Boys only.',
-   'lte', 4.60, 'b0400000-0168-4000-8000-000000000040'::uuid, 1, 'Elite', 'green', 'Male', 'HS', true, true, 1),
+   'lte', 4.60, 'b0400000-0171-4000-8000-000000000040'::uuid, 1, 'Elite', 'green', 'Male', 'HS', true, true, 1),
 
   ('bench-hs-boys-40yd-excellent', 'DASH_40YD', 'HS Boys 40 yd - Excellent (≤4.80)',
    'OVR Performance HS boys 40-yard dash data, laser timed, rolling start: 4.80 s or faster = 12.2% of athletes. Rolling-start times run faster than standing-start times. Boys only.',
-   'lte', 4.80, 'b0400000-0168-4000-8000-000000000040'::uuid, 2, 'Excellent', 'blue', 'Male', 'HS', true, true, 2),
+   'lte', 4.80, 'b0400000-0171-4000-8000-000000000040'::uuid, 2, 'Excellent', 'blue', 'Male', 'HS', true, true, 2),
 
   ('bench-hs-boys-40yd-above-avg', 'DASH_40YD', 'HS Boys 40 yd - Above Average (≤5.00)',
    'OVR Performance HS boys 40-yard dash data, laser timed, rolling start: 5.00 s or faster = 38.4% of athletes. Rolling-start times run faster than standing-start times. Boys only.',
-   'lte', 5.00, 'b0400000-0168-4000-8000-000000000040'::uuid, 3, 'Above Average', 'gray', 'Male', 'HS', true, true, 3),
+   'lte', 5.00, 'b0400000-0171-4000-8000-000000000040'::uuid, 3, 'Above Average', 'gray', 'Male', 'HS', true, true, 3),
 
   ('bench-hs-boys-40yd-average', 'DASH_40YD', 'HS Boys 40 yd - Average (≤5.20)',
    'OVR Performance HS boys 40-yard dash data, laser timed, rolling start: 5.20 s or faster = 62.7% of athletes. Rolling-start times run faster than standing-start times. Boys only.',
-   'lte', 5.20, 'b0400000-0168-4000-8000-000000000040'::uuid, 4, 'Average', 'yellow', 'Male', 'HS', true, true, 4),
+   'lte', 5.20, 'b0400000-0171-4000-8000-000000000040'::uuid, 4, 'Average', 'yellow', 'Male', 'HS', true, true, 4),
 
   ('bench-hs-boys-40yd-below-avg', 'DASH_40YD', 'HS Boys 40 yd - Below Average (≤5.50)',
    'OVR Performance HS boys 40-yard dash data, laser timed, rolling start: 5.50 s or faster = 83.3% of athletes; slower times are also graded here. Rolling-start times run faster than standing-start times. Boys only.',
-   'lte', 5.50, 'b0400000-0168-4000-8000-000000000040'::uuid, 5, 'Below Average', 'orange', 'Male', 'HS', true, true, 5)
+   'lte', 5.50, 'b0400000-0171-4000-8000-000000000040'::uuid, 5, 'Below Average', 'orange', 'Male', 'HS', true, true, 5)
 ON CONFLICT (metric_code, name) DO UPDATE SET
   description = EXCLUDED.description,
   comparison_operator = EXCLUDED.comparison_operator,
@@ -93,7 +93,7 @@ DECLARE
   v_tiers INTEGER;
   v_items INTEGER;
 BEGIN
-  SELECT COUNT(*) INTO v_tiers FROM site_benchmarks WHERE tier_group_id = 'b0400000-0168-4000-8000-000000000040'::uuid;
+  SELECT COUNT(*) INTO v_tiers FROM site_benchmarks WHERE tier_group_id = 'b0400000-0171-4000-8000-000000000040'::uuid;
   SELECT COUNT(*) INTO v_items FROM benchmark_set_items WHERE set_id = 'set-hs-boys-40yd-ovr';
-  RAISE NOTICE 'Migration 0168 complete: % HS boys 40 yd tier rows, % set items.', v_tiers, v_items;
+  RAISE NOTICE 'Migration 0171 complete: % HS boys 40 yd tier rows, % set items.', v_tiers, v_items;
 END $$;
