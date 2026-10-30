@@ -66,6 +66,8 @@ interface TestUserConfig {
   emails: string[];
 }
 
+const ATHLETE_BIRTH_DATE = '1995-01-01';
+
 async function globalSetup(config: FullConfig) {
   console.log('\n🚀 Starting E2E Test Setup...\n');
 
@@ -377,6 +379,8 @@ async function globalSetup(config: FullConfig) {
                 emails: userConfig.emails,
                 isSiteAdmin: userConfig.isSiteAdmin,
                 isActive: true,
+                // The profile gate blocks athletes without a birthdate
+                ...(userConfig.role === 'athlete' ? { birthDate: ATHLETE_BIRTH_DATE } : {}),
               })
               .onConflictDoUpdate({
                 target: schema.users.username,
@@ -388,6 +392,7 @@ async function globalSetup(config: FullConfig) {
                   emails: userConfig.emails,
                   isSiteAdmin: userConfig.isSiteAdmin,
                   isActive: true,
+                  ...(userConfig.role === 'athlete' ? { birthDate: ATHLETE_BIRTH_DATE } : {}),
                   updatedAt: new Date(),
                 },
               })

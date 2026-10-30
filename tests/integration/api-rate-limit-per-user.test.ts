@@ -45,6 +45,7 @@ describe('app-wide /api rate limiter', () => {
       const [u] = await db
         .insert(users)
         .values({
+          birthDate: '1990-01-01', // the profile gate requires a birthdate
           username: `apilim-${tag}-${suffix}`,
           emails: [`apilim-${tag}-${suffix}@test.com`],
           password: hashed,

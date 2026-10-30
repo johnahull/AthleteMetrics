@@ -45,6 +45,7 @@ async function createUser(suffix: string, extra: Record<string, unknown> = {}) {
   const [user] = await db
     .insert(users)
     .values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `${PREFIX}${suffix}_${id}`,
       firstName: 'Assign',
       lastName: suffix,

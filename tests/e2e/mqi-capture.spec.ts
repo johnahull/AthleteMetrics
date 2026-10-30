@@ -58,6 +58,7 @@ async function mkUser(username: string, first: string, last: string) {
       lastName: last,
       fullName: `${first} ${last}`,
       emails: [`${username}@test.local`],
+      birthDate: '1995-01-01', // the profile gate blocks athletes without a birthdate
       hasCompletedOnboarding: true,
       isActive: true,
     } as any)

@@ -166,6 +166,7 @@ beforeAll(async () => {
   // 2. Create minor athlete with consented COPPA status (primary test subject)
   minorAthleteUsername = `del-minor-${TS}`;
   const [minorAthlete] = await db.insert(users).values({
+    birthDate: '1990-01-01', // the profile gate requires a birthdate
     username: minorAthleteUsername,
     firstName: 'Delete',
     lastName: 'Minor',
@@ -191,6 +192,7 @@ beforeAll(async () => {
   // 3. Create second minor athlete (for process/complete tests)
   minorAthlete2Username = `del-minor2-${TS}`;
   const [minorAthlete2] = await db.insert(users).values({
+    birthDate: '1990-01-01', // the profile gate requires a birthdate
     username: minorAthlete2Username,
     firstName: 'Delete2',
     lastName: 'Minor2',
@@ -215,6 +217,7 @@ beforeAll(async () => {
   // 4. Create org admin
   orgAdminUsername = `del-orgadmin-${TS}`;
   const [orgAdmin] = await db.insert(users).values({
+    birthDate: '1990-01-01', // the profile gate requires a birthdate
     username: orgAdminUsername,
     firstName: 'Org',
     lastName: 'Admin',
@@ -555,6 +558,7 @@ describe('POST /api/coppa/data-deletion/:requestId/process', () => {
     const processTs = `proc-${TS}`;
     const hashedPw = await bcrypt.hash(CORRECT_PASSWORD, BCRYPT_SALT_ROUNDS);
     const [processMinor] = await db.insert(users).values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `del-proc-minor-${processTs}`,
       firstName: 'Process',
       lastName: 'Minor',
@@ -671,6 +675,7 @@ describe('[LEGAL] Audit log is retained after data deletion', () => {
     const auditTs = `audit-${TS}`;
     const hashedPw = await bcrypt.hash(CORRECT_PASSWORD, BCRYPT_SALT_ROUNDS);
     const [auditMinor] = await db.insert(users).values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `del-audit-minor-${auditTs}`,
       firstName: 'Audit',
       lastName: 'Minor',
@@ -747,6 +752,7 @@ describe('Deletion cascade completeness', () => {
 
     // Create the minor athlete
     const [cascadeMinor] = await db.insert(users).values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `del-casc-w-${cascadeTs}`,
       firstName: 'CascW',
       lastName: 'Minor',
@@ -800,6 +806,7 @@ describe('Deletion cascade completeness', () => {
     const hashedPw = await bcrypt.hash(CORRECT_PASSWORD, BCRYPT_SALT_ROUNDS);
 
     const [cascadeMinor] = await db.insert(users).values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `del-casc-e-${cascadeTs}`,
       firstName: 'CascE',
       lastName: 'Minor',
@@ -854,6 +861,7 @@ describe('Deletion cascade completeness', () => {
     const hashedPw = await bcrypt.hash(CORRECT_PASSWORD, BCRYPT_SALT_ROUNDS);
 
     const [cascadeMinor] = await db.insert(users).values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `del-casc-t-${cascadeTs}`,
       firstName: 'CascT',
       lastName: 'Minor',
@@ -906,6 +914,7 @@ describe('Deletion cascade completeness', () => {
     const hashedPw = await bcrypt.hash(CORRECT_PASSWORD, BCRYPT_SALT_ROUNDS);
 
     const [cascadeMinor] = await db.insert(users).values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `del-casc-c-${cascadeTs}`,
       firstName: 'CascC',
       lastName: 'Minor',
@@ -980,6 +989,7 @@ describe('Org admin with shared org — deletion and export happy paths', () => 
 
     // Create an org admin user
     const [orgAdminUser] = await db.insert(users).values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `del-orgadmin-shared-${orgAdminTs}`,
       firstName: 'SharedOrg',
       lastName: 'Admin',
@@ -1001,6 +1011,7 @@ describe('Org admin with shared org — deletion and export happy paths', () => 
 
     // Create the minor athlete who is also a member of the shared org
     const [sharedMinor] = await db.insert(users).values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `del-sharedminor-${orgAdminTs}`,
       firstName: 'Shared',
       lastName: 'Minor',
