@@ -24,6 +24,7 @@
 > 0165 (removes the 12 seeded JUMP_SJ_HEIGHT benchmarks and their set items; metric, EUR and measurements stay) is provisional: renumber at merge if another branch lands 0165 first (file, `_down`, test, tracking row, this line).
 > 0166 (report_templates: saved metrics, benchmark sets and chart choices for the report wizard) is provisional: renumber at merge if another branch lands 0166 first (file, `_down`, test `migration-0166-report-templates`, tracking row, this line).
 > 0167 (renames the 16 EUR / RSI tier benchmarks seeded by 0137 to `<Group> - <Tier>` so the group label is EUR, RSI Left, RSI Right or RSI Asymmetry; 0137 must not be replayed after it) is provisional: renumber at merge if another branch lands 0167 first (file, `_down`, test `migration-0167-rename-eur-rsi-tier-groups`, tracking row, this line).
+> 0168 (HS boys 40-yard dash tier group and site benchmark set, from OVR Performance data: 5 `lte` tiers, 4.60 to 5.50 s) is provisional: renumber at merge if another branch lands 0168 first (file, `_down`, test `migration-0168-hs-boys-40yd-tiers`, tracking row, this line).
 
 ## Current State (2025-10-30)
 
