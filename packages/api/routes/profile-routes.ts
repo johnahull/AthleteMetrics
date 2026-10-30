@@ -35,6 +35,14 @@ const usernameCheckLimiter = rateLimit({
   skip: (req) => shouldSkipRateLimiting(req, 'general'),
 });
 
+async function sendNewEmailVerification(userId: string, firstName: string, email: string) {
+  const { token } = await storage.createEmailVerificationToken(userId, email);
+  emailService.sendEmailVerification(email, {
+    userName: firstName,
+    verificationLink: `${process.env.APP_URL}/verify-email?token=${token}`,
+  }).catch((err: unknown) => console.error("[ProfileComplete] verification email failed:", err));
+}
+
 export function registerProfileRoutes(app: Express) {
   /**
    * Get user profile information
@@ -504,7 +512,7 @@ export function registerProfileRoutes(app: Express) {
         if (needEmail) {
           if (!body.email || isPlaceholderEmail(body.email)) return fail(400, "A valid email is required.", "email");
           const [taken] = await tx.select({ id: users.id }).from(users)
-            .where(and(sql`${body.email} = ANY(${users.emails})`, ne(users.id, userId), isNull(users.deletedAt))).limit(1);
+            .where(and(sql`lower(${body.email}) = ANY(SELECT lower(e) FROM unnest(${users.emails}) e)`, ne(users.id, userId), isNull(users.deletedAt))).limit(1);
           if (taken) return fail(409, "That email is already in use.", "email");
           updates.emails = [body.email];
           updates.isEmailVerified = false;
@@ -527,7 +535,7 @@ export function registerProfileRoutes(app: Express) {
           const athleteEmail = updates.emails?.[0] ?? user.emails?.find((e) => !isPlaceholderEmail(e));
           parentEmail = body.parentEmail;
           if (under13 && !parentEmail) return fail(400, "Parent or guardian email is required for athletes under 13.", "parentEmail");
-          if (parentEmail && parentEmail === athleteEmail) return fail(400, "Parent email must differ from the athlete's email.", "parentEmail");
+          if (parentEmail && (parentEmail === athleteEmail || (user.emails ?? []).some((e) => e.toLowerCase() === parentEmail))) return fail(400, "Parent email must differ from the athlete's email.", "parentEmail");
           updates.birthDate = dob;
           updates.birthYear = y;
           updates.isMinor = minor;
@@ -547,7 +555,8 @@ export function registerProfileRoutes(app: Express) {
       if (!("ok" in outcome)) return res.status(outcome.status).json(outcome.body);
       const { user, updates, under13, teen, parentEmail, athleteOrgId, needEmail } = outcome;
 
-      await storage.createAuditLog({
+      // After commit: an audit failure must not turn a saved profile into a 500.
+      storage.createAuditLog({
         userId,
         action: "profile_completed",
         resourceType: "user",
@@ -555,7 +564,7 @@ export function registerProfileRoutes(app: Express) {
         ipAddress: req.ip,
         userAgent: req.get("user-agent"),
         details: JSON.stringify({ birthDateSet: !!updates.birthDate, emailSet: needEmail, under13 }),
-      });
+      }).catch((err: unknown) => console.error("[ProfileComplete] audit log failed:", err));
 
       if (under13 && parentEmail) {
         const consent = await coppaService.initiateConsent({
@@ -565,14 +574,22 @@ export function registerProfileRoutes(app: Express) {
           ip: req.ip,
           userAgent: req.get("user-agent"),
         });
-        // Every session of this user ends, including the current one. sessions.user_id is only synced
+        if (!consent.success) {
+          // Undo the committed write so the child keeps a usable session and can retry.
+          const restore: Record<string, unknown> = {};
+          for (const key of Object.keys(updates)) restore[key] = (user as Record<string, unknown>)[key] ?? null;
+          await db.update(users).set(restore).where(eq(users.id, userId));
+          return res.status(500).json({ message: "We could not start the parental consent request. Please try again." });
+        }
+        if (needEmail && updates.emails) await sendNewEmailVerification(userId, user.firstName, updates.emails[0]);
+        // Only now end every session of this user, including the current one. sessions.user_id is only synced
         // on a session's first request after login, so also match on the stored session payload.
         await db.delete(sessions).where(or(eq(sessions.userId, userId), sql`${sessions.sess}->'user'->>'id' = ${userId}`));
         await new Promise<void>((resolve) => req.session.destroy(() => resolve()));
         return res.status(200).json({
           success: true,
           requiresParentalConsent: true,
-          message: consent.emailSent === false
+          message: !consent.emailSent
             ? "Thanks. We could not send the consent email to your parent. Please ask them to visit the consent page directly, or try again later."
             : "Thanks. A consent email has been sent to your parent or guardian. You will be able to log in once they approve your account.",
         });
@@ -584,11 +601,7 @@ export function registerProfileRoutes(app: Express) {
 
       if (needEmail && updates.emails) {
         const newEmail = updates.emails[0];
-        const { token } = await storage.createEmailVerificationToken(userId, newEmail);
-        emailService.sendEmailVerification(newEmail, {
-          userName: user.firstName,
-          verificationLink: `${process.env.APP_URL}/verify-email?token=${token}`,
-        }).catch((err: unknown) => console.error("[ProfileComplete] verification email failed:", err));
+        await sendNewEmailVerification(userId, user.firstName, newEmail);
         req.session.user = { ...req.session.user!, email: newEmail, emailVerified: false };
       }
       req.session.profileCheck = { userId, missing: [] };

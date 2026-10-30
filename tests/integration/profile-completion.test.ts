@@ -11,14 +11,16 @@ process.env.ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@test.com';
 process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'TestPassword123!';
 process.env.BYPASS_GENERAL_RATE_LIMIT = 'true';
 
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import request from 'supertest';
 import express, { type Express } from 'express';
 import bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 import { eq, inArray } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
-import { users, organizations, userOrganizations } from '@shared/schema';
+import { users, organizations, userOrganizations, emailVerificationTokens } from '@shared/schema';
+import { coppaService } from '../../packages/api/services/coppa-service';
+import { storage } from '../../packages/api/storage';
 import { parentAthleteLinks } from '@shared/schema/tables/coppa';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 
@@ -81,6 +83,7 @@ beforeAll(async () => {
 afterAll(async () => {
   if (userIds.length) {
     await db.delete(parentAthleteLinks).where(inArray(parentAthleteLinks.athleteUserId, userIds)).catch(() => {});
+    await db.delete(emailVerificationTokens).where(inArray(emailVerificationTokens.userId, userIds)).catch(() => {});
     await db.delete(userOrganizations).where(inArray(userOrganizations.userId, userIds));
     await db.delete(users).where(inArray(users.id, userIds));
   }
@@ -144,6 +147,72 @@ describe('POST /api/profile/complete', () => {
     const r = await row(u.id);
     expect(String(r.birthDate)).toBe(adultDob);
     expect(r.emails).toEqual(u.emails);
+  });
+
+  describe('under 13 failure handling', () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it('initiateConsent failure: rolls back, 500, session kept so the child can retry', async () => {
+      const u = await makeUser('u13fail', { emails: [`u13fail-${tag}@temp.local`] });
+      const agent = await login(u.username);
+      vi.spyOn(coppaService, 'initiateConsent').mockResolvedValueOnce({ success: false, error: 'x' } as any);
+      const res = await agent.post('/api/profile/complete')
+        .send({ birthDate: yearsAgo(10), email: `u13fail-${tag}@example.com`, parentEmail: `p-${tag}@example.com` });
+      expect(res.status).toBe(500);
+      const r = await row(u.id);
+      expect(r.birthDate).toBeNull();
+      expect(r.coppaStatus).toBe('not_applicable');
+      expect(r.parentEmail).toBeNull();
+      expect(r.emails).toEqual([`u13fail-${tag}@temp.local`]);
+      expect((await agent.get('/api/auth/me')).status).toBe(200);
+    });
+
+    it('an audit-log failure after commit does not 500 the child', async () => {
+      const u = await makeUser('u13audit');
+      const agent = await login(u.username);
+      vi.spyOn(storage, 'createAuditLog').mockRejectedValue(new Error('audit down'));
+      const res = await agent.post('/api/profile/complete').send({ birthDate: yearsAgo(10), parentEmail: `pa-${tag}@example.com` });
+      expect(res.status).toBe(200);
+      expect(res.body.requiresParentalConsent).toBe(true);
+    });
+
+    it.each([[false], [undefined]])('consent email not sent (emailSent=%s) -> "could not send" message', async (emailSent) => {
+      const u = await makeUser(`u13mail-${String(emailSent)}`);
+      const agent = await login(u.username);
+      vi.spyOn(coppaService, 'initiateConsent').mockResolvedValueOnce({ success: true, consentId: 'c', emailSent } as any);
+      const res = await agent.post('/api/profile/complete').send({ birthDate: yearsAgo(10), parentEmail: `pm-${tag}@example.com` });
+      expect(res.status).toBe(200);
+      expect(res.body.message).toMatch(/could not send/i);
+    });
+
+    it('a new email entered with an under-13 DOB still gets a verification token', async () => {
+      const u = await makeUser('u13tok', { emails: [`u13tok-${tag}@temp.local`] });
+      const agent = await login(u.username);
+      const res = await agent.post('/api/profile/complete')
+        .send({ birthDate: yearsAgo(10), email: `u13tok-${tag}@example.com`, parentEmail: `pt-${tag}@example.com` });
+      expect(res.status).toBe(200);
+      const toks = await db.select().from(emailVerificationTokens).where(eq(emailVerificationTokens.userId, u.id));
+      expect(toks.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('400 when the parent email is any of the athlete\'s own emails', async () => {
+    const u = await makeUser('ownparent', { emails: [`own1-${tag}@example.com`, `own2-${tag}@example.com`] });
+    const agent = await login(u.username);
+    const res = await agent.post('/api/profile/complete')
+      .send({ birthDate: yearsAgo(10), parentEmail: `OWN2-${tag}@example.com` });
+    expect(res.status).toBe(400);
+    expect(res.body.errors[0].field).toBe('parentEmail');
+    expect((await row(u.id)).birthDate).toBeNull();
+  });
+
+  it('409 when the email matches a stored mixed-case email of another account', async () => {
+    const other = await makeUser('mixed', { emails: [`Mixed-${tag}@Example.com`] });
+    const u = await makeUser('mixedph', { birthDate: adultDob, emails: [`mixedph-${tag}@temp.local`] });
+    const agent = await login(u.username);
+    const res = await agent.post('/api/profile/complete').send({ email: `mixed-${tag}@example.com` });
+    expect(res.status).toBe(409);
+    expect(other.id).toBeTruthy();
   });
 
   describe('under 13', () => {
