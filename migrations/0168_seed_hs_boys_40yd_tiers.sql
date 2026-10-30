@@ -71,6 +71,7 @@ INSERT INTO benchmark_sets (
 ON CONFLICT (id) DO UPDATE SET
   name = EXCLUDED.name,
   description = EXCLUDED.description,
+  sport = EXCLUDED.sport,
   level = EXCLUDED.level,
   gender = EXCLUDED.gender,
   is_template = EXCLUDED.is_template,
@@ -92,7 +93,7 @@ DECLARE
   v_tiers INTEGER;
   v_items INTEGER;
 BEGIN
-  SELECT COUNT(*) INTO v_tiers FROM site_benchmarks WHERE id LIKE 'bench-hs-boys-40yd-%';
+  SELECT COUNT(*) INTO v_tiers FROM site_benchmarks WHERE tier_group_id = 'b0400000-0168-4000-8000-000000000040'::uuid;
   SELECT COUNT(*) INTO v_items FROM benchmark_set_items WHERE set_id = 'set-hs-boys-40yd-ovr';
   RAISE NOTICE 'Migration 0168 complete: % HS boys 40 yd tier rows, % set items.', v_tiers, v_items;
 END $$;

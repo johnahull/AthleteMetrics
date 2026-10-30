@@ -112,6 +112,8 @@ describe.skipIf(!isDisposableTestDb)('Migration 0168: against a disposable DB (r
       expect(tierFor(4.6)).toBe('Elite');
       expect(tierFor(4.95)).toBe('Above Average');
       expect(tierFor(5.8)).toBe('Below Average');
+      // every cutoff is inclusive: a time equal to a tier's max stays in that tier
+      for (const r of rows) expect(tierFor(Number(r.benchmarkValue))).toBe(r.tierName);
       expect(evaluateTierBenchmark(4.95, true, rows)?.tierGroupName).toBe('HS Boys 40 yd');
     });
   });
