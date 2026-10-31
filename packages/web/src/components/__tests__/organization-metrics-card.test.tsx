@@ -20,7 +20,10 @@ vi.mock('@/lib/custom-metrics-api', () => ({
 }));
 
 const ORG = '11111111-1111-1111-1111-111111111111';
-const site = (code: string) => ({ code, label: code, isActive: true, sportAssociations: null });
+const site = (code: string) => ({
+  code, label: code, isActive: true, sportAssociations: null, metricType: 'lower_is_better', description: `${code} description`,
+  ...(code === 'C' ? { isDerived: true, formula: 'A + B', dependentMetrics: ['A', 'B'] } : { isDerived: false }),
+});
 const orgRow = (metricCode: string, isEnabled: boolean) => ({ id: `om-${metricCode}`, organizationId: ORG, metricCode, isEnabled });
 
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -126,5 +129,35 @@ describe('OrganizationMetricsCard staged toggles', () => {
     rerender(ui('22222222-2222-2222-2222-222222222222'));
     await screen.findByTestId('toggle-metric-A');
     expect(screen.queryByTestId('save-metric-changes')).not.toBeInTheDocument();
+  });
+});
+
+describe('OrganizationMetricsCard metric details', () => {
+  it('opens a read-only detail dialog from a metric row', async () => {
+    renderCard();
+    fireEvent.click(await screen.findByTestId('metric-details-A'));
+    expect(await screen.findByText('A description')).toBeInTheDocument();
+    expect(screen.getByText('Lower is Better')).toBeInTheDocument();
+  });
+
+  it('marks calculated metrics and shows the formula in details', async () => {
+    renderCard();
+    expect(await screen.findByTestId('metric-calculated-C')).toBeInTheDocument();
+    expect(screen.queryByTestId('metric-calculated-A')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('metric-details-C'));
+    expect(await screen.findByText('A + B')).toBeInTheDocument();
+  });
+
+  it('lets a read-only viewer open details but not change anything', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <OrganizationMetricsCard organizationId={ORG} canEdit={false} />
+      </QueryClientProvider>
+    );
+    expect(await screen.findByTestId('toggle-metric-A')).toBeDisabled();
+    expect(screen.getByTestId('edit-custom-label-B')).toBeDisabled();
+    fireEvent.click(screen.getByTestId('metric-details-A'));
+    expect(await screen.findByText('A description')).toBeInTheDocument();
   });
 });

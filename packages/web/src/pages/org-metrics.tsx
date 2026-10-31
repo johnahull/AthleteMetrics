@@ -78,11 +78,10 @@ export default function OrgMetricsPage() {
     return <LoadingSpinner text="Loading metrics configuration..." />;
   }
 
-  // Check access - must be site admin or org admin for this org
-  const hasAccess = user?.isSiteAdmin ||
-    userOrganizations?.some(o =>
-      o.organizationId === organizationId && o.role === 'org_admin'
-    );
+  // Site admins and org admins of this org can edit; coaches of this org can view read-only.
+  const orgRole = userOrganizations?.find(o => o.organizationId === organizationId)?.role;
+  const canEdit = !!user?.isSiteAdmin || orgRole === 'org_admin';
+  const hasAccess = canEdit || orgRole === 'coach';
 
   if (!hasAccess) {
     return <Redirect to="/" />;
@@ -101,7 +100,9 @@ export default function OrgMetricsPage() {
           Metrics Configuration
         </h1>
         <p className="text-muted-foreground mt-1">
-          Manage which metrics are available for your organization
+          {canEdit
+            ? "Manage which metrics are available for your organization"
+            : "Metrics available for your organization. Select a metric for details."}
         </p>
       </div>
 
@@ -109,7 +110,7 @@ export default function OrgMetricsPage() {
       <OrganizationMetricsCard
         key={organizationId}
         organizationId={organizationId}
-        canEdit={true}
+        canEdit={canEdit}
       />
 
       {/* Custom Metrics Section - only if enabled */}
@@ -121,7 +122,7 @@ export default function OrgMetricsPage() {
               <Ruler className="h-6 w-6" />
               Custom Metrics
             </h2>
-            <CustomOrgMetricList organizationId={organizationId} embedded />
+            <CustomOrgMetricList organizationId={organizationId} embedded canEdit={canEdit} />
           </div>
         </>
       )}
@@ -149,9 +150,10 @@ export default function OrgMetricsPage() {
         </>
       )}
 
-      <Separator className="my-6" />
+      {canEdit && <Separator className="my-6" />}
 
       {/* Derived Metrics Recalculation */}
+      {canEdit && (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -198,6 +200,7 @@ export default function OrgMetricsPage() {
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Confirmation Dialog */}
       {ConfirmationComponent}
