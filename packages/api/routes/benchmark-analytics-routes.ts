@@ -24,6 +24,9 @@ type ValidGender = typeof VALID_GENDERS[number];
 // a well-formed code with no benchmarks yields an empty result, so chart overlays degrade instead of erroring.
 const METRIC_CODE_PATTERN = /^[A-Z0-9_]{1,64}$/;
 
+// Benchmark ids are UUIDs (custom) or text slugs (seeded site benchmarks, e.g. d1-soc-dash40-d1-avg)
+const BENCHMARK_ID_PATTERN = /^[A-Za-z0-9_-]{1,100}$/;
+
 // Array size limits for DoS protection
 const MAX_FILTER_IDS = 50; // Prevents DoS via excessive IN clause values in database queries
 
@@ -88,6 +91,15 @@ async function validateTeamOwnership(teamIds: string[], organizationId: string):
  */
 function isValidUUID(value: string): boolean {
   return UUID_REGEX.test(value);
+}
+
+/**
+ * Validates the format of a benchmark id (UUID or seeded slug); existence is checked downstream
+ * @param value String to validate
+ * @returns True if the id is well-formed
+ */
+function isValidBenchmarkId(value: string): boolean {
+  return BENCHMARK_ID_PATTERN.test(value);
 }
 
 /**
@@ -275,9 +287,11 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
 
         // Validate benchmarkIds array
         if (benchmarkIds && benchmarkIds.length > 0) {
-          const validationError = validateUUIDArray(benchmarkIds, 'benchmark IDs');
-          if (validationError) {
-            return res.status(400).json({ message: validationError });
+          if (benchmarkIds.length > MAX_FILTER_IDS) {
+            return res.status(400).json({ message: `Too many benchmark IDs. Maximum allowed is ${MAX_FILTER_IDS}.` });
+          }
+          if (!benchmarkIds.every(isValidBenchmarkId)) {
+            return res.status(400).json({ message: 'Invalid benchmark IDs format.' });
           }
         }
 
@@ -424,8 +438,8 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
         }
 
         // Validate benchmarkId format
-        if (!isValidUUID(benchmarkId)) {
-          return res.status(400).json({ message: 'benchmarkId must be a valid UUID' });
+        if (!isValidBenchmarkId(benchmarkId)) {
+          return res.status(400).json({ message: 'benchmarkId has an invalid format' });
         }
 
         // SECURITY: Get organizationId from query or user's database-validated membership
@@ -570,8 +584,8 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
         }
 
         // Validate benchmarkId format
-        if (!isValidUUID(benchmarkId)) {
-          return res.status(400).json({ message: 'benchmarkId must be a valid UUID' });
+        if (!isValidBenchmarkId(benchmarkId)) {
+          return res.status(400).json({ message: 'benchmarkId has an invalid format' });
         }
 
         // SECURITY: Get organizationId from query or user's database-validated membership

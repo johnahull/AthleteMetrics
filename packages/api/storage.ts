@@ -5597,13 +5597,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async enableBenchmarkForOrg(organizationId: string, benchmarkId: string, benchmarkType: 'site' | 'custom'): Promise<OrganizationBenchmark> {
-    // 1. Validate UUID format
+    // 1. Validate ID formats. Organization and custom benchmark ids are DB-generated UUIDs; site benchmark ids
+    // are varchar and seeded rows use text slugs (e.g. d1-soc-dash40-d1-avg), so existence is the only check there.
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(benchmarkId)) {
-      throw new Error(`Invalid benchmark ID format: ${benchmarkId}`);
-    }
     if (!uuidRegex.test(organizationId)) {
       throw new Error(`Invalid organization ID format: ${organizationId}`);
+    }
+    if (benchmarkType === 'custom' && !uuidRegex.test(benchmarkId)) {
+      throw new Error(`Invalid benchmark ID format: ${benchmarkId}`);
     }
 
     // 2. Validate that the benchmark exists and ownership (for custom)
