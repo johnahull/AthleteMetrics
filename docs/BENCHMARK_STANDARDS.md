@@ -50,6 +50,24 @@ Apply to all athletes regardless of sport.
 | MS Male Pro Agility | Club | Male | ≤5.00s | ≤5.30s | ≤5.60s |
 | MS Female Pro Agility | Club | Female | ≤5.30s | ≤5.60s | ≤5.90s |
 
+#### 5-10-5 tier groups by sport (migration 0170)
+
+*Electronic (FAT) timing; hand-timed runs read about 0.15-0.25 s faster. Compiled norms with no primary citation: provisional (confidence LOW-MEDIUM) until replaced with BTA data at N>=30.*
+
+One 4-tier group (Elite / Competitive / Average / Developing) per sex x sport x level. Male sports: Football, Soccer, Basketball, Baseball, Lacrosse. Female sports: Soccer, Basketball, Volleyball, Softball, Lacrosse. Cutoffs below are Elite < c1 ≤ Competitive ≤ c2 < Average ≤ c3 < Developing (the seed steps by 0.001, so Elite ends at c1 − 0.001).
+
+| Level (age) | Male c1 / c2 / c3 | Female c1 / c2 / c3 |
+|-------------|-------------------|---------------------|
+| NCAA D1 (19+) | 4.10 / 4.25 / 4.40 | 4.45 / 4.65 / 4.85 |
+| HS Varsity (16-18) | 4.30 / 4.50 / 4.75 | 4.70 / 4.95 / 5.20 |
+| HS JV / Freshman (14-15) | 4.50 / 4.70 / 4.95 | 4.90 / 5.15 / 5.40 |
+| MS 8th grade (13) | 4.70 / 4.95 / 5.25 | 5.10 / 5.35 / 5.65 |
+| MS 6th-7th grade (11-12) | 4.90 / 5.20 / 5.55 | 5.30 / 5.60 / 6.00 |
+
+- Age 14 belongs to JV only (the source table lists 13-14 for 8th grade), so age bands never overlap. D1 starts at 19 so it does not match high-school athletes.
+- Rows are sport-specific (never NULL). The single "Average" HS/MS rows for Female Soccer and Volleyball from 0129 stay active: eval reports ignore AGILITY_5105 tier groups (`AVERAGE_ONLY_CODES` in `tier-match.ts`) and keep comparing to the single Average, so other sports have no 5-10-5 eval comparison. The tiers show in the benchmark views and in reports where a set is picked. The ten `5-10-5 Tiers - <Sex> <Sport>` template sets are visible to every organization by default.
+- Group names are `5-10-5 <Sex> <Sport> <Level> - <Tier>` with no range after the dash, so the group label derives cleanly.
+
 ---
 
 ## Soccer-Specific Benchmarks
