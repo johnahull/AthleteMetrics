@@ -37,6 +37,7 @@ import { useOrganization } from "@/lib/organization-api";
 import type { SiteMetric, OrganizationMetric, CustomOrgMetric } from "@shared/schema";
 import { Separator } from "@/components/ui/separator";
 import { Ruler } from "lucide-react";
+import { MetricDetailDialog } from "@/components/metrics/MetricDetailDialog";
 import { CategoryGroupToggle } from "@/components/ui/category-group";
 import { groupByCategory } from "@/lib/category-grouping";
 
@@ -54,6 +55,7 @@ export default function OrganizationMetricsCard({
 }: OrganizationMetricsCardProps) {
   const { toast } = useToast();
   const [editingMetric, setEditingMetric] = useState<string | null>(null);
+  const [detailMetric, setDetailMetric] = useState<SiteMetric | CustomOrgMetric | null>(null);
   const [customLabel, setCustomLabel] = useState("");
   const [selectedSport, setSelectedSport] = useState<string>("ALL");
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -437,7 +439,24 @@ export default function OrganizationMetricsCard({
                       data-testid={`org-metric-row-${metric.code}`}
                     >
                       <TableCell className="font-medium">
-                        {metric.label}
+                        <button
+                          type="button"
+                          className="text-left hover:underline"
+                          onClick={() => setDetailMetric(metric)}
+                          data-testid={`metric-details-${metric.code}`}
+                          aria-label={`View details for ${metric.label}`}
+                        >
+                          {metric.label}
+                        </button>
+                        {metric.isDerived && (
+                          <Badge
+                            variant="secondary"
+                            className="ml-2 text-xs"
+                            data-testid={`metric-calculated-${metric.code}`}
+                          >
+                            Calculated
+                          </Badge>
+                        )}
                         {metric.isSystemDefault && (
                           <Badge variant="outline" className="ml-2 text-xs">
                             Default
@@ -549,7 +568,15 @@ export default function OrganizationMetricsCard({
                       >
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2">
-                            {metric.label}
+                            <button
+                              type="button"
+                              className="text-left hover:underline"
+                              onClick={() => setDetailMetric(metric)}
+                              data-testid={`metric-details-${metric.code}`}
+                              aria-label={`View details for ${metric.label}`}
+                            >
+                              {metric.label}
+                            </button>
                             <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700">
                               Custom
                             </Badge>
@@ -594,6 +621,11 @@ export default function OrganizationMetricsCard({
           </>
         )}
       </CardContent>
+      <MetricDetailDialog
+        metric={detailMetric}
+        open={detailMetric !== null}
+        onOpenChange={(open) => !open && setDetailMetric(null)}
+      />
     </Card>
   );
 }
