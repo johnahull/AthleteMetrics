@@ -7,8 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-10-30
+
 ### Added
-- High school boys 40-yard dash tiers (Elite ≤4.60 s through Below Average ≤5.50 s) and a matching site benchmark set, seeded from OVR Performance laser-timed, rolling-start data. Migration `0171`
+- Single-leg triple hop Limb Symmetry Index (`HOP_SL_TRIPLE_LSI`, shorter leg over longer leg x 100), a Triple Hop Asymmetry Screening benchmark set and soccer distance tiers per leg for male and female athletes. Migration `0169` (#691)
+- 5-10-5 agility tier benchmarks (Elite / Competitive / Average / Developing) per sex, sport and level, with template sets. Provisional norms; eval reports keep comparing to the single age-group Average. Migration `0170` (#693)
+- High school boys 40-yard dash tiers (Elite <=4.60 s through Below Average <=5.50 s) and a matching site benchmark set, from OVR Performance laser-timed, rolling-start data. Migration `0171` (#692)
+- Every athlete must have a birthdate and a real email: athletes missing either (OAuth sign-ups, legacy and CSV-imported athletes with placeholder emails) are sent to a post-login "Complete your profile" page. Under-13 athletes go to `pending_consent` and need a parent email (#695)
+
+### Changed
+- Single-leg triple hop is now measured in feet instead of meters: site metric unit and range, measurements, benchmarks, report benchmarks and goals are converted. Migration `0168` (#691). It also accepts units already spelled Feet/ft and normalizes them to `ft` (#696)
+- API: incomplete athletes get `403 profile_incomplete`; consent-blocked users get `403 coppa_*`; revoking consent deletes the athlete's sessions (#695)
+- Dependency bumps: @radix-ui/react-menubar, react-collapsible, react-separator, @testing-library/user-event (#686, #687, #688, #690)
+
+### Deployment notes
+- Migrations `0168`-`0171` are new. Back up first: `0168` rewrites stored measurement values. After `npm run db:migrate:manual`, run `POST /api/admin/recalculate-derived-metrics` to backfill the LSI.
+- Coaches should be told that CSV-imported athletes will be asked to complete their profile at first login.
 
 ## [0.31.0] - 2026-10-25
 
