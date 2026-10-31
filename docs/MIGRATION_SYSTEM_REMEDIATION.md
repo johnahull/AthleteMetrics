@@ -30,6 +30,8 @@
 
 > 0171 (HS boys 40-yard dash tier group and site benchmark set, from OVR Performance data: 5 `lte` tiers, 4.60 to 5.50 s) is provisional: renumber at merge if another branch lands 0171 first (file, `_down`, test `migration-0171-hs-boys-40yd-tiers`, tracking row, this line).
 
+> 0172 (allows the audit actions `user_assigned_to_organization`, `measurements_bulk_delete`, `org_metrics_bulk_updated` and `profile_completed`, which code writes but the `audit_logs` CHECK rejected; the first is written in the same transaction as the site-admin "assign unaffiliated user" membership insert, so without it that route returns 500 and rolls the assignment back, and the others were silently lost) is provisional: renumber at merge if another branch lands 0172 first (file, `_down`, test `0172-missing-audit-actions`, tracking row, this line). Apply to production BEFORE or WITH the release that contains the route. `waiver_submission_received` is still rejected (it also needs resource_type `waiver_submission` and a non-null `user_id`); the test lists it as a known exception.
+
 ## Current State (2025-10-30)
 
 ### Overview
