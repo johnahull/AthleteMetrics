@@ -67,6 +67,11 @@ describe('Migration 0172: static analysis', () => {
   });
 });
 
+type Row = { id: string; name: string; sport: string | null; is_active: boolean; gender: string; age_min: number | null;
+  age_max: number | null; tier_order: number; tier_group_id: string; tier_name: string; tier_color: string; min_value: string;
+  max_value: string; display_order: number; [k: string]: unknown };
+type Tx = postgres.TransactionSql;
+
 const dbUrl = process.env.DATABASE_URL || '';
 const isDisposableTestDb =
   process.env.NODE_ENV === 'test' && (/@(localhost|127\.0\.0\.1)[:/]/.test(dbUrl) || process.env.CI === 'true');
@@ -81,7 +86,7 @@ describe.skipIf(!isDisposableTestDb)('Migration 0172: against a disposable DB (r
   });
 
   /** Production state: 0129 rows + 0170 applied; then fn runs inside a transaction that is rolled back. */
-  const rollbackable = async (fn: (tx: any) => Promise<void>) => {
+  const rollbackable = async (fn: (tx: Tx) => Promise<void>) => {
     const ROLLBACK = new Error('rollback');
     try {
       await sql.begin(async (tx) => {
@@ -101,10 +106,10 @@ describe.skipIf(!isDisposableTestDb)('Migration 0172: against a disposable DB (r
       if (e !== ROLLBACK) throw e;
     }
   };
-  const generic = (tx: any) =>
+  const generic = (tx: Tx) =>
     tx`SELECT * FROM site_benchmarks WHERE metric_code = 'AGILITY_5105' AND id LIKE 'b5105g-%' ORDER BY id`;
-  const count = async (tx: any, q: string) => (await tx.unsafe(q))[0].n as number;
-  const toCandidates = (rows: any[]): TierCandidateRow[] =>
+  const count = async (tx: Tx, q: string) => (await tx.unsafe(q))[0].n as number;
+  const toCandidates = (rows: Row[]): TierCandidateRow[] =>
     rows.map((r) => ({
       ...r,
       metricCode: r.metric_code,
@@ -127,8 +132,8 @@ describe.skipIf(!isDisposableTestDb)('Migration 0172: against a disposable DB (r
       await tx.unsafe(UP);
       const rows = await generic(tx);
       expect(rows).toHaveLength(40);
-      expect(rows.every((r: any) => r.is_active && r.sport === null && r.id.length <= 36 && r.name.length <= 100)).toBe(true);
-      const groups = new Map<string, any[]>();
+      expect(rows.every((r: Row) => r.is_active && r.sport === null && r.id.length <= 36 && r.name.length <= 100)).toBe(true);
+      const groups = new Map<string, Row[]>();
       for (const r of rows) groups.set(r.tier_group_id, [...(groups.get(r.tier_group_id) ?? []), r]);
       expect(groups.size).toBe(10);
       for (const g of groups.values()) {
@@ -139,7 +144,7 @@ describe.skipIf(!isDisposableTestDb)('Migration 0172: against a disposable DB (r
       }
       expect(rows[0].name).toMatch(/^5-10-5 (Male|Female) /);
       const sets = await tx`SELECT * FROM benchmark_sets WHERE id LIKE 'set-5105g-%' ORDER BY name`;
-      expect(sets.map((s: any) => [s.name, s.gender, s.sport, s.is_template, s.is_active])).toEqual([
+      expect(sets.map((s: Row) => [s.name, s.gender, s.sport, s.is_template, s.is_active])).toEqual([
         ['5-10-5 Tiers - Female', 'Female', null, true, true],
         ['5-10-5 Tiers - Male', 'Male', null, true, true],
       ]);
@@ -157,11 +162,11 @@ describe.skipIf(!isDisposableTestDb)('Migration 0172: against a disposable DB (r
       const rows = await generic(tx);
       for (const b of BANDS) {
         const g = rows
-          .filter((r: any) => r.gender === b.sex && r.age_min === b.age[0] && r.age_max === b.age[1])
-          .sort((x: any, y: any) => x.tier_order - y.tier_order);
+          .filter((r: Row) => r.gender === b.sex && r.age_min === b.age[0] && r.age_max === b.age[1])
+          .sort((x: Row, y: Row) => x.tier_order - y.tier_order);
         expect(g).toHaveLength(4);
         const [c1, c2, c3] = b.cuts;
-        expect(g.map((r: any) => [Number(r.min_value), Number(r.max_value)])).toEqual([
+        expect(g.map((r: Row) => [Number(r.min_value), Number(r.max_value)])).toEqual([
           [0, +(c1 - 0.001).toFixed(3)],
           [c1, c2],
           [+(c2 + 0.001).toFixed(3), c3],
@@ -219,12 +224,12 @@ describe.skipIf(!isDisposableTestDb)('Migration 0172: against a disposable DB (r
     await rollbackable(async (tx) => {
       await tx.unsafe(UP);
       const tiersFor = async (prefix: string) =>
-        (await tx`SELECT * FROM site_benchmarks WHERE id LIKE ${prefix} ORDER BY tier_order`).map((r: any) => ({
+        (await tx`SELECT * FROM site_benchmarks WHERE id LIKE ${prefix} ORDER BY tier_order`).map((r: Row) => ({
           tierOrder: r.tier_order, tierName: r.tier_name, minValue: r.min_value, maxValue: r.max_value,
           benchmarkValue: r.benchmark_value, comparisonOperator: r.comparison_operator, tierColor: r.tier_color,
         }));
       const male = await tiersFor('b5105g-m-var-%');
-      const tierOf = (t: any[], v: number) => (evaluateTierBenchmark(v, true, t as any) as any)?.tierName;
+      const tierOf = (t: Row[], v: number) => (evaluateTierBenchmark(v, true, t as any) as any)?.tierName;
       expect([4.29, 4.3, 4.5, 4.501, 4.75, 4.751].map((v) => tierOf(male, v))).toEqual([
         'Elite', 'Competitive', 'Competitive', 'Average', 'Average', 'Developing',
       ]);
@@ -247,6 +252,89 @@ describe.skipIf(!isDisposableTestDb)('Migration 0172: against a disposable DB (r
       expect(match('Female', 'VOLLEYBALL', '2009-09-01', 5.5)).toMatchObject({ kind: 'average', status: 'below' });
       expect(match('Male', 'BASKETBALL', '2009-09-01', 4.6)).toBeNull();
       expect(selectTierGroup(candidates.filter((c) => c.gender === 'Male' && c.ageMin === 16))).toHaveLength(4);
+    });
+  });
+  describe('auto-enable for organizations that had the sport-specific rows enabled', () => {
+    const OLD = (sx: string, n: number) => `b5105-${sx}-soccer-var-t${n}`;
+    /** inserts orgs; each org: [id, [[benchmarkId, isEnabled, displayOrder]...]] */
+    const seedOrgs = async (tx: Tx, orgs: Array<[string, Array<[string, boolean, number]>]>) => {
+      for (const [org, rows] of orgs) {
+        await tx`INSERT INTO organizations (id, name) VALUES (${org}, ${org})`;
+        for (const [bid, en, ord] of rows) {
+          await tx`INSERT INTO organization_benchmarks (organization_id, benchmark_id, benchmark_type, is_enabled, display_order)
+                   VALUES (${org}, ${bid}, 'site', ${en}, ${ord})`;
+        }
+      }
+    };
+    const enabledGeneric = (tx: Tx, org: string) =>
+      tx`SELECT benchmark_id, is_enabled, display_order FROM organization_benchmarks
+          WHERE organization_id = ${org} AND benchmark_id LIKE 'b5105g-%' ORDER BY display_order`;
+
+    it('enables only the same-sex generic rows; both sexes -> 40; none / disabled-only -> 0', async () => {
+      await rollbackable(async (tx) => {
+        await seedOrgs(tx, [
+          ['org-a-male', [[OLD('m', 1), true, 1]]],
+          ['org-b-both', [[OLD('m', 1), true, 1], [OLD('f', 1), true, 2]]],
+          ['org-c-none', [['some-other', true, 1]]],
+          ['org-d-off', [[OLD('m', 1), false, 1]]],
+        ]);
+        await tx.unsafe(UP);
+        const a = await enabledGeneric(tx, 'org-a-male');
+        expect(a).toHaveLength(20);
+        expect(a.every((r) => r.is_enabled && String(r.benchmark_id).startsWith('b5105g-m-'))).toBe(true);
+        expect(await enabledGeneric(tx, 'org-b-both')).toHaveLength(40);
+        expect(await enabledGeneric(tx, 'org-c-none')).toHaveLength(0);
+        expect(await enabledGeneric(tx, 'org-d-off')).toHaveLength(0);
+        const old = await tx`SELECT is_enabled FROM organization_benchmarks WHERE organization_id = 'org-a-male' AND benchmark_id = ${OLD('m', 1)}`;
+        expect(old[0].is_enabled).toBe(true);
+      });
+    });
+
+    it('display_order is unique per org and continues after its existing max', async () => {
+      await rollbackable(async (tx) => {
+        await seedOrgs(tx, [['org-e', [[OLD('m', 1), true, 7], [OLD('f', 1), true, 42]]]]);
+        await tx.unsafe(UP);
+        const rows = await tx`SELECT display_order FROM organization_benchmarks WHERE organization_id = 'org-e' ORDER BY display_order`;
+        const orders = rows.map((r) => Number(r.display_order));
+        expect(new Set(orders).size).toBe(orders.length);
+        const gen = (await enabledGeneric(tx, 'org-e')).map((r) => Number(r.display_order));
+        expect(Math.min(...gen)).toBe(43);
+        expect(gen).toHaveLength(40);
+      });
+    });
+
+    it('is idempotent and never re-enables a generic row an admin disabled', async () => {
+      await rollbackable(async (tx) => {
+        await seedOrgs(tx, [['org-f', [[OLD('m', 1), true, 1]]]]);
+        await tx.unsafe(UP);
+        await tx`UPDATE organization_benchmarks SET is_enabled = false WHERE organization_id = 'org-f' AND benchmark_id = 'b5105g-m-d1-elite'`;
+        await tx.unsafe(UP);
+        const rows = await enabledGeneric(tx, 'org-f');
+        expect(rows).toHaveLength(20);
+        expect(rows.filter((r) => !r.is_enabled).map((r) => r.benchmark_id)).toEqual(['b5105g-m-d1-elite']);
+      });
+    });
+
+    it('down removes the generic enablement rows and leaves the old rows enabled', async () => {
+      await rollbackable(async (tx) => {
+        await seedOrgs(tx, [['org-g', [[OLD('m', 1), true, 1]]]]);
+        await tx.unsafe(UP);
+        await tx.unsafe(DOWN);
+        expect(await enabledGeneric(tx, 'org-g')).toHaveLength(0);
+        const old = await tx`SELECT is_enabled FROM organization_benchmarks WHERE organization_id = 'org-g' AND benchmark_id = ${OLD('m', 1)}`;
+        expect(old).toHaveLength(1);
+        expect(old[0].is_enabled).toBe(true);
+      });
+    });
+  });
+
+  it('gives the 40 generic rows distinct display_order (Female offset by 100)', async () => {
+    await rollbackable(async (tx) => {
+      await tx.unsafe(UP);
+      const orders = (await generic(tx)).map((r) => Number(r.display_order));
+      expect(new Set(orders).size).toBe(40);
+      expect(Math.min(...orders)).toBe(11);
+      expect(Math.max(...orders)).toBe(154);
     });
   });
 });

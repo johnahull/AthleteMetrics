@@ -18,6 +18,13 @@
 --
 -- Bands step by 0.001 (measurements are decimal(10,3)), as in 0170: evaluateTierBenchmark gives a shared boundary to the
 -- better tier. Names are "<Group> - <Tier>" so deriveTierGroupName gives one label per group (see 0167).
+-- Block B2 AUTO-ENABLES the generic rows per organization: analytics reach site benchmarks only through enabled
+-- organization_benchmarks rows, so every org with an enabled b5105-<m|f>-... row gets the 20 generic rows of the SAME sex
+-- enabled (never a sex it did not have), display_order continuing after its current max (as storage.enableBenchmarkForOrg).
+-- Existing rows, including ones an admin disabled, are left alone (ON CONFLICT DO NOTHING); the old b5105-% enablement
+-- rows are kept. Benchmark SETS need nothing: organization_benchmark_sets only holds opt-OUT rows, template sets are
+-- visible to every org by default.
+-- Female generic display_order is offset by +100 so the 40 rows have distinct orders.
 -- Idempotent. No upsert touches is_active, so a re-run does not re-enable a row or set an admin switched off.
 -- Reversible: 0172_generic_5105_age_group_tiers_down.sql.
 -- Transaction: supplied by scripts/apply-manual-migrations.js, so no BEGIN/COMMIT here.
@@ -55,7 +62,7 @@ SELECT
   md5('5105g-' || b.sex || '-' || b.lcode)::uuid,
   t.tier_order, t.tname, t.color,
   b.sex, NULL, b.level, b.age_min, b.age_max,
-  true, true, b.lord * 10 + t.tier_order
+  true, true, b.lord * 10 + t.tier_order + CASE WHEN b.sex = 'Female' THEN 100 ELSE 0 END
 FROM (VALUES
   ('Male',   1, 'd1',   'NCAA D1 (19+)',            'D1', 19, NULL::int, 4.10, 4.25, 4.40),
   ('Male',   2, 'var',  'HS Varsity (16-18)',       'HS', 16, 18,        4.30, 4.50, 4.75),
@@ -117,6 +124,34 @@ FROM site_benchmarks bm
 WHERE bm.metric_code = 'AGILITY_5105' AND bm.id LIKE 'b5105g-%'
 ON CONFLICT (set_id, benchmark_id, benchmark_type) DO UPDATE SET
   display_order = EXCLUDED.display_order;
+
+-- ============================================================================
+-- Block B2 — enable the generic rows for organizations that had the sport-specific rows enabled (same sex only)
+-- ============================================================================
+INSERT INTO organization_benchmarks (organization_id, benchmark_id, benchmark_type, is_enabled, display_order)
+SELECT
+  c.organization_id, c.benchmark_id, 'site', true,
+  COALESCE(mx.max_order, 0) + row_number() OVER (PARTITION BY c.organization_id ORDER BY c.display_order, c.benchmark_id)
+FROM (
+  SELECT s.organization_id, g.id AS benchmark_id, g.display_order
+  FROM (
+    SELECT DISTINCT organization_id, split_part(benchmark_id, '-', 2) AS sx
+    FROM organization_benchmarks
+    WHERE benchmark_type = 'site' AND is_enabled AND benchmark_id LIKE 'b5105-%'
+  ) s
+  JOIN site_benchmarks g
+    ON g.metric_code = 'AGILITY_5105' AND g.id LIKE 'b5105g-%' AND split_part(g.id, '-', 2) = s.sx
+  WHERE NOT EXISTS (
+    SELECT 1 FROM organization_benchmarks e
+     WHERE e.organization_id = s.organization_id AND e.benchmark_id = g.id AND e.benchmark_type = 'site'
+  )
+) c
+LEFT JOIN (
+  SELECT organization_id, max(display_order) AS max_order FROM organization_benchmarks GROUP BY organization_id
+) mx ON mx.organization_id = c.organization_id
+-- Explicit target: only the (org, benchmark, type) duplicate is skipped. A display_order collision with a concurrent
+-- app enable must fail loudly (and roll the migration back), not silently drop one of the 20 rows.
+ON CONFLICT (organization_id, benchmark_id, benchmark_type) DO NOTHING;
 
 -- ============================================================================
 -- Block C — retire the sport-specific rows from 0170 (deactivate, keep the data)

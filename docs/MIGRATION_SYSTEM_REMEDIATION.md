@@ -30,7 +30,7 @@
 
 > 0171 (HS boys 40-yard dash tier group and site benchmark set, from OVR Performance data: 5 `lte` tiers, 4.60 to 5.50 s) is provisional: renumber at merge if another branch lands 0171 first (file, `_down`, test `migration-0171-hs-boys-40yd-tiers`, tracking row, this line).
 
-> 0172 (generic sport-less 5-10-5 age-group tiers per sex: 40 `b5105g-*` rows and 2 template sets; deactivates, does not delete, the 200 `b5105-*` rows and 10 `set-5105-*` sets seeded by 0170) is provisional: renumber at merge if another branch lands 0172 first (file, `_down`, test `migration-0172-generic-5105-age-group-tiers`, tracking row, this line).
+> 0172 (generic sport-less 5-10-5 age-group tiers per sex: 40 `b5105g-*` rows and 2 template sets; deactivates, does not delete, the 200 `b5105-*` rows and 10 `set-5105-*` sets seeded by 0170; auto-enables the same-sex `b5105g-*` rows in `organization_benchmarks` for every org that had a `b5105-<m|f>-*` row enabled, appending display_order after the org's max; the down migration deletes those enablement rows) is provisional: renumber at merge if another branch lands 0172 first (file, `_down`, test `migration-0172-generic-5105-age-group-tiers`, tracking row, this line).
 
 ## Current State (2025-10-30)
 

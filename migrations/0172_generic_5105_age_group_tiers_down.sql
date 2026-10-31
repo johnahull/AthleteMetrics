@@ -5,6 +5,7 @@
 -- 'set-5105-%' set, including any an admin had switched off before 0172 (0172 does not record the earlier state).
 -- Forgets this migration's manual_migrations row so the next forward deploy re-applies it. Measurements are not touched.
 
+-- Removes the enablement rows (including those auto-enabled by the up migration); the orgs' own b5105-% rows are untouched.
 DELETE FROM organization_benchmarks
  WHERE benchmark_type = 'site' AND benchmark_id LIKE 'b5105g-%';
 
