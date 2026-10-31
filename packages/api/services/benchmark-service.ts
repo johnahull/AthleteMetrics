@@ -506,7 +506,7 @@ export class BenchmarkService extends BaseService {
         isSiteAdmin
       );
 
-      if (!hasOrgAccess && !isSiteAdmin) {
+      if (!hasOrgAccess) {
         throw new Error("Unauthorized: Only organization administrators, coaches or site administrators can create custom benchmarks");
       }
 
@@ -598,7 +598,7 @@ export class BenchmarkService extends BaseService {
         isSiteAdmin
       );
 
-      if (!hasOrgAccess && !isSiteAdmin) {
+      if (!hasOrgAccess) {
         throw new Error("Unauthorized: Only the owning organization administrators, coaches or site administrators can update custom benchmarks");
       }
 
@@ -663,7 +663,7 @@ export class BenchmarkService extends BaseService {
         isSiteAdmin
       );
 
-      if (!hasOrgAccess && !isSiteAdmin) {
+      if (!hasOrgAccess) {
         throw new Error("Unauthorized: Only the owning organization administrators, coaches or site administrators can delete custom benchmarks");
       }
 
@@ -762,7 +762,7 @@ export class BenchmarkService extends BaseService {
         isSiteAdmin
       );
 
-      if (!hasOrgAccess && !isSiteAdmin) {
+      if (!hasOrgAccess) {
         throw new Error("Unauthorized: Only organization administrators, coaches or site administrators can enable benchmarks");
       }
 
@@ -831,7 +831,7 @@ export class BenchmarkService extends BaseService {
         isSiteAdmin
       );
 
-      if (!hasOrgAccess && !isSiteAdmin) {
+      if (!hasOrgAccess) {
         throw new Error("Unauthorized: Only organization administrators, coaches or site administrators can disable benchmarks");
       }
 
