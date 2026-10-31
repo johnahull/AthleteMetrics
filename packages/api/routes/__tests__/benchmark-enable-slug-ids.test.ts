@@ -12,8 +12,6 @@ const SLUG = 'd1-soc-dash40-d1-avg';
 
 // Rows returned by the fake db, keyed by call order within a test
 const state = vi.hoisted(() => ({
-  siteBenchmark: undefined as any,
-  customBenchmark: undefined as any,
   selectQueue: [] as any[][],
 }));
 
@@ -88,6 +86,11 @@ describe('POST /api/organizations/:organizationId/benchmarks/:id/enable (slug id
     const res = await enable('no-such-slug', { benchmarkType: 'site' });
     expect(res.status).toBe(404);
     expect(res.body.message).toContain('Site benchmark not found');
+  });
+
+  it('returns 400 for a malformed site benchmark id', async () => {
+    const res = await enable('a%20b!', { benchmarkType: 'site' });
+    expect(res.status).toBe(400);
   });
 
   it('returns 400 for a non-UUID custom benchmark id', async () => {

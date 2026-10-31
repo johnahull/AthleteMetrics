@@ -500,8 +500,15 @@ describe('Benchmark Storage', () => {
           const orgBenchmarks = await storage.getOrganizationBenchmarks(testOrgId);
           expect(orgBenchmarks.find(b => b.benchmarkId === slug && b.benchmarkType === 'site')).toBeDefined();
         } finally {
+          await db.delete(organizationBenchmarks).where(eq(organizationBenchmarks.benchmarkId, slug));
           await db.delete(siteBenchmarks).where(eq(siteBenchmarks.id, slug));
         }
+      });
+
+      it('should reject a malformed site benchmark id', async () => {
+        await expect(
+          storage.enableBenchmarkForOrg(testOrgId, 'a b!', 'site')
+        ).rejects.toThrow('Invalid benchmark ID format');
       });
 
       it('should throw not found for a non-existent site benchmark slug', async () => {

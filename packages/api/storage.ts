@@ -44,6 +44,7 @@ import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { hashToken } from "./lib/token-hash";
 import { BCRYPT_SALT_ROUNDS } from "@shared/constants";
+import { isValidBenchmarkId } from "@shared/benchmark-utils";
 import { getPgErrorCode, PG_UNIQUE_VIOLATION } from "./lib/pg-error";
 
 /**
@@ -5598,12 +5599,13 @@ export class DatabaseStorage implements IStorage {
 
   async enableBenchmarkForOrg(organizationId: string, benchmarkId: string, benchmarkType: 'site' | 'custom'): Promise<OrganizationBenchmark> {
     // 1. Validate ID formats. Organization and custom benchmark ids are DB-generated UUIDs; site benchmark ids
-    // are varchar and seeded rows use text slugs (e.g. d1-soc-dash40-d1-avg), so existence is the only check there.
+    // are varchar and seeded rows use text slugs (e.g. d1-soc-dash40-d1-avg), so they only need a bounded slug format.
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(organizationId)) {
       throw new Error(`Invalid organization ID format: ${organizationId}`);
     }
-    if (benchmarkType === 'custom' && !uuidRegex.test(benchmarkId)) {
+    const validBenchmarkId = benchmarkType === 'custom' ? uuidRegex.test(benchmarkId) : isValidBenchmarkId(benchmarkId);
+    if (!validBenchmarkId) {
       throw new Error(`Invalid benchmark ID format: ${benchmarkId}`);
     }
 

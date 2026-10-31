@@ -72,3 +72,13 @@ export function calculateTierDistributions(athleteRankings: Array<{
       .sort((a, b) => a.tierOrder - b.tierOrder),
   }));
 }
+
+// Benchmark ids are UUIDs (custom) or text slugs (seeded site benchmarks, e.g. d1-soc-dash40-d1-avg)
+const BENCHMARK_ID_PATTERN = /^[A-Za-z0-9_-]{1,100}$/;
+
+/**
+ * True if the value is a well-formed benchmark id (UUID or seeded slug). Format only; existence is checked elsewhere.
+ */
+export function isValidBenchmarkId(value: string): boolean {
+  return BENCHMARK_ID_PATTERN.test(value);
+}

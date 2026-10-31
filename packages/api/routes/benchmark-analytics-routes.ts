@@ -15,6 +15,7 @@ import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from '../constants/rate-limits';
 import { db } from '../db';
 import { teams, organizationBenchmarks, customBenchmarks } from '@shared/schema';
 import { eq, and, inArray, or } from 'drizzle-orm';
+import { isValidBenchmarkId } from '@shared/benchmark-utils';
 
 // Valid gender values from database schema
 const VALID_GENDERS = ['Male', 'Female', 'Not Specified'] as const;
@@ -23,9 +24,6 @@ type ValidGender = typeof VALID_GENDERS[number];
 // Metric code format used across the API (see measurement and metric routes). The format is the only check:
 // a well-formed code with no benchmarks yields an empty result, so chart overlays degrade instead of erroring.
 const METRIC_CODE_PATTERN = /^[A-Z0-9_]{1,64}$/;
-
-// Benchmark ids are UUIDs (custom) or text slugs (seeded site benchmarks, e.g. d1-soc-dash40-d1-avg)
-const BENCHMARK_ID_PATTERN = /^[A-Za-z0-9_-]{1,100}$/;
 
 // Array size limits for DoS protection
 const MAX_FILTER_IDS = 50; // Prevents DoS via excessive IN clause values in database queries
@@ -91,15 +89,6 @@ async function validateTeamOwnership(teamIds: string[], organizationId: string):
  */
 function isValidUUID(value: string): boolean {
   return UUID_REGEX.test(value);
-}
-
-/**
- * Validates the format of a benchmark id (UUID or seeded slug); existence is checked downstream
- * @param value String to validate
- * @returns True if the id is well-formed
- */
-function isValidBenchmarkId(value: string): boolean {
-  return BENCHMARK_ID_PATTERN.test(value);
 }
 
 /**
