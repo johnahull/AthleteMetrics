@@ -37,6 +37,8 @@ import { useOrganization } from "@/lib/organization-api";
 import type { SiteMetric, OrganizationMetric, CustomOrgMetric } from "@shared/schema";
 import { Separator } from "@/components/ui/separator";
 import { Ruler } from "lucide-react";
+import { CategoryGroupToggle } from "@/components/ui/category-group";
+import { groupByCategory } from "@/lib/category-grouping";
 
 // Maximum number of sport badges to display before showing "+N more"
 const MAX_VISIBLE_SPORT_BADGES = 3;
@@ -54,6 +56,7 @@ export default function OrganizationMetricsCard({
   const [editingMetric, setEditingMetric] = useState<string | null>(null);
   const [customLabel, setCustomLabel] = useState("");
   const [selectedSport, setSelectedSport] = useState<string>("ALL");
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   // Staged switch flips (metric code -> wanted state), sent together by Save
   const [pending, setPending] = useState<Record<string, boolean>>({});
 
@@ -107,6 +110,16 @@ export default function OrganizationMetricsCard({
       return sportAssociations.includes(selectedSport);
     });
   }, [siteMetrics, selectedSport]);
+
+  const categoryGroups = useMemo(() => groupByCategory(filteredMetrics, (m) => m.category), [filteredMetrics]);
+
+  const toggleGroup = useCallback((id: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }, []);
 
   // Get org metric data for a given site metric code
   const getOrgMetric = (code: string): OrganizationMetric | undefined => {
@@ -397,94 +410,110 @@ export default function OrganizationMetricsCard({
               <TableHead className="text-right">Enabled</TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody>
-            {filteredMetrics.map((metric) => {
-              const savedEnabled = isMetricEnabled(metric.code);
-              const isEnabled = effectivePending[metric.code] ?? savedEnabled;
-              const customLabelValue = getCustomLabel(metric.code);
-              const isEditing = editingMetric === metric.code;
-
-              return (
-                <TableRow
-                  key={metric.code}
-                  data-testid={`org-metric-row-${metric.code}`}
-                >
-                  <TableCell className="font-medium">
-                    {metric.label}
-                    {metric.isSystemDefault && (
-                      <Badge variant="outline" className="ml-2 text-xs">
-                        Default
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {metric.category ? (
-                      <Badge variant="outline">{metric.category}</Badge>
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {metric.unit || <span className="text-muted-foreground">-</span>}
-                  </TableCell>
-                  <TableCell data-testid="org-metric-sports-cell">
-                    {renderSportBadges(metric.sportAssociations)}
-                  </TableCell>
-                  <TableCell>
-                    {isEditing ? (
-                      <div className="flex gap-2 items-center">
-                        <Input
-                          value={customLabel}
-                          onChange={(e) => setCustomLabel(e.target.value)}
-                          placeholder={metric.label}
-                          className="max-w-xs"
-                          data-testid={`custom-label-input-${metric.code}`}
-                        />
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleSaveCustomLabel(metric.code)}
-                          disabled={updateMutation.isPending}
-                          data-testid={`save-custom-label-${metric.code}`}
-                        >
-                          <Save className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={handleCancelEdit}
-                          data-testid={`cancel-custom-label-${metric.code}`}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => handleStartEdit(metric.code)}
-                        className="text-left hover:underline"
-                        disabled={!canEdit || !savedEnabled}
-                        data-testid={`edit-custom-label-${metric.code}`}
-                      >
-                        {customLabelValue || (
-                          <span className="text-muted-foreground italic">
-                            {canEdit && savedEnabled ? "Set custom label..." : "-"}
-                          </span>
-                        )}
-                      </button>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Switch
-                      checked={isEnabled}
-                      onCheckedChange={(checked) => handleToggle(metric, checked)}
-                      disabled={!canEdit || bulkMutation.isPending}
-                      data-testid={`toggle-metric-${metric.code}`}
+          {categoryGroups.map((group) => {
+            const open = !collapsedGroups.has(group.id);
+            return (
+              <TableBody key={group.id} data-testid={`category-group-${group.id}`}>
+                <TableRow className="bg-muted/40 hover:bg-muted/40">
+                  <TableCell colSpan={6} className="p-0">
+                    <CategoryGroupToggle
+                      title={group.label}
+                      count={group.items.length}
+                      unit="metric"
+                      open={open}
+                      onToggle={() => toggleGroup(group.id)}
                     />
                   </TableCell>
                 </TableRow>
-              );
-            })}
-          </TableBody>
+                {open && group.items.map((metric) => {
+                  const savedEnabled = isMetricEnabled(metric.code);
+                  const isEnabled = effectivePending[metric.code] ?? savedEnabled;
+                  const customLabelValue = getCustomLabel(metric.code);
+                  const isEditing = editingMetric === metric.code;
+
+                  return (
+                    <TableRow
+                      key={metric.code}
+                      data-testid={`org-metric-row-${metric.code}`}
+                    >
+                      <TableCell className="font-medium">
+                        {metric.label}
+                        {metric.isSystemDefault && (
+                          <Badge variant="outline" className="ml-2 text-xs">
+                            Default
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {metric.category ? (
+                          <Badge variant="outline">{metric.category}</Badge>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {metric.unit || <span className="text-muted-foreground">-</span>}
+                      </TableCell>
+                      <TableCell data-testid="org-metric-sports-cell">
+                        {renderSportBadges(metric.sportAssociations)}
+                      </TableCell>
+                      <TableCell>
+                        {isEditing ? (
+                          <div className="flex gap-2 items-center">
+                            <Input
+                              value={customLabel}
+                              onChange={(e) => setCustomLabel(e.target.value)}
+                              placeholder={metric.label}
+                              className="max-w-xs"
+                              data-testid={`custom-label-input-${metric.code}`}
+                            />
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleSaveCustomLabel(metric.code)}
+                              disabled={updateMutation.isPending}
+                              data-testid={`save-custom-label-${metric.code}`}
+                            >
+                              <Save className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={handleCancelEdit}
+                              data-testid={`cancel-custom-label-${metric.code}`}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleStartEdit(metric.code)}
+                            className="text-left hover:underline"
+                            disabled={!canEdit || !savedEnabled}
+                            data-testid={`edit-custom-label-${metric.code}`}
+                          >
+                            {customLabelValue || (
+                              <span className="text-muted-foreground italic">
+                                {canEdit && savedEnabled ? "Set custom label..." : "-"}
+                              </span>
+                            )}
+                          </button>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Switch
+                          checked={isEnabled}
+                          onCheckedChange={(checked) => handleToggle(metric, checked)}
+                          disabled={!canEdit || bulkMutation.isPending}
+                          data-testid={`toggle-metric-${metric.code}`}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            );
+          })}
         </Table>
 
         {/* Custom Metrics Section - only if org has customMetricsEnabled */}

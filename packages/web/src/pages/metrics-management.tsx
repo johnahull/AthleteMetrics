@@ -44,6 +44,8 @@ import {
 import { useSports } from "@/lib/sports-api";
 import type { SiteMetric } from "@shared/schema";
 import MetricFormDialog from "@/components/metric-form-dialog";
+import { CategoryGroupToggle } from "@/components/ui/category-group";
+import { groupByCategory } from "@/lib/category-grouping";
 
 // The admin check wraps the page so non-admins never mount its site-admin-only queries
 export default function MetricsManagementPage() {
@@ -75,25 +77,25 @@ function MetricsManagement() {
   const [formDialogOpen, setFormDialogOpen] = useState(false);
   const [metricToEdit, setMetricToEdit] = useState<SiteMetric | null>(null);
   const [derivedFilter, setDerivedFilter] = useState<'all' | 'derived' | 'source'>('all');
+  const [selectedSports, setSelectedSports] = useState<string[]>([]);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const { data: allMetrics, isLoading } = useSiteMetrics(true); // Include inactive
   const { data: sports } = useSports();
   const deleteMetricMutation = useDeleteSiteMetric();
   const toggleStatusMutation = useToggleSiteMetricStatus();
 
-  // Apply derived filter
-  const metrics = useMemo(() => {
-    if (!allMetrics) return [];
+  const toggleGroup = useCallback((id: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }, []);
 
-    switch (derivedFilter) {
-      case 'derived':
-        return allMetrics.filter(m => m.isDerived);
-      case 'source':
-        return allMetrics.filter(m => !m.isDerived);
-      default:
-        return allMetrics;
-    }
-  }, [allMetrics, derivedFilter]);
+  const toggleSport = useCallback((code: string) => {
+    setSelectedSports((prev) => (prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]));
+  }, []);
 
   // Memoized sport name lookup map for performance
   const sportNameMap = useMemo(() => {
@@ -104,6 +106,36 @@ function MetricsManagement() {
   const getSportName = useCallback((code: string): string => {
     return sportNameMap.get(code) || code;
   }, [sportNameMap]);
+
+  // One chip per sport that appears on any metric, labelled by sport name
+  const sportOptions = useMemo(() => {
+    const codes = new Set<string>();
+    for (const m of allMetrics ?? []) m.sportAssociations?.forEach((c) => codes.add(c));
+    return [...codes]
+      .map((code) => ({ code, name: getSportName(code) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [allMetrics, getSportName]);
+
+  // A selected sport whose chip is gone (its metrics were re-tagged or deleted) must not keep filtering
+  const activeSports = useMemo(
+    () => selectedSports.filter((code) => sportOptions.some((o) => o.code === code)),
+    [selectedSports, sportOptions],
+  );
+
+  // Apply derived and sport filters. A metric with no sport associations applies to all sports,
+  // so it stays visible under any sport chip.
+  const metrics = useMemo(() => {
+    if (!allMetrics) return [];
+
+    return allMetrics.filter((m) => {
+      if (derivedFilter === 'derived' && !m.isDerived) return false;
+      if (derivedFilter === 'source' && m.isDerived) return false;
+      if (activeSports.length === 0 || !m.sportAssociations?.length) return true;
+      return m.sportAssociations.some((code) => activeSports.includes(code));
+    });
+  }, [allMetrics, derivedFilter, activeSports]);
+
+  const categoryGroups = useMemo(() => groupByCategory(metrics, (m) => m.category), [metrics]);
 
   // Helper to render sport badges
   const renderSportBadges = useCallback((sportCodes: string[] | null | undefined) => {
@@ -210,6 +242,24 @@ function MetricsManagement() {
         </div>
       </div>
 
+      {sportOptions.length > 0 && (
+        <div role="group" aria-label="Filter by sport" className="flex flex-wrap items-center gap-2 mb-4">
+          <span className="text-sm text-muted-foreground">Sport:</span>
+          {sportOptions.map(({ code, name }) => (
+            <Button
+              key={code}
+              type="button"
+              size="sm"
+              variant={activeSports.includes(code) ? "default" : "outline"}
+              aria-pressed={activeSports.includes(code)}
+              onClick={() => toggleSport(code)}
+            >
+              {name}
+            </Button>
+          ))}
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Site Metrics</CardTitle>
@@ -219,7 +269,9 @@ function MetricsManagement() {
             <div className="text-center py-8">Loading metrics...</div>
           ) : !metrics || metrics.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              No metrics found. Create your first metric to get started.
+              {allMetrics && allMetrics.length > 0
+                ? "No metrics match the current filters."
+                : "No metrics found. Create your first metric to get started."}
             </div>
           ) : (
             <Table data-testid="metrics-table">
@@ -235,111 +287,127 @@ function MetricsManagement() {
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>
-                {metrics.map((metric) => (
-                  <TableRow key={metric.code} data-testid={`metric-row-${metric.code}`}>
-                    <TableCell className="font-mono text-sm">{metric.code}</TableCell>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        {metric.label}
-                        {metric.isDerived && (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Badge variant="outline" className="text-xs cursor-help">
-                                  fx
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent className="max-w-xs">
-                                <p className="text-sm font-mono">{metric.formula}</p>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  Depends on: {metric.dependentMetrics?.join(', ')}
-                                </p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {metric.category && (
-                        <Badge variant="outline">{metric.category}</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>{metric.unit || '-'}</TableCell>
-                    <TableCell>
-                      <Badge variant={
-                        metric.metricType === 'lower_is_better' ? "default" :
-                        metric.metricType === 'higher_is_better' ? "secondary" :
-                        "outline"
-                      }>
-                        {metric.metricType === 'lower_is_better' ? 'Lower is better' :
-                         metric.metricType === 'higher_is_better' ? 'Higher is better' :
-                         'Tracking'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell data-testid="sports-cell">
-                      {renderSportBadges(metric.sportAssociations)}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        {metric.isSystemDefault && (
-                          <Badge variant="outline">System Default</Badge>
-                        )}
-                        {metric.isActive ? (
-                          <Badge>Active</Badge>
-                        ) : (
-                          <Badge variant="secondary">Inactive</Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          data-testid={`edit-metric-${metric.code}`}
-                          onClick={() => {
-                            setMetricToEdit(metric);
-                            setFormDialogOpen(true);
-                          }}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          data-testid={`toggle-metric-${metric.code}`}
-                          onClick={() => {
-                            setSelectedMetric(metric);
-                            setToggleDialogOpen(true);
-                          }}
-                        >
-                          {metric.isActive ? (
-                            <PowerOff className="h-4 w-4" />
-                          ) : (
-                            <Power className="h-4 w-4" />
+              {categoryGroups.map((group) => {
+                const open = !collapsedGroups.has(group.id);
+                return (
+                  <TableBody key={group.id} data-testid={`category-group-${group.id}`}>
+                    <TableRow className="bg-muted/40 hover:bg-muted/40">
+                      <TableCell colSpan={8} className="p-0">
+                        <CategoryGroupToggle
+                          title={group.label}
+                          count={group.items.length}
+                          unit="metric"
+                          open={open}
+                          onToggle={() => toggleGroup(group.id)}
+                        />
+                      </TableCell>
+                    </TableRow>
+                    {open && group.items.map((metric) => (
+                      <TableRow key={metric.code} data-testid={`metric-row-${metric.code}`}>
+                        <TableCell className="font-mono text-sm">{metric.code}</TableCell>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            {metric.label}
+                            {metric.isDerived && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Badge variant="outline" className="text-xs cursor-help">
+                                      fx
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-xs">
+                                    <p className="text-sm font-mono">{metric.formula}</p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      Depends on: {metric.dependentMetrics?.join(', ')}
+                                    </p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {metric.category && (
+                            <Badge variant="outline">{metric.category}</Badge>
                           )}
-                        </Button>
+                        </TableCell>
+                        <TableCell>{metric.unit || '-'}</TableCell>
+                        <TableCell>
+                          <Badge variant={
+                            metric.metricType === 'lower_is_better' ? "default" :
+                            metric.metricType === 'higher_is_better' ? "secondary" :
+                            "outline"
+                          }>
+                            {metric.metricType === 'lower_is_better' ? 'Lower is better' :
+                             metric.metricType === 'higher_is_better' ? 'Higher is better' :
+                             'Tracking'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell data-testid="sports-cell">
+                          {renderSportBadges(metric.sportAssociations)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            {metric.isSystemDefault && (
+                              <Badge variant="outline">System Default</Badge>
+                            )}
+                            {metric.isActive ? (
+                              <Badge>Active</Badge>
+                            ) : (
+                              <Badge variant="secondary">Inactive</Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              data-testid={`edit-metric-${metric.code}`}
+                              onClick={() => {
+                                setMetricToEdit(metric);
+                                setFormDialogOpen(true);
+                              }}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
 
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          data-testid={`delete-metric-${metric.code}`}
-                          disabled={metric.isSystemDefault}
-                          onClick={() => {
-                            setSelectedMetric(metric);
-                            setDeleteDialogOpen(true);
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              data-testid={`toggle-metric-${metric.code}`}
+                              onClick={() => {
+                                setSelectedMetric(metric);
+                                setToggleDialogOpen(true);
+                              }}
+                            >
+                              {metric.isActive ? (
+                                <PowerOff className="h-4 w-4" />
+                              ) : (
+                                <Power className="h-4 w-4" />
+                              )}
+                            </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              data-testid={`delete-metric-${metric.code}`}
+                              disabled={metric.isSystemDefault}
+                              onClick={() => {
+                                setSelectedMetric(metric);
+                                setDeleteDialogOpen(true);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                );
+              })}
             </Table>
           )}
         </CardContent>
