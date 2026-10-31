@@ -50,11 +50,11 @@ Apply to all athletes regardless of sport.
 | MS Male Pro Agility | Club | Male | ≤5.00s | ≤5.30s | ≤5.60s |
 | MS Female Pro Agility | Club | Female | ≤5.30s | ≤5.60s | ≤5.90s |
 
-#### 5-10-5 tier groups by sport (migration 0170)
+#### 5-10-5 age-group tier groups, per sex (migrations 0170, 0172)
 
 *Electronic (FAT) timing; hand-timed runs read about 0.15-0.25 s faster. Compiled norms with no primary citation: provisional (confidence LOW-MEDIUM) until replaced with BTA data at N>=30.*
 
-One 4-tier group (Elite / Competitive / Average / Developing) per sex x sport x level. Male sports: Football, Soccer, Basketball, Baseball, Lacrosse. Female sports: Soccer, Basketball, Volleyball, Softball, Lacrosse. Cutoffs below are Elite < c1 ≤ Competitive ≤ c2 < Average ≤ c3 < Developing (the seed steps by 0.001, so Elite ends at c1 − 0.001).
+One 4-tier group (Elite / Competitive / Average / Developing) per sex x level (10 groups, 40 rows, `sport = NULL`, ids `b5105g-*`), seeded by 0172. Migration 0170 had seeded these as 200 sport-specific rows (`b5105-*`, 10 sets `set-5105-*`); the cutoffs never varied by sport, and 0172 deactivated those rows and sets (kept, not deleted, so saved reports and sets still resolve). Cutoffs below are Elite < c1 ≤ Competitive ≤ c2 < Average ≤ c3 < Developing (the seed steps by 0.001, so Elite ends at c1 − 0.001).
 
 | Level (age) | Male c1 / c2 / c3 | Female c1 / c2 / c3 |
 |-------------|-------------------|---------------------|
@@ -65,8 +65,8 @@ One 4-tier group (Elite / Competitive / Average / Developing) per sex x sport x 
 | MS 6th-7th grade (11-12) | 4.90 / 5.20 / 5.55 | 5.30 / 5.60 / 6.00 |
 
 - Age 14 belongs to JV only (the source table lists 13-14 for 8th grade), so age bands never overlap. D1 starts at 19 so it does not match high-school athletes.
-- Rows are sport-specific (never NULL). The single "Average" HS/MS rows for Female Soccer and Volleyball from 0129 stay active: eval reports ignore AGILITY_5105 tier groups (`AVERAGE_ONLY_CODES` in `tier-match.ts`) and keep comparing to the single Average, so other sports have no 5-10-5 eval comparison. The tiers show in the benchmark views and in reports where a set is picked. The ten `5-10-5 Tiers - <Sex> <Sport>` template sets are visible to every organization by default.
-- Group names are `5-10-5 <Sex> <Sport> <Level> - <Tier>` with no range after the dash, so the group label derives cleanly.
+- Rows are sport-less (`sport = NULL`). The single "Average" HS/MS rows for Female Soccer and Volleyball from 0129 stay active: eval reports ignore AGILITY_5105 tier groups (`AVERAGE_ONLY_CODES` in `tier-match.ts`) and, because `matchTierGroup` requires a sport match, never match a NULL-sport row, so they keep comparing to the single Average and other sports have no 5-10-5 eval comparison. The tiers show in the benchmark views and in reports where a set is picked. The two template sets `5-10-5 Tiers - Male` / `5-10-5 Tiers - Female` (20 items each) are visible to every organization by default (`organization_benchmark_sets` only stores opt-out rows). Analytics read site benchmarks through enabled `organization_benchmarks` rows, so 0172 auto-enables the 20 generic rows of the same sex for every organization that had a `b5105-<m|f>-*` row enabled (never a sex it lacked; an admin's disabled rows are never re-enabled; the old enablement rows are kept).
+- Group names are `5-10-5 <Sex> <Level> - <Tier>` with no range after the dash, so the group label derives cleanly.
 
 ---
 
