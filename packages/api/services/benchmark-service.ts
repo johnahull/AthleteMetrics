@@ -488,7 +488,7 @@ export class BenchmarkService extends BaseService {
   // ========================================================================
 
   /**
-   * Create a new custom benchmark (org admin OR site admin)
+   * Create a new custom benchmark (org admin, coach OR site admin)
    * Cycle 7: Requires org admin or site admin permission
    * Cycle 8: Validates allow_custom_benchmarks feature flag
    * Cycle 9: Creates audit log
@@ -499,7 +499,7 @@ export class BenchmarkService extends BaseService {
     context?: RequestContext
   ): Promise<CustomBenchmark> {
     try {
-      // Cycle 7: Verify org admin OR site admin permission
+      // Cycle 7: Verify org admin, coach OR site admin permission
       const isSiteAdmin = await this.isSiteAdmin(requestingUserId);
       const hasOrgAccess = await this.canManageOrgBenchmarks(
         requestingUserId,
@@ -580,7 +580,7 @@ export class BenchmarkService extends BaseService {
   }
 
   /**
-   * Update a custom benchmark (owner org admin OR site admin)
+   * Update a custom benchmark (owner org admin, coach OR site admin)
    * Cycle 10: Only allows owner org or site admin
    */
   async updateCustomBenchmark(
@@ -591,7 +591,7 @@ export class BenchmarkService extends BaseService {
     context?: RequestContext
   ): Promise<CustomBenchmark> {
     try {
-      // Cycle 10: Verify owner org admin OR site admin permission
+      // Cycle 10: Verify owner org admin, coach OR site admin permission
       const isSiteAdmin = await this.isSiteAdmin(requestingUserId);
       const hasOrgAccess = await this.canManageOrgBenchmarks(
         requestingUserId,
@@ -646,7 +646,7 @@ export class BenchmarkService extends BaseService {
   }
 
   /**
-   * Delete a custom benchmark (owner org admin OR site admin)
+   * Delete a custom benchmark (owner org admin, coach OR site admin)
    * Cycle 11: Only allows owner org or site admin
    */
   async deleteCustomBenchmark(
@@ -656,7 +656,7 @@ export class BenchmarkService extends BaseService {
     context?: RequestContext
   ): Promise<void> {
     try {
-      // Cycle 11: Verify owner org admin OR site admin permission
+      // Cycle 11: Verify owner org admin, coach OR site admin permission
       const isSiteAdmin = await this.isSiteAdmin(requestingUserId);
       const hasOrgAccess = await this.canManageOrgBenchmarks(
         requestingUserId,
@@ -743,7 +743,7 @@ export class BenchmarkService extends BaseService {
   // ========================================================================
 
   /**
-   * Enable a benchmark for an organization (org admin OR site admin)
+   * Enable a benchmark for an organization (org admin, coach OR site admin)
    * Cycle 12: Requires org admin or site admin permission
    * Cycle 13: Validates benchmarks_enabled feature flag
    */
@@ -755,7 +755,7 @@ export class BenchmarkService extends BaseService {
     context?: RequestContext
   ): Promise<OrganizationBenchmark> {
     try {
-      // Cycle 12: Verify org admin OR site admin permission
+      // Cycle 12: Verify org admin, coach OR site admin permission
       const isSiteAdmin = await this.isSiteAdmin(requestingUserId);
       const hasOrgAccess = await this.canManageOrgBenchmarks(
         requestingUserId,
@@ -813,7 +813,7 @@ export class BenchmarkService extends BaseService {
   }
 
   /**
-   * Disable a benchmark for an organization (org admin OR site admin)
+   * Disable a benchmark for an organization (org admin, coach OR site admin)
    * Cycle 14: Requires org admin or site admin permission
    */
   async disableBenchmarkForOrg(
@@ -824,7 +824,7 @@ export class BenchmarkService extends BaseService {
     context?: RequestContext
   ): Promise<OrganizationBenchmark> {
     try {
-      // Cycle 14: Verify org admin OR site admin permission
+      // Cycle 14: Verify org admin, coach OR site admin permission
       const isSiteAdmin = await this.isSiteAdmin(requestingUserId);
       const hasOrgAccess = await this.canManageOrgBenchmarks(
         requestingUserId,
