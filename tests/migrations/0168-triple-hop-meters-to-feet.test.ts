@@ -30,6 +30,11 @@ describe('Migration 0168: static analysis', () => {
     expect(UP).toMatch(/target_value[\s\S]*baseline_value[\s\S]*current_value/);
     expect(UP).toMatch(/r\.report_type <> 'eval'/);
   });
+  it('treats feet spelled ft/feet/foot (any case) as already converted and normalizes it to ft', () => {
+    expect(UP).toMatch(/lower\(v_unit\) IN \('ft', 'feet', 'foot'\)/);
+    expect(UP).toMatch(/UPDATE site_metrics SET unit = 'ft' WHERE code = v_code/);
+    expect(UP).toMatch(/UPDATE measurements SET units = 'ft' WHERE metric = v_code/);
+  });
   it('fails loudly on an unexpected unit instead of skipping', () => {
     expect(UP).toMatch(/RAISE EXCEPTION[^;]*expected m\/meter\/meters or ft/);
   });
@@ -154,6 +159,18 @@ describe.skipIf(!isDisposableTestDb)('Migration 0168: against a disposable DB (r
       const l = (await tx`SELECT value FROM measurements WHERE metric = 'HOP_SL_TRIPLE_L'`)[0];
       expect(num(r.value)).toBe(5);
       expect(num(l.value)).toBeCloseTo(5 * F, 3);
+    });
+  });
+
+  it('treats a unit already spelled Feet as feet: no conversion, unit normalized to ft', async () => {
+    await rollbackable(async (tx) => {
+      await seed(tx, 'Feet');
+      await tx.unsafe(UP);
+      const s = await snapshot(tx);
+      expect(s.metric.unit).toBe('ft');
+      expect(num(s.metric.validation_min)).toBe(1);
+      expect(s.m.units).toBe('ft');
+      expect(num(s.m.value)).toBe(5);
     });
   });
 
