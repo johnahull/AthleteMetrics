@@ -424,6 +424,42 @@ describe.skip('Benchmark Endpoints Integration Tests', () => {
         expect(enableResponse.body.isEnabled).toBe(true);
       });
 
+      it('should enable a seeded site benchmark with a text slug id', async () => {
+        const cookie = getSessionCookie('siteAdmin');
+        // Seeded rows use slug ids; POST /api/benchmarks only yields UUIDs, so insert directly
+        const slug = `test-slug-${Date.now()}`;
+        await db.insert(siteBenchmarks).values({
+          id: slug,
+          metricCode: 'FLY10_TIME',
+          name: 'Slug Enable Test Benchmark',
+          benchmarkValue: '2.100',
+          comparisonOperator: 'lte',
+        });
+
+        try {
+          const enableResponse = await request(app)
+            .post(`/api/organizations/${testOrgId}/benchmarks/${slug}/enable`).set('Cookie', cookie)
+            .send({ benchmarkType: 'site' });
+
+          expect(enableResponse.status).toBe(201);
+          expect(enableResponse.body.benchmarkId).toBe(slug);
+          expect(enableResponse.body.isEnabled).toBe(true);
+        } finally {
+          await db.delete(organizationBenchmarks).where(eq(organizationBenchmarks.benchmarkId, slug));
+          await db.delete(siteBenchmarks).where(eq(siteBenchmarks.id, slug));
+        }
+      });
+
+      it('should return 404 for an unknown site benchmark slug', async () => {
+        const cookie = getSessionCookie('siteAdmin');
+
+        const response = await request(app)
+          .post(`/api/organizations/${testOrgId}/benchmarks/no-such-slug-${Date.now()}/enable`).set('Cookie', cookie)
+          .send({ benchmarkType: 'site' });
+
+        expect(response.status).toBe(404);
+      });
+
       it('should return 400 for missing benchmarkType', async () => {
         const cookie = getSessionCookie('siteAdmin');
 
