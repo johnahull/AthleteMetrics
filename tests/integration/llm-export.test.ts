@@ -98,6 +98,7 @@ beforeEach(async () => {
   [testCoach] = await db
     .insert(users)
     .values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `llmexport_coach_${suffix}`,
       emails: [`llmexport_coach_${suffix}@test.com`],
       password: hashedPassword,
@@ -110,6 +111,7 @@ beforeEach(async () => {
   [otherCoach] = await db
     .insert(users)
     .values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `llmexport_other_${suffix}`,
       emails: [`llmexport_other_${suffix}@test.com`],
       password: hashedPassword,
@@ -122,6 +124,7 @@ beforeEach(async () => {
   [testOrgAdmin] = await db
     .insert(users)
     .values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `llmexport_orgadmin_${suffix}`,
       emails: [`llmexport_orgadmin_${suffix}@test.com`],
       password: hashedPassword,
@@ -134,6 +137,7 @@ beforeEach(async () => {
   [testAthlete] = await db
     .insert(users)
     .values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `llmexport_athlete_${suffix}`,
       emails: [`llmexport_athlete_${suffix}@test.com`],
       password: hashedPassword,
@@ -146,6 +150,7 @@ beforeEach(async () => {
   [siteAdmin] = await db
     .insert(users)
     .values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `llmexport_siteadmin_${suffix}`,
       emails: [`llmexport_siteadmin_${suffix}@test.com`],
       password: hashedPassword,

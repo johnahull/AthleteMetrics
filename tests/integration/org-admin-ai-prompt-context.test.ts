@@ -58,6 +58,7 @@ beforeAll(async () => {
   // Create org admin user
   const hashedPassword = await bcrypt.hash('OrgAdmin123!', BCRYPT_SALT_ROUNDS);
   [orgAdminUser] = await db.insert(users).values({
+    birthDate: '1990-01-01', // the profile gate requires a birthdate
     username: `orgadmin-aiprompt-${Date.now()}`,
     emails: [`orgadmin-aiprompt-${Date.now()}@test.com`],
     password: hashedPassword,
@@ -93,6 +94,7 @@ beforeAll(async () => {
   // Create athlete user in the same org
   const athletePassword = await bcrypt.hash('Athlete123!', BCRYPT_SALT_ROUNDS);
   [athleteUser] = await db.insert(users).values({
+    birthDate: '1990-01-01', // the profile gate requires a birthdate
     username: `athlete-aiprompt-${Date.now()}`,
     emails: [`athlete-aiprompt-${Date.now()}@test.com`],
     password: athletePassword,
@@ -124,6 +126,7 @@ beforeAll(async () => {
 
   const otherHashedPassword = await bcrypt.hash('OtherAdmin123!', BCRYPT_SALT_ROUNDS);
   [otherOrgAdminUser] = await db.insert(users).values({
+    birthDate: '1990-01-01', // the profile gate requires a birthdate
     username: `other-orgadmin-aiprompt-${ts}`,
     emails: [`other-orgadmin-aiprompt-${ts}@test.com`],
     password: otherHashedPassword,
@@ -355,6 +358,7 @@ describe('PATCH /api/organizations/:id/org-settings – aiPromptContext authoriz
 
     const hashedPassword = await bcrypt.hash('LockedAdmin123!', BCRYPT_SALT_ROUNDS);
     const [lockedAdmin] = await db.insert(users).values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `locked-orgadmin-${Date.now()}`,
       emails: [`locked-orgadmin-${Date.now()}@test.com`],
       password: hashedPassword,
@@ -416,6 +420,7 @@ describe('PATCH /api/organizations/:id/org-settings – aiPromptContext authoriz
 
     const hashedPassword = await bcrypt.hash('LockedAdmin2123!', BCRYPT_SALT_ROUNDS);
     const [lockedAdmin] = await db.insert(users).values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `locked-orgadmin2-${Date.now()}`,
       emails: [`locked-orgadmin2-${Date.now()}@test.com`],
       password: hashedPassword,

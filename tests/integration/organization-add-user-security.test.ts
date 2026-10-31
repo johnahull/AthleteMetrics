@@ -66,6 +66,7 @@ describe('POST /api/organizations/:id/users — authorization', () => {
     });
 
     orgAdmin = await storage.createUser({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `wave1admin${ts}`,
       password: PASSWORD,
       emails: [`wave1admin${ts}@test.com`],
@@ -75,6 +76,7 @@ describe('POST /api/organizations/:id/users — authorization', () => {
     await storage.addUserToOrganization(orgAdmin.id, org.id, 'org_admin');
 
     athlete = await storage.createUser({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `wave1athlete${ts}`,
       password: PASSWORD,
       emails: [`wave1athlete${ts}@test.com`],

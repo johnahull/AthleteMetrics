@@ -65,6 +65,7 @@ describe('clip (mediaUrl) read visibility', () => {
       [u[who]] = await db
         .insert(users)
         .values({
+          birthDate: '1990-01-01', // the profile gate requires a birthdate
           username: `clipvis-${who}-${suffix}`,
           emails: [`clipvis-${who}-${suffix}@test.com`],
           password: hashed,

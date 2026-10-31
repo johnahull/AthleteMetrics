@@ -35,6 +35,8 @@ const ORG_NAME = 'Screenshot Seed Org';
 const client = postgres(DATABASE_URL);
 const db = drizzle(client);
 
+const BIRTH_DATE = '1995-01-01';
+
 async function upsertOrg(): Promise<string> {
   const existing = await db.select({ id: organizations.id })
     .from(organizations)
@@ -61,7 +63,7 @@ async function upsertUser(): Promise<string> {
 
   if (existing.length > 0) {
     await db.update(users)
-      .set({ password: hashed, isActive: true })
+      .set({ password: hashed, isActive: true, birthDate: BIRTH_DATE })
       .where(eq(users.id, existing[0].id));
     return existing[0].id;
   }
@@ -74,6 +76,7 @@ async function upsertUser(): Promise<string> {
     lastName: 'Athlete',
     fullName: 'Screenshot Athlete',
     birthYear: 2008,
+    birthDate: BIRTH_DATE, // the profile gate blocks athletes without a birthdate
     sports: ['Soccer'],
     positions: ['F'],
     gender: 'Male',

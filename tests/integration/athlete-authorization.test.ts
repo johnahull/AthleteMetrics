@@ -44,6 +44,7 @@ describe('Athlete management authorization', () => {
   async function makeUser(role: 'org_admin' | 'coach' | 'athlete'): Promise<User> {
     const uniq = `${Date.now()}${seq++}`;
     const user = await storage.createUser({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `wave1${role.replace('_', '')}${uniq}`,
       password: PASSWORD,
       emails: [`wave1${role.replace('_', '')}${uniq}@test.com`],

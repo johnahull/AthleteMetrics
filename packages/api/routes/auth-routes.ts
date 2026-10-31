@@ -2,6 +2,7 @@
  * Authentication routes
  */
 
+import { resolveGateDecision } from '../middleware/profile-completion-gate';
 import type { Express, Request } from "express";
 import { AuthService } from "../services/auth-service";
 import { coppaService } from "../services/coppa-service";
@@ -135,10 +136,11 @@ export function registerAuthRoutes(app: Express, options: AuthRoutesOptions = {}
 
       // Persist the regenerated session before responding so the Set-Cookie is
       // written before the body (avoids a race with the client's next request).
+      const { missing } = await resolveGateDecision(req);
       await saveSession(req);
 
       res.json({
-        user: req.session.user,
+        user: { ...req.session.user, missingProfileFields: missing },
         organizations,
         redirectUrl
       });
@@ -151,10 +153,25 @@ export function registerAuthRoutes(app: Express, options: AuthRoutesOptions = {}
   /**
    * Get current user
    */
-  app.get("/api/auth/me", (req, res) => {
+  app.get("/api/auth/me", async (req, res) => {
     if (req.session.user) {
+      // The gate skips this path, so resolve the profile state here.
+      let decision: Awaited<ReturnType<typeof resolveGateDecision>>;
+      try {
+        decision = req.session.isImpersonating ? { missing: [] } : await resolveGateDecision(req);
+      } catch (error) {
+        console.error("Error resolving profile status:", error);
+        return res.status(500).json({ message: "Failed to load user" });
+      }
+      if (decision.coppaBlock) {
+        return res.status(403).json({
+          code: decision.coppaBlock.code,
+          coppaStatus: decision.coppaBlock.coppaStatus,
+          message: "Account access requires parental consent.",
+        });
+      }
       res.json({
-        user: req.session.user,
+        user: { ...req.session.user, missingProfileFields: decision.missing },
         impersonating: req.session.isImpersonating ? {
           userId: req.session.user!.id,
           username: req.session.user!.username,

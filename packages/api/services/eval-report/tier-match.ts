@@ -53,6 +53,12 @@ const NO_TIER_CODES: ReadonlySet<string> = new Set([
   "AGILITY_505_M_LSI",
 ]);
 
+/**
+ * Metrics whose tier groups (benchmark views, migration 0170) are ignored here: the family report compares them
+ * only to the single age-group "Average" row and never shows tier names.
+ */
+const AVERAGE_ONLY_CODES: ReadonlySet<string> = new Set(["AGILITY_5105"]);
+
 const YMD = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 /** Strict YYYY-MM-DD parse with a real calendar check (rejects 2012-02-30, 2013-02-29, 2012-04-31). */
@@ -150,7 +156,9 @@ export function matchTierGroup(args: {
       age <= c.ageMax,
   );
 
-  const grouped = eligible.filter((c) => c.tierGroupId != null && c.tierOrder != null);
+  const grouped = AVERAGE_ONLY_CODES.has(metricCode)
+    ? []
+    : eligible.filter((c) => c.tierGroupId != null && c.tierOrder != null);
   if (grouped.length > 0) {
     const comparison = evaluateTierBenchmark(args.value, args.lowerIsBetter, selectTierGroup(grouped));
     return comparison ? { kind: "tiers", comparison } : null;

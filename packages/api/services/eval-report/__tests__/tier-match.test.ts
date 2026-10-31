@@ -143,6 +143,25 @@ describe('matchTierGroup: multi-tier groups', () => {
   it('uses selectTierGroup/evaluateTierBenchmark for rows with a tier group and order', () => {
     expect(tierName(match({ value: 1.95, candidates: tiers() }))).toBe('Good');
   });
+
+  // The family report only ever shows above/below the age-group average, never tier names (migration 0170
+  // seeds 5-10-5 tier groups for the benchmark views; eval must keep using the single Average rows).
+  describe('AGILITY_5105 tier groups are ignored (eval stays on the Average row)', () => {
+    const agi = { metricCode: 'AGILITY_5105', value: 5.0 };
+    const agiTiers = tiers({ metricCode: 'AGILITY_5105' });
+    const agiAverage = avgRow({ metricCode: 'AGILITY_5105', tierName: 'MS Average', benchmarkValue: 5.95 });
+
+    it('uses the Average row even when a matching tier group exists', () => {
+      const m = match({ ...agi, candidates: [...agiTiers, agiAverage] });
+      expect(m).toMatchObject({ kind: 'average', status: 'at_or_better' });
+    });
+    it('is value-only when only a tier group exists', () => {
+      expect(match({ ...agi, candidates: agiTiers })).toBeNull();
+    });
+    it('still uses tier groups for other metrics', () => {
+      expect(tierName(match({ value: 1.95, candidates: tiers() }))).toBe('Good');
+    });
+  });
 });
 
 describe('matchTierGroup: eligibility', () => {

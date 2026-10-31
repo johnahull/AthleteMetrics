@@ -87,7 +87,7 @@ describe('POST /api/events/:eventId/metrics/bulk', () => {
     for (const [who, memberships] of Object.entries(spec) as Array<[Who, Array<[string, string]>]>) {
       [u[who]] = await db
         .insert(users)
-        .values({ username: `${PREFIX}-${who}`, emails: [`${PREFIX}-${who}@test.com`], password: hashed, firstName: 'Bulk', lastName: who, fullName: `Bulk ${who}`, ...(who === 'siteAdmin' ? { isSiteAdmin: true } : {}) } as any)
+        .values({ birthDate: '1990-01-01', username: `${PREFIX}-${who}`, emails: [`${PREFIX}-${who}@test.com`], password: hashed, firstName: 'Bulk', lastName: who, fullName: `Bulk ${who}`, ...(who === 'siteAdmin' ? { isSiteAdmin: true } : {}) } as any)
         .returning();
       for (const [organizationId, role] of memberships) {
         await db.insert(userOrganizations).values({ userId: u[who].id, organizationId, role } as any);
