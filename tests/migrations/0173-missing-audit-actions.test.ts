@@ -1,5 +1,5 @@
 /**
- * Migration 0172: allow audit actions the code already writes but the audit_logs CHECK constraint rejected.
+ * Migration 0173: allow audit actions the code already writes but the audit_logs CHECK constraint rejected.
  *
  * - user_assigned_to_organization: written in the SAME transaction as the membership insert by
  *   POST /api/organizations/:orgId/users/:userId/assign, so the rejected audit row rolled the assignment back (500).
@@ -17,8 +17,8 @@ import postgres from 'postgres';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../..');
 const read = (f: string) => fs.readFileSync(path.resolve(root, 'migrations', f), 'utf-8');
-const UP = read('0172_add_missing_audit_actions.sql');
-const DOWN = read('0172_add_missing_audit_actions_down.sql');
+const UP = read('0173_add_missing_audit_actions.sql');
+const DOWN = read('0173_add_missing_audit_actions_down.sql');
 const PREVIOUS = read('0155_add_eval_template_audit_actions.sql');
 
 const NEW_ACTIONS = [
@@ -54,7 +54,7 @@ const dbUrl = process.env.DATABASE_URL || '';
 const isDisposableTestDb =
   process.env.NODE_ENV === 'test' && (/@(localhost|127\.0\.0\.1)[:/]/.test(dbUrl) || process.env.CI === 'true');
 
-describe('Migration 0172: static analysis', () => {
+describe('Migration 0173: static analysis', () => {
   it('the up list is the 0155 list plus the missing actions', () => {
     const previous = listOf(PREVIOUS, 'audit_logs_action_valid');
     expect(previous.length).toBeGreaterThan(100);
@@ -68,7 +68,7 @@ describe('Migration 0172: static analysis', () => {
   it('the down list is exactly the 0155 list, re-added NOT VALID, and forgets its manual_migrations row', () => {
     expect(listOf(DOWN, 'audit_logs_action_valid')).toEqual(listOf(PREVIOUS, 'audit_logs_action_valid'));
     expect(DOWN.match(/\)\) NOT VALID;/g)).toHaveLength(1);
-    expect(DOWN).toMatch(/DELETE FROM manual_migrations WHERE migration_name = '0172_add_missing_audit_actions'/);
+    expect(DOWN).toMatch(/DELETE FROM manual_migrations WHERE migration_name = '0173_add_missing_audit_actions'/);
   });
   it('runs no BEGIN/COMMIT of its own', () => {
     expect(UP).not.toMatch(/^\s*(BEGIN|COMMIT);/m);
@@ -87,7 +87,7 @@ describe('Migration 0172: static analysis', () => {
   });
 });
 
-describe.skipIf(!isDisposableTestDb)('Migration 0172: against a disposable DB (rolled back)', () => {
+describe.skipIf(!isDisposableTestDb)('Migration 0173: against a disposable DB (rolled back)', () => {
   let sql: ReturnType<typeof postgres>;
   beforeAll(() => {
     sql = postgres(dbUrl, { max: 1, onnotice: () => {} });
@@ -109,7 +109,7 @@ describe.skipIf(!isDisposableTestDb)('Migration 0172: against a disposable DB (r
   };
   const insertAudit = (tx: any, action: string) =>
     tx`INSERT INTO audit_logs (user_id, action, resource_type, resource_id)
-       SELECT id, ${action}, 'user', 'mig0172' FROM users LIMIT 1`;
+       SELECT id, ${action}, 'user', 'mig0173' FROM users LIMIT 1`;
   const rejects = async (tx: any, action: string) => {
     let error: unknown = null;
     await tx.savepoint(async (sp: any) => insertAudit(sp, action)).catch((e: unknown) => (error = e));

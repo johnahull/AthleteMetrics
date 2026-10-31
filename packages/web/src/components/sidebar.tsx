@@ -93,7 +93,8 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
     { name: "Sprint F-V", href: "/sprint-fv", icon: Zap, tourId: "sprint-fv" },
     { name: "Reports", href: "/reports", icon: ClipboardList, tourId: "reports" },
     { name: "Measurements", href: "/publish", icon: FileCheck, tourId: "measurements" },
-    { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target, tourId: "benchmarks" }
+    { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target, tourId: "benchmarks" },
+    { name: "Metrics", href: "/organizations/__ORG_ID__/metrics", icon: Ruler, tourId: "metrics" }
   ],
   athlete: (invitationBadge?: number, reportBadge?: number) => [
     { name: "My Profile", href: "/my-profile", icon: UsersRound, tourId: "my-profile" },
@@ -160,8 +161,8 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
     }
   }
 
-  // Update metrics link with organization ID for org_admin
-  if (role === "org_admin" && userOrganizations?.[0]?.organizationId) {
+  // Update metrics link with organization ID for org_admin (editable) and coach (read-only)
+  if ((role === "org_admin" || role === "coach") && userOrganizations?.[0]?.organizationId) {
     const metricsIndex = navigation.findIndex(item => item.name === "Metrics");
     if (metricsIndex !== -1) {
       navigation[metricsIndex].href = `/organizations/${userOrganizations[0].organizationId}/metrics`;

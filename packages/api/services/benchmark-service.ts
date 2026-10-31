@@ -47,6 +47,26 @@ export interface TierEvaluationResult {
 }
 
 export class BenchmarkService extends BaseService {
+  /**
+   * Whether the user may change org benchmarks (enable/disable/custom create/update/delete) in this organization:
+   * a site admin, or an org_admin or coach of THAT organization (the roles the org benchmarks settings page admits).
+   * Membership alone is not enough; athletes and guests can read but not change them.
+   */
+  private async canManageOrgBenchmarks(
+    userId: string,
+    organizationId: string,
+    userIsSiteAdmin: boolean
+  ): Promise<boolean> {
+    if (userIsSiteAdmin) {
+      // Keeps the site admin override audit log (and its production audit-failure blocking)
+      return this.validateOrganizationAccess(userId, organizationId, true);
+    }
+    // One lookup serves both the membership check and the role
+    const memberships = await this.storage.getUserOrganizations(userId);
+    const role = memberships.find(m => m.organizationId === organizationId)?.role;
+    return role === 'org_admin' || role === 'coach';
+  }
+
   // ========================================================================
   // SITE BENCHMARKS (Site Admin Only)
   // ========================================================================
@@ -467,7 +487,7 @@ export class BenchmarkService extends BaseService {
   // ========================================================================
 
   /**
-   * Create a new custom benchmark (org admin OR site admin)
+   * Create a new custom benchmark (org admin, coach OR site admin)
    * Cycle 7: Requires org admin or site admin permission
    * Cycle 8: Validates allow_custom_benchmarks feature flag
    * Cycle 9: Creates audit log
@@ -478,16 +498,16 @@ export class BenchmarkService extends BaseService {
     context?: RequestContext
   ): Promise<CustomBenchmark> {
     try {
-      // Cycle 7: Verify org admin OR site admin permission
+      // Cycle 7: Verify org admin, coach OR site admin permission
       const isSiteAdmin = await this.isSiteAdmin(requestingUserId);
-      const hasOrgAccess = await this.validateOrganizationAccess(
+      const hasOrgAccess = await this.canManageOrgBenchmarks(
         requestingUserId,
         benchmarkData.organizationId,
         isSiteAdmin
       );
 
-      if (!hasOrgAccess && !isSiteAdmin) {
-        throw new Error("Unauthorized: Only organization administrators or site administrators can create custom benchmarks");
+      if (!hasOrgAccess) {
+        throw new Error("Unauthorized: Only organization administrators, coaches or site administrators can create custom benchmarks");
       }
 
       // Validate input
@@ -559,7 +579,7 @@ export class BenchmarkService extends BaseService {
   }
 
   /**
-   * Update a custom benchmark (owner org admin OR site admin)
+   * Update a custom benchmark (owner org admin, coach OR site admin)
    * Cycle 10: Only allows owner org or site admin
    */
   async updateCustomBenchmark(
@@ -570,16 +590,16 @@ export class BenchmarkService extends BaseService {
     context?: RequestContext
   ): Promise<CustomBenchmark> {
     try {
-      // Cycle 10: Verify owner org admin OR site admin permission
+      // Cycle 10: Verify owner org admin, coach OR site admin permission
       const isSiteAdmin = await this.isSiteAdmin(requestingUserId);
-      const hasOrgAccess = await this.validateOrganizationAccess(
+      const hasOrgAccess = await this.canManageOrgBenchmarks(
         requestingUserId,
         organizationId,
         isSiteAdmin
       );
 
-      if (!hasOrgAccess && !isSiteAdmin) {
-        throw new Error("Unauthorized: Only the owning organization administrators or site administrators can update custom benchmarks");
+      if (!hasOrgAccess) {
+        throw new Error("Unauthorized: Only the owning organization administrators, coaches or site administrators can update custom benchmarks");
       }
 
       // Validate input if provided fields
@@ -625,7 +645,7 @@ export class BenchmarkService extends BaseService {
   }
 
   /**
-   * Delete a custom benchmark (owner org admin OR site admin)
+   * Delete a custom benchmark (owner org admin, coach OR site admin)
    * Cycle 11: Only allows owner org or site admin
    */
   async deleteCustomBenchmark(
@@ -635,16 +655,16 @@ export class BenchmarkService extends BaseService {
     context?: RequestContext
   ): Promise<void> {
     try {
-      // Cycle 11: Verify owner org admin OR site admin permission
+      // Cycle 11: Verify owner org admin, coach OR site admin permission
       const isSiteAdmin = await this.isSiteAdmin(requestingUserId);
-      const hasOrgAccess = await this.validateOrganizationAccess(
+      const hasOrgAccess = await this.canManageOrgBenchmarks(
         requestingUserId,
         organizationId,
         isSiteAdmin
       );
 
-      if (!hasOrgAccess && !isSiteAdmin) {
-        throw new Error("Unauthorized: Only the owning organization administrators or site administrators can delete custom benchmarks");
+      if (!hasOrgAccess) {
+        throw new Error("Unauthorized: Only the owning organization administrators, coaches or site administrators can delete custom benchmarks");
       }
 
       // Get benchmark for audit log BEFORE deletion
@@ -722,7 +742,7 @@ export class BenchmarkService extends BaseService {
   // ========================================================================
 
   /**
-   * Enable a benchmark for an organization (org admin OR site admin)
+   * Enable a benchmark for an organization (org admin, coach OR site admin)
    * Cycle 12: Requires org admin or site admin permission
    * Cycle 13: Validates benchmarks_enabled feature flag
    */
@@ -734,16 +754,16 @@ export class BenchmarkService extends BaseService {
     context?: RequestContext
   ): Promise<OrganizationBenchmark> {
     try {
-      // Cycle 12: Verify org admin OR site admin permission
+      // Cycle 12: Verify org admin, coach OR site admin permission
       const isSiteAdmin = await this.isSiteAdmin(requestingUserId);
-      const hasOrgAccess = await this.validateOrganizationAccess(
+      const hasOrgAccess = await this.canManageOrgBenchmarks(
         requestingUserId,
         organizationId,
         isSiteAdmin
       );
 
-      if (!hasOrgAccess && !isSiteAdmin) {
-        throw new Error("Unauthorized: Only organization administrators or site administrators can enable benchmarks");
+      if (!hasOrgAccess) {
+        throw new Error("Unauthorized: Only organization administrators, coaches or site administrators can enable benchmarks");
       }
 
       // Cycle 13: Check if benchmarks are enabled for this organization
@@ -792,7 +812,7 @@ export class BenchmarkService extends BaseService {
   }
 
   /**
-   * Disable a benchmark for an organization (org admin OR site admin)
+   * Disable a benchmark for an organization (org admin, coach OR site admin)
    * Cycle 14: Requires org admin or site admin permission
    */
   async disableBenchmarkForOrg(
@@ -803,16 +823,16 @@ export class BenchmarkService extends BaseService {
     context?: RequestContext
   ): Promise<OrganizationBenchmark> {
     try {
-      // Cycle 14: Verify org admin OR site admin permission
+      // Cycle 14: Verify org admin, coach OR site admin permission
       const isSiteAdmin = await this.isSiteAdmin(requestingUserId);
-      const hasOrgAccess = await this.validateOrganizationAccess(
+      const hasOrgAccess = await this.canManageOrgBenchmarks(
         requestingUserId,
         organizationId,
         isSiteAdmin
       );
 
-      if (!hasOrgAccess && !isSiteAdmin) {
-        throw new Error("Unauthorized: Only organization administrators or site administrators can disable benchmarks");
+      if (!hasOrgAccess) {
+        throw new Error("Unauthorized: Only organization administrators, coaches or site administrators can disable benchmarks");
       }
 
       // Disable benchmark

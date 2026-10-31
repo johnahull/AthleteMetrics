@@ -1,17 +1,8 @@
--- Migration 0172: allow audit actions the code already writes but the audit_logs CHECK constraint rejected
+-- Down migration 0173: restore the audit_logs action list of migration 0155 (without the 0173 actions)
 --
--- user_assigned_to_organization: POST /api/organizations/:orgId/users/:userId/assign writes it in the SAME
---   transaction as the membership insert (storage.assignUnaffiliatedUser). The rejected audit row failed the
---   statement, rolled the membership back and returned 500.
--- measurements_bulk_delete, org_metrics_bulk_updated, profile_completed: written best effort (try/catch), so
---   without this migration their audit rows were silently lost (only a console error was logged).
---
--- The constraint is re-defined as the list of migration 0155 plus these values (a strict superset, so every
--- existing row still conforms). Their resource_types (user, measurement, organization) are already allowed.
--- Not included: waiver_submission_received, which also needs resource_type 'waiver_submission' and a non-null
--- user_id; see tests/migrations/0172-missing-audit-actions.test.ts.
---
--- IDEMPOTENT: safe to run multiple times.
+-- Re-added NOT VALID so existing rows written while 0173 was in place (user_assigned_to_organization,
+-- measurements_bulk_delete, org_metrics_bulk_updated, profile_completed) are kept and do not block the rollback;
+-- new inserts of those actions are rejected again.
 
 ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS audit_logs_action_valid;
 
@@ -179,19 +170,12 @@ ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_action_valid CHECK (action IN (
 
     -- Eval battery template actions (AM-FEAT-019)
     'eval_template_updated',
-    'eval_template_deleted',
-
-    -- Written by code but never added to a constraint migration (migration 0172)
-    'user_assigned_to_organization',   -- routes/organization-routes.ts (site admin assigns a user with no org)
-    'measurements_bulk_delete',        -- routes/measurement-routes.ts
-    'org_metrics_bulk_updated',        -- services/metric-service.ts
-    'profile_completed'                -- routes/profile-routes.ts
-));
-
-COMMENT ON CONSTRAINT audit_logs_action_valid ON audit_logs IS
-  'Valid audit log actions — list of 0155 plus user_assigned_to_organization, measurements_bulk_delete, org_metrics_bulk_updated, profile_completed (migration 0172).';
+    'eval_template_deleted'
+)) NOT VALID;
 
 DO $$
 BEGIN
-  RAISE NOTICE 'Migration 0172: added user_assigned_to_organization, measurements_bulk_delete, org_metrics_bulk_updated, profile_completed to the audit_logs_action_valid CHECK constraint';
+  IF to_regclass('manual_migrations') IS NOT NULL THEN
+    DELETE FROM manual_migrations WHERE migration_name = '0173_add_missing_audit_actions';
+  END IF;
 END $$;
