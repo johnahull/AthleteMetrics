@@ -22,6 +22,8 @@ interface CustomOrgMetricListProps {
   organizationId: string;
   /** When true, hides the page header and info banner (for embedding in parent page) */
   embedded?: boolean;
+  /** Overrides the session-role check, which reflects only the user's first organization. */
+  canEdit?: boolean;
 }
 
 const METRIC_CATEGORIES = [
@@ -38,7 +40,7 @@ const METRIC_CATEGORIES = [
   { value: "custom", label: "Custom" },
 ];
 
-export function CustomOrgMetricList({ organizationId, embedded = false }: CustomOrgMetricListProps) {
+export function CustomOrgMetricList({ organizationId, embedded = false, canEdit }: CustomOrgMetricListProps) {
   const { user } = useAuth();
   const [showForm, setShowForm] = useState(false);
   const [editingMetric, setEditingMetric] = useState<CustomOrgMetric | null>(null);
@@ -79,8 +81,8 @@ export function CustomOrgMetricList({ organizationId, embedded = false }: Custom
     setShowForm(true);
   };
 
-  // Check if user can create/edit metrics (org admin or site admin)
-  const canEditMetrics = user?.isSiteAdmin || user?.role === 'org_admin';
+  // Create/edit rights: the canEdit prop when given, else the session role (org admin or site admin)
+  const canEditMetrics = canEdit ?? (user?.isSiteAdmin || user?.role === 'org_admin');
 
   if (error) {
     return (
