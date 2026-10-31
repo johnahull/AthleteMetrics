@@ -59,7 +59,7 @@ const inviteSchema = z.object({
   email: z.string().email("Invalid email address"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  role: z.enum(["athlete", "coach", "org_admin", "site_admin"]),
+  role: z.enum(["athlete", "coach", "org_admin"]),
   organizationId: z.string().min(1, "Organization is required"),
 });
 
@@ -131,6 +131,7 @@ export default function UserManagement() {
 
   const { data: siteAdmins = [] } = useQuery<SiteAdmin[]>({
     queryKey: ["/api/site-admins"],
+    enabled: isSiteAdmin, // endpoint is site-admin only
   });
 
 
@@ -549,7 +550,7 @@ export default function UserManagement() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Users</SelectItem>
-            <SelectItem value="site_admin">Site Admins</SelectItem>
+            {isSiteAdmin && <SelectItem value="site_admin">Site Admins</SelectItem>}
             <SelectItem value="org_admin">Org Admins</SelectItem>
             <SelectItem value="coach">Coaches</SelectItem>
             <SelectItem value="athlete">Athletes</SelectItem>
@@ -682,10 +683,6 @@ export default function UserManagement() {
                                   <SelectItem value="athlete">Athlete</SelectItem>
                                   <SelectItem value="coach">Coach</SelectItem>
                                   <SelectItem value="org_admin">Org Admin</SelectItem>
-                                  {/* Site Admin only available for users not tied to organizations */}
-                                  {!isOrgUser && (
-                                    <SelectItem value="site_admin">Site Admin</SelectItem>
-                                  )}
                                 </SelectContent>
                               </Select>
                               <FormMessage />
@@ -748,7 +745,7 @@ export default function UserManagement() {
           <CardContent>
             <div className="space-y-6">
               {/* Site Administrators Section */}
-              {(roleFilter === "all" || roleFilter === "site_admin") && (
+              {isSiteAdmin && (roleFilter === "all" || roleFilter === "site_admin") && (
               <div className="space-y-3 border-b pb-6">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
@@ -1023,6 +1020,14 @@ export default function UserManagement() {
                               </p>
                             </div>
                             <div className="ml-4">
+                              {!isSiteAdmin ? (
+                                <span
+                                  className="text-sm text-gray-700 capitalize"
+                                  data-testid={`user-role-label-${userOrg.user.id}`}
+                                >
+                                  {userOrg.role.replace('_', ' ')}
+                                </span>
+                              ) : (
                               <select
                                 value={userOrg.role}
                                 onChange={(e) => {
@@ -1050,6 +1055,7 @@ export default function UserManagement() {
                                 <option value="org_admin">Org Admin</option>
                                 {/* Site Admin not available for organization users */}
                               </select>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1087,6 +1093,9 @@ export default function UserManagement() {
                               <LinkIcon className="h-4 w-4 text-green-600" />
                             </Button>
                           )}
+                          {/* Status toggle and delete use site-admin-only endpoints */}
+                          {isSiteAdmin && (
+                          <>
                           <Button
                             variant="outline"
                             size="sm"
@@ -1115,6 +1124,8 @@ export default function UserManagement() {
                           >
                             <Trash2 className="h-4 w-4 text-red-600" />
                           </Button>
+                          </>
+                          )}
                         </div>
                       </div>
                     ))}

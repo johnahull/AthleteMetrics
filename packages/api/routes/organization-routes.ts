@@ -889,13 +889,23 @@ export function registerOrganizationRoutes(app: Express) {
 
         res.json(organizationsWithUsers);
       } else {
-        // For non-admin users, return their organizations with user lists
-        const orgIds = userOrganizations.map(org => org.id);
+        // Non-site-admins get the roster only for organizations where they are
+        // an org admin; coaches and athletes get none.
+        const adminChecks = await Promise.all(
+          userOrganizations.map(async (org) =>
+            (await storage.getUserRoles(currentUser.id, org.id)).includes("org_admin"),
+          ),
+        );
+        const adminOrganizations = userOrganizations.filter((_, i) => adminChecks[i]);
+        if (adminOrganizations.length === 0) {
+          return res.status(403).json({ message: "Organization admin access required" });
+        }
+        const orgIds = adminOrganizations.map(org => org.id);
 
         // Fetch all profiles in batch (optimized to avoid N+1 queries)
         const profilesMap = await organizationService.getOrganizationProfilesBatch(orgIds, currentUser.id);
 
-        const organizationsWithUsers = userOrganizations.map(org => {
+        const organizationsWithUsers = adminOrganizations.map(org => {
           const profile = profilesMap.get(org.id);
           return {
             ...org,
