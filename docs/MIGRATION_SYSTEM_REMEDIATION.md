@@ -26,6 +26,7 @@
 > 0167 (renames the 16 EUR / RSI tier benchmarks seeded by 0137 to `<Group> - <Tier>` so the group label is EUR, RSI Left, RSI Right or RSI Asymmetry; 0137 must not be replayed after it) is provisional: renumber at merge if another branch lands 0167 first (file, `_down`, test `migration-0167-rename-eur-rsi-tier-groups`, tracking row, this line).
 > 0168 (HOP_SL_TRIPLE_L / HOP_SL_TRIPLE_R from meters to feet, converting measurements, benchmarks, goals, report configs; clears peer_percentile_cache) is provisional: renumber at merge if another branch lands 0168 first (file, `_down`, test `0168-triple-hop-meters-to-feet`, tracking row, this line). Back up first; run the derived-metric recalculation afterwards.
 > 0169 (HOP_SL_TRIPLE_LSI derived metric, Triple Hop Asymmetry Screening set, soccer triple hop distance tiers in feet; needs 0168 first) is provisional: renumber at merge if another branch lands 0169 first (file, `_down`, test `0169-triple-hop-lsi-and-benchmarks`, tracking row, this line).
+> 0171 (HS boys 40-yard dash tier group and site benchmark set, from OVR Performance data: 5 `lte` tiers, 4.60 to 5.50 s) is provisional: renumber at merge if another branch lands 0171 first (file, `_down`, test `migration-0171-hs-boys-40yd-tiers`, tracking row, this line).
 
 ## Current State (2025-10-30)
 
