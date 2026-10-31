@@ -162,7 +162,7 @@ describe.skipIf(!isDisposableTestDb)('Migration 0168: against a disposable DB (r
     });
   });
 
-  it.each(['Feet', 'foot'])('treats a unit already spelled %s as feet: no conversion, unit normalized to ft', async (spelling) => {
+  it.each(['ft', 'Feet', 'foot'])('treats a unit already spelled %s as feet: no conversion, unit normalized to ft', async (spelling) => {
     await rollbackable(async (tx) => {
       await seed(tx, spelling);
       await tx`UPDATE measurements SET units = 'm' WHERE metric = 'HOP_SL_TRIPLE_L'`;
