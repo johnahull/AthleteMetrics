@@ -546,7 +546,7 @@ export function registerProfileRoutes(app: Express) {
           const athleteEmail = updates.emails?.[0] ?? user.emails?.find((e) => !isPlaceholderEmail(e));
           parentEmail = body.parentEmail;
           if (under13 && !parentEmail) return fail(400, "Parent or guardian email is required for athletes under 13.", "parentEmail");
-          if (parentEmail && (parentEmail === athleteEmail || (user.emails ?? []).some((e) => e.toLowerCase() === parentEmail))) return fail(400, "Parent email must differ from the athlete's email.", "parentEmail");
+          if (parentEmail && (parentEmail === athleteEmail?.toLowerCase() || (user.emails ?? []).some((e) => e.toLowerCase() === parentEmail))) return fail(400, "Parent email must differ from the athlete's email.", "parentEmail");
           if (needDob) {
             updates.birthDate = dob;
             updates.birthYear = y;
