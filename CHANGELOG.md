@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- High school boys 40-yard dash tiers (Elite ≤4.60 s through Below Average ≤5.50 s) and a matching site benchmark set, seeded from OVR Performance laser-timed, rolling-start data. Migration `0171`
+
 ## [0.31.0] - 2026-10-25
 
 ### Added

@@ -28,6 +28,8 @@
 > 0169 (HOP_SL_TRIPLE_LSI derived metric, Triple Hop Asymmetry Screening set, soccer triple hop distance tiers in feet; needs 0168 first) is provisional: renumber at merge if another branch lands 0169 first (file, `_down`, test `0169-triple-hop-lsi-and-benchmarks`, tracking row, this line).
 > 0170 (seeds 200 AGILITY_5105 tier rows, 10 sets and 200 set items per sex x sport x level) is provisional: renumber at merge if another branch lands 0170 first (file, `_down`, test `migration-0170-seed-5105-tier-benchmarks`, tracking row, this line). 0168 and 0169 are held by the triple-hop branch.
 
+> 0171 (HS boys 40-yard dash tier group and site benchmark set, from OVR Performance data: 5 `lte` tiers, 4.60 to 5.50 s) is provisional: renumber at merge if another branch lands 0171 first (file, `_down`, test `migration-0171-hs-boys-40yd-tiers`, tracking row, this line).
+
 ## Current State (2025-10-30)
 
 ### Overview
