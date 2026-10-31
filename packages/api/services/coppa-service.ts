@@ -14,6 +14,7 @@
 import crypto from 'crypto';
 import { eq, and, isNull, sql, inArray } from 'drizzle-orm';
 import { db } from '../db';
+import { deleteUserSessions } from '../lib/session-helpers';
 import { BaseService } from './base-service';
 import { EmailService } from './email-service';
 import {
@@ -569,6 +570,9 @@ export class CoppaService extends BaseService {
           await tx.update(users)
             .set({ coppaStatus: 'consent_revoked' })
             .where(eq(users.id, athleteUserId));
+
+          // End live sessions so the revocation takes effect immediately.
+          await deleteUserSessions(athleteUserId, tx);
 
           await tx.update(parentAthleteLinks)
             .set({ isActive: false })

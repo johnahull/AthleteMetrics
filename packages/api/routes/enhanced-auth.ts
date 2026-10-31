@@ -9,6 +9,7 @@ import { regenerateSession, saveSession } from '../lib/session-helpers';
 import rateLimit from 'express-rate-limit';
 import { shouldSkipRateLimiting } from '../utils/rate-limit-utils';
 import { z } from 'zod';
+import { resolveGateDecision } from '../middleware/profile-completion-gate';
 
 // Per-IP throttle for the sensitive enhanced-auth endpoints. These previously
 // had no rate limiting, allowing credential stuffing / reset-token probing that
@@ -174,11 +175,12 @@ router.post('/login', enhancedAuthLimiter, async (req: Request, res: Response) =
 
     // Persist the regenerated session before responding (avoids a Set-Cookie
     // vs response-body race with the client's next request).
+    const { missing } = await resolveGateDecision(req);
     await saveSession(req);
 
     return res.status(200).json({
       success: true,
-      user: req.session.user,
+      user: { ...req.session.user, missingProfileFields: missing },
       redirectUrl,
       message: 'Login successful'
     });

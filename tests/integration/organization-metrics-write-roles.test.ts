@@ -62,6 +62,7 @@ beforeAll(async () => {
   const hash = await bcrypt.hash(PASSWORD, 4);
   for (const role of ROLES) {
     const [u] = await db.insert(users).values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `rolewrite-${role}-${stamp}`, emails: [`rolewrite-${role}-${stamp}@test.com`], password: hash,
       firstName: 'Role', lastName: role, fullName: `Role ${role}`, isActive: true,
     } as any).returning();

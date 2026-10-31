@@ -21,6 +21,8 @@ import { OfflineStatusIndicator } from "./offline-status-indicator";
 import { backgroundSync } from "@/lib/background-sync";
 import { Footer } from "./footer";
 
+const COMPLETE_PROFILE_ROUTE = '/complete-profile';
+
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, userOrganizations, isLoading, logout } = useAuth();
   const [location, setLocation] = useLocation();
@@ -84,7 +86,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     // protected route. Without this, a minor who is authenticated but awaiting
     // parental consent can navigate directly to /dashboard or other routes.
     if (!isLoading && user && !isPublicRoute) {
-      if (user.coppaStatus === 'pending_consent' || user.coppaStatus === 'needs_parent_email') {
+      if (user.missingProfileFields?.length) {
+        if (location !== COMPLETE_PROFILE_ROUTE) setLocation(COMPLETE_PROFILE_ROUTE);
+      } else if (user.coppaStatus === 'pending_consent' || user.coppaStatus === 'needs_parent_email') {
         setLocation("/parental-consent");
       } else if (user.coppaStatus === 'consent_revoked') {
         setLocation("/login");
@@ -104,7 +108,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }
 
   // For public routes, render without sidebar
-  if (isPublicRoute || !user) {
+  // The complete-profile page also renders bare, so no gated queries fire from the sidebar
+  if (isPublicRoute || !user || location === COMPLETE_PROFILE_ROUTE) {
     return <div className="min-h-screen bg-background">{children}</div>;
   }
 

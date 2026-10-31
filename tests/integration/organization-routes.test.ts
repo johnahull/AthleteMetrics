@@ -436,6 +436,7 @@ describe('Authorization', () => {
       fullName: 'Regular User',
       isSiteAdmin: false,
       isActive: true,
+      birthDate: '1990-01-01', // adult: otherwise the profile gate, not the route, would answer 403
     }).returning();
 
     // Authenticate regular user

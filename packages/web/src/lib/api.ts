@@ -170,6 +170,14 @@ class ApiClient {
         // Response doesn't contain JSON
       }
 
+      // The profile gate rejects a valid session: send the user to finish their profile (not a CSRF problem)
+      if (response.status === 403 && error.details?.code === 'profile_incomplete') {
+        if (window.location.pathname !== '/complete-profile') {
+          window.location.assign('/complete-profile');
+        }
+        throw error;
+      }
+
       // Clear CSRF token cache on 403 Forbidden (likely invalid token)
       if (response.status === 403) {
         this.clearCsrfTokenCache();

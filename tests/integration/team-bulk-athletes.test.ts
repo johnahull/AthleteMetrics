@@ -66,6 +66,7 @@ async function mkUser(tag: string, extra: Record<string, unknown> = {}) {
   const [u] = await db
     .insert(users)
     .values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `${PREFIX}_${tag}_${counter}_${suffix}`,
       emails: [`${PREFIX}_${tag}_${counter}_${suffix}@test.com`],
       password: await bcrypt.hash(PASSWORD, BCRYPT_SALT_ROUNDS),

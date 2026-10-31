@@ -55,6 +55,7 @@ const OrganizationSettings = React.lazy(() => import("./pages/organization-setti
 const OrgAdminSettings = React.lazy(() => import("./pages/org-admin-settings"));
 const AcceptInvitation = React.lazy(() => import("./pages/accept-invitation"));
 const Register = React.lazy(() => import("./pages/register"));
+const CompleteProfile = React.lazy(() => import("./pages/complete-profile"));
 const EnhancedLogin = React.lazy(() => import("./pages/enhanced-login"));
 const ForgotPassword = React.lazy(() => import("./pages/forgot-password"));
 const ResetPassword = React.lazy(() => import("./pages/reset-password"));
@@ -150,6 +151,11 @@ function Router() {
       <Route path="/register">
         <Suspense fallback={<LoadingSpinner text="Loading..." />}>
           <Register />
+        </Suspense>
+      </Route>
+      <Route path="/complete-profile">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <CompleteProfile />
         </Suspense>
       </Route>
       <Route path="/login" component={Login} />

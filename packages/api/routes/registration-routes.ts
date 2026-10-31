@@ -35,7 +35,7 @@ const registrationLimiter = rateLimit({
 });
 
 // Rate limiting for availability check endpoints (prevent enumeration attacks)
-const availabilityCheckLimiter = rateLimit({
+export const availabilityCheckLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   limit: 100, // 100 checks per 15 minutes (reasonable for legitimate use)
   message: { message: "Too many availability checks, please try again later." },

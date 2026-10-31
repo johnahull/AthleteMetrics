@@ -49,6 +49,7 @@ describe('personal measurements are visible only to their athlete', () => {
         await db
           .insert(users)
           .values({
+            birthDate: '1990-01-01', // the profile gate requires a birthdate
             username: `piso-${tag}-${suffix}`,
             emails: [`piso-${tag}-${suffix}@test.com`],
             password: hashed,

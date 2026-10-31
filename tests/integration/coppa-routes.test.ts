@@ -174,6 +174,7 @@ beforeAll(async () => {
   // ----------------------------------------------------------------
   pendingMinorUsername = `coppaminor-${ts}`;
   const [pendingMinor] = await db.insert(users).values({
+    birthDate: '1990-01-01', // the profile gate requires a birthdate
     username: pendingMinorUsername,
     firstName: 'Pending',
     lastName: 'Minor',
@@ -192,6 +193,7 @@ beforeAll(async () => {
   // 3. consented minor — for AI access and status tests
   // ----------------------------------------------------------------
   const [consentedMinor] = await db.insert(users).values({
+    birthDate: '1990-01-01', // the profile gate requires a birthdate
     username: `coppa-consented-routes-${ts}`,
     firstName: 'Consented',
     lastName: 'Minor',
@@ -210,6 +212,7 @@ beforeAll(async () => {
   // ----------------------------------------------------------------
   orgAdminUsername = `coppa-orgadmin-${ts}`;
   const [orgAdmin] = await db.insert(users).values({
+    birthDate: '1990-01-01', // the profile gate requires a birthdate
     username: orgAdminUsername,
     firstName: 'Org',
     lastName: 'Admin',
@@ -559,6 +562,7 @@ describe('POST /api/coppa/consent/revoke', () => {
     // Create a fresh consented minor for this test to avoid state bleed from previous revoke tests
     const hashedPassword = await bcrypt.hash(CORRECT_PASSWORD, BCRYPT_SALT_ROUNDS);
     const [aiRevokeMinor] = await db.insert(users).values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `coppa-airevoke-${ts}`,
       firstName: 'AIRevoke',
       lastName: 'Minor',
@@ -841,6 +845,7 @@ describe('B1: audit log emitted on COPPA login block', () => {
     const ts = Date.now();
     const hashedPw = await bcrypt.hash(CORRECT_PASSWORD, BCRYPT_SALT_ROUNDS);
     const [revokedUser] = await db.insert(users).values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `coppa-revoked-${ts}`,
       firstName: 'Revoked',
       lastName: 'User',
@@ -1197,6 +1202,7 @@ describe('C4: POST /api/coppa/consent/update-parent-email', () => {
     needsParentEmailUserEmail = `needsemail-athlete-${ts}@testcoppa.local`;
 
     const [needsEmailUser] = await db.insert(users).values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: needsParentEmailUsername,
       firstName: 'NeedsEmail',
       lastName: 'Minor',
@@ -1326,6 +1332,7 @@ describe('C5: POST /api/admin/coppa/re-initiate/:athleteId', () => {
 
     // Create an athlete with consent_revoked status
     const [revokedAthlete] = await db.insert(users).values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `coppa-reinit-revoked-${ts}`,
       firstName: 'Revoked',
       lastName: 'Athlete',
@@ -1341,6 +1348,7 @@ describe('C5: POST /api/admin/coppa/re-initiate/:athleteId', () => {
 
     // Create an athlete with not_applicable status (wrong status for re-initiate)
     const [notApplicableAthlete] = await db.insert(users).values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `coppa-reinit-notappl-${ts}`,
       firstName: 'NotAppl',
       lastName: 'Athlete',
@@ -1356,6 +1364,7 @@ describe('C5: POST /api/admin/coppa/re-initiate/:athleteId', () => {
 
     // Create an org admin who shares an org with revokedAthlete
     const [orgAdminForReinitiate] = await db.insert(users).values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `coppa-reinit-orgadmin-${ts}`,
       firstName: 'Reinit',
       lastName: 'OrgAdmin',
@@ -1398,6 +1407,7 @@ describe('C5: POST /api/admin/coppa/re-initiate/:athleteId', () => {
 
     // Create an org admin in a DIFFERENT org (no shared org with revokedAthlete)
     const [unrelatedOrgAdmin] = await db.insert(users).values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `coppa-reinit-unrelated-${ts}`,
       firstName: 'Unrelated',
       lastName: 'OrgAdmin',

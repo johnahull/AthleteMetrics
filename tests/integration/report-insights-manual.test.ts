@@ -75,6 +75,7 @@ async function createUser(suffix: string, opts: {
 } = {}) {
   const id = uid();
   const [user] = await db.insert(users).values({
+    birthDate: '1990-01-01', // the profile gate requires a birthdate
     username: `${TEST_PREFIX}${suffix}_${id}`,
     firstName: 'Test',
     lastName: 'User',

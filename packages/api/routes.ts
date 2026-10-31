@@ -10,6 +10,7 @@
  * Route handlers are defined in modular files under ./routes/
  */
 
+import { profileCompletionGate } from './middleware/profile-completion-gate';
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer } from "http";
 import session from "express-session";
@@ -63,6 +64,8 @@ declare module 'express-session' {
       emailVerified?: boolean; // Added for enhanced auth
     };
     isImpersonating?: boolean;
+    /** Cache of a positive profile-completion check (see middleware/profile-completion-gate.ts) */
+    profileCheck?: { userId: string; missing: string[] };
     impersonationStartTime?: Date;
   }
 }
@@ -947,6 +950,10 @@ export async function registerRoutes(app: Express) {
 
   // Apply general rate limiting to all API routes
   app.use('/api', apiLimiter);
+
+  // Athletes missing a birthdate or real email (and consent-blocked minors) get 403 until resolved.
+  // After the rate limiter so the DB lookup is throttled; before every route registration below.
+  app.use('/api', profileCompletionGate);
 
   // Register application routes AFTER the security middleware above so that
   // helmet, CSRF protection, input sanitization and rate limiting all run

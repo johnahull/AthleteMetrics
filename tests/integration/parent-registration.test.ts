@@ -74,6 +74,7 @@ function hashToken(raw: string): string {
 async function createTestAthleteUser(prefix: string) {
   const id = uniqueId();
   const [athlete] = await db.insert(users).values({
+    birthDate: '1990-01-01', // the profile gate requires a birthdate
     username: `${prefix}athlete_${id}`,
     firstName: 'Test',
     lastName: 'Athlete',
@@ -287,6 +288,7 @@ describe('POST /api/auth/register/parent', () => {
 
       // Create an athlete directly with fullName (avoids pre-existing helper bug)
       const [revokedAthlete] = await db.insert(users).values({
+        birthDate: '1990-01-01', // the profile gate requires a birthdate
         username: `prt_rev_ath_${id}`,
         firstName: 'Revoked',
         lastName: 'Athlete',
@@ -751,6 +753,7 @@ describe('GET /api/coppa/status/:athleteUserId — user with no consent records 
     // Create a fresh minor with no associated consent records
     const id = uniqueId();
     const [minorNoConsent] = await db.insert(users).values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `${TEST_PREFIX}noconstat_${id}`,
       firstName: 'No',
       lastName: 'Consent',

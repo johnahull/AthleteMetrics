@@ -2,6 +2,7 @@
  * Service for managing cross-organization athlete identity linking
  */
 
+import { isPlaceholderEmail } from '@shared/email-utils';
 import { db } from "../db";
 import {
   globalAthletes, userGlobalAthleteLinks, globalAthleteAuditLog,
@@ -39,10 +40,7 @@ export class GlobalAthleteService extends BaseService {
    */
   async linkAthleteByEmail(userId: string, email: string): Promise<void> {
     // Skip placeholder/temp emails - these are not real emails
-    if (!email ||
-        email.endsWith('@temp.local') ||
-        email.endsWith('@ocr-import.local') ||
-        email.includes('@placeholder.')) {
+    if (isPlaceholderEmail(email)) {
       return;
     }
 
@@ -894,10 +892,7 @@ export class GlobalAthleteService extends BaseService {
 
       // Get primary email
       const email = athlete.emails?.[0];
-      if (!email ||
-          email.endsWith('@temp.local') ||
-          email.endsWith('@ocr-import.local') ||
-          email.includes('@placeholder.')) {
+      if (isPlaceholderEmail(email)) {
         stats.skipped++;
         continue;
       }

@@ -97,6 +97,7 @@ beforeEach(async () => {
   [athlete] = await db
     .insert(users)
     .values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `lift_athlete_${ts}`,
       emails: [`lift_athlete_${ts}@test.com`],
       password: hashed,

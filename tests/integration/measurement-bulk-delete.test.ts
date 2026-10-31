@@ -101,6 +101,7 @@ beforeEach(async () => {
   const hashed = await hashPassword('TestPass123!');
 
   [athleteA] = await db.insert(users).values({
+    birthDate: '1990-01-01', // the profile gate requires a birthdate
     username: `bd_athleteA_${ts}`,
     emails: [`bd_athleteA_${ts}@test.com`],
     password: hashed,
@@ -115,6 +116,7 @@ beforeEach(async () => {
   });
 
   [athleteB] = await db.insert(users).values({
+    birthDate: '1990-01-01', // the profile gate requires a birthdate
     username: `bd_athleteB_${ts}`,
     emails: [`bd_athleteB_${ts}@test.com`],
     password: hashed,
@@ -132,6 +134,7 @@ beforeEach(async () => {
   // via userOrganizations.role. Site admin is the only role expressed
   // directly on users via isSiteAdmin: true.
   [orgAdmin] = await db.insert(users).values({
+    birthDate: '1990-01-01', // the profile gate requires a birthdate
     username: `bd_orgadmin_${ts}`,
     emails: [`bd_orgadmin_${ts}@test.com`],
     password: hashed,
@@ -146,6 +149,7 @@ beforeEach(async () => {
   });
 
   [siteAdmin] = await db.insert(users).values({
+    birthDate: '1990-01-01', // the profile gate requires a birthdate
     username: `bd_siteadmin_${ts}`,
     emails: [`bd_siteadmin_${ts}@test.com`],
     password: hashed,
@@ -156,6 +160,7 @@ beforeEach(async () => {
   }).returning();
 
   [coachUser] = await db.insert(users).values({
+    birthDate: '1990-01-01', // the profile gate requires a birthdate
     username: `bd_coach_${ts}`,
     emails: [`bd_coach_${ts}@test.com`],
     password: hashed,
@@ -170,6 +175,7 @@ beforeEach(async () => {
   });
 
   [guestUser] = await db.insert(users).values({
+    birthDate: '1990-01-01', // the profile gate requires a birthdate
     username: `bd_guest_${ts}`,
     emails: [`bd_guest_${ts}@test.com`],
     password: hashed,
@@ -184,6 +190,7 @@ beforeEach(async () => {
   });
 
   [athleteUser] = await db.insert(users).values({
+    birthDate: '1990-01-01', // the profile gate requires a birthdate
     username: `bd_loneathlete_${ts}`,
     emails: [`bd_loneathlete_${ts}@test.com`],
     password: hashed,
@@ -433,6 +440,7 @@ describe('POST /api/measurements/bulk-delete', () => {
     const ts = Date.now();
     const hashed = await hashPassword('TestPass123!');
     const [orphanUser] = await db.insert(users).values({
+      birthDate: '1990-01-01', // the profile gate requires a birthdate
       username: `bd_orphan_${ts}`,
       emails: [`bd_orphan_${ts}@test.com`],
       password: hashed,

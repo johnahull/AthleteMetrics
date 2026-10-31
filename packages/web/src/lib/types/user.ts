@@ -36,6 +36,8 @@ export interface EnhancedUser extends BaseUser {
   organizations?: UserOrganization[];
   // Backwards compatibility - primary role for the current context
   role?: 'site_admin' | 'org_admin' | 'coach' | 'athlete' | 'parent' | 'guest';
+  // Fields the athlete must still provide (from /api/auth/me); non-empty means the profile gate is active
+  missingProfileFields?: Array<'birthDate' | 'email'>;
   // COPPA status for under-13 athletes
   coppaStatus?: 'not_applicable' | 'pending_consent' | 'consented' | 'consent_revoked' | 'needs_parent_email';
 }
