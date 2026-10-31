@@ -59,8 +59,13 @@ export function groupByCategory<T>(
     const list = known.get(id);
     if (list) result.push({ id, label, items: list });
   }
+  const usedIds = new Set<string>();
   for (const [key, { label, items: list }] of unknown) {
-    result.push({ id: `custom:${key}`, label, items: list });
+    const slug = key.replace(/[^a-z0-9_-]+/g, "-");
+    let id = `custom--${slug}`;
+    for (let n = 2; usedIds.has(id); n++) id = `custom--${slug}-${n}`;
+    usedIds.add(id);
+    result.push({ id, label, items: list });
   }
   const other = known.get(OTHER_ID);
   if (other) {

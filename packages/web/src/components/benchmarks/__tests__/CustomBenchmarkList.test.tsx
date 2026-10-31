@@ -15,6 +15,7 @@ const bm = (id: string, name: string, metricCode: string) => ({
 
 const mocks = vi.hoisted(() => ({
   categoriesLoading: false,
+  categoriesError: false,
   categories: {} as Record<string, string | null>,
   getCategory: vi.fn(),
 }));
@@ -32,7 +33,7 @@ vi.mock("@/lib/benchmarks-api", () => ({
   }),
 }));
 vi.mock("@/hooks/use-metric-category-lookup", () => ({
-  useMetricCategoryLookup: () => ({ getCategory: mocks.getCategory, isLoading: mocks.categoriesLoading }),
+  useMetricCategoryLookup: () => ({ getCategory: mocks.getCategory, isLoading: mocks.categoriesLoading, isError: mocks.categoriesError }),
 }));
 vi.mock("@/hooks/use-metric-labels", () => ({
   useMetricLabels: () => ({ getLabel: (code: string) => `label:${code}` }),
@@ -49,6 +50,7 @@ import { CustomBenchmarkList } from "../CustomBenchmarkList";
 
 beforeEach(() => {
   mocks.categoriesLoading = false;
+  mocks.categoriesError = false;
   mocks.categories = { DASH_40YD: "Speed", VERTICAL_JUMP: "power", CUSTOM_SKATE: "Skating" };
   mocks.getCategory.mockReset();
   mocks.getCategory.mockImplementation((code: string) => mocks.categories[code] ?? null);
@@ -68,6 +70,7 @@ describe("CustomBenchmarkList: category groups", () => {
     render(<CustomBenchmarkList organizationId="org-1" />);
     expect(screen.getByText("label:DASH_40YD")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { level: 3 })).not.toBeInTheDocument();
+    expect(screen.getByText("label:DASH_40YD").querySelector("span")).toHaveAttribute("aria-hidden", "true");
   });
 
   it("collapses one category without touching the others", async () => {
@@ -89,5 +92,17 @@ describe("CustomBenchmarkList: category groups", () => {
     render(<CustomBenchmarkList organizationId="org-1" />);
     expect(screen.queryByRole("button", { name: /^Other,/ })).not.toBeInTheDocument();
     expect(screen.queryByTestId("custom-card-1")).not.toBeInTheDocument();
+  });
+
+  it("tells the user categories are unavailable when the lookup fails, and still lists every benchmark", () => {
+    mocks.categoriesError = true;
+    render(<CustomBenchmarkList organizationId="org-1" />);
+    expect(screen.getByRole("alert")).toHaveTextContent(/categories are unavailable/i);
+    for (const id of ["1", "2", "3", "4"]) expect(screen.getByTestId(`custom-card-${id}`)).toBeInTheDocument();
+  });
+
+  it("shows no notice when the lookup succeeds", () => {
+    render(<CustomBenchmarkList organizationId="org-1" />);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

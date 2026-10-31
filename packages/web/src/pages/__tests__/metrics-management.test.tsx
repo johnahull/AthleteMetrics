@@ -41,6 +41,21 @@ describe("MetricsManagement: category groups", () => {
     expect(groupButton(/^Other, 1 metric$/)).toBeInTheDocument();
   });
 
+  it("links each group toggle to the rows it controls via aria-controls", async () => {
+    render(<MetricsManagementPage />);
+    const toggle = groupButton(/^Speed,/);
+    const controlsId = toggle.getAttribute("aria-controls");
+    expect(controlsId).toBeTruthy();
+    const region = document.getElementById(controlsId!);
+    expect(region).not.toBeNull();
+    expect(region).toContainElement(screen.getByTestId("metric-row-DASH_40YD"));
+
+    // the controlled element still exists (and is found by id) while the group is collapsed
+    await userEvent.click(toggle);
+    expect(document.getElementById(controlsId!)).not.toBeNull();
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+  });
+
   it("keeps existing row test ids and renders each row under its group", () => {
     render(<MetricsManagementPage />);
     expect(screen.getByTestId("metrics-table")).toBeInTheDocument();

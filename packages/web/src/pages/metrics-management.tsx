@@ -290,7 +290,7 @@ function MetricsManagement() {
               {categoryGroups.map((group) => {
                 const open = !collapsedGroups.has(group.id);
                 return (
-                  <TableBody key={group.id} data-testid={`category-group-${group.id}`}>
+                  <TableBody key={group.id} id={`rows-${group.id}`} data-testid={`category-group-${group.id}`}>
                     <TableRow className="bg-muted/40 hover:bg-muted/40">
                       <TableCell colSpan={8} className="p-0">
                         <CategoryGroupToggle
@@ -298,6 +298,7 @@ function MetricsManagement() {
                           count={group.items.length}
                           unit="metric"
                           open={open}
+                          controlsId={`rows-${group.id}`}
                           onToggle={() => toggleGroup(group.id)}
                         />
                       </TableCell>

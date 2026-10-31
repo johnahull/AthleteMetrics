@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Plus, Search, Filter, AlertCircle } from "lucide-react";
 import { CustomBenchmarkCard } from "./CustomBenchmarkCard";
+import { CategoriesUnavailableNotice } from "./CategoriesUnavailableNotice";
 import { CustomBenchmarkForm } from "./CustomBenchmarkForm";
 import { useAuth } from "@/lib/auth";
 import { useMetricCategoryLookup } from "@/hooks/use-metric-category-lookup";
@@ -27,7 +28,7 @@ export function CustomBenchmarkList({ organizationId }: CustomBenchmarkListProps
   const [searchQuery, setSearchQuery] = useState("");
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const { getLabel } = useMetricLabels();
-  const { getCategory, isLoading: categoriesLoading } = useMetricCategoryLookup(organizationId);
+  const { getCategory, isLoading: categoriesLoading, isError: categoriesError } = useMetricCategoryLookup(organizationId);
 
   // Fetch custom benchmarks for this organization
   const { data: benchmarks, isLoading: benchmarksLoading, error } = useCustomBenchmarks(
@@ -159,6 +160,8 @@ export function CustomBenchmarkList({ organizationId }: CustomBenchmarkListProps
         </CardContent>
       </Card>
 
+      {categoriesError && <CategoriesUnavailableNotice />}
+
       {/* Benchmarks List */}
       {isLoading ? (
         <LoadingSpinner text="Loading custom benchmarks..." />
@@ -198,7 +201,7 @@ export function CustomBenchmarkList({ organizationId }: CustomBenchmarkListProps
                 <section key={metricGroup.metricCode} className="mb-6">
                   <p className="mb-2 text-sm font-medium text-muted-foreground">
                     {getLabel(metricGroup.metricCode)}
-                    <span className="ml-2 font-normal">{metricGroup.items.length}</span>
+                    <span className="ml-2 font-normal" aria-hidden>{metricGroup.items.length}</span>
                   </p>
                   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {metricGroup.items.map((benchmark) => (

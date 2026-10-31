@@ -44,6 +44,18 @@ describe("groupByCategory", () => {
     expect(groups.map((g) => g.label)).toEqual(["Speed", "Plyometrics", "Other"]);
   });
 
+  it("builds ids for unknown categories without characters that need CSS escaping", () => {
+    const groups = groupByCategory([m("p", "Plyometrics")], cat);
+    expect(groups[0].id).toBe("custom--plyometrics");
+    expect(groups[0].id).toMatch(/^[a-z0-9_-]+$/);
+  });
+
+  it("slugs multi-word custom categories and keeps ids unique when slugs collide", () => {
+    const groups = groupByCategory([m("a", "Speed Skating"), m("b", "speed-skating")], cat);
+    expect(groups.map((g) => g.label)).toEqual(["Speed Skating", "speed-skating"]);
+    expect(groups.map((g) => g.id)).toEqual(["custom--speed-skating", "custom--speed-skating-2"]);
+  });
+
   it("merges unknown categories that differ only by case, keeping the first-seen label", () => {
     const groups = groupByCategory([m("a", "Plyometrics"), m("b", "plyometrics")], cat);
     expect(groups).toHaveLength(1);

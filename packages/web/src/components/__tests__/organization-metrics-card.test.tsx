@@ -147,6 +147,18 @@ describe('OrganizationMetricsCard category groups', () => {
     expect(order).toEqual(['Speed', 'Power']);
   });
 
+  it('links each group toggle to the rows it controls via aria-controls', async () => {
+    renderCard();
+    const toggle = await screen.findByRole('button', { name: /^Speed,/ });
+    const controlsId = toggle.getAttribute('aria-controls');
+    expect(controlsId).toBeTruthy();
+    const region = document.getElementById(controlsId!);
+    expect(region).not.toBeNull();
+    expect(region).toContainElement(screen.getByTestId('org-metric-row-A'));
+    fireEvent.click(toggle);
+    expect(document.getElementById(controlsId!)).not.toBeNull();
+  });
+
   it('keeps row and toggle test ids', async () => {
     renderCard();
     await screen.findByTestId('toggle-metric-A');

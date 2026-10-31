@@ -11,6 +11,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Plus, Search, Filter, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { BenchmarkCatalog } from "./BenchmarkCatalog";
+import { CategoriesUnavailableNotice } from "./CategoriesUnavailableNotice";
 import { BenchmarkEnablementToggle } from "./BenchmarkEnablementToggle";
 import { BenchmarkFilters } from "./BenchmarkFilters";
 import { Link } from "wouter";
@@ -26,7 +27,7 @@ export function OrganizationBenchmarksList({ organizationId }: OrganizationBench
   const [searchQuery, setSearchQuery] = useState("");
   const { getMetricConfig } = useMetricConfig();
   const { getLabel } = useMetricLabels();
-  const { getCategory, isLoading: categoriesLoading } = useMetricCategoryLookup(organizationId);
+  const { getCategory, isLoading: categoriesLoading, isError: categoriesError } = useMetricCategoryLookup(organizationId);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState<{
     metricCode?: string;
@@ -155,6 +156,8 @@ export function OrganizationBenchmarksList({ organizationId }: OrganizationBench
         </CardContent>
       </Card>
 
+      {categoriesError && <CategoriesUnavailableNotice />}
+
       {/* Benchmarks List */}
       {isLoading ? (
         <LoadingSpinner text="Loading benchmarks..." />
@@ -194,7 +197,7 @@ export function OrganizationBenchmarksList({ organizationId }: OrganizationBench
                 <section key={metricGroup.metricCode} className="mb-6">
                   <p className="mb-2 text-sm font-medium text-muted-foreground">
                     {getLabel(metricGroup.metricCode)}
-                    <span className="ml-2 font-normal">{metricGroup.items.length}</span>
+                    <span className="ml-2 font-normal" aria-hidden>{metricGroup.items.length}</span>
                   </p>
                   <div className="grid gap-4">
                     {metricGroup.items.map((benchmark) => {

@@ -50,4 +50,23 @@ describe("useMetricCategoryLookup", () => {
     const { result } = renderHook(() => useMetricCategoryLookup("org-1"));
     expect(result.current.isLoading).toBe(true);
   });
+
+  it("keeps a site metric that has an explicit null category in Other instead of using the org config's category", () => {
+    mocks.useSiteMetrics.mockReturnValue({ data: [{ code: "DASH_40YD", category: null }], isLoading: false });
+    mocks.getMetricConfig.mockReturnValue({ category: "speed" });
+    const { result } = renderHook(() => useMetricCategoryLookup("org-1"));
+    expect(result.current.getCategory("DASH_40YD")).toBeNull();
+  });
+
+  it("reports an error when the site metric list fails to load", () => {
+    mocks.useSiteMetrics.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+    const { result } = renderHook(() => useMetricCategoryLookup("org-1"));
+    expect(result.current.isError).toBe(true);
+  });
+
+  it("reports no error when the site metric list loads", () => {
+    mocks.useSiteMetrics.mockReturnValue({ data: [], isLoading: false, isError: false });
+    const { result } = renderHook(() => useMetricCategoryLookup("org-1"));
+    expect(result.current.isError).toBe(false);
+  });
 });

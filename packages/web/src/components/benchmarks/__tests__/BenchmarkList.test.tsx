@@ -89,6 +89,8 @@ describe("BenchmarkList: category groups", () => {
     expect(within(speed).getByText("Dash Varsity")).toBeInTheDocument();
     expect(within(speed).getByText("Dash Elite")).toBeInTheDocument();
     expect(within(speed).getByText("10 Yard Fly")).toBeInTheDocument();
+    // the per-metric count is decorative: the category toggle already announces totals
+    expect(within(speed).getByText("40 Yard Dash").querySelector("span")).toHaveAttribute("aria-hidden", "true");
   });
 
   it("falls back to the metric code when the metric is unknown, and files it under Other", () => {

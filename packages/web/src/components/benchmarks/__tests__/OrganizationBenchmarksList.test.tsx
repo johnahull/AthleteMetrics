@@ -326,7 +326,7 @@ describe('OrganizationBenchmarksList', () => {
       isActive: true,
     });
 
-    const setup = async (metricsLoading = false) => {
+    const setup = async (metricsLoading = false, metricsError = false) => {
       const { useOrganizationBenchmarks } = await import('@/lib/benchmarks-api');
       const { useSiteMetrics } = await import('@/lib/metrics-api');
       vi.mocked(useOrganizationBenchmarks).mockReturnValue({
@@ -339,7 +339,8 @@ describe('OrganizationBenchmarksList', () => {
         error: null,
       } as any);
       vi.mocked(useSiteMetrics).mockReturnValue({
-        data: metricsLoading
+        isError: metricsError,
+        data: metricsLoading || metricsError
           ? undefined
           : [
               { code: 'DASH_40YD', label: '40 Yard Dash', category: 'Speed' },
@@ -376,6 +377,25 @@ describe('OrganizationBenchmarksList', () => {
       await userEvent.type(screen.getByPlaceholderText('Search enabled benchmarks...'), 'elite');
       expect(screen.getByRole('button', { name: 'Speed, 1 benchmark' })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /^Power,/ })).not.toBeInTheDocument();
+    });
+
+    it('hides the per-metric count from assistive technology', async () => {
+      await setup();
+      const count = screen.getByTestId('category-group-power').querySelector('section > p > span');
+      expect(count).not.toBeNull();
+      expect(count).toHaveAttribute('aria-hidden', 'true');
+    });
+
+    it('tells the user categories are unavailable when the metric list fails, and still lists every benchmark', async () => {
+      await setup(false, true);
+      expect(screen.getByRole('alert')).toHaveTextContent(/categories are unavailable/i);
+      expect(screen.getByText('Dash Varsity')).toBeInTheDocument();
+      expect(screen.getByText('Jump Varsity')).toBeInTheDocument();
+    });
+
+    it('shows no notice when the metric list loads', async () => {
+      await setup();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
 
     it('waits for the metric list instead of flashing everything under Other', async () => {

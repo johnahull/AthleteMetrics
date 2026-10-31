@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Plus, Search, Filter, Layers } from "lucide-react";
 import { BenchmarkCard } from "./BenchmarkCard";
+import { CategoriesUnavailableNotice } from "./CategoriesUnavailableNotice";
 import { BenchmarkForm } from "./BenchmarkForm";
 import { TierGroupWizard } from "./TierGroupWizard";
 import type { SiteBenchmark } from "@shared/schema";
@@ -152,11 +153,7 @@ export function BenchmarkList() {
         </CardContent>
       </Card>
 
-      {metricsError && (
-        <div role="alert" className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Categories are unavailable because the metric list failed to load. Benchmarks are shown under Other.
-        </div>
-      )}
+      {metricsError && <CategoriesUnavailableNotice />}
 
       {/* Benchmarks List */}
       {isLoading ? (
@@ -197,7 +194,7 @@ export function BenchmarkList() {
                 <section key={metricGroup.metricCode} className="mb-6">
                   <p className="mb-2 text-sm font-medium text-muted-foreground">
                     {metricsByCode.get(metricGroup.metricCode)?.label ?? metricGroup.metricCode}
-                    <span className="ml-2 font-normal">{metricGroup.items.length}</span>
+                    <span className="ml-2 font-normal" aria-hidden>{metricGroup.items.length}</span>
                   </p>
                   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {metricGroup.items.map((benchmark) => (

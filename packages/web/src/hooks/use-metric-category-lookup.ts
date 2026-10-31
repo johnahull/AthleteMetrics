@@ -8,7 +8,7 @@ import { useMetricConfig } from "@/hooks/use-metric-config";
  * does not return fall back to the org metric config (which also covers custom org metrics).
  */
 export function useMetricCategoryLookup(organizationId: string) {
-  const { data: siteMetrics, isLoading } = useSiteMetrics(true, organizationId);
+  const { data: siteMetrics, isLoading, isError } = useSiteMetrics(true, organizationId);
   const { getMetricConfig } = useMetricConfig();
 
   const categoryByCode = useMemo(
@@ -16,10 +16,12 @@ export function useMetricCategoryLookup(organizationId: string) {
     [siteMetrics],
   );
 
+  // A site metric deliberately left uncategorised stays in Other; only codes the site list lacks use the config
   const getCategory = useCallback(
-    (code: string): string | null => categoryByCode.get(code) ?? getMetricConfig(code)?.category ?? null,
+    (code: string): string | null =>
+      categoryByCode.has(code) ? (categoryByCode.get(code) ?? null) : (getMetricConfig(code)?.category ?? null),
     [categoryByCode, getMetricConfig],
   );
 
-  return { getCategory, isLoading };
+  return { getCategory, isLoading, isError: !!isError };
 }
