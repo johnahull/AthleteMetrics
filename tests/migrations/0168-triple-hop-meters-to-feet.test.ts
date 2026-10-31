@@ -33,7 +33,7 @@ describe('Migration 0168: static analysis', () => {
   it('treats feet spelled ft/feet/foot (any case) as already converted and normalizes it to ft', () => {
     expect(UP).toMatch(/lower\(v_unit\) IN \('ft', 'feet', 'foot'\)/);
     expect(UP).toMatch(/UPDATE site_metrics SET unit = 'ft' WHERE code = v_code/);
-    expect(UP).toMatch(/UPDATE measurements SET units = 'ft' WHERE metric = v_code/);
+    expect(UP).toMatch(/UPDATE measurements SET units = 'ft' WHERE metric = v_code AND lower\(units\) IN \('ft', 'feet', 'foot'\)/);
   });
   it('fails loudly on an unexpected unit instead of skipping', () => {
     expect(UP).toMatch(/RAISE EXCEPTION[^;]*expected m\/meter\/meters or ft/);
@@ -162,15 +162,20 @@ describe.skipIf(!isDisposableTestDb)('Migration 0168: against a disposable DB (r
     });
   });
 
-  it('treats a unit already spelled Feet as feet: no conversion, unit normalized to ft', async () => {
+  it.each(['Feet', 'foot'])('treats a unit already spelled %s as feet: no conversion, unit normalized to ft', async (spelling) => {
     await rollbackable(async (tx) => {
-      await seed(tx, 'Feet');
+      await seed(tx, spelling);
+      await tx`UPDATE measurements SET units = 'm' WHERE metric = 'HOP_SL_TRIPLE_L'`;
       await tx.unsafe(UP);
       const s = await snapshot(tx);
       expect(s.metric.unit).toBe('ft');
       expect(num(s.metric.validation_min)).toBe(1);
       expect(s.m.units).toBe('ft');
       expect(num(s.m.value)).toBe(5);
+      // a row in another unit is never relabeled without a conversion
+      const l = (await tx`SELECT value, units FROM measurements WHERE metric = 'HOP_SL_TRIPLE_L'`)[0];
+      expect(l.units).toBe('m');
+      expect(num(l.value)).toBe(5);
     });
   });
 

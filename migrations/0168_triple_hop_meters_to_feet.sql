@@ -40,7 +40,8 @@ BEGIN
       RAISE NOTICE 'Migration 0168: % is already in feet, no conversion.', v_code;
       -- Normalize the spelling (e.g. 'Feet') so 0169 and the app see the canonical 'ft'.
       UPDATE site_metrics SET unit = 'ft' WHERE code = v_code AND unit <> 'ft';
-      UPDATE measurements SET units = 'ft' WHERE metric = v_code AND units IS DISTINCT FROM 'ft';
+      -- Only respell rows that already say feet; a row in any other unit is left alone, never relabeled without a conversion.
+      UPDATE measurements SET units = 'ft' WHERE metric = v_code AND lower(units) IN ('ft', 'feet', 'foot') AND units <> 'ft';
     ELSIF v_unit IN ('m', 'meter', 'meters') THEN
       v_todo := v_todo || v_code;
     ELSE
