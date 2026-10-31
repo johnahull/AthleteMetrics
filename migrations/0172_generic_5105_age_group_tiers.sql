@@ -149,8 +149,11 @@ FROM (
 LEFT JOIN (
   SELECT organization_id, max(display_order) AS max_order FROM organization_benchmarks GROUP BY organization_id
 ) mx ON mx.organization_id = c.organization_id
--- Explicit target: only the (org, benchmark, type) duplicate is skipped. A display_order collision with a concurrent
--- app enable must fail loudly (and roll the migration back), not silently drop one of the 20 rows.
+-- Explicit target: only the (org, benchmark, type) duplicate (organization_benchmarks_unique_org_benchmark) is skipped.
+-- A display_order clash with a concurrent app enable violates the separate partial unique index
+-- org_benchmarks_display_order_unique (migration 0024) and is NOT covered by this target, so it raises and rolls the
+-- migration back instead of silently dropping one of the 20 rows. (CI test DBs are built with db:push and lack that
+-- partial index; production has it from 0024.)
 ON CONFLICT (organization_id, benchmark_id, benchmark_type) DO NOTHING;
 
 -- ============================================================================
