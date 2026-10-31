@@ -17,7 +17,7 @@ const CONSENT_EXEMPT: Rule[] = [
   exact('/auth/login'), exact('/auth/logout'), exact('/auth/register'), exact('/auth/forgot-password'),
   exact('/auth/reset-password'), exact('/auth/validate-reset-token'), exact('/auth/verify-email'),
   exact('/auth/oauth-status'), re(/^\/auth\/check-username\/[^/]+$/),
-  exact('/auth/me'), exact('/auth/me/organizations'),
+  exact('/auth/me'),
   exact('/admin/impersonation-status'), exact('/admin/stop-impersonation'),
   exact('/auth/google'), exact('/auth/google/callback'), exact('/auth/apple'), exact('/auth/apple/callback'),
   re(/^\/auth\/link-account\/[^/]+$/),
@@ -28,6 +28,7 @@ const CONSENT_EXEMPT: Rule[] = [
 // Additionally allowed while the profile is incomplete (but still subject to the consent block).
 const INCOMPLETE_ALLOWED: Rule[] = [
   ...CONSENT_EXEMPT,
+  exact('/auth/me/organizations'), exact('/users/check-username'),
   exact('/auth/check-email'), exact('/auth/resend-verification'), exact('/enhanced-auth/request-email-verification'),
   re(/^\/invitations\/(?!athletes$)[^/]+$/, 'GET'),
   re(/^\/invitations\/[^/]+\/accept$/, 'POST'),

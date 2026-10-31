@@ -16,15 +16,12 @@ export interface ProfileStatus {
 export async function loadProfileStatus(userId: string): Promise<ProfileStatus | null> {
   const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   if (!user) return null;
-  const orgs = await db
-    .select({ role: userOrganizations.role })
-    .from(userOrganizations)
-    .where(eq(userOrganizations.userId, userId));
-  const [link] = await db
-    .select({ id: parentAthleteLinks.id })
-    .from(parentAthleteLinks)
-    .where(and(eq(parentAthleteLinks.parentUserId, userId), eq(parentAthleteLinks.isActive, true)))
-    .limit(1);
+  const [orgs, [link]] = await Promise.all([
+    db.select({ role: userOrganizations.role }).from(userOrganizations).where(eq(userOrganizations.userId, userId)),
+    db.select({ id: parentAthleteLinks.id }).from(parentAthleteLinks)
+      .where(and(eq(parentAthleteLinks.parentUserId, userId), eq(parentAthleteLinks.isActive, true)))
+      .limit(1),
+  ]);
   let minorByDob = false;
   try { minorByDob = !!user.birthDate && isMinorAge(user.birthDate); } catch { /* unparseable: treat as minor below */ minorByDob = true; }
   return {

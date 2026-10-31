@@ -18,6 +18,7 @@ import { parentAthleteLinks } from "@shared/schema/tables/coppa";
 import { isUnder13, isMinorAge, isTeenMinor } from "@shared/coppa-utils";
 import { isPlaceholderEmail } from "@shared/email-utils";
 import { getMissingProfileFields } from "../services/profile-completion";
+import { loadProfileStatus } from "../services/profile-status";
 import { deleteUserSessions } from "../lib/session-helpers";
 import { coppaService } from "../services/coppa-service";
 import { emailService } from "../services/email-service";
@@ -40,7 +41,7 @@ async function sendNewEmailVerification(userId: string, firstName: string, email
   const { token } = await storage.createEmailVerificationToken(userId, email);
   emailService.sendEmailVerification(email, {
     userName: firstName,
-    verificationLink: `${process.env.APP_URL}/verify-email?token=${token}`,
+    verificationLink: `${process.env.APP_URL || process.env.BASE_URL || 'https://athletemetrics.app'}/verify-email?token=${token}`,
   }).catch((err: unknown) => console.error("[ProfileComplete] verification email failed:", err));
 }
 
@@ -333,6 +334,9 @@ export function registerProfileRoutes(app: Express) {
         );
       }
 
+      // Emails/parent data may change profile completeness: force the gate to re-check
+      delete req.session.profileCheck;
+
       // Update session with new data
       if (req.session.user) {
         req.session.user = {
@@ -512,6 +516,8 @@ export function registerProfileRoutes(app: Express) {
 
         if (needEmail) {
           if (!body.email || isPlaceholderEmail(body.email)) return fail(400, "A valid email is required.", "email");
+          // Serialise concurrent claims of the same address (users.emails has no unique constraint).
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${'profile-email:' + body.email.toLowerCase()}))`);
           const [taken] = await tx.select({ id: users.id }).from(users)
             .where(and(sql`lower(${body.email}) = ANY(SELECT lower(e) FROM unnest(${users.emails}) e)`, ne(users.id, userId), isNull(users.deletedAt))).limit(1);
           if (taken) return fail(409, "That email is already in use.", "email");
@@ -519,27 +525,33 @@ export function registerProfileRoutes(app: Express) {
           updates.isEmailVerified = false;
         }
 
-        if (needDob) {
-          const dob = body.birthDate;
-          if (!dob) return fail(400, "Birthdate is required.", "birthDate");
+        // A stored birthdate still needs its age rules (consent / parent link) when only the email is missing.
+        const dob = needDob ? body.birthDate : user.birthDate;
+        if (needDob && !dob) return fail(400, "Birthdate is required.", "birthDate");
+        if (dob) {
           const [y, m, d] = dob.split("-").map(Number);
           const probe = new Date(Date.UTC(y, m - 1, d));
           let minor = false;
           try {
+            // Date.UTC maps years 0-99 to 1900-1999, so reject implausible years before any age maths.
+            if (y < 1900) throw new Error("implausible year");
             if (probe.getUTCMonth() !== m - 1 || probe.getUTCDate() !== d) throw new Error("not a calendar date");
-            under13 = isUnder13(dob);
+            if (probe.getTime() > Date.now()) throw new Error("future date");
+            under13 = isUnder13(dob) && (needDob || user.coppaStatus === "not_applicable");
             minor = isMinorAge(dob);
             teen = isTeenMinor(dob);
           } catch {
-            return fail(400, "Invalid date format or future date.", "birthDate");
+            if (needDob) return fail(400, "Invalid date format or future date.", "birthDate");
           }
           const athleteEmail = updates.emails?.[0] ?? user.emails?.find((e) => !isPlaceholderEmail(e));
           parentEmail = body.parentEmail;
           if (under13 && !parentEmail) return fail(400, "Parent or guardian email is required for athletes under 13.", "parentEmail");
           if (parentEmail && (parentEmail === athleteEmail || (user.emails ?? []).some((e) => e.toLowerCase() === parentEmail))) return fail(400, "Parent email must differ from the athlete's email.", "parentEmail");
-          updates.birthDate = dob;
-          updates.birthYear = y;
-          updates.isMinor = minor;
+          if (needDob) {
+            updates.birthDate = dob;
+            updates.birthYear = y;
+            updates.isMinor = minor;
+          }
           if (minor && parentEmail) updates.parentEmail = parentEmail;
           if (under13) updates.coppaStatus = "pending_consent";
         }
@@ -556,8 +568,8 @@ export function registerProfileRoutes(app: Express) {
       if (!("ok" in outcome)) return res.status(outcome.status).json(outcome.body);
       const { user, updates, under13, teen, parentEmail, athleteOrgId, needEmail } = outcome;
 
-      // After commit: an audit failure must not turn a saved profile into a 500.
-      storage.createAuditLog({
+      // Written only once the completion has succeeded; an audit failure must not turn a saved profile into a 500.
+      const auditCompletion = () => storage.createAuditLog({
         userId,
         action: "profile_completed",
         resourceType: "user",
@@ -582,7 +594,11 @@ export function registerProfileRoutes(app: Express) {
           await db.update(users).set(restore).where(eq(users.id, userId));
           return res.status(500).json({ message: "We could not start the parental consent request. Please try again." });
         }
-        if (needEmail && updates.emails) await sendNewEmailVerification(userId, user.firstName, updates.emails[0]);
+        auditCompletion();
+        if (needEmail && updates.emails) {
+          await sendNewEmailVerification(userId, user.firstName, updates.emails[0])
+            .catch((err: unknown) => console.error("[ProfileComplete] verification token failed:", err));
+        }
         // Only now end every session of this user, including the current one.
         await deleteUserSessions(userId);
         await new Promise<void>((resolve) => req.session.destroy(() => resolve()));
@@ -595,16 +611,25 @@ export function registerProfileRoutes(app: Express) {
         });
       }
 
+      // The profile is already committed, so a failing follow-up must not return 500 (a retry would only get 409).
       if (teen && parentEmail) {
-        await handleParentEmailUpdate(userId, parentEmail, { firstName: user.firstName, birthDate: updates.birthDate as string }, athleteOrgId);
+        try {
+          await handleParentEmailUpdate(userId, parentEmail, { firstName: user.firstName, birthDate: (updates.birthDate ?? user.birthDate) as string }, athleteOrgId);
+        } catch (err) {
+          console.error("[ProfileComplete] parent link failed:", err);
+        }
       }
 
       if (needEmail && updates.emails) {
         const newEmail = updates.emails[0];
-        await sendNewEmailVerification(userId, user.firstName, newEmail);
+        await sendNewEmailVerification(userId, user.firstName, newEmail)
+          .catch((err: unknown) => console.error("[ProfileComplete] verification token failed:", err));
         req.session.user = { ...req.session.user!, email: newEmail, emailVerified: false };
       }
-      req.session.profileCheck = { userId, missing: [] };
+      auditCompletion();
+      // Cache completion only for users the gate itself would cache (never minors or consent states).
+      const after = await loadProfileStatus(userId);
+      if (after && after.missing.length === 0 && after.cacheable) req.session.profileCheck = { userId, missing: [] };
 
       return res.json({ success: true });
     } catch (error) {

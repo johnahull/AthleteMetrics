@@ -24,6 +24,7 @@ export default function CompleteProfile() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [consentSent, setConsentSent] = useState(false);
+  const [consentMessage, setConsentMessage] = useState('');
   const [emailChecking, setEmailChecking] = useState(false);
   const [emailAvailable, setEmailAvailable] = useState<boolean | null>(null);
   const [emailError, setEmailError] = useState('');
@@ -80,8 +81,9 @@ export default function CompleteProfile() {
 
     setSubmitting(true);
     try {
-      const data = await apiClient.post<{ requiresParentalConsent?: boolean }>('/profile/complete', body);
+      const data = await apiClient.post<{ requiresParentalConsent?: boolean; message?: string }>('/profile/complete', body);
       if (data.requiresParentalConsent) {
+        setConsentMessage(data.message ?? '');
         setConsentSent(true);
         return;
       }
@@ -101,7 +103,7 @@ export default function CompleteProfile() {
           <CardHeader className="text-center">
             <CardTitle className="text-2xl">Check with your parent</CardTitle>
             <CardDescription>
-              A consent email has been sent to your parent or guardian. You will be able to log in once they approve your account.
+              {consentMessage || 'A consent email has been sent to your parent or guardian. You will be able to log in once they approve your account.'}
             </CardDescription>
           </CardHeader>
           <CardContent>
