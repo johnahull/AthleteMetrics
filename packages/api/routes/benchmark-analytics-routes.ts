@@ -15,6 +15,7 @@ import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from '../constants/rate-limits';
 import { db } from '../db';
 import { teams, organizationBenchmarks, customBenchmarks } from '@shared/schema';
 import { eq, and, inArray, or } from 'drizzle-orm';
+import { isValidBenchmarkId } from '@shared/benchmark-utils';
 
 // Valid gender values from database schema
 const VALID_GENDERS = ['Male', 'Female', 'Not Specified'] as const;
@@ -275,9 +276,11 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
 
         // Validate benchmarkIds array
         if (benchmarkIds && benchmarkIds.length > 0) {
-          const validationError = validateUUIDArray(benchmarkIds, 'benchmark IDs');
-          if (validationError) {
-            return res.status(400).json({ message: validationError });
+          if (benchmarkIds.length > MAX_FILTER_IDS) {
+            return res.status(400).json({ message: `Too many benchmark IDs. Maximum allowed is ${MAX_FILTER_IDS}.` });
+          }
+          if (!benchmarkIds.every(isValidBenchmarkId)) {
+            return res.status(400).json({ message: 'Invalid benchmark IDs format.' });
           }
         }
 
@@ -424,8 +427,8 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
         }
 
         // Validate benchmarkId format
-        if (!isValidUUID(benchmarkId)) {
-          return res.status(400).json({ message: 'benchmarkId must be a valid UUID' });
+        if (!isValidBenchmarkId(benchmarkId)) {
+          return res.status(400).json({ message: 'benchmarkId has an invalid format' });
         }
 
         // SECURITY: Get organizationId from query or user's database-validated membership
@@ -570,8 +573,8 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
         }
 
         // Validate benchmarkId format
-        if (!isValidUUID(benchmarkId)) {
-          return res.status(400).json({ message: 'benchmarkId must be a valid UUID' });
+        if (!isValidBenchmarkId(benchmarkId)) {
+          return res.status(400).json({ message: 'benchmarkId has an invalid format' });
         }
 
         // SECURITY: Get organizationId from query or user's database-validated membership
