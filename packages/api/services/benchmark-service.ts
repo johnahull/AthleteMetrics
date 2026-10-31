@@ -57,12 +57,11 @@ export class BenchmarkService extends BaseService {
     organizationId: string,
     userIsSiteAdmin: boolean
   ): Promise<boolean> {
-    if (!(await this.validateOrganizationAccess(userId, organizationId, userIsSiteAdmin))) {
-      return false;
-    }
     if (userIsSiteAdmin) {
-      return true;
+      // Keeps the site admin override audit log (and its production audit-failure blocking)
+      return this.validateOrganizationAccess(userId, organizationId, true);
     }
+    // One lookup serves both the membership check and the role
     const memberships = await this.storage.getUserOrganizations(userId);
     const role = memberships.find(m => m.organizationId === organizationId)?.role;
     return role === 'org_admin' || role === 'coach';

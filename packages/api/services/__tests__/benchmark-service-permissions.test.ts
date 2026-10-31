@@ -76,4 +76,19 @@ describe('BenchmarkService org benchmark mutation permissions', () => {
       expect(await outcome(op, actor)).toBe('');
     });
   });
+
+  describe('membership lookups', () => {
+    it('looks up memberships once for a non-site-admin', async () => {
+      await outcome('enable', 'orgAdmin');
+      expect(storage.getUserOrganizations).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the site admin override audit log and skips the membership lookup', async () => {
+      await outcome('enable', 'siteAdmin');
+      expect(storage.getUserOrganizations).not.toHaveBeenCalled();
+      expect(storage.createAuditLog).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'site_admin_organization_access', resourceId: ORG })
+      );
+    });
+  });
 });

@@ -10,7 +10,8 @@ import express from 'express';
 const ORG_ID = '123e4567-e89b-12d3-a456-426614174000';
 const SLUG = 'd1-soc-dash40-d1-avg';
 
-// Rows returned by the fake db, keyed by call order within a test
+// Rows returned by the fake db's top-level select() calls, in call order within a test:
+// [0] getSiteBenchmark lookup, [1] already-enabled check (storage.enableBenchmarkForOrg)
 const state = vi.hoisted(() => ({
   selectQueue: [] as any[][],
 }));
