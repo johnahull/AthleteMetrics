@@ -5,6 +5,12 @@
 -- 'set-5105-%' set, including any an admin had switched off before 0172 (0172 does not record the earlier state).
 -- Forgets this migration's manual_migrations row so the next forward deploy re-applies it. Measurements are not touched.
 
+-- PRE-ROLLBACK RUNBOOK: the reactivation below is unconditional and the earlier state is not recorded. Before applying
+-- this down, list what was already inactive before 0172 (rows an admin had switched off), so they can be switched off again:
+--   SELECT id, is_active FROM site_benchmarks WHERE id LIKE 'b5105-%' AND NOT is_active;
+--   SELECT id, is_active FROM benchmark_sets WHERE id LIKE 'set-5105-%' AND NOT is_active;
+-- Run both while 0172 is still applied and compare with the pre-0172 state.
+
 -- Removes the enablement rows (including those auto-enabled by the up migration); the orgs' own b5105-% rows are untouched.
 DELETE FROM organization_benchmarks
  WHERE benchmark_type = 'site' AND benchmark_id LIKE 'b5105g-%';

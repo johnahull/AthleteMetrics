@@ -63,6 +63,9 @@ SELECT
   t.tier_order, t.tname, t.color,
   b.sex, NULL, b.level, b.age_min, b.age_max,
   true, true, b.lord * 10 + t.tier_order + CASE WHEN b.sex = 'Female' THEN 100 ELSE 0 END
+-- Level note: the middle-school groups (ms8, ms67) carry level 'HS' because they follow 0170 and no dedicated middle-school
+-- level value exists. Nothing filters site_benchmarks.level for AGILITY_5105 (checked in packages/api and packages/web/src),
+-- so this has no functional effect.
 FROM (VALUES
   ('Male',   1, 'd1',   'NCAA D1 (19+)',            'D1', 19, NULL::int, 4.10, 4.25, 4.40),
   ('Male',   2, 'var',  'HS Varsity (16-18)',       'HS', 16, 18,        4.30, 4.50, 4.75),

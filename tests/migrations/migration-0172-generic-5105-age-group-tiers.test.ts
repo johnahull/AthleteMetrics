@@ -76,6 +76,9 @@ const dbUrl = process.env.DATABASE_URL || '';
 const isDisposableTestDb =
   process.env.NODE_ENV === 'test' && (/@(localhost|127\.0\.0\.1)[:/]/.test(dbUrl) || process.env.CI === 'true');
 
+// The DB-backed block only runs under vitest.integration.config.ts (npm run test:integration) with NODE_ENV=test and either
+// a localhost DATABASE_URL or CI=true; under the default config (tests/migrations is excluded) it is not collected at all.
+// In CI it is run by the "Integration Tests" job (integration-tests) in .github/workflows/pr-checks.yml.
 describe.skipIf(!isDisposableTestDb)('Migration 0172: against a disposable DB (rolled back)', () => {
   let sql: ReturnType<typeof postgres>;
   beforeAll(() => {
