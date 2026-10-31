@@ -209,6 +209,35 @@ test.describe('Benchmark Management - Site Admin Tests', () => {
     }
   });
 
+  test('should group benchmarks under their metric category and collapse a group', async ({ page }) => {
+    const benchmark = generateTestBenchmark();
+    const response = await page.request.post(`${STAGING_URL}/api/benchmarks`, {
+      data: {
+        metricCode: 'FLY10_TIME',
+        name: benchmark.name,
+        benchmarkValue: 1.0,
+        comparisonOperator: 'lte',
+        isActive: true,
+      },
+    });
+    const created = await response.json();
+    createdBenchmarkIds.push(created.id);
+
+    await page.goto(`${STAGING_URL}/benchmarks`);
+
+    // FLY10_TIME is a speed metric, so its benchmark appears under the Speed category
+    const speedGroup = page.locator('[data-testid="category-group-speed"]');
+    await expect(speedGroup).toBeVisible({ timeout: 5000 });
+    await expect(speedGroup.getByText(benchmark.name)).toBeVisible();
+
+    // Collapsing the category hides the benchmark; reopening restores it
+    const toggle = speedGroup.getByRole('button', { name: /^Speed, \d+ benchmarks?$/ });
+    await toggle.click();
+    await expect(page.getByText(benchmark.name)).toHaveCount(0);
+    await toggle.click();
+    await expect(page.getByText(benchmark.name)).toBeVisible();
+  });
+
   test('should filter benchmarks by search query', async ({ page }) => {
     // Create two benchmarks with different names
     const benchmark1 = generateTestBenchmark();

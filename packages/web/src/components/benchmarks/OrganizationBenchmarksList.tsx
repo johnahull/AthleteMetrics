@@ -1,6 +1,9 @@
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useOrganizationBenchmarks } from "@/lib/benchmarks-api";
 import { useMetricConfig } from "@/hooks/use-metric-config";
+import { useMetricCategoryLookup } from "@/hooks/use-metric-category-lookup";
+import { CategoryGroup } from "@/components/ui/category-group";
+import { groupByCategoryThenMetric } from "@/lib/category-grouping";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +26,8 @@ export function OrganizationBenchmarksList({ organizationId }: OrganizationBench
   const [searchQuery, setSearchQuery] = useState("");
   const { getMetricConfig } = useMetricConfig();
   const { getLabel } = useMetricLabels();
+  const { getCategory, isLoading: categoriesLoading } = useMetricCategoryLookup(organizationId);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState<{
     metricCode?: string;
     gender?: string;
@@ -32,10 +37,11 @@ export function OrganizationBenchmarksList({ organizationId }: OrganizationBench
   }>({});
 
   // Fetch enabled benchmarks for this organization with full details
-  const { data: orgBenchmarks, isLoading, error } = useOrganizationBenchmarks(
+  const { data: orgBenchmarks, isLoading: benchmarksLoading, error } = useOrganizationBenchmarks(
     organizationId,
     false // only active
   );
+  const isLoading = benchmarksLoading || categoriesLoading;
 
   // Filter benchmarks by search query and filters
   const filteredBenchmarks = orgBenchmarks?.filter((benchmark) => {
@@ -74,6 +80,20 @@ export function OrganizationBenchmarksList({ organizationId }: OrganizationBench
 
     return true;
   });
+
+  const categoryGroups = useMemo(
+    () => groupByCategoryThenMetric(filteredBenchmarks ?? [], (b) => b.metricCode, getCategory),
+    [filteredBenchmarks, getCategory],
+  );
+
+  const setGroupOpen = useCallback((id: string, open: boolean) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (open) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   if (error) {
     return (
@@ -159,89 +179,111 @@ export function OrganizationBenchmarksList({ organizationId }: OrganizationBench
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4">
-          {filteredBenchmarks.map((benchmark) => {
-            const unit = getMetricConfig(benchmark.metricCode)?.unit || '';
-            return (
-            <Card key={benchmark.id}>
-              <CardContent className="pt-6">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <h3 className="text-lg font-semibold">
-                        {benchmark.customName || benchmark.name}
-                      </h3>
-                      <Badge variant="secondary">
-                        {benchmark.benchmarkType === "site" ? "Site" : "Custom"}
-                      </Badge>
-                      {benchmark.isActive === false && (
-                        <Badge variant="outline">Inactive</Badge>
-                      )}
-                    </div>
-                    {benchmark.description && (
-                      <p className="text-sm text-muted-foreground mb-3">
-                        {benchmark.description}
-                      </p>
-                    )}
-                    <div className="flex flex-wrap gap-3 text-sm">
-                      <div>
-                        <span className="font-medium">Metric:</span>{" "}
-                        <span className="text-muted-foreground">{getLabel(benchmark.metricCode)}</span>
-                      </div>
-                      <div>
-                        <span className="font-medium">Target:</span>{" "}
-                        <span className="text-muted-foreground">
-                          {benchmark.comparisonOperator === "range" ? (
-                            <>
-                              ↔ {benchmark.minValue} – {benchmark.maxValue}{unit ? ` ${unit}` : ''}
-                            </>
-                          ) : (
-                            <>
-                              {benchmark.comparisonOperator === "lte" && "≤ "}
-                              {benchmark.comparisonOperator === "gte" && "≥ "}
-                              {benchmark.comparisonOperator === "eq" && "= "}
-                              {benchmark.benchmarkValue}{unit ? ` ${unit}` : ''}
-                            </>
-                          )}
-                        </span>
-                      </div>
-                      {(benchmark.ageMin !== null || benchmark.ageMax !== null) && (
-                        <div>
-                          <span className="font-medium">Age:</span>{" "}
-                          <span className="text-muted-foreground">
-                            {benchmark.ageMin || "Any"} - {benchmark.ageMax || "Any"}
-                          </span>
+        <div>
+          {categoryGroups.map((group) => (
+            <CategoryGroup
+              key={group.id}
+              id={group.id}
+              title={group.label}
+              count={group.count}
+              unit="benchmark"
+              open={!collapsedGroups.has(group.id)}
+              onOpenChange={(open) => setGroupOpen(group.id, open)}
+            >
+              {group.items.map((metricGroup) => (
+                <section key={metricGroup.metricCode} className="mb-6">
+                  <p className="mb-2 text-sm font-medium text-muted-foreground">
+                    {getLabel(metricGroup.metricCode)}
+                    <span className="ml-2 font-normal">{metricGroup.items.length}</span>
+                  </p>
+                  <div className="grid gap-4">
+                    {metricGroup.items.map((benchmark) => {
+                    const unit = getMetricConfig(benchmark.metricCode)?.unit || '';
+                    return (
+                    <Card key={benchmark.id}>
+                      <CardContent className="pt-6">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <h3 className="text-lg font-semibold">
+                                {benchmark.customName || benchmark.name}
+                              </h3>
+                              <Badge variant="secondary">
+                                {benchmark.benchmarkType === "site" ? "Site" : "Custom"}
+                              </Badge>
+                              {benchmark.isActive === false && (
+                                <Badge variant="outline">Inactive</Badge>
+                              )}
+                            </div>
+                            {benchmark.description && (
+                              <p className="text-sm text-muted-foreground mb-3">
+                                {benchmark.description}
+                              </p>
+                            )}
+                            <div className="flex flex-wrap gap-3 text-sm">
+                              <div>
+                                <span className="font-medium">Metric:</span>{" "}
+                                <span className="text-muted-foreground">{getLabel(benchmark.metricCode)}</span>
+                              </div>
+                              <div>
+                                <span className="font-medium">Target:</span>{" "}
+                                <span className="text-muted-foreground">
+                                  {benchmark.comparisonOperator === "range" ? (
+                                    <>
+                                      ↔ {benchmark.minValue} – {benchmark.maxValue}{unit ? ` ${unit}` : ''}
+                                    </>
+                                  ) : (
+                                    <>
+                                      {benchmark.comparisonOperator === "lte" && "≤ "}
+                                      {benchmark.comparisonOperator === "gte" && "≥ "}
+                                      {benchmark.comparisonOperator === "eq" && "= "}
+                                      {benchmark.benchmarkValue}{unit ? ` ${unit}` : ''}
+                                    </>
+                                  )}
+                                </span>
+                              </div>
+                              {(benchmark.ageMin !== null || benchmark.ageMax !== null) && (
+                                <div>
+                                  <span className="font-medium">Age:</span>{" "}
+                                  <span className="text-muted-foreground">
+                                    {benchmark.ageMin || "Any"} - {benchmark.ageMax || "Any"}
+                                  </span>
+                                </div>
+                              )}
+                              {benchmark.gender && (
+                                <div>
+                                  <span className="font-medium">Gender:</span>{" "}
+                                  <span className="text-muted-foreground capitalize">{benchmark.gender}</span>
+                                </div>
+                              )}
+                              {benchmark.level && (
+                                <div>
+                                  <span className="font-medium">Level:</span>{" "}
+                                  <span className="text-muted-foreground capitalize">
+                                    {benchmark.level.replace('_', ' ')}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="ml-4">
+                            <BenchmarkEnablementToggle
+                              organizationId={organizationId}
+                              benchmarkId={benchmark.benchmarkId}
+                              benchmarkType={benchmark.benchmarkType as 'site' | 'custom'}
+                              isEnabled={benchmark.isEnabled}
+                            />
+                          </div>
                         </div>
-                      )}
-                      {benchmark.gender && (
-                        <div>
-                          <span className="font-medium">Gender:</span>{" "}
-                          <span className="text-muted-foreground capitalize">{benchmark.gender}</span>
-                        </div>
-                      )}
-                      {benchmark.level && (
-                        <div>
-                          <span className="font-medium">Level:</span>{" "}
-                          <span className="text-muted-foreground capitalize">
-                            {benchmark.level.replace('_', ' ')}
-                          </span>
-                        </div>
-                      )}
-                    </div>
+                      </CardContent>
+                    </Card>
+                    );
+                  })}
                   </div>
-                  <div className="ml-4">
-                    <BenchmarkEnablementToggle
-                      organizationId={organizationId}
-                      benchmarkId={benchmark.benchmarkId}
-                      benchmarkType={benchmark.benchmarkType as 'site' | 'custom'}
-                      isEnabled={benchmark.isEnabled}
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            );
-          })}
+                </section>
+              ))}
+            </CategoryGroup>
+          ))}
         </div>
       )}
 
