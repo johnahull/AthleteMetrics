@@ -27,6 +27,7 @@ import { isUnder13, isMinorAge } from "@shared/coppa-utils";
 import { coppaService } from "../services/coppa-service";
 import crypto from "crypto";
 import { hashToken } from "../lib/token-hash";
+import { canManageInvitation } from "../lib/safe-user";
 
 // Rate limiting for invitation endpoints
 const invitationLimiter = rateLimit({
@@ -701,18 +702,15 @@ export function registerInvitationRoutes(app: Express) {
         userOrgs.some(userOrg => userOrg.organizationId === invitation.organizationId)
       );
 
-      // Filter invitations based on role
-      const filteredInvitations = userInvitations.filter(invitation => {
-        // Site admins and org admins see all invitations
-        if (userIsSiteAdmin || isOrgAdmin) {
-          return true;
-        }
-        // Coaches only see athlete invitations
-        if (isCoach) {
-          return invitation.role === 'athlete';
-        }
-        return false;
-      });
+      // Filter invitations by the caller's role in EACH invitation's own organization: being an org admin
+      // in one organization must not expose another organization's invitations (or their bearer tokens).
+      const filteredInvitations = userInvitations.filter(invitation =>
+        canManageInvitation(
+          userOrgs.find(userOrg => userOrg.organizationId === invitation.organizationId)?.role,
+          userIsSiteAdmin,
+          invitation.role,
+        )
+      );
 
       // Batch fetch users and organizations to avoid N+1 queries
       const inviterIds = [...new Set(filteredInvitations.map(i => i.invitedBy).filter(Boolean))] as string[];
@@ -764,13 +762,22 @@ export function registerInvitationRoutes(app: Express) {
         return res.json([]);
       }
 
+      // Invitation links are bearer credentials: only people who manage athlete invitations in an
+      // organization (its coaches and admins, site admins) may list them. Plain members may not.
+      const userIsSiteAdmin = isSiteAdmin(user);
+      if (!userIsSiteAdmin && !userOrgs.some(org => org.role === 'org_admin' || org.role === 'coach')) {
+        return res.status(403).json({ message: "Insufficient permissions to view invitations" });
+      }
+
       const allInvitations = await storage.getInvitations();
 
-      const athleteInvitations = allInvitations.filter(invitation =>
-        invitation.role === 'athlete' &&
-        !invitation.isUsed &&
-        userOrgs.some(userOrg => userOrg.organizationId === invitation.organizationId)
-      );
+      // Only unused athlete invitations of organizations the caller belongs to, and only where their
+      // role there lets them manage athlete invitations.
+      const athleteInvitations = allInvitations.filter(invitation => {
+        if (invitation.role !== 'athlete' || invitation.isUsed) return false;
+        const membership = userOrgs.find(userOrg => userOrg.organizationId === invitation.organizationId);
+        return !!membership && canManageInvitation(membership.role, userIsSiteAdmin, invitation.role);
+      });
 
       // Enrich with athlete data - handle errors gracefully
       const enrichedInvitations = await Promise.all(
@@ -795,7 +802,7 @@ export function registerInvitationRoutes(app: Express) {
       res.json(enrichedInvitations);
     } catch (error) {
       console.error("Error fetching athlete invitations:", error);
-      res.status(500).json({ message: "Failed to fetch athlete invitations", error: error instanceof Error ? error.message : 'Unknown error' });
+      res.status(500).json({ message: "Failed to fetch athlete invitations" });
     }
   });
 
