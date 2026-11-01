@@ -46,7 +46,8 @@ const BUILT_IN_CODES: Partial<Record<MetricGroupId, readonly string[]>> = {
     "RSI", "RSI_105", "RSI_BILATERAL", "RSI_LEFT", "RSI_RIGHT", "RSI_L", "RSI_R",
     "RSI_SINGLE_LEFT", "RSI_SINGLE_RIGHT",
     "JUMP_CMJ_SL_L", "JUMP_CMJ_SL_R",
-    // Stick landing first: alphabetically HOP_SL_TRIPLE_BL_* would sort ahead of HOP_SL_TRIPLE_L
+    // Stick landing first: alphabetically HOP_SL_TRIPLE_BL_* would sort ahead of HOP_SL_TRIPLE_L.
+    // Listing a code here pins it to power whatever category its DB row has (built-in map beats category).
     "HOP_SL_TRIPLE_L", "HOP_SL_TRIPLE_R", "HOP_SL_TRIPLE_BL_L", "HOP_SL_TRIPLE_BL_R",
     "PEAK_POWER_W", "PEAK_POWER_REL", "JUMP_BROAD", "MOMENTUM",
   ],

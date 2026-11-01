@@ -27,6 +27,8 @@ BEGIN
     RAISE EXCEPTION 'Migration 0174 (down): goals, report benchmarks or custom benchmarks reference the HOP_SL_TRIPLE_BL_* metrics, refusing to remove them.';
   END IF;
 
+  -- Deliberately over-cautious: a plain substring match on the JSON text, so a field that merely mentions a code also blocks
+  -- the rollback. Refusing is safer than leaving reports that point at deleted metrics.
   IF EXISTS (SELECT 1 FROM reports WHERE strpos(config::text, 'HOP_SL_TRIPLE_BL_') > 0)
      OR EXISTS (SELECT 1 FROM report_templates WHERE strpos(metrics::text, 'HOP_SL_TRIPLE_BL_') > 0) THEN
     RAISE EXCEPTION 'Migration 0174 (down): reports or report templates reference the HOP_SL_TRIPLE_BL_* metrics, refusing to remove them.';

@@ -284,6 +284,14 @@ describe.skipIf(!isDisposableTestDb)('Migration 0174: against a disposable DB (r
     });
   });
 
+  it('raises when the only stick-landing leg that exists is still in meters', async () => {
+    await rollbackable(async (tx) => {
+      await seed(tx, 'm');
+      await tx`DELETE FROM site_metrics WHERE code = 'HOP_SL_TRIPLE_R'`;
+      await expect(tx.unsafe(UP)).rejects.toThrow(/must be in ft/);
+    });
+  });
+
   describe('down', () => {
     it('removes everything it added, forgets the tracking row, and keeps the stick-landing rows', async () => {
       await rollbackable(async (tx) => {
@@ -328,6 +336,7 @@ describe.skipIf(!isDisposableTestDb)('Migration 0174: against a disposable DB (r
         await tx`INSERT INTO site_benchmarks (id, metric_code, name, comparison_operator, min_value, max_value, is_system_default, is_active)
                  VALUES ('bench-admin-bl-l', 'HOP_SL_TRIPLE_BL_L', 'admin tier', 'range', 15, 20, false, true),
                         ('bench-lookalike', 'HOP_SL_TRIPLE_BLXL', 'lookalike tier', 'range', 15, 20, false, true)`;
+        // 'set-org-pick' is not seeded: the rollbackable helper turns FK checks off (session_replication_role = replica)
         await tx`INSERT INTO benchmark_set_items (id, set_id, benchmark_id, benchmark_type, display_order)
                  VALUES ('bsi-admin-bl-l', 'set-org-pick', 'bench-admin-bl-l', 'site', 1)`;
         await tx`INSERT INTO organization_benchmarks (organization_id, benchmark_id, benchmark_type, is_enabled)

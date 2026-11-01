@@ -22,7 +22,8 @@
 --
 -- Everything is skipped (and the migration is still recorded as applied) unless BOTH HOP_SL_TRIPLE_L and HOP_SL_TRIPLE_R
 -- exist: those rows are created in the admin UI, not by a migration. Confirm they exist in the target environment first. If
--- either is present but not in feet (0168 not applied), the migration raises instead.
+-- either one that exists is not in feet (0168 not applied), the migration raises instead. A lone leg that is already in feet
+-- is skipped silently and the migration is still recorded as applied.
 -- An existing row is never modified (ON CONFLICT DO NOTHING). Sets are inserted with explicit ids and a bare ON CONFLICT DO
 -- NOTHING: the partial unique index benchmark_sets_unique_site_name (name WHERE organization_id IS NULL) would otherwise abort
 -- the migration when a site template of that name exists. Benchmark, set and item ids use a 'bl' infix so 0169's down
@@ -32,11 +33,11 @@
 -- Do not re-run by hand: a manual re-run re-adds org rows an admin deleted.
 -- Number is provisional: renumber at merge if another branch lands 0174 first.
 
+-- Any stick-landing leg that exists must be in feet, even when its partner is missing: otherwise a lone leg still in meters
+-- would let the migration skip silently and be recorded as applied.
 DO $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM site_metrics WHERE code = 'HOP_SL_TRIPLE_L')
-     AND EXISTS (SELECT 1 FROM site_metrics WHERE code = 'HOP_SL_TRIPLE_R')
-     AND EXISTS (SELECT 1 FROM site_metrics WHERE code IN ('HOP_SL_TRIPLE_L', 'HOP_SL_TRIPLE_R') AND unit IS DISTINCT FROM 'ft') THEN
+  IF EXISTS (SELECT 1 FROM site_metrics WHERE code IN ('HOP_SL_TRIPLE_L', 'HOP_SL_TRIPLE_R') AND unit IS DISTINCT FROM 'ft') THEN
     RAISE EXCEPTION 'Migration 0174: HOP_SL_TRIPLE_L / _R must be in ft. Apply 0168_triple_hop_meters_to_feet first.';
   END IF;
 END $$;
