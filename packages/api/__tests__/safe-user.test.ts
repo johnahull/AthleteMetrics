@@ -112,7 +112,7 @@ describe("invitation visibility", () => {
 
 describe("withoutPrivateMemberDetails", () => {
   it("drops contact and age details and keeps everything else", () => {
-    const row = { id: "u1", fullName: "A B", role: "athlete", emails: ["a@x.com"], birthDate: "2010-01-01", phoneNumbers: ["1"], height: 60, weight: 100 };
+    const row = { id: "u1", fullName: "A B", role: "athlete", emails: ["a@x.com"], birthDate: "2010-01-01", birthYear: 2010, phoneNumbers: ["1"], height: 60, weight: 100 };
     expect(withoutPrivateMemberDetails(row)).toEqual({ id: "u1", fullName: "A B", role: "athlete" });
     expect(row.emails).toEqual(["a@x.com"]); // input is not mutated
   });
