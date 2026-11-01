@@ -112,7 +112,15 @@ describe.skipIf(!isDisposableTestDb)('Migration 0173: against a disposable DB (r
        SELECT id, ${action}, 'user', 'mig0173' FROM users LIMIT 1`;
   const rejects = async (tx: any, action: string) => {
     let error: unknown = null;
-    await tx.savepoint(async (sp: any) => insertAudit(sp, action)).catch((e: unknown) => (error = e));
+    let inserted = 0;
+    await tx
+      .savepoint(async (sp: any) => {
+        inserted = (await insertAudit(sp, action)).count;
+      })
+      .catch((e: unknown) => (error = e));
+    // INSERT ... SELECT FROM users adds nothing on an empty users table, so the CHECK would never run and
+    // "not rejected" would be reported for every action, including an unknown one
+    if (!error && inserted !== 1) throw new Error(`audit_logs insert for '${action}' wrote ${inserted} rows (no user to attach it to?)`);
     return (error as { code?: string } | null)?.code === '23514';
   };
 
@@ -120,6 +128,9 @@ describe.skipIf(!isDisposableTestDb)('Migration 0173: against a disposable DB (r
     await rollbackable(async (tx) => {
       // Rows other tests wrote may not satisfy a strict list on a push-only DB; this transaction is rolled back
       await tx`DELETE FROM audit_logs`;
+      // insertAudit needs a user row; other test files may have left users empty. Rolled back with the rest.
+      await tx`INSERT INTO users (username, first_name, last_name, full_name)
+               SELECT 'mig0173_user', 'Mig', 'Test', 'Mig Test' WHERE NOT EXISTS (SELECT 1 FROM users)`;
       await tx.unsafe(UP);
       await tx.unsafe(UP);
       for (const action of NEW_ACTIONS) expect(await rejects(tx, action)).toBe(false);
