@@ -53,6 +53,18 @@ describe("groupMetricCodes", () => {
     const g = groupMetricCodes(["T_TEST", "AGILITY_5105_R", "AGILITY_5105_L", "AGILITY_5105"], {})[0];
     expect(g.codes).toEqual(["AGILITY_5105", "AGILITY_5105_L", "AGILITY_5105_R", "T_TEST"]);
   });
+  it("lists the stick-landing triple hop before the bilateral-landing one, whatever category each row has", () => {
+    // Alphabetically HOP_SL_TRIPLE_BL_* sorts before HOP_SL_TRIPLE_L, so the order has to be explicit.
+    const codes = ["HOP_SL_TRIPLE_BL_R", "HOP_SL_TRIPLE_BL_L", "HOP_SL_TRIPLE_R", "HOP_SL_TRIPLE_L", "DASH_10YD"];
+    const groups = groupMetricCodes(codes, { HOP_SL_TRIPLE_L: "Speed", HOP_SL_TRIPLE_BL_L: "Custom" });
+    expect(groups.map((g) => g.group)).toEqual(["speed", "power"]);
+    expect(groups[1].codes).toEqual(["HOP_SL_TRIPLE_L", "HOP_SL_TRIPLE_R", "HOP_SL_TRIPLE_BL_L", "HOP_SL_TRIPLE_BL_R"]);
+  });
+  it("puts the bilateral-landing triple hop LSI in movement, right after the stick-landing LSI", () => {
+    const g = groupMetricCodes(["HOP_SL_TRIPLE_BL_LSI", "MQI_TOTAL", "HOP_SL_TRIPLE_LSI", "AGILITY_505_M_LSI"], {});
+    expect(g.map((x) => x.group)).toEqual(["movement"]);
+    expect(g[0].codes).toEqual(["MQI_TOTAL", "AGILITY_505_M_LSI", "HOP_SL_TRIPLE_LSI", "HOP_SL_TRIPLE_BL_LSI"]);
+  });
   it("puts conditioning metrics in endurance", () => {
     const g = groupMetricCodes(["COND_VO2MAX_EST"], { COND_VO2MAX_EST: "conditioning" });
     expect(g.map((x) => x.group)).toEqual(["endurance"]);
