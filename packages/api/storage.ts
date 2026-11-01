@@ -37,6 +37,7 @@ import type { WellnessTrend } from "@shared/wellness-types";
 import { validateMeasurementValue, MeasurementValueValidationError } from "@shared/measurement-value-validation";
 import { isMovementQualityMetric } from "@shared/peer-comparison-exclusions";
 import { assertFlyInDistanceMatches, assertFlyInDistanceOnUpdate } from "@shared/fly-run-in";
+import { coppaStatusAllowsJoining } from "@shared/coppa-utils";
 import { db } from "./db";
 import { wellnessRepository, type WellnessTrend as RepoWellnessTrend } from "./repositories/wellness-repository";
 import { eq, desc, asc, and, gte, lte, gt, inArray, sql, arrayContains, or, isNull, isNotNull, exists, notExists, ne, SQL } from "drizzle-orm";
@@ -2211,7 +2212,11 @@ export class DatabaseStorage implements IStorage {
     // Auto-approve only once the requester's email is verified. An unverified requester stays
     // pending and is approved by approvePendingAutoJoinRequests() when they verify.
     const requester = await this.getUser(data.userId);
-    const autoApprove = org.autoApproveRequests && requester?.isEmailVerified === true;
+    const autoApprove =
+      org.autoApproveRequests &&
+      requester?.isEmailVerified === true &&
+      requester.isActive &&
+      coppaStatusAllowsJoining(requester.coppaStatus);
     const status = autoApprove ? 'approved' : 'pending';
 
     const insertValues: any = {
@@ -2263,8 +2268,9 @@ export class DatabaseStorage implements IStorage {
       coppaStatus: users.coppaStatus,
     }).from(users).where(eq(users.id, userId));
 
-    // Never auto-join a deactivated/deleted account or one still waiting on parental consent.
-    if (!user || !user.isActive || user.deletedAt || user.coppaStatus === 'pending_consent') {
+    // Never auto-join a deactivated/deleted account, or one the login gate would refuse (consent pending, parent
+    // email missing, consent revoked); see coppaStatusAllowsJoining.
+    if (!user || !user.isActive || user.deletedAt || !coppaStatusAllowsJoining(user.coppaStatus)) {
       return 0;
     }
 

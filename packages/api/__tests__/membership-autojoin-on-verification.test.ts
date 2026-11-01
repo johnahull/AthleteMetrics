@@ -10,6 +10,8 @@ import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest
 import { db } from "../db";
 import { storage } from "../storage";
 import { PasswordResetService } from "../auth/password-reset";
+import { coppaService } from "../services/coppa-service";
+import { parentalConsents } from "@shared/schema/tables/coppa";
 import {
   organizations,
   users,
@@ -97,6 +99,26 @@ describe("Membership auto-join on email verification", () => {
   });
 
   describe("createMembershipRequest", () => {
+    // A verified email is not enough: the immediate path must apply the same eligibility rules as the sweep.
+    it.each(["pending_consent", "needs_parent_email", "consent_revoked"] as const)(
+      "keeps a verified user whose COPPA status is %s pending instead of approving at once",
+      async (coppaStatus) => {
+        const user = await makeUser(`vc_${coppaStatus}`, { isEmailVerified: true, coppaStatus });
+        const request = await storage.createMembershipRequest({ userId: user.id, organizationId: autoOrgId, discoveryMethod: "join_code" });
+
+        expect(request.status).toBe("pending");
+        expect(await membershipOf(user.id, autoOrgId)).toBeUndefined();
+      },
+    );
+
+    it("keeps a deactivated verified user pending instead of approving at once", async () => {
+      const user = await makeUser("vinactive", { isEmailVerified: true, isActive: false });
+      const request = await storage.createMembershipRequest({ userId: user.id, organizationId: autoOrgId, discoveryMethod: "join_code" });
+
+      expect(request.status).toBe("pending");
+      expect(await membershipOf(user.id, autoOrgId)).toBeUndefined();
+    });
+
     it("approves immediately when the org auto-approves and the email is verified", async () => {
       const user = await makeUser("verified", { isEmailVerified: true });
       const request = await storage.createMembershipRequest({ userId: user.id, organizationId: autoOrgId, discoveryMethod: "join_code" });
@@ -255,12 +277,25 @@ describe("Membership auto-join on email verification", () => {
       expect(await storage.approvePendingAutoJoinRequests(user.id)).toBe(0);
     });
 
-    it("never auto-joins a user whose COPPA consent is still pending", async () => {
-      const user = await makeUser("minor", { coppaStatus: "pending_consent" });
-      const request = await storage.createMembershipRequest({ userId: user.id, organizationId: autoOrgId, discoveryMethod: "join_code" });
+    // The login gate blocks all three of these statuses, so a link in an old email must not get them into an org either.
+    it.each(["pending_consent", "needs_parent_email", "consent_revoked"] as const)(
+      "never auto-joins a user whose COPPA status is %s",
+      async (coppaStatus) => {
+        const user = await makeUser(`minor_${coppaStatus}`, { coppaStatus });
+        const request = await storage.createMembershipRequest({ userId: user.id, organizationId: autoOrgId, discoveryMethod: "join_code" });
 
-      expect(await storage.approvePendingAutoJoinRequests(user.id)).toBe(0);
-      expect((await requestById(request.id)).status).toBe("pending");
+        expect(await storage.approvePendingAutoJoinRequests(user.id)).toBe(0);
+        expect((await requestById(request.id)).status).toBe("pending");
+        expect(await membershipOf(user.id, autoOrgId)).toBeUndefined();
+      },
+    );
+
+    it.each(["not_applicable", "consented"] as const)("still auto-joins a user whose COPPA status is %s", async (coppaStatus) => {
+      const user = await makeUser(`ok_${coppaStatus}`, { coppaStatus });
+      await storage.createMembershipRequest({ userId: user.id, organizationId: autoOrgId, discoveryMethod: "join_code" });
+
+      expect(await storage.approvePendingAutoJoinRequests(user.id)).toBe(1);
+      expect((await membershipOf(user.id, autoOrgId))?.role).toBe("athlete");
     });
 
     it("skips an inactive user", async () => {
@@ -270,6 +305,28 @@ describe("Membership auto-join on email verification", () => {
 
       expect(await storage.approvePendingAutoJoinRequests(user.id)).toBe(0);
       expect((await requestById(request.id)).status).toBe("pending");
+    });
+  });
+
+  describe("parental consent confirmation", () => {
+    it("approves a request that was waiting on consent once the parent confirms", async () => {
+      const user = await makeUser("waiting", { coppaStatus: "pending_consent" });
+      const request = await storage.createMembershipRequest({ userId: user.id, organizationId: autoOrgId, discoveryMethod: "join_code" });
+      expect(request.status).toBe("pending");
+
+      const [consent] = await db.insert(parentalConsents).values({
+        athleteUserId: user.id,
+        parentEmail: `parent${suffix}@example.com`,
+        tokenHash: `hash${suffix}_${Math.random()}`,
+        status: "pending",
+        expiresAt: new Date(Date.now() + 86_400_000),
+      }).returning();
+
+      const result = await coppaService.confirmConsent({ consentId: consent.id, aiConsentGranted: false });
+
+      expect(result.success).toBe(true);
+      expect((await requestById(request.id)).status).toBe("approved");
+      expect((await membershipOf(user.id, autoOrgId))?.role).toBe("athlete");
     });
   });
 
