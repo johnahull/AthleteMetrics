@@ -3,8 +3,8 @@
  */
 
 import type { Express, Request, Response } from "express";
-import rateLimit from "express-rate-limit";
-import { storage } from "../storage";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import { storage, PENDING_MEMBERSHIP_REQUEST_LIMIT } from "../storage";
 import { requireAuth } from "../middleware";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { isSiteAdmin } from "@shared/auth-utils";
@@ -40,6 +40,30 @@ const membershipLimiter = rateLimit({
   legacyHeaders: false,
   skip: (req) => shouldSkipRateLimiting(req, 'general'),
 });
+
+// Per signed-in user rather than per IP: an admin clearing a backlog makes many calls, and staff behind one
+// school network share an IP, so the shared per-IP limiter above would lock them out part-way.
+const perUserLimiter = (limit: number) => rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit,
+  keyGenerator: (req) => req.session?.user?.id ?? ipKeyGenerator(req.ip ?? "unknown"),
+  validate: { keyGeneratorIpFallback: false },
+  message: { message: "Too many requests. Please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  skip: (req) => shouldSkipRateLimiting(req, 'general'),
+});
+const decisionLimiter = perUserLimiter(200); // approve / reject
+const pendingListLimiter = perUserLimiter(300); // the read-only pending list (refetched after every decision)
+
+// Messages the storage layer throws on purpose for the admin to read ("already handled", "no longer
+// eligible"). Anything else is an unexpected failure and must not leak its text (database errors, etc.).
+const EXPECTED_DECISION_ERRORS = new Set([
+  "Membership request not found",
+  "Only pending requests can be approved",
+  "Only pending requests can be rejected",
+  "This request can no longer be approved",
+]);
 
 export function registerMembershipRequestRoutes(app: Express) {
   /**
@@ -117,6 +141,39 @@ export function registerMembershipRequestRoutes(app: Express) {
   });
 
   /**
+   * Pending requests the caller can act on, across organizations (User Management)
+   * GET /api/membership-requests/pending
+   *
+   * Site admins: every organization. Everyone else: only organizations where they are an org admin
+   * (coaches and athletes get 403). Organization ids come from the session, never from the client.
+   */
+  app.get("/api/membership-requests/pending", pendingListLimiter, requireAuth, async (req: Request, res: Response) => {
+    try {
+      const currentUser = req.session.user;
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
+      let orgIds: string[] | null = null;
+      if (!isSiteAdmin(currentUser)) {
+        const memberships = await storage.getUserOrganizations(currentUser.id);
+        orgIds = memberships.filter(m => m.role === 'org_admin').map(m => m.organizationId);
+        if (orgIds.length === 0) {
+          return res.status(403).json({ message: "Organization admin access required" });
+        }
+      }
+
+      const rows = await storage.getPendingMembershipRequestsForOrganizations(orgIds);
+      const truncated = rows.length > PENDING_MEMBERSHIP_REQUEST_LIMIT;
+      res.set("Cache-Control", "no-store");
+      res.json({ requests: truncated ? rows.slice(0, PENDING_MEMBERSHIP_REQUEST_LIMIT) : rows, truncated });
+    } catch (error) {
+      console.error("Error fetching pending membership requests:", error);
+      res.status(500).json({ message: "Failed to fetch membership requests" });
+    }
+  });
+
+  /**
    * Get membership requests for the current user
    * GET /api/membership-requests/my
    */
@@ -183,7 +240,7 @@ export function registerMembershipRequestRoutes(app: Express) {
    * When linkToAthleteId is provided, the existing athlete's data (measurements,
    * team memberships, profile) is transferred to the requester's account.
    */
-  app.post("/api/membership-requests/:id/approve", membershipLimiter, requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/membership-requests/:id/approve", decisionLimiter, requireAuth, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const { linkToAthleteId } = req.body;
@@ -219,6 +276,12 @@ export function registerMembershipRequestRoutes(app: Express) {
       // Only org_admin and coach can approve requests
       if (!userIsSiteAdmin && userOrgRole?.role !== 'org_admin' && userOrgRole?.role !== 'coach') {
         return res.status(403).json({ message: "Insufficient permissions to approve membership requests" });
+      }
+
+      // Linking an existing athlete moves that athlete's measurements and rosters to the requester (a profile
+      // merge); the dedicated merge routes need org_admin, so this does too. Coaches can still approve without a link.
+      if (linkToAthleteId && !userIsSiteAdmin && userOrgRole?.role !== 'org_admin') {
+        return res.status(403).json({ message: "Only organization admins can link a request to an existing athlete" });
       }
 
       // If linking to existing athlete, verify the athlete exists and is unlinked
@@ -257,7 +320,7 @@ export function registerMembershipRequestRoutes(app: Express) {
       });
     } catch (error) {
       console.error("Error approving membership request:", error);
-      if (error instanceof Error) {
+      if (error instanceof Error && EXPECTED_DECISION_ERRORS.has(error.message)) {
         return res.status(400).json({ message: error.message });
       }
       res.status(500).json({ message: "Failed to approve membership request" });
@@ -268,7 +331,7 @@ export function registerMembershipRequestRoutes(app: Express) {
    * Reject a membership request
    * POST /api/membership-requests/:id/reject
    */
-  app.post("/api/membership-requests/:id/reject", membershipLimiter, requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/membership-requests/:id/reject", decisionLimiter, requireAuth, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const { reason } = req.body;
@@ -322,7 +385,7 @@ export function registerMembershipRequestRoutes(app: Express) {
       });
     } catch (error) {
       console.error("Error rejecting membership request:", error);
-      if (error instanceof Error) {
+      if (error instanceof Error && EXPECTED_DECISION_ERRORS.has(error.message)) {
         return res.status(400).json({ message: error.message });
       }
       res.status(500).json({ message: "Failed to reject membership request" });

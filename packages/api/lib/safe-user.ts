@@ -18,7 +18,6 @@ const MEMBER_VISIBLE_USER_KEYS: ReadonlyArray<keyof User> = [
   "fullName",
   "school",
   "graduationYear",
-  "birthYear",
   "sports",
   "positions",
   "gender",
@@ -33,6 +32,7 @@ const STAFF_VISIBLE_USER_KEYS: ReadonlyArray<keyof User> = [
   ...MEMBER_VISIBLE_USER_KEYS,
   "emails",
   "birthDate",
+  "birthYear", // for a minor this reveals that they are underage, so staff only
   "phoneNumbers",
   "height",
   "weight",
@@ -99,8 +99,11 @@ export function invitationsVisibleTo<T extends Pick<Invitation, "role">>(
   return invitations.filter((inv) => canManageInvitation(roleInOrganization, isSiteAdmin, inv.role));
 }
 
-/** Contact and age details a fellow member must not get about teammates. */
-const PRIVATE_MEMBER_DETAIL_KEYS = ["emails", "birthDate", "phoneNumbers", "height", "weight"] as const;
+/**
+ * Contact and age details a fellow member must not get about teammates. `birthYear` counts as age: for a minor
+ * it tells any org member that they are underage (the member tier of `toSafeUser` leaves it out for the same reason).
+ */
+const PRIVATE_MEMBER_DETAIL_KEYS = ["emails", "birthDate", "birthYear", "phoneNumbers", "height", "weight"] as const;
 
 /**
  * For roster rows that are already column projections (not whole users): drop contact and age details

@@ -144,6 +144,7 @@ beforeAll(async () => {
     parentEmail: SECRET.parentEmail,
     googleId: `${SECRET.google}-${who}`,
     birthDate: SECRET.birthDate,
+    birthYear: 2010,
   });
   const orgAdmin = await createUser('orgadmin', [{ orgId: orgA.id, role: 'org_admin' }], secretsFor('orgadmin'));
   const coach = await createUser('coach', [{ orgId: orgA.id, role: 'coach' }], secretsFor('coach'));
@@ -272,12 +273,14 @@ describe('user endpoints', () => {
     expect(asAthlete.status).toBe(200);
     const athleteText = JSON.stringify(asAthlete.body);
     expect(athleteText).not.toContain(SECRET.birthDate);
+    expect(athleteText).not.toContain('"birthYear":2010'); // a birth year tells anyone a minor is underage
     expect(athleteText).not.toContain('@example.com'); // no teammate emails
 
     const asCoach = await get(`/api/users?organizationId=${orgA.id}&includeTeamMemberships=true`, 'coach');
     expect(asCoach.status).toBe(200);
     expect(JSON.stringify(asCoach.body)).toContain('@example.com');
     expect(JSON.stringify(asCoach.body)).toContain(SECRET.birthDate);
+    expect(JSON.stringify(asCoach.body)).toContain('"birthYear":2010');
   });
 
   it('GET /api/site-admins returns no credentials', async () => {
