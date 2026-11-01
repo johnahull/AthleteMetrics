@@ -34,6 +34,21 @@ describe('joinOrganizationByCode', () => {
     expect(await joinOrganizationByCode('ABCD1234')).toEqual({ status: 'pending', organizationName: 'Org' });
   });
 
+  it('flags a pending request that is only waiting for the email to be verified', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(json({ organization: { id: 'org-1', name: 'Org' } }))
+        .mockResolvedValueOnce(json({ request: { status: 'pending' }, awaitingEmailVerification: true })),
+    );
+    expect(await joinOrganizationByCode('ABCD1234')).toEqual({
+      status: 'pending',
+      organizationName: 'Org',
+      awaitingEmailVerification: true,
+    });
+  });
+
   it('throws the server message when the code is invalid, without posting', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(json({ message: 'Organization not found' }, false));
     vi.stubGlobal('fetch', fetchMock);

@@ -60,6 +60,18 @@ describe('Register page — join link signup', () => {
     expect(await screen.findByText(/request to join big time athletes was submitted/i)).toBeInTheDocument();
   });
 
+  it('tells the user they will be added once their email is verified', async () => {
+    joinMock.mockResolvedValue({
+      status: 'pending',
+      organizationName: 'Big Time Athletes',
+      awaitingEmailVerification: true,
+    });
+    await registerWith('?redirect=/join/JOINBTA');
+    expect(
+      await screen.findByText(/verify your email and you'll be added to big time athletes automatically/i),
+    ).toBeInTheDocument();
+  });
+
   it('keeps the new account and links back to the join page when joining fails', async () => {
     joinMock.mockRejectedValue(new Error('Organization does not accept membership requests'));
     await registerWith('?redirect=/join/JOINBTA');
