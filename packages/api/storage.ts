@@ -108,13 +108,14 @@ export interface UnaffiliatedUser {
   isParent: boolean;
 }
 
-/**
- * A pending membership request as listed for admins: explicit, minimal columns only (no spread of a
- * joined `users` or `organizations` row, which would carry credentials / the join code).
- */
 /** How many pending requests one list call returns; the list asks for one more to detect a cut-off. */
 export const PENDING_MEMBERSHIP_REQUEST_LIMIT = 500;
 
+/**
+ * A pending membership request as listed for admins: explicit, minimal columns only (no spread of a
+ * joined `users` or `organizations` row, which would carry credentials / the join code). Only what the card
+ * shows: name, email and whether it is verified. No school or age details (they are not needed to decide).
+ */
 export interface PendingMembershipRequest {
   id: string;
   userId: string;
@@ -131,9 +132,6 @@ export interface PendingMembershipRequest {
     fullName: string;
     email: string | null;
     isEmailVerified: boolean;
-    school: string | null;
-    graduationYear: number | null;
-    birthYear: number | null;
   };
   organization: { id: string; name: string };
 }
@@ -2317,9 +2315,6 @@ export class DatabaseStorage implements IStorage {
         fullName: users.fullName,
         email: sql<string | null>`(${users.emails})[1]`,
         isEmailVerified: users.isEmailVerified,
-        school: users.school,
-        graduationYear: users.graduationYear,
-        birthYear: users.birthYear,
       },
       organization: { id: organizations.id, name: organizations.name },
     })

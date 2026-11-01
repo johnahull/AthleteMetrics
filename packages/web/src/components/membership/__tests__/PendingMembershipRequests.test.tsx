@@ -136,6 +136,17 @@ describe('PendingMembershipRequests', () => {
     );
   });
 
+  it('closes the link dialog when the link-approve fails (the request was probably already handled)', async () => {
+    apiRequestMock.mockRejectedValueOnce(new Error('400: {"message":"Only pending requests can be approved"}'));
+    renderComponent();
+    fireEvent.click(await screen.findByTestId('link-request-req-2'));
+    fireEvent.click(await screen.findByText('Old Athlete'));
+    fireEvent.click(screen.getByRole('button', { name: /link & approve/i }));
+
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ variant: 'destructive' })));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
   it('only disables the row being decided, so several can be approved in a row', async () => {
     apiRequestMock.mockReturnValue(new Promise(() => {})); // never settles
     renderComponent();

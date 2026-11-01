@@ -41,11 +41,11 @@ const membershipLimiter = rateLimit({
   skip: (req) => shouldSkipRateLimiting(req, 'general'),
 });
 
-// Approve / reject, per signed-in user: an admin clearing a backlog makes many calls, and staff behind one
+// Per signed-in user rather than per IP: an admin clearing a backlog makes many calls, and staff behind one
 // school network share an IP, so the shared per-IP limiter above would lock them out part-way.
-const decisionLimiter = rateLimit({
+const perUserLimiter = (limit: number) => rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  limit: 200,
+  limit,
   keyGenerator: (req) => req.session?.user?.id ?? ipKeyGenerator(req.ip ?? "unknown"),
   validate: { keyGeneratorIpFallback: false },
   message: { message: "Too many requests. Please try again later." },
@@ -53,6 +53,8 @@ const decisionLimiter = rateLimit({
   legacyHeaders: false,
   skip: (req) => shouldSkipRateLimiting(req, 'general'),
 });
+const decisionLimiter = perUserLimiter(200); // approve / reject
+const pendingListLimiter = perUserLimiter(300); // the read-only pending list (refetched after every decision)
 
 // Messages the storage layer throws on purpose for the admin to read ("already handled", "no longer
 // eligible"). Anything else is an unexpected failure and must not leak its text (database errors, etc.).
@@ -145,7 +147,7 @@ export function registerMembershipRequestRoutes(app: Express) {
    * Site admins: every organization. Everyone else: only organizations where they are an org admin
    * (coaches and athletes get 403). Organization ids come from the session, never from the client.
    */
-  app.get("/api/membership-requests/pending", decisionLimiter, requireAuth, async (req: Request, res: Response) => {
+  app.get("/api/membership-requests/pending", pendingListLimiter, requireAuth, async (req: Request, res: Response) => {
     try {
       const currentUser = req.session.user;
       if (!currentUser?.id) {

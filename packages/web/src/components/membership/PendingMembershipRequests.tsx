@@ -126,7 +126,10 @@ export function PendingMembershipRequests() {
         description: "The membership request has been approved and linked to the existing athlete profile.",
       });
     },
-    onError,
+    onError: (err: Error) => {
+      onError(err);
+      closeLinkDialog(); // the request was most likely handled by someone else; do not leave the dialog open on a stale list
+    },
   });
 
   const rejectMutation = useMutation({

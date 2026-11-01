@@ -22,7 +22,7 @@ import { db } from '../../packages/api/db';
 import { storage } from '../../packages/api/storage';
 import { users, organizations } from '@shared/schema/tables/core';
 import { userOrganizations, membershipRequests } from '@shared/schema/tables/membership';
-import { and, eq, inArray, like } from 'drizzle-orm';
+import { and, eq, inArray, like, sql } from 'drizzle-orm';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 
 vi.mock('../../packages/api/vite.js', () => ({
@@ -217,7 +217,7 @@ describe('GET /api/membership-requests/pending', () => {
     const res = await get('/api/membership-requests/pending', 'adminA');
     const row = res.body.requests.find((r: { id: string }) => r.id === reqIds.pendingA);
     expect(Object.keys(row.user).sort()).toEqual(
-      ['birthYear', 'email', 'firstName', 'fullName', 'graduationYear', 'id', 'isEmailVerified', 'lastName', 'school'],
+      ['email', 'firstName', 'fullName', 'id', 'isEmailVerified', 'lastName'],
     );
     expect(Object.keys(row.organization).sort()).toEqual(['id', 'name']);
     const text = JSON.stringify(res.body);
@@ -388,6 +388,19 @@ describe('approve and reject error responses', () => {
   });
 });
 
+/** True once some backend is waiting on a row lock (the approval blocked by the uncommitted deactivation). */
+async function waitForBlockedBackend(timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const rows = await db.execute(
+      sql`select 1 from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock'`,
+    );
+    if (rows.length > 0) return true;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return false;
+}
+
 describe('eligibility is checked inside the approval transaction', () => {
   /**
    * Runs an approval while another transaction has deactivated something but not committed yet, then lets that
@@ -410,7 +423,9 @@ describe('eligibility is checked inside the approval transaction', () => {
     const approving = storage
       .approveMembershipRequest(requestId, adminAId)
       .then(() => 'approved', (e: Error) => e.message);
-    await new Promise((resolve) => setTimeout(resolve, 300)); // let the approval start (and, with the fix, block)
+    // With the fix the approval is now waiting on the deactivation's row lock; without it the approval has already
+    // finished and nothing ever blocks (the wait gives up and the assertions below fail).
+    await waitForBlockedBackend();
     release();
     await deactivating;
     return approving;
