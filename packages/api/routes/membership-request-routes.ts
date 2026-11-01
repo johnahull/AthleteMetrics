@@ -8,6 +8,7 @@ import { storage } from "../storage";
 import { requireAuth } from "../middleware";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { isSiteAdmin } from "@shared/auth-utils";
+import { toSafeUser } from "../lib/safe-user";
 import { createMembershipRequestSchema, type OrganizationType } from "@shared/schema";
 
 // Rate limiting for membership request creation
@@ -164,7 +165,8 @@ export function registerMembershipRequestRoutes(app: Express) {
       }
 
       const requests = await storage.getMembershipRequestsByOrganization(organizationId, { status });
-      res.json({ requests });
+      // The storage method joins whole user rows; never send the password hash, MFA secret etc. to the client
+      res.json({ requests: requests.map(r => ({ ...r, user: toSafeUser(r.user, "staff") })) });
     } catch (error) {
       console.error("Error fetching organization membership requests:", error);
       res.status(500).json({ message: "Failed to fetch membership requests" });

@@ -10,6 +10,7 @@ import { requireAuth, requireSiteAdmin } from "../middleware";
 import { sanitizeSearchTerm, validateSearchTerm } from "@shared/input-sanitization";
 import { storage } from "../storage";
 import { handleParentEmailUpdate } from "../services/parent-link-helper";
+import { toSafeUser, visibilityForRole, withoutPrivateMemberDetails, type UserVisibility } from "../lib/safe-user";
 import { updateProfileSchema } from "@shared/schema";
 // Session types are loaded globally
 
@@ -119,7 +120,7 @@ export function registerUserRoutes(app: Express) {
 
       if (userIsSiteAdmin) {
         const users = await userService.getUsers();
-        return res.json(users);
+        return res.json(users.map(u => toSafeUser(u, "staff")));
       }
 
       const userOrgs = await storage.getUserOrganizations(currentUser.id);
@@ -129,6 +130,11 @@ export function registerUserRoutes(app: Express) {
 
       const targetOrgId = String(organizationId || userOrgs[0].organizationId);
       let orgUsers = await userService.getUsersByOrganization(targetOrgId, currentUser.id);
+
+      // A fellow member (athlete) gets names but not teammates' emails, phone numbers, birth dates or body
+      // measurements; staff of that organization keep them.
+      const viewerIsPlainMember =
+        visibilityForRole(userOrgs.find((o) => o.organizationId === targetOrgId)?.role, false) === "member";
 
       // Filter by role if specified (e.g., role=athlete for players only)
       if (role) {
@@ -181,10 +187,10 @@ export function registerUserRoutes(app: Express) {
           filters
         );
 
-        return res.json(usersWithTeams);
+        return res.json(viewerIsPlainMember ? usersWithTeams.map(withoutPrivateMemberDetails) : usersWithTeams);
       }
 
-      res.json(orgUsers);
+      res.json(viewerIsPlainMember ? orgUsers.map(withoutPrivateMemberDetails) : orgUsers);
     } catch (error) {
       console.error("Get users error:", error);
       res.status(500).json({ message: "Failed to fetch users" });
@@ -203,7 +209,28 @@ export function registerUserRoutes(app: Express) {
         return res.status(404).json({ message: "User not found or access denied" });
       }
 
-      res.json(user);
+      // Never return the raw row (password hash, MFA secret ...). Yourself, site admins and staff of an
+      // organization you share with the target see more than a fellow member does.
+      const requester = req.session.user!;
+      let visibility: UserVisibility = "member";
+      if (requester.id === userId) {
+        visibility = "self";
+      } else if (requester.isSiteAdmin === true) {
+        visibility = "staff";
+      } else {
+        const [mine, theirs] = await Promise.all([
+          storage.getUserOrganizations(requester.id),
+          storage.getUserOrganizations(userId),
+        ]);
+        const isStaffOfSharedOrg = mine.some(
+          (m) =>
+            (m.role === "org_admin" || m.role === "coach") &&
+            theirs.some((t) => t.organizationId === m.organizationId),
+        );
+        if (isStaffOfSharedOrg) visibility = "staff";
+      }
+
+      res.json(toSafeUser(user, visibility));
     } catch (error) {
       console.error("Get user profile error:", error);
       const message = error instanceof Error ? error.message : "Failed to fetch user profile";
@@ -241,7 +268,7 @@ export function registerUserRoutes(app: Express) {
         email: updatedUser.emails?.[0] || req.session.user!.email
       };
 
-      res.json(updatedUser);
+      res.json(toSafeUser(updatedUser, "self"));
     } catch (error) {
       console.error("Update profile error:", error);
       const message = error instanceof Error ? error.message : "Failed to update profile";
@@ -313,7 +340,7 @@ export function registerUserRoutes(app: Express) {
         req.session.user!.id
       );
 
-      res.json(updatedUser);
+      res.json(toSafeUser(updatedUser, "staff"));
     } catch (error) {
       console.error("Update user role error:", error);
       const message = error instanceof Error ? error.message : "Failed to update user role";
@@ -336,7 +363,7 @@ export function registerUserRoutes(app: Express) {
         req.session.user!.id
       );
       
-      res.json(updatedUser);
+      res.json(toSafeUser(updatedUser, "staff"));
     } catch (error) {
       console.error("Update user status error:", error);
       const message = error instanceof Error ? error.message : "Failed to update user status";
@@ -369,7 +396,7 @@ export function registerUserRoutes(app: Express) {
   app.get("/api/site-admins", requireSiteAdmin, async (req, res) => {
     try {
       const admins = await userService.getSiteAdmins();
-      res.json(admins);
+      res.json(admins.map(a => toSafeUser(a, "staff")));
     } catch (error) {
       console.error("Get site admins error:", error);
       const message = error instanceof Error ? error.message : "Failed to fetch site administrators";

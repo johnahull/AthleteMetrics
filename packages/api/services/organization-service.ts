@@ -6,6 +6,7 @@ import { BaseService } from "./base-service";
 import { insertOrganizationSchema, updateOrganizationSchema } from "@shared/schema";
 import type { Organization, InsertOrganization, UpdateOrganization, User, UserOrganization } from "@shared/schema";
 import crypto from "crypto";
+import { invitationsVisibleTo, toSafeUser, visibilityForRole } from "../lib/safe-user";
 
 export interface OrganizationFilters {
   search?: string;
@@ -322,7 +323,8 @@ export class OrganizationService extends BaseService {
   ): Promise<any> {
     try {
       // Validate access
-      const hasAccess = await this.validateOrganizationAccess(requestingUserId, organizationId);
+      const isSiteAdmin = await this.isSiteAdmin(requestingUserId);
+      const hasAccess = await this.validateOrganizationAccess(requestingUserId, organizationId, isSiteAdmin);
       if (!hasAccess) {
         throw new Error("Unauthorized: Access denied to this organization");
       }
@@ -332,9 +334,20 @@ export class OrganizationService extends BaseService {
         throw new Error("Organization not found");
       }
 
+      // The caller's role in THIS organization decides how much of each member they see and which
+      // invitations (and their bearer tokens) they get. Membership of any role passes the access check above.
+      const memberships = await this.storage.getUserOrganizations(requestingUserId);
+      const roleInOrg = memberships.find(m => m.organizationId === organizationId)?.role;
+      const visibility = visibilityForRole(roleInOrg, isSiteAdmin);
+
       // Get organization users and invitations
-      const users = await this.storage.getOrganizationUsers(organizationId);
-      const invitations = await this.storage.getOrganizationInvitations(organizationId);
+      const users = (await this.storage.getOrganizationUsers(organizationId))
+        .map(u => ({ ...u, user: toSafeUser(u.user, visibility) }));
+      const invitations = invitationsVisibleTo(
+        await this.storage.getOrganizationInvitations(organizationId),
+        roleInOrg,
+        isSiteAdmin,
+      );
 
       // Categorize users into coaches (org_admin/coach) and athletes
       const coaches = users.filter(u => u.role === 'org_admin' || u.role === 'coach');
@@ -473,6 +486,12 @@ export class OrganizationService extends BaseService {
       const profilesMap = new Map<string, any>();
       const BATCH_SIZE = 50; // Process 50 organizations at a time to prevent memory issues
 
+      // Same rule as getOrganizationProfile: what each org's users and invitations look like depends on the
+      // caller's role in that organization.
+      const isSiteAdmin = await this.isSiteAdmin(requestingUserId);
+      const memberships = await this.storage.getUserOrganizations(requestingUserId);
+      const roleIn = (orgId: string) => memberships.find(m => m.organizationId === orgId)?.role;
+
       // Process organizations in batches to prevent memory issues with large numbers
       for (let i = 0; i < organizationIds.length; i += BATCH_SIZE) {
         const batch = organizationIds.slice(i, i + BATCH_SIZE);
@@ -500,10 +519,11 @@ export class OrganizationService extends BaseService {
 
         // Build the profiles map for this batch
         batch.forEach((orgId, index) => {
+          const visibility = visibilityForRole(roleIn(orgId), isSiteAdmin);
           profilesMap.set(orgId, {
             organization: orgs[index],
-            users: usersArrays[index] || [],
-            invitations: invitationsArrays[index] || []
+            users: (usersArrays[index] || []).map(u => ({ ...u, user: toSafeUser(u.user, visibility) })),
+            invitations: invitationsVisibleTo(invitationsArrays[index] || [], roleIn(orgId), isSiteAdmin)
           });
         });
       }
