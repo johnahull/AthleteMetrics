@@ -272,12 +272,18 @@ describe('approving a request', () => {
     expect(row.status).toBe('pending');
   });
 
-  it('a coach can still approve without a link', async () => {
+  it('a coach can still approve without a link, and the requester becomes a member', async () => {
     const res = await request(app)
       .post(`/api/membership-requests/${reqIds.coachApprove}/approve`)
       .set('Cookie', cookies.coachA)
       .send({});
     expect(res.status).toBe(200);
+
+    const [row] = await db.select().from(membershipRequests).where(eq(membershipRequests.id, reqIds.coachApprove));
+    expect(row.status).toBe('approved');
+    const [membership] = await db.select().from(userOrganizations)
+      .where(and(eq(userOrganizations.userId, row.userId), eq(userOrganizations.organizationId, orgA.id)));
+    expect(membership?.role).toBe('athlete');
   });
 
   it('an approval racing a rejection leaves a record that matches the membership', async () => {
@@ -302,6 +308,50 @@ describe('approving a request', () => {
     const memberships = await db.select().from(userOrganizations)
       .where(and(eq(userOrganizations.userId, row.userId), eq(userOrganizations.organizationId, orgA.id)));
     expect(memberships).toHaveLength(1);
+  });
+});
+
+describe('the whole flow, over HTTP', () => {
+  it('a user asks to join, an org admin sees and approves the request, and the user is added to the organization', async () => {
+    // an athlete with no organization (birth date so the profile-completion gate lets them through)
+    const applicant = await createUser('flowApplicant', [], { birthDate: '1990-01-01' });
+    const applicantCookie = await loginAs(applicant.username);
+    const membershipOf = async () => (await db.select().from(userOrganizations)
+      .where(and(eq(userOrganizations.userId, applicant.id), eq(userOrganizations.organizationId, orgA.id))))[0];
+
+    // 1. the applicant submits the request
+    const created = await request(app)
+      .post('/api/membership-requests')
+      .set('Cookie', applicantCookie)
+      .send({ organizationId: orgA.id, discoveryMethod: 'directory' });
+    expect(created.status).toBe(201);
+    expect(created.body.request.status).toBe('pending');
+    const requestId: string = created.body.request.id;
+    expect(await membershipOf()).toBeUndefined(); // not a member yet
+
+    // 2. the org admin sees it in the pending list
+    const listed = await get('/api/membership-requests/pending', 'adminA');
+    expect(listedIds(listed.body)).toContain(requestId);
+
+    // 3. the org admin approves it
+    const approved = await request(app)
+      .post(`/api/membership-requests/${requestId}/approve`)
+      .set('Cookie', cookies.adminA)
+      .send({});
+    expect(approved.status).toBe(200);
+
+    // 4. the applicant is now in the organization, as an athlete, and the request records who approved it
+    expect((await membershipOf())?.role).toBe('athlete');
+    const [row] = await db.select().from(membershipRequests).where(eq(membershipRequests.id, requestId));
+    expect(row.status).toBe('approved');
+    expect(row.processedBy).toBe(adminAId);
+
+    // 5. it is gone from the pending list, and the applicant's own view includes the organization
+    const after = await get('/api/membership-requests/pending', 'adminA');
+    expect(listedIds(after.body)).not.toContain(requestId);
+    const mine = await request(app).get('/api/auth/me/organizations').set('Cookie', applicantCookie);
+    expect(mine.status).toBe(200);
+    expect(JSON.stringify(mine.body)).toContain(orgA.id);
   });
 });
 

@@ -200,6 +200,13 @@ describe("Membership Request Storage", () => {
       expect(approved.status).toBe("approved");
       expect(approved.processedBy).toBe(testAdminId);
       expect(approved.processedAt).toBeDefined();
+
+      // ...and the requester really is a member of the organization now
+      const [membership] = await db.select().from(userOrganizations).where(and(
+        eq(userOrganizations.userId, testUserId),
+        eq(userOrganizations.organizationId, testOrgId)
+      ));
+      expect(membership?.role).toBe("athlete");
     });
 
     it("should throw error for non-pending request", async () => {
