@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useCustomBenchmarks } from "@/lib/benchmarks-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,8 +7,13 @@ import { Switch } from "@/components/ui/switch";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Plus, Search, Filter, AlertCircle } from "lucide-react";
 import { CustomBenchmarkCard } from "./CustomBenchmarkCard";
+import { CategoriesUnavailableNotice } from "./CategoriesUnavailableNotice";
 import { CustomBenchmarkForm } from "./CustomBenchmarkForm";
 import { useAuth } from "@/lib/auth";
+import { useMetricCategoryLookup } from "@/hooks/use-metric-category-lookup";
+import { useMetricLabels } from "@/hooks/use-metric-labels";
+import { CategoryGroup } from "@/components/ui/category-group";
+import { groupByCategoryThenMetric } from "@/lib/category-grouping";
 import type { CustomBenchmark } from "@shared/schema";
 
 interface CustomBenchmarkListProps {
@@ -21,12 +26,16 @@ export function CustomBenchmarkList({ organizationId }: CustomBenchmarkListProps
   const [editingBenchmark, setEditingBenchmark] = useState<CustomBenchmark | null>(null);
   const [includeInactive, setIncludeInactive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const { getLabel } = useMetricLabels();
+  const { getCategory, isLoading: categoriesLoading, isError: categoriesError } = useMetricCategoryLookup(organizationId);
 
   // Fetch custom benchmarks for this organization
-  const { data: benchmarks, isLoading, error } = useCustomBenchmarks(
+  const { data: benchmarks, isLoading: benchmarksLoading, error } = useCustomBenchmarks(
     organizationId,
     includeInactive
   );
+  const isLoading = benchmarksLoading || categoriesLoading;
 
   // Filter benchmarks by search query
   const filteredBenchmarks = benchmarks?.filter((benchmark) => {
@@ -38,6 +47,20 @@ export function CustomBenchmarkList({ organizationId }: CustomBenchmarkListProps
       benchmark.description?.toLowerCase().includes(query)
     );
   });
+
+  const categoryGroups = useMemo(
+    () => groupByCategoryThenMetric(filteredBenchmarks ?? [], (b) => b.metricCode, getCategory),
+    [filteredBenchmarks, getCategory],
+  );
+
+  const setGroupOpen = useCallback((id: string, open: boolean) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (open) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   const handleEdit = (benchmark: CustomBenchmark) => {
     setEditingBenchmark(benchmark);
@@ -137,6 +160,8 @@ export function CustomBenchmarkList({ organizationId }: CustomBenchmarkListProps
         </CardContent>
       </Card>
 
+      {categoriesError && <CategoriesUnavailableNotice />}
+
       {/* Benchmarks List */}
       {isLoading ? (
         <LoadingSpinner text="Loading custom benchmarks..." />
@@ -161,14 +186,36 @@ export function CustomBenchmarkList({ organizationId }: CustomBenchmarkListProps
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredBenchmarks.map((benchmark) => (
-            <CustomBenchmarkCard
-              key={benchmark.id}
-              benchmark={benchmark}
-              organizationId={organizationId}
-              onEdit={handleEdit}
-            />
+        <div>
+          {categoryGroups.map((group) => (
+            <CategoryGroup
+              key={group.id}
+              id={group.id}
+              title={group.label}
+              count={group.count}
+              unit="benchmark"
+              open={!collapsedGroups.has(group.id)}
+              onOpenChange={(open) => setGroupOpen(group.id, open)}
+            >
+              {group.items.map((metricGroup) => (
+                <section key={metricGroup.metricCode} className="mb-6">
+                  <p className="mb-2 text-sm font-medium text-muted-foreground">
+                    {getLabel(metricGroup.metricCode)}
+                    <span className="ml-2 font-normal" aria-hidden>{metricGroup.items.length}</span>
+                  </p>
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {metricGroup.items.map((benchmark) => (
+                      <CustomBenchmarkCard
+                        key={benchmark.id}
+                        benchmark={benchmark}
+                        organizationId={organizationId}
+                        onEdit={handleEdit}
+                      />
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </CategoryGroup>
           ))}
         </div>
       )}

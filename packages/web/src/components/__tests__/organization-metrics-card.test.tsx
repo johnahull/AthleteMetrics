@@ -20,8 +20,9 @@ vi.mock('@/lib/custom-metrics-api', () => ({
 }));
 
 const ORG = '11111111-1111-1111-1111-111111111111';
+let categories: Record<string, string | null> = {};
 const site = (code: string) => ({
-  code, label: code, isActive: true, sportAssociations: null, metricType: 'lower_is_better', description: `${code} description`,
+  code, label: code, isActive: true, sportAssociations: null, category: categories[code] ?? null, metricType: 'lower_is_better', description: `${code} description`,
   ...(code === 'C' ? { isDerived: true, formula: 'A + B', dependentMetrics: ['A', 'B'] } : { isDerived: false }),
 });
 const orgRow = (metricCode: string, isEnabled: boolean) => ({ id: `om-${metricCode}`, organizationId: ORG, metricCode, isEnabled });
@@ -31,6 +32,7 @@ let savedA = false;
 let savedC: boolean | null = null; // null = no org_metrics row yet
 
 beforeEach(() => {
+  categories = {};
   savedA = false;
   savedC = null;
   fetchMock = vi.fn(async (input: any, init?: any) => {
@@ -129,6 +131,60 @@ describe('OrganizationMetricsCard staged toggles', () => {
     rerender(ui('22222222-2222-2222-2222-222222222222'));
     await screen.findByTestId('toggle-metric-A');
     expect(screen.queryByTestId('save-metric-changes')).not.toBeInTheDocument();
+  });
+});
+
+describe('OrganizationMetricsCard category groups', () => {
+  beforeEach(() => {
+    categories = { A: 'Speed', B: 'speed', C: 'power' };
+  });
+
+  it('groups site metrics under category headers with counts, in report order', async () => {
+    renderCard();
+    expect(await screen.findByRole('button', { name: 'Speed, 2 metrics' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Power, 1 metric' })).toBeInTheDocument();
+    const order = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent?.replace(/\d+$/, ''));
+    expect(order).toEqual(['Speed', 'Power']);
+  });
+
+  it('links each group toggle to the rows it controls via aria-controls', async () => {
+    renderCard();
+    const toggle = await screen.findByRole('button', { name: /^Speed,/ });
+    const controlsId = toggle.getAttribute('aria-controls');
+    expect(controlsId).toBeTruthy();
+    const region = document.getElementById(controlsId!);
+    expect(region).not.toBeNull();
+    expect(region).toContainElement(screen.getByTestId('org-metric-row-A'));
+    fireEvent.click(toggle);
+    expect(document.getElementById(controlsId!)).not.toBeNull();
+  });
+
+  it('keeps row and toggle test ids', async () => {
+    renderCard();
+    await screen.findByTestId('toggle-metric-A');
+    for (const code of ['A', 'B', 'C']) {
+      expect(screen.getByTestId(`org-metric-row-${code}`)).toBeInTheDocument();
+    }
+  });
+
+  it('collapses one category and keeps staged toggles when it is reopened', async () => {
+    renderCard();
+    const a = await screen.findByTestId('toggle-metric-A');
+    fireEvent.click(a);
+    fireEvent.click(screen.getByRole('button', { name: /^Speed,/ }));
+    expect(screen.queryByTestId('org-metric-row-A')).not.toBeInTheDocument();
+    expect(screen.getByTestId('org-metric-row-C')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Speed,/ }));
+    expect(screen.getByTestId('toggle-metric-A')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByText(/1 unsaved change/i)).toBeInTheDocument();
+  });
+
+  it('puts metrics without a category under Other, last', async () => {
+    categories = { A: 'Speed' };
+    renderCard();
+    expect(await screen.findByRole('button', { name: 'Other, 2 metrics' })).toBeInTheDocument();
+    const order = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent?.replace(/\d+$/, ''));
+    expect(order).toEqual(['Speed', 'Other']);
   });
 });
 

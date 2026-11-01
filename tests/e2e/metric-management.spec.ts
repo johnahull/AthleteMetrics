@@ -81,6 +81,27 @@ test.describe('Metric Management - Site Admin', () => {
     await expect(fly10Row).toContainText('System Default');
   });
 
+  test('should group metrics under collapsible category headers', async ({ page }) => {
+    await page.goto(`${STAGING_URL}/metrics`);
+    await page.waitForSelector('[data-testid="metrics-table"]', { timeout: 5000 });
+
+    // Every metric row sits inside a category group whose header shows a count
+    const groups = page.locator('[data-testid^="category-group-"]');
+    await expect(groups.first()).toBeVisible();
+    // FLY10_TIME is a speed metric; the group is addressed by its stable id so it survives collapsing
+    const speedGroup = page.locator('[data-testid="category-group-speed"]');
+    await expect(speedGroup.locator('[data-testid="metric-row-FLY10_TIME"]')).toBeVisible();
+    const toggle = speedGroup.getByRole('button', { name: /^Speed, \d+ metrics?$/ });
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
+    // Collapsing the group hides its rows; reopening restores them
+    await toggle.click();
+    await expect(page.locator('[data-testid="metric-row-FLY10_TIME"]')).toHaveCount(0);
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await toggle.click();
+    await expect(page.locator('[data-testid="metric-row-FLY10_TIME"]')).toBeVisible();
+  });
+
   test('should successfully create a new custom metric', async ({ page }) => {
     const testMetric = generateTestMetric();
 

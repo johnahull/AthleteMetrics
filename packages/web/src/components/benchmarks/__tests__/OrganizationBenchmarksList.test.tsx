@@ -6,6 +6,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { OrganizationBenchmarksList } from '../OrganizationBenchmarksList';
@@ -17,6 +18,12 @@ vi.mock('@/lib/benchmarks-api', () => ({
     isLoading: false,
     error: null,
   })),
+}));
+
+// Mock the site metrics API (category lookup)
+vi.mock('@/lib/metrics-api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/metrics-api')>()),
+  useSiteMetrics: vi.fn(() => ({ data: [], isLoading: false })),
 }));
 
 // Mock the metric config hook
@@ -293,6 +300,108 @@ describe('OrganizationBenchmarksList', () => {
       expect(screen.getByText(/↔ 25 – 30/i)).toBeInTheDocument();
       // Traditional benchmark
       expect(screen.getByText(/≤ 1/i)).toBeInTheDocument();
+    });
+  });
+
+  describe('Category groups', () => {
+    const orgBenchmark = (id: string, name: string, metricCode: string) => ({
+      id,
+      organizationId: 'org-1',
+      benchmarkId: `b-${id}`,
+      benchmarkType: 'site',
+      isEnabled: true,
+      customName: null,
+      name,
+      metricCode,
+      description: null,
+      benchmarkValue: 1,
+      comparisonOperator: 'lte',
+      minValue: null,
+      maxValue: null,
+      ageMin: null,
+      ageMax: null,
+      gender: null,
+      position: null,
+      level: null,
+      isActive: true,
+    });
+
+    const setup = async (metricsLoading = false, metricsError = false) => {
+      const { useOrganizationBenchmarks } = await import('@/lib/benchmarks-api');
+      const { useSiteMetrics } = await import('@/lib/metrics-api');
+      vi.mocked(useOrganizationBenchmarks).mockReturnValue({
+        data: [
+          orgBenchmark('1', 'Dash Varsity', 'DASH_40YD'),
+          orgBenchmark('2', 'Dash Elite', 'DASH_40YD'),
+          orgBenchmark('3', 'Jump Varsity', 'VERTICAL_JUMP'),
+        ],
+        isLoading: false,
+        error: null,
+      } as any);
+      vi.mocked(useSiteMetrics).mockReturnValue({
+        isError: metricsError,
+        data: metricsLoading || metricsError
+          ? undefined
+          : [
+              { code: 'DASH_40YD', label: '40 Yard Dash', category: 'Speed' },
+              { code: 'VERTICAL_JUMP', label: 'Vertical Jump', category: 'power' },
+            ],
+        isLoading: metricsLoading,
+      } as any);
+      renderWithClient(<OrganizationBenchmarksList organizationId="org-1" />);
+    };
+
+    it('groups enabled benchmarks under category headers with counts, in report order', async () => {
+      await setup();
+      expect(screen.getByRole('button', { name: 'Speed, 2 benchmarks' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Power, 1 benchmark' })).toBeInTheDocument();
+      const order = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent?.replace(/\d+$/, ''));
+      expect(order).toEqual(['Speed', 'Power']);
+    });
+
+    it('asks for the organization-scoped metric list including inactive metrics', async () => {
+      await setup();
+      const { useSiteMetrics } = await import('@/lib/metrics-api');
+      expect(useSiteMetrics).toHaveBeenCalledWith(true, 'org-1');
+    });
+
+    it('collapses one category without touching the others', async () => {
+      await setup();
+      await userEvent.click(screen.getByRole('button', { name: /^Speed,/ }));
+      expect(screen.queryByText('Dash Varsity')).not.toBeInTheDocument();
+      expect(screen.getByText('Jump Varsity')).toBeInTheDocument();
+    });
+
+    it('updates counts when searching', async () => {
+      await setup();
+      await userEvent.type(screen.getByPlaceholderText('Search enabled benchmarks...'), 'elite');
+      expect(screen.getByRole('button', { name: 'Speed, 1 benchmark' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Power,/ })).not.toBeInTheDocument();
+    });
+
+    it('hides the per-metric count from assistive technology', async () => {
+      await setup();
+      const count = screen.getByTestId('category-group-power').querySelector('section > p > span');
+      expect(count).not.toBeNull();
+      expect(count).toHaveAttribute('aria-hidden', 'true');
+    });
+
+    it('tells the user categories are unavailable when the metric list fails, and still lists every benchmark', async () => {
+      await setup(false, true);
+      expect(screen.getByRole('alert')).toHaveTextContent(/categories are unavailable/i);
+      expect(screen.getByText('Dash Varsity')).toBeInTheDocument();
+      expect(screen.getByText('Jump Varsity')).toBeInTheDocument();
+    });
+
+    it('shows no notice when the metric list loads', async () => {
+      await setup();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('waits for the metric list instead of flashing everything under Other', async () => {
+      await setup(true);
+      expect(screen.queryByRole('button', { name: /^Other,/ })).not.toBeInTheDocument();
+      expect(screen.queryByText('Dash Varsity')).not.toBeInTheDocument();
     });
   });
 });

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useCustomOrgMetrics } from "@/lib/custom-metrics-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,8 @@ import { Plus, Search, Filter, Ruler, AlertCircle } from "lucide-react";
 import { CustomOrgMetricCard } from "./CustomOrgMetricCard";
 import { CustomOrgMetricForm } from "./CustomOrgMetricForm";
 import { useAuth } from "@/lib/auth";
+import { CategoryGroup } from "@/components/ui/category-group";
+import { groupByCategory } from "@/lib/category-grouping";
 import type { CustomOrgMetric } from "@shared/schema";
 
 interface CustomOrgMetricListProps {
@@ -47,6 +49,7 @@ export function CustomOrgMetricList({ organizationId, embedded = false, canEdit 
   const [includeArchived, setIncludeArchived] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   // Fetch custom metrics for this organization
   const { data: metrics, isLoading, error } = useCustomOrgMetrics(
@@ -65,6 +68,20 @@ export function CustomOrgMetricList({ organizationId, embedded = false, canEdit 
       metric.category?.toLowerCase().includes(query)
     );
   });
+
+  const categoryGroups = useMemo(
+    () => groupByCategory(filteredMetrics ?? [], (m) => m.category),
+    [filteredMetrics],
+  );
+
+  const setGroupOpen = useCallback((id: string, open: boolean) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (open) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   const handleEdit = (metric: CustomOrgMetric) => {
     setEditingMetric(metric);
@@ -224,15 +241,29 @@ export function CustomOrgMetricList({ organizationId, embedded = false, canEdit 
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredMetrics.map((metric) => (
-            <CustomOrgMetricCard
-              key={metric.id}
-              metric={metric}
-              organizationId={organizationId}
-              onEdit={handleEdit}
-              canEdit={canEditMetrics}
-            />
+        <div>
+          {categoryGroups.map((group) => (
+            <CategoryGroup
+              key={group.id}
+              id={group.id}
+              title={group.label}
+              count={group.items.length}
+              unit="metric"
+              open={!collapsedGroups.has(group.id)}
+              onOpenChange={(open) => setGroupOpen(group.id, open)}
+            >
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {group.items.map((metric) => (
+                  <CustomOrgMetricCard
+                    key={metric.id}
+                    metric={metric}
+                    organizationId={organizationId}
+                    onEdit={handleEdit}
+                    canEdit={canEditMetrics}
+                  />
+                ))}
+              </div>
+            </CategoryGroup>
           ))}
         </div>
       )}
