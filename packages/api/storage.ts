@@ -234,6 +234,7 @@ export interface IStorage {
   getMembershipRequestsByUser(userId: string): Promise<(MembershipRequest & { organization: Organization })[]>;
   approveMembershipRequest(id: string, processedBy: string): Promise<MembershipRequest>;
   getPendingMembershipRequestsForOrganizations(orgIds: string[] | null): Promise<PendingMembershipRequest[]>;
+  approvePendingAutoJoinRequests(userId: string): Promise<number>;
   rejectMembershipRequest(id: string, processedBy: string, reason?: string): Promise<MembershipRequest>;
   cancelMembershipRequest(id: string): Promise<void>;
   hasPendingMembershipRequest(userId: string, organizationId: string): Promise<boolean>;
@@ -2160,6 +2161,16 @@ export class DatabaseStorage implements IStorage {
         return { success: false };
       }
 
+      // The token must be for an address the user still has. A token for an old or other
+      // address must not verify the account (verification can now admit the user to an org).
+      const [tokenUser] = await tx.select({ emails: users.emails })
+        .from(users)
+        .where(eq(users.id, verificationToken.userId));
+      const tokenEmail = String(verificationToken.email).toLowerCase();
+      if (!tokenUser?.emails?.some((e: string) => e.toLowerCase() === tokenEmail)) {
+        return { success: false };
+      }
+
       // Mark token as used (within same transaction)
       await tx.update(emailVerificationTokens)
         .set({ isUsed: true })
@@ -2228,8 +2239,11 @@ export class DatabaseStorage implements IStorage {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
 
-    // If auto-approve is enabled, approve immediately
-    const status = org.autoApproveRequests ? 'approved' : 'pending';
+    // Auto-approve only once the requester's email is verified. An unverified requester stays
+    // pending and is approved by approvePendingAutoJoinRequests() when they verify.
+    const requester = await this.getUser(data.userId);
+    const autoApprove = org.autoApproveRequests && requester?.isEmailVerified === true;
+    const status = autoApprove ? 'approved' : 'pending';
 
     const insertValues: any = {
       userId: data.userId,
@@ -2243,15 +2257,25 @@ export class DatabaseStorage implements IStorage {
     if (data.discoveryMethod) {
       insertValues.discoveryMethod = data.discoveryMethod;
     }
-    if (org.autoApproveRequests) {
+    if (autoApprove) {
       insertValues.processedAt = new Date();
     }
 
     const [request] = await db.insert(membershipRequests).values(insertValues).returning();
 
     // If auto-approved, add user to organization immediately
-    if (org.autoApproveRequests) {
+    if (autoApprove) {
       await this.addUserToOrganization(data.userId, data.organizationId, 'athlete');
+      return request;
+    }
+
+    // The email may have been verified between the read above and this insert, in which case the
+    // verification's sweep ran before this row existed. Re-check so the request is not stranded.
+    if (org.autoApproveRequests) {
+      const recheck = await this.getUser(data.userId);
+      if (recheck?.isEmailVerified === true && (await this.approvePendingAutoJoinRequests(data.userId)) > 0) {
+        return (await this.getMembershipRequest(request.id)) ?? request;
+      }
     }
 
     return request;
@@ -2305,6 +2329,84 @@ export class DatabaseStorage implements IStorage {
       .where(and(...conditions))
       .orderBy(asc(membershipRequests.createdAt))
       .limit(PENDING_MEMBERSHIP_REQUEST_LIMIT + 1);
+  }
+
+  /**
+   * Approve a user's pending requests to organizations that auto-approve, called once their
+   * email is verified. Organization state is re-read here (not at request time), so an org that
+   * has since gone manual, closed, expired the request or been deactivated leaves it pending for
+   * a coach. Returns how many requests were approved.
+   */
+  async approvePendingAutoJoinRequests(userId: string): Promise<number> {
+    const [user] = await db.select({
+      isActive: users.isActive,
+      deletedAt: users.deletedAt,
+      coppaStatus: users.coppaStatus,
+    }).from(users).where(eq(users.id, userId));
+
+    // Never auto-join a deactivated/deleted account or one still waiting on parental consent.
+    if (!user || !user.isActive || user.deletedAt || user.coppaStatus === 'pending_consent') {
+      return 0;
+    }
+
+    const candidates = await db.select({
+      id: membershipRequests.id,
+      organizationId: membershipRequests.organizationId,
+    })
+      .from(membershipRequests)
+      .innerJoin(organizations, eq(membershipRequests.organizationId, organizations.id))
+      .where(and(
+        eq(membershipRequests.userId, userId),
+        eq(membershipRequests.status, 'pending'),
+        or(isNull(membershipRequests.expiresAt), gt(membershipRequests.expiresAt, new Date())),
+        eq(organizations.autoApproveRequests, true),
+        eq(organizations.allowMembershipRequests, true),
+        eq(organizations.isActive, true),
+        isNull(organizations.deletedAt),
+      ));
+
+    let approved = 0;
+    for (const candidate of candidates) {
+      // One transaction per request: the guarded status flip and the membership commit together.
+      const won = await db.transaction(async (tx: any) => {
+        const [flipped] = await tx.update(membershipRequests)
+          .set({ status: 'approved', processedBy: null, processedAt: new Date() })
+          .where(and(eq(membershipRequests.id, candidate.id), eq(membershipRequests.status, 'pending')))
+          .returning({ id: membershipRequests.id });
+        if (!flipped) return false; // a coach (or another verification) got there first
+
+        // addUserToOrganization replaces any existing row, so an existing member (e.g. made a
+        // coach while this request was pending) must not be touched or they would be demoted.
+        const [existing] = await tx.select({ id: userOrganizations.id }).from(userOrganizations)
+          .where(and(
+            eq(userOrganizations.userId, userId),
+            eq(userOrganizations.organizationId, candidate.organizationId),
+          ));
+        if (!existing) {
+          await this.addUserToOrganization(userId, candidate.organizationId, 'athlete', tx);
+        }
+        return true;
+      });
+      if (!won) continue;
+      approved++;
+
+      try {
+        await this.createAuditLog({
+          userId,
+          action: 'membership_request_approved',
+          resourceType: 'membership_request',
+          resourceId: candidate.id,
+          details: JSON.stringify({
+            requesterId: userId,
+            organizationId: candidate.organizationId,
+            reason: 'auto_approved_on_email_verification',
+          }),
+        });
+      } catch (auditError) {
+        console.error('[Membership] Failed to audit auto-join approval:', auditError);
+      }
+    }
+    return approved;
   }
 
   async getMembershipRequest(id: string): Promise<MembershipRequest | undefined> {

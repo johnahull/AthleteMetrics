@@ -279,6 +279,18 @@ export class PasswordResetService {
         console.error('Global athlete auto-linking error:', linkError);
       }
 
+      // Approve this user's pending join requests to organizations that auto-approve.
+      // The verification is already committed; if this fails the request stays pending
+      // and a coach can still approve it, so never fail verification over it.
+      try {
+        const joined = await storage.approvePendingAutoJoinRequests(userId);
+        if (joined > 0) {
+          console.log(`Auto-joined user ${userId} to ${joined} organization(s) after email verification`);
+        }
+      } catch (joinError) {
+        console.error('Auto-join after email verification failed:', joinError);
+      }
+
       return { success: true, message: 'Email address verified successfully!' };
     } catch (error) {
       console.error('Email verification error:', error);

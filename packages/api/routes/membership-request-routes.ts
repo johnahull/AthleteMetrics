@@ -84,6 +84,17 @@ export function registerMembershipRequestRoutes(app: Express) {
         discoveryMethod,
       });
 
+      // An auto-approve org holds an unverified requester's request until their email is verified
+      // (storage.approvePendingAutoJoinRequests then approves it).
+      let awaitingEmailVerification = false;
+      if (request.status === 'pending') {
+        const [org, requester] = await Promise.all([
+          storage.getOrganization(organizationId),
+          storage.getUser(userId),
+        ]);
+        awaitingEmailVerification = !!org?.autoApproveRequests && requester?.isEmailVerified === false;
+      }
+
       // Audit log
       await storage.createAuditLog({
         userId,
@@ -94,6 +105,7 @@ export function registerMembershipRequestRoutes(app: Express) {
           organizationId,
           discoveryMethod,
           status: request.status,
+          awaitingEmailVerification,
         }),
         ipAddress: req.ip,
         userAgent: req.get('user-agent')
@@ -101,9 +113,12 @@ export function registerMembershipRequestRoutes(app: Express) {
 
       res.status(201).json({
         request,
+        awaitingEmailVerification,
         message: request.status === 'approved'
           ? "Your request has been automatically approved! You are now a member."
-          : "Your membership request has been submitted and is pending approval."
+          : awaitingEmailVerification
+            ? "Your request is saved. Verify your email and you will be added to the organization automatically."
+            : "Your membership request has been submitted and is pending approval."
       });
     } catch (error) {
       console.error("Error creating membership request:", error);

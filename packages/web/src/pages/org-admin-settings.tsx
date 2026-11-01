@@ -1044,7 +1044,7 @@ export default function OrgAdminSettings() {
                   <span className="text-base font-medium">Auto-Approve Requests</span>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Automatically approve all membership requests (open enrollment)
+                  Automatically approve membership requests once their email is verified (open enrollment)
                 </p>
               </div>
               <Switch
