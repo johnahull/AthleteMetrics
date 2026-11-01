@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-11-01
+
+### Added
+- Single-leg triple hop with a bilateral landing as its own per-leg metrics (`HOP_SL_TRIPLE_BL_L`, `_R`, derived `HOP_SL_TRIPLE_BL_LSI`), enabled for every organization that has the stick-landing triple hop, plus a Bilateral Landing Asymmetry Screening set. Migration `0174` (#707)
+- Join-code sign-ups to an Auto-Approve organization are added automatically once the email is verified, instead of instantly before verification (#705)
+- Membership-request approvals now live on the User Management page: site admins see every organization, org admins their own (#708)
+- Org admins get a User Management link and page access (#704)
+- Read-only metric details dialog for coaches and org admins, and a read-only Metrics nav item for coaches (#701)
+- Metric and benchmark lists are grouped under collapsible category headers (#702)
+
+### Changed
+- Generic age-group 5-10-5 benchmarks per sex replace the sport-specific ones. The old rows and sets are deactivated, not deleted, so saved reports still resolve. Migration `0172` (#699)
+- API: `GET /api/organizations-with-users` now returns only organizations the caller administers and 403 otherwise; `POST /api/invitations` rejects `role: "site_admin"` from non-site-admins (#704)
+- API: user, invitation and membership-request responses use allowlists. Credential, MFA, lock, OAuth and consent fields and invitation links are no longer returned to org members; member views of the roster drop `birthYear` (#706)
+
+### Fixed
+- Enabling a seeded site benchmark (text slug id) for an organization returned 400 "Invalid benchmark ID format" (#700)
+- Assigning a user with no organization as site admin failed with 500 because `audit_logs_action_valid` rejected the audit action. Migration `0173` adds the missing actions (#703)
+- Auto-join from a join code now applies the login gate's COPPA rules on every path; only `not_applicable` and `consented` users can be admitted (#709)
+
+### Security
+- Response-boundary allowlists for user, invitation and membership-request data (#706) and tightened roster and invitation authorization (#704); COPPA allowlist for join-code admission (#709)
+
+### Deployment notes
+- Migrations `0172`-`0174` are new. Apply with `npm run db:migrate:manual`. All three are additive or deactivate-only (no destructive up-migrations).
+- Staging deploys for #708 and #709 were still running when this release was prepared. Confirm `0172`-`0174` appear in `manual_migrations` on staging before merging.
+
 ## [0.32.0] - 2026-10-30
 
 ### Added
