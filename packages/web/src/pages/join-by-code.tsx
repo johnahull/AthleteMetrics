@@ -209,7 +209,7 @@ export default function JoinByCode() {
             <CardTitle>Join {organization.name}</CardTitle>
             <CardDescription>
               {organization.autoApproveRequests
-                ? "This organization has open enrollment - you'll be added as soon as your email is verified."
+                ? "This organization has open enrollment - you'll be added automatically."
                 : "Request to join this organization"}
             </CardDescription>
           </CardHeader>
@@ -235,7 +235,7 @@ export default function JoinByCode() {
               <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
                 <CheckCircle2 className="h-5 w-5 text-green-600 mx-auto mb-1" />
                 <p className="text-sm text-green-700">
-                  Open enrollment - approved automatically once your email is verified
+                  Open enrollment - approved automatically
                 </p>
               </div>
             )}
