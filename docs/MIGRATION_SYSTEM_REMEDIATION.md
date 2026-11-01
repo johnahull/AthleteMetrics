@@ -34,6 +34,8 @@
 
 > 0173 (allows the audit actions `user_assigned_to_organization`, `measurements_bulk_delete`, `org_metrics_bulk_updated` and `profile_completed`, which code writes but the `audit_logs` CHECK rejected; the first is written in the same transaction as the site-admin "assign unaffiliated user" membership insert, so without it that route returns 500 and rolls the assignment back, and the others were silently lost) is provisional: renumber at merge if another branch lands 0173 first (file, `_down`, test `0173-missing-audit-actions`, tracking row, this line). Apply to production BEFORE or WITH the release that contains the route. `waiver_submission_received` is still rejected (it also needs resource_type `waiver_submission` and a non-null `user_id`); the test lists it as a known exception.
 
+> 0174 (single-leg triple hop with a bilateral landing: `HOP_SL_TRIPLE_BL_L` / `HOP_SL_TRIPLE_BL_R` copied from the stick-landing legs `HOP_SL_TRIPLE_L` / `_R` with their own explanation text, the derived `HOP_SL_TRIPLE_BL_LSI`, org enablement for every org with `HOP_SL_TRIPLE_L` enabled, and the Triple Hop Bilateral Landing Asymmetry Screening set; no distance tiers, as no norms exist for a two-foot landing; needs 0168 first) is provisional: renumber at merge if another branch lands 0174 first (file, `_down`, test `0174-triple-hop-bilateral-landing`, tracking row, this line). `HOP_SL_TRIPLE_L` / `_R` are created in the admin UI, not by a migration: if either is missing the migration does nothing and is still recorded as applied, so confirm both exist in the target environment first.
+
 ## Current State (2025-10-30)
 
 ### Overview
