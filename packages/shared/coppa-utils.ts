@@ -15,6 +15,20 @@
 
 export const COPPA_AGE_THRESHOLD = 13;
 
+/**
+ * coppaStatus values the login gate refuses (auth-routes.ts). Anything that grants access to an
+ * organization on a user's behalf (auto-join, approvals) must refuse the same accounts.
+ */
+export const COPPA_LOGIN_BLOCKED_STATUSES = ['pending_consent', 'needs_parent_email', 'consent_revoked'] as const;
+
+/**
+ * True when an account may be added to an organization without a person approving it: an ALLOWLIST
+ * (`not_applicable`, `consented`), so a status added later is denied until someone decides about it.
+ */
+export function coppaStatusAllowsJoining(status: string | null | undefined): boolean {
+  return status === 'not_applicable' || status === 'consented';
+}
+
 /** 30-day consent token expiry per FTC guidance */
 export const CONSENT_TOKEN_EXPIRY_DAYS = 30;
 

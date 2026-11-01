@@ -9,7 +9,7 @@ import { coppaService } from "../services/coppa-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { createAuthRateLimiters } from "../middleware/auth-rate-limiters";
-import { COPPA_ACTIONS } from "@shared/coppa-utils";
+import { COPPA_ACTIONS, COPPA_LOGIN_BLOCKED_STATUSES } from "@shared/coppa-utils";
 import { storage } from "../storage";
 import { generateParentEmailToken } from "../services/coppa-email-token-store";
 import { regenerateSession, saveSession } from "../lib/session-helpers";
@@ -65,7 +65,7 @@ export function registerAuthRoutes(app: Express, options: AuthRoutesOptions = {}
       // COPPA check: block login for under-13 athletes without parental consent.
       // IMPORTANT: This check runs AFTER password validation to prevent leaking
       // whether an account exists via different error codes on wrong passwords.
-      if (['pending_consent', 'needs_parent_email', 'consent_revoked'].includes(user.coppaStatus)) {
+      if ((COPPA_LOGIN_BLOCKED_STATUSES as readonly string[]).includes(user.coppaStatus)) {
         const codeMap: Record<string, string> = {
           pending_consent: 'coppa_pending_consent',
           needs_parent_email: 'coppa_needs_parent_email',
@@ -250,7 +250,7 @@ export function registerAuthRoutes(app: Express, options: AuthRoutesOptions = {}
       // a child's data before the parent has consented is a COPPA violation
       // regardless of admin privilege level.
       const targetCheck = await storage.getUser(targetUserId);
-      if (targetCheck && ['pending_consent', 'needs_parent_email', 'consent_revoked'].includes(targetCheck.coppaStatus ?? '')) {
+      if (targetCheck && (COPPA_LOGIN_BLOCKED_STATUSES as readonly string[]).includes(targetCheck.coppaStatus ?? '')) {
         return res.status(403).json({
           message: "Cannot impersonate this account: parental consent has not been granted.",
           code: "coppa_impersonation_blocked",

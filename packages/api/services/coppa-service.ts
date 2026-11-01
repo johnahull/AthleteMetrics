@@ -388,6 +388,14 @@ export class CoppaService extends BaseService {
         throw txError;
       }
 
+      // A join-code request may have been waiting on this consent (the account is now consented and its email
+      // verified). Failure here must not undo the confirmation; a coach can still approve the request.
+      try {
+        await this.storage.approvePendingAutoJoinRequests(updatedConsent.athleteUserId);
+      } catch (joinErr) {
+        console.error(`[COPPA] Auto-join after consent failed for consent ${consentId}:`, joinErr);
+      }
+
       // Post-transaction steps — must not cause the operation to report failure
       try {
         await this.writeCoppaAudit({
