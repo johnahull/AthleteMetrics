@@ -108,6 +108,36 @@ export interface UnaffiliatedUser {
   isParent: boolean;
 }
 
+/**
+ * A pending membership request as listed for admins: explicit, minimal columns only (no spread of a
+ * joined `users` or `organizations` row, which would carry credentials / the join code).
+ */
+/** How many pending requests one list call returns; the list asks for one more to detect a cut-off. */
+export const PENDING_MEMBERSHIP_REQUEST_LIMIT = 500;
+
+export interface PendingMembershipRequest {
+  id: string;
+  userId: string;
+  organizationId: string;
+  status: string;
+  requestedRole: string;
+  discoveryMethod: string | null;
+  createdAt: Date;
+  expiresAt: Date | null;
+  user: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    fullName: string;
+    email: string | null;
+    isEmailVerified: boolean;
+    school: string | null;
+    graduationYear: number | null;
+    birthYear: number | null;
+  };
+  organization: { id: string; name: string };
+}
+
 export interface IStorage {
   // Authentication & Users
   authenticateUser(username: string, password: string): Promise<User | null>;
@@ -203,6 +233,7 @@ export interface IStorage {
   getMembershipRequestsByOrganization(organizationId: string, filters?: { status?: string }): Promise<(MembershipRequest & { user: User })[]>;
   getMembershipRequestsByUser(userId: string): Promise<(MembershipRequest & { organization: Organization })[]>;
   approveMembershipRequest(id: string, processedBy: string): Promise<MembershipRequest>;
+  getPendingMembershipRequestsForOrganizations(orgIds: string[] | null): Promise<PendingMembershipRequest[]>;
   rejectMembershipRequest(id: string, processedBy: string, reason?: string): Promise<MembershipRequest>;
   cancelMembershipRequest(id: string): Promise<void>;
   hasPendingMembershipRequest(userId: string, organizationId: string): Promise<boolean>;
@@ -2226,6 +2257,56 @@ export class DatabaseStorage implements IStorage {
     return request;
   }
 
+  /**
+   * Pending requests an admin can still act on: not expired, organization and requester active, requester
+   * not waiting on / without parental consent. `null` = every organization (site admins). Oldest first, so a
+   * capped list drops the newest rather than the most overdue; returns up to LIMIT + 1 rows (the extra row tells
+   * the caller the list was cut off).
+   */
+  async getPendingMembershipRequestsForOrganizations(orgIds: string[] | null): Promise<PendingMembershipRequest[]> {
+    if (orgIds !== null && orgIds.length === 0) return [];
+
+    const conditions = [
+      eq(membershipRequests.status, 'pending'),
+      or(isNull(membershipRequests.expiresAt), gt(membershipRequests.expiresAt, new Date())),
+      eq(organizations.isActive, true),
+      isNull(organizations.deletedAt),
+      eq(users.isActive, true),
+      isNull(users.deletedAt),
+      inArray(users.coppaStatus, ['not_applicable', 'consented']),
+    ];
+    if (orgIds !== null) conditions.push(inArray(membershipRequests.organizationId, orgIds));
+
+    return await db.select({
+      id: membershipRequests.id,
+      userId: membershipRequests.userId,
+      organizationId: membershipRequests.organizationId,
+      status: membershipRequests.status,
+      requestedRole: membershipRequests.requestedRole,
+      discoveryMethod: membershipRequests.discoveryMethod,
+      createdAt: membershipRequests.createdAt,
+      expiresAt: membershipRequests.expiresAt,
+      user: {
+        id: users.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        fullName: users.fullName,
+        email: sql<string | null>`(${users.emails})[1]`,
+        isEmailVerified: users.isEmailVerified,
+        school: users.school,
+        graduationYear: users.graduationYear,
+        birthYear: users.birthYear,
+      },
+      organization: { id: organizations.id, name: organizations.name },
+    })
+      .from(membershipRequests)
+      .innerJoin(users, eq(membershipRequests.userId, users.id))
+      .innerJoin(organizations, eq(membershipRequests.organizationId, organizations.id))
+      .where(and(...conditions))
+      .orderBy(asc(membershipRequests.createdAt))
+      .limit(PENDING_MEMBERSHIP_REQUEST_LIMIT + 1);
+  }
+
   async getMembershipRequest(id: string): Promise<MembershipRequest | undefined> {
     const [request] = await db.select()
       .from(membershipRequests)
@@ -2293,9 +2374,35 @@ export class DatabaseStorage implements IStorage {
       throw new Error('Only pending requests can be approved');
     }
 
+    // The same rules the pending list applies, enforced here so a known request id cannot bypass them: an inactive
+    // or deleted requester, one without parental consent, or an inactive organization cannot be approved.
+    const [requester, organization] = await Promise.all([
+      this.getUser(request.userId),
+      this.getOrganization(request.organizationId),
+    ]);
+    const coppaOk = requester?.coppaStatus === 'not_applicable' || requester?.coppaStatus === 'consented';
+    if (!requester || !requester.isActive || !coppaOk || !organization || !organization.isActive || organization.deletedAt) {
+      throw new Error('This request can no longer be approved');
+    }
+
     // Use transaction to ensure atomicity of approval operations
     return await db.transaction(async (tx: any) => {
-      // If linking to existing athlete, perform the data transfer
+      // Update request status. Conditional on still being pending, so two simultaneous approvals
+      // (or an approval racing a rejection) cannot both succeed.
+      const [updated] = await tx.update(membershipRequests)
+        .set({
+          status: 'approved',
+          processedBy,
+          processedAt: new Date(),
+        })
+        .where(and(eq(membershipRequests.id, id), eq(membershipRequests.status, 'pending')))
+        .returning();
+      if (!updated) {
+        throw new Error('Only pending requests can be approved');
+      }
+
+      // If linking to existing athlete, perform the data transfer. Done only after winning the status flip
+      // above, so a losing concurrent approval never moves any data (and a failure here rolls the flip back).
       if (linkToAthleteId) {
         await this.linkAthleteAccounts(
           request.userId,        // requester (with login) - survives
@@ -2303,16 +2410,6 @@ export class DatabaseStorage implements IStorage {
           request.organizationId
         );
       }
-
-      // Update request status
-      const [updated] = await tx.update(membershipRequests)
-        .set({
-          status: 'approved',
-          processedBy,
-          processedAt: new Date(),
-        })
-        .where(eq(membershipRequests.id, id))
-        .returning();
 
       // Add user to organization.
       // NOTE: full atomicity of approval is NOT yet achieved here — linkAthleteAccounts
@@ -2451,8 +2548,12 @@ export class DatabaseStorage implements IStorage {
         processedAt: new Date(),
         rejectionReason: reason || null,
       })
-      .where(eq(membershipRequests.id, id))
+      .where(and(eq(membershipRequests.id, id), eq(membershipRequests.status, 'pending')))
       .returning();
+    // Conditional on still being pending: a rejection racing an approval must not overwrite it
+    if (!updated) {
+      throw new Error('Only pending requests can be rejected');
+    }
 
     return updated;
   }

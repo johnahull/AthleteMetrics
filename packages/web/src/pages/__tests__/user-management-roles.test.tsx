@@ -10,6 +10,7 @@ import '@testing-library/jest-dom';
 
 let mockUser: any;
 let useQueryCalls: any[] = [];
+let orgsResponse: any = undefined; // undefined = use the default fixture; null = no roster (e.g. a coach got a 403)
 
 vi.mock('@/lib/auth', () => ({ useAuth: () => ({ user: mockUser }) }));
 
@@ -22,6 +23,10 @@ vi.mock('@/hooks/use-toast', () => ({ useToast: () => ({ toast: vi.fn() }) }));
 
 vi.mock('@/components/users/UnaffiliatedUsersSection', () => ({
   UnaffiliatedUsersSection: () => <div data-testid="unaffiliated-users" />,
+}));
+
+vi.mock('@/components/membership/PendingMembershipRequests', () => ({
+  PendingMembershipRequests: () => <div data-testid="pending-membership-requests" />,
 }));
 
 vi.mock('@/lib/queryClient', () => ({
@@ -65,7 +70,9 @@ vi.mock('@tanstack/react-query', async (importOriginal) => {
     useQuery: (options: any) => {
       useQueryCalls.push(options);
       const key = options.queryKey?.[0];
-      if (key === '/api/organizations-with-users') return { data: orgWithUsers };
+      if (key === '/api/organizations-with-users') {
+        return { data: orgsResponse === undefined ? orgWithUsers : (orgsResponse ?? undefined) };
+      }
       if (key === '/api/site-admins') return { data: [] };
       if (key === '/api/auth/me/organizations') return { data: [{ organizationId: 'org-1' }] };
       return { data: undefined };
@@ -85,6 +92,29 @@ describe('User Management page - role-based controls', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useQueryCalls = [];
+    orgsResponse = undefined;
+  });
+
+  describe('pending membership requests section', () => {
+    it('is shown to an org admin', async () => {
+      mockUser = { id: 'u-1', role: 'org_admin', isSiteAdmin: false };
+      await renderPage();
+      expect(screen.getByTestId('pending-membership-requests')).toBeInTheDocument();
+    });
+
+    it('is shown to a site admin', async () => {
+      mockUser = { id: 'u-0', role: 'site_admin', isSiteAdmin: true };
+      await renderPage();
+      expect(screen.getByTestId('pending-membership-requests')).toBeInTheDocument();
+    });
+
+    it('is not shown when the server returned no roster (a coach gets a 403 there)', async () => {
+      mockUser = { id: 'u-3', role: 'coach', isSiteAdmin: false };
+      orgsResponse = null;
+      const UserManagement = (await import('../user-management')).default;
+      render(<UserManagement />);
+      expect(screen.queryByTestId('pending-membership-requests')).not.toBeInTheDocument();
+    });
   });
 
   describe('as org admin', () => {

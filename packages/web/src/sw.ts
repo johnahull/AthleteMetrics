@@ -2,7 +2,7 @@
 import { clientsClaim } from 'workbox-core';
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
 import { registerRoute } from 'workbox-routing';
-import { CacheFirst, NetworkFirst, StaleWhileRevalidate } from 'workbox-strategies';
+import { CacheFirst, NetworkFirst, NetworkOnly, StaleWhileRevalidate } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
 import { CacheableResponsePlugin } from 'workbox-cacheable-response';
 
@@ -58,6 +58,10 @@ registerRoute(
     ],
   })
 );
+
+// Membership-request endpoints carry applicants' names and contact details: never serve them from the cache
+// (the first matching route wins, so this must be registered before the generic /api/ route below).
+registerRoute(/\/api\/membership-requests\//i, new NetworkOnly());
 
 // Network-first for API requests
 registerRoute(

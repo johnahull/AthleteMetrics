@@ -17,6 +17,7 @@ import { UserPlus, Trash2, Link as LinkIcon, User, CheckCircle, XCircle, Clock, 
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { UnaffiliatedUsersSection } from "@/components/users/UnaffiliatedUsersSection";
+import { PendingMembershipRequests } from "@/components/membership/PendingMembershipRequests";
 
 type Organization = {
   id: string;
@@ -538,6 +539,10 @@ export default function UserManagement() {
           <p className="text-gray-600 mt-1">Manage users and send invitations</p>
         </div>
       </div>
+
+      {/* People waiting to join. A successful roster response means the server treats the caller as an admin of
+          these organizations (coaches get a 403 there), so only then is the section offered. */}
+      {organizations && organizations.length > 0 && <PendingMembershipRequests />}
 
       {/* Role Filter */}
       <div className="flex items-center gap-3 bg-white p-4 rounded-lg border">
