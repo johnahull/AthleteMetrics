@@ -139,6 +139,20 @@ test.describe('RBAC/Permissions Tests', () => {
       expect(page.url()).toContain('/organizations');
     });
 
+    test('org admin can reach User Management from the sidebar without site-admin controls', async ({ page }) => {
+      await loginWithCredentials(page, TEST_USERS.orgAdmin.username, TEST_USERS.orgAdmin.password);
+      await goToDashboard(page);
+
+      await page.locator('[data-testid="nav-user-management"]').click();
+      await page.waitForURL('**/user-management');
+
+      // Can invite users
+      await expect(page.locator('[data-testid="send-invitation-button"]')).toBeVisible();
+
+      // Must not be able to add site admins
+      await expect(page.locator('[data-testid="add-site-admin-button"]')).toHaveCount(0);
+    });
+
     test('org admin should not see other organizations data', async ({ page }) => {
       await loginWithCredentials(page, TEST_USERS.orgAdmin.username, TEST_USERS.orgAdmin.password);
       await goToOrganizations(page);

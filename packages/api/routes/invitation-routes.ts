@@ -145,6 +145,11 @@ async function checkInvitationPermissions(
   // Check inviter's roles in the organization
   const inviterRoles = await storage.getUserRoles(inviterId, organizationId);
 
+  // Site administrators are created through POST /api/site-admins only
+  if (targetRole === "site_admin") {
+    return { allowed: false, reason: "Only site admins can invite site administrators" };
+  }
+
   // Organization admins can invite anyone within their organization
   if (inviterRoles.includes("org_admin")) {
     return { allowed: true };

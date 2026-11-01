@@ -80,6 +80,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
     { name: "Measurements", href: "/publish", icon: FileCheck, tourId: "measurements" },
     { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target, tourId: "benchmarks" },
     { name: "Metrics", href: "/organizations/__ORG_ID__/metrics", icon: Ruler, tourId: "metrics" },
+    { name: "User Management", href: "/user-management", icon: UserCog, tourId: "user-management" },
     { name: "Settings", href: "/organizations/__ORG_ID__/settings/admin", icon: Settings, tourId: "settings" }
   ],
   coach: [
