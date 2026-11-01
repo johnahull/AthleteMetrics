@@ -2476,19 +2476,28 @@ export class DatabaseStorage implements IStorage {
       throw new Error('Only pending requests can be approved');
     }
 
-    // The same rules the pending list applies, enforced here so a known request id cannot bypass them: an inactive
-    // or deleted requester, one without parental consent, or an inactive organization cannot be approved.
-    const [requester, organization] = await Promise.all([
-      this.getUser(request.userId),
-      this.getOrganization(request.organizationId),
-    ]);
-    const coppaOk = requester?.coppaStatus === 'not_applicable' || requester?.coppaStatus === 'consented';
-    if (!requester || !requester.isActive || !coppaOk || !organization || !organization.isActive || organization.deletedAt) {
-      throw new Error('This request can no longer be approved');
-    }
-
     // Use transaction to ensure atomicity of approval operations
     return await db.transaction(async (tx: any) => {
+      // The same rules the pending list applies, enforced here so a known request id cannot bypass them: an
+      // inactive or deleted requester, one without parental consent, or an inactive organization cannot be
+      // approved. Read INSIDE the transaction with a share lock: a deactivation committing at the same moment
+      // either lands first (and is seen here) or waits until this approval finishes, so the check cannot go
+      // stale between the read and the status flip below.
+      const [requester] = await tx.select({
+        isActive: users.isActive,
+        deletedAt: users.deletedAt,
+        coppaStatus: users.coppaStatus,
+      }).from(users).where(eq(users.id, request.userId)).for('share');
+      const [organization] = await tx.select({
+        isActive: organizations.isActive,
+        deletedAt: organizations.deletedAt,
+      }).from(organizations).where(eq(organizations.id, request.organizationId)).for('share');
+      const coppaOk = requester?.coppaStatus === 'not_applicable' || requester?.coppaStatus === 'consented';
+      if (!requester || !requester.isActive || requester.deletedAt || !coppaOk
+        || !organization || !organization.isActive || organization.deletedAt) {
+        throw new Error('This request can no longer be approved');
+      }
+
       // Update request status. Conditional on still being pending, so two simultaneous approvals
       // (or an approval racing a rejection) cannot both succeed.
       const [updated] = await tx.update(membershipRequests)
@@ -2509,18 +2518,14 @@ export class DatabaseStorage implements IStorage {
         await this.linkAthleteAccounts(
           request.userId,        // requester (with login) - survives
           linkToAthleteId,       // existing athlete (no login) - gets data transferred
-          request.organizationId
+          request.organizationId,
+          tx
         );
       }
 
-      // Add user to organization.
-      // NOTE: full atomicity of approval is NOT yet achieved here — linkAthleteAccounts
-      // above transfers measurements/roster and deactivates the old athlete on the
-      // pooled db handle, outside this transaction. Rather than thread tx through only
-      // this call (a mixed state that could partially roll back and corrupt data), keep
-      // it consistent with those writes (no tx). Threading tx through linkAthleteAccounts
-      // to make the whole approval atomic is a separate, larger change.
-      await this.addUserToOrganization(request.userId, request.organizationId, 'athlete');
+      // Add user to organization. The status flip, the athlete link and this insert all run on `tx`, so the approval
+      // commits or rolls back as one (a failure part-way no longer leaves moved data behind a pending request).
+      await this.addUserToOrganization(request.userId, request.organizationId, 'athlete', tx);
 
       return updated;
     });
@@ -2534,26 +2539,28 @@ export class DatabaseStorage implements IStorage {
    * @param requesterId - The user ID of the requester (with login credentials)
    * @param existingAthleteId - The user ID of the existing athlete (no login)
    * @param organizationId - The organization context for the linking
+   * @param executor - The transaction to run in, so the whole approval commits or rolls back together
    */
   private async linkAthleteAccounts(
     requesterId: string,
     existingAthleteId: string,
-    organizationId: string
+    organizationId: string,
+    executor: any = db
   ): Promise<void> {
     // 1. Transfer measurements from existing athlete to requester
-    await db.update(measurements)
+    await executor.update(measurements)
       .set({ userId: requesterId })
       .where(eq(measurements.userId, existingAthleteId));
 
     // 2. Transfer team memberships from existing athlete to requester
     // First, get existing team memberships to avoid duplicates
-    const existingTeamMemberships = await db.select()
+    const existingTeamMemberships = await executor.select()
       .from(userTeams)
       .where(eq(userTeams.userId, existingAthleteId));
 
     for (const membership of existingTeamMemberships) {
       // Check if requester already has this team membership
-      const [existing] = await db.select()
+      const [existing] = await executor.select()
         .from(userTeams)
         .where(and(
           eq(userTeams.userId, requesterId),
@@ -2563,7 +2570,7 @@ export class DatabaseStorage implements IStorage {
 
       if (!existing) {
         // Transfer the team membership
-        await db.update(userTeams)
+        await executor.update(userTeams)
           .set({ userId: requesterId })
           .where(and(
             eq(userTeams.userId, existingAthleteId),
@@ -2571,7 +2578,7 @@ export class DatabaseStorage implements IStorage {
           ));
       } else {
         // Delete the old team membership (requester already has it)
-        await db.delete(userTeams)
+        await executor.delete(userTeams)
           .where(and(
             eq(userTeams.userId, existingAthleteId),
             eq(userTeams.teamId, membership.teamId)
@@ -2580,11 +2587,11 @@ export class DatabaseStorage implements IStorage {
     }
 
     // 3. Copy profile data from existing athlete to requester (if requester is missing it)
-    const [existingAthlete] = await db.select()
+    const [existingAthlete] = await executor.select()
       .from(users)
       .where(eq(users.id, existingAthleteId));
 
-    const [requester] = await db.select()
+    const [requester] = await executor.select()
       .from(users)
       .where(eq(users.id, requesterId));
 
@@ -2615,19 +2622,19 @@ export class DatabaseStorage implements IStorage {
       }
 
       if (Object.keys(profileUpdates).length > 0) {
-        await db.update(users)
+        await executor.update(users)
           .set(profileUpdates)
           .where(eq(users.id, requesterId));
       }
     }
 
     // 4. Deactivate the existing athlete (they no longer need login access)
-    await db.update(users)
+    await executor.update(users)
       .set({ isActive: false })
       .where(eq(users.id, existingAthleteId));
 
     // 5. Remove existing athlete from organization (requester will be added later)
-    await db.delete(userOrganizations)
+    await executor.delete(userOrganizations)
       .where(and(
         eq(userOrganizations.userId, existingAthleteId),
         eq(userOrganizations.organizationId, organizationId)

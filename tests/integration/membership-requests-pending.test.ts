@@ -19,6 +19,7 @@ import express, { type Express } from 'express';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { db } from '../../packages/api/db';
+import { storage } from '../../packages/api/storage';
 import { users, organizations } from '@shared/schema/tables/core';
 import { userOrganizations, membershipRequests } from '@shared/schema/tables/membership';
 import { and, eq, inArray, like } from 'drizzle-orm';
@@ -54,6 +55,7 @@ const MFA_SENTINEL = `MFA-SENTINEL-${id}`;
 
 let app: Express;
 let orgA: { id: string; name: string };
+let adminAId: string;
 let orgB: { id: string; name: string };
 let orgInactive: { id: string };
 const cookies: Record<'siteAdmin' | 'adminA' | 'coachA' | 'athleteA', string> = {
@@ -126,6 +128,7 @@ beforeAll(async () => {
     { orgId: orgA.id, role: 'org_admin' },
     { orgId: orgB.id, role: 'coach' },
   ]);
+  adminAId = adminA.id;
   const coachA = await createUser('coachA', [{ orgId: orgA.id, role: 'coach' }]);
   const athleteA = await createUser('athleteA', [{ orgId: orgA.id, role: 'athlete' }], { birthDate: '1990-01-01' });
 
@@ -295,5 +298,66 @@ describe('approving a request', () => {
     const memberships = await db.select().from(userOrganizations)
       .where(and(eq(userOrganizations.userId, row.userId), eq(userOrganizations.organizationId, orgA.id)));
     expect(memberships).toHaveLength(1);
+  });
+});
+
+describe('eligibility is checked inside the approval transaction', () => {
+  /**
+   * Runs an approval while another transaction has deactivated something but not committed yet, then lets that
+   * transaction commit. An approval that read the rows before its own transaction would already have passed its
+   * check and succeed; one that reads them (locked) inside its transaction waits for the commit and sees it.
+   */
+  async function approvalRacingADeactivation(deactivate: (tx: any) => Promise<unknown>, requestId: string) {
+    let release!: () => void;
+    let markUpdated!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const updated = new Promise<void>((resolve) => { markUpdated = resolve; });
+
+    const deactivating = db.transaction(async (tx) => {
+      await deactivate(tx);
+      markUpdated();
+      await held;
+    });
+    await updated; // the uncommitted change now holds its row lock
+
+    const approving = storage
+      .approveMembershipRequest(requestId, adminAId)
+      .then(() => 'approved', (e: Error) => e.message);
+    await new Promise((resolve) => setTimeout(resolve, 300)); // let the approval start (and, with the fix, block)
+    release();
+    await deactivating;
+    return approving;
+  }
+
+  it('refuses when the requester is deactivated while the approval is in flight', async () => {
+    const requester = await createUser('rLockUser');
+    const row = await addRequest('lockUser', requester.id, orgA.id);
+
+    const outcome = await approvalRacingADeactivation(
+      (tx) => tx.update(users).set({ isActive: false }).where(eq(users.id, requester.id)),
+      row.id,
+    );
+
+    expect(outcome).toBe('This request can no longer be approved');
+    const [after] = await db.select().from(membershipRequests).where(eq(membershipRequests.id, row.id));
+    expect(after.status).toBe('pending');
+    const memberships = await db.select().from(userOrganizations).where(eq(userOrganizations.userId, requester.id));
+    expect(memberships).toHaveLength(0);
+  });
+
+  it('refuses when the organization is deactivated while the approval is in flight', async () => {
+    const [org] = await db.insert(organizations).values({ name: `MRPendingOrgLock-${id}`, orgType: 'club' }).returning();
+    createdOrgIds.push(org.id);
+    const requester = await createUser('rLockOrg');
+    const row = await addRequest('lockOrg', requester.id, org.id);
+
+    const outcome = await approvalRacingADeactivation(
+      (tx) => tx.update(organizations).set({ isActive: false }).where(eq(organizations.id, org.id)),
+      row.id,
+    );
+
+    expect(outcome).toBe('This request can no longer be approved');
+    const [after] = await db.select().from(membershipRequests).where(eq(membershipRequests.id, row.id));
+    expect(after.status).toBe('pending');
   });
 });
