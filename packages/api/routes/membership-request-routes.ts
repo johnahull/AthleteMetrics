@@ -54,6 +54,15 @@ const decisionLimiter = rateLimit({
   skip: (req) => shouldSkipRateLimiting(req, 'general'),
 });
 
+// Messages the storage layer throws on purpose for the admin to read ("already handled", "no longer
+// eligible"). Anything else is an unexpected failure and must not leak its text (database errors, etc.).
+const EXPECTED_DECISION_ERRORS = new Set([
+  "Membership request not found",
+  "Only pending requests can be approved",
+  "Only pending requests can be rejected",
+  "This request can no longer be approved",
+]);
+
 export function registerMembershipRequestRoutes(app: Express) {
   /**
    * Create a new membership request
@@ -309,7 +318,7 @@ export function registerMembershipRequestRoutes(app: Express) {
       });
     } catch (error) {
       console.error("Error approving membership request:", error);
-      if (error instanceof Error) {
+      if (error instanceof Error && EXPECTED_DECISION_ERRORS.has(error.message)) {
         return res.status(400).json({ message: error.message });
       }
       res.status(500).json({ message: "Failed to approve membership request" });
@@ -374,7 +383,7 @@ export function registerMembershipRequestRoutes(app: Express) {
       });
     } catch (error) {
       console.error("Error rejecting membership request:", error);
-      if (error instanceof Error) {
+      if (error instanceof Error && EXPECTED_DECISION_ERRORS.has(error.message)) {
         return res.status(400).json({ message: error.message });
       }
       res.status(500).json({ message: "Failed to reject membership request" });

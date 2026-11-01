@@ -159,6 +159,10 @@ beforeAll(async () => {
   await addRequest('race', rRace.id, orgA.id);
   const rApproveVsReject = await createUser('rApproveVsReject');
   await addRequest('approveVsReject', rApproveVsReject.id, orgA.id);
+  const rErrApprove = await createUser('rErrApprove');
+  await addRequest('errApprove', rErrApprove.id, orgA.id);
+  const rErrReject = await createUser('rErrReject');
+  await addRequest('errReject', rErrReject.id, orgA.id);
 
   cookies.siteAdmin = await loginAs(siteAdmin.username);
   cookies.adminA = await loginAs(adminA.username);
@@ -298,6 +302,39 @@ describe('approving a request', () => {
     const memberships = await db.select().from(userOrganizations)
       .where(and(eq(userOrganizations.userId, row.userId), eq(userOrganizations.organizationId, orgA.id)));
     expect(memberships).toHaveLength(1);
+  });
+});
+
+describe('approve and reject error responses', () => {
+  const RAW = 'relation "membership_requests" does not exist';
+
+  it.each([
+    ['approve', 'errApprove', 'Failed to approve membership request'],
+    ['reject', 'errReject', 'Failed to reject membership request'],
+  ])('an unexpected failure while trying to %s is a generic 500, never the raw error text', async (action, label, message) => {
+    const method = action === 'approve' ? 'approveMembershipRequest' : 'rejectMembershipRequest';
+    const spy = vi.spyOn(storage, method as 'approveMembershipRequest').mockRejectedValueOnce(new Error(RAW));
+    try {
+      const res = await request(app)
+        .post(`/api/membership-requests/${reqIds[label]}/${action}`)
+        .set('Cookie', cookies.adminA)
+        .send({});
+      expect(res.status).toBe(500);
+      expect(res.body.message).toBe(message);
+      expect(JSON.stringify(res.body)).not.toContain('relation');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('still tells the admin when the request was already handled', async () => {
+    const approve = await request(app).post(`/api/membership-requests/${reqIds.approved}/approve`).set('Cookie', cookies.adminA).send({});
+    expect(approve.status).toBe(400);
+    expect(approve.body.message).toBe('Only pending requests can be approved');
+
+    const reject = await request(app).post(`/api/membership-requests/${reqIds.rejected}/reject`).set('Cookie', cookies.adminA).send({});
+    expect(reject.status).toBe(400);
+    expect(reject.body.message).toBe('Only pending requests can be rejected');
   });
 });
 

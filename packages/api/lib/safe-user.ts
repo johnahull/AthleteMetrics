@@ -18,7 +18,6 @@ const MEMBER_VISIBLE_USER_KEYS: ReadonlyArray<keyof User> = [
   "fullName",
   "school",
   "graduationYear",
-  "birthYear",
   "sports",
   "positions",
   "gender",
@@ -33,6 +32,7 @@ const STAFF_VISIBLE_USER_KEYS: ReadonlyArray<keyof User> = [
   ...MEMBER_VISIBLE_USER_KEYS,
   "emails",
   "birthDate",
+  "birthYear", // for a minor this reveals that they are underage, so staff only
   "phoneNumbers",
   "height",
   "weight",

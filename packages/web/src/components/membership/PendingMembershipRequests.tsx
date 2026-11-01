@@ -175,7 +175,7 @@ export function PendingMembershipRequests() {
 
   if (!requests || requests.length === 0) return null;
 
-  // Group by organization, keeping the server's newest-first order inside each group
+  // Group by organization, keeping the server's oldest-first order inside each group
   const groups = new Map<string, { name: string; items: PendingRequest[] }>();
   for (const r of requests) {
     const group = groups.get(r.organization.id) ?? { name: r.organization.name, items: [] };

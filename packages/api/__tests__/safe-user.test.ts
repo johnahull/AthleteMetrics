@@ -70,7 +70,8 @@ describe("toSafeUser", () => {
   it("gives plain members only names and school details", () => {
     const safe = toSafeUser(fullRow, "member");
     expect(safe).toMatchObject({ id: "u1", username: "lucy", fullName: "Lucy Ortiz", school: "Central" });
-    for (const key of ["emails", "birthDate", "phoneNumbers", "coppaStatus", "isMinor"]) {
+    // birthYear too: for a minor it tells any org member that they are underage
+    for (const key of ["emails", "birthDate", "birthYear", "phoneNumbers", "coppaStatus", "isMinor"]) {
       expect(safe).not.toHaveProperty(key);
     }
   });
