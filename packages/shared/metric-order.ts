@@ -46,12 +46,15 @@ const BUILT_IN_CODES: Partial<Record<MetricGroupId, readonly string[]>> = {
     "RSI", "RSI_105", "RSI_BILATERAL", "RSI_LEFT", "RSI_RIGHT", "RSI_L", "RSI_R",
     "RSI_SINGLE_LEFT", "RSI_SINGLE_RIGHT",
     "JUMP_CMJ_SL_L", "JUMP_CMJ_SL_R",
+    // Stick landing first: alphabetically HOP_SL_TRIPLE_BL_* would sort ahead of HOP_SL_TRIPLE_L.
+    // Listing a code here pins it to power whatever category its DB row has (built-in map beats category).
+    "HOP_SL_TRIPLE_L", "HOP_SL_TRIPLE_R", "HOP_SL_TRIPLE_BL_L", "HOP_SL_TRIPLE_BL_R",
     "PEAK_POWER_W", "PEAK_POWER_REL", "JUMP_BROAD", "MOMENTUM",
   ],
   strength: ["STRENGTH_SQUAT", "SQUAT_1RM", "SQUAT_1RM_KG"],
   movement: [
     "MQI_TOTAL", "MQI",
-    "AGILITY_505_M_LSI", "AGILITY_505_YD_LSI", "HOP_SL_TRIPLE_LSI",
+    "AGILITY_505_M_LSI", "AGILITY_505_YD_LSI", "HOP_SL_TRIPLE_LSI", "HOP_SL_TRIPLE_BL_LSI",
     "JUMP_CMJ_SL_ASYM", "RSI_ASYM",
   ],
   body_composition: ["BODY_HEIGHT", "BODY_WEIGHT", "HEIGHT", "HEIGHT_IN", "WEIGHT", "WEIGHT_LBS"],

@@ -388,7 +388,9 @@ export default function Register() {
                 <AlertDescription>
                   {joinResult.status === 'approved'
                     ? `You've joined ${joinResult.organizationName}.`
-                    : `Your request to join ${joinResult.organizationName} was submitted and is pending approval.`}
+                    : joinResult.awaitingEmailVerification
+                      ? `Verify your email and you'll be added to ${joinResult.organizationName} automatically.`
+                      : `Your request to join ${joinResult.organizationName} was submitted and is pending approval.`}
                 </AlertDescription>
               </Alert>
             )}

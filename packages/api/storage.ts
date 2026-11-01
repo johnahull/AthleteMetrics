@@ -37,6 +37,7 @@ import type { WellnessTrend } from "@shared/wellness-types";
 import { validateMeasurementValue, MeasurementValueValidationError } from "@shared/measurement-value-validation";
 import { isMovementQualityMetric } from "@shared/peer-comparison-exclusions";
 import { assertFlyInDistanceMatches, assertFlyInDistanceOnUpdate } from "@shared/fly-run-in";
+import { coppaStatusAllowsJoining } from "@shared/coppa-utils";
 import { db } from "./db";
 import { wellnessRepository, type WellnessTrend as RepoWellnessTrend } from "./repositories/wellness-repository";
 import { eq, desc, asc, and, gte, lte, gt, inArray, sql, arrayContains, or, isNull, isNotNull, exists, notExists, ne, SQL } from "drizzle-orm";
@@ -44,6 +45,7 @@ import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { hashToken } from "./lib/token-hash";
 import { BCRYPT_SALT_ROUNDS } from "@shared/constants";
+import { isValidBenchmarkId } from "@shared/benchmark-utils";
 import { getPgErrorCode, PG_UNIQUE_VIOLATION } from "./lib/pg-error";
 
 /**
@@ -105,6 +107,34 @@ export interface UnaffiliatedUser {
   isActive: boolean;
   createdAt: Date;
   isParent: boolean;
+}
+
+/** How many pending requests one list call returns; the list asks for one more to detect a cut-off. */
+export const PENDING_MEMBERSHIP_REQUEST_LIMIT = 500;
+
+/**
+ * A pending membership request as listed for admins: explicit, minimal columns only (no spread of a
+ * joined `users` or `organizations` row, which would carry credentials / the join code). Only what the card
+ * shows: name, email and whether it is verified. No school or age details (they are not needed to decide).
+ */
+export interface PendingMembershipRequest {
+  id: string;
+  userId: string;
+  organizationId: string;
+  status: string;
+  requestedRole: string;
+  discoveryMethod: string | null;
+  createdAt: Date;
+  expiresAt: Date | null;
+  user: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    fullName: string;
+    email: string | null;
+    isEmailVerified: boolean;
+  };
+  organization: { id: string; name: string };
 }
 
 export interface IStorage {
@@ -202,6 +232,8 @@ export interface IStorage {
   getMembershipRequestsByOrganization(organizationId: string, filters?: { status?: string }): Promise<(MembershipRequest & { user: User })[]>;
   getMembershipRequestsByUser(userId: string): Promise<(MembershipRequest & { organization: Organization })[]>;
   approveMembershipRequest(id: string, processedBy: string): Promise<MembershipRequest>;
+  getPendingMembershipRequestsForOrganizations(orgIds: string[] | null): Promise<PendingMembershipRequest[]>;
+  approvePendingAutoJoinRequests(userId: string): Promise<number>;
   rejectMembershipRequest(id: string, processedBy: string, reason?: string): Promise<MembershipRequest>;
   cancelMembershipRequest(id: string): Promise<void>;
   hasPendingMembershipRequest(userId: string, organizationId: string): Promise<boolean>;
@@ -2128,6 +2160,16 @@ export class DatabaseStorage implements IStorage {
         return { success: false };
       }
 
+      // The token must be for an address the user still has. A token for an old or other
+      // address must not verify the account (verification can now admit the user to an org).
+      const [tokenUser] = await tx.select({ emails: users.emails })
+        .from(users)
+        .where(eq(users.id, verificationToken.userId));
+      const tokenEmail = String(verificationToken.email).toLowerCase();
+      if (!tokenUser?.emails?.some((e: string) => e.toLowerCase() === tokenEmail)) {
+        return { success: false };
+      }
+
       // Mark token as used (within same transaction)
       await tx.update(emailVerificationTokens)
         .set({ isUsed: true })
@@ -2196,8 +2238,15 @@ export class DatabaseStorage implements IStorage {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
 
-    // If auto-approve is enabled, approve immediately
-    const status = org.autoApproveRequests ? 'approved' : 'pending';
+    // Auto-approve only once the requester's email is verified. An unverified requester stays
+    // pending and is approved by approvePendingAutoJoinRequests() when they verify.
+    const requester = await this.getUser(data.userId);
+    const autoApprove =
+      org.autoApproveRequests &&
+      requester?.isEmailVerified === true &&
+      requester.isActive &&
+      coppaStatusAllowsJoining(requester.coppaStatus);
+    const status = autoApprove ? 'approved' : 'pending';
 
     const insertValues: any = {
       userId: data.userId,
@@ -2211,18 +2260,154 @@ export class DatabaseStorage implements IStorage {
     if (data.discoveryMethod) {
       insertValues.discoveryMethod = data.discoveryMethod;
     }
-    if (org.autoApproveRequests) {
+    if (autoApprove) {
       insertValues.processedAt = new Date();
     }
 
     const [request] = await db.insert(membershipRequests).values(insertValues).returning();
 
     // If auto-approved, add user to organization immediately
-    if (org.autoApproveRequests) {
+    if (autoApprove) {
       await this.addUserToOrganization(data.userId, data.organizationId, 'athlete');
+      return request;
+    }
+
+    // The email may have been verified between the read above and this insert, in which case the
+    // verification's sweep ran before this row existed. Re-check so the request is not stranded.
+    if (org.autoApproveRequests) {
+      const recheck = await this.getUser(data.userId);
+      if (recheck?.isEmailVerified === true && (await this.approvePendingAutoJoinRequests(data.userId)) > 0) {
+        return (await this.getMembershipRequest(request.id)) ?? request;
+      }
     }
 
     return request;
+  }
+
+  /**
+   * Pending requests an admin can still act on: not expired, organization and requester active, requester
+   * not waiting on / without parental consent. `null` = every organization (site admins). Oldest first, so a
+   * capped list drops the newest rather than the most overdue; returns up to LIMIT + 1 rows (the extra row tells
+   * the caller the list was cut off).
+   */
+  async getPendingMembershipRequestsForOrganizations(orgIds: string[] | null): Promise<PendingMembershipRequest[]> {
+    if (orgIds !== null && orgIds.length === 0) return [];
+
+    const conditions = [
+      eq(membershipRequests.status, 'pending'),
+      or(isNull(membershipRequests.expiresAt), gt(membershipRequests.expiresAt, new Date())),
+      eq(organizations.isActive, true),
+      isNull(organizations.deletedAt),
+      eq(users.isActive, true),
+      isNull(users.deletedAt),
+      inArray(users.coppaStatus, ['not_applicable', 'consented']),
+    ];
+    if (orgIds !== null) conditions.push(inArray(membershipRequests.organizationId, orgIds));
+
+    return await db.select({
+      id: membershipRequests.id,
+      userId: membershipRequests.userId,
+      organizationId: membershipRequests.organizationId,
+      status: membershipRequests.status,
+      requestedRole: membershipRequests.requestedRole,
+      discoveryMethod: membershipRequests.discoveryMethod,
+      createdAt: membershipRequests.createdAt,
+      expiresAt: membershipRequests.expiresAt,
+      user: {
+        id: users.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        fullName: users.fullName,
+        email: sql<string | null>`(${users.emails})[1]`,
+        isEmailVerified: users.isEmailVerified,
+      },
+      organization: { id: organizations.id, name: organizations.name },
+    })
+      .from(membershipRequests)
+      .innerJoin(users, eq(membershipRequests.userId, users.id))
+      .innerJoin(organizations, eq(membershipRequests.organizationId, organizations.id))
+      .where(and(...conditions))
+      .orderBy(asc(membershipRequests.createdAt))
+      .limit(PENDING_MEMBERSHIP_REQUEST_LIMIT + 1);
+  }
+
+  /**
+   * Approve a user's pending requests to organizations that auto-approve, called once their
+   * email is verified. Organization state is re-read here (not at request time), so an org that
+   * has since gone manual, closed, expired the request or been deactivated leaves it pending for
+   * a coach. Returns how many requests were approved.
+   */
+  async approvePendingAutoJoinRequests(userId: string): Promise<number> {
+    const [user] = await db.select({
+      isActive: users.isActive,
+      deletedAt: users.deletedAt,
+      coppaStatus: users.coppaStatus,
+    }).from(users).where(eq(users.id, userId));
+
+    // Never auto-join a deactivated/deleted account, or one the login gate would refuse (consent pending, parent
+    // email missing, consent revoked); see coppaStatusAllowsJoining.
+    if (!user || !user.isActive || user.deletedAt || !coppaStatusAllowsJoining(user.coppaStatus)) {
+      return 0;
+    }
+
+    const candidates = await db.select({
+      id: membershipRequests.id,
+      organizationId: membershipRequests.organizationId,
+    })
+      .from(membershipRequests)
+      .innerJoin(organizations, eq(membershipRequests.organizationId, organizations.id))
+      .where(and(
+        eq(membershipRequests.userId, userId),
+        eq(membershipRequests.status, 'pending'),
+        or(isNull(membershipRequests.expiresAt), gt(membershipRequests.expiresAt, new Date())),
+        eq(organizations.autoApproveRequests, true),
+        eq(organizations.allowMembershipRequests, true),
+        eq(organizations.isActive, true),
+        isNull(organizations.deletedAt),
+      ));
+
+    let approved = 0;
+    for (const candidate of candidates) {
+      // One transaction per request: the guarded status flip and the membership commit together.
+      const won = await db.transaction(async (tx: any) => {
+        const [flipped] = await tx.update(membershipRequests)
+          .set({ status: 'approved', processedBy: null, processedAt: new Date() })
+          .where(and(eq(membershipRequests.id, candidate.id), eq(membershipRequests.status, 'pending')))
+          .returning({ id: membershipRequests.id });
+        if (!flipped) return false; // a coach (or another verification) got there first
+
+        // addUserToOrganization replaces any existing row, so an existing member (e.g. made a
+        // coach while this request was pending) must not be touched or they would be demoted.
+        const [existing] = await tx.select({ id: userOrganizations.id }).from(userOrganizations)
+          .where(and(
+            eq(userOrganizations.userId, userId),
+            eq(userOrganizations.organizationId, candidate.organizationId),
+          ));
+        if (!existing) {
+          await this.addUserToOrganization(userId, candidate.organizationId, 'athlete', tx);
+        }
+        return true;
+      });
+      if (!won) continue;
+      approved++;
+
+      try {
+        await this.createAuditLog({
+          userId,
+          action: 'membership_request_approved',
+          resourceType: 'membership_request',
+          resourceId: candidate.id,
+          details: JSON.stringify({
+            requesterId: userId,
+            organizationId: candidate.organizationId,
+            reason: 'auto_approved_on_email_verification',
+          }),
+        });
+      } catch (auditError) {
+        console.error('[Membership] Failed to audit auto-join approval:', auditError);
+      }
+    }
+    return approved;
   }
 
   async getMembershipRequest(id: string): Promise<MembershipRequest | undefined> {
@@ -2294,33 +2479,54 @@ export class DatabaseStorage implements IStorage {
 
     // Use transaction to ensure atomicity of approval operations
     return await db.transaction(async (tx: any) => {
-      // If linking to existing athlete, perform the data transfer
-      if (linkToAthleteId) {
-        await this.linkAthleteAccounts(
-          request.userId,        // requester (with login) - survives
-          linkToAthleteId,       // existing athlete (no login) - gets data transferred
-          request.organizationId
-        );
+      // The same rules the pending list applies, enforced here so a known request id cannot bypass them: an
+      // inactive or deleted requester, one without parental consent, or an inactive organization cannot be
+      // approved. Read INSIDE the transaction with a share lock: a deactivation committing at the same moment
+      // either lands first (and is seen here) or waits until this approval finishes, so the check cannot go
+      // stale between the read and the status flip below.
+      const [requester] = await tx.select({
+        isActive: users.isActive,
+        deletedAt: users.deletedAt,
+        coppaStatus: users.coppaStatus,
+      }).from(users).where(eq(users.id, request.userId)).for('share');
+      const [organization] = await tx.select({
+        isActive: organizations.isActive,
+        deletedAt: organizations.deletedAt,
+      }).from(organizations).where(eq(organizations.id, request.organizationId)).for('share');
+      const coppaOk = requester?.coppaStatus === 'not_applicable' || requester?.coppaStatus === 'consented';
+      if (!requester || !requester.isActive || requester.deletedAt || !coppaOk
+        || !organization || !organization.isActive || organization.deletedAt) {
+        throw new Error('This request can no longer be approved');
       }
 
-      // Update request status
+      // Update request status. Conditional on still being pending, so two simultaneous approvals
+      // (or an approval racing a rejection) cannot both succeed.
       const [updated] = await tx.update(membershipRequests)
         .set({
           status: 'approved',
           processedBy,
           processedAt: new Date(),
         })
-        .where(eq(membershipRequests.id, id))
+        .where(and(eq(membershipRequests.id, id), eq(membershipRequests.status, 'pending')))
         .returning();
+      if (!updated) {
+        throw new Error('Only pending requests can be approved');
+      }
 
-      // Add user to organization.
-      // NOTE: full atomicity of approval is NOT yet achieved here — linkAthleteAccounts
-      // above transfers measurements/roster and deactivates the old athlete on the
-      // pooled db handle, outside this transaction. Rather than thread tx through only
-      // this call (a mixed state that could partially roll back and corrupt data), keep
-      // it consistent with those writes (no tx). Threading tx through linkAthleteAccounts
-      // to make the whole approval atomic is a separate, larger change.
-      await this.addUserToOrganization(request.userId, request.organizationId, 'athlete');
+      // If linking to existing athlete, perform the data transfer. Done only after winning the status flip
+      // above, so a losing concurrent approval never moves any data (and a failure here rolls the flip back).
+      if (linkToAthleteId) {
+        await this.linkAthleteAccounts(
+          request.userId,        // requester (with login) - survives
+          linkToAthleteId,       // existing athlete (no login) - gets data transferred
+          request.organizationId,
+          tx
+        );
+      }
+
+      // Add user to organization. The status flip, the athlete link and this insert all run on `tx`, so the approval
+      // commits or rolls back as one (a failure part-way no longer leaves moved data behind a pending request).
+      await this.addUserToOrganization(request.userId, request.organizationId, 'athlete', tx);
 
       return updated;
     });
@@ -2334,26 +2540,28 @@ export class DatabaseStorage implements IStorage {
    * @param requesterId - The user ID of the requester (with login credentials)
    * @param existingAthleteId - The user ID of the existing athlete (no login)
    * @param organizationId - The organization context for the linking
+   * @param executor - The transaction to run in, so the whole approval commits or rolls back together
    */
   private async linkAthleteAccounts(
     requesterId: string,
     existingAthleteId: string,
-    organizationId: string
+    organizationId: string,
+    executor: any = db
   ): Promise<void> {
     // 1. Transfer measurements from existing athlete to requester
-    await db.update(measurements)
+    await executor.update(measurements)
       .set({ userId: requesterId })
       .where(eq(measurements.userId, existingAthleteId));
 
     // 2. Transfer team memberships from existing athlete to requester
     // First, get existing team memberships to avoid duplicates
-    const existingTeamMemberships = await db.select()
+    const existingTeamMemberships = await executor.select()
       .from(userTeams)
       .where(eq(userTeams.userId, existingAthleteId));
 
     for (const membership of existingTeamMemberships) {
       // Check if requester already has this team membership
-      const [existing] = await db.select()
+      const [existing] = await executor.select()
         .from(userTeams)
         .where(and(
           eq(userTeams.userId, requesterId),
@@ -2363,7 +2571,7 @@ export class DatabaseStorage implements IStorage {
 
       if (!existing) {
         // Transfer the team membership
-        await db.update(userTeams)
+        await executor.update(userTeams)
           .set({ userId: requesterId })
           .where(and(
             eq(userTeams.userId, existingAthleteId),
@@ -2371,7 +2579,7 @@ export class DatabaseStorage implements IStorage {
           ));
       } else {
         // Delete the old team membership (requester already has it)
-        await db.delete(userTeams)
+        await executor.delete(userTeams)
           .where(and(
             eq(userTeams.userId, existingAthleteId),
             eq(userTeams.teamId, membership.teamId)
@@ -2380,11 +2588,11 @@ export class DatabaseStorage implements IStorage {
     }
 
     // 3. Copy profile data from existing athlete to requester (if requester is missing it)
-    const [existingAthlete] = await db.select()
+    const [existingAthlete] = await executor.select()
       .from(users)
       .where(eq(users.id, existingAthleteId));
 
-    const [requester] = await db.select()
+    const [requester] = await executor.select()
       .from(users)
       .where(eq(users.id, requesterId));
 
@@ -2415,19 +2623,19 @@ export class DatabaseStorage implements IStorage {
       }
 
       if (Object.keys(profileUpdates).length > 0) {
-        await db.update(users)
+        await executor.update(users)
           .set(profileUpdates)
           .where(eq(users.id, requesterId));
       }
     }
 
     // 4. Deactivate the existing athlete (they no longer need login access)
-    await db.update(users)
+    await executor.update(users)
       .set({ isActive: false })
       .where(eq(users.id, existingAthleteId));
 
     // 5. Remove existing athlete from organization (requester will be added later)
-    await db.delete(userOrganizations)
+    await executor.delete(userOrganizations)
       .where(and(
         eq(userOrganizations.userId, existingAthleteId),
         eq(userOrganizations.organizationId, organizationId)
@@ -2450,8 +2658,12 @@ export class DatabaseStorage implements IStorage {
         processedAt: new Date(),
         rejectionReason: reason || null,
       })
-      .where(eq(membershipRequests.id, id))
+      .where(and(eq(membershipRequests.id, id), eq(membershipRequests.status, 'pending')))
       .returning();
+    // Conditional on still being pending: a rejection racing an approval must not overwrite it
+    if (!updated) {
+      throw new Error('Only pending requests can be rejected');
+    }
 
     return updated;
   }
@@ -5597,13 +5809,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async enableBenchmarkForOrg(organizationId: string, benchmarkId: string, benchmarkType: 'site' | 'custom'): Promise<OrganizationBenchmark> {
-    // 1. Validate UUID format
+    // 1. Validate ID formats. Organization and custom benchmark ids are DB-generated UUIDs; site benchmark ids
+    // are varchar and seeded rows use text slugs (e.g. d1-soc-dash40-d1-avg), so they only need a bounded slug format.
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(benchmarkId)) {
-      throw new Error(`Invalid benchmark ID format: ${benchmarkId}`);
-    }
     if (!uuidRegex.test(organizationId)) {
       throw new Error(`Invalid organization ID format: ${organizationId}`);
+    }
+    const validBenchmarkId = benchmarkType === 'custom' ? uuidRegex.test(benchmarkId) : isValidBenchmarkId(benchmarkId);
+    if (!validBenchmarkId) {
+      throw new Error(`Invalid benchmark ID format: ${benchmarkId}`);
     }
 
     // 2. Validate that the benchmark exists and ownership (for custom)

@@ -1,5 +1,8 @@
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useSiteBenchmarks } from "@/lib/benchmarks-api";
+import { useSiteMetrics } from "@/lib/metrics-api";
+import { CategoryGroup } from "@/components/ui/category-group";
+import { groupByCategoryThenMetric } from "@/lib/category-grouping";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Plus, Search, Filter, Layers } from "lucide-react";
 import { BenchmarkCard } from "./BenchmarkCard";
+import { CategoriesUnavailableNotice } from "./CategoriesUnavailableNotice";
 import { BenchmarkForm } from "./BenchmarkForm";
 import { TierGroupWizard } from "./TierGroupWizard";
 import type { SiteBenchmark } from "@shared/schema";
@@ -17,9 +21,13 @@ export function BenchmarkList() {
   const [editingBenchmark, setEditingBenchmark] = useState<SiteBenchmark | null>(null);
   const [includeInactive, setIncludeInactive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   // Fetch benchmarks with includeInactive filter
-  const { data: benchmarks, isLoading, error } = useSiteBenchmarks(includeInactive);
+  const { data: benchmarks, isLoading: benchmarksLoading, error } = useSiteBenchmarks(includeInactive);
+  // Every benchmark's metric_code is an FK to site_metrics, so the full list (inactive included) always resolves its category
+  const { data: metrics, isLoading: metricsLoading, isError: metricsError } = useSiteMetrics(true);
+  const isLoading = benchmarksLoading || metricsLoading;
 
   // Filter benchmarks by search query
   const filteredBenchmarks = benchmarks?.filter((benchmark) => {
@@ -31,6 +39,27 @@ export function BenchmarkList() {
       benchmark.description?.toLowerCase().includes(query)
     );
   });
+
+  const metricsByCode = useMemo(() => new Map((metrics ?? []).map((m) => [m.code, m])), [metrics]);
+
+  const categoryGroups = useMemo(
+    () =>
+      groupByCategoryThenMetric(
+        filteredBenchmarks ?? [],
+        (b) => b.metricCode,
+        (code) => metricsByCode.get(code)?.category,
+      ),
+    [filteredBenchmarks, metricsByCode],
+  );
+
+  const setGroupOpen = useCallback((id: string, open: boolean) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (open) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   const handleEdit = (benchmark: SiteBenchmark) => {
     setEditingBenchmark(benchmark);
@@ -124,6 +153,8 @@ export function BenchmarkList() {
         </CardContent>
       </Card>
 
+      {metricsError && <CategoriesUnavailableNotice />}
+
       {/* Benchmarks List */}
       {isLoading ? (
         <LoadingSpinner text="Loading benchmarks..." />
@@ -148,13 +179,31 @@ export function BenchmarkList() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredBenchmarks.map((benchmark) => (
-            <BenchmarkCard
-              key={benchmark.id}
-              benchmark={benchmark}
-              onEdit={handleEdit}
-            />
+        <div>
+          {categoryGroups.map((group) => (
+            <CategoryGroup
+              key={group.id}
+              id={group.id}
+              title={group.label}
+              count={group.count}
+              unit="benchmark"
+              open={!collapsedGroups.has(group.id)}
+              onOpenChange={(open) => setGroupOpen(group.id, open)}
+            >
+              {group.items.map((metricGroup) => (
+                <section key={metricGroup.metricCode} className="mb-6">
+                  <p className="mb-2 text-sm font-medium text-muted-foreground">
+                    {metricsByCode.get(metricGroup.metricCode)?.label ?? metricGroup.metricCode}
+                    <span className="ml-2 font-normal" aria-hidden>{metricGroup.items.length}</span>
+                  </p>
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {metricGroup.items.map((benchmark) => (
+                      <BenchmarkCard key={benchmark.id} benchmark={benchmark} onEdit={handleEdit} />
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </CategoryGroup>
           ))}
         </div>
       )}

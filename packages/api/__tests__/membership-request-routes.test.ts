@@ -227,8 +227,28 @@ describe("Membership Request Routes", () => {
         expect(request.organizationId).toBe(testOrgId);
       });
 
-      it("should auto-approve requests when org has autoApproveRequests enabled", async () => {
-        // Enable auto-approve
+      it("should auto-approve a verified user when org has autoApproveRequests enabled", async () => {
+        await storage.updateOrganizationMembershipSettings(testOrgId, {
+          autoApproveRequests: true
+        });
+        await db.update(users).set({ isEmailVerified: true }).where(eq(users.id, testAthleteId));
+
+        const request = await storage.createMembershipRequest({
+          userId: testAthleteId,
+          organizationId: testOrgId,
+          discoveryMethod: "join_code"
+        });
+
+        expect(request.status).toBe("approved");
+
+        // Reset
+        await db.update(users).set({ isEmailVerified: false }).where(eq(users.id, testAthleteId));
+        await storage.updateOrganizationMembershipSettings(testOrgId, {
+          autoApproveRequests: false
+        });
+      });
+
+      it("should keep an unverified user pending when org has autoApproveRequests enabled", async () => {
         await storage.updateOrganizationMembershipSettings(testOrgId, {
           autoApproveRequests: true
         });
@@ -239,9 +259,8 @@ describe("Membership Request Routes", () => {
           discoveryMethod: "join_code"
         });
 
-        expect(request.status).toBe("approved");
+        expect(request.status).toBe("pending");
 
-        // Reset auto-approve
         await storage.updateOrganizationMembershipSettings(testOrgId, {
           autoApproveRequests: false
         });

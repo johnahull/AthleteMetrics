@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useCustomOrgMetrics } from "@/lib/custom-metrics-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,12 +16,16 @@ import { Plus, Search, Filter, Ruler, AlertCircle } from "lucide-react";
 import { CustomOrgMetricCard } from "./CustomOrgMetricCard";
 import { CustomOrgMetricForm } from "./CustomOrgMetricForm";
 import { useAuth } from "@/lib/auth";
+import { CategoryGroup } from "@/components/ui/category-group";
+import { groupByCategory } from "@/lib/category-grouping";
 import type { CustomOrgMetric } from "@shared/schema";
 
 interface CustomOrgMetricListProps {
   organizationId: string;
   /** When true, hides the page header and info banner (for embedding in parent page) */
   embedded?: boolean;
+  /** Overrides the session-role check, which reflects only the user's first organization. */
+  canEdit?: boolean;
 }
 
 const METRIC_CATEGORIES = [
@@ -38,13 +42,14 @@ const METRIC_CATEGORIES = [
   { value: "custom", label: "Custom" },
 ];
 
-export function CustomOrgMetricList({ organizationId, embedded = false }: CustomOrgMetricListProps) {
+export function CustomOrgMetricList({ organizationId, embedded = false, canEdit }: CustomOrgMetricListProps) {
   const { user } = useAuth();
   const [showForm, setShowForm] = useState(false);
   const [editingMetric, setEditingMetric] = useState<CustomOrgMetric | null>(null);
   const [includeArchived, setIncludeArchived] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   // Fetch custom metrics for this organization
   const { data: metrics, isLoading, error } = useCustomOrgMetrics(
@@ -64,6 +69,20 @@ export function CustomOrgMetricList({ organizationId, embedded = false }: Custom
     );
   });
 
+  const categoryGroups = useMemo(
+    () => groupByCategory(filteredMetrics ?? [], (m) => m.category),
+    [filteredMetrics],
+  );
+
+  const setGroupOpen = useCallback((id: string, open: boolean) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (open) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
   const handleEdit = (metric: CustomOrgMetric) => {
     setEditingMetric(metric);
     setShowForm(true);
@@ -79,8 +98,8 @@ export function CustomOrgMetricList({ organizationId, embedded = false }: Custom
     setShowForm(true);
   };
 
-  // Check if user can create/edit metrics (org admin or site admin)
-  const canEditMetrics = user?.isSiteAdmin || user?.role === 'org_admin';
+  // Create/edit rights: the canEdit prop when given, else the session role (org admin or site admin)
+  const canEditMetrics = canEdit ?? (user?.isSiteAdmin || user?.role === 'org_admin');
 
   if (error) {
     return (
@@ -222,15 +241,29 @@ export function CustomOrgMetricList({ organizationId, embedded = false }: Custom
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredMetrics.map((metric) => (
-            <CustomOrgMetricCard
-              key={metric.id}
-              metric={metric}
-              organizationId={organizationId}
-              onEdit={handleEdit}
-              canEdit={canEditMetrics}
-            />
+        <div>
+          {categoryGroups.map((group) => (
+            <CategoryGroup
+              key={group.id}
+              id={group.id}
+              title={group.label}
+              count={group.items.length}
+              unit="metric"
+              open={!collapsedGroups.has(group.id)}
+              onOpenChange={(open) => setGroupOpen(group.id, open)}
+            >
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {group.items.map((metric) => (
+                  <CustomOrgMetricCard
+                    key={metric.id}
+                    metric={metric}
+                    organizationId={organizationId}
+                    onEdit={handleEdit}
+                    canEdit={canEditMetrics}
+                  />
+                ))}
+              </div>
+            </CategoryGroup>
           ))}
         </div>
       )}

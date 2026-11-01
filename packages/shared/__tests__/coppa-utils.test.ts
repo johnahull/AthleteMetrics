@@ -7,6 +7,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { coppaStatusEnum } from '../schema/enums';
+import { COPPA_LOGIN_BLOCKED_STATUSES, coppaStatusAllowsJoining } from '../coppa-utils';
 import {
   calculateAge,
   isUnder13,
@@ -550,5 +552,28 @@ describe('isTeenMinor()', () => {
   it('throws for undefined', () => {
     // @ts-expect-error — intentionally testing JS runtime path
     expect(() => isTeenMinor(undefined)).toThrow();
+  });
+});
+
+describe('coppaStatusAllowsJoining', () => {
+  it('allows exactly the statuses the login gate lets through (every status must be classified)', () => {
+    for (const status of coppaStatusEnum) {
+      const blocked = (COPPA_LOGIN_BLOCKED_STATUSES as readonly string[]).includes(status);
+      expect(coppaStatusAllowsJoining(status), status).toBe(!blocked);
+    }
+  });
+
+  it('allows not_applicable and consented, blocks the other three', () => {
+    expect(coppaStatusAllowsJoining('not_applicable')).toBe(true);
+    expect(coppaStatusAllowsJoining('consented')).toBe(true);
+    for (const s of ['pending_consent', 'needs_parent_email', 'consent_revoked']) {
+      expect(coppaStatusAllowsJoining(s), s).toBe(false);
+    }
+  });
+
+  it('denies a status it does not know, and a missing one', () => {
+    expect(coppaStatusAllowsJoining('some_future_status')).toBe(false);
+    expect(coppaStatusAllowsJoining(undefined)).toBe(false);
+    expect(coppaStatusAllowsJoining(null)).toBe(false);
   });
 });

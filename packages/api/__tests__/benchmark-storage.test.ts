@@ -480,6 +480,75 @@ describe('Benchmark Storage', () => {
       expect(enabled.isEnabled).toBe(true);
     });
 
+    describe('enableBenchmarkForOrg ID validation', () => {
+      it('should enable a site benchmark whose id is a text slug (seeded rows)', async () => {
+        const slug = `test-slug-${uniqueSuffix}`;
+        await db.insert(siteBenchmarks).values({
+          id: slug,
+          metricCode: testMetricCode,
+          name: `Slug Benchmark ${uniqueSuffix}`,
+          benchmarkValue: '1.000',
+          comparisonOperator: 'lte',
+        });
+
+        try {
+          const enabled = await storage.enableBenchmarkForOrg(testOrgId, slug, 'site');
+          expect(enabled.benchmarkId).toBe(slug);
+          expect(enabled.benchmarkType).toBe('site');
+          expect(enabled.isEnabled).toBe(true);
+
+          const orgBenchmarks = await storage.getOrganizationBenchmarks(testOrgId);
+          expect(orgBenchmarks.find(b => b.benchmarkId === slug && b.benchmarkType === 'site')).toBeDefined();
+        } finally {
+          await db.delete(organizationBenchmarks).where(eq(organizationBenchmarks.benchmarkId, slug));
+          await db.delete(siteBenchmarks).where(eq(siteBenchmarks.id, slug));
+        }
+      });
+
+      it('should reject a malformed site benchmark id', async () => {
+        await expect(
+          storage.enableBenchmarkForOrg(testOrgId, 'a b!', 'site')
+        ).rejects.toThrow('Invalid benchmark ID format');
+      });
+
+      it('should throw not found for a non-existent site benchmark slug', async () => {
+        await expect(
+          storage.enableBenchmarkForOrg(testOrgId, `no-such-slug-${uniqueSuffix}`, 'site')
+        ).rejects.toThrow('Site benchmark not found');
+      });
+
+      it('should still reject a non-UUID id for a custom benchmark', async () => {
+        await expect(
+          storage.enableBenchmarkForOrg(testOrgId, 'not-a-uuid', 'custom')
+        ).rejects.toThrow('Invalid benchmark ID format');
+      });
+
+      it('should still reject an invalid organization id', async () => {
+        await expect(
+          storage.enableBenchmarkForOrg('not-a-uuid', 'd1-soc-dash40-d1-avg', 'site')
+        ).rejects.toThrow('Invalid organization ID format');
+      });
+
+      it('should still reject a custom benchmark that belongs to another organization', async () => {
+        const [otherOrg] = await db.insert(organizations).values({
+          name: `Other Org Benchmarks ${uniqueSuffix}`,
+        }).returning();
+        try {
+          const custom = await storage.createCustomBenchmark({
+            organizationId: otherOrg.id,
+            metricCode: testMetricCode,
+            name: 'Other Org Custom',
+            benchmarkValue: 1.10,
+          }, siteAdminUserId);
+          await expect(
+            storage.enableBenchmarkForOrg(testOrgId, custom.id, 'custom')
+          ).rejects.toThrow('does not belong to organization');
+        } finally {
+          await db.delete(organizations).where(eq(organizations.id, otherOrg.id));
+        }
+      });
+    });
+
     it('should enable a custom benchmark for organization', async () => {
       const customBenchmark = await storage.createCustomBenchmark({
         organizationId: testOrgId,
