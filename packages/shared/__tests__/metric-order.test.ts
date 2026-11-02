@@ -41,6 +41,11 @@ describe("groupMetricCodes", () => {
     expect(groups[4].codes).toEqual(["BODY_HEIGHT", "BODY_WEIGHT"]);
     expect(groups[0].label).toBe("Speed");
   });
+  it("keeps the 10/5 hop height and contact time in power, right after RSI_105 (height first)", () => {
+    const groups = groupMetricCodes(["RSI_105_GCT", "RSI_105_HEIGHT", "RSI_105", "JUMP_CMJ_HOH"], {});
+    expect(groups.map((g) => g.group)).toEqual(["power"]);
+    expect(groups[0].codes).toEqual(["JUMP_CMJ_HOH", "RSI_105", "RSI_105_HEIGHT", "RSI_105_GCT"]);
+  });
   it("puts a custom Strength metric in strength, unknown in other, sorted by code", () => {
     const groups = groupMetricCodes(["ZED", "BENCH", "ALPHA"], { BENCH: "Strength" });
     expect(groups.map((g) => g.group)).toEqual(["strength", "other"]);

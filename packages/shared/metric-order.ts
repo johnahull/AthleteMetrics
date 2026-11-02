@@ -43,7 +43,7 @@ const BUILT_IN_CODES: Partial<Record<MetricGroupId, readonly string[]>> = {
   ],
   power: [
     "VERTICAL_JUMP", "JUMP_CMJ_HOH", "JUMP_SJ_HEIGHT", "POWER_EUR",
-    "RSI", "RSI_105", "RSI_BILATERAL", "RSI_LEFT", "RSI_RIGHT", "RSI_L", "RSI_R",
+    "RSI", "RSI_105", "RSI_105_HEIGHT", "RSI_105_GCT", "RSI_BILATERAL", "RSI_LEFT", "RSI_RIGHT", "RSI_L", "RSI_R",
     "RSI_SINGLE_LEFT", "RSI_SINGLE_RIGHT",
     "JUMP_CMJ_SL_L", "JUMP_CMJ_SL_R",
     // Stick landing first: alphabetically HOP_SL_TRIPLE_BL_* would sort ahead of HOP_SL_TRIPLE_L.
