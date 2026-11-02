@@ -16,7 +16,7 @@ import { createServer } from "http";
 import session from "express-session";
 import passport from "passport";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
-import { isSessionProbe } from "./utils/rate-limit-utils";
+import { isSessionProbe, getApiRateLimit } from "./utils/rate-limit-utils";
 import helmet from "helmet";
 import csrf from "csrf";
 import DOMPurify from "isomorphic-dompurify";
@@ -839,7 +839,7 @@ export async function registerRoutes(app: Express) {
   // Rate limiting for API endpoints (general usage)
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    limit: 100, // Limit each signed-in user (anonymous: each IP) to 100 requests per windowMs
+    limit: getApiRateLimit(process.env.API_RATE_LIMIT), // Per signed-in user (anonymous: per IP); default 600 per windowMs
     // Per user, so users behind one IP (a team on shared Wi-Fi) do not share a budget
     keyGenerator: (req) => req.session?.user?.id ?? ipKeyGenerator(req.ip ?? "unknown"),
     message: {

@@ -36,6 +36,8 @@
 
 > 0174 (single-leg triple hop with a bilateral landing: `HOP_SL_TRIPLE_BL_L` / `HOP_SL_TRIPLE_BL_R` copied from the stick-landing legs `HOP_SL_TRIPLE_L` / `_R` with their own explanation text, the derived `HOP_SL_TRIPLE_BL_LSI`, org enablement for every org with `HOP_SL_TRIPLE_L` enabled, and the Triple Hop Bilateral Landing Asymmetry Screening set; no distance tiers, as no norms exist for a two-foot landing; needs 0168 first) is provisional: renumber at merge if another branch lands 0174 first (file, `_down`, test `0174-triple-hop-bilateral-landing`, tracking row, this line). `HOP_SL_TRIPLE_L` / `_R` are created in the admin UI, not by a migration: if either is missing the migration does nothing and is still recorded as applied, so confirm both exist in the target environment first.
 
+> 0175 (10/5 repeat hop inputs: `RSI_105_HEIGHT` (average jump height, in) and `RSI_105_GCT` (average ground contact time, s) as plain entered metrics created from the `RSI_105` row, org enablement for every org with `RSI_105` enabled; `RSI_105` is NOT computed from them, because the device's RSI is the average of per-hop ratios; no benchmarks, not added to the eval report or template; needs 0156 first) is provisional: renumber at merge if another branch lands 0175 first (file, `_down`, test `0175-rsi-105-height-contact-metrics`, tracking row, this line). If `RSI_105` is missing the migration does nothing and is still recorded as applied.
+
 ## Current State (2025-10-30)
 
 ### Overview

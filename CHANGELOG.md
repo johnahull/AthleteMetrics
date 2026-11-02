@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-11-01
+
+### Added
+- 10/5 repeat hop: average jump height (`RSI_105_HEIGHT`, inches) and average ground contact time (`RSI_105_GCT`, seconds) as entered metrics, enabled automatically for every organization that has `RSI_105`. `RSI_105` itself is still entered, not computed from them. Migration `0175` (#714)
+
+### Changed
+- The general `/api` rate limit is now 600 requests per 15 minutes per signed-in user (was 100), configurable with the `API_RATE_LIMIT` env var; invalid values fall back to 600 (#712)
+
+### Fixed
+- DashR CSV import rejected Pro Agility and 5-10-5 rows with a blank Final Distance as "Invalid or missing final distance". Final Distance is no longer required for those drills or used to tell their attempts apart (#713)
+
+### Deployment notes
+- Migration `0175` is new. Apply with `npm run db:migrate:manual`. It is additive only (new `site_metrics` rows plus org enablement); a `_down` script is included.
+- Optional: set `API_RATE_LIMIT` on Railway to override the 600 default.
+
 ## [0.33.0] - 2026-11-01
 
 ### Added

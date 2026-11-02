@@ -65,3 +65,18 @@ export function shouldSkipRateLimiting(
 export function isSessionProbe(req: Request): boolean {
   return req.path === '/auth/me' || req.path === '/auth/me/organizations';
 }
+
+/** Default per-user budget for the general `/api` limiter, per 15-minute window. */
+export const DEFAULT_API_RATE_LIMIT = 600;
+
+/**
+ * Reads the `API_RATE_LIMIT` env value. Only a plain positive integer is accepted;
+ * anything else (unset, empty, zero, negative, junk) falls back to the default.
+ */
+export function getApiRateLimit(envValue: string | undefined): number {
+  if (envValue && /^\d+$/.test(envValue)) {
+    const parsed = parseInt(envValue, 10);
+    if (parsed > 0) return parsed;
+  }
+  return DEFAULT_API_RATE_LIMIT;
+}

@@ -727,6 +727,9 @@ The application runs as a **single-process Node.js server** without clustering:
 
 **Security Note**: File upload endpoints validate both MIME types and file extensions to prevent malicious file uploads. Row limits prevent memory exhaustion from large CSV files. For production deployments, consider integrating virus scanning middleware (e.g., ClamAV).
 
+#### General API Rate Limit
+- `API_RATE_LIMIT` - Per-user (anonymous: per-IP) requests per 15 minutes across all `/api` routes (default: 600). Must be a positive integer, otherwise the default applies. Route-specific limiters are separate.
+
 #### Rate Limiting Bypass (Development Only)
 - `BYPASS_ANALYTICS_RATE_LIMIT` - Set to "true" to bypass analytics rate limiting for site admins (default: false)
 - `BYPASS_GENERAL_RATE_LIMIT` - Set to "true" to bypass general API rate limiting (default: false)

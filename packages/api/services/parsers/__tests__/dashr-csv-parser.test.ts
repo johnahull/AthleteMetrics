@@ -218,6 +218,79 @@ describe('drill type mapping', () => {
     expect(result.athletes[0]?.drills[0]?.metric).toBe('AGILITY_5105');
   });
 
+  describe('Pro Agility / 5-10-5 exports with a blank Final Distance', () => {
+    // Real DashR shape: Split Time 1 set, Split Distance 1 blank, Final Distance blank.
+    const blankDistRow = (type: string, finalTime: string, direction = '', time = '10:00:00') =>
+      `01/01/2025 ${time},Jane,,Doe,${type},,Imperial,,2.51,,,,,,,,,,,,,,,,,,${finalTime},,,,,${direction},,,,,,,,,,,,,,,,,,,,,,,,,,`;
+    const agility = (csv: Buffer) =>
+      parser.parse(csv).athletes[0]?.drills.filter(d => d.metric.startsWith('AGILITY_5105')) ?? [];
+
+    it('imports Pro Agility as AGILITY_5105 using Final Time', () => {
+      const result = parser.parse(makeCsv([blankDistRow('Pro Agility', '4.83')]));
+      expect(result.warnings.some(w => w.toLowerCase().includes('final distance'))).toBe(false);
+      const drills = result.athletes[0].drills;
+      expect(drills).toHaveLength(1);
+      expect(drills[0]).toMatchObject({ metric: 'AGILITY_5105', value: 4.83 });
+    });
+
+    it('does not turn Split Time 1 into a split when Split Distance 1 is blank', () => {
+      const result = parser.parse(makeCsv([blankDistRow('Pro Agility', '4.83')]));
+      expect(result.athletes[0].drills[0].splits).toBeUndefined();
+    });
+
+    it('imports 5-10-5 as AGILITY_5105', () => {
+      const drills = agility(makeCsv([blankDistRow('5-10-5', '4.83')]));
+      expect(drills).toHaveLength(1);
+      expect(drills[0].metric).toBe('AGILITY_5105');
+    });
+
+    it('keeps the fastest of several attempts', () => {
+      const drills = agility(makeCsv([
+        blankDistRow('Pro Agility', '5.10', '', '10:00:00'),
+        blankDistRow('Pro Agility', '4.83', '', '10:05:00'),
+      ]));
+      expect(drills).toHaveLength(1);
+      expect(drills[0].value).toBe(4.83);
+    });
+
+    it('treats a blank-distance and a 20-yard attempt of the same day as attempts of one drill', () => {
+      const withDistance =
+        '01/01/2025 10:05:00,Jane,,Doe,Pro Agility,,Imperial,,,,,,,,,,,,,,,,,,,,5.100000,20.000000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,';
+      const drills = agility(makeCsv([blankDistRow('Pro Agility', '4.83'), withDistance]));
+      expect(drills).toHaveLength(1);
+      expect(drills[0].value).toBe(4.83);
+    });
+
+    it('groups 505 attempts with blank and filled Final Distance into one drill', () => {
+      const blank = '01/01/2025 10:00:00,Jane,,Doe,505 Agility Test,,Imperial,,,,,,,,,,,,,,,,,,,,2.600000,,,,,L,,,,,,,,,,,,,,,,,,,,,,,,,,';
+      const filled = '01/01/2025 10:05:00,Jane,,Doe,505 Agility Test,,Imperial,,,,,,,,,,,,,,,,,,,,2.500000,5.000000,,,,L,,,,,,,,,,,,,,,,,,,,,,,,,,';
+      const drills = parser.parse(makeCsv([blank, filled])).athletes[0].drills;
+      expect(drills).toHaveLength(1);
+      expect(drills[0]).toMatchObject({ metric: 'AGILITY_505_YD_L', value: 2.5 });
+    });
+
+    it('maps Direction L to AGILITY_5105_L', () => {
+      const drills = agility(makeCsv([blankDistRow('Pro Agility', '4.83', 'L')]));
+      expect(drills.map(d => d.metric)).toEqual(['AGILITY_5105_L']);
+    });
+
+    it('counts the rows in getSessionDates', () => {
+      const sessions = parser.getSessionDates(makeCsv([
+        blankDistRow('Pro Agility', '4.83', '', '10:00:00'),
+        blankDistRow('Pro Agility', '5.10', '', '10:05:00'),
+      ]));
+      expect(sessions).toHaveLength(1);
+      expect(sessions[0].drillCount).toBe(2);
+    });
+
+    it('still rejects a Dash row with a blank Final Distance', () => {
+      const dash = '01/01/2025 10:00:00,Jane,,Doe,Dash,,Imperial,,,,,,,,,,,,,,,,,,,,5.100000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,';
+      const result = parser.parse(makeCsv([dash]));
+      expect(result.athletes).toHaveLength(0);
+      expect(result.warnings.some(w => w.toLowerCase().includes('final distance'))).toBe(true);
+    });
+  });
+
   it('warns about unsupported drill types', () => {
     const csv = makeCsv([
       '01/01/2025 10:00:00,Jane,,Doe,Unknown Drill,,Imperial,,,,,,,,,,,,,,,,,,,,3.000000,10.000000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,',

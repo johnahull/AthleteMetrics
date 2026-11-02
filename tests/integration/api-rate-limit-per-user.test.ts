@@ -1,11 +1,13 @@
 /**
- * The app-wide /api limiter (100 requests / 15 min) is keyed per signed-in user,
+ * The app-wide /api limiter (API_RATE_LIMIT requests / 15 min, default 600) is keyed per signed-in user,
  * so users behind one IP (e.g. a team on gym Wi-Fi) do not share a budget;
  * anonymous requests are still limited per IP.
  */
 process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret-key-for-integration-tests-only';
 delete process.env.BYPASS_GENERAL_RATE_LIMIT;
+// A small budget keeps the test fast and proves the env var reaches the limiter (default is unit-tested)
+process.env.API_RATE_LIMIT = '20';
 
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import request from 'supertest';
@@ -24,7 +26,7 @@ import { registerRoutes } from '../../packages/api/routes';
 import { purgeTestRows } from '../helpers/purge-test-rows';
 
 const PASSWORD = 'ApiLimiter123!';
-const LIMIT = 100;
+const LIMIT = 20;
 // Any /api path is counted by the limiter before routing; this one does not exist
 const PROBE = '/api/__rate-limit-probe';
 
