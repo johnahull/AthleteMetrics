@@ -222,8 +222,8 @@ test.describe('Metric Sport Tags - Site Admin Form', () => {
     // Remove Basketball
     await page.click('[data-testid="remove-sport-BASKETBALL"]');
 
-    // Should show "All Sports" placeholder again
-    await expect(page.locator('[data-testid="sport-multi-select"]')).toContainText('All Sports');
+    // Should show the "All sports (default)" placeholder again
+    await expect(page.locator('[data-testid="sport-multi-select"]')).toContainText('All sports (default)');
 
     // Submit form
     await page.click('[data-testid="save-metric-button"]');
