@@ -38,6 +38,8 @@
 
 > 0175 (10/5 repeat hop inputs: `RSI_105_HEIGHT` (average jump height, in) and `RSI_105_GCT` (average ground contact time, s) as plain entered metrics created from the `RSI_105` row, org enablement for every org with `RSI_105` enabled; `RSI_105` is NOT computed from them, because the device's RSI is the average of per-hop ratios; no benchmarks, not added to the eval report or template; needs 0156 first) is provisional: renumber at merge if another branch lands 0175 first (file, `_down`, test `0175-rsi-105-height-contact-metrics`, tracking row, this line). If `RSI_105` is missing the migration does nothing and is still recorded as applied.
 
+> 0176 (10/5 repeat hop metrics for all sports: clears `sport_associations` to NULL on `RSI_105`, `RSI_105_HEIGHT` and `RSI_105_GCT`, which 0175 had tagged `{Soccer}`; plain `RSI` is untouched; the prior values, NULL included, are kept in `site_metrics_sport_backup_0176` so `_down` restores each row exactly; needs 0175 first) is provisional: renumber at merge if another branch lands 0176 first (file, `_down`, test `0176-rsi-105-all-sports`, tracking row, backup table name, this line). If a code is missing the migration does nothing for it and is still recorded as applied.
+
 ## Current State (2025-10-30)
 
 ### Overview

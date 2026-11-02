@@ -363,6 +363,26 @@ describe('MetricService', () => {
       expect(updated.updatedAt).toBeDefined();
     });
 
+    it('clears sportAssociations and availableOrgTypes with null, and leaves them alone when omitted', async () => {
+      await metricService.updateSiteMetric(
+        testMetricCode,
+        { sportAssociations: ['SOCCER'], availableOrgTypes: ['club'] },
+        siteAdminUserId
+      );
+
+      const untouched = await metricService.updateSiteMetric(testMetricCode, { label: 'Tags kept' }, siteAdminUserId);
+      expect(untouched.sportAssociations).toEqual(['SOCCER']);
+      expect(untouched.availableOrgTypes).toEqual(['club']);
+
+      const cleared = await metricService.updateSiteMetric(
+        testMetricCode,
+        { sportAssociations: null, availableOrgTypes: null },
+        siteAdminUserId
+      );
+      expect(cleared.sportAssociations).toBeNull();
+      expect(cleared.availableOrgTypes).toBeNull();
+    });
+
     it('should reject update by non-site-admin', async () => {
       await expect(
         metricService.updateSiteMetric(
