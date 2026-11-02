@@ -50,6 +50,10 @@ const OUTLIER_RANGES: Record<string, { min: number; max: number; label: string }
   RSI: { min: 0.1, max: 4.0, label: 'RSI' },
 };
 
+// Drill types whose DashR rows may leave Final Distance blank (the course length is fixed by the drill).
+// Same type strings as mapDrillType.
+const NO_DISTANCE_TYPES = new Set(['505 Agility Test', 'Pro Agility', '5-10-5']);
+
 /**
  * Returns the unit suffix to use for dash/fly metric codes based on the row's Units column.
  * DashR exports "Imperial" or "Metric" in this field.
@@ -316,7 +320,7 @@ function validateRow(row: DashrRow): string | null {
   if (finalTime === null || finalTime <= 0) return 'Invalid or missing final time';
 
   // For most drill types, final distance should be positive
-  if (type !== '505 Agility Test' && (finalDist === null || finalDist <= 0)) {
+  if (!NO_DISTANCE_TYPES.has(type) && (finalDist === null || finalDist <= 0)) {
     return 'Invalid or missing final distance';
   }
 
@@ -466,7 +470,8 @@ function selectBestAttempts(rows: DashrRow[]): DashrRow[] {
       (row['Type'] || '').toLowerCase().trim(),
       date || '',
       (row['Direction'] || '').toLowerCase().trim(),
-      row['Final Distance'] || '',
+      // Agility exports may or may not fill Final Distance; it is not part of their identity.
+      NO_DISTANCE_TYPES.has((row['Type'] || '').trim()) ? '' : row['Final Distance'] || '',
       // A metric and a yard 5-0-5 are different protocols (_M vs _YD), never alternate attempts.
       getDistanceUnit(row),
       // Different yard run-ins on the same day are different metrics, not attempts at one.
