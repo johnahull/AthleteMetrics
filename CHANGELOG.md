@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-11-03
+
+### Added
+- Individual reports can include a sprint runs section (summary tiles, gate and interval table, PR and "faster" markers) in the coach view, athlete view, public snapshot and PDF. New `charts.sprintRuns` option in the report wizard, default on. Report payloads carry slimmed rows only (no file names, importer ids, free-text notes or measurement ids); the PDF shows the newest 48 runs per unit (#725)
+- Report wizard "Select Metrics" step groups metrics by category and sorts them naturally within each group (#724)
+
+### Fixed
+- 10/5 repeat hop metrics (`RSI_105`, `RSI_105_HEIGHT`, `RSI_105_GCT`) now apply to all sports instead of Soccer only. Migration `0176` (#722)
+- Clearing the last sport or org type in the admin metric edit form now saves (#722)
+- Tier marker on benchmark charts sat in the worse tier when a value fell on a shared tier boundary; it now matches the tier label (#723)
+
+### Maintenance
+- Dependency bumps: `dexie` 4.4.7, `@radix-ui/react-accordion` 1.3.1, `react-context-menu` 2.4.1, `react-navigation-menu` 1.4.1, `react-toggle` 1.2.1 (#717-#721)
+
+### Deployment notes
+- Migration `0176` is new. Apply with `npm run db:migrate:manual`. It sets `sport_associations = NULL` on `RSI_105`, `RSI_105_HEIGHT` and `RSI_105_GCT` (this also clears any tag an admin set on `RSI_105`); prior values are backed up in `site_metrics_sport_backup_0176` and a `_down` script is included.
+
 ## [0.34.0] - 2026-11-01
 
 ### Added
