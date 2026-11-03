@@ -1,6 +1,6 @@
 {
   "name": "@athletemetrics/root",
-  "version": "0.34.0",
+  "version": "0.35.0",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -112,7 +112,7 @@
     "@types/qrcode": "^1.5.6",
     "canvas-confetti": "^1.9.4",
     "date-fns": "^4.1.0",
-    "dexie": "^4.2.1",
+    "dexie": "^4.4.7",
     "dexie-react-hooks": "^4.4.0",
     "dompurify": "^3.4.16",
     "drizzle-orm": "^0.45.2",

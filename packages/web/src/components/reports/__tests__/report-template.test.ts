@@ -82,6 +82,14 @@ describe("formToTemplate", () => {
       trends: true,
       distribution: true,
       fvProfile: true,
+      sprintRuns: true,
     });
+  });
+
+  it("round-trips a saved sprintRuns choice", () => {
+    const out = formToTemplate({ ...form, charts: { ...form.charts, sprintRuns: false } }, "individual", undefined);
+    expect(out.charts.individual?.sprintRuns).toBe(false);
+    const { values } = templateToFormValues({ ...template, charts: out.charts }, "individual", available);
+    expect(values.charts.sprintRuns).toBe(false);
   });
 });

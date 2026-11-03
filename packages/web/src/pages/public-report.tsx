@@ -30,6 +30,8 @@ import { TrendSection } from "@/components/reports/TrendSection";
 import { PercentileRadarSection } from "@/components/reports/PercentileRadarSection";
 import { DistributionSection } from "@/components/reports/DistributionSection";
 import { FvProfileSection } from "@/components/reports/FvProfileSection";
+import { SprintRunsCard } from "@/components/athlete/SprintRunsCard";
+import type { SprintRunMeasurement } from "@shared/report-sprint-runs-types";
 import type { ReportFvProfile } from "@shared/report-fv-types";
 import { isGroupComparisonOn, resolveChartSelection, resolveTeamChartSelection } from "@shared/report-charts";
 import { TierProgressChart } from "@/components/charts/TierProgressChart";
@@ -95,6 +97,8 @@ export default function PublicReport() {
   const metricFormats = snapshotData.metricFormats as Record<string, MeasurementFormat> | undefined;
   const trends = snapshotData.trends as ReportTrends | undefined;
   const fvProfile = snapshotData.fvProfile as ReportFvProfile | undefined;
+  // Snapshots taken before sprint runs existed have no rows, so the section stays hidden
+  const sprintRunMeasurements = snapshotData.sprintRunMeasurements as SprintRunMeasurement[] | undefined;
   const sel = resolveChartSelection(snapshotData.reportConfig);
   const showComparison = isGroupComparisonOn(snapshotData.reportConfig as { groupComparison?: boolean } | undefined);
   // Team charts: separate resolver + payload fields (mirrors TeamReportView).
@@ -607,6 +611,10 @@ export default function PublicReport() {
                 athleteName={snapshotData.athlete?.userName ?? ''}
                 fvProfile={fvProfile}
               />
+            )}
+
+            {sel.sprintRuns && sprintRunMeasurements && sprintRunMeasurements.length > 0 && (
+              <SprintRunsCard measurements={sprintRunMeasurements} reportMode />
             )}
 
             {/* Glossary of metrics (Individual) */}

@@ -48,6 +48,8 @@ import { TeamAthleteSelector } from "@/components/ui/team-athlete-selector";
 import type { OrganizationBenchmarkWithDetails } from "@shared/schema";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { DEFAULT_CHART_SELECTION } from "@shared/report-charts";
+import { groupPickerMetrics } from "@/lib/metric-groups";
+import { MetricGroupHeading } from "./MetricGroupHeading";
 
 // Module-level so BenchmarkChecklist's memos keep stable accessor props across renders
 const getBenchmarkKey = (b: OrganizationBenchmarkWithDetails) => b.benchmarkId;
@@ -84,6 +86,7 @@ const reportConfigSchema = z.object({
     trends: z.boolean().default(true),
     distribution: z.boolean().default(true),
     fvProfile: z.boolean().default(true),
+    sprintRuns: z.boolean().default(true),
     leaderboard: z.boolean().default(true),
     tierDistribution: z.boolean().default(true),
     boxSwarm: z.boolean().default(true),
@@ -175,6 +178,8 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     organizationContext || "",
     true // enabledOnly
   );
+
+  const groupedMetrics = useMemo(() => groupPickerMetrics(metrics ?? []), [metrics]);
 
   // Fetch teams
   const { data: teams, isLoading: teamsLoading, error: teamsError } = useQuery({
@@ -366,6 +371,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     ...(fvEnabled
       ? [['fvProfile', 'Force-Velocity profile', 'Latest sprint F-V profile in the report window (KPIs, chart, analysis)'] as const]
       : []),
+    ['sprintRuns', 'Sprint runs', 'Device-imported dash runs in the report window: gate times, intervals and bests'],
   ];
   const teamChartItems: ReadonlyArray<readonly [ChartItemKey, string, string]> = [
     ['benchmarkStanding', 'Benchmark standing', `Where the ${labels.team.toLowerCase()} average sits vs each benchmark`],
@@ -486,6 +492,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
           distribution: data.groupComparison && data.charts.distribution,
           // Never persist true while the sprint-FV feature is off for this org.
           fvProfile: fvEnabled ? data.charts.fvProfile : false,
+          sprintRuns: data.charts.sprintRuns,
         };
 
     // An individual report without group comparison has no cohort to filter
@@ -767,26 +774,29 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                   <p className="text-sm mt-1">Please enable metrics in Settings first</p>
                 </div>
               ) : (
-                <div className="space-y-2 border rounded-lg p-4 max-h-96 overflow-y-auto">
-                  {metrics.map((metric) => {
-                    const metricCode = metric.metricCode;
-                    const displayName = metric.customLabel || metric.siteMetric.label;
-                    return (
-                      <div key={metricCode} className="flex items-center gap-x-2">
-                        <Checkbox
-                          id={metricCode}
-                          checked={selectedMetrics?.includes(metricCode)}
-                          onCheckedChange={() => toggleMetric(metricCode)}
-                        />
-                        <Label htmlFor={metricCode} className="cursor-pointer flex-1">
-                          <div className="font-medium">{displayName}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {metric.siteMetric.unit} • {metric.siteMetric.category}
+                <div className="space-y-4 border rounded-lg p-4 max-h-96 overflow-y-auto">
+                  {groupedMetrics.map((g) => (
+                    <div key={g.group} className="space-y-2">
+                      <MetricGroupHeading label={g.label} />
+                      {g.metrics.map((metric) => {
+                        const metricCode = metric.metricCode;
+                        const displayName = metric.customLabel || metric.siteMetric.label;
+                        return (
+                          <div key={metricCode} className="flex items-center gap-x-2">
+                            <Checkbox
+                              id={metricCode}
+                              checked={selectedMetrics?.includes(metricCode)}
+                              onCheckedChange={() => toggleMetric(metricCode)}
+                            />
+                            <Label htmlFor={metricCode} className="cursor-pointer flex-1">
+                              <div className="font-medium">{displayName}</div>
+                              <div className="text-sm text-muted-foreground">{metric.siteMetric.unit}</div>
+                            </Label>
                           </div>
-                        </Label>
-                      </div>
-                    );
-                  })}
+                        );
+                      })}
+                    </div>
+                  ))}
                 </div>
               )}
               {errors.metrics && (

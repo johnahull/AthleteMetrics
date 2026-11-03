@@ -52,6 +52,20 @@ describe('AthleteReportView hook order', () => {
     expect(screen.queryByText('Loading report...')).not.toBeInTheDocument();
   });
 
+  it('shows the sprint runs card to the athlete when the report selected it', async () => {
+    const row = (metric: string, value: string, extra: Record<string, unknown> = {}) => ({
+      metric, value, date: '2026-09-01', isVerified: true, organizationId: 'o1', importBatchId: null, notes: null,
+      calculationMetadata: { formula: 'direct_import', runId: 'r1', ...extra },
+    });
+    payload = {
+      ...individualData,
+      reportConfig: { metrics: ['FLY10_TIME'], charts: { sprintRuns: true } },
+      sprintRunMeasurements: [row('DASH_20YD', '3.30'), row('DASH_10YD', '1.90', { formula: 'direct_import_split', parentMetric: 'DASH_20YD' })],
+    };
+    render(<AthleteReportView report={report('individual')} />);
+    await waitFor(() => expect(screen.getByRole('heading', { name: /sprint runs/i })).toBeInTheDocument());
+  });
+
   it('renders a team report once its data arrives', async () => {
     payload = teamData;
     render(<AthleteReportView report={report('team')} />);

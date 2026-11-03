@@ -1,11 +1,8 @@
-import type { Measurement } from '@shared/schema';
+import type { SprintRunMeasurement } from '@shared/report-sprint-runs-types';
+
+export type { SprintRunMeasurement };
 
 export type SprintUnit = 'YD' | 'M';
-
-export type SprintRunMeasurement = Pick<
-  Measurement,
-  'id' | 'metric' | 'value' | 'date' | 'isVerified' | 'organizationId' | 'importBatchId' | 'calculationMetadata' | 'notes'
->;
 
 export interface SprintGate {
   distance: number;

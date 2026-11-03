@@ -232,8 +232,9 @@ export default function MetricFormDialog({
             decimalPrecision: data.displayFormat === 'duration' && metric.displayFormat !== 'duration'
               ? DURATION_DECIMAL_PRECISION
               : undefined,
-            availableOrgTypes: data.availableOrgTypes?.length ? data.availableOrgTypes : undefined,
-            sportAssociations: data.sportAssociations?.length ? data.sportAssociations : undefined,
+            // null (not undefined) clears the tags: the PATCH API treats a missing key as "don't update"
+            availableOrgTypes: data.availableOrgTypes?.length ? data.availableOrgTypes : null,
+            sportAssociations: data.sportAssociations?.length ? data.sportAssociations : null,
             isDerived: data.isDerived,
             formula: data.isDerived ? data.formula : undefined,
             dependentMetrics: data.isDerived && formulaValidation.data?.dependentMetrics

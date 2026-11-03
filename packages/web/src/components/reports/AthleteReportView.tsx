@@ -64,7 +64,8 @@ import {
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { useTeams } from "@/hooks/use-teams";
 import type { Report, TeamReportData, TeamStatistic, AthleteRanking, PdfFormat, IndividualReportData, BenchmarkComparison, TeamReportConfig } from "@/types/report-types";
-import { isGroupComparisonOn } from "@shared/report-charts";
+import { isGroupComparisonOn, resolveChartSelection } from "@shared/report-charts";
+import { SprintRunsCard } from "@/components/athlete/SprintRunsCard";
 
 interface AthleteReportViewProps {
   report: Report;
@@ -152,6 +153,7 @@ function AthleteIndividualReportView({ report }: { report: Report }) {
 
   const { athlete, metricLabels, metricUnits, metricFormats } = reportData;
   const showComparison = isGroupComparisonOn(reportData.reportConfig);
+  const sel = resolveChartSelection(reportData.reportConfig);
   const resolveLabel = (code: string) => metricLabels?.[code] ?? getLabel(code);
 
   return (
@@ -298,6 +300,10 @@ function AthleteIndividualReportView({ report }: { report: Report }) {
             </Table>
           </CardContent>
         </Card>
+      )}
+
+      {sel.sprintRuns && reportData.sprintRunMeasurements && reportData.sprintRunMeasurements.length > 0 && (
+        <SprintRunsCard measurements={reportData.sprintRunMeasurements} reportMode />
       )}
     </div>
   );

@@ -131,9 +131,21 @@ describe('athletePositionPctForValue', () => {
   });
 
   it('positions a value exactly at a segment boundary', () => {
-    // 24 sits exactly at the JV/Varsity boundary; findIndex matches JV first (inclusive on both ends).
+    // 24 sits exactly at the JV/Varsity boundary; the server gives boundary values the BETTER tier
+    // (evaluateTierBenchmark), so the marker must sit at the bottom of Varsity (index 1, f=0).
     const pos = athletePositionPctForValue(24, segs);
-    expect(pos).toBeCloseTo(1 / 3, 5); // top of JV segment (index 0, f=1) => (0+1)/3
+    expect(pos).toBeCloseTo(1 / 3, 5); // (1+0)/3
+  });
+
+  it('puts a boundary value in the better tier even when the worse tier is open-ended (matches the tier label)', () => {
+    // 40-yard dash (lower is better): Below Average is 5.13+, Average 5.00-5.13. 5.13 is "Average".
+    const dash: TierInfo[] = [
+      { tierName: 'Below Average', tierColor: '#f90', tierOrder: 3, minValue: 5.13, maxValue: null },
+      { tierName: 'Average', tierColor: '#ff0', tierOrder: 2, minValue: 5.0, maxValue: 5.13 },
+      { tierName: 'Above Average', tierColor: '#888', tierOrder: 1, minValue: null, maxValue: 5.0 },
+    ];
+    const pos = athletePositionPctForValue(5.13, dash);
+    expect(pos).toBeCloseTo(2 / 3, 5); // top edge of the Average segment (index 1, f=1)
   });
 
   it('returns 0 for an empty segment array', () => {

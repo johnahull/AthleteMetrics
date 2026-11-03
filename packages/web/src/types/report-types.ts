@@ -1,6 +1,7 @@
 import type { MetricExplanation } from '@shared/metric-explanations';
 import type { ReportTrends, ReportDistributions, TeamReportTrends, TeamReportDistributions } from '@shared/report-trends-types';
 import type { ReportFvProfile } from '@shared/report-fv-types';
+import type { SprintRunMeasurement } from '@shared/report-sprint-runs-types';
 import type { MetricGroup } from '@shared/metric-order';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
 import type { ChartSelection, TeamChartSelection } from '@shared/report-charts';
@@ -157,6 +158,8 @@ export interface IndividualReportData {
   trends?: ReportTrends;
   distributions?: ReportDistributions;
   fvProfile?: ReportFvProfile; // present only when charts.fvProfile is selected and the sprint-FV flag is on
+  /** Verified dash rows in the report window; present only when charts.sprintRuns is selected and there are some */
+  sprintRunMeasurements?: SprintRunMeasurement[];
   comparisonLabel?: string; // cohort name for the "Where You Stand" caption (undefined = org-wide)
   /** Metric groups in display order; absent on data from before grouping existed */
   metricGroups?: MetricGroup[];

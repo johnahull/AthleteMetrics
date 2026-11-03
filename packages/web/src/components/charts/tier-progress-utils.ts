@@ -26,8 +26,13 @@ export function athletePositionPctForValue(value: number, segs: TierInfo[]): num
   const lo = (s: TierInfo) => s.minValue ?? -Infinity;
   const hi = (s: TierInfo) => s.maxValue ?? Infinity;
 
-  // Find the segment whose [min, max] band contains the value.
-  let index = segs.findIndex(s => v >= lo(s) && v <= hi(s));
+  // Find the segment whose [min, max] band contains the value. segs run worst->best, so search from
+  // the end: a value on a shared boundary takes the BETTER tier, as the server does
+  // (evaluateTierBenchmark), keeping the marker in the same segment as the tier label.
+  let index = -1;
+  for (let i = n - 1; i >= 0; i--) {
+    if (v >= lo(segs[i]) && v <= hi(segs[i])) { index = i; break; }
+  }
 
   if (index === -1) {
     // Not contained by any band: clamp below first / above last, else nearest boundary.
