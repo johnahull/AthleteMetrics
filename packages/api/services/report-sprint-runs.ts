@@ -2,6 +2,13 @@
 import type { Measurement } from '@shared/schema';
 import type { SprintRunMeasurement } from '@shared/report-sprint-runs-types';
 
+/**
+ * Most dash rows one report carries. The payload is frozen into public snapshots, so it is bounded here, not only
+ * by the card's 48-newest-runs-per-unit display limit. Rows are taken newest first; a run has a handful of gate
+ * rows, so this covers both units' displayed runs with room to spare.
+ */
+export const REPORT_SPRINT_RUN_ROW_CAP = 2000;
+
 // The marker the oldest device imports left in notes (see groupSprintRuns); the rest of the note holds the file name
 const SPLIT_NOTE = /^Split from DASH_\d+(?:YD|M)\b/;
 

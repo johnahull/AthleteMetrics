@@ -41,6 +41,7 @@ vi.mock('../../packages/api/vite.js', () => ({
 }));
 
 import { registerRoutes } from '../../packages/api/routes';
+import { REPORT_SPRINT_RUN_ROW_CAP } from '../../packages/api/services/report-sprint-runs';
 
 // Helper function for password hashing
 async function hashPassword(password: string): Promise<string> {
@@ -484,6 +485,28 @@ describe('POST /api/reports/:id/generate — sprint runs payload', () => {
     const rows = response.body.sprintRunMeasurements as Array<{ metric: string; value: string }>;
     expect(rows.map(r => r.metric).sort()).toEqual(['DASH_20YD', 'DASH_40YD']);
     expect(rows.find(r => r.metric === 'DASH_40YD')?.value).toBe(keep.value);
+  });
+
+  it('caps the payload at REPORT_SPRINT_RUN_ROW_CAP rows and keeps the newest', async () => {
+    const base = { userId: testAthlete.id, submittedBy: testCoach.id, age: 17, units: 's', organizationId: testOrg.id, isVerified: true, metric: 'DASH_40YD' };
+    const filler = Array.from({ length: REPORT_SPRINT_RUN_ROW_CAP }, (_, i) => ({
+      ...base,
+      value: '5.500',
+      date: `2026-03-${String((i % 28) + 2).padStart(2, '0')}`,
+    }));
+    await db.insert(measurements).values([
+      { ...base, value: '1.111', date: '2026-03-01' }, // oldest: must be dropped
+      ...filler,
+      { ...base, value: '9.999', date: '2026-03-31' }, // newest: must be kept
+    ]);
+
+    const response = await generate((await createIndividualReport(sprintConfig())).id);
+
+    expect(response.status).toBe(200);
+    const rows = response.body.sprintRunMeasurements as Array<{ value: string }>;
+    expect(rows).toHaveLength(REPORT_SPRINT_RUN_ROW_CAP);
+    expect(rows.some(r => r.value === '9.999')).toBe(true);
+    expect(rows.some(r => r.value === '1.111')).toBe(false);
   });
 
   it('is absent when the chart is off, for a legacy report, and when there are no runs', async () => {

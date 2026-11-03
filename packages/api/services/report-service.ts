@@ -39,7 +39,7 @@ import { computeDistribution } from './report-distributions';
 import { assembleTeamTrends, computeTeamDistribution } from './report-team-charts';
 import { buildCohortLabel } from './cohort-label';
 import { pickLatestInWindow, toReportFvProfile } from './report-fv';
-import { toReportSprintRunRow } from './report-sprint-runs';
+import { toReportSprintRunRow, REPORT_SPRINT_RUN_ROW_CAP } from './report-sprint-runs';
 import { SprintFvService } from './sprint-fv-service';
 import { checkSprintFvEnabled } from '../middleware/require-sprint-fv-enabled';
 import { stripMediaUrlDeep } from '../utils/measurement-redaction';
@@ -720,7 +720,8 @@ export class ReportService extends BaseService {
         })
         .from(measurements)
         .where(and(...runConditions))
-        .orderBy(desc(measurements.date));
+        .orderBy(desc(measurements.date))
+        .limit(REPORT_SPRINT_RUN_ROW_CAP);
       if (runRows.length > 0) sprintRunMeasurements = runRows.map(toReportSprintRunRow);
     }
 
