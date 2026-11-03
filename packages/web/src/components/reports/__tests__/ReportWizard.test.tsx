@@ -121,11 +121,11 @@ describe('ReportWizard Component', () => {
           json: async () => [
             {
               metricCode: 'FLY10_TIME',
-              siteMetric: { name: '10-Yard Fly', unit: 'seconds', category: 'Speed' },
+              siteMetric: { name: '10-Yard Fly', label: '10-Yard Fly', unit: 'seconds', category: 'Speed' },
             },
             {
               metricCode: 'VERTICAL_JUMP',
-              siteMetric: { name: 'Vertical Jump', unit: 'inches', category: 'Power' },
+              siteMetric: { name: 'Vertical Jump', label: 'Vertical Jump', unit: 'inches', category: 'Power' },
             },
           ],
         });
@@ -159,11 +159,11 @@ describe('ReportWizard Component', () => {
       data: [
         {
           metricCode: 'FLY10_TIME',
-          siteMetric: { name: '10-Yard Fly', unit: 'seconds', category: 'Speed' },
+          siteMetric: { name: '10-Yard Fly', label: '10-Yard Fly', unit: 'seconds', category: 'Speed' },
         },
         {
           metricCode: 'VERTICAL_JUMP',
-          siteMetric: { name: 'Vertical Jump', unit: 'inches', category: 'Power' },
+          siteMetric: { name: 'Vertical Jump', label: 'Vertical Jump', unit: 'inches', category: 'Power' },
         },
       ],
       isLoading: false,
@@ -631,11 +631,11 @@ describe('ReportWizard Component', () => {
             json: async () => [
               {
                 metricCode: 'FLY10_TIME',
-                siteMetric: { name: '10-Yard Fly', unit: 'seconds', category: 'Speed' },
+                siteMetric: { name: '10-Yard Fly', label: '10-Yard Fly', unit: 'seconds', category: 'Speed' },
               },
               {
                 metricCode: 'VERTICAL_JUMP',
-                siteMetric: { name: 'Vertical Jump', unit: 'inches', category: 'Power' },
+                siteMetric: { name: 'Vertical Jump', label: 'Vertical Jump', unit: 'inches', category: 'Power' },
               },
             ],
           });
@@ -1252,6 +1252,47 @@ describe('ReportWizard Component', () => {
       fireEvent.change(await screen.findByLabelText(/Template name/i), { target: { value: 'X' } });
       fireEvent.click(screen.getByRole('button', { name: /Save template/i }));
       expect(await screen.findByText('Name is too long')).toBeInTheDocument();
+    });
+  });
+
+  describe('Metric picker order (step 5)', () => {
+    const next = () => fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+    const metric = (metricCode: string, label: string, category: string) => ({
+      metricCode,
+      siteMetric: { label, unit: 's', category },
+    });
+
+    it('groups metrics by category and sorts each group naturally', async () => {
+      mockUseOrganizationMetrics.mockReturnValue({
+        data: [
+          metric('VERTICAL_JUMP', 'Vertical Jump (in)', 'Power'),
+          metric('FLY10_TIME_RI30', '10-Yard Fly, 30 yd run-in', 'speed'),
+          metric('AGILITY_5105', '5-10-5 Agility', 'agility'),
+          metric('DASH_40YD', '40-Yard Dash', 'speed'),
+          metric('FLY10_TIME_RI5', '10-Yard Fly, 5 yd run-in', 'speed'),
+          metric('AGILITY_505_M', '5-0-5 Agility (m)', 'agility'),
+        ],
+        isLoading: false,
+        error: null,
+      });
+      renderWithQueryClient(<ReportWizard open={true} onClose={mockOnClose} onSuccess={mockOnSuccess} />);
+
+      await waitFor(() => expect(screen.getByText('Team Report')).toBeInTheDocument());
+      next();
+      await waitFor(() => fireEvent.change(screen.getByLabelText(/Report Name/i), { target: { value: 'Order Test' } }));
+      next();
+      next();
+
+      await screen.findByText('Select Metrics *');
+      expect(screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent)).toEqual(['Speed', 'Agility', 'Power']);
+      expect(screen.getAllByRole('checkbox').map((c) => c.id)).toEqual([
+        'FLY10_TIME_RI5',
+        'FLY10_TIME_RI30',
+        'DASH_40YD',
+        'AGILITY_505_M',
+        'AGILITY_5105',
+        'VERTICAL_JUMP',
+      ]);
     });
   });
 });
