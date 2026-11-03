@@ -86,10 +86,12 @@ test.describe('Report sprint runs (live + public)', () => {
     athleteId = (await athleteRes.json()).id;
     await page.request.post(`${STAGING_URL}/api/teams/${teamId}/members`, { data: { userId: athleteId } });
 
-    const m = await page.request.post(`${STAGING_URL}/api/measurements`, {
-      data: { userId: athleteId, metric: 'DASH_40YD', value: 5.5, date: runDate, teamId },
+    // The batch endpoint has its own rate-limit bucket. The single-create one (200 / 15 min) is shared by the whole
+    // E2E run and is already used up by the time this spec runs, so it answered 429 here.
+    const m = await page.request.post(`${STAGING_URL}/api/measurements/batch`, {
+      data: { measurements: [{ userId: athleteId, metric: 'DASH_40YD', value: 5.5, date: runDate, teamId }] },
     });
-    expect(m.ok(), 'dash measurement was created').toBeTruthy();
+    expect(m.ok(), `dash measurement was created (HTTP ${m.status()})`).toBeTruthy();
   });
 
   test.afterEach(async ({ page }) => {
