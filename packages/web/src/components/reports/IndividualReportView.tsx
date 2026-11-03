@@ -410,7 +410,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
         <FvProfileSection athleteName={athlete.userName} fvProfile={reportData.fvProfile} />
       )}
 
-      {sel.sprintRuns && (reportData.sprintRunMeasurements?.length ?? 0) > 0 && (
+      {sel.sprintRuns && reportData.sprintRunMeasurements && reportData.sprintRunMeasurements.length > 0 && (
         <SprintRunsCard measurements={reportData.sprintRunMeasurements} reportMode />
       )}
 
