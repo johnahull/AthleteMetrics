@@ -15,7 +15,6 @@ function m(o: {
 }): SprintRunMeasurement {
   n += 1;
   return {
-    id: `m${n}`,
     metric: o.metric,
     value: String(o.value),
     date: o.date,
@@ -26,8 +25,6 @@ function m(o: {
     calculationMetadata: o.runId
       ? {
           formula: o.split ? 'direct_import_split' : 'direct_import',
-          sourceValues: {},
-          calculatedAt: '2026-10-17T00:00:00Z',
           runId: o.runId,
           ...(o.parentMetric ? { parentMetric: o.parentMetric } : {}),
         }

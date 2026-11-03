@@ -44,10 +44,11 @@ const report = {
 function renderWith(
   reportConfig: Record<string, unknown>,
   measurements: Record<string, number> = { VERTICAL_JUMP: 27.5 },
-  extra: { metricFormats?: Record<string, unknown>; teamAverages?: Record<string, number> } = {},
+  extra: { metricFormats?: Record<string, unknown>; teamAverages?: Record<string, number>; sprintRunMeasurements?: unknown[] } = {},
 ) {
   const data = {
     metricFormats: extra.metricFormats,
+    sprintRunMeasurements: extra.sprintRunMeasurements,
     reportType: 'individual',
     reportConfig: { metrics: ['VERTICAL_JUMP'], ...reportConfig },
     generatedAt: '2024-03-15T00:00:00Z',
@@ -219,5 +220,33 @@ describe('IndividualReportView — metric groups', () => {
     renderGrouped();
     expect(screen.getByText('Benchmark Standing')).toBeInTheDocument();
     expect(Array.from(document.querySelectorAll('h4')).map((h) => h.textContent)).toEqual(['Speed', 'Power']);
+  });
+});
+
+describe('IndividualReportView — sprint runs section', () => {
+  const rows = [
+    { metric: 'DASH_20YD', value: '3.30', date: '2026-09-01', isVerified: true, organizationId: 'org-1', importBatchId: null, notes: null, calculationMetadata: { formula: 'direct_import', runId: 'r1' } },
+    { metric: 'DASH_10YD', value: '1.90', date: '2026-09-01', isVerified: true, organizationId: 'org-1', importBatchId: null, notes: null, calculationMetadata: { formula: 'direct_import_split', runId: 'r1', parentMetric: 'DASH_20YD' } },
+  ];
+
+  it('shows the sprint runs card when selected and the payload has rows', () => {
+    renderWith({ charts: { sprintRuns: true } }, undefined, { sprintRunMeasurements: rows });
+    expect(screen.getByRole('heading', { name: /sprint runs/i })).toBeInTheDocument();
+    expect(screen.getByRole('rowheader', { name: /Sep 1, 2026/ })).toBeInTheDocument();
+  });
+
+  it('hides it when the chart is not selected', () => {
+    renderWith({ charts: { sprintRuns: false } }, undefined, { sprintRunMeasurements: rows });
+    expect(screen.queryByRole('heading', { name: /sprint runs/i })).not.toBeInTheDocument();
+  });
+
+  it('hides it for a legacy report with no charts setting', () => {
+    renderWith({}, undefined, { sprintRunMeasurements: rows });
+    expect(screen.queryByRole('heading', { name: /sprint runs/i })).not.toBeInTheDocument();
+  });
+
+  it('hides it when the payload has no rows', () => {
+    renderWith({ charts: { sprintRuns: true } });
+    expect(screen.queryByRole('heading', { name: /sprint runs/i })).not.toBeInTheDocument();
   });
 });

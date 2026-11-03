@@ -23,7 +23,7 @@ export interface TemplateAvailability {
 }
 
 const TEAM_CHART_KEYS = ["benchmarkStanding", "trends", "boxSwarm", "leaderboard", "tierDistribution"] as const;
-const INDIVIDUAL_CHART_KEYS = ["radar", "benchmarkStanding", "trends", "distribution", "fvProfile"] as const;
+const INDIVIDUAL_CHART_KEYS = ["radar", "benchmarkStanding", "trends", "distribution", "fvProfile", "sprintRuns"] as const;
 
 /** Defaults with the template's saved choices for one report type on top. */
 export function templateCharts(template: { charts: ReportTemplateCharts }, reportType: ReportType): Charts {

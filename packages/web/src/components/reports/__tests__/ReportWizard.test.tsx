@@ -949,6 +949,28 @@ describe('ReportWizard Component', () => {
       expect(payload.config.charts.distribution).toBe(false);
     });
 
+    it('individual report sends charts.sprintRuns true by default, and false once its checkbox is cleared', async () => {
+      renderWithQueryClient(<ReportWizard open={true} onClose={mockOnClose} onSuccess={mockOnSuccess} />);
+      await goToFilters('individual');
+      next();
+      const checkbox = await screen.findByRole('checkbox', { name: /Sprint runs/i });
+      expect(checkbox).toBeChecked();
+      fireEvent.click(checkbox);
+      fireEvent.click(screen.getByRole('button', { name: /Create Report/i }));
+      await waitFor(() => expect(mockCreateReportMutate).toHaveBeenCalled());
+      expect(mockCreateReportMutate.mock.calls[0][0].config.charts.sprintRuns).toBe(false);
+    });
+
+    it('team report does not offer the sprint runs chart', async () => {
+      renderWithQueryClient(<ReportWizard open={true} onClose={mockOnClose} onSuccess={mockOnSuccess} />);
+      await goToFilters('team');
+      await waitFor(() => expect(screen.getByLabelText('Team A')).toBeInTheDocument());
+      fireEvent.click(screen.getByLabelText('Team A'));
+      next();
+      await screen.findByRole('checkbox', { name: /Leaderboard/i });
+      expect(screen.queryByRole('checkbox', { name: /Sprint runs/i })).not.toBeInTheDocument();
+    });
+
     it('individual report with the switch on sends groupComparison: true and shows filters', async () => {
       renderWithQueryClient(<ReportWizard open={true} onClose={mockOnClose} onSuccess={mockOnSuccess} />);
       await goToFilters('individual');

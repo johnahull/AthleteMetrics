@@ -24,7 +24,6 @@ function m(o: {
 }): SprintRunMeasurement {
   n += 1;
   return {
-    id: `m${n}`,
     metric: o.metric,
     value: String(o.value),
     date: o.date ?? '2026-10-17',

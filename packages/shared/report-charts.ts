@@ -7,6 +7,8 @@ export interface ChartSelection {
   distribution: boolean;
   /** Sprint Force-Velocity profile section (individual reports only; requires the sprint-FV feature flag). */
   fvProfile: boolean;
+  /** Sprint runs section: device-imported dash runs inside the report window (individual reports only). */
+  sprintRuns: boolean;
   // Team-only charts (team-report-charts Stage 1). Optional here so
   // resolveChartSelection's existing individual-only return values (which
   // don't set these) keep type-checking unchanged; resolveTeamChartSelection
@@ -18,7 +20,7 @@ export interface ChartSelection {
 
 /** Default chart selection for new reports — all charts on. */
 export const DEFAULT_CHART_SELECTION: ChartSelection = {
-  radar: true, benchmarkStanding: true, trends: true, distribution: true, fvProfile: true,
+  radar: true, benchmarkStanding: true, trends: true, distribution: true, fvProfile: true, sprintRuns: true,
   leaderboard: true, tierDistribution: true, boxSwarm: true,
 };
 
@@ -74,6 +76,7 @@ function resolveChartSelectionRaw(config: ChartConfigInput | undefined | null): 
       trends: c.trends ?? false,
       distribution: c.distribution ?? false,
       fvProfile: c.fvProfile ?? false,
+      sprintRuns: c.sprintRuns ?? false,
     };
   }
   return {
@@ -82,6 +85,7 @@ function resolveChartSelectionRaw(config: ChartConfigInput | undefined | null): 
     trends: config?.showTrends ?? false,
     distribution: false,
     fvProfile: false,
+    sprintRuns: false,
   };
 }
 

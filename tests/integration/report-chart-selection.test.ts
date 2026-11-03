@@ -434,3 +434,113 @@ describe('POST /api/reports/:id/generate — back-compat (no charts field)', () 
     expect(response.body.distributions).toBeUndefined();
   });
 });
+
+describe('POST /api/reports/:id/generate — sprint runs payload', () => {
+  let otherOrgId: string | undefined;
+
+  afterEach(async () => {
+    if (otherOrgId) {
+      await db.delete(measurements).where(eq(measurements.organizationId, otherOrgId));
+      await db.delete(organizations).where(eq(organizations.id, otherOrgId));
+      otherOrgId = undefined;
+    }
+  });
+
+  async function seedDash(over: Partial<typeof measurements.$inferInsert> & { metric: string; value: string; date: string }) {
+    const [row] = await db.insert(measurements).values({
+      userId: testAthlete.id,
+      submittedBy: testCoach.id,
+      age: 17,
+      units: 's',
+      organizationId: testOrg.id,
+      isVerified: true,
+      ...over,
+    }).returning();
+    return row;
+  }
+
+  const sprintConfig = (extra: Record<string, any> = {}) => ({
+    charts: { sprintRuns: true },
+    timeframe: { type: 'custom', customStart: '2026-03-01', customEnd: '2026-03-31' },
+    ...extra,
+  });
+
+  it('returns only the athlete\'s verified DASH rows of the report organization inside the window', async () => {
+    const keep = await seedDash({ metric: 'DASH_40YD', value: '5.500', date: '2026-03-10' });
+    await seedDash({ metric: 'DASH_20YD', value: '3.200', date: '2026-03-10' });
+    await seedDash({ metric: 'DASH_40YD', value: '5.400', date: '2026-03-12', isVerified: false });
+    await seedDash({ metric: 'DASH_40YD', value: '5.300', date: '2026-02-10' });
+    await seedDash({ metric: 'DASH_40YD', value: '5.300', date: '2026-04-10' });
+    await seedDash({ metric: 'VERTICAL_JUMP', value: '30.000', date: '2026-03-10', units: 'in' });
+    // The underscore in the LIKE pattern is literal: a look-alike code must not match
+    await seedDash({ metric: 'DASHX40YD', value: '5.000', date: '2026-03-10' });
+    const [other] = await db.insert(organizations).values({ name: `ChartSel Other ${Date.now()}`, isActive: true }).returning();
+    otherOrgId = other.id;
+    await seedDash({ metric: 'DASH_40YD', value: '5.100', date: '2026-03-10', organizationId: other.id });
+
+    const response = await generate((await createIndividualReport(sprintConfig())).id);
+
+    expect(response.status).toBe(200);
+    const rows = response.body.sprintRunMeasurements as Array<{ metric: string; value: string }>;
+    expect(rows.map(r => r.metric).sort()).toEqual(['DASH_20YD', 'DASH_40YD']);
+    expect(rows.find(r => r.metric === 'DASH_40YD')?.value).toBe(keep.value);
+  });
+
+  it('is absent when the chart is off, for a legacy report, and when there are no runs', async () => {
+    await seedDash({ metric: 'DASH_40YD', value: '5.500', date: '2026-03-10' });
+
+    const off = await generate((await createIndividualReport(sprintConfig({ charts: { sprintRuns: false } }))).id);
+    expect(off.body.sprintRunMeasurements).toBeUndefined();
+
+    const legacy = await generate((await createIndividualReport({ timeframe: sprintConfig().timeframe })).id);
+    expect(legacy.body.sprintRunMeasurements).toBeUndefined();
+
+    const empty = await generate((await createIndividualReport(sprintConfig({ timeframe: { type: 'custom', customStart: '2025-01-01', customEnd: '2025-01-31' } }))).id);
+    expect(empty.status).toBe(200);
+    expect(empty.body.sprintRunMeasurements).toBeUndefined();
+  });
+
+  it('keeps only rows of the report event when the report has an event', async () => {
+    await seedDash({ metric: 'DASH_40YD', value: '5.500', date: '2026-03-10', eventId: 'event-a' });
+    await seedDash({ metric: 'DASH_40YD', value: '5.600', date: '2026-03-11', eventId: 'event-b' });
+    await seedDash({ metric: 'DASH_40YD', value: '5.700', date: '2026-03-12' });
+
+    const response = await generate((await createIndividualReport(sprintConfig({ eventId: 'event-a' }))).id);
+
+    expect(response.status).toBe(200);
+    expect((response.body.sprintRunMeasurements as unknown[]).length).toBe(1);
+    expect(response.body.sprintRunMeasurements[0].value).toBe('5.500');
+  });
+
+  it('never carries import file names, the importing coach\'s id or free-text notes (the payload is frozen into public snapshots)', async () => {
+    await seedDash({
+      metric: 'DASH_20YD',
+      value: '3.200',
+      date: '2026-03-10',
+      notes: 'Split from DASH_40YD — imported from secret-team-file.csv',
+      importBatchId: 'batch-1',
+      calculationMetadata: {
+        formula: 'direct_import_split',
+        sourceValues: {},
+        calculatedAt: '2026-03-10T00:00:00Z',
+        parentMetric: 'DASH_40YD',
+        runId: 'run-1',
+        triggeredBy: { event: 'bulk_import', userId: testCoach.id },
+      },
+    });
+    await seedDash({ metric: 'DASH_40YD', value: '5.500', date: '2026-03-10', notes: 'felt a tweak in the hamstring' });
+
+    const response = await generate((await createIndividualReport(sprintConfig())).id);
+
+    expect(response.status).toBe(200);
+    const body = JSON.stringify(response.body.sprintRunMeasurements);
+    expect(body).not.toContain('secret-team-file');
+    expect(body).not.toContain('hamstring');
+    expect(body).not.toContain('triggeredBy');
+    expect(body).not.toContain(testCoach.id);
+    // Run grouping still works: the split keeps its marker, run id and parent
+    const split = (response.body.sprintRunMeasurements as any[]).find(r => r.metric === 'DASH_20YD');
+    expect(split.notes).toBe('Split from DASH_40YD');
+    expect(split.calculationMetadata).toEqual({ formula: 'direct_import_split', parentMetric: 'DASH_40YD', runId: 'run-1' });
+  });
+});
