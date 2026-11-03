@@ -24,7 +24,7 @@ import {
   type ReportBenchmark,
 } from '@shared/schema';
 import { isUnder13OrUnknownDob } from '@shared/coppa-utils';
-import { eq, and, or, isNull, gte, lte, inArray, desc, sql } from 'drizzle-orm';
+import { eq, and, or, isNull, gte, lte, inArray, desc, sql, like } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { quantileRank, median, mean, min, max, standardDeviation } from 'simple-statistics';
 import { BaseService } from './base-service';
@@ -39,12 +39,14 @@ import { computeDistribution } from './report-distributions';
 import { assembleTeamTrends, computeTeamDistribution } from './report-team-charts';
 import { buildCohortLabel } from './cohort-label';
 import { pickLatestInWindow, toReportFvProfile } from './report-fv';
+import { toReportSprintRunRow, REPORT_SPRINT_RUN_ROW_CAP } from './report-sprint-runs';
 import { SprintFvService } from './sprint-fv-service';
 import { checkSprintFvEnabled } from '../middleware/require-sprint-fv-enabled';
 import { stripMediaUrlDeep } from '../utils/measurement-redaction';
 import { isGroupComparisonOn, resolveChartSelection, resolveTeamChartSelection, type ChartSelection } from '@shared/report-charts';
 import type { ReportTrends, ReportDistributions, TeamReportTrends, TeamReportDistributions } from '@shared/report-trends-types';
 import type { ReportFvProfile } from '@shared/report-fv-types';
+import type { SprintRunMeasurement } from '@shared/report-sprint-runs-types';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
 import { wasUnder13At } from '@shared/coppa-utils';
 import type { MeasurementFormat } from '@shared/duration-format';
@@ -171,6 +173,8 @@ interface IndividualReportData {
   trends?: ReportTrends; // present only when reportConfig.showTrends is true
   distributions?: ReportDistributions;
   fvProfile?: ReportFvProfile; // present only when charts.fvProfile is selected and the sprint-FV flag is on
+  /** Verified dash rows in the report window; present only when charts.sprintRuns is selected and the athlete has some */
+  sprintRunMeasurements?: SprintRunMeasurement[];
   comparisonLabel?: string; // cohort name for the "Where You Stand" caption (undefined = org-wide)
 }
 
@@ -690,6 +694,37 @@ export class ReportService extends BaseService {
       }
     }
 
+    // Device-imported dash runs in the report window, when selected. Not limited to config.metrics: a run's
+    // gates span several DASH_* codes. Slimmed because the payload is frozen into public snapshots.
+    let sprintRunMeasurements: SprintRunMeasurement[] | undefined;
+    if (chartSelection.sprintRuns) {
+      const runConditions = [
+        eq(measurements.userId, athleteId),
+        eq(measurements.organizationId, report.organizationId),
+        eq(measurements.isVerified, true),
+        gte(measurements.date, startDate),
+        lte(measurements.date, endDate),
+        like(measurements.metric, 'DASH\\_%'),
+      ];
+      if (config.eventId) runConditions.push(eq(measurements.eventId, config.eventId));
+      const runRows = await db
+        .select({
+          metric: measurements.metric,
+          value: measurements.value,
+          date: measurements.date,
+          isVerified: measurements.isVerified,
+          organizationId: measurements.organizationId,
+          importBatchId: measurements.importBatchId,
+          notes: measurements.notes,
+          calculationMetadata: measurements.calculationMetadata,
+        })
+        .from(measurements)
+        .where(and(...runConditions))
+        .orderBy(desc(measurements.date))
+        .limit(REPORT_SPRINT_RUN_ROW_CAP);
+      if (runRows.length > 0) sprintRunMeasurements = runRows.map(toReportSprintRunRow);
+    }
+
     // Human label for the peer cohort (names the group in the "Where You Stand"
     // caption). Undefined when no filter narrows the cohort → frontend says "your group".
     const comparisonLabel = groupComparison
@@ -761,6 +796,7 @@ export class ReportService extends BaseService {
       trends,
       distributions,
       fvProfile,
+      sprintRunMeasurements,
       comparisonLabel,
     };
   }

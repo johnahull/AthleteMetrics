@@ -34,6 +34,7 @@ import { TrendSection } from "@/components/reports/TrendSection";
 import { PercentileRadarSection } from "@/components/reports/PercentileRadarSection";
 import { DistributionSection } from "@/components/reports/DistributionSection";
 import { FvProfileSection } from "@/components/reports/FvProfileSection";
+import { SprintRunsCard } from "@/components/athlete/SprintRunsCard";
 import { isGroupComparisonOn, resolveChartSelection } from "@shared/report-charts";
 import { TierProgressChart } from "@/components/charts/TierProgressChart";
 import { BenchmarkStandingBar } from "@/components/charts/BenchmarkStandingBar";
@@ -407,6 +408,10 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
 
       {sel.fvProfile && reportData.fvProfile && (
         <FvProfileSection athleteName={athlete.userName} fvProfile={reportData.fvProfile} />
+      )}
+
+      {sel.sprintRuns && reportData.sprintRunMeasurements && reportData.sprintRunMeasurements.length > 0 && (
+        <SprintRunsCard measurements={reportData.sprintRunMeasurements} reportMode />
       )}
 
       {metricExplanations && measurementCodes.length > 0 && (

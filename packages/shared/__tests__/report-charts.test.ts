@@ -4,16 +4,16 @@ import { isGroupComparisonOn, resolveChartSelection, resolveTeamChartSelection, 
 describe('resolveChartSelection', () => {
   it('uses explicit charts config when present (missing keys -> false)', () => {
     expect(resolveChartSelection({ charts: { radar: true, distribution: true } })).toEqual({
-      radar: true, benchmarkStanding: false, trends: false, distribution: true, fvProfile: false,
+      radar: true, benchmarkStanding: false, trends: false, distribution: true, fvProfile: false, sprintRuns: false,
     });
   });
 
   it('back-compat: absent charts -> radar+benchmark on, trends from showTrends, distribution off', () => {
     expect(resolveChartSelection({ showTrends: true })).toEqual({
-      radar: true, benchmarkStanding: true, trends: true, distribution: false, fvProfile: false,
+      radar: true, benchmarkStanding: true, trends: true, distribution: false, fvProfile: false, sprintRuns: false,
     });
     expect(resolveChartSelection({})).toEqual({
-      radar: true, benchmarkStanding: true, trends: false, distribution: false, fvProfile: false,
+      radar: true, benchmarkStanding: true, trends: false, distribution: false, fvProfile: false, sprintRuns: false,
     });
   });
 
@@ -23,7 +23,7 @@ describe('resolveChartSelection', () => {
 
   it('treats a present-but-empty charts object as all-off (explicit selection)', () => {
     expect(resolveChartSelection({ charts: {} })).toEqual({
-      radar: false, benchmarkStanding: false, trends: false, distribution: false, fvProfile: false,
+      radar: false, benchmarkStanding: false, trends: false, distribution: false, fvProfile: false, sprintRuns: false,
     });
   });
 
@@ -33,6 +33,16 @@ describe('resolveChartSelection', () => {
 
   it('defaults fvProfile on for new reports (DEFAULT_CHART_SELECTION)', () => {
     expect(DEFAULT_CHART_SELECTION.fvProfile).toBe(true);
+  });
+
+  it('resolves an explicitly selected sprintRuns to true, defaults it on for new reports, off for legacy', () => {
+    expect(resolveChartSelection({ charts: { sprintRuns: true } }).sprintRuns).toBe(true);
+    expect(DEFAULT_CHART_SELECTION.sprintRuns).toBe(true);
+    expect(resolveChartSelection({}).sprintRuns).toBe(false);
+  });
+
+  it('keeps sprintRuns on when group comparison is off (not a comparison chart)', () => {
+    expect(resolveChartSelection({ groupComparison: false, charts: { sprintRuns: true } }).sprintRuns).toBe(true);
   });
 });
 
@@ -96,7 +106,7 @@ describe('isGroupComparisonOn', () => {
 
   it('resolveChartSelection forces radar + distribution off when comparison is off', () => {
     expect(resolveChartSelection({ groupComparison: false, charts: { radar: true, distribution: true, trends: true } })).toEqual({
-      radar: false, benchmarkStanding: false, trends: true, distribution: false, fvProfile: false,
+      radar: false, benchmarkStanding: false, trends: true, distribution: false, fvProfile: false, sprintRuns: false,
     });
     expect(resolveChartSelection({ groupComparison: false })).toMatchObject({ radar: false, distribution: false, benchmarkStanding: true });
   });

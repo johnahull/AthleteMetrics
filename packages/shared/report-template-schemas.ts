@@ -20,7 +20,7 @@ const teamCharts = z
   .partial()
   .strict();
 const individualCharts = z
-  .object({ radar: bool, benchmarkStanding: bool, trends: bool, distribution: bool, fvProfile: bool })
+  .object({ radar: bool, benchmarkStanding: bool, trends: bool, distribution: bool, fvProfile: bool, sprintRuns: bool })
   .partial()
   .strict();
 

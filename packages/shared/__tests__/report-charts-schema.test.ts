@@ -70,6 +70,23 @@ describe('insertReportSchema / updateReportSchema — config.charts', () => {
 
     expect(result.config?.charts).toEqual({ fvProfile: false });
   });
+
+  it('insert and update schemas retain charts.sprintRuns (no silent stripping)', () => {
+    const inserted = insertReportSchema.parse({
+      organizationId: 'org-1',
+      name: 'Individual Report',
+      reportType: 'individual',
+      config: {
+        timeframe: { type: 'preset', preset: 'season' },
+        metrics: ['DASH_40YD'],
+        charts: { sprintRuns: true },
+      },
+    });
+    expect(inserted.config.charts).toEqual({ sprintRuns: true });
+
+    const updated = updateReportSchema.parse({ config: { charts: { sprintRuns: false } } });
+    expect(updated.config?.charts).toEqual({ sprintRuns: false });
+  });
 });
 
 describe('insertReportSchema / updateReportSchema — config.groupComparison', () => {

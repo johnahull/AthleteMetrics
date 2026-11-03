@@ -86,6 +86,7 @@ const reportConfigSchema = z.object({
     trends: z.boolean().default(true),
     distribution: z.boolean().default(true),
     fvProfile: z.boolean().default(true),
+    sprintRuns: z.boolean().default(true),
     leaderboard: z.boolean().default(true),
     tierDistribution: z.boolean().default(true),
     boxSwarm: z.boolean().default(true),
@@ -370,6 +371,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     ...(fvEnabled
       ? [['fvProfile', 'Force-Velocity profile', 'Latest sprint F-V profile in the report window (KPIs, chart, analysis)'] as const]
       : []),
+    ['sprintRuns', 'Sprint runs', 'Device-imported dash runs in the report window: gate times, intervals and bests'],
   ];
   const teamChartItems: ReadonlyArray<readonly [ChartItemKey, string, string]> = [
     ['benchmarkStanding', 'Benchmark standing', `Where the ${labels.team.toLowerCase()} average sits vs each benchmark`],
@@ -490,6 +492,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
           distribution: data.groupComparison && data.charts.distribution,
           // Never persist true while the sprint-FV feature is off for this org.
           fvProfile: fvEnabled ? data.charts.fvProfile : false,
+          sprintRuns: data.charts.sprintRuns,
         };
 
     // An individual report without group comparison has no cohort to filter
