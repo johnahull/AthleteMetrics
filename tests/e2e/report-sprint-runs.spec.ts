@@ -84,6 +84,9 @@ test.describe('Report sprint runs (live + public)', () => {
       data: { firstName: athleteFirstName, lastName: 'Runs', birthDate: '2000-01-01', emails: [] },
     });
     athleteId = (await athleteRes.json()).id;
+    // A site admin with no org of their own (the CI admin) creates the athlete unaffiliated, and a report only accepts
+    // members of its organization. Anyone else already put the athlete in their org, so 403/409 is fine here.
+    await page.request.post(`${STAGING_URL}/api/organizations/${orgId}/users/${athleteId}/assign`, { data: { role: 'athlete' } });
     await page.request.post(`${STAGING_URL}/api/teams/${teamId}/members`, { data: { userId: athleteId } });
 
     // The batch endpoint has its own rate-limit bucket. The single-create one (200 / 15 min) is shared by the whole
