@@ -28,6 +28,13 @@ async function resolveOrgId(page: any): Promise<string | null> {
     return auth ? JSON.parse(auth).organizationContext || null : null;
   });
   if (lsOrg) return lsOrg;
+  // The org POST /api/athletes puts a new athlete in (the user's first membership). The first entry of
+  // /api/organizations can be a different org for a site admin, and a report only accepts members of its own org.
+  const mine = await page.request.get(`${STAGING_URL}/api/auth/me/organizations`);
+  if (mine.ok()) {
+    const memberships = await mine.json();
+    if (memberships?.[0]?.organizationId) return memberships[0].organizationId;
+  }
   const res = await page.request.get(`${STAGING_URL}/api/organizations`);
   if (!res.ok()) return null;
   const body = await res.json();
@@ -84,9 +91,6 @@ test.describe('Report sprint runs (live + public)', () => {
       data: { firstName: athleteFirstName, lastName: 'Runs', birthDate: '2000-01-01', emails: [] },
     });
     athleteId = (await athleteRes.json()).id;
-    // A site admin with no org of their own (the CI admin) creates the athlete unaffiliated, and a report only accepts
-    // members of its organization. Anyone else already put the athlete in their org, so 403/409 is fine here.
-    await page.request.post(`${STAGING_URL}/api/organizations/${orgId}/users/${athleteId}/assign`, { data: { role: 'athlete' } });
     await page.request.post(`${STAGING_URL}/api/teams/${teamId}/members`, { data: { userId: athleteId } });
 
     // The batch endpoint has its own rate-limit bucket. The single-create one (200 / 15 min) is shared by the whole
