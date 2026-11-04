@@ -89,7 +89,7 @@ export function tierLegendRows(
   unit?: string | null,
   format?: MeasurementFormat | null,
 ): string[][] {
-  const ranges = tierRangeLabels(tiers, { unit, format, ascii: true });
+  const ranges = tierRangeLabels(tiers, { unit, format, ascii: true, decimals: 2 });
   return tiers.map((t, i) => [`#${t.tierOrder}`, t.tierName, ranges[i] || '-']);
 }
 

@@ -11,9 +11,9 @@ describe('tierLegendRows', () => {
 
   it('prints the same boundaries as the web labels, in ASCII (the PDF font is WinAnsi-only)', () => {
     expect(tierLegendRows(dash40, 's')).toEqual([
-      ['#1', 'Elite', '<= 4.6 s'],
-      ['#2', 'Excellent', '4.6 - 4.8 s'],
-      ['#3', 'Below Average', '> 4.8 s'],
+      ['#1', 'Elite', '<= 4.60 s'],
+      ['#2', 'Excellent', '4.60 - 4.80 s'],
+      ['#3', 'Below Average', '> 4.80 s'],
     ]);
   });
 
@@ -22,7 +22,7 @@ describe('tierLegendRows', () => {
       { tierName: 'Elite', tierOrder: 1, minValue: 28, maxValue: null },
       { tierName: 'JV', tierOrder: 2, minValue: null, maxValue: 28 },
     ];
-    expect(tierLegendRows(vj, 'in').map((r) => r[2])).toEqual(['>= 28 in', '< 28 in']);
+    expect(tierLegendRows(vj, 'in').map((r) => r[2])).toEqual(['>= 28.00 in', '< 28.00 in']);
   });
 
   it('prints a dash for tiers with no bounds (old snapshots)', () => {

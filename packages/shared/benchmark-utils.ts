@@ -119,15 +119,15 @@ export function cutoffTiersToBands<T extends TierBounds>(tiers: T[]): T[] {
  * Boundary text for each tier, from its min/max only (same order as `tiers`): "4.6–4.8 s", or for an
  * open band "> 5.2 s" / "< 25 in" when a better tier owns that boundary (a shared boundary belongs to
  * the better tier), otherwise the inclusive "≤ 4.6 s" / "≥ 30 in". A tier with no bounds gets "". Duration metrics print
- * m:ss with no unit; other values are rounded to 2 decimals. `ascii` for WinAnsi-only PDF fonts.
+ * m:ss with no unit; other values are rounded to 2 decimals (or always shown with `decimals` places). `ascii` for WinAnsi-only PDF fonts.
  */
 export function tierRangeLabels(
   tiers: TierBounds[],
-  opts: { unit?: string | null; format?: MeasurementFormat | null; ascii?: boolean } = {},
+  opts: { unit?: string | null; format?: MeasurementFormat | null; ascii?: boolean; decimals?: number } = {},
 ): string[] {
-  const { unit, format, ascii } = opts;
+  const { unit, format, ascii, decimals } = opts;
   const duration = format?.displayFormat === 'duration';
-  const num = (v: number) => (duration ? formatMeasurement(v, format!) : String(Math.round(v * 100) / 100));
+  const num = (v: number) => (duration ? formatMeasurement(v, format!) : decimals == null ? String(Math.round(v * 100) / 100) : v.toFixed(decimals));
   const u = unit && !duration ? ` ${unit}` : '';
   // a better tier holds this value as its opposite bound, so the boundary itself is not in this tier
   const ownedByBetter = (t: TierBounds, v: number, side: 'minValue' | 'maxValue') =>
