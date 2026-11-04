@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.35.1] - 2026-11-04
+
+### Fixed
+- Tier bars on benchmark charts are readable: shared tier palette with mid-tone fills and dark text (blue, green and red were unreadable; `emerald` and `bronze` are not CSS colors). The "You" marker is bordered with a tag and pointer, labels are 12px, and hex tier colors now render instead of gray (#728)
+- Report PDF tables: tier tints use the same palette (red, green, yellow and orange no longer fall back to gray); the "Benchmark Tiers" heading is no longer orphaned; the Actual column no longer wraps; open ranges use `>=`/`<=`; tier gaps always show 2 decimals (#728)
+- Report glossary lists only metrics shown in the report, named from the report's metric labels; duplicate consecutive chart titles (for example "Sprint runs — Yards") print once (#728)
+- Sprint runs card shows one best-fly card per run-in; before, a single RI20 card could show a slower time than RI30. The arrow hint is hidden with fewer than 2 runs (#728)
+- Report dates: the client sends its time zone (validated, UTC fallback). The cover shows the event date, "Generated:" uses the caller's zone, dates use one format (`Oct 31, 2026`), and an `Event:` line appears when the report was created from an event (#728)
+- Built-in unit notes read "Measured in s" (#728)
+- Approach Jump explanation is sport- and unit-neutral instead of volleyball-specific. Migration `0177` (#728)
+
+### Deployment notes
+- Migration `0177` is new. Apply with `npm run db:migrate:manual`. It rewrites `what_it_measures` and `why_it_matters` for `APPROACH_JUMP` only while each still equals the 0159 seed text, so admin edits are kept; a `_down` script is included.
+- Known limits: GET PDF routes still format times in UTC; `TeamReportView` still has the raw tier-colour text issue.
+
 ## [0.35.0] - 2026-11-03
 
 ### Added
