@@ -59,6 +59,9 @@ export function athletePositionPctForValue(value: number, segs: TierInfo[], tier
     f = (v - seg.minValue) / (seg.maxValue - seg.minValue);
     // Lower-is-better band (the better neighbour sits below its min, or the worse one above its max):
     // a higher value is worse, so it belongs further left.
+    // Either test is enough: in a lower-is-better group the better neighbour's max (or the worse one's min)
+    // is the non-null boundary it shares with this band, gaps included. Open sides give false, i.e.
+    // higher-is-better, which is right for every group where that boundary is open.
     const better = segs[index + 1];
     const worse = segs[index - 1];
     const lowerIsBetter =
