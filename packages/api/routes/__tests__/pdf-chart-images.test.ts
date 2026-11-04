@@ -86,3 +86,41 @@ describe('addTrendChartsToPdf heading height', () => {
     expect(imageY).toEqual([34, 26]);
   });
 });
+
+describe('addTrendChartsToPdf repeated titles', () => {
+  // A small image keeps several charts on one page
+  const url = pngDataUrl(182, 20);
+  const titlesDrawn = (charts: Array<Record<string, unknown>>) => {
+    const doc = new jsPDF();
+    const spy = vi.spyOn(doc, 'text');
+    addTrendChartsToPdf(doc, charts as any);
+    return spy.mock.calls.map((c) => c[0]);
+  };
+
+  it('prints a title once when consecutive charts share it on one page', () => {
+    const run = { metricCode: 'SPRINT', dataUrl: url, title: 'Sprint runs — Yards' };
+    expect(titlesDrawn([run, run]).filter((t) => t === 'Sprint runs — Yards')).toHaveLength(1);
+  });
+
+  it('still prints different consecutive titles', () => {
+    expect(titlesDrawn([
+      { metricCode: 'A', dataUrl: url, title: 'A chart' },
+      { metricCode: 'B', dataUrl: url, title: 'B chart' },
+    ])).toEqual(['A chart', 'B chart']);
+  });
+
+  it('repeats the title after a group heading', () => {
+    const drawn = titlesDrawn([
+      { metricCode: 'A', dataUrl: url, title: 'Same', group: 'g1', groupLabel: 'One' },
+      { metricCode: 'A', dataUrl: url, title: 'Same', group: 'g2', groupLabel: 'Two' },
+    ]);
+    expect(drawn.filter((t) => t === 'Same')).toHaveLength(2);
+  });
+
+  it('repeats the title after a page break', () => {
+    const tall = pngDataUrl(182, 115);
+    const run = { metricCode: 'SPRINT', dataUrl: tall, title: 'Sprint runs — Yards' };
+    // three tall blocks cannot share one page
+    expect(titlesDrawn([run, run, run]).filter((t) => t === 'Sprint runs — Yards')).toHaveLength(2);
+  });
+});

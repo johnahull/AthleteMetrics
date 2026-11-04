@@ -154,6 +154,35 @@ describe('TierProgressChart', () => {
     });
   });
 
+  it('labels the primary marker "You" inside the captured chart element', () => {
+    render(<TierProgressChart label="Vertical Jump" metricCode="VJ" comparison={comparison} unit="in" />);
+    const tag = screen.getByText('You');
+    expect(tag.closest('[data-report-chart]')).toBeTruthy();
+  });
+
+  it('labels the primary marker "Team Average" in team usage', () => {
+    render(
+      <TierProgressChart
+        label="Vertical Jump"
+        metricCode="VJ"
+        comparison={comparison}
+        unit="in"
+        athleteValues={[{ athleteId: 'a1', athleteName: 'Jordan Smith', value: 22 }]}
+      />
+    );
+    expect(screen.getByText('Team Average')).toBeInTheDocument();
+  });
+
+  it('fills segments from the shared tier palette, not the raw stored color name', () => {
+    const blue = {
+      ...comparison,
+      allTiers: comparison.allTiers!.map((t) => (t.tierName === 'Varsity' ? { ...t, tierColor: 'blue' } : t)),
+    };
+    render(<TierProgressChart label="Vertical Jump" metricCode="VJ" comparison={blue} unit="in" />);
+    const seg = screen.getByText('Varsity', { selector: 'div' }) as HTMLElement;
+    expect(seg.style.backgroundColor).toBe('#93c5fd'); // blue fill, not 'blue'
+  });
+
   it('returns null (renders nothing) when there are no tiers, regardless of athleteValues', () => {
     const { container } = render(
       <TierProgressChart

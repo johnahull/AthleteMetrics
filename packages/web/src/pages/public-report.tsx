@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { TierBadge } from "@/components/benchmarks/TierBadge";
 import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
 import { formatMeasurement, type MeasurementFormat } from "@shared/duration-format";
+import { resolveTierText } from "@shared/tier-colors";
 import { format } from "date-fns";
 import { captureTrendCharts } from "@/lib/chartExport";
 import { Lock } from "lucide-react";
@@ -142,7 +143,7 @@ export default function PublicReport() {
       const res = await fetch(`/api/public/reports/${token}/pdf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ format: 'visual', chartImages }),
+        body: JSON.stringify({ format: 'visual', chartImages, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
       });
       if (!res.ok) {
         throw new Error('Failed to download PDF');
@@ -257,7 +258,7 @@ export default function PublicReport() {
                               if (b.minValue != null && b.maxValue != null) {
                                 return (
                                   <TableCell key={name}>
-                                    <span style={b.tierColor ? { color: b.tierColor } : undefined}>
+                                    <span style={b.tierColor ? { color: resolveTierText(b.tierColor) } : undefined}>
                                       {(metricFormats?.[stat.metric] ? `${formatMeasurement(b.minValue, metricFormats[stat.metric])} - ${formatMeasurement(b.maxValue, metricFormats[stat.metric])}` : `${b.minValue.toFixed(2)} - ${b.maxValue.toFixed(2)} ${units}`)}
                                     </span>
                                   </TableCell>

@@ -24,7 +24,7 @@ describe('getMetricExplanation — built-in metrics', () => {
     expect(result.directionOfBetter).toBe('lower');
     expect(result.whatItMeasures).toMatch(/acceleration|velocity|speed/i);
     expect(result.whyItMatters.length).toBeGreaterThan(20);
-    expect(result.unitNote).toMatch(/second/i);
+    expect(result.unitNote).toMatch(/Measured in s;/);
     expect(result.unitNote).toMatch(/lower is better/i);
   });
 
@@ -84,18 +84,22 @@ describe('getMetricExplanation — built-in metrics', () => {
     for (const code of ['AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_YD']) {
       const e = getMetricExplanation(code);
       expect(e.directionOfBetter).toBe('lower');
-      expect(e.unitNote).toMatch(/second/i);
+      expect(e.unitNote).toMatch(/Measured in s;/);
       expect(e.whatItMeasures).toMatch(/10/);
     }
     expect(getMetricExplanation('AGILITY_COD_DEFICIT_M').whatItMeasures).toMatch(/meters/i);
     expect(getMetricExplanation('AGILITY_COD_DEFICIT_YD').whatItMeasures).toMatch(/yards/i);
   });
 
+  it('writes time units as "s", like the unit note built from a metric row', () => {
+    expect(getMetricExplanation('FLY10_TIME').unitNote).toBe('Measured in s; lower is better.');
+  });
+
   it('explains the interpolated metric COD deficit (10 m estimated from the 10 and 20 yd splits)', () => {
     const e = getMetricExplanation('AGILITY_COD_DEFICIT_M_INTERP');
     expect(e.title).toBe('COD Deficit (m, interpolated 10 m)');
     expect(e.directionOfBetter).toBe('lower');
-    expect(e.unitNote).toBe('Measured in seconds; lower is better.');
+    expect(e.unitNote).toBe('Measured in s; lower is better.');
     expect(e.whatItMeasures).toMatch(/estimated/i);
     expect(e.whatItMeasures).toMatch(/10 and 20 yard/i);
     expect(e.whatItMeasures).toMatch(/meters/i);

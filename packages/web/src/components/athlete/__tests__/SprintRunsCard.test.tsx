@@ -161,9 +161,12 @@ describe('SprintRunsCard', () => {
     expect(within(best).getByText('5.49 s')).toBeInTheDocument();
     expect(within(best).getByText('−0.22 s since Aug 29, 2026')).toBeInTheDocument();
 
+    // one card per run-in
     const fly = screen.getByRole('group', { name: 'Best fly 10 (RI20)' });
     expect(within(fly).getByText('1.20 s')).toBeInTheDocument();
     expect(within(fly).getByText('−0.04 s since Aug 29, 2026')).toBeInTheDocument();
+    expect(within(screen.getByRole('group', { name: 'Best fly 10 (RI10)' })).getByText('1.30 s')).toBeInTheDocument();
+    expect(within(screen.getByRole('group', { name: 'Best fly 10 (RI30)' })).getByText('1.14 s')).toBeInTheDocument();
 
     const gain = screen.getByRole('group', { name: 'Biggest gain' });
     expect(within(gain).getByText('10–20 yd')).toBeInTheDocument();
@@ -172,6 +175,15 @@ describe('SprintRunsCard', () => {
     const count = screen.getByRole('group', { name: 'Runs recorded' });
     expect(within(count).getByText('2')).toBeInTheDocument();
     expect(within(count).getByText('Aug 29, 2026 – Oct 17, 2026')).toBeInTheDocument();
+  });
+
+  it('explains the faster marker only when there are two or more runs to compare', () => {
+    const { unmount } = render(<SprintRunsCard measurements={NEW} />);
+    expect(screen.queryByText(/Green with a ▼/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Cumulative gate times/)).toBeInTheDocument();
+    unmount();
+    render(<SprintRunsCard measurements={[...OLD, ...NEW]} />);
+    expect(screen.getByText(/Green with a ▼/)).toBeInTheDocument();
   });
 
   it('omits the best and gain cards that have no data (a single pooled run)', () => {

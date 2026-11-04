@@ -215,7 +215,7 @@ describe('TeamReportView - PDF Export', () => {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ format: 'visual', athleteId: undefined, chartImages: [] }),
+          body: JSON.stringify({ format: 'visual', athleteId: undefined, chartImages: [], timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
         })
       );
     });
@@ -471,7 +471,7 @@ describe('TeamReportView - PDF Export', () => {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ format: 'visual', athleteId: undefined, chartImages: [] }),
+          body: JSON.stringify({ format: 'visual', athleteId: undefined, chartImages: [], timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
         })
       );
     });
@@ -519,7 +519,7 @@ describe('TeamReportView - PDF Export', () => {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ format: 'simplified', athleteId: undefined, chartImages: [] }),
+          body: JSON.stringify({ format: 'simplified', athleteId: undefined, chartImages: [], timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
         })
       );
     });

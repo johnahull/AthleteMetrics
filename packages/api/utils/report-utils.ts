@@ -55,8 +55,8 @@ export async function getBenchmarkLabel(
       return `${tierComparison.tierName} [Best]`;
     }
     if (tierComparison.distanceToNextTier != null && tierComparison.nextTierName) {
-      const dist = tierComparison.distanceToNextTier;
-      const formatted = dist < 1 ? dist.toFixed(2) : dist.toFixed(1);
+      // fixed 2 decimals (the web caption drops trailing zeros)
+      const formatted = tierComparison.distanceToNextTier.toFixed(2);
       return `${tierComparison.tierName} (${formatted} to ${tierComparison.nextTierName})`;
     }
     return tierComparison.tierName;
@@ -75,4 +75,29 @@ export async function getBenchmarkLabel(
   }
 
   return null;
+}
+
+/**
+ * Range text for the PDF tier reference table. Only a null bound is open: seeded tiers store
+ * real-looking caps (0, 1.5, 10), not a consistent sentinel. ASCII >= / <= because the jsPDF
+ * Helvetica font is WinAnsi-only.
+ */
+export function formatTierRange(min: number | null | undefined, max: number | null | undefined): string {
+  if (min != null && max != null) return `${min.toFixed(2)} - ${max.toFixed(2)}`;
+  if (min != null) return `>= ${min.toFixed(2)}`;
+  if (max != null) return `<= ${max.toFixed(2)}`;
+  return '-';
+}
+
+/** "Oct 31, 2026" (plus ", 9:30 PM" with time) in the given IANA time zone, for report PDFs. */
+export function formatReportDate(d: string | Date, timeZone: string, withTime = false): string {
+  return new Date(d)
+    .toLocaleString('en-US', {
+      timeZone,
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      ...(withTime ? { hour: 'numeric', minute: '2-digit' } : {}),
+    })
+    .replace(/\s/g, ' '); // ICU puts U+202F before AM/PM, which jsPDF's WinAnsi font cannot print
 }
