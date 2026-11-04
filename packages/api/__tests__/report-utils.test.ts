@@ -120,6 +120,14 @@ describe('report-utils', () => {
       expect(result).toBeNull();
     });
 
+    it('rounds the distance to the next tier to 2 decimals, matching the web caption', async () => {
+      const tier = (distanceToNextTier: number) => ({
+        benchmarkComparisons: { VJ: [{ tierName: 'JV', nextTierName: 'Varsity', distanceToNextTier }] },
+      });
+      expect(await getBenchmarkLabel(tier(1.234), 'VJ')).toBe('JV (1.23 to Varsity)');
+      expect(await getBenchmarkLabel(tier(0.456), 'VJ')).toBe('JV (0.46 to Varsity)');
+    });
+
     it('should return highest met benchmark for lower_is_better metrics', async () => {
       const athlete = {
         benchmarkComparisons: {

@@ -136,13 +136,14 @@ function SprintUnitBody({ unit, allRuns, runs, expanded, onToggle, reportMode = 
           note={summary.bestFinal.delta !== null ? `${minus(summary.bestFinal.delta)} since ${formatDate(summary.bestFinal.sinceDate)}` : undefined}
         />
       )}
-      {summary.bestFly && (
+      {summary.bestFlies.map(fly => (
         <SummaryStat
-          label={`Best fly 10 (RI${summary.bestFly.runInYd})`}
-          value={`${summary.bestFly.time.toFixed(2)} s`}
-          note={summary.bestFly.delta !== null ? `${minus(summary.bestFly.delta)} since ${formatDate(summary.bestFly.sinceDate)}` : undefined}
+          key={fly.runInYd}
+          label={`Best fly 10 (RI${fly.runInYd})`}
+          value={`${fly.time.toFixed(2)} s`}
+          note={fly.delta !== null ? `${minus(fly.delta)} since ${formatDate(fly.sinceDate)}` : undefined}
         />
-      )}
+      ))}
       {summary.biggestGain && (
         <SummaryStat
           label="Biggest gain"
@@ -165,11 +166,16 @@ function SprintUnitBody({ unit, allRuns, runs, expanded, onToggle, reportMode = 
   );
 
   const shownRuns = reportMode ? runs.slice(0, REPORT_MAX_RUNS) : runs;
+  // The faster marker needs a previous run to compare against
+  const fasterNote = shownRuns.length < 2
+    ? ''
+    : reportMode
+      ? ' Green with a ▼ means faster than the same interval in the previous run of this report.'
+      : ' Green with a ▼ means faster than the same interval in the previous run.';
   const hint = (
     <p className="text-sm text-gray-600 mb-3">
-      {reportMode
-        ? 'Cumulative gate times, then the time between gates. Green with a ▼ means faster than the same interval in the previous run of this report. PR is the best final time in this report’s period.'
-        : 'Cumulative gate times, then the time between gates. Green with a ▼ means faster than the same interval in the previous run.'}
+      {`Cumulative gate times, then the time between gates.${fasterNote}`}
+      {reportMode && ' PR is the best final time in this report’s period.'}
       {shownRuns.length < runs.length && ` Showing the newest ${shownRuns.length} of ${runs.length} runs.`}
     </p>
   );

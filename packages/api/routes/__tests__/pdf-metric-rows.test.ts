@@ -162,3 +162,15 @@ describe('groupLabelFor', () => {
     expect(groupLabelFor('DASH_20YD', undefined)).toBeNull();
   });
 });
+
+describe('buildBenchmarkRows tier distance', () => {
+  it('rounds the distance to the next tier to 2 decimals, like the web caption', () => {
+    const { tierRows } = buildBenchmarkRows({
+      benchmarkComparisons: {
+        JUMP_CMJ_HOH: [{ tierName: 'JV', tierGroupName: 'CMJ', nextTierName: 'Varsity', distanceToNextTier: 1.234, athleteValue: 20 }],
+      },
+      labels, units, durationText,
+    });
+    expect(tierRows[0][2]).toBe('JV (1.23 in to Varsity)');
+  });
+});

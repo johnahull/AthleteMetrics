@@ -121,7 +121,7 @@ describe('useReportPdf', () => {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ format: 'visual', athleteId: undefined, chartImages: [] }),
+        body: JSON.stringify({ format: 'visual', athleteId: undefined, chartImages: [], timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
       });
     });
 
@@ -166,7 +166,7 @@ describe('useReportPdf', () => {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ format: undefined, athleteId: 'athlete-789', chartImages: [] }),
+        body: JSON.stringify({ format: undefined, athleteId: 'athlete-789', chartImages: [], timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
       });
     });
   });

@@ -47,6 +47,7 @@ import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
 import { formatMeasurement } from "@shared/duration-format";
+import { resolveTierText } from "@shared/tier-colors";
 import { MetricGroupRowHeading } from "./MetricGroupHeading";
 import { groupedCodes } from "@/lib/metric-groups";
 import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from "@/lib/report-utils";
@@ -545,7 +546,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
                         if (benchmarkData.minValue != null && benchmarkData.maxValue != null) {
                           return (
                             <TableCell key={name}>
-                              <span style={benchmarkData.tierColor ? { color: benchmarkData.tierColor } : undefined}>
+                              <span style={benchmarkData.tierColor ? { color: resolveTierText(benchmarkData.tierColor) } : undefined}>
                                 {(metricFormats?.[stat.metric] ? `${formatMeasurement(benchmarkData.minValue, metricFormats[stat.metric])} - ${formatMeasurement(benchmarkData.maxValue, metricFormats[stat.metric])}` : `${benchmarkData.minValue.toFixed(2)} - ${benchmarkData.maxValue.toFixed(2)} ${stat.units || ""}`)}
                               </span>
                             </TableCell>

@@ -3,6 +3,7 @@ import type { BenchmarkComparison } from '@shared/benchmark-types';
 import { formatMeasurement, type MeasurementFormat } from '@shared/duration-format';
 import { tierSegments, athletePositionPct, athletePositionPctForValue, nextTierCaption } from './tier-progress-utils';
 import { generateDeterministicJitter } from './utils/boxPlotStatistics';
+import { resolveTierFill } from '@shared/tier-colors';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { AthleteMarkerValue } from './BenchmarkStandingBar';
 
@@ -48,16 +49,19 @@ export function TierProgressChart({ label, metricCode, comparison, unit, format,
     <TooltipProvider>
       <div data-report-chart={`tier:${metricCode}`} data-report-chart-title={`${label} — tier`} className="w-full">
         <div className="text-sm font-medium mb-1">{label}</div>
-        <div className="relative h-6 w-full flex rounded overflow-hidden border">
-          {segs.map((t) => (
-            <div
-              key={t.tierName}
-              className="flex-1 flex items-center justify-center text-[10px] text-slate-700"
-              style={{ backgroundColor: t.tierColor || '#e2e8f0' }}
-            >
-              {t.tierName}
-            </div>
-          ))}
+        {/* mt-6 leaves room for the marker tag inside the captured element */}
+        <div className="relative mt-6">
+          <div className="h-7 w-full flex rounded overflow-hidden border">
+            {segs.map((t) => (
+              <div
+                key={t.tierName}
+                className="flex-1 flex items-center justify-center text-xs font-medium text-slate-900"
+                style={{ backgroundColor: resolveTierFill(t.tierColor) }}
+              >
+                {t.tierName}
+              </div>
+            ))}
+          </div>
           {/* individual athlete markers, rendered first (visually subordinate) so the
               primary marker stacks on top and reads as the dominant element */}
           {hasAthleteValues && athleteValues!.map((a) => {
@@ -79,18 +83,34 @@ export function TierProgressChart({ label, metricCode, comparison, unit, format,
             );
           })}
           {/* primary marker: team average (when athleteValues is present) or the
-              individual athlete's own value (individual-report usage) */}
+              individual athlete's own value (individual-report usage). Border, not
+              ring/box-shadow: html2canvas-pro renders box-shadow unreliably. */}
           <Tooltip>
             <TooltipTrigger asChild>
               <div
                 data-testid={hasAthleteValues ? 'tier-marker-team-average' : 'tier-marker-self'}
-                className="absolute top-0 h-6 w-0.5 bg-slate-900"
-                style={{ left: `${pos * 100}%` }}
+                className="absolute -top-1 -bottom-1 w-1.5 bg-slate-900 border-2 border-white"
+                style={{ left: `clamp(3px, ${pos * 100}%, calc(100% - 3px))`, marginLeft: '-3px' }}
                 aria-hidden="true"
               />
             </TooltipTrigger>
             <TooltipContent>{primaryLabel}: {primaryVal}{unitSuffix}</TooltipContent>
           </Tooltip>
+          {/* pin: the tag shifts by its own width times pos so it stays inside the bar at 0% and 100% */}
+          <div
+            className="absolute bottom-full mb-3 whitespace-nowrap text-[10px] font-semibold leading-none text-slate-900"
+            style={{ left: `${pos * 100}%`, transform: `translateX(-${pos * 100}%)` }}
+            aria-hidden="true"
+          >
+            {primaryLabel}
+          </div>
+          <div
+            className="absolute bottom-full mb-1 text-[8px] leading-none text-slate-900"
+            style={{ left: `clamp(3px, ${pos * 100}%, calc(100% - 3px))`, transform: 'translateX(-50%)' }}
+            aria-hidden="true"
+          >
+            ▼
+          </div>
         </div>
         <div className="mt-1 text-xs text-muted-foreground">
           {primaryLabel}: {primaryVal}{unitSuffix} · {comparison.tierName} · {caption}
