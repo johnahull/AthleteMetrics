@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Tier bar marker lands in the matched tier for single-cutoff tiers (for example HS boys 40yd, which store one `<=` cutoff per tier and no min/max). Before, the marker always sat in the best tier. New reports carry real bands for these tiers; old snapshots still place the marker by the matched tier.
+- Team Benchmark Standing: the team average on single-cutoff tiers is graded by its band instead of always showing the best tier, and the athlete dots are placed by band.
+- Tier bars print each tier's boundaries under the bar (for example `≤ 4.6 s`, `4.6–4.8 s`, `> 5.2 s`; a shared boundary belongs to the better tier). The PDF "Benchmark Tier Reference" table prints the same ranges in ASCII (`<=`, `-`) with the unit or m:ss; tiers with no bounds still print `-`.
+
 ## [0.35.1] - 2026-11-04
 
 ### Fixed

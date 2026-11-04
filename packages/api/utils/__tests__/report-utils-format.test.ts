@@ -1,27 +1,38 @@
 import { describe, it, expect } from 'vitest';
-import { formatTierRange, formatReportDate } from '../report-utils';
+import { tierLegendRows, formatReportDate } from '../report-utils';
 
-describe('formatTierRange', () => {
-  it('prints both bounds', () => {
-    expect(formatTierRange(4.3, 4.5)).toBe('4.30 - 4.50');
+describe('tierLegendRows', () => {
+  // HS boys 40yd as evaluateTierBenchmark now emits it (cutoffs turned into bands)
+  const dash40 = [
+    { tierName: 'Elite', tierOrder: 1, minValue: null, maxValue: 4.6 },
+    { tierName: 'Excellent', tierOrder: 2, minValue: 4.6, maxValue: 4.8 },
+    { tierName: 'Below Average', tierOrder: 3, minValue: 4.8, maxValue: null },
+  ];
+
+  it('prints the same boundaries as the web labels, in ASCII (the PDF font is WinAnsi-only)', () => {
+    expect(tierLegendRows(dash40, 's')).toEqual([
+      ['#1', 'Elite', '<= 4.60 s'],
+      ['#2', 'Excellent', '4.60 - 4.80 s'],
+      ['#3', 'Below Average', '> 4.80 s'],
+    ]);
   });
 
-  it('prints an open upper bound as >= (ASCII: the PDF font is WinAnsi-only)', () => {
-    expect(formatTierRange(28, null)).toBe('>= 28.00');
+  it('prints >= for an open-top best tier', () => {
+    const vj = [
+      { tierName: 'Elite', tierOrder: 1, minValue: 28, maxValue: null },
+      { tierName: 'JV', tierOrder: 2, minValue: null, maxValue: 28 },
+    ];
+    expect(tierLegendRows(vj, 'in').map((r) => r[2])).toEqual(['>= 28.00 in', '< 28.00 in']);
   });
 
-  it('prints an open lower bound as <=', () => {
-    expect(formatTierRange(null, 4.6)).toBe('<= 4.60');
+  it('prints a dash for tiers with no bounds (old snapshots)', () => {
+    expect(tierLegendRows([{ tierName: 'Elite', tierOrder: 1, minValue: null, maxValue: null }])[0][2]).toBe('-');
   });
 
-  it('prints a dash when both bounds are open', () => {
-    expect(formatTierRange(null, null)).toBe('-');
-    expect(formatTierRange(undefined, undefined)).toBe('-');
-  });
-
-  it('keeps stored sentinel-looking bounds as real values', () => {
-    expect(formatTierRange(0, 4.099)).toBe('0.00 - 4.10');
-    expect(formatTierRange(4.751, 10)).toBe('4.75 - 10.00');
+  it('prints m:ss for duration metrics', () => {
+    const format = { unit: 's', displayFormat: 'duration' as const, decimalPrecision: 0 };
+    const rows = tierLegendRows([{ tierName: 'Elite', tierOrder: 1, minValue: null, maxValue: 300 }], 's', format);
+    expect(rows[0][2]).toBe('<= 5:00');
   });
 });
 

@@ -29,6 +29,24 @@ describe('trend-utils', () => {
     expect(formatDelta({ from: 20, to: 20, pct: 0 })).toBe('No change');
   });
 
+  it('draws banded single-cutoff tiers (HS boys 40yd) as separate boxes and names the tier', () => {
+    // deriveOverlay order (best first) of the bands evaluateTierBenchmark emits for lte cutoffs
+    const dash40: BenchmarkOverlay = {
+      kind: 'tiers',
+      tiers: [
+        { name: 'Elite', min: null, max: 4.6, color: 'gray' },
+        { name: 'Excellent', min: 4.6, max: 4.8, color: 'gray' },
+        { name: 'Average', min: 4.8, max: 5.2, color: 'gray' },
+        { name: 'Below Average', min: 5.2, max: null, color: 'gray' },
+      ],
+    };
+    expect(currentTierName(dash40, 5.32)).toBe('Below Average');
+    expect(currentTierName(dash40, 4.5)).toBe('Elite');
+    const ann = overlayToAnnotations(dash40) as Record<string, { yMin?: number; yMax?: number }>;
+    expect([ann['tier-0'].yMin, ann['tier-0'].yMax]).toEqual([undefined, 4.6]);
+    expect([ann['tier-3'].yMin, ann['tier-3'].yMax]).toEqual([5.2, undefined]);
+  });
+
   it('finds the tier a value falls into', () => {
     const overlay: BenchmarkOverlay = {
       kind: 'tiers',

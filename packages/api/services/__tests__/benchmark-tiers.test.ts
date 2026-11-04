@@ -8,6 +8,33 @@ const tiers = [
 ];
 
 describe('evaluateTierBenchmark', () => {
+  describe('single-cutoff lte tiers (HS boys 40yd, migration 0171)', () => {
+    const cut = (tierName: string, tierOrder: number, benchmarkValue: string) =>
+      ({ tierName, tierColor: 'gray', tierOrder, minValue: null, maxValue: null, benchmarkValue, comparisonOperator: 'lte', name: `40 - ${tierName}` });
+    const dash40 = [
+      cut('Elite', 1, '4.60'), cut('Excellent', 2, '4.80'), cut('Above Average', 3, '5.00'), cut('Average', 4, '5.20'), cut('Below Average', 5, '5.50'),
+    ];
+
+    it('matches Below Average and emits contiguous bands in allTiers', () => {
+      const c = evaluateTierBenchmark(5.32, true, dash40)!;
+      expect(c.tierName).toBe('Below Average');
+      expect(c.distanceToNextTier).toBeCloseTo(0.12, 5);
+      expect(c.allTiers!.map((t) => [t.tierName, t.minValue, t.maxValue])).toEqual([
+        ['Elite', null, 4.6],
+        ['Excellent', 4.6, 4.8],
+        ['Above Average', 4.8, 5.0],
+        ['Average', 5.0, 5.2],
+        ['Below Average', 5.2, null],
+      ]);
+      // TierInfo shape only: no matcher fields leak into the snapshot
+      expect(Object.keys(c.allTiers![0]).sort()).toEqual(['maxValue', 'minValue', 'tierColor', 'tierName', 'tierOrder']);
+    });
+
+    it('grades slower than the worst cutoff as the worst tier', () => {
+      expect(evaluateTierBenchmark(5.6, true, dash40)!.tierName).toBe('Below Average');
+    });
+  });
+
   it('matches the tier a higher-is-better value falls into and distance to next', () => {
     const c = evaluateTierBenchmark(25.5, false, tiers)!;
     expect(c.tierName).toBe('Varsity');

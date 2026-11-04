@@ -1,5 +1,5 @@
 import type { BenchmarkComparison } from '@shared/benchmark-types';
-import { deriveTierGroupName } from '@shared/benchmark-utils';
+import { cutoffTiersToBands, deriveTierGroupName } from '@shared/benchmark-utils';
 
 /**
  * Shape of a raw benchmark/tier row as stored in the database and passed to
@@ -198,12 +198,16 @@ export function evaluateTierBenchmark(
     nextTierName,
     isBestTier,
     coachingNote: matchedTier.coachingNote ?? null,
-    allTiers: allTiers.map((t) => ({
+    // Single-cutoff tiers get the bands the matcher above implies, so charts and legends can place
+    // values and print boundaries; matching itself still runs on the raw rows.
+    allTiers: cutoffTiersToBands(allTiers.map((t) => ({
       tierName: t.tierName || t.name || '',
       tierColor: t.tierColor || 'gray',
       tierOrder: t.tierOrder || 0,
       minValue: t.minValue != null ? parseFloat(String(t.minValue)) : null,
       maxValue: t.maxValue != null ? parseFloat(String(t.maxValue)) : null,
-    })),
+      benchmarkValue: t.benchmarkValue != null ? parseFloat(String(t.benchmarkValue)) : null,
+      comparisonOperator: t.comparisonOperator ?? null,
+    }))).map(({ benchmarkValue: _bv, comparisonOperator: _op, ...tier }) => tier),
   };
 }
