@@ -453,3 +453,73 @@ describe('GET /api/analytics/benchmark-tiers', () => {
     }
   });
 });
+
+describe('GET /api/analytics/benchmark-tiers: age-group / sex-specific tier groups', () => {
+  // Male group has the LOWER displayOrder, so without athlete filtering it would always win.
+  const seedGroup = async (prefix: string, gender: string, displayOrder: number, cut: number) => {
+    const tierGroupId = randomUUID();
+    const tiers = await db.insert(customBenchmarks).values(
+      [
+        { tierOrder: 1, tierName: `${prefix}-High`, tierColor: 'green', minValue: String(cut), maxValue: '50.00' },
+        { tierOrder: 2, tierName: `${prefix}-Low`, tierColor: 'gray', minValue: '0.00', maxValue: String(cut) },
+      ].map((t) => ({
+        organizationId: testOrg.id,
+        metricCode: 'VERTICAL_JUMP',
+        name: `VJ ${t.tierName}`,
+        comparisonOperator: 'range',
+        minValue: t.minValue,
+        maxValue: t.maxValue,
+        tierGroupId,
+        tierOrder: t.tierOrder,
+        tierName: t.tierName,
+        tierColor: t.tierColor,
+        gender,
+        ageMin: 14,
+        ageMax: 18,
+        displayOrder,
+        isActive: true,
+      })),
+    ).returning();
+    createdBenchmarkIds.push(...tiers.map((b) => b.id));
+    const orgRows = await db.insert(organizationBenchmarks).values(
+      tiers.map((b, idx) => ({
+        organizationId: testOrg.id,
+        benchmarkId: b.id,
+        benchmarkType: 'custom',
+        isEnabled: true,
+        displayOrder: displayOrder * 10 + idx + 20,
+      })),
+    ).returning();
+    createdOrgBenchmarkIds.push(...orgRows.map((o) => o.id));
+  };
+  const ageYearsAgo = (years: number) => `${new Date().getFullYear() - years}-01-01`;
+  const tierFor = async () =>
+    (
+      await request(app)
+        .get('/api/analytics/benchmark-tiers')
+        .query({ athleteId: testAthlete.id, metric: 'VERTICAL_JUMP' })
+        .set('Cookie', coachAuthCookie)
+    ).body.comparison?.tierName;
+
+  beforeEach(async () => {
+    await seedGroup('M', 'Male', 1, 20);
+    await seedGroup('F', 'Female', 2, 26);
+  });
+
+  it("scores a female 16-year-old against the Female group, not the lower-displayOrder Male group", async () => {
+    await db.update(users).set({ gender: 'Female', birthDate: ageYearsAgo(16) }).where(eq(users.id, testAthlete.id));
+    expect(await tierFor()).toBe('F-High'); // best value 27.5 >= 26
+  });
+
+  it('scores a male 16-year-old against the Male group', async () => {
+    await db.update(users).set({ gender: 'Male', birthDate: ageYearsAgo(16) }).where(eq(users.id, testAthlete.id));
+    expect(await tierFor()).toBe('M-High'); // 27.5 >= 20
+  });
+
+  it('falls back to the org-wide (no sex, no age) group when the athlete matches no sex-specific group', async () => {
+    await db.update(users).set({ gender: null, birthDate: null }).where(eq(users.id, testAthlete.id));
+    expect(await tierFor()).toBe('Good'); // base group from beforeEach: 27.5 in [25,30]
+    await db.update(users).set({ gender: 'Female', birthDate: ageYearsAgo(30) }).where(eq(users.id, testAthlete.id));
+    expect(await tierFor()).toBe('Good'); // 30 is outside the 14-18 sex-specific groups
+  });
+});

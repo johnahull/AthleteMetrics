@@ -27,6 +27,26 @@ export interface SourcedTierRow extends TierBenchmarkRow {
   displayOrder?: number | null;
 }
 
+/**
+ * Keep only the tier rows that apply to this athlete, so selectTierGroup picks the athlete's own group
+ * (e.g. Female HS, not the lowest displayOrder group of the other sex). A row with a null gender / age bound
+ * applies to everyone; an unknown athlete age skips the age check; an unknown athlete sex drops sex-specific rows.
+ * Bounds are inclusive and 0 is a real bound.
+ */
+export function filterTierRowsForAthlete<
+  T extends { gender?: string | null; ageMin?: number | null; ageMax?: number | null },
+>(rows: T[], athlete: { gender: string | null; age: number | null }): T[] {
+  const sex = athlete.gender?.toLowerCase() ?? null;
+  return rows.filter((r) => {
+    if (r.gender != null && r.gender.toLowerCase() !== sex) return false;
+    if (athlete.age != null) {
+      if (r.ageMin != null && athlete.age < r.ageMin) return false;
+      if (r.ageMax != null && athlete.age > r.ageMax) return false;
+    }
+    return true;
+  });
+}
+
 /** Group sourced tier rows by `${_source}:${tierGroupId}`, pick ONE group
  *  deterministically (lowest min displayOrder, then group key), and return that
  *  group's rows sorted ascending by tierOrder. Returns [] when there are none. */

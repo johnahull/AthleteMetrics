@@ -31,7 +31,8 @@ import {
   organizationBenchmarks,
 } from "@shared/schema";
 import { eq, and, inArray, isNotNull } from "drizzle-orm";
-import { evaluateTierBenchmark, selectTierGroup } from "../services/benchmark-tiers";
+import { evaluateTierBenchmark, filterTierRowsForAthlete, selectTierGroup } from "../services/benchmark-tiers";
+import { calculateAge } from "@shared/coppa-utils";
 import { isLowerBetter } from "../utils/metric-type";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import {
@@ -64,6 +65,16 @@ const analyticsLimiter = rateLimit({
     return false;
   },
 });
+
+/** Whole-year age, or null when the birth date is missing, malformed or in the future (calculateAge throws). */
+function athleteAge(birthDate: string | null | undefined): number | null {
+  if (!birthDate) return null;
+  try {
+    return calculateAge(birthDate);
+  } catch {
+    return null;
+  }
+}
 
 export function registerAnalyticsRoutes(app: Express) {
   const analyticsService = new AnalyticsService();
@@ -907,7 +918,17 @@ export function registerAnalyticsRoutes(app: Express) {
         ...siteRows.map(({ b }) => ({ ...b, _source: "site" })),
         ...customRows.map(({ b }) => ({ ...b, _source: "custom" })),
       ];
-      const tiers = selectTierGroup(allTierRows);
+      // Narrow to the athlete's own sex / age groups first, so age-group sets (e.g. CMJ HOH) pick the right group.
+      const [athleteRow] = await db
+        .select({ gender: users.gender, birthDate: users.birthDate })
+        .from(users)
+        .where(eq(users.id, athleteId));
+      const tiers = selectTierGroup(
+        filterTierRowsForAthlete(allTierRows, {
+          gender: athleteRow?.gender ?? null,
+          age: athleteAge(athleteRow?.birthDate),
+        }),
+      );
 
       // Metric direction from its own row (site metric, else this organization's custom metric).
       const lowerIsBetter = await isLowerBetter(metric, organizationId);
