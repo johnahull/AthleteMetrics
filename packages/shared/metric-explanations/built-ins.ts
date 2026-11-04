@@ -18,7 +18,7 @@ export const BUILT_IN_METRIC_EXPLANATIONS: Record<string, MetricExplanation> = {
       'The 10-yard fly measures the time it takes to run 10 yards after you are already up to full speed. When converted from time to speed, it is essentially a maximum velocity measurement.',
     whyItMatters:
       "Max velocity separates fast athletes from the fastest. In game situations you're often already moving — this test captures how fast you actually are once acceleration is out of the picture.",
-    unitNote: 'Measured in seconds; lower is better.',
+    unitNote: 'Measured in s; lower is better.',
     directionOfBetter: 'lower',
   },
   VERTICAL_JUMP: {
@@ -38,7 +38,7 @@ export const BUILT_IN_METRIC_EXPLANATIONS: Record<string, MetricExplanation> = {
       'The 5-0-5 test measures your ability to decelerate, change direction 180 degrees, and re-accelerate. You sprint 5 meters, plant and turn, then sprint back through the timing gates.',
     whyItMatters:
       "This test isolates single-leg change of direction ability, revealing asymmetries between legs. It's essential for sports requiring quick direction changes and reflects injury risk factors.",
-    unitNote: 'Measured in seconds; lower is better.',
+    unitNote: 'Measured in s; lower is better.',
     directionOfBetter: 'lower',
   },
   AGILITY_505_YD: {
@@ -48,7 +48,7 @@ export const BUILT_IN_METRIC_EXPLANATIONS: Record<string, MetricExplanation> = {
       'The 5-0-5 test measures your ability to decelerate, change direction 180 degrees, and re-accelerate. You sprint 5 yards, plant and turn, then sprint back through the timing gates.',
     whyItMatters:
       "This test isolates single-leg change of direction ability, revealing asymmetries between legs. It's essential for sports requiring quick direction changes and reflects injury risk factors. Yard times are not directly comparable to the meters protocol.",
-    unitNote: 'Measured in seconds; lower is better.',
+    unitNote: 'Measured in s; lower is better.',
     directionOfBetter: 'lower',
   },
   AGILITY_COD_DEFICIT_M: {
@@ -58,7 +58,7 @@ export const BUILT_IN_METRIC_EXPLANATIONS: Record<string, MetricExplanation> = {
       'The change of direction deficit is your faster-leg 5-0-5 time in meters minus your 10-meter sprint time. It isolates the time lost to braking, turning, and re-accelerating.',
     whyItMatters:
       'A small deficit means you lose little time when you change direction relative to your straight-line speed. A large deficit points to turning mechanics and braking strength as the area to train.',
-    unitNote: 'Measured in seconds; lower is better.',
+    unitNote: 'Measured in s; lower is better.',
     directionOfBetter: 'lower',
   },
   AGILITY_COD_DEFICIT_YD: {
@@ -68,7 +68,7 @@ export const BUILT_IN_METRIC_EXPLANATIONS: Record<string, MetricExplanation> = {
       'The change of direction deficit is your faster-leg 5-0-5 time in yards minus your 10-yard sprint time. It isolates the time lost to braking, turning, and re-accelerating.',
     whyItMatters:
       'A small deficit means you lose little time when you change direction relative to your straight-line speed. A large deficit points to turning mechanics and braking strength as the area to train.',
-    unitNote: 'Measured in seconds; lower is better.',
+    unitNote: 'Measured in s; lower is better.',
     directionOfBetter: 'lower',
   },
   AGILITY_COD_DEFICIT_M_INTERP: {
@@ -78,7 +78,7 @@ export const BUILT_IN_METRIC_EXPLANATIONS: Record<string, MetricExplanation> = {
       'The change of direction deficit is your faster-leg 5-0-5 time in meters minus your 10-meter sprint time. Here the 10-meter time is not timed directly: it is estimated from your 10 and 20 yard splits. It isolates the time lost to braking, turning, and re-accelerating.',
     whyItMatters:
       'A small deficit means you lose little time when you change direction relative to your straight-line speed. A large deficit points to turning mechanics and braking strength as the area to train. Because the 10-meter time is an estimate, compare it with other estimated results rather than with a timed 10-meter deficit.',
-    unitNote: 'Measured in seconds; lower is better.',
+    unitNote: 'Measured in s; lower is better.',
     directionOfBetter: 'lower',
   },
   AGILITY_5105: {
@@ -88,7 +88,7 @@ export const BUILT_IN_METRIC_EXPLANATIONS: Record<string, MetricExplanation> = {
       'The Pro Agility (5-10-5) shuttle measures lateral quickness and change of direction. Starting in a three-point stance, you sprint 5 yards, touch, sprint 10 yards, touch, then sprint 5 yards.',
     whyItMatters:
       'This is the standard NFL Combine agility test. It measures lateral movement ability, hip flexibility, and the capacity to rapidly change direction — all critical for field and court sports.',
-    unitNote: 'Measured in seconds; lower is better.',
+    unitNote: 'Measured in s; lower is better.',
     directionOfBetter: 'lower',
   },
   T_TEST: {
@@ -98,7 +98,7 @@ export const BUILT_IN_METRIC_EXPLANATIONS: Record<string, MetricExplanation> = {
       'The T-Test measures multi-directional agility through a T-shaped course. You sprint forward, shuffle left, shuffle right, shuffle back to center, then backpedal to start.',
     whyItMatters:
       'This comprehensive agility test evaluates forward, lateral, and backward movement in a single drill. It reveals overall movement competency and coordination across all movement planes.',
-    unitNote: 'Measured in seconds; lower is better.',
+    unitNote: 'Measured in s; lower is better.',
     directionOfBetter: 'lower',
   },
   DASH_40YD: {
@@ -108,7 +108,7 @@ export const BUILT_IN_METRIC_EXPLANATIONS: Record<string, MetricExplanation> = {
       'The 40-yard dash is the gold standard for measuring linear speed and acceleration. It tests your ability to explode from a standstill and maintain acceleration over a significant distance.',
     whyItMatters:
       'The 40-yard dash is the most recognized speed test in American sports, especially football. It measures both your starting explosiveness and your ability to reach top speed.',
-    unitNote: 'Measured in seconds; lower is better.',
+    unitNote: 'Measured in s; lower is better.',
     directionOfBetter: 'lower',
   },
   TOP_SPEED: {

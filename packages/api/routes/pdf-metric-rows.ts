@@ -79,9 +79,7 @@ export function buildBenchmarkRows(args: {
       if (comp.isBestTier) {
         tierLabel += ' [Best]';
       } else if (comp.distanceToNextTier != null && comp.nextTierName) {
-        const dist = comp.distanceToNextTier < 1
-          ? comp.distanceToNextTier.toFixed(2)
-          : comp.distanceToNextTier.toFixed(1);
+        const dist = comp.distanceToNextTier.toFixed(2); // fixed 2 decimals (the web caption drops trailing zeros)
         tierLabel += ` (${durationText(metric, comp.distanceToNextTier) ?? `${dist}${unit ? ` ${unit}` : ''}`} to ${comp.nextTierName})`;
       }
       const rankPrefix = comp.tierOrder ? `#${comp.tierOrder} ` : '';

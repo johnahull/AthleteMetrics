@@ -40,6 +40,8 @@
 
 > 0176 (10/5 repeat hop metrics for all sports: clears `sport_associations` to NULL on `RSI_105`, `RSI_105_HEIGHT` and `RSI_105_GCT`, which 0175 had tagged `{Soccer}`; plain `RSI` is untouched; the prior values, NULL included, are kept in `site_metrics_sport_backup_0176` so `_down` restores each row exactly; needs 0175 first) is provisional: renumber at merge if another branch lands 0176 first (file, `_down`, test `0176-rsi-105-all-sports`, tracking row, backup table name, this line). If a code is missing the migration does nothing for it and is still recorded as applied.
 
+> 0177 (sport- and unit-neutral `APPROACH_JUMP` explanation: rewrites `what_it_measures` and `why_it_matters` only while each still equals the 0159 text, so admin edits are kept; `_down` restores the 0159 text the same way) is provisional: renumber at merge if another branch lands 0177 first (file, `_down`, test `0177-neutral-approach-jump-explanation`, tracking row, this line).
+
 ## Current State (2025-10-30)
 
 ### Overview

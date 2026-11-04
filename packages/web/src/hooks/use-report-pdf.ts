@@ -77,7 +77,8 @@ export function useReportPdf({ reportId, reportName, onError }: UseReportPdfOpti
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ format, athleteId, chartImages }),
+        // PDF dates print in the viewer's time zone
+        body: JSON.stringify({ format, athleteId, chartImages, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
       });
 
       if (!response.ok) {

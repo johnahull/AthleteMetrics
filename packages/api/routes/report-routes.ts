@@ -39,11 +39,12 @@ import { parentalConsents, parentAthleteLinks } from "@shared/schema/tables/copp
 import { COPPA_ACTIONS, isUnder13OrUnknownDob } from "@shared/coppa-utils";
 import { isGroupComparisonOn, resolveChartSelection, resolveTeamChartSelection } from "@shared/report-charts";
 import { formatMeasurement } from "@shared/duration-format";
+import { resolveTierTint } from "@shared/tier-colors";
 import type { MetricExplanation } from "@shared/metric-explanations";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from "../utils/report-utils";
+import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel, formatTierRange, formatReportDate } from "../utils/report-utils";
 import { getMetricTypes } from "../utils/metric-type";
 import { getPgErrorCode, PG_UNIQUE_VIOLATION } from "../lib/pg-error";
 import { calculateTierDistributions } from "@shared/benchmark-utils";
@@ -58,6 +59,7 @@ import { EVAL_REPORT_TYPE, frozenModelSchema } from "@shared/eval-report-config"
 import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { formatCalendarDate, formatEventReportTimeframe } from "../utils/calendar-date";
+import { isValidTimezone } from "../lib/wellness-schedule-utils";
 import type { BenchmarkComparison } from "@shared/benchmark-types";
 
 const REPORT_NOT_FOUND = { message: "Report not found" };
@@ -1381,6 +1383,7 @@ export function registerReportRoutes(app: Express) {
       const reportId = req.params.id;
       const { athleteId, format = 'simplified' } = req.body || {};
       const chartImages = normalizeChartImages(req.body?.chartImages);
+      const timeZone = pdfTimeZone(req.body?.timeZone);
       let report: Report | undefined;
 
       try {
@@ -1424,7 +1427,7 @@ export function registerReportRoutes(app: Express) {
         const org = await fetchOrgForBranding(report.organizationId);
 
         // Generate PDF
-        const pdf = await generatePDF(report, reportData, (format === 'visual' ? 'visual' : 'simplified'), org, chartImages);
+        const pdf = await generatePDF(report, reportData, (format === 'visual' ? 'visual' : 'simplified'), org, chartImages, timeZone);
 
         // Send PDF
         res.setHeader("Content-Type", "application/pdf");
@@ -1464,6 +1467,7 @@ export function registerReportRoutes(app: Express) {
         const token = req.params.token;
         const { format = 'simplified' } = req.body || {};
         const chartImages = normalizeChartImages(req.body?.chartImages);
+        const timeZone = pdfTimeZone(req.body?.timeZone);
 
         const snapshot = await reportService.getPublicSnapshot(token);
 
@@ -1496,7 +1500,7 @@ export function registerReportRoutes(app: Express) {
         }
 
         // Generate PDF from snapshot data
-        const pdf = await generatePDF(report, snapshot.snapshotData, (format === 'visual' ? 'visual' : 'simplified'), org, chartImages);
+        const pdf = await generatePDF(report, snapshot.snapshotData, (format === 'visual' ? 'visual' : 'simplified'), org, chartImages, timeZone);
 
         // Send PDF
         res.setHeader("Content-Type", "application/pdf");
@@ -3674,28 +3678,6 @@ function addFooterToAllPages(doc: jsPDF, orgName?: string, startPage = 1): void 
 /**
  * Generate PDF document from report data
  */
-// Tier color name → RGB for PDF cell backgrounds (matched to Tailwind classes in TierBadge.tsx)
-const TIER_COLOR_RGB: Record<string, [number, number, number]> = {
-  gold:    [245, 158, 11],
-  emerald: [16, 185, 129],
-  silver:  [148, 163, 184],
-  blue:    [59, 130, 246],
-  bronze:  [234, 88, 12],
-  amber:   [217, 119, 6],
-  slate:   [100, 116, 139],
-  gray:    [107, 114, 128],
-};
-
-/** Create a light tint (blend with white at 25% opacity) for cell backgrounds */
-function tierTint(colorName: string): [number, number, number] {
-  const rgb = TIER_COLOR_RGB[colorName?.toLowerCase()] || TIER_COLOR_RGB.gray;
-  return [
-    Math.round(rgb[0] * 0.25 + 255 * 0.75),
-    Math.round(rgb[1] * 0.25 + 255 * 0.75),
-    Math.round(rgb[2] * 0.25 + 255 * 0.75),
-  ] as [number, number, number];
-}
-
 /** AM-FEAT-019: who may open a restricted eval snapshot: org writer, the athlete themself, or a parent linked to that athlete. */
 async function canOpenRestrictedEval(
   sessionUser: { id: string; isSiteAdmin?: boolean; role?: string },
@@ -3854,6 +3836,11 @@ export function normalizeChartImages(raw: unknown): ChartImage[] {
     });
 }
 
+/** The caller's IANA time zone for PDF dates; anything else (or nothing) is UTC. */
+export function pdfTimeZone(tz: unknown): string {
+  return typeof tz === 'string' && isValidTimezone(tz) ? tz : 'UTC';
+}
+
 export function addTrendChartsToPdf(
   doc: jsPDF,
   chartImages: ChartImage[],
@@ -3896,6 +3883,7 @@ export function addTrendChartsToPdf(
   );
   doc.addPage();
   let yPos = startY;
+  let prevTitle: string | undefined;
   measured.forEach(({ img, imgHeight }, i) => {
     if (breaks[i]) {
       doc.addPage();
@@ -3907,10 +3895,15 @@ export function addTrendChartsToPdf(
       doc.text(headings[i]!.toUpperCase(), margin, yPos);
       yPos += CHART_HEADING_HEIGHT;
     }
-    doc.setFontSize(14);
-    doc.setTextColor(40, 40, 40);
-    doc.text(img.title || metricLabels[img.metricCode] || img.metricCode, margin, yPos);
-    yPos += 6;
+    const title = img.title || metricLabels[img.metricCode] || img.metricCode;
+    // A run of charts with one title (e.g. sprint runs) prints it once per page / group
+    if (title !== prevTitle || breaks[i] || headings[i]) {
+      doc.setFontSize(14);
+      doc.setTextColor(40, 40, 40);
+      doc.text(title, margin, yPos);
+      yPos += 6;
+    }
+    prevTitle = title;
     doc.addImage(img.dataUrl, 'PNG', margin, yPos, imgWidth, imgHeight, undefined, 'FAST');
     yPos += imgHeight + 10;
   });
@@ -3982,7 +3975,7 @@ async function sendEvalReportPdf(user: { id: string; isSiteAdmin?: boolean; role
   res.send(Buffer.from(pdf.output("arraybuffer")));
 }
 
-async function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified', org?: ReportOrg, chartImages: ChartImage[] = []): Promise<jsPDF> {
+export async function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified', org?: ReportOrg, chartImages: ChartImage[] = [], timeZone = 'UTC'): Promise<jsPDF> {
   // AM-FEAT-019: a public eval snapshot carries its frozen model
   if (reportData?.reportType === EVAL_REPORT_TYPE) {
     if (!isRenderableEvalModel(reportData.model)) throw new Error('Eval report model is unavailable');
@@ -4046,7 +4039,14 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
 
     doc.setFontSize(14);
     doc.setTextColor(100, 100, 100);
-    const dateStr = reportData.generatedAt ? new Date(reportData.generatedAt).toLocaleDateString() : '';
+    // Event and custom timeframe dates are calendar dates (UTC midnight); generatedAt is an instant
+    const eventDate = reportData.eventContext?.eventDate;
+    const timeframe = reportData.reportConfig?.timeframe;
+    const dateStr = eventDate
+      ? formatReportDate(eventDate, 'UTC')
+      : timeframe?.type === 'custom' && timeframe.customEnd
+        ? formatReportDate(timeframe.customEnd, 'UTC')
+        : reportData.generatedAt ? formatReportDate(reportData.generatedAt, timeZone) : '';
     const dateWidth = doc.getTextWidth(dateStr);
     doc.text(dateStr, (pageWidth - dateWidth) / 2, coverY + 55);
 
@@ -4128,7 +4128,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
   // Add generation timestamp
   doc.setFontSize(10);
   doc.text(
-    `Generated: ${new Date(reportData.generatedAt).toLocaleString()}`,
+    `Generated: ${formatReportDate(reportData.generatedAt, timeZone, true)}`,
     14,
     headerY + 3
   );
@@ -4263,7 +4263,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
               if (data.section === 'head' && data.column.index >= 2) {
                 const tierIdx = data.column.index - 2;
                 if (tierIdx < tierColors.length) {
-                  data.cell.styles.fillColor = tierTint(tierColors[tierIdx]);
+                  data.cell.styles.fillColor = resolveTierTint(tierColors[tierIdx]);
                   data.cell.styles.textColor = [40, 40, 40];
                   data.cell.styles.fontStyle = 'bold';
                 }
@@ -4272,7 +4272,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
               if (data.section === 'body' && data.column.index >= 2) {
                 const tierIdx = data.column.index - 2;
                 if (tierIdx < tierColors.length) {
-                  data.cell.styles.fillColor = tierTint(tierColors[tierIdx]);
+                  data.cell.styles.fillColor = resolveTierTint(tierColors[tierIdx]);
                 }
               }
             },
@@ -4377,7 +4377,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
               if (data.column.index === 4 && data.row.index < rowTierColors.length) {
                 const colorName = rowTierColors[data.row.index];
                 if (colorName) {
-                  data.cell.styles.fillColor = tierTint(colorName);
+                  data.cell.styles.fillColor = resolveTierTint(colorName);
                   data.cell.styles.fontStyle = 'bold';
                 }
               }
@@ -4461,6 +4461,10 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
       doc.text(`${teamLabel}: ${athlete.teams.join(', ')}`, 14, yPos);
       yPos += 5;
     }
+    if (reportData.eventContext) {
+      doc.text(`Event: ${reportData.eventContext.eventName} (${formatReportDate(reportData.eventContext.eventDate, 'UTC')})`, 14, yPos);
+      yPos += 5;
+    }
 
     yPos += 5; // Add spacing before measurements table
 
@@ -4498,7 +4502,13 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
       });
 
       // Render tier benchmarks table with color-coded tier cells
+      // Keep a heading with its table header and first row (about 40 mm)
+      const orphanLimit = doc.internal.pageSize.getHeight() - 40;
       if (tierRows.length > 0) {
+        if (yPos > orphanLimit) {
+          doc.addPage();
+          yPos = 20;
+        }
         doc.setFontSize(14);
         doc.text("Benchmark Tiers", 14, yPos);
         yPos += 10;
@@ -4510,6 +4520,8 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
           theme: isVisual ? "striped" : "grid",
           headStyles: { fillColor: colors.primary },
           styles: { fontSize: 9 },
+          // Wide enough for "19.13 ft" on one line
+          columnStyles: { 3: { cellWidth: 24, halign: 'right' } },
           didParseCell: (data: any) => {
             if (data.section !== 'body') return;
             const rowIdx = data.row.index;
@@ -4517,7 +4529,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
             // Color the "Tier" column (index 2) with the tier's color tint
             const colorName = tierColors[rowIdx];
             if (colIdx === 2 && colorName) {
-              data.cell.styles.fillColor = tierTint(colorName);
+              data.cell.styles.fillColor = resolveTierTint(colorName);
               data.cell.styles.fontStyle = 'bold';
             }
           },
@@ -4528,6 +4540,10 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
 
       // Render single-value benchmarks table with green/red Meets Target
       if (singleValueRows.length > 0) {
+        if (yPos > orphanLimit) {
+          doc.addPage();
+          yPos = 20;
+        }
         doc.setFontSize(14);
         doc.text("Benchmark Comparisons", 14, yPos);
         yPos += 10;
@@ -4614,12 +4630,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
         doc.text(`${group.groupName}`, 14, yPos);
         yPos += 6;
 
-        const legendRows = group.tiers.map(t => {
-          const range = (t.minValue != null && t.maxValue != null)
-            ? `${t.minValue.toFixed(2)} - ${t.maxValue.toFixed(2)}`
-            : '-';
-          return [`#${t.tierOrder}`, t.tierName, range];
-        });
+        const legendRows = group.tiers.map(t => [`#${t.tierOrder}`, t.tierName, formatTierRange(t.minValue, t.maxValue)]);
 
         autoTable(doc, {
           startY: yPos,
@@ -4635,7 +4646,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
             if (data.row.index < group.tiers.length) {
               const colorName = group.tiers[data.row.index].tierColor;
               if (data.column.index === 1) {
-                data.cell.styles.fillColor = tierTint(colorName);
+                data.cell.styles.fillColor = resolveTierTint(colorName);
                 data.cell.styles.fontStyle = 'bold';
               }
             }
@@ -4733,7 +4744,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     if (report.coachingInsightsGeneratedAt) {
       doc.setFontSize(8);
       doc.setTextColor(100, 100, 100);
-      const generatedDate = new Date(report.coachingInsightsGeneratedAt).toLocaleString();
+      const generatedDate = formatReportDate(report.coachingInsightsGeneratedAt, timeZone, true);
       const modelText = report.coachingInsightsModel
         ? ` (${getAIModel(report.coachingInsightsModel)?.label ?? report.coachingInsightsModel})`
         : '';
@@ -4759,14 +4770,18 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
   } else if (reportData.reportType === 'individual' && reportData.athlete?.measurements) {
     for (const code of sortCodesByGroups(Object.keys(reportData.athlete.measurements), reportData.metricGroups)) pushCode(code);
   }
-  // Fallback: include any explanation keys that weren't already ordered
-  for (const code of Object.keys(glossaryExplanations)) pushCode(code);
+  // Only the metrics the report shows; every explanation only when it shows none (e.g. no data)
+  if (glossaryOrder.length === 0) {
+    for (const code of Object.keys(glossaryExplanations)) pushCode(code);
+  }
 
   const glossaryRows = glossaryOrder
     .map((code) => {
       const entry = glossaryExplanations[code];
       if (!entry) return null;
-      return [entry.title || code, entry.whatItMeasures || '', entry.whyItMatters || '', entry.unitNote || ''];
+      // Same name as the metric table
+      const name = reportData.metricLabels?.[code] ?? entry.title ?? code;
+      return [name, entry.whatItMeasures || '', entry.whyItMatters || '', entry.unitNote || ''];
     })
     .filter((row): row is string[] => row !== null);
 
