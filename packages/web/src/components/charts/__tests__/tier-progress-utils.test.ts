@@ -75,6 +75,20 @@ describe('tier-progress-utils', () => {
     expect(athletePositionPct(cutoffOnly)).toBeCloseTo(0.1, 5); // (0 + 0.5) / 5
     expect(athletePositionPct({ ...cutoffOnly, tierName: 'Elite', tierOrder: 1 })).toBeCloseTo(0.9, 5);
   });
+  it('leans toward the better neighbour inside a lower-is-better band', () => {
+    // 40yd bands worst->best: higher time = worse = further left within a band
+    const segs: TierInfo[] = [
+      { tierName: 'Below Average', tierColor: 'gray', tierOrder: 3, minValue: 4.8, maxValue: null },
+      { tierName: 'Excellent', tierColor: 'gray', tierOrder: 2, minValue: 4.6, maxValue: 4.8 },
+      { tierName: 'Elite', tierColor: 'gray', tierOrder: 1, minValue: null, maxValue: 4.6 },
+    ];
+    expect(athletePositionPctForValue(4.79, segs)).toBeCloseTo((1 + 0.05) / 3, 5); // near Excellent's left edge
+    expect(athletePositionPctForValue(4.61, segs)).toBeCloseTo((1 + 0.95) / 3, 5); // near Elite
+    expect(athletePositionPctForValue(4.7, segs)).toBeCloseTo(1.5 / 3, 5);
+    expect(athletePositionPctForValue(5.0, segs)).toBeCloseTo(0.5 / 3, 5); // open band: centre
+    // higher-is-better unchanged: 25 in Varsity [24, 28] -> a quarter of the way toward Elite
+    expect(athletePositionPctForValue(25, tierSegments(cmp))).toBeCloseTo((1 + 0.25) / 3, 5);
+  });
   it('captions distance to next tier', () => {
     expect(nextTierCaption(cmp, 'in')).toBe('2.5 in to Elite');
     expect(nextTierCaption({ ...cmp, isBestTier: true, nextTierName: null, distanceToNextTier: null }, 'in')).toBe('Top tier ✓');
@@ -156,7 +170,8 @@ describe('athletePositionPctForValue', () => {
       { tierName: 'Above Average', tierColor: '#888', tierOrder: 1, minValue: null, maxValue: 5.0 },
     ];
     const pos = athletePositionPctForValue(5.13, dash);
-    expect(pos).toBeCloseTo(2 / 3, 5); // top edge of the Average segment (index 1, f=1)
+    // Average segment (index 1), at its worse (left) edge: lower is better, so 5.13 is Average's slowest value
+    expect(pos).toBeCloseTo(1 / 3, 5);
   });
 
   it('returns 0 for an empty segment array', () => {

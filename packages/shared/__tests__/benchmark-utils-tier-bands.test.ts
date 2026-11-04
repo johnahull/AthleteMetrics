@@ -59,10 +59,11 @@ describe('cutoffTiersToBands', () => {
     expect(cutoffTiersToBands(backwards)).toEqual(backwards);
   });
 
-  it('normalizes only the cutoff tiers of a group that also has range tiers', () => {
+  it('leaves a group that mixes cutoff and range tiers unchanged', () => {
+    // an open band on B would overlap R: 5.5 would chart as B while the server matches R
     const range: T = { tierName: 'R', tierOrder: 3, minValue: 5.0, maxValue: 6.0, benchmarkValue: null, comparisonOperator: null };
-    const out = cutoffTiersToBands([cut('A', 1, 4.6), cut('B', 2, 4.8), range]);
-    expect(bands(out)).toEqual([['A', null, 4.6], ['B', 4.6, null], ['R', 5.0, 6.0]]);
+    const mixed = [cut('A', 1, 4.6), cut('B', 2, 4.8), range];
+    expect(cutoffTiersToBands(mixed)).toEqual(mixed);
   });
 
   it('leaves range tiers alone', () => {
@@ -103,5 +104,19 @@ describe('tierRangeLabels', () => {
     expect(tierRangeLabels(cutoffTiersToBands(dash40), { unit: 's', ascii: true })).toEqual([
       '<= 4.6 s', '4.6 - 4.8 s', '4.8 - 5 s', '5 - 5.2 s', '> 5.2 s',
     ]);
+  });
+
+  it('uses the inclusive sign for an open bound no better tier shares', () => {
+    const gap = [
+      { tierOrder: 1, minValue: null, maxValue: 5.2 },
+      { tierOrder: 2, minValue: 5.21, maxValue: null },
+    ];
+    expect(tierRangeLabels(gap, { ascii: true })).toEqual(['<= 5.2', '>= 5.21']);
+    expect(tierRangeLabels(gap)).toEqual(['≤ 5.2', '≥ 5.21']);
+    const vjGap = [
+      { tierOrder: 1, minValue: 30, maxValue: null },
+      { tierOrder: 2, minValue: null, maxValue: 29.5 },
+    ];
+    expect(tierRangeLabels(vjGap)).toEqual(['≥ 30', '≤ 29.5']);
   });
 });

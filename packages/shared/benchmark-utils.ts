@@ -89,15 +89,16 @@ export interface TierBounds {
  * contiguous [min, max] bands the server matcher implies: for `lte` the best tier is `<= c1`, then
  * `c1..c2`, ..., and the worst tier is everything above the second-worst cutoff (the server grades
  * slower-than-worst as the worst tier). `gte` is the mirror. A shared boundary belongs to the better
- * tier, as in evaluateTierBenchmark. Only tiers with both bounds null are changed; mixed operators,
- * `eq`, a single cutoff or cutoffs that disagree with tierOrder are returned unchanged. Pure: returns
- * new objects in the input order.
+ * tier, as in evaluateTierBenchmark. Only a group made entirely of cutoff tiers (both bounds null) is
+ * changed: a group that also has range tiers (an open band would overlap them), mixed operators, `eq`,
+ * a single cutoff or cutoffs that disagree with tierOrder are returned unchanged. Pure: returns new
+ * objects in the input order.
  */
 export function cutoffTiersToBands<T extends TierBounds>(tiers: T[]): T[] {
   const cutoffs = tiers
     .filter((t) => t.minValue == null && t.maxValue == null && t.benchmarkValue != null)
     .sort((a, b) => a.tierOrder - b.tierOrder); // best first
-  if (cutoffs.length < 2) return tiers;
+  if (cutoffs.length < 2 || cutoffs.length !== tiers.length) return tiers;
   const op = cutoffs[0].comparisonOperator;
   if ((op !== 'lte' && op !== 'gte') || cutoffs.some((t) => t.comparisonOperator !== op)) return tiers;
   const c = cutoffs.map((t) => t.benchmarkValue!);
@@ -111,13 +112,13 @@ export function cutoffTiersToBands<T extends TierBounds>(tiers: T[]): T[] {
     const own = i === last ? null : c[i]; // own cutoff; the worst tier is open-ended
     band.set(t, op === 'lte' ? { minValue: better, maxValue: own } : { minValue: own, maxValue: better });
   });
-  return tiers.map((t) => (band.has(t) ? { ...t, ...band.get(t)! } : { ...t }));
+  return tiers.map((t) => ({ ...t, ...band.get(t)! }));
 }
 
 /**
  * Boundary text for each tier, from its min/max only (same order as `tiers`): "4.6–4.8 s", or for an
- * open band "≤ 4.6 s" / "≥ 30 in" on the best tier and "> 5.2 s" / "< 25 in" on any other tier, since
- * a shared boundary belongs to the better tier. A tier with no bounds gets "". Duration metrics print
+ * open band "> 5.2 s" / "< 25 in" when a better tier owns that boundary (a shared boundary belongs to
+ * the better tier), otherwise the inclusive "≤ 4.6 s" / "≥ 30 in". A tier with no bounds gets "". Duration metrics print
  * m:ss with no unit; other values are rounded to 2 decimals. `ascii` for WinAnsi-only PDF fonts.
  */
 export function tierRangeLabels(
@@ -128,12 +129,13 @@ export function tierRangeLabels(
   const duration = format?.displayFormat === 'duration';
   const num = (v: number) => (duration ? formatMeasurement(v, format!) : String(Math.round(v * 100) / 100));
   const u = unit && !duration ? ` ${unit}` : '';
-  const bestOrder = Math.min(...tiers.map((t) => t.tierOrder));
+  // a better tier holds this value as its opposite bound, so the boundary itself is not in this tier
+  const ownedByBetter = (t: TierBounds, v: number, side: 'minValue' | 'maxValue') =>
+    tiers.some((o) => o.tierOrder < t.tierOrder && o[side] === v);
   return tiers.map((t) => {
-    const best = t.tierOrder === bestOrder;
     if (t.minValue != null && t.maxValue != null) return `${num(t.minValue)}${ascii ? ' - ' : '–'}${num(t.maxValue)}${u}`;
-    if (t.maxValue != null) return `${best ? (ascii ? '<=' : '≤') : '<'} ${num(t.maxValue)}${u}`;
-    if (t.minValue != null) return `${best ? (ascii ? '>=' : '≥') : '>'} ${num(t.minValue)}${u}`;
+    if (t.maxValue != null) return `${ownedByBetter(t, t.maxValue, 'minValue') ? '<' : ascii ? '<=' : '≤'} ${num(t.maxValue)}${u}`;
+    if (t.minValue != null) return `${ownedByBetter(t, t.minValue, 'maxValue') ? '>' : ascii ? '>=' : '≥'} ${num(t.minValue)}${u}`;
     return '';
   });
 }

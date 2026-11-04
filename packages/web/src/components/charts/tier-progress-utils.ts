@@ -57,6 +57,14 @@ export function athletePositionPctForValue(value: number, segs: TierInfo[], tier
   let f = 0.5;
   if (seg.minValue != null && seg.maxValue != null && seg.maxValue !== seg.minValue) {
     f = (v - seg.minValue) / (seg.maxValue - seg.minValue);
+    // Lower-is-better band (the better neighbour sits below its min, or the worse one above its max):
+    // a higher value is worse, so it belongs further left.
+    const better = segs[index + 1];
+    const worse = segs[index - 1];
+    const lowerIsBetter =
+      (better?.maxValue != null && better.maxValue <= seg.minValue) ||
+      (worse?.minValue != null && worse.minValue >= seg.maxValue);
+    if (lowerIsBetter) f = 1 - f;
   }
   f = Math.max(0, Math.min(1, f));
 
