@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { MetricService } from '../metric-service';
 import { db } from '../../db';
-import { siteMetrics, organizationMetrics, organizations, users, measurements, auditLogs } from '@shared/schema';
+import { benchmarkDistributions, benchmarkDistributionVersions, siteMetrics, organizationMetrics, organizations, users, measurements, auditLogs } from '@shared/schema';
 import { eq, and, or } from 'drizzle-orm';
 
 describe('MetricService', () => {
@@ -602,6 +602,24 @@ describe('MetricService', () => {
 
       // Cleanup measurement
       await db.delete(measurements).where(eq(measurements.metric, testMetricCode));
+    });
+  });
+
+  describe('deleteSiteMetric with loaded distributions', () => {
+    it('gives a friendly error instead of a raw foreign key failure', async () => {
+      const code = `ZZ_DIST_${Date.now()}`;
+      await db.insert(siteMetrics).values({ code, label: code, category: 'speed', unit: 's', metricType: 'lower_is_better' } as any);
+      const [v] = await db.insert(benchmarkDistributionVersions).values({ label: `v-${code}`, source: 's' }).returning();
+      await db.insert(benchmarkDistributions).values({ versionId: v.id, metricCode: code, sex: 'male', ageMin: 1, ageMax: 2, n: 1, values: [1] });
+      try {
+        await expect(new MetricService().deleteSiteMetric(code, siteAdminUserId)).rejects.toThrow(/Cannot delete metric .* distribution/);
+      } finally {
+        // DBs with the 0179 trigger keep these rows (immutable); only that is tolerated.
+        const tolerate = (e: any) => { if (!/immutable|violates foreign key/.test(String(e?.message) + String(e?.cause?.message))) throw e; };
+        await db.delete(benchmarkDistributions).where(eq(benchmarkDistributions.metricCode, code)).catch(tolerate);
+        await db.delete(benchmarkDistributionVersions).where(eq(benchmarkDistributionVersions.id, v.id)).catch(tolerate);
+        await db.delete(siteMetrics).where(eq(siteMetrics.code, code)).catch(tolerate);
+      }
     });
   });
 

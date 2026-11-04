@@ -6,6 +6,7 @@ export * from "./limiter";
 export * from "./metric-key-map";
 export * from "./model";
 export * from "./mqi-band";
+export * from "./percentile";
 export * from "./retest";
 export * from "./selection";
 export * from "./tier-match";
