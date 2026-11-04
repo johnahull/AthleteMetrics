@@ -10,3 +10,4 @@ export { MIN_NORM_N, percentile } from "./percentile"; // midRankPercentile need
 export * from "./retest";
 export * from "./selection";
 export * from "./tier-match";
+export * from "./radar";

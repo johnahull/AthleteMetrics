@@ -44,6 +44,9 @@ export const evalFormSchema = z.object({
   strengthsOn: z.boolean(),
   retestTrend: z.boolean(),
   radar: z.boolean(),
+  /** Comparison group of the radar (AM-FEAT-024); only sent while the radar is on */
+  radarCohort: z.enum(["norm", "event", "team"]),
+  radarTeamId: z.string().nullable(),
   ageGroupComparison: z.boolean(),
   load: z.enum(["light", "medium", "heavy", "none"]),
   coachNote: z.string().max(COACH_NOTE_MAX_LENGTH, `Keep the note to ${COACH_NOTE_MAX_LENGTH} characters or fewer`),
@@ -126,6 +129,8 @@ export function buildInitialValues(args: {
   age: number | null;
   /** The preset the server computes for this athlete, for a saved eval that stored none */
   fallbackPreset?: EvalPreset;
+  /** The organization's teams, when loaded: a saved radar team that is not among them is cleared */
+  teamIds?: readonly string[];
 }): EvalFormValues {
   const { defaults, settings, age } = args;
   const offered = offeredList(defaults);
@@ -136,6 +141,8 @@ export function buildInitialValues(args: {
     preset,
     metricCollegeGauge: {} as Record<string, boolean>,
     radar: false,
+    radarCohort: "norm" as const,
+    radarTeamId: null as string | null,
     ageGroupComparison: false,
     load: "none" as const,
     coachNote: "",
@@ -158,6 +165,8 @@ export function buildInitialValues(args: {
       coachNoteOn: sel.sections?.coachNote ?? true,
       strengthsOn: sel.sections?.strengths ?? true,
       radar: sel.sections?.radar ?? false,
+      radarCohort: sel.radarCohort?.kind ?? ("norm" as const),
+      radarTeamId: args.teamIds && !args.teamIds.includes(sel.radarCohort?.teamId ?? "") ? null : (sel.radarCohort?.teamId ?? null),
       // An eval saved before the switch compared
       ageGroupComparison: sel.sections?.ageGroupComparison ?? true,
       load: defaults.load ?? "none",
@@ -190,6 +199,9 @@ export function toRequest(values: EvalFormValues, ctx: RequestContext): BuiltReq
       metricKeys: ids,
       ...(values.collegeGauge === null ? {} : { collegeGauge: values.collegeGauge }),
       ...(Object.keys(perMetric).length > 0 ? { metricCollegeGauge: perMetric } : {}),
+      ...(values.radar
+        ? { radarCohort: values.radarCohort === "team" ? { kind: "team" as const, teamId: values.radarTeamId ?? undefined } : { kind: values.radarCohort } }
+        : {}),
       sections: {
         headline: true,
         freshAndHealthy: values.freshAndHealthy,

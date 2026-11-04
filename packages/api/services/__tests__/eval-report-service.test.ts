@@ -602,3 +602,51 @@ describe('assembleEvalReportModel: display format', () => {
     expect(metric(model, 'DASH_10YD')!).not.toHaveProperty('displayFormat');
   });
 });
+
+describe('assembleEvalReportModel: radar (AM-FEAT-024)', () => {
+  const radarRows = [
+    row('DASH_10YD', 2.0), row('JUMP_CMJ_HOH', 14), row('AGILITY_505_M_L', 2.5), row('AGILITY_505_M_R', 2.7),
+    row('MQI_TOTAL', 20, { units: 'pts' }),
+  ];
+  const norm = (metricCode: string) => ({
+    versionId: 'v1', versionCreatedAt: '2026-01-01', source: 'BTA data', metricCode, sex: 'female', ageMin: 15, ageMax: 16, kind: 'raw', values: Array.from({ length: 30 }, (_, i) => 1 + i / 10),
+  });
+
+  it('adds no radar block and no modelVersion when the radar section is off', () => {
+    const model = assembleEvalReportModel(input({ rows: radarRows }));
+    expect(model.radar).toBeUndefined();
+    expect(model.modelVersion).toBeUndefined();
+  });
+
+  it('freezes a radar block with modelVersion 2 when the radar section is on, headline fasterLeg unchanged', () => {
+    const model = assembleEvalReportModel(
+      input({
+        rows: radarRows,
+        selection: { sections: { radar: true }, metricKeys: ['505_LEFT', '505_RIGHT', '505'] },
+        radar: { kind: 'norm', distributions: [norm('AGILITY_505_M'), norm('DASH_10YD')] },
+      }),
+    );
+    expect(model.modelVersion).toBe(2);
+    const cod = model.radar!.axes.find((a) => a.axis === 'changeOfDirection')!;
+    expect(cod.value).toBeCloseTo(2.6);
+    expect(cod.percentile).not.toBeNull();
+    expect(model.radar!.axes.find((a) => a.axis === 'acceleration')!.cohortLabel).toContain('BTA data');
+    // The headline 5-0-5 is still the faster leg
+    expect(metric(model, 'AGILITY_505_M')?.value).toBe(2.5);
+    // Missing tests stay unscored
+    expect(model.radar!.axes.find((a) => a.axis === 'horizontalPower')!.value).toBeNull();
+  });
+
+  it('with no cohort data every axis is unscored, not zero', () => {
+    const model = assembleEvalReportModel(input({ rows: radarRows, selection: { sections: { radar: true } } }));
+    expect(model.radar!.scoredCount).toBe(0);
+    expect(model.radar!.axes.every((a) => a.percentile === null)).toBe(true);
+  });
+
+  it('never uses a row from another athlete, event or organization', () => {
+    const model = assembleEvalReportModel(
+      input({ rows: [row('DASH_10YD', 1.0, { userId: 'other' }), row('JUMP_CMJ_HOH', 14)], selection: { sections: { radar: true } } }),
+    );
+    expect(model.radar!.axes.find((a) => a.axis === 'acceleration')!.value).toBeNull();
+  });
+});

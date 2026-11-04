@@ -256,4 +256,76 @@ describe('EvalReportBody: duration (mm:ss) metrics', () => {
     expect(screen.getByTestId('eval-metric-MILE_RUN')).toHaveTextContent('402.50 s');
     expect(screen.getByText(/Improved by 4.20 s/)).toBeInTheDocument();
   });
+
+  describe('percentile radar (AM-FEAT-024)', () => {
+    const axis = (id: string, label: string, percentile: number | null, value: number | null = 1.9) => ({
+      axis: id, label, code: 'X', value, displayValue: value === null ? null : `${value} s`, detail: id === 'highSpeedRunning' && value !== null ? '1 s' : null,
+      percentile, cohortKind: 'norm', cohortLabel: 'BTA data, Male 13-14', n: 30, source: 'BTA data', distributionVersionId: 'v1',
+    });
+    const ids: Array<[string, string]> = [
+      ['acceleration', 'Acceleration'], ['highSpeedRunning', 'High-speed running'], ['verticalPower', 'Vertical power'],
+      ['reactiveStrength', 'Reactive strength'], ['changeOfDirection', 'Change of direction'], ['horizontalPower', 'Horizontal power'],
+    ];
+    const withRadar = (scored: number, movement: unknown = { total: 20, band: 'Efficient' }) =>
+      ({
+        ...model,
+        modelVersion: 2,
+        radar: { cohortKind: 'norm', scoredCount: scored, axes: ids.map(([a, l], i) => (i < scored ? axis(a, l, 40 + i * 10) : axis(a, l, null, null))), movement },
+      }) as unknown as EvalReportModelView;
+
+    it('draws an SVG radar with a point per scored axis and the group and n on every label', () => {
+      render(<EvalReportBody model={withRadar(4)} />);
+      const svg = screen.getByRole('img', { name: /percentile profile/i });
+      expect(svg.querySelectorAll('[data-testid^="radar-point-"]')).toHaveLength(4);
+      // the group line shows only for axes with a value
+      expect(screen.getAllByText('vs BTA data, Male 13-14, n=30')).toHaveLength(4);
+      // an unscored axis is labelled, has no point, and reads Not tested
+      expect(screen.getByTestId('radar-label-horizontalPower')).toHaveTextContent('Not tested');
+      expect(screen.queryByTestId('radar-point-horizontalPower')).not.toBeInTheDocument();
+    });
+
+    it('shows Movement beside the radar: band word and MQI total, or Not tested', () => {
+      const { unmount } = render(<EvalReportBody model={withRadar(6)} />);
+      expect(screen.getByTestId('radar-movement')).toHaveTextContent('Efficient');
+      expect(screen.getByTestId('radar-movement')).toHaveTextContent('20');
+      unmount();
+      render(<EvalReportBody model={withRadar(6, { total: null, band: null })} />);
+      expect(screen.getByTestId('radar-movement')).toHaveTextContent('Not tested');
+    });
+
+    it('shows the raw time for the fly axis as a hover title', () => {
+      render(<EvalReportBody model={withRadar(6)} />);
+      expect(screen.getByTestId('radar-label-highSpeedRunning').querySelector('[title]')).toHaveAttribute('title', '1 s');
+    });
+
+    it('with fewer than 3 scored axes shows the measurement table instead of the radar', () => {
+      render(<EvalReportBody model={withRadar(2)} />);
+      expect(screen.queryByRole('img', { name: /percentile profile/i })).not.toBeInTheDocument();
+      expect(screen.getByTestId('radar-table')).toBeInTheDocument();
+      expect(screen.getAllByText('Not tested').length).toBeGreaterThan(0);
+    });
+
+    it('draws outline segments only between adjacent scored axes, and a point for every scored axis', () => {
+      const m = withRadar(6) as any;
+      m.radar.axes[2] = axis('verticalPower', 'Vertical power', null, null);
+      m.radar.scoredCount = 5;
+      render(<EvalReportBody model={m} />);
+      const segs = [...document.querySelectorAll('[data-testid^="radar-segment-"]')].map((e) => e.getAttribute('data-testid'));
+      expect(segs).toEqual(['radar-segment-0-1', 'radar-segment-3-4', 'radar-segment-4-5', 'radar-segment-5-0']);
+      expect(document.querySelectorAll('[data-testid^="radar-point-"]')).toHaveLength(5);
+    });
+
+    it('hides the on-chart axis names below the sm breakpoint (the list carries the data)', () => {
+      render(<EvalReportBody model={withRadar(6)} />);
+      const texts = screen.getByRole('img', { name: /percentile profile/i }).querySelectorAll('text');
+      expect(texts.length).toBe(6);
+      texts.forEach((t) => expect(t.getAttribute('class')).toContain('max-sm:hidden'));
+    });
+
+    it('an old model with no radar block draws no percentile radar', () => {
+      render(<EvalReportBody model={model} />);
+      expect(screen.queryByRole('img', { name: /percentile profile/i })).not.toBeInTheDocument();
+      expect(screen.queryByTestId('radar-table')).not.toBeInTheDocument();
+    });
+  });
 });

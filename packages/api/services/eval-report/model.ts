@@ -3,6 +3,7 @@ import type { MqiBandLabel } from "@shared/mqi-band";
 import type { BalanceLine } from "./balance";
 import type { EvalMetricKey } from "./metric-key-map";
 import type { RetestTrend } from "./retest";
+import type { EvalRadar } from "./radar";
 import type { AgeGroupMatch, AverageComparison } from "./tier-match";
 
 /**
@@ -71,4 +72,8 @@ export interface EvalReportModel {
   limiter: EvalMetricKey | null;
   coachNote: string | null;
   selection: EvalSelection;
+  /** 2 once the percentile radar exists (AM-FEAT-024); absent on older rows */
+  modelVersion?: number;
+  /** Six-axis percentile radar, frozen with its cohort provenance; absent on older rows and when the radar section is off */
+  radar?: EvalRadar;
 }

@@ -123,3 +123,26 @@ describe('strengths and development area overrides', () => {
     expect(evalReportRequestSchema.safeParse({ developmentAreasOverride: ['DASH_10', 'bad key!'] }).success).toBe(false);
   });
 });
+
+describe('radar (AM-FEAT-024)', () => {
+  const radar = {
+    cohortKind: 'norm',
+    scoredCount: 1,
+    axes: [{ axis: 'acceleration', code: 'DASH_10YD', value: 1.9, displayValue: '1.9 s', percentile: 60, cohortKind: 'norm', cohortLabel: 'x', n: 30, source: 'x', distributionVersionId: 'v' }],
+  };
+
+  it('accepts a frozen model with a radar block and modelVersion 2, and one without (old rows)', () => {
+    expect(evalReportConfigSchema.safeParse({ ...config, model: { ...model, modelVersion: 2, radar } }).success).toBe(true);
+    expect(evalReportConfigSchema.safeParse(config).success).toBe(true);
+  });
+
+  it('accepts a radarCohort in the selection; team needs a teamId, norm and event do not', () => {
+    const sel = (radarCohort: unknown) => evalReportRequestSchema.safeParse({ selection: { radarCohort } }).success;
+    expect(sel({ kind: 'norm' })).toBe(true);
+    expect(sel({ kind: 'event' })).toBe(true);
+    expect(sel({ kind: 'team', teamId: '8c3f2c0e-6a5b-4c5e-9d0e-0a1b2c3d4e5f' })).toBe(true);
+    expect(sel({ kind: 'team' })).toBe(false);
+    expect(sel({ kind: 'team', teamId: 'not-a-uuid' })).toBe(false);
+    expect(sel({ kind: 'galaxy' })).toBe(false);
+  });
+});

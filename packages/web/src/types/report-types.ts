@@ -188,6 +188,30 @@ export interface EvalMetricResultView {
   trend: { change: number; direction: "improved" | "declined" | "unchanged" } | null;
 }
 
+/** Frozen six-axis percentile radar (AM-FEAT-024); absent on eval reports saved before it */
+export interface EvalRadarAxisView {
+  axis: string;
+  label: string;
+  code: string;
+  value: number | null;
+  displayValue: string | null;
+  /** Hover text, e.g. the raw time behind a speed shown as mph */
+  detail?: string | null;
+  percentile: number | null;
+  cohortKind: "norm" | "event" | "team";
+  cohortLabel: string;
+  n: number;
+  source: string;
+  distributionVersionId: string | null;
+}
+
+export interface EvalRadarView {
+  cohortKind: "norm" | "event" | "team";
+  axes: EvalRadarAxisView[];
+  scoredCount: number;
+  movement: { total: number | null; band: string | null };
+}
+
 export interface EvalReportModelView {
   athlete: { name: string; age: number | null; graduationYear: number | null; sport: string | null; team: string | null };
   /** YYYY-MM-DD */
@@ -202,6 +226,8 @@ export interface EvalReportModelView {
   developmentAreas?: string[];
   limiter?: string | null;
   coachNote: string | null;
+  modelVersion?: number;
+  radar?: EvalRadarView;
   selection?: {
     preset?: "middle_school" | "high_school" | "senior";
     /** Logical keys, or metric codes for measured metrics outside the key map */
