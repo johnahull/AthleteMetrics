@@ -26,6 +26,7 @@ describe('tier-progress-utils', () => {
       ...cmp,
       athleteValue: 25, // falls in the open-ended top tier
       tierName: 'Elite',
+      tierOrder: 1,
       allTiers: [
         { tierName: 'Below', tierColor: '#fde68a', tierOrder: 3, minValue: null, maxValue: 10 },
         { tierName: 'Mid', tierColor: '#86efac', tierOrder: 2, minValue: 10, maxValue: 20 },
@@ -63,6 +64,16 @@ describe('tier-progress-utils', () => {
     const pos = athletePositionPct(allNull);
     expect(Number.isFinite(pos)).toBe(true);
     expect(pos).toBeCloseTo(0.5, 5);
+  });
+  it('uses the server-matched tier for single-cutoff (null/null) tiers', () => {
+    // HS boys 40yd: five `lte` tiers arrive with no min/max; 5.32 s is Below Average (tierOrder 5, leftmost)
+    const t = (tierName: string, tierOrder: number): TierInfo => ({ tierName, tierColor: 'gray', tierOrder, minValue: null, maxValue: null });
+    const cutoffOnly: BenchmarkComparison = {
+      ...cmp, athleteValue: 5.32, tierName: 'Below Average', tierOrder: 5,
+      allTiers: [t('Elite', 1), t('Excellent', 2), t('Above Average', 3), t('Average', 4), t('Below Average', 5)],
+    };
+    expect(athletePositionPct(cutoffOnly)).toBeCloseTo(0.1, 5); // (0 + 0.5) / 5
+    expect(athletePositionPct({ ...cutoffOnly, tierName: 'Elite', tierOrder: 1 })).toBeCloseTo(0.9, 5);
   });
   it('captions distance to next tier', () => {
     expect(nextTierCaption(cmp, 'in')).toBe('2.5 in to Elite');

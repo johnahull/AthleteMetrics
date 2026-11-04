@@ -44,7 +44,7 @@ import type { MetricExplanation } from "@shared/metric-explanations";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel, formatTierRange, formatReportDate } from "../utils/report-utils";
+import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel, tierLegendRows, formatReportDate } from "../utils/report-utils";
 import { getMetricTypes } from "../utils/metric-type";
 import { getPgErrorCode, PG_UNIQUE_VIOLATION } from "../lib/pg-error";
 import { calculateTierDistributions } from "@shared/benchmark-utils";
@@ -4584,6 +4584,7 @@ export async function generatePDF(report: any, reportData: any, format: 'visual'
   if (reportData.reportType === 'individual' || reportData.reportType === 'team') {
     // Collect unique tier groups from benchmark comparisons
     const tierLegendGroups = new Map<string, {
+      metric: string;
       groupName: string;
       metricLabel: string;
       tiers: Array<{ tierName: string; tierColor: string; tierOrder: number; minValue: number | null; maxValue: number | null }>;
@@ -4600,6 +4601,7 @@ export async function generatePDF(report: any, reportData: any, format: 'visual'
           const legendKey = `${metric}:${comp.tierGroupName}`;
           if (comp.tierGroupName && comp.allTiers && !tierLegendGroups.has(legendKey)) {
             tierLegendGroups.set(legendKey, {
+              metric,
               groupName: comp.tierGroupName,
               metricLabel: reportData.metricLabels?.[metric] || metric,
               tiers: [...comp.allTiers].sort((a: any, b: any) => a.tierOrder - b.tierOrder),
@@ -4630,7 +4632,7 @@ export async function generatePDF(report: any, reportData: any, format: 'visual'
         doc.text(`${group.groupName}`, 14, yPos);
         yPos += 6;
 
-        const legendRows = group.tiers.map(t => [`#${t.tierOrder}`, t.tierName, formatTierRange(t.minValue, t.maxValue)]);
+        const legendRows = tierLegendRows(group.tiers, reportData.metricUnits?.[group.metric], reportData.metricFormats?.[group.metric]);
 
         autoTable(doc, {
           startY: yPos,

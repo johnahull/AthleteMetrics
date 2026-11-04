@@ -17,8 +17,11 @@ export function tierSegments(cmp: BenchmarkComparison): TierInfo[] {
  * value's actual tier segment regardless of unequal or open-ended band widths.
  *
  * Returns `(segmentIndex + intraSegmentFraction) / segmentCount`.
+ *
+ * `tierOrder` (the server-matched tier) wins over band matching: single-cutoff tiers arrive with null
+ * min/max, so every band would "contain" the value and the best tier would be picked.
  */
-export function athletePositionPctForValue(value: number, segs: TierInfo[]): number {
+export function athletePositionPctForValue(value: number, segs: TierInfo[], tierOrder?: number): number {
   const n = segs.length;
   if (n === 0) return 0;
 
@@ -29,9 +32,9 @@ export function athletePositionPctForValue(value: number, segs: TierInfo[]): num
   // Find the segment whose [min, max] band contains the value. segs run worst->best, so search from
   // the end: a value on a shared boundary takes the BETTER tier, as the server does
   // (evaluateTierBenchmark), keeping the marker in the same segment as the tier label.
-  let index = -1;
-  for (let i = n - 1; i >= 0; i--) {
-    if (v >= lo(segs[i]) && v <= hi(segs[i])) { index = i; break; }
+  let index = tierOrder == null ? -1 : segs.findIndex((s) => s.tierOrder === tierOrder);
+  for (let i = n - 1; index === -1 && i >= 0; i--) {
+    if (v >= lo(segs[i]) && v <= hi(segs[i])) index = i;
   }
 
   if (index === -1) {
@@ -62,7 +65,7 @@ export function athletePositionPctForValue(value: number, segs: TierInfo[]): num
 
 /** Athlete position 0..1 for `cmp.athleteValue`. See {@link athletePositionPctForValue}. */
 export function athletePositionPct(cmp: BenchmarkComparison): number {
-  return athletePositionPctForValue(cmp.athleteValue, tierSegments(cmp));
+  return athletePositionPctForValue(cmp.athleteValue, tierSegments(cmp), cmp.tierOrder);
 }
 
 /**

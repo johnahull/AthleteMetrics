@@ -176,4 +176,30 @@ describe('TeamBenchmarkStandingSection', () => {
     render(<TeamBenchmarkStandingSection teamStatistics={[singleValueStat]} metricLabels={{ FLY: 'Fly 10' }} />);
     expect(screen.queryByText(/Best performance within/i)).not.toBeInTheDocument();
   });
+  it('places the team average and athletes by band for single-cutoff (lte) tiers', () => {
+    // HS boys 40yd (migration 0171): no min/max, just a cutoff per tier
+    const cut = (tierName: string, tierOrder: number, value: number) =>
+      ({ name: `40 - ${tierName}`, value, comparisonOperator: 'lte' as const, minValue: null, maxValue: null, tierName, tierColor: 'gray', tierGroupId: 'g40', tierOrder });
+    const dashStat: TeamStatistic = {
+      metric: 'DASH_40YD', units: 's', average: 5.32, median: 5.32, min: 4.5, max: 5.6, standardDeviation: 0.2, topPerformer: null,
+      benchmarks: [cut('Elite', 1, 4.6), cut('Excellent', 2, 4.8), cut('Above Average', 3, 5.0), cut('Average', 4, 5.2), cut('Below Average', 5, 5.5)],
+    };
+    render(
+      <TeamBenchmarkStandingSection
+        teamStatistics={[dashStat]}
+        metricUnits={{ DASH_40YD: 's' }}
+        metricDirections={{ DASH_40YD: 'lower' }}
+        athleteRankings={[
+          { userId: 'fast', userName: 'Fast', measurements: { DASH_40YD: 4.5 } },
+          { userId: 'mid', userName: 'Mid', measurements: { DASH_40YD: 5.1 } },
+        ]}
+      />
+    );
+    expect(screen.getByText(/Team Average: 5.32 s · Below Average · 0.12 s to Average/)).toBeInTheDocument();
+    // leftmost of five equal segments, centred in its open band: 0.5 / 5
+    // the marker's left is a clamp() jsdom drops, so read the pin tag that sits at the same position
+    expect((screen.getByText('Team Average') as HTMLElement).style.left).toBe('10%');
+    expect((screen.getByTestId('tier-marker-fast') as HTMLElement).style.left).toBe('90%'); // Elite, rightmost
+    expect(parseFloat((screen.getByTestId('tier-marker-mid') as HTMLElement).style.left)).toBeCloseTo(30, 5); // Average 5.0-5.2, midway
+  });
 });

@@ -4,7 +4,7 @@ import { TierProgressChart } from '@/components/charts/TierProgressChart';
 import { BenchmarkStandingBar } from '@/components/charts/BenchmarkStandingBar';
 import type { AthleteMarkerValue } from '@/components/charts/BenchmarkStandingBar';
 import { evaluateTierStanding } from '@/components/charts/tier-progress-utils';
-import { deriveTierGroupName } from '@shared/benchmark-utils';
+import { cutoffTiersToBands, deriveTierGroupName } from '@shared/benchmark-utils';
 import { formatDateRange } from './report-utils';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
 import type { MeasurementFormat } from '@shared/duration-format';
@@ -73,10 +73,14 @@ function buildTeamComparisons(stat: TeamStatistic, lowerIsBetter: boolean): Benc
         tierOrder: b.tierOrder ?? 0,
         minValue: b.minValue ?? null,
         maxValue: b.maxValue ?? null,
+        benchmarkValue: b.value ?? null,
+        comparisonOperator: b.comparisonOperator ?? null,
       }));
     if (allTiers.length === 0) continue;
     const tierGroupName = deriveTierGroupName(group[0]?.name || '');
-    comparisons.push(evaluateTierStanding(stat.average!, allTiers, tierGroupName, lowerIsBetter));
+    // single-cutoff tiers have no min/max: give them bands so the average is not matched to the best tier
+    const banded = cutoffTiersToBands(allTiers).map(({ benchmarkValue: _bv, comparisonOperator: _op, ...tier }) => tier);
+    comparisons.push(evaluateTierStanding(stat.average!, banded, tierGroupName, lowerIsBetter));
   }
 
   for (const b of singleValue) {

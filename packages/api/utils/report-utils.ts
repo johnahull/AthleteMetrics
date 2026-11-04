@@ -7,6 +7,8 @@ import { isLowerBetter } from './metric-type';
 
 // Re-export from shared package — single source of truth
 export { deriveTierGroupName } from '@shared/benchmark-utils';
+import { tierRangeLabels, type TierBounds } from '@shared/benchmark-utils';
+import type { MeasurementFormat } from '@shared/duration-format';
 
 // Direction comes from the metric's own row (site metric, else the organization's custom metric)
 export { isLowerBetter };
@@ -78,15 +80,17 @@ export async function getBenchmarkLabel(
 }
 
 /**
- * Range text for the PDF tier reference table. Only a null bound is open: seeded tiers store
- * real-looking caps (0, 1.5, 10), not a consistent sentinel. ASCII >= / <= because the jsPDF
- * Helvetica font is WinAnsi-only.
+ * Rows ([rank, tier, range]) for the PDF tier reference table, tiers in the order given. The range is
+ * the web chart's boundary label (tierRangeLabels) in ASCII because the jsPDF Helvetica font is
+ * WinAnsi-only; "-" when a tier has no bounds (old snapshots of single-cutoff tiers).
  */
-export function formatTierRange(min: number | null | undefined, max: number | null | undefined): string {
-  if (min != null && max != null) return `${min.toFixed(2)} - ${max.toFixed(2)}`;
-  if (min != null) return `>= ${min.toFixed(2)}`;
-  if (max != null) return `<= ${max.toFixed(2)}`;
-  return '-';
+export function tierLegendRows(
+  tiers: Array<TierBounds & { tierName: string }>,
+  unit?: string | null,
+  format?: MeasurementFormat | null,
+): string[][] {
+  const ranges = tierRangeLabels(tiers, { unit, format, ascii: true });
+  return tiers.map((t, i) => [`#${t.tierOrder}`, t.tierName, ranges[i] || '-']);
 }
 
 /** "Oct 31, 2026" (plus ", 9:30 PM" with time) in the given IANA time zone, for report PDFs. */
