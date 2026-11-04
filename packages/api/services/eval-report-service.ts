@@ -5,9 +5,9 @@
  * loader. Only that athlete's measurements for that event, in the event's organization, are read. Pre-test
  * survey tables are never read and the inputs have no field for them.
  */
-import { and, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
 import type { db as database } from "../db";
-import { measurements, siteBenchmarks, siteMetrics, users, events, type Event } from "@shared/schema";
+import { benchmarkDistributionVersions, benchmarkDistributions, measurements, siteBenchmarks, siteMetrics, teams, userTeams, users, events, type Event } from "@shared/schema";
 import type { EvalSelectionInput } from "@shared/eval-report-config";
 import type { DisplayFormat } from "@shared/duration-format";
 import { eventCalendarDate } from "./event-measurements-service";
@@ -30,7 +30,12 @@ import {
   recomputeDerived,
   resolvePreset,
   retestTrend,
+  buildRadar,
+  RADAR_LOWER_IS_BETTER,
+  RADAR_METRIC_CODES,
+  RADAR_NORM_CODES,
   selectPriorEvent,
+  sexOf,
   showCollegeGauge,
   strengthsAndLimiter,
   type EvalMetricKey,
@@ -39,6 +44,7 @@ import {
   type EventMeasurementRow,
   type EventRef,
   type LoadLevel,
+  type RadarCohortInput,
   type TierCandidateRow,
 } from "./eval-report";
 
@@ -70,6 +76,8 @@ export interface EvalAssemblyInput {
   load: LoadLevel | null;
   coachNote: string | null;
   overrides: { strengths?: readonly string[]; developmentAreas?: readonly string[]; limiter?: string | null };
+  /** Comparison group of the radar, loaded for the coach's choice; absent = site norms with no distributions (every axis unscored) */
+  radar?: RadarCohortInput;
 }
 
 const KNOWN_KEYS = new Set<string>(Object.keys(EVAL_METRIC_CODES));
@@ -193,6 +201,22 @@ export function assembleEvalReportModel(input: EvalAssemblyInput): EvalReportMod
     limiter = limiterOverride;
   }
 
+  // Radar bests use each axis's fixed direction (no site_metrics needed) and never touch the headline 5-0-5
+  const radar = sectionOn.radar
+    ? buildRadar({
+        bests: eventBests(
+          { eventId: event.id, userId: athlete.id, organizationId: event.organizationId },
+          scoped,
+          (code) => RADAR_LOWER_IS_BETTER.has(code),
+        ),
+        unitOf: (code) => unitOf(code, scoped),
+        gender: athlete.gender,
+        age,
+        cohort: input.radar ?? { kind: "norm", distributions: [] },
+        mqiTotal: bests.get(metricCode("MQI")),
+      })
+    : null;
+
   return {
     athlete: {
       name: athlete.name,
@@ -209,6 +233,7 @@ export function assembleEvalReportModel(input: EvalAssemblyInput): EvalReportMod
     limiter: sectionOn.strengths ? limiter : null,
     coachNote: sectionOn.coachNote ? input.coachNote : null,
     selection: { preset, metricKeys: effective.map((e) => e.id), collegeGauge, ...sectionOn },
+    ...(radar ? { modelVersion: 2, radar } : {}),
   };
 }
 
@@ -226,7 +251,7 @@ export function computeEvalDefaults(input: EvalAssemblyInput) {
   };
 }
 
-export type EvalReportInputErrorCode = "event_has_no_organization" | "athlete_not_found" | "invalid_override";
+export type EvalReportInputErrorCode = "event_has_no_organization" | "athlete_not_found" | "invalid_override" | "invalid_team";
 
 /** HTTP answer for each input error code; an unlisted code is a server bug, not a 404. */
 export function evalInputErrorResponse(code: EvalReportInputErrorCode): { status: number; message: string } {
@@ -237,6 +262,8 @@ export function evalInputErrorResponse(code: EvalReportInputErrorCode): { status
       return { status: 400, message: "Override names a metric that is not in the report" };
     case "athlete_not_found":
       return { status: 404, message: "Not found" };
+    case "invalid_team":
+      return { status: 400, message: "The team is not in this organization" };
     default: {
       const unhandled: never = code;
       console.error("Unhandled eval report input error code", unhandled);
@@ -353,6 +380,90 @@ export async function loadEvalReportInputs(
   };
 }
 
+/**
+ * Load the comparison group of the radar for the coach's choice (AM-FEAT-024). Norm rows are filtered to the
+ * athlete's sex and age at the event; event and team groups are every athlete's verified bests at this event,
+ * in the event's organization. A team must belong to that organization.
+ */
+export async function loadRadarCohort(
+  db: Db,
+  args: {
+    organizationId: string;
+    eventId: string;
+    eventDate: string;
+    athlete: { gender: string | null; birthDate: string | null };
+    cohort?: { kind: "norm" | "event" | "team"; teamId?: string };
+  },
+): Promise<RadarCohortInput> {
+  const kind = args.cohort?.kind ?? "norm";
+  if (kind === "norm") {
+    const sex = sexOf(args.athlete.gender);
+    const age = args.athlete.birthDate ? ageAtDate(args.athlete.birthDate, args.eventDate) : Number.NaN;
+    if (!sex || !Number.isFinite(age)) return { kind, distributions: [] };
+    const rows = await db
+      .select({
+        versionId: benchmarkDistributions.versionId,
+        versionCreatedAt: benchmarkDistributionVersions.createdAt,
+        source: benchmarkDistributionVersions.source,
+        metricCode: benchmarkDistributions.metricCode,
+        sex: benchmarkDistributions.sex,
+        ageMin: benchmarkDistributions.ageMin,
+        ageMax: benchmarkDistributions.ageMax,
+        kind: benchmarkDistributions.kind,
+        values: benchmarkDistributions.values,
+      })
+      .from(benchmarkDistributions)
+      .innerJoin(benchmarkDistributionVersions, eq(benchmarkDistributionVersions.id, benchmarkDistributions.versionId))
+      .where(
+        and(
+          eq(benchmarkDistributions.sex, sex),
+          eq(benchmarkDistributions.kind, "raw"),
+          inArray(benchmarkDistributions.metricCode, [...RADAR_NORM_CODES]),
+          lte(benchmarkDistributions.ageMin, age),
+          gte(benchmarkDistributions.ageMax, age),
+        ),
+      );
+    return { kind, distributions: rows };
+  }
+
+  let label = "This event (all athletes)";
+  let memberIds: string[] | null = null;
+  if (kind === "team") {
+    const [team] = args.cohort?.teamId
+      ? await db.select({ id: teams.id, name: teams.name }).from(teams).where(and(eq(teams.id, args.cohort.teamId), eq(teams.organizationId, args.organizationId))).limit(1)
+      : [];
+    if (!team) throw new EvalReportInputError("invalid_team");
+    label = `${team.name} (whole team)`;
+    memberIds = (await db.select({ userId: userTeams.userId }).from(userTeams).where(and(eq(userTeams.teamId, team.id), eq(userTeams.isActive, true)))).map((m) => m.userId);
+    if (memberIds.length === 0) return { kind, label, peers: new Map() };
+  }
+  const rows = await db
+    .select({ eventId: measurements.eventId, userId: measurements.userId, organizationId: measurements.organizationId, metric: measurements.metric, value: measurements.value })
+    .from(measurements)
+    .where(
+      and(
+        eq(measurements.eventId, args.eventId),
+        eq(measurements.organizationId, args.organizationId),
+        eq(measurements.isVerified, true),
+        inArray(measurements.metric, [...RADAR_METRIC_CODES]),
+        memberIds ? inArray(measurements.userId, memberIds) : undefined,
+      ),
+    );
+  const byUser = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const list = byUser.get(r.userId);
+    if (list) list.push(r);
+    else byUser.set(r.userId, [r]);
+  }
+  const peers = new Map(
+    [...byUser].map(([userId, userRows]) => [
+      userId,
+      eventBests({ eventId: args.eventId, userId, organizationId: args.organizationId }, userRows, (code) => RADAR_LOWER_IS_BETTER.has(code)),
+    ]),
+  );
+  return { kind, label, peers };
+}
+
 export async function buildEvalReportModel(
   db: Db,
   args: {
@@ -365,5 +476,14 @@ export async function buildEvalReportModel(
   },
 ): Promise<EvalReportModel> {
   const loaded = await loadEvalReportInputs(db, args);
-  return assembleEvalReportModel({ ...loaded, selection: args.selection, load: args.load, coachNote: args.coachNote, overrides: args.overrides });
+  const radar = args.selection.sections?.radar
+    ? await loadRadarCohort(db, {
+        organizationId: loaded.event.organizationId,
+        eventId: loaded.event.id,
+        eventDate: loaded.event.date,
+        athlete: loaded.athlete,
+        cohort: args.selection.radarCohort,
+      })
+    : undefined;
+  return assembleEvalReportModel({ ...loaded, selection: args.selection, load: args.load, coachNote: args.coachNote, overrides: args.overrides, radar });
 }

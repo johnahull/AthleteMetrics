@@ -13,8 +13,9 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { exportEventReportPDF } from "@/lib/events-api";
+import { radarSegments } from "@shared/eval-report-radar-geometry";
 import { LOAD_LABELS, RESULTS_TITLE, balanceText, formatValue as formatValueWithUnit } from "@shared/eval-report-copy";
-import type { EvalReportModelView, EvalMetricResultView, Report } from "@/types/report-types";
+import type { EvalReportModelView, EvalMetricResultView, EvalRadarView, EvalRadarAxisView, Report } from "@/types/report-types";
 
 /** "2026-05-01" -> "May 1, 2026" without a timezone shift */
 export function formatEvalEventDate(eventDate: string | undefined | null): string {
@@ -53,6 +54,98 @@ function collegeText(m: EvalMetricResultView): string | null {
   return c.status === "at_or_better" ? "At or better than the college average" : "Below the college average";
 }
 
+const MIN_RADAR_AXES = 3;
+const NOT_TESTED = "Not tested";
+const SHORT_NAMES: Record<string, string> = { highSpeedRunning: "High-speed", changeOfDirection: "Change of dir.", reactiveStrength: "Reactive", verticalPower: "Vertical", horizontalPower: "Horizontal" };
+
+const axisText = (a: EvalRadarAxisView) =>
+  a.value === null ? NOT_TESTED : a.percentile === null ? `${a.displayValue} (not scored)` : `${a.displayValue} (${a.percentile} percentile)`;
+const groupText = (a: EvalRadarAxisView) => `vs ${a.cohortLabel}, n=${a.n}`;
+
+/** Inline SVG: radius = percentile / 100; an unscored axis is labelled in the list but has no point and no polygon vertex. */
+function PercentileRadar({ radar }: { radar: EvalRadarView }) {
+  const W = 420;
+  const H = 290;
+  const [cx, cy, R] = [W / 2, H / 2, 95];
+  const n = radar.axes.length;
+  const at = (i: number, r: number): [number, number] => [cx + r * Math.sin((2 * Math.PI * i) / n), cy - r * Math.cos((2 * Math.PI * i) / n)];
+  const ring = (f: number) => radar.axes.map((_, i) => at(i, R * f).join(",")).join(" ");
+  const pts = radar.axes.map((a, i) => (a.percentile === null ? null : at(i, R * (Math.min(100, Math.max(0, a.percentile)) / 100))));
+  const segments = radarSegments(radar.axes.map((a) => a.percentile));
+  const allScored = pts.every((p) => p !== null);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Percentile profile radar chart. The list below gives each value." className="mx-auto w-full max-w-md">
+      {[0.25, 0.5, 0.75, 1].map((f) => (
+        <polygon key={f} points={ring(f)} fill="none" className="stroke-muted-foreground/30" strokeWidth={1} />
+      ))}
+      {radar.axes.map((a, i) => {
+        const [x, y] = at(i, R);
+        const [lx, ly] = at(i, R + 12);
+        return (
+          <g key={a.axis} aria-hidden="true">
+            <line x1={cx} y1={cy} x2={x} y2={y} className="stroke-muted-foreground/30" strokeWidth={1} />
+            <text x={lx} y={ly + (ly > cy ? 8 : 0)} fontSize={11} textAnchor={Math.abs(lx - cx) < 1 ? "middle" : lx > cx ? "start" : "end"} className="fill-foreground max-sm:hidden">
+              {SHORT_NAMES[a.axis] ?? a.label}
+            </text>
+          </g>
+        );
+      })}
+      {allScored && <polygon points={pts.map((p) => p!.join(",")).join(" ")} className="fill-primary/25 stroke-none" />}
+      {segments.map(([i, j]) => (
+        <line key={`${i}-${j}`} data-testid={`radar-segment-${i}-${j}`} x1={pts[i]![0]} y1={pts[i]![1]} x2={pts[j]![0]} y2={pts[j]![1]} className="stroke-primary" strokeWidth={2} />
+      ))}
+      {radar.axes.map((a, i) =>
+        pts[i] ? (
+          <circle key={a.axis} data-testid={`radar-point-${a.axis}`} cx={pts[i]![0]} cy={pts[i]![1]} r={4} className="fill-primary">
+            <title>{`${a.label}: ${a.percentile} percentile`}</title>
+          </circle>
+        ) : null,
+      )}
+    </svg>
+  );
+}
+
+function RadarSection({ radar }: { radar: EvalRadarView }) {
+  const enough = radar.scoredCount >= MIN_RADAR_AXES;
+  const { movement } = radar;
+  return (
+    <Card>
+      <CardHeader>
+        <SectionHeading>{enough ? "Percentile profile" : "Measurements"}</SectionHeading>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {enough ? (
+          <>
+            <PercentileRadar radar={radar} />
+            <p className="text-center text-xs text-muted-foreground">Farther from the center is a higher percentile within the comparison group.</p>
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground" data-testid="radar-table-note">
+            A percentile profile needs at least {MIN_RADAR_AXES} scored measurements.
+          </p>
+        )}
+        <ul className="space-y-2" data-testid={enough ? "radar-list" : "radar-table"}>
+          {radar.axes.map((a) => (
+            <li key={a.axis} className="space-y-0.5" data-testid={`radar-label-${a.axis}`}>
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="font-medium">{a.label}</span>
+                <span className="tabular-nums" title={a.detail ?? undefined}>
+                  {axisText(a)}
+                </span>
+              </div>
+              {a.value !== null && <p className="text-xs text-muted-foreground">{groupText(a)}</p>}
+            </li>
+          ))}
+        </ul>
+        <p className="text-sm" data-testid="radar-movement">
+          <span className="font-medium">Movement:</span>{" "}
+          {movement.total === null ? NOT_TESTED : `${movement.band ?? ""} (MQI total ${movement.total} of 24)`.trim()}
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return <h2 className="text-2xl font-semibold leading-none tracking-tight">{children}</h2>;
 }
@@ -65,7 +158,9 @@ export function EvalReportBody({ model }: { model: EvalReportModelView }) {
   const strengths = (model.strengths ?? []).map(labelOf);
   const development = (model.developmentAreas ?? []).map(labelOf);
   const limiter = model.limiter ? labelOf(model.limiter) : null;
-  const hasFh = sel?.freshAndHealthy !== false && (fh.load || fh.balance || fh.movement);
+  // With the percentile radar, Movement is shown beside it instead
+  const fhMovement = model.radar ? undefined : fh.movement;
+  const hasFh = sel?.freshAndHealthy !== false && (fh.load || fh.balance || fhMovement);
   const showStrengths = sel?.strengths !== false && (strengths.length > 0 || development.length > 0 || !!limiter);
   const showNote = sel?.coachNote !== false && !!model.coachNote;
   const athlete = model.athlete;
@@ -149,6 +244,8 @@ export function EvalReportBody({ model }: { model: EvalReportModelView }) {
         </CardContent>
       </Card>
 
+      {model.radar && <RadarSection radar={model.radar} />}
+
       {hasFh && (
         <Card>
           <CardHeader>
@@ -165,9 +262,9 @@ export function EvalReportBody({ model }: { model: EvalReportModelView }) {
                 <span className="font-medium">Balance:</span> {balanceText(fh.balance)}
               </p>
             )}
-            {fh.movement && (
+            {fhMovement && (
               <p>
-                <span className="font-medium">Movement:</span> {fh.movement}
+                <span className="font-medium">Movement:</span> {fhMovement}
               </p>
             )}
           </CardContent>

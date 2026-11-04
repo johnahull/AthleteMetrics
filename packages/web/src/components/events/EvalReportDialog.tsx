@@ -28,6 +28,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { EvalReportBody } from "@/components/reports/EvalReportView";
 import { ShareReportDialog } from "@/components/reports/ShareReportDialog";
 import { useToast } from "@/hooks/use-toast";
+import { useTeams } from "@/hooks/use-teams";
 import {
   apiErrorMessage,
   downloadEvalReportPdf,
@@ -138,6 +139,8 @@ export function EvalReportDialog({ open, onOpenChange, eventId, organizationId, 
       strengthsOn: true,
       retestTrend: true,
       radar: false,
+      radarCohort: "norm",
+      radarTeamId: null,
       load: "none",
       coachNote: "",
       strengths: null,
@@ -146,6 +149,9 @@ export function EvalReportDialog({ open, onOpenChange, eventId, organizationId, 
     },
   });
   const values = form.watch();
+  // Teams are only needed once the coach picks the team group
+  const savedTeam = defaultsQuery.data?.source === "saved" && defaultsQuery.data.selection?.radarCohort?.kind === "team";
+  const teamsQuery = useTeams({ organizationId: (values.radar && values.radarCohort === "team") || savedTeam ? organizationId : undefined });
 
   const age = probeQuery.data?.athlete.age ?? null;
   const hasPrior = probeQuery.data ? probeQuery.data.metrics.some((m) => m.trend !== null) : true;
@@ -165,10 +171,11 @@ export function EvalReportDialog({ open, onOpenChange, eventId, organizationId, 
   const settled =
     !!defaults &&
     (settingsQuery.isSuccess || settingsQuery.isError) &&
-    (offered.length === 0 || probeQuery.isSuccess || probeQuery.isError);
+    (offered.length === 0 || probeQuery.isSuccess || probeQuery.isError) &&
+    (!savedTeam || teamsQuery.isSuccess || teamsQuery.isError);
   useEffect(() => {
     if (!settled || hydrated || !defaults) return;
-    const initial = buildInitialValues({ defaults, settings, age, fallbackPreset: probeQuery.data?.selection?.preset });
+    const initial = buildInitialValues({ defaults, settings, age, fallbackPreset: probeQuery.data?.selection?.preset, teamIds: teamsQuery.data?.map((t) => t.id) });
     form.reset(initial);
     if (defaults.source === "saved") {
       (["metricKeys", "collegeGauge", "freshAndHealthy", "retestTrend", "coachNoteOn", "strengthsOn"] as PresetField[]).forEach((f) =>
@@ -597,10 +604,46 @@ export function EvalReportDialog({ open, onOpenChange, eventId, organizationId, 
                   disabled: !hasPrior,
                   hint: hasPrior ? "Shows change since the last evaluation." : "There is no comparable earlier evaluation for this athlete.",
                 })}
-                {sectionSwitch("eval-radar", "Radar chart", values.radar && values.ageGroupComparison, (c) => form.setValue("radar", c, { shouldDirty: true }), {
-                  disabled: !values.ageGroupComparison,
-                  hint: values.ageGroupComparison ? undefined : "Needs the age-group comparison.",
+                {sectionSwitch("eval-radar", "Radar chart", values.radar, (c) => form.setValue("radar", c, { shouldDirty: true }), {
+                  hint: "Six fixed measurements as percentiles within a comparison group. Needs at least 3 scored.",
                 })}
+                {values.radar && (
+                  <div className="ml-6 space-y-2" data-testid="eval-radar-group">
+                    <div className="space-y-1">
+                      <Label htmlFor="eval-radar-cohort" className="text-sm">Compare against</Label>
+                      <Select value={values.radarCohort} onValueChange={(v) => form.setValue("radarCohort", v as EvalFormValues["radarCohort"], { shouldDirty: true })}>
+                        <SelectTrigger id="eval-radar-cohort" aria-label="Compare against">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="norm">Site norms</SelectItem>
+                          <SelectItem value="event">This event</SelectItem>
+                          <SelectItem value="team">A team</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        {values.radarCohort === "norm"
+                          ? "Athletes of the same sex and age. An axis needs at least 30 in that group."
+                          : "The whole group, with no sex or age filter. An axis needs at least 10 athletes."}
+                      </p>
+                    </div>
+                    {values.radarCohort === "team" && (
+                      <div className="space-y-1">
+                        <Label htmlFor="eval-radar-team" className="text-sm">Team</Label>
+                        <Select value={values.radarTeamId ?? ""} onValueChange={(v) => form.setValue("radarTeamId", v, { shouldDirty: true })}>
+                          <SelectTrigger id="eval-radar-team" aria-label="Team">
+                            <SelectValue placeholder={teamsQuery.isLoading ? "Loading teams..." : "Choose a team"} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(teamsQuery.data ?? []).filter((t) => !t.isArchived).map((t) => (
+                              <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                )}
               </fieldset>
 
               <fieldset className="space-y-2">

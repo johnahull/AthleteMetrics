@@ -29,7 +29,7 @@ All routes need a signed-in user. "Writer" means coach, org admin or site admin 
 | POST | `/api/events/:eventId/athletes/:athleteId/eval-report` | Same | 201 `{ report, model }`; inserts a new `reports` row |
 | GET | `/api/events/:eventId/athletes/:athleteId/eval-report/defaults` | Same | `{ source: "saved", reportId, selection, load, coachNote, offered }` or `{ source: "computed", selection, load, coachNote, offered }` |
 
-Request body of preview and save (`evalReportRequestSchema`, `packages/shared/eval-report-config.ts`): `selection` (`preset`, `metricKeys`, `collegeGauge`, `metricCollegeGauge`, `sections`), `load` (`light` / `medium` / `heavy` / null), `coachNote` (max 2000 characters, null clears), `strengthsOverride`, `developmentAreasOverride`, `limiterOverride`. Errors: 400 invalid body or an override naming a metric not in the report; 404 not a writer, no such event, or athlete not measured in the event; 409 event has no organization (site admin only, others get 404); save returns 500 if the built config fails validation (a server fault).
+Request body of preview and save (`evalReportRequestSchema`, `packages/shared/eval-report-config.ts`): `selection` (`preset`, `metricKeys`, `collegeGauge`, `metricCollegeGauge`, `sections`), `load` (`light` / `medium` / `heavy` / null), `coachNote` (max 2000 characters, null clears), `strengthsOverride`, `developmentAreasOverride`, `limiterOverride`. `selection.radarCohort` (`{ kind: 'norm' | 'event' | 'team', teamId? }`, see Percentile radar) picks the radar's comparison group; `teamId` is required for `team`. Errors: 400 invalid body, an override naming a metric not in the report, or `invalid_team` (the team is unknown or belongs to another organization); 404 not a writer, no such event, or athlete not measured in the event; 409 event has no organization (site admin only, others get 404); save returns 500 if the built config fails validation (a server fault).
 
 Preview and defaults use the STANDARD limiter (100 per 15 minutes); save uses the MUTATION limiter (20 per 15 minutes).
 
@@ -85,6 +85,20 @@ Reads use the STANDARD limiter; writes use MUTATION (20 per 15 minutes).
 `selection.sections.ageGroupComparison` (boolean, optional). The selection dialog shows "Compare to age group", off for a new report. A missing key means compare, so reports saved before the switch, API callers and frozen models are unchanged; the saved-selection branch of the form reads a missing key as on, so reopening an older eval keeps its comparison.
 
 Off: every metric has `comparison: null`. Strengths, areas to develop and the limiter are not suggested (they rank by age-group position), so they are manual-only: the coach can still pick them in the dialog and those overrides are kept, with the same `invalid_override` check as when comparison is on. The web view and PDF title the section "Results" (`RESULTS_TITLE` in `packages/shared/eval-report-copy.ts`) and draw no radar. The college standard gauge keeps its own switch. The org does not remember this choice. The frozen config stays immutable.
+
+## Percentile radar (AM-FEAT-024)
+
+`selection.sections.radar` (default off) adds a frozen six-axis percentile radar to the model: `model.radar` with `modelVersion: 2`. It no longer needs "Compare to age group". Axes: Acceleration (`DASH_10YD`), High-speed running (`FLY10_TIME_RI30`, shown as mph, the raw time on hover), Vertical power (`JUMP_CMJ_HOH`), Reactive strength (`RSI_105`), Change of direction (mean of the left and right best 5-0-5, meter variant else yard; the headline 5-0-5 stays the faster leg), Horizontal power (`JUMP_BROAD`). EUR and MQI are never axes. Aggregation is the best verified attempt at the event.
+
+Comparison group (`selection.radarCohort`, the dialog's "Compare against"):
+
+| Kind | Group | Minimum n |
+|---|---|---|
+| `norm` (default) | Site benchmark distributions for the athlete's sex (Male / Female only) and age at the event date. For each metric the most recent version (by `created_at`) that has a `raw` row for that metric, sex and age band is used; `quantiles` rows are ignored. | 30 |
+| `event` | Every athlete's verified bests at this event, whole group: no sex or age filter | 10 |
+| `team` | Active members of the chosen team (must belong to the event's organization), their bests at this event, whole group: no sex or age filter | 10 |
+
+An axis with no value, or no qualifying group, is unscored (never zero or 50). Fewer than 3 scored axes shows a measurement table instead of the radar. Every axis prints "vs <group>, n=X" (event and team labels say whole group). Axes are never averaged. Movement (band word and raw MQI total, or "Not tested" when the MQI set is incomplete) is shown beside the radar and is never scored. Each axis freezes its cohort kind, label, n, source and `distributionVersionId`, so later changes to distributions never alter a saved report. Reports saved before this keep the old age-group-average radar (PDF, behind the age-group comparison); only models with a `radar` block render the percentile radar.
 
 ## Data model
 
