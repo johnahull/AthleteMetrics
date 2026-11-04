@@ -83,7 +83,7 @@ export function ageAtDate(birthDate: string, onDate: string): number {
 }
 
 /** Only "Male" and "Female" identify a set; anything else (including "Not Specified") matches nothing. */
-function sexOf(gender: string | null): "male" | "female" | null {
+export function sexOf(gender: string | null): "male" | "female" | null {
   const g = gender?.toLowerCase();
   return g === "male" || g === "female" ? g : null;
 }

@@ -40,6 +40,7 @@
 
 > 0176 (10/5 repeat hop metrics for all sports: clears `sport_associations` to NULL on `RSI_105`, `RSI_105_HEIGHT` and `RSI_105_GCT`, which 0175 had tagged `{Soccer}`; plain `RSI` is untouched; the prior values, NULL included, are kept in `site_metrics_sport_backup_0176` so `_down` restores each row exactly; needs 0175 first) is provisional: renumber at merge if another branch lands 0176 first (file, `_down`, test `0176-rsi-105-all-sports`, tracking row, backup table name, this line). If a code is missing the migration does nothing for it and is still recorded as applied.
 
+> 0179 (reference distributions for AM-FEAT-024: `benchmark_distribution_versions` and `benchmark_distributions` (raw samples per metric, sex and age band, stored as `DOUBLE PRECISION[]`); a BEFORE UPDATE OR DELETE trigger makes distribution rows immutable, deliberately not on the versions table so COPPA user deletion (`created_by` ON DELETE SET NULL) still works; `_down` refuses while any row exists) is provisional: renumber at merge if another branch lands 0178 first (file, `_down`, test `migration-0178-benchmark-distributions`, tracking row, this line).
 ## Current State (2025-10-30)
 
 ### Overview

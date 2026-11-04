@@ -31,6 +31,7 @@ import {
   type InsertOAuthUser,
   securityEvents,
   type SecurityEvent,
+  benchmarkDistributions,
 } from "@shared/schema";
 import { parentAthleteLinks } from "@shared/schema/tables/coppa";
 import type { WellnessTrend } from "@shared/wellness-types";
@@ -5111,6 +5112,19 @@ export class DatabaseStorage implements IStorage {
     if (measurementCount.count > 0) {
       throw new Error(
         `Cannot delete metric ${code}: ${measurementCount.count} measurement(s) exist. ` +
+        `Disable the metric instead to hide it from new measurements.`
+      );
+    }
+
+    // Loaded reference distributions are immutable and block deletion (ON DELETE RESTRICT)
+    const [distributionCount] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(benchmarkDistributions)
+      .where(eq(benchmarkDistributions.metricCode, code));
+
+    if (Number(distributionCount.count) > 0) {
+      throw new Error(
+        `Cannot delete metric ${code}: ${distributionCount.count} benchmark distribution(s) exist. ` +
         `Disable the metric instead to hide it from new measurements.`
       );
     }

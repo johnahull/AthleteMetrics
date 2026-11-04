@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { log } from "./utils/logger.js";
+import { mountJsonParsers } from "./middleware/json-parsers";
 import { shutdownSecurityStore } from "./middleware/organization-type-security";
 import { shutdownAuditLogQueue } from "./middleware/organization-type-middleware";
 import { startWellnessDigestJob, stopWellnessDigestJob } from "./jobs/wellness-digest-job";
@@ -29,23 +30,7 @@ const app = express();
 // Trust proxy when running behind a proxy (like in Replit environment)
 app.set('trust proxy', 1);
 
-// PDF export routes (POST /api/reports/:id/pdf and POST /api/public/reports/:token/pdf)
-// accept large chart-image payloads and mount their own higher-limit JSON parser.
-// Skip the default 100kb global parser for them so it does not 413 before the
-// route-level parser runs. All other routes keep the small default limit.
-const defaultJsonParser = express.json();
-// Only the two known PDF-export endpoints get the large route-level parser.
-// Match them explicitly (prefix + `/pdf` suffix) rather than any path ending in
-// `/pdf`, so a future POST route ending in `/pdf` can't silently inherit the
-// 15 MB limit by skipping the 100kb default.
-const isLargePdfUpload = (req: Request) =>
-  req.method === 'POST' &&
-  req.path.endsWith('/pdf') &&
-  (req.path.startsWith('/api/reports/') || req.path.startsWith('/api/public/reports/'));
-app.use((req, res, next) =>
-  isLargePdfUpload(req) ? next() : defaultJsonParser(req, res, next),
-);
-app.use(express.urlencoded({ extended: false }));
+mountJsonParsers(app);
 
 // Cache database connection modules for performance
 let dbCache: any = null;
