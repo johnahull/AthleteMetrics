@@ -130,6 +130,7 @@ export function tierRangeLabels(
   const num = (v: number) => (duration ? formatMeasurement(v, format!) : decimals == null ? String(Math.round(v * 100) / 100) : v.toFixed(decimals));
   const u = unit && !duration ? ` ${unit}` : '';
   // a better tier holds this value as its opposite bound, so the boundary itself is not in this tier
+  // exact === is fine: bounds are copied from one cutoff or parsed from the same stored decimal, so equal values are identical doubles
   const ownedByBetter = (t: TierBounds, v: number, side: 'minValue' | 'maxValue') =>
     tiers.some((o) => o.tierOrder < t.tierOrder && o[side] === v);
   return tiers.map((t) => {
