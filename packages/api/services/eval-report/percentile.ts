@@ -1,8 +1,9 @@
 /** Smallest reference sample a percentile is reported from; below this the answer is null (AM-FEAT-024). */
 export const MIN_NORM_N = 30;
 
-/** Mid-rank percentile (0-100) of x in an ascending `sorted` sample: (below + 0.5 * equal) / n. */
+/** Mid-rank percentile (0-100; 0 for an empty sample) of x in an ascending `sorted` sample: (below + 0.5 * equal) / n. */
 export function midRankPercentile(sorted: number[], x: number): number {
+  if (sorted.length === 0) return 0; // no sample to rank against; avoids 0/0 = NaN
   const lowerBound = (target: number, strict: boolean) => {
     let lo = 0;
     let hi = sorted.length;

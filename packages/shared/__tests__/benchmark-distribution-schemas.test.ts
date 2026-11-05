@@ -15,6 +15,10 @@ describe("createBenchmarkDistributionSchema", () => {
     expect(ok([row()], { label: "" }).success).toBe(false);
     expect(ok([row({ extra: 1 })]).success).toBe(false);
   });
+  it("rejects control characters in source, accepts normal text", () => {
+    expect(ok([row()], { source: "bad\u0000source" }).success).toBe(false);
+    expect(ok([row()], { source: "Combine 2024, n=1,200" }).success).toBe(true);
+  });
   it("rejects bad sex, kind, ages, non-finite or empty values", () => {
     expect(ok([row({ sex: "x" })]).success).toBe(false);
     expect(ok([row({ kind: "quantiles" })]).success).toBe(false);
