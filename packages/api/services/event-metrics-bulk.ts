@@ -26,7 +26,12 @@ export interface BulkAddResult {
 }
 
 /** Throws EventMetricsFrozenError for a frozen event (also when every code would have been skipped). */
-export async function bulkAddEventMetrics(eventId: string, userId: string, requested: BulkAddItem[]): Promise<BulkAddResult> {
+export interface BulkAddOptions {
+  /** Runs inside the same transaction, after the insert and with the event row locked and known not frozen */
+  afterInsert?: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0]) => Promise<void>;
+}
+
+export async function bulkAddEventMetrics(eventId: string, userId: string, requested: BulkAddItem[], options: BulkAddOptions = {}): Promise<BulkAddResult> {
   const seen = new Set<string>();
   const items: BulkAddItem[] = [];
   for (const m of requested) {
@@ -71,6 +76,7 @@ export async function bulkAddEventMetrics(eventId: string, userId: string, reque
           .onConflictDoNothing({ target: [eventMetrics.eventId, eventMetrics.metricCode] })
           .returning({ code: eventMetrics.metricCode })
       : [];
+    await options.afterInsert?.(tx);
     const insertedCodes = new Set(inserted.map((r) => r.code));
     const added = toAdd.filter((m) => insertedCodes.has(m.metricCode)).map((m) => m.metricCode);
 

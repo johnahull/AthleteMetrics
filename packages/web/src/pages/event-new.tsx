@@ -72,7 +72,7 @@ export default function EventNew() {
     setSubmitting(true);
     try {
       // Extract selectedMetrics (saved after the event exists) from the event fields
-      const { selectedMetrics, ...formData } = data;
+      const { selectedMetrics, evalTemplateId, ...formData } = data;
 
       const status: EventStatus = isDraft ? "draft" : "published";
       const eventData = {
@@ -93,6 +93,7 @@ export default function EventNew() {
       // Then save the final metrics list (typed by hand and/or filled by a template) in ONE request, in list order
       let added = 0;
       const skipped: BulkAddEventMetricsResult["skipped"] = [];
+      let warning: string | undefined;
       if (selectedMetrics && selectedMetrics.length > 0) {
         const payload = selectedMetrics.map((metric, index) => ({
           metricCode: metric.code,
@@ -102,9 +103,10 @@ export default function EventNew() {
         }));
         for (let start = 0; start < payload.length; start += METRICS_BATCH_SIZE) {
           try {
-            const result = await addEventMetricsBulk(event.id, payload.slice(start, start + METRICS_BATCH_SIZE));
+            const result = await addEventMetricsBulk(event.id, payload.slice(start, start + METRICS_BATCH_SIZE), ...(evalTemplateId ? [evalTemplateId] : []));
             added += result.added.length;
             skipped.push(...result.skipped);
+            warning ??= result.warning;
           } catch (metricsError) {
             // The event exists: say so and why its tests were not (all) added, in the one toast, and go to the event
             const message = metricsError instanceof Error ? metricsError.message : "The tests could not be added.";
@@ -126,7 +128,7 @@ export default function EventNew() {
           isDraft
             ? "Your event has been saved as a draft."
             : `Your event has been ${added ? `created with ${added} ${added === 1 ? "metric" : "metrics"}` : "published"}.`
-        }${skippedNote}`,
+        }${skippedNote}${warning ? ` ${warning}` : ""}`,
       });
 
       // Navigate to the event detail page

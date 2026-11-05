@@ -477,6 +477,7 @@ describe('eval templates and org eval report settings', () => {
       const stripped = (before.metrics as Array<{ metricKey: string; displayOrder: number }>)
         .filter((m) => !OURS.includes(m.metricKey) && ![6, 28, 29].includes(m.displayOrder));
       try {
+        // A direct edit (as migrations do) publishes no revision: apply notices the stored tests differ and publishes one (AM-FEAT-024)
         await db.update(evalBatteryTemplates).set({ metrics: stripped as any }).where(eq(evalBatteryTemplates.id, globalId));
         await db.execute(sql.raw(fs.readFileSync(path.resolve(__dirname, '../../migrations/0156_add_rsi_105_and_single_leg_cmj_metrics.sql'), 'utf-8')));
         // 0156 creates all three codes on CI's DB: remove every one we created in afterAll
@@ -627,10 +628,11 @@ describe('eval templates and org eval report settings', () => {
       expect(res.status).toBe(200);
       expect(res.body.added).toEqual(['DASH_10YD']);
       expect(res.body.skipped.sort()).toEqual([DERIVED_CODE, INACTIVE_CODE].sort());
+      expect(res.body.templateRevision.revision).toBe(1);
       // ... and one the org's type does not offer
       const [t2] = await db.insert(evalBatteryTemplates).values({ organizationId: orgB, sport: 'SOCCER', name: `${PREFIX}-college`, metrics: [{ metricKey: COLLEGE_CODE, isRequired: true, displayOrder: 1 }] } as any).returning({ id: evalBatteryTemplates.id });
       const res2 = await as('coachB').post(`/api/events/${ev.id}/apply-eval-template`).send({ templateId: t2.id });
-      expect(res2.body).toEqual({ added: [], skipped: [COLLEGE_CODE], alreadyPresent: [] });
+      expect(res2.body).toEqual({ added: [], skipped: [COLLEGE_CODE], alreadyPresent: [], templateRevision: expect.objectContaining({ revision: 1 }) });
       const rows = await db.select().from(eventMetrics).where(eq(eventMetrics.eventId, ev.id));
       expect(rows.map((r) => r.metricCode)).toEqual(['DASH_10YD']);
     });
@@ -899,8 +901,9 @@ describe('eval templates and org eval report settings', () => {
       expect(await rowOf(id)).toBeUndefined();
     });
 
-    it('nothing stores a template id: editing or deleting a template leaves events created from it unchanged', async () => {
-      const fks = await db.execute(sql`SELECT conname FROM pg_constraint WHERE contype = 'f' AND confrelid = 'eval_battery_templates'::regclass`);
+    it('events keep copies of the tests: editing or deleting a template leaves events created from it unchanged', async () => {
+      // An event points at a template REVISION (AM-FEAT-024), never at the template row itself
+      const fks = await db.execute(sql`SELECT conname FROM pg_constraint WHERE contype = 'f' AND conrelid = 'events'::regclass AND confrelid = 'eval_battery_templates'::regclass`);
       expect((fks as any).rows ?? fks).toHaveLength(0);
 
       const id = (await post('coachB', orgB, { name: `${PREFIX}-frozen`, metrics })).body.id;
@@ -916,7 +919,9 @@ describe('eval templates and org eval report settings', () => {
       const changed = [{ metricKey: 'RSI_LEFT', isRequired: true, displayOrder: 1 }, { metricKey: 'CMJ_HOH', isRequired: true, displayOrder: 2, customLabel: 'Renamed' }];
       expect((await as('coachB').patch(`/api/eval-templates/${id}`).send({ name: `${PREFIX}-frozen-2`, metrics: changed })).status).toBe(200);
       expect(await snapshot()).toEqual(before);
-      expect((await as('coachB').delete(`/api/eval-templates/${id}`)).status).toBe(204);
+      // an event points at its revision, so a hard delete is refused (archive instead); the tests stay either way
+      expect((await as('coachB').delete(`/api/eval-templates/${id}`)).status).toBe(409);
+      expect((await as('coachB').post(`/api/eval-templates/${id}/archive`)).status).toBe(200);
       expect(await snapshot()).toEqual(before);
     });
   });

@@ -75,6 +75,8 @@ export interface EvalTemplate {
   sport: string;
   description?: string | null;
   metrics: EvalTemplateMetric[];
+  /** The number of the current revision (AM-FEAT-024); absent on a template nothing has published for yet */
+  currentRevision?: number | null;
 }
 
 /**

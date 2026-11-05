@@ -13,6 +13,7 @@ vi.mock('../../db', () => {
   chain.returning = () => Promise.resolve([]);
   // the archived-or-gone check after an empty update: the row is gone
   chain.select = () => chain;
+  chain.transaction = (fn: (tx: any) => unknown) => fn(chain);
   chain.from = () => chain;
   chain.then = (res: any, rej: any) => Promise.resolve([]).then(res, rej);
   return { db: chain };

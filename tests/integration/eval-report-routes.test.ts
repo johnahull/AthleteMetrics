@@ -14,7 +14,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
 import { loadEvalReportInputs } from '../../packages/api/services/eval-report-service';
 import { registerEventReportRoutes } from '../../packages/api/routes/event-report-routes';
-import { eventRegistrations, events, measurements, organizations, reports, siteBenchmarks, siteMetrics, userOrganizations, users } from '@shared/schema';
+import { evalBatteryTemplateRevisions, evalBatteryTemplates, eventRegistrations, events, measurements, organizations, reports, siteBenchmarks, siteMetrics, userOrganizations, users } from '@shared/schema';
 import { evalReportConfigSchema } from '@shared/eval-report-config';
 import { buildEvalReportPdf } from '../../packages/api/utils/eval-report-pdf';
 import { purgeTestRows } from '../helpers/purge-test-rows';
@@ -297,6 +297,29 @@ describe('eval report routes', () => {
     expect(config.junk).toBeUndefined();
     expect(evalReportConfigSchema.safeParse(config).success).toBe(true);
     expect(keysAndText(config)).toEqual([]);
+  });
+
+  it('freezes the template revision the event applied (AM-FEAT-024), and nothing for an event that applied none', async () => {
+    const none = await preview('coachA', eventA);
+    expect(none.status).toBe(200);
+    expect(none.body.model.selection.template).toBeUndefined();
+
+    const [tpl] = await db.insert(evalBatteryTemplates).values({ organizationId: orgA, sport: 'ALL', name: `Frozen ${suffix}`, metrics: [{ metricKey: 'DASH_10', isRequired: true, displayOrder: 1 }] } as any).returning();
+    const [rev] = await db.insert(evalBatteryTemplateRevisions).values({ templateId: tpl.id, revision: 3, metrics: tpl.metrics } as any).returning();
+    await db.update(events).set({ evalTemplateRevisionId: rev.id }).where(eq(events.id, eventA));
+    try {
+      const res = await preview('coachA', eventA);
+      expect(res.body.model.selection.template).toEqual({ templateId: tpl.id, revision: 3, name: `Frozen ${suffix}` });
+      const saved = await save('coachA', eventA, u.athlete.id);
+      expect(saved.status).toBe(201);
+      const [row] = await db.select().from(reports).where(eq(reports.id, saved.body.report.id));
+      const config = row.config as any;
+      expect(config.model.selection.template).toEqual({ templateId: tpl.id, revision: 3, name: `Frozen ${suffix}` });
+      expect(evalReportConfigSchema.safeParse(config).success).toBe(true);
+    } finally {
+      await db.update(events).set({ evalTemplateRevisionId: null }).where(eq(events.id, eventA));
+      await db.delete(evalBatteryTemplates).where(eq(evalBatteryTemplates.id, tpl.id));
+    }
   });
 
   it('with the age-group comparison off, preview and save carry no comparison, and the saved model renders a PDF', async () => {
