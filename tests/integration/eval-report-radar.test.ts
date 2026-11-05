@@ -145,7 +145,7 @@ describe('eval report radar', () => {
   });
 
   afterAll(async () => {
-    // On DBs with the 0178 trigger distribution rows cannot be deleted; only that error is tolerated
+    // On DBs with the 0179 trigger distribution rows cannot be deleted; only that error is tolerated
     const tolerate = (e: any) => { if (!/immutable|violates foreign key/.test(String(e?.message) + String(e?.cause?.message))) throw e; };
     const versionIds = (await db.select({ id: benchmarkDistributionVersions.id }).from(benchmarkDistributionVersions).where(like(benchmarkDistributionVersions.label, `evalradar-${suffix}%`))).map((v) => v.id);
     if (versionIds.length) await db.delete(benchmarkDistributions).where(inArray(benchmarkDistributions.versionId, versionIds)).catch(tolerate);
