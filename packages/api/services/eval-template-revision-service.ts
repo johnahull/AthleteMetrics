@@ -17,6 +17,13 @@ type Executor = Pick<typeof db, "select">;
 const metricsKey = (list: EvalTemplateMetric[]) => JSON.stringify(list.map((m) => [m.metricKey, m.isRequired, m.displayOrder, m.customLabel ?? null]));
 export const sameMetrics = (a: EvalTemplateMetric[], b: EvalTemplateMetric[]) => metricsKey(a) === metricsKey(b);
 
+/** A 404: the template vanished (deleted between the authorization check and the write). */
+export class TemplateNotFoundError extends Error {
+  constructor() {
+    super("Template not found");
+  }
+}
+
 /** A 409: the metric is one the applied Foundation / Performance preset requires. */
 export class RequiredMetricError extends Error {}
 
@@ -57,7 +64,8 @@ export async function currentRevisionOf(template: EvalBatteryTemplate, userId: s
   return db.transaction(async (tx) => {
     // Re-read under the lock: another request may have published meanwhile
     const [locked] = await tx.select().from(evalBatteryTemplates).where(eq(evalBatteryTemplates.id, template.id)).for("update");
-    const current = locked ?? template;
+    if (!locked) throw new TemplateNotFoundError();
+    const current = locked;
     return (await matching(tx, current)) ?? publishRevision(tx, template.id, current.metrics, userId);
   });
 }
@@ -67,6 +75,10 @@ export async function currentRevisionOf(template: EvalBatteryTemplate, userId: s
  * non-preset template (a coach adding their own battery on top of Foundation keeps the Foundation lock and label).
  */
 export async function linkEventRevision(tx: Tx, eventId: string, revisionId: string, isPreset: boolean): Promise<void> {
+  // Shared lock on the template row: deleteTemplate takes it FOR UPDATE, so the two serialize. A template deleted
+  // meanwhile (its revisions went with it) fails the whole transaction cleanly instead of an FK error or a lost link.
+  const locked = await tx.execute(sql`SELECT t.id FROM eval_battery_templates t JOIN eval_battery_template_revisions r ON r.template_id = t.id WHERE r.id = ${revisionId} FOR SHARE OF t`);
+  if (((locked as unknown as { rows?: unknown[] }).rows ?? (locked as unknown as unknown[])).length === 0) throw new TemplateNotFoundError();
   const notPresetLinked = sql`(${events.evalTemplateRevisionId} IS NULL OR ${events.evalTemplateRevisionId} NOT IN (
     SELECT r.id FROM eval_battery_template_revisions r JOIN eval_battery_templates t ON t.id = r.template_id WHERE t.preset_key IS NOT NULL))`;
   await tx

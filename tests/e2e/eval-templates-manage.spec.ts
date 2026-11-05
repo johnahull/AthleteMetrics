@@ -141,7 +141,7 @@ test.describe('Manage eval templates', () => {
     await openTemplatePicker(page);
     await expect(page.getByRole('option', { name: RENAMED })).toBeVisible();
     await page.getByRole('option', { name: RENAMED }).click();
-    await expect(page.getByTestId('eval-template-revision')).toContainText(`${RENAMED}, revision 2`);
+    await expect(page.getByTestId('eval-template-revision')).toContainText(`Applying ${RENAMED}, currently at revision 2`);
   });
 
   test('the New event picker offers the Foundation and Performance presets and shows the revision', async ({ page }) => {
@@ -153,7 +153,7 @@ test.describe('Manage eval templates', () => {
     await expect(page.getByRole('option', { name: 'Foundation' })).toBeVisible();
     await expect(page.getByRole('option', { name: 'Performance' })).toBeVisible();
     await page.getByRole('option', { name: 'Foundation' }).click();
-    await expect(page.getByTestId('eval-template-revision')).toContainText('Foundation, revision');
+    await expect(page.getByTestId('eval-template-revision')).toContainText('Applying Foundation, currently at revision');
   });
 
   test('deletes an organization template after confirming', async ({ page }) => {

@@ -17,6 +17,7 @@ import { requireAuth } from "../middleware";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { storage } from "../storage";
 import { bulkAddForTemplate, getVisibleTemplate } from "../services/eval-template-service";
+import { TemplateNotFoundError } from "../services/eval-template-revision-service";
 import { assertMetricRemovable, RequiredMetricError } from "../services/eval-template-revision-service";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 
@@ -261,6 +262,9 @@ export function registerEventMetricsRoutes(app: Express) {
         }
         if (error instanceof EventNotFoundError) {
           return res.status(404).json({ error: "Event not found" });
+        }
+        if (error instanceof TemplateNotFoundError) {
+          return res.status(404).json({ error: error.message });
         }
         console.error("Error bulk adding metrics to event:", error);
         return res.status(500).json({ error: "Failed to add metrics to event" });

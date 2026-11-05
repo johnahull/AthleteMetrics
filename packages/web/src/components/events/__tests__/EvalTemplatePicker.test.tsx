@@ -115,7 +115,7 @@ describe("EvalTemplatePicker", () => {
     render(<Host />);
     expect(screen.queryByTestId("eval-template-revision")).not.toBeInTheDocument();
     await pick("Foundation");
-    expect(await screen.findByTestId("eval-template-revision")).toHaveTextContent("Foundation, revision 2");
+    expect(await screen.findByTestId("eval-template-revision")).toHaveTextContent("Applying Foundation, currently at revision 2");
   });
 
   it("choosing a template fills the list with its required tests, in order", async () => {

@@ -103,7 +103,7 @@ export default function EventNew() {
         }));
         for (let start = 0; start < payload.length; start += METRICS_BATCH_SIZE) {
           try {
-            const result = await addEventMetricsBulk(event.id, payload.slice(start, start + METRICS_BATCH_SIZE), ...(evalTemplateId ? [evalTemplateId] : []));
+            const result = await addEventMetricsBulk(event.id, payload.slice(start, start + METRICS_BATCH_SIZE), ...(start === 0 && evalTemplateId ? [evalTemplateId] : []));
             added += result.added.length;
             skipped.push(...result.skipped);
             warning ??= result.warning;
