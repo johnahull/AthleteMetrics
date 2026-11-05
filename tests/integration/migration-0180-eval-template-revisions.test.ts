@@ -62,8 +62,8 @@ describe('Migration 0180: static analysis', () => {
     expect(UP).toMatch(/BEFORE UPDATE OR DELETE ON eval_battery_template_revisions/);
     expect(UP).not.toMatch(/created_by VARCHAR\(36\) REFERENCES/);
   });
-  it('documents that the trigger does not cover TRUNCATE or session_replication_role=replica', () => {
-    expect(UP).toMatch(/TRUNCATE/);
+  it('documents that the trigger does not cover a bulk table wipe or session_replication_role=replica', () => {
+    expect(UP).toMatch(/bulk wipe of the table/);
     expect(UP).toMatch(/session_replication_role/);
   });
   it('down refuses while history exists, and forgets the tracking row', () => {
