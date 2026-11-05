@@ -17,7 +17,7 @@ import { EventMetricsFrozenError } from "./event-metrics-service";
 import { bulkAddEventMetrics, type BulkAddItem } from "./event-metrics-bulk";
 import { fetchEligibilityRows, ineligibleReason, type IneligibleReason } from "./event-metric-eligibility";
 import { keyForCode, resolveTemplateKey } from "./eval-report/template-keys";
-import { currentRevisionOf, linkEventRevision, publishRevision, sameMetrics } from "./eval-template-revision-service";
+import { currentRevisionOf, linkEventRevision, publishRevision, sameMetrics, TemplateNotFoundError } from "./eval-template-revision-service";
 import { isMqiMetricCode, isMqiRequiredPreset } from "./eval-report/mqi-required";
 
 export type Actor = { id: string; isSiteAdmin?: boolean; role?: string };
@@ -25,12 +25,8 @@ export type Actor = { id: string; isSiteAdmin?: boolean; role?: string };
 export class TemplateConflictError extends Error {}
 export class EventFrozenError extends Error {}
 export class EmptyEventError extends Error {}
-/** A 404: the template vanished between the authorization check and the write. */
-export class TemplateNotFoundError extends Error {
-  constructor() {
-    super("Template not found");
-  }
-}
+// Defined with the revision service (which also throws it); re-exported so existing imports keep working
+export { TemplateNotFoundError };
 /** A 409: archived templates are read-only. */
 export class TemplateArchivedError extends Error {
   constructor() {
@@ -268,14 +264,21 @@ export async function archiveTemplate(id: string) {
 
 /** Hard delete. Events keep their copied tests (nothing stores a template id); the audit row keeps the full template. */
 export async function deleteTemplate(id: string, userId: string) {
-  const [linked] = await db
-    .select({ id: events.id })
-    .from(events)
-    .innerJoin(evalBatteryTemplateRevisions, eq(evalBatteryTemplateRevisions.id, events.evalTemplateRevisionId))
-    .where(eq(evalBatteryTemplateRevisions.templateId, id))
-    .limit(1);
-  if (linked) throw new TemplateInUseError();
-  const [row] = await db.delete(evalBatteryTemplates).where(eq(evalBatteryTemplates.id, id)).returning();
+  // One transaction with the template row locked: applying a template takes a shared lock on the same row (linkEventRevision),
+  // so a link either lands before this check (and is seen) or waits for the delete (and then fails cleanly).
+  const row = await db.transaction(async (tx) => {
+    const [locked] = await tx.select({ id: evalBatteryTemplates.id }).from(evalBatteryTemplates).where(eq(evalBatteryTemplates.id, id)).for("update");
+    if (!locked) return undefined;
+    const [linked] = await tx
+      .select({ id: events.id })
+      .from(events)
+      .innerJoin(evalBatteryTemplateRevisions, eq(evalBatteryTemplateRevisions.id, events.evalTemplateRevisionId))
+      .where(eq(evalBatteryTemplateRevisions.templateId, id))
+      .limit(1);
+    if (linked) throw new TemplateInUseError();
+    const [deleted] = await tx.delete(evalBatteryTemplates).where(eq(evalBatteryTemplates.id, id)).returning();
+    return deleted;
+  });
   if (!row) return;
   await writeTemplateAudit(userId, "eval_template_deleted", row.id, {
     name: row.name,

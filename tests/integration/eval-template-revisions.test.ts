@@ -24,6 +24,8 @@ vi.mock('express-rate-limit', async (importOriginal) => {
 });
 
 import { registerRoutes } from '../../packages/api/routes';
+import { deleteTemplate, TemplateInUseError, TemplateNotFoundError } from '../../packages/api/services/eval-template-service';
+import { currentRevisionOf, linkEventRevision } from '../../packages/api/services/eval-template-revision-service';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -272,6 +274,53 @@ describe('eval template revisions and MQI required', () => {
       expect(res2.status).toBe(200);
       expect(res2.body.warning).toBeTruthy();
       expect(res2.body.added).toEqual(['DASH_10YD']);
+    });
+  });
+
+  describe('delete and apply serialize on the template row', () => {
+    it('a delete that races with a link waits for it, then refuses with TemplateInUseError; the link survives', async () => {
+      const made = await api.post(`/api/organizations/${orgA}/eval-templates`).send({ name: `${PREFIX}-race`, sport: 'SOCCER', metrics });
+      const tpl = made.body.id as string;
+      const [rev] = await revisionsOf(tpl);
+      const ev = await newEvent('race');
+      let deletion: Promise<unknown> | undefined;
+      let deleteSettledEarly = false;
+      await db.transaction(async (tx) => {
+        await linkEventRevision(tx, ev, rev.id, false);
+        // the link transaction is still open: the delete must wait for the template row, not slip past the check
+        deletion = deleteTemplate(tpl, coach.id).then(() => 'deleted', (e) => e);
+        deletion.then(() => { deleteSettledEarly = true; });
+        await new Promise((r) => setTimeout(r, 400));
+      });
+      expect(deleteSettledEarly).toBe(false);
+      expect(await deletion).toBeInstanceOf(TemplateInUseError);
+      expect(await eventRevisionId(ev)).toBe(rev.id);
+      expect(await revisionsOf(tpl)).toHaveLength(1);
+    });
+
+    it('a link that loses the race to a delete fails cleanly with TemplateNotFoundError', async () => {
+      const made = await api.post(`/api/organizations/${orgA}/eval-templates`).send({ name: `${PREFIX}-race2`, sport: 'SOCCER', metrics });
+      const tpl = made.body.id as string;
+      const [rev] = await revisionsOf(tpl);
+      const ev = await newEvent('race2');
+      await deleteTemplate(tpl, coach.id);
+      await expect(db.transaction((tx) => linkEventRevision(tx, ev, rev.id, false))).rejects.toBeInstanceOf(TemplateNotFoundError);
+      expect(await eventRevisionId(ev)).toBeNull();
+    });
+
+    it('currentRevisionOf throws TemplateNotFoundError when the template is gone, not an FK error', async () => {
+      const ghost: any = { id: '00000000-0000-4000-8000-000000000001', currentRevisionId: null, metrics, organizationId: orgA };
+      await expect(currentRevisionOf(ghost, coach.id)).rejects.toBeInstanceOf(TemplateNotFoundError);
+    });
+
+    it('a later plain batch leaves the link the first batch recorded', async () => {
+      const made = await api.post(`/api/organizations/${orgA}/eval-templates`).send({ name: `${PREFIX}-batches`, sport: 'SOCCER', metrics });
+      const ev = await newEvent('batches');
+      await api.post(`/api/events/${ev}/metrics/bulk`).send({ evalTemplateId: made.body.id, metrics: [{ metricCode: 'DASH_10YD', displayOrder: 0 }] }).expect(200);
+      const link = await eventRevisionId(ev);
+      expect(link).not.toBeNull();
+      await api.post(`/api/events/${ev}/metrics/bulk`).send({ metrics: [{ metricCode: 'FLY10_TIME', displayOrder: 1 }] }).expect(200);
+      expect(await eventRevisionId(ev)).toBe(link);
     });
   });
 

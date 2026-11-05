@@ -76,6 +76,7 @@ export async function bulkAddEventMetrics(eventId: string, userId: string, reque
           .onConflictDoNothing({ target: [eventMetrics.eventId, eventMetrics.metricCode] })
           .returning({ code: eventMetrics.metricCode })
       : [];
+    // Fires even when nothing was inserted (every code already present or skipped): the caller's link is still recorded
     await options.afterInsert?.(tx);
     const insertedCodes = new Set(inserted.map((r) => r.code));
     const added = toAdd.filter((m) => insertedCodes.has(m.metricCode)).map((m) => m.metricCode);
