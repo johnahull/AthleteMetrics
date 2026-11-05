@@ -16,6 +16,8 @@ import { orgTypeOf } from "../services/eval-template-service";
 import { requireAuth } from "../middleware";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { storage } from "../storage";
+import { bulkAddForTemplate, getVisibleTemplate } from "../services/eval-template-service";
+import { assertMetricRemovable, RequiredMetricError } from "../services/eval-template-revision-service";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 
 // Rate limiting for event metrics endpoints
@@ -58,6 +60,8 @@ const bulkAddSchema = z.object({
       })
     )
     .max(100),
+  /** The eval template the coach picked on the new-event form; its current revision is recorded on the event */
+  evalTemplateId: z.string().min(1).max(36).optional(),
 });
 
 /**
@@ -239,6 +243,17 @@ export function registerEventMetricsRoutes(app: Express) {
           return res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
         }
 
+        if (parsed.data.evalTemplateId) {
+          const template = await getVisibleTemplate(user, parsed.data.evalTemplateId);
+          // A template archived, deleted or not usable for this event since the coach picked it must not fail the whole
+          // list: add the tests plainly, link nothing, and say so
+          const usable = template && !template.archivedAt && (!template.organizationId || template.organizationId === event.organizationId);
+          if (usable) return res.json(await bulkAddForTemplate(eventId, user.id, template, parsed.data.metrics));
+          return res.json({
+            ...(await bulkAddEventMetrics(eventId, user.id, parsed.data.metrics)),
+            warning: "The template is no longer available, so the tests were added without it.",
+          });
+        }
         return res.json(await bulkAddEventMetrics(eventId, user.id, parsed.data.metrics));
       } catch (error) {
         if (error instanceof EventMetricsFrozenError) {
@@ -283,6 +298,9 @@ export function registerEventMetricsRoutes(app: Express) {
           return res.status(403).json({ error: "Access denied" });
         }
 
+        // MQI is required in the Foundation / Performance presets: it can not be made optional either
+        if (isRequired === false) await assertMetricRemovable(eventId, code);
+
         const updates: UpdateMetricOptions = {
           displayOrder,
           isRequired,
@@ -298,6 +316,9 @@ export function registerEventMetricsRoutes(app: Express) {
 
         return res.json(updated);
       } catch (error) {
+        if (error instanceof RequiredMetricError) {
+          return res.status(409).json({ error: error.message });
+        }
         console.error("Error updating event metric:", error);
 
         // Return 400 for business logic errors
@@ -346,10 +367,14 @@ export function registerEventMetricsRoutes(app: Express) {
           return res.status(403).json({ error: "Access denied" });
         }
 
+        await assertMetricRemovable(eventId, code);
         await eventMetricsService.removeMetricFromEvent(eventId, code, user.id);
 
         return res.status(204).send();
       } catch (error) {
+        if (error instanceof RequiredMetricError) {
+          return res.status(409).json({ error: error.message });
+        }
         console.error("Error removing metric from event:", error);
 
         // Return 400 for business logic errors

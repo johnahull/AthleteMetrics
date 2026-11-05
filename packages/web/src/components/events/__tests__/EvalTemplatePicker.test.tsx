@@ -105,6 +105,19 @@ describe("EvalTemplatePicker", () => {
     expect(screen.getByRole("option", { name: "No template" })).toBeInTheDocument();
   });
 
+  it("shows which revision of the chosen template the event will record, for a preset like Foundation", async () => {
+    mockUseEvalTemplates.mockReturnValue({
+      data: [...templates, { id: "t-found", organizationId: null, name: "Foundation", sport: "ALL", metrics: [{ metricKey: "DASH_10", isRequired: true, displayOrder: 0 }], currentRevision: 2 }],
+      isLoading: false,
+      isError: false,
+    });
+    resolvedByTemplate["t-found"] = { template: { id: "t-found", name: "Foundation" }, metrics: [r("DASH_10", "DASH_10YD", 0, true)] };
+    render(<Host />);
+    expect(screen.queryByTestId("eval-template-revision")).not.toBeInTheDocument();
+    await pick("Foundation");
+    expect(await screen.findByTestId("eval-template-revision")).toHaveTextContent("Foundation, revision 2");
+  });
+
   it("choosing a template fills the list with its required tests, in order", async () => {
     render(<Host />);
     await pick("Soccer eval (yards)");

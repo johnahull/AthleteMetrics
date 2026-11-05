@@ -4,7 +4,18 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('../../db', () => ({ db: { select: () => ({ from: () => ({ where: () => Promise.resolve([{ orgType: 'club' }]) }) }) } }));
+vi.mock('../../db', () => ({
+  db: {
+    select: () => ({ from: () => ({ where: () => Promise.resolve([{ orgType: 'club' }]) }) }),
+    // the event's revision link (AM-FEAT-024)
+    update: () => ({ set: () => ({ where: () => Promise.resolve() }) }),
+  },
+}));
+// The revision is published by its own service (integration-tested); here it is the template's own tests
+vi.mock('../eval-template-revision-service', () => ({
+  currentRevisionOf: async (t: any) => ({ id: 'rev-1', revision: 1, metrics: t.metrics }),
+  publishRevision: vi.fn(),
+}));
 vi.mock('../../storage', () => ({ storage: {} }));
 vi.mock('../event-metrics-service', () => ({ EventMetricsFrozenError: class extends Error {} }));
 
@@ -40,7 +51,7 @@ describe('applyTemplateToEvent: concurrent add', () => {
     rows.set(...row(a)); rows.set(...row(b));
     bulkAddEventMetrics.mockResolvedValue({ added: [a], alreadyPresent: [b], skipped: [] });
     const r = await applyTemplateToEvent('ev', 'u', template, 'org');
-    expect(r).toEqual({ added: [a], alreadyPresent: [b], skipped: [] });
+    expect(r).toEqual({ added: [a], alreadyPresent: [b], skipped: [], templateRevision: { id: 'rev-1', revision: 1 } });
   });
 
   it('skips a template metric that is inactive, derived or not offered to the org type, reporting the key', async () => {
