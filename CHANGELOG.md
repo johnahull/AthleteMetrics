@@ -7,10 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-11-05
+
+### Added
+- Age-group hands-on-hips CMJ tiers for `JUMP_CMJ_HOH` per sex (Elite / Advanced / Good / Average for MS 11-13, HS 14-18, College 19-22, Pro 23+), from OVR Performance normative data, with two template sets, enabled for every organization. Values are provisional compiled norms. Migration `0178` (#732)
+
 ### Fixed
 - Tier bar marker lands in the matched tier for single-cutoff tiers (for example HS boys 40yd, which store one `<=` cutoff per tier and no min/max). Before, the marker always sat in the best tier. New reports carry real bands for these tiers; old snapshots still place the marker by the matched tier.
 - Team Benchmark Standing: the team average on single-cutoff tiers is graded by its band instead of always showing the best tier, and the athlete dots are placed by band.
-- Tier bars print each tier's boundaries under the bar (for example `≤ 4.6 s`, `4.6–4.8 s`, `> 5.2 s`; a shared boundary belongs to the better tier). The PDF "Benchmark Tier Reference" table prints the same ranges in ASCII (`<=`, `-`) with the unit or m:ss; tiers with no bounds still print `-`.
+- Tier bars print each tier's boundaries under the bar (for example `≤ 4.6 s`, `4.6–4.8 s`, `> 5.2 s`; a shared boundary belongs to the better tier). The PDF "Benchmark Tier Reference" table prints the same ranges in ASCII (`<=`, `-`) with the unit or m:ss; tiers with no bounds still print `-`. (#731)
+- `GET /api/analytics/benchmark-tiers` picks the tier group for the athlete's sex and age instead of the lowest display order group. Behavior change for existing groups: male and unknown-sex athletes no longer get a comparison on female-only metrics (`RSI_L`, `RSI_R`, `RSI_ASYM`, `AGILITY_505_M_LSI`, `AGILITY_505_YD_LSI`), female and unknown-sex athletes lose it on `DASH_40YD`, and athletes outside a group's age bounds get none. With no birth date the age check is skipped (#732)
+
+### Deployment notes
+- Migration `0178` is new. Apply with `npm run db:migrate:manual`. It inserts 32 `cmjhoh-*` tier rows, 2 template sets and enablement rows for every organization; a `_down` script removes them.
+- Known limits: reports saved before 0.36.0 keep unlabeled tiers (the marker is still correct); the trend chart `currentTierName` puts a value exactly on a cutoff in the worse tier; the benchmark-tiers route still ignores `sport`.
 
 ## [0.35.1] - 2026-11-04
 
