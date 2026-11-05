@@ -22,7 +22,7 @@
 -- saved reports stay readable because they freeze {templateId, revision, name} themselves.
 --
 -- Limit of the trigger: it is a row-level BEFORE UPDATE OR DELETE trigger. It does NOT cover a bulk emptying of the table
--- (TRUNCATE) nor a session running with session_replication_role = replica, which skip row triggers. Only a superuser
+-- (a bulk wipe of the table) nor a session running with session_replication_role = replica, which skip row triggers. Only a superuser
 -- or table owner doing maintenance can do either; nothing in the application does.
 --
 -- Presets are identified by eval_battery_templates.preset_key ('foundation', 'performance'), a stable key that a rename,
