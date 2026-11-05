@@ -203,3 +203,46 @@ describe('TierProgressChart: duration (mm:ss) metric', () => {
     expect(screen.getByText(/You: 6:42\.5 · Varsity · 0:04\.2 to Elite/)).toBeInTheDocument();
   });
 });
+
+describe('TierProgressChart: tier boundary labels', () => {
+  const labels = () => Array.from(document.querySelectorAll('[data-report-chart] [data-testid="tier-range-label"]')).map((e) => e.textContent);
+  const dash40: BenchmarkComparison = {
+    ...comparison,
+    athleteValue: 5.32,
+    tierName: 'Below Average',
+    tierOrder: 5,
+    allTiers: [
+      { tierName: 'Elite', tierColor: 'gray', tierOrder: 1, minValue: null, maxValue: 4.6 },
+      { tierName: 'Excellent', tierColor: 'gray', tierOrder: 2, minValue: 4.6, maxValue: 4.8 },
+      { tierName: 'Above Average', tierColor: 'gray', tierOrder: 3, minValue: 4.8, maxValue: 5.0 },
+      { tierName: 'Average', tierColor: 'gray', tierOrder: 4, minValue: 5.0, maxValue: 5.2 },
+      { tierName: 'Below Average', tierColor: 'gray', tierOrder: 5, minValue: 5.2, maxValue: null },
+    ],
+  };
+
+  it('labels each segment worst->best, inside the captured chart element', () => {
+    render(<TierProgressChart label="40 Yard Dash" metricCode="DASH_40YD" comparison={dash40} unit="s" />);
+    expect(labels()).toEqual(['> 5.2 s', '5–5.2 s', '4.8–5 s', '4.6–4.8 s', '≤ 4.6 s']);
+  });
+
+  it('prints no labels for old snapshots whose tiers have no bounds', () => {
+    const old = { ...dash40, allTiers: dash40.allTiers!.map((t) => ({ ...t, minValue: null, maxValue: null })) };
+    render(<TierProgressChart label="40 Yard Dash" metricCode="DASH_40YD" comparison={old} unit="s" />);
+    expect(labels().filter(Boolean)).toEqual([]);
+  });
+
+  it('prints m:ss labels for a duration metric', () => {
+    const format = { unit: 's', displayFormat: 'duration' as const, decimalPrecision: 0 };
+    const mile: BenchmarkComparison = {
+      ...comparison,
+      athleteValue: 320,
+      allTiers: [
+        { tierName: 'JV', tierColor: 'gray', tierOrder: 3, minValue: 330, maxValue: null },
+        { tierName: 'Varsity', tierColor: 'gray', tierOrder: 2, minValue: 300, maxValue: 330 },
+        { tierName: 'Elite', tierColor: 'gray', tierOrder: 1, minValue: null, maxValue: 300 },
+      ],
+    };
+    render(<TierProgressChart label="Mile" metricCode="MILE" comparison={mile} unit="s" format={format} />);
+    expect(labels()).toEqual(['> 5:30', '5:00–5:30', '≤ 5:00']);
+  });
+});

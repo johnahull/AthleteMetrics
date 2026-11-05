@@ -4,6 +4,7 @@ import { formatMeasurement, type MeasurementFormat } from '@shared/duration-form
 import { tierSegments, athletePositionPct, athletePositionPctForValue, nextTierCaption } from './tier-progress-utils';
 import { generateDeterministicJitter } from './utils/boxPlotStatistics';
 import { resolveTierFill } from '@shared/tier-colors';
+import { tierRangeLabels } from '@shared/benchmark-utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { AthleteMarkerValue } from './BenchmarkStandingBar';
 
@@ -36,6 +37,7 @@ export function TierProgressChart({ label, metricCode, comparison, unit, format,
   if (segs.length === 0) return null;
   const pos = athletePositionPct(comparison);
   const caption = nextTierCaption(comparison, unit, format);
+  const rangeLabels = tierRangeLabels(segs, { unit, format });
   const durationFormat = format?.displayFormat === 'duration' ? format : undefined;
   // m:ss values carry no unit
   const unitSuffix = unit && !durationFormat ? ` ${unit}` : '';
@@ -112,6 +114,15 @@ export function TierProgressChart({ label, metricCode, comparison, unit, format,
             ▼
           </div>
         </div>
+        {rangeLabels.some(Boolean) && (
+          <div className="mt-0.5 flex w-full">
+            {segs.map((t, i) => (
+              <div key={t.tierName} data-testid="tier-range-label" className="flex-1 text-center text-[10px] leading-tight text-slate-700">
+                {rangeLabels[i]}
+              </div>
+            ))}
+          </div>
+        )}
         <div className="mt-1 text-xs text-muted-foreground">
           {primaryLabel}: {primaryVal}{unitSuffix} · {comparison.tierName} · {caption}
         </div>

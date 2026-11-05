@@ -98,10 +98,9 @@ describe('individual PDF benchmark tables', () => {
     }
   });
 
-  it('prints open tier bounds as >= / <=', async () => {
+  it('prints open tier bounds with 2 decimals; a boundary shared with the better tier is strict', async () => {
     const text = allText(await generatePDF(report, individual()));
-    expect(text).toContain('<= 4.30');
-    expect(text).toContain('>= 4.30');
+    expect(text.filter((t) => t.includes('4.30'))).toEqual(['<= 4.30 s', '> 4.30 s', '<= 4.30 ft', '> 4.30 ft']);
   });
 });
 

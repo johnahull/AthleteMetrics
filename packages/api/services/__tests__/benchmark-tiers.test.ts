@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateTierBenchmark, selectTierGroup, type SourcedTierRow } from '../benchmark-tiers';
+import {
+  evaluateTierBenchmark,
+  filterTierRowsForAthlete,
+  selectTierGroup,
+  type SourcedTierRow,
+} from '../benchmark-tiers';
 
 const tiers = [
   { tierName: 'Elite', tierColor: '#fbbf24', tierOrder: 1, minValue: '28', maxValue: '40', name: 'VJ Elite' },
@@ -8,6 +13,33 @@ const tiers = [
 ];
 
 describe('evaluateTierBenchmark', () => {
+  describe('single-cutoff lte tiers (HS boys 40yd, migration 0171)', () => {
+    const cut = (tierName: string, tierOrder: number, benchmarkValue: string) =>
+      ({ tierName, tierColor: 'gray', tierOrder, minValue: null, maxValue: null, benchmarkValue, comparisonOperator: 'lte', name: `40 - ${tierName}` });
+    const dash40 = [
+      cut('Elite', 1, '4.60'), cut('Excellent', 2, '4.80'), cut('Above Average', 3, '5.00'), cut('Average', 4, '5.20'), cut('Below Average', 5, '5.50'),
+    ];
+
+    it('matches Below Average and emits contiguous bands in allTiers', () => {
+      const c = evaluateTierBenchmark(5.32, true, dash40)!;
+      expect(c.tierName).toBe('Below Average');
+      expect(c.distanceToNextTier).toBeCloseTo(0.12, 5);
+      expect(c.allTiers!.map((t) => [t.tierName, t.minValue, t.maxValue])).toEqual([
+        ['Elite', null, 4.6],
+        ['Excellent', 4.6, 4.8],
+        ['Above Average', 4.8, 5.0],
+        ['Average', 5.0, 5.2],
+        ['Below Average', 5.2, null],
+      ]);
+      // TierInfo shape only: no matcher fields leak into the snapshot
+      expect(Object.keys(c.allTiers![0]).sort()).toEqual(['maxValue', 'minValue', 'tierColor', 'tierName', 'tierOrder']);
+    });
+
+    it('grades slower than the worst cutoff as the worst tier', () => {
+      expect(evaluateTierBenchmark(5.6, true, dash40)!.tierName).toBe('Below Average');
+    });
+  });
+
   it('matches the tier a higher-is-better value falls into and distance to next', () => {
     const c = evaluateTierBenchmark(25.5, false, tiers)!;
     expect(c.tierName).toBe('Varsity');
@@ -176,5 +208,38 @@ describe('selectTierGroup', () => {
     ];
     const result = selectTierGroup(rows);
     expect(result.map((t) => t.tierName)).toEqual(['Cust1', 'Cust2']);
+  });
+});
+
+describe('filterTierRowsForAthlete', () => {
+  const row = (tierGroupId: string, gender: string | null, ageMin: number | null, ageMax: number | null, displayOrder: number) =>
+    ({ tierName: tierGroupId, tierOrder: 1, _source: 'site', tierGroupId, displayOrder, gender, ageMin, ageMax });
+  const rows = [
+    row('m-ms', 'Male', 11, 13, 1),
+    row('m-hs', 'Male', 14, 18, 2),
+    row('m-pro', 'Male', 23, null, 4),
+    row('f-hs', 'Female', 14, 18, 101),
+    row('any', null, null, null, 500),
+  ];
+  const ids = (r: typeof rows) => r.map((x) => x.tierGroupId);
+
+  it('keeps only rows for the athlete sex and age (open age_max matches any older age)', () => {
+    expect(ids(filterTierRowsForAthlete(rows, { gender: 'Female', age: 16 }))).toEqual(['f-hs', 'any']);
+    expect(ids(filterTierRowsForAthlete(rows, { gender: 'Male', age: 30 }))).toEqual(['m-pro', 'any']);
+    expect(ids(filterTierRowsForAthlete(rows, { gender: 'Male', age: 13 }))).toEqual(['m-ms', 'any']);
+  });
+
+  it('age bounds are inclusive and 0 is a real bound', () => {
+    expect(ids(filterTierRowsForAthlete([row('z', null, 0, 0, 1)], { gender: 'Male', age: 0 }))).toEqual(['z']);
+    expect(ids(filterTierRowsForAthlete([row('z', null, 0, 0, 1)], { gender: 'Male', age: 1 }))).toEqual([]);
+  });
+
+  it('unknown age skips the age check; unknown sex drops sex-specific rows (as report-service does)', () => {
+    expect(ids(filterTierRowsForAthlete(rows, { gender: 'Male', age: null }))).toEqual(['m-ms', 'm-hs', 'm-pro', 'any']);
+    expect(ids(filterTierRowsForAthlete(rows, { gender: null, age: 16 }))).toEqual(['any']);
+  });
+
+  it('lets selectTierGroup pick the athlete group instead of the lowest displayOrder', () => {
+    expect(selectTierGroup(filterTierRowsForAthlete(rows, { gender: 'Female', age: 16 }))[0].tierGroupId).toBe('f-hs');
   });
 });

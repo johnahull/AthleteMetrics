@@ -1,5 +1,5 @@
 import type { BenchmarkComparison } from '@shared/benchmark-types';
-import { deriveTierGroupName } from '@shared/benchmark-utils';
+import { cutoffTiersToBands, deriveTierGroupName } from '@shared/benchmark-utils';
 
 /**
  * Shape of a raw benchmark/tier row as stored in the database and passed to
@@ -25,6 +25,26 @@ export interface SourcedTierRow extends TierBenchmarkRow {
   _source?: string;
   tierGroupId?: string | null;
   displayOrder?: number | null;
+}
+
+/**
+ * Keep only the tier rows that apply to this athlete, so selectTierGroup picks the athlete's own group
+ * (e.g. Female HS, not the lowest displayOrder group of the other sex). A row with a null gender / age bound
+ * applies to everyone; an unknown athlete age skips the age check; an unknown athlete sex drops sex-specific rows.
+ * Bounds are inclusive and 0 is a real bound.
+ */
+export function filterTierRowsForAthlete<
+  T extends { gender?: string | null; ageMin?: number | null; ageMax?: number | null },
+>(rows: T[], athlete: { gender: string | null; age: number | null }): T[] {
+  const sex = athlete.gender?.toLowerCase() ?? null;
+  return rows.filter((r) => {
+    if (r.gender != null && r.gender.toLowerCase() !== sex) return false;
+    if (athlete.age != null) {
+      if (r.ageMin != null && athlete.age < r.ageMin) return false;
+      if (r.ageMax != null && athlete.age > r.ageMax) return false;
+    }
+    return true;
+  });
 }
 
 /** Group sourced tier rows by `${_source}:${tierGroupId}`, pick ONE group
@@ -198,12 +218,16 @@ export function evaluateTierBenchmark(
     nextTierName,
     isBestTier,
     coachingNote: matchedTier.coachingNote ?? null,
-    allTiers: allTiers.map((t) => ({
+    // Single-cutoff tiers get the bands the matcher above implies, so charts and legends can place
+    // values and print boundaries; matching itself still runs on the raw rows.
+    allTiers: cutoffTiersToBands(allTiers.map((t) => ({
       tierName: t.tierName || t.name || '',
       tierColor: t.tierColor || 'gray',
       tierOrder: t.tierOrder || 0,
       minValue: t.minValue != null ? parseFloat(String(t.minValue)) : null,
       maxValue: t.maxValue != null ? parseFloat(String(t.maxValue)) : null,
-    })),
+      benchmarkValue: t.benchmarkValue != null ? parseFloat(String(t.benchmarkValue)) : null,
+      comparisonOperator: t.comparisonOperator ?? null,
+    }))).map(({ benchmarkValue: _bv, comparisonOperator: _op, ...tier }) => tier),
   };
 }
