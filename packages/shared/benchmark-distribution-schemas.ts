@@ -21,7 +21,7 @@ const distributionRowSchema = z
 export const createBenchmarkDistributionSchema = z
   .object({
     label: z.string().trim().min(1).max(200).regex(NO_CONTROL_CHARS, "Label must not contain control characters"),
-    source: z.string().trim().min(1).max(200),
+    source: z.string().trim().min(1).max(200).regex(NO_CONTROL_CHARS, "Source must not contain control characters"),
     notes: z.string().trim().max(5000).optional(),
     // 500 rows x 8 columns stays well under the 65535-parameter limit of one multi-row insert
     distributions: z.array(distributionRowSchema).min(1).max(500),

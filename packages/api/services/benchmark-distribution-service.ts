@@ -10,17 +10,17 @@ export class DistributionInputError extends Error {}
 export class DuplicateVersionLabelError extends Error {}
 
 export async function createDistributionVersion(input: CreateBenchmarkDistributionInput, userId: string) {
-  const codes = Array.from(new Set(input.distributions.map((d) => d.metricCode)));
-  const metrics = await db.select({ code: siteMetrics.code, metricType: siteMetrics.metricType }).from(siteMetrics).where(inArray(siteMetrics.code, codes));
-  const byCode = new Map(metrics.map((m) => [m.code, m.metricType]));
-  for (const code of codes) {
-    const type = byCode.get(code);
-    if (!type) throw new DistributionInputError(`Unknown metric code: ${code}`);
-    if (type === "tracking") throw new DistributionInputError(`Metric ${code} is a tracking metric and has no better/worse direction`);
-  }
-
   try {
     return await db.transaction(async (tx) => {
+      const codes = Array.from(new Set(input.distributions.map((d) => d.metricCode)));
+      const metrics = await tx.select({ code: siteMetrics.code, metricType: siteMetrics.metricType }).from(siteMetrics).where(inArray(siteMetrics.code, codes))
+        .for("share"); // a concurrent metric delete waits, so it cannot slip in before the insert
+      const byCode = new Map(metrics.map((m) => [m.code, m.metricType]));
+      for (const code of codes) {
+        const type = byCode.get(code);
+        if (!type) throw new DistributionInputError(`Unknown metric code: ${code}`);
+        if (type === "tracking") throw new DistributionInputError(`Metric ${code} is a tracking metric and has no better/worse direction`);
+      }
       const [version] = await tx
         .insert(benchmarkDistributionVersions)
         .values({ label: input.label, source: input.source, notes: input.notes, createdBy: userId })

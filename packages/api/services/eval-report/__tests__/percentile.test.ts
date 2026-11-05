@@ -9,6 +9,7 @@ describe("midRankPercentile", () => {
     expect(midRankPercentile([1, 2, 2, 3], 2)).toBe(50);
     expect(midRankPercentile([1, 2, 3, 4], 3)).toBe(62.5);
   });
+  it("returns 0 for an empty sample, not NaN", () => expect(midRankPercentile([], 5)).toBe(0));
 });
 
 describe("percentile", () => {
