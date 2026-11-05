@@ -40,8 +40,6 @@
 
 > 0176 (10/5 repeat hop metrics for all sports: clears `sport_associations` to NULL on `RSI_105`, `RSI_105_HEIGHT` and `RSI_105_GCT`, which 0175 had tagged `{Soccer}`; plain `RSI` is untouched; the prior values, NULL included, are kept in `site_metrics_sport_backup_0176` so `_down` restores each row exactly; needs 0175 first) is provisional: renumber at merge if another branch lands 0176 first (file, `_down`, test `0176-rsi-105-all-sports`, tracking row, backup table name, this line). If a code is missing the migration does nothing for it and is still recorded as applied.
 
-> 0178 (age-group hands-on-hips CMJ tiers for `JUMP_CMJ_HOH` per sex, from OVR Performance data: 32 `cmjhoh-*` rows = 2 sexes x 4 levels (MS 11-13, HS 14-18, College 19-22, Pro 23+) x 4 tiers Elite / Advanced / Good / Average, 2 template sets, and enablement rows for every organization; the down migration deletes all of them) is provisional: renumber at merge if another branch lands 0178 first (file, `_down`, test `migration-0178-cmj-hoh-tiers`, tracking row, this line).
-
 ## Current State (2025-10-30)
 
 ### Overview
