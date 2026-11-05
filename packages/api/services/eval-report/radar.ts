@@ -177,7 +177,7 @@ export function buildRadar(input: RadarInput): EvalRadar {
   return {
     cohortKind: cohort.kind,
     axes,
-     scoredCount: axes.filter((a) => a.percentile !== null).length,
+    scoredCount: axes.filter((a) => a.percentile !== null).length,
     movement: { total: input.mqiTotal ?? null, band: movementBand(input.mqiTotal) },
   };
 }

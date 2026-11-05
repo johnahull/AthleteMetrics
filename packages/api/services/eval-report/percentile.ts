@@ -25,6 +25,7 @@ export function midRankPercentile(sorted: number[], x: number): number {
 /**
  * Where x sits in a reference sample, 0-100 with higher = better. Null when the sample is smaller than
  * minN, x is not finite, or any sample value is NaN. Values outside the sample range give 0 / 100, not null.
+ * The result is an unrounded float (e.g. 48.333); callers that store whole percentiles must round it.
  */
 export function percentile(
   values: number[],
