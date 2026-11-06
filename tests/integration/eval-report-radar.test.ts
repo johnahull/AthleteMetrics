@@ -75,7 +75,7 @@ describe('eval report radar', () => {
   const save = (userKey: string, selection: object, eventId = eventA) => as(userKey, 'post', path(eventId)).send({ selection });
   const axis = (model: any, id: string) => model.radar.axes.find((a: any) => a.axis === id);
 
-  const mkVersion = async (label: string, values: (code: string) => number[], createdAt: Date) => {
+  const mkVersion = async (label: string, values: (code: string) => number[], createdAt: Date, band: [number, number] = [13, 14]) => {
     const [v] = await db
       .insert(benchmarkDistributionVersions)
       .values({ label: `evalradar-${suffix}-${label}`, source: `Radar test ${label}`, createdAt } as any)
@@ -83,7 +83,7 @@ describe('eval report radar', () => {
     await db.insert(benchmarkDistributions).values(
       AXIS_CODES.map((metricCode) => {
         const vals = values(metricCode);
-        return { versionId: v.id, metricCode, sex: 'male', ageMin: 13, ageMax: 14, kind: 'raw', n: vals.length, values: vals };
+        return { versionId: v.id, metricCode, sex: 'male', ageMin: band[0], ageMax: band[1], kind: 'raw', n: vals.length, values: vals };
       }) as any,
     );
     return v.id;
@@ -288,5 +288,28 @@ describe('eval report radar', () => {
   it('the model carries no survey-style field names', async () => {
     const { model } = (await preview('coach', RADAR_ON)).body;
     expect(JSON.stringify(model)).not.toMatch(/sleep|soreness|stress|energy|cycle|wellness|mood|readiness|pain/i);
+  });
+
+  describe('norm version selection', () => {
+    const DAY = 86_400_000;
+    it('with two versions for the same cohort only the newer one scores', async () => {
+      const older = await mkVersion('sel-old', () => range(30), new Date(laterThanAll + 5 * DAY));
+      const newer = await mkVersion('sel-new', () => range(40, 100), new Date(laterThanAll + 6 * DAY));
+      const { model } = (await preview('coach', RADAR_ON)).body;
+      const accel = axis(model, 'acceleration');
+      expect(accel.distributionVersionId).toBe(newer);
+      expect(accel.distributionVersionId).not.toBe(older);
+      expect(accel.n).toBe(40);
+      expect(accel.source).toBe('Radar test sel-new');
+    });
+
+    it('uses an older version when the newer one lacks the athlete\'s age band', async () => {
+      const older = await mkVersion('band-old', () => range(30), new Date(laterThanAll + 7 * DAY));
+      await mkVersion('band-new', () => range(40, 100), new Date(laterThanAll + 8 * DAY), [15, 16]);
+      const { model } = (await preview('coach', RADAR_ON)).body;
+      const accel = axis(model, 'acceleration');
+      expect(accel.distributionVersionId).toBe(older);
+      expect(accel.n).toBe(30);
+    });
   });
 });

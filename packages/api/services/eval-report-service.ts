@@ -5,7 +5,7 @@
  * loader. Only that athlete's measurements for that event, in the event's organization, are read. Pre-test
  * survey tables are never read and the inputs have no field for them.
  */
-import { and, eq, gte, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
 import type { db as database } from "../db";
 import { benchmarkDistributionVersions, benchmarkDistributions, measurements, siteBenchmarks, siteMetrics, teams, userTeams, users, events, type Event } from "@shared/schema";
 import type { EvalSelectionInput } from "@shared/eval-report-config";
@@ -400,8 +400,10 @@ export async function loadRadarCohort(
     const sex = sexOf(args.athlete.gender);
     const age = args.athlete.birthDate ? ageAtDate(args.athlete.birthDate, args.eventDate) : Number.NaN;
     if (!sex || !Number.isFinite(age)) return { kind, distributions: [] };
+    // Newest version per (metric, sex, band start) that has a raw row for this athlete; ties by version id.
+    // Bands from different versions can still overlap, so buildRadar keeps its own newest-first pick.
     const rows = await db
-      .select({
+      .selectDistinctOn([benchmarkDistributions.metricCode, benchmarkDistributions.sex, benchmarkDistributions.ageMin], {
         versionId: benchmarkDistributions.versionId,
         versionCreatedAt: benchmarkDistributionVersions.createdAt,
         source: benchmarkDistributionVersions.source,
@@ -422,6 +424,13 @@ export async function loadRadarCohort(
           lte(benchmarkDistributions.ageMin, age),
           gte(benchmarkDistributions.ageMax, age),
         ),
+      )
+      .orderBy(
+        benchmarkDistributions.metricCode,
+        benchmarkDistributions.sex,
+        benchmarkDistributions.ageMin,
+        desc(benchmarkDistributionVersions.createdAt),
+        desc(benchmarkDistributions.versionId),
       );
     return { kind, distributions: rows };
   }
