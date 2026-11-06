@@ -139,7 +139,7 @@ function RadarSection({ radar }: { radar: EvalRadarView }) {
         </ul>
         <p className="text-sm" data-testid="radar-movement">
           <span className="font-medium">Movement:</span>{" "}
-          {movement.total === null ? NOT_TESTED : `${movement.band ?? ""} (MQI total ${movement.total} of 24)`.trim()}
+          {movement.total === null ? NOT_TESTED : movement.band === null ? `MQI total ${movement.total} of 24` : `${movement.band} (MQI total ${movement.total} of 24)`}
         </p>
       </CardContent>
     </Card>

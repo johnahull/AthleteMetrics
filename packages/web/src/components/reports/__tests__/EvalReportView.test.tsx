@@ -293,6 +293,13 @@ describe('EvalReportBody: duration (mm:ss) metrics', () => {
       expect(screen.getByTestId('radar-movement')).toHaveTextContent('Not tested');
     });
 
+    it('prints the MQI total without parentheses when there is no band', () => {
+      render(<EvalReportBody model={withRadar(6, { total: 17, band: null })} />);
+      const el = screen.getByTestId('radar-movement');
+      expect(el).toHaveTextContent('Movement: MQI total 17 of 24');
+      expect(el.textContent).not.toMatch(/[()]/);
+    });
+
     it('shows the raw time for the fly axis as a hover title', () => {
       render(<EvalReportBody model={withRadar(6)} />);
       expect(screen.getByTestId('radar-label-highSpeedRunning').querySelector('[title]')).toHaveAttribute('title', '1 s');
