@@ -107,6 +107,25 @@ describe('buildRadar', () => {
     expect(a.percentile).toBe(98);
   });
 
+  it('treats a zero or negative value as invalid on every axis: unscored, no display, never Infinity', () => {
+    const cases: Array<[string, string, number]> = [
+      ['highSpeedRunning', 'FLY10_TIME_RI30', 0], ['highSpeedRunning', 'FLY10_TIME_RI30', -1.2],
+      ['verticalPower', 'JUMP_CMJ_HOH', 0], ['acceleration', 'DASH_10YD', -2],
+    ];
+    for (const [id, code, bad] of cases) {
+      const bests = new Map(FULL);
+      bests.set(code, bad);
+      const a = byAxis(buildRadar(input({ bests })), id);
+      expect(a.value, `${code}=${bad}`).toBeNull();
+      expect(a.displayValue).toBeNull();
+      expect(a.percentile).toBeNull();
+    }
+    const legs = new Map(FULL);
+    legs.set('AGILITY_505_M_L', 0);
+    expect(byAxis(buildRadar(input({ bests: legs })), 'changeOfDirection').value).toBeNull();
+    expect(byAxis(buildRadar(input()), 'highSpeedRunning').percentile).not.toBeNull();
+  });
+
   it('does not score a missing test, and never imputes zero or 50', () => {
     const bests = new Map(FULL);
     bests.delete('RSI_105');

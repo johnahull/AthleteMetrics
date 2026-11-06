@@ -126,8 +126,16 @@ function recordedVariant(bests: ReadonlyMap<string, number>): Variant {
   return mean505(bests, "AGILITY_505_M") === null && mean505(bests, "AGILITY_505_YD") !== null ? "AGILITY_505_YD" : "AGILITY_505_M";
 }
 
+/** A value <= 0 is bad data on every axis: unscored, and never a display like Infinity mph. */
 function axisValue(def: AxisDef, bests: ReadonlyMap<string, number>, variant: Variant): number | null {
-  return def.code === "COD" ? mean505(bests, variant) : (bests.get(def.code) ?? null);
+  const value = def.code === "COD" ? mean505Valid(bests, variant) : (bests.get(def.code) ?? null);
+  return value !== null && value > 0 ? value : null;
+}
+
+function mean505Valid(bests: ReadonlyMap<string, number>, variant: Variant): number | null {
+  const l = bests.get(`${variant}_L`);
+  const r = bests.get(`${variant}_R`);
+  return l !== undefined && r !== undefined && l > 0 && r > 0 ? (l + r) / 2 : null;
 }
 
 function display(def: AxisDef, value: number, unit: string): { displayValue: string; detail: string | null } {
