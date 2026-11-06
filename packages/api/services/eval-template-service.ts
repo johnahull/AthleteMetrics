@@ -8,31 +8,35 @@
 import { and, asc, eq, isNull, or } from "drizzle-orm";
 import { db } from "../db";
 import { storage } from "../storage";
-import { auditLogs, evalBatteryTemplates, eventMetrics, orgEvalReportSettings, organizations } from "@shared/schema";
+import { auditLogs, evalBatteryTemplateRevisions, evalBatteryTemplates, eventMetrics, events, orgEvalReportSettings, organizations } from "@shared/schema";
 import type { EvalBatteryTemplate, OrgEvalReportSettings, UserOrganization } from "@shared/schema";
 import type { EvalTemplateMetric, EvalReportSettingsInput } from "@shared/eval-template-schemas";
 import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
 import { isSiteAdmin } from "../permissions/helpers";
 import { EventMetricsFrozenError } from "./event-metrics-service";
-import { bulkAddEventMetrics } from "./event-metrics-bulk";
+import { bulkAddEventMetrics, type BulkAddItem } from "./event-metrics-bulk";
 import { fetchEligibilityRows, ineligibleReason, type IneligibleReason } from "./event-metric-eligibility";
 import { keyForCode, resolveTemplateKey } from "./eval-report/template-keys";
+import { currentRevisionOf, linkEventRevision, publishRevision, sameMetrics, TemplateNotFoundError } from "./eval-template-revision-service";
+import { isMqiMetricCode, isMqiRequiredPreset } from "./eval-report/mqi-required";
 
 export type Actor = { id: string; isSiteAdmin?: boolean; role?: string };
 
 export class TemplateConflictError extends Error {}
 export class EventFrozenError extends Error {}
 export class EmptyEventError extends Error {}
-/** A 404: the template vanished between the authorization check and the write. */
-export class TemplateNotFoundError extends Error {
-  constructor() {
-    super("Template not found");
-  }
-}
+// Defined with the revision service (which also throws it); re-exported so existing imports keep working
+export { TemplateNotFoundError };
 /** A 409: archived templates are read-only. */
 export class TemplateArchivedError extends Error {
   constructor() {
     super("Template is archived");
+  }
+}
+/** A 409: events point at a revision of this template, so it can only be archived. */
+export class TemplateInUseError extends Error {
+  constructor() {
+    super("Events were created from this template, so it cannot be deleted; archive it instead");
   }
 }
 /** A 400: the message says what is wrong with the request. */
@@ -70,12 +74,15 @@ export async function canEditTemplate(user: Actor, template: Pick<EvalBatteryTem
   return template.organizationId ? isOrgWriter(user, template.organizationId) : isSiteAdmin(user);
 }
 
-export async function listTemplates(organizationId: string): Promise<EvalBatteryTemplate[]> {
-  return db
-    .select()
+/** Each template with the number of its current revision (AM-FEAT-024); null when nothing has published for it yet. */
+export async function listTemplates(organizationId: string): Promise<Array<EvalBatteryTemplate & { currentRevision: number | null }>> {
+  const rows = await db
+    .select({ template: evalBatteryTemplates, currentRevision: evalBatteryTemplateRevisions.revision })
     .from(evalBatteryTemplates)
+    .leftJoin(evalBatteryTemplateRevisions, eq(evalBatteryTemplateRevisions.id, evalBatteryTemplates.currentRevisionId))
     .where(and(isNull(evalBatteryTemplates.archivedAt), or(eq(evalBatteryTemplates.organizationId, organizationId), isNull(evalBatteryTemplates.organizationId))))
     .orderBy(asc(evalBatteryTemplates.name));
+  return rows.map((r) => ({ ...r.template, currentRevision: r.currentRevision }));
 }
 
 export async function organizationExists(organizationId: string): Promise<boolean> {
@@ -142,10 +149,14 @@ async function writeTemplateAudit(userId: string, action: "eval_template_updated
   }
 }
 
+/** Insert the template and publish its revision 1 in one transaction. */
 async function insertTemplate(values: typeof evalBatteryTemplates.$inferInsert): Promise<EvalBatteryTemplate> {
   try {
-    const [row] = await db.insert(evalBatteryTemplates).values(values).returning();
-    return row;
+    return await db.transaction(async (tx) => {
+      const [row] = await tx.insert(evalBatteryTemplates).values(values).returning();
+      const revision = await publishRevision(tx, row.id, row.metrics, values.createdBy ?? null);
+      return { ...row, currentRevisionId: revision.id };
+    });
   } catch (e) {
     if (isUniqueViolation(e)) throw new TemplateConflictError("A template with this name already exists");
     throw e;
@@ -193,13 +204,12 @@ async function throwNotFoundOrArchived(id: string): Promise<never> {
   throw new TemplateNotFoundError();
 }
 
-const metricsKey = (list: EvalTemplateMetric[]) => JSON.stringify(list.map((m) => [m.metricKey, m.isRequired, m.displayOrder, m.customLabel ?? null]));
-const sameMetrics = (a: EvalTemplateMetric[], b: EvalTemplateMetric[]) => metricsKey(a) === metricsKey(b);
 
 /**
  * Partial update of `template` (the row the route authorized). The organization type comes from the template's own
  * organization (none for the global default); the eligibility rule compares with the template's stored metrics.
  * Last write wins: there is no version check, so of two concurrent saves the later one is kept.
+ * A change to the tests publishes a NEW revision (the old one is never touched); a rename or description change does not.
  */
 export async function updateTemplate(
   template: EvalBatteryTemplate,
@@ -223,11 +233,16 @@ export async function updateTemplate(
   try {
     // Drizzle's .set() skips undefined fields, which is what makes this a partial update
     // (null, by contrast, is written, so description: null clears it).
-    [row] = await db
-      .update(evalBatteryTemplates)
-      .set({ name, sport, description, metrics, updatedAt: new Date() })
-      .where(and(eq(evalBatteryTemplates.id, template.id), isNull(evalBatteryTemplates.archivedAt)))
-      .returning();
+    row = await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(evalBatteryTemplates)
+        .set({ name, sport, description, metrics, updatedAt: new Date() })
+        .where(and(eq(evalBatteryTemplates.id, template.id), isNull(evalBatteryTemplates.archivedAt)))
+        .returning();
+      if (!updated || !metrics) return updated;
+      const revision = await publishRevision(tx, updated.id, metrics, userId);
+      return { ...updated, currentRevisionId: revision.id };
+    });
   } catch (e) {
     if (isUniqueViolation(e)) throw new TemplateConflictError("A template with this name already exists");
     throw e;
@@ -249,7 +264,21 @@ export async function archiveTemplate(id: string) {
 
 /** Hard delete. Events keep their copied tests (nothing stores a template id); the audit row keeps the full template. */
 export async function deleteTemplate(id: string, userId: string) {
-  const [row] = await db.delete(evalBatteryTemplates).where(eq(evalBatteryTemplates.id, id)).returning();
+  // One transaction with the template row locked: applying a template takes a shared lock on the same row (linkEventRevision),
+  // so a link either lands before this check (and is seen) or waits for the delete (and then fails cleanly).
+  const row = await db.transaction(async (tx) => {
+    const [locked] = await tx.select({ id: evalBatteryTemplates.id }).from(evalBatteryTemplates).where(eq(evalBatteryTemplates.id, id)).for("update");
+    if (!locked) return undefined;
+    const [linked] = await tx
+      .select({ id: events.id })
+      .from(events)
+      .innerJoin(evalBatteryTemplateRevisions, eq(evalBatteryTemplateRevisions.id, events.evalTemplateRevisionId))
+      .where(eq(evalBatteryTemplateRevisions.templateId, id))
+      .limit(1);
+    if (linked) throw new TemplateInUseError();
+    const [deleted] = await tx.delete(evalBatteryTemplates).where(eq(evalBatteryTemplates.id, id)).returning();
+    return deleted;
+  });
   if (!row) return;
   await writeTemplateAudit(userId, "eval_template_deleted", row.id, {
     name: row.name,
@@ -318,14 +347,18 @@ export async function resolveTemplateMetrics(template: Pick<EvalBatteryTemplate,
  * alone (`alreadyPresent`). The write is the atomic bulkAddEventMetrics (frozen check, insert and audit log in one transaction).
  */
 export async function applyTemplateToEvent(eventId: string, userId: string, template: EvalBatteryTemplate, organizationId: string | null, includeOptional: string[] = []) {
-  const optionalKeys = new Set(template.metrics.filter((m) => !m.isRequired).map((m) => m.metricKey));
+  // The tests come from the template's current REVISION, and the event records which one it applied
+  const revision = await currentRevisionOf(template, userId);
+  const templateRevision = { id: revision.id, revision: revision.revision };
+  const optionalKeys = new Set(revision.metrics.filter((m) => !m.isRequired).map((m) => m.metricKey));
   const notOptional = includeOptional.filter((k) => !optionalKeys.has(k));
   if (notOptional.length > 0) throw new TemplateValidationError(`Not optional metrics of this template: ${notOptional.join(", ")}`);
   if (SINGLE_LEG_CMJ.every((k) => includeOptional.includes(k))) {
     throw new TemplateValidationError("Use one single-leg CMJ per athlete, not both");
   }
 
-  const chosen = (await resolveTemplateMetrics(template, await orgTypeOf(organizationId))).filter((m) => m.isRequired || includeOptional.includes(m.metricKey));
+  const chosen = (await resolveTemplateMetrics({ metrics: revision.metrics }, await orgTypeOf(organizationId))).filter((m) => m.isRequired || includeOptional.includes(m.metricKey));
+  // Nothing to add: nothing applied, so no revision is recorded
   if (chosen.length === 0) return { added: [], skipped: [], alreadyPresent: [] };
 
   const usable = chosen.filter((m) => m.status === "available");
@@ -334,13 +367,35 @@ export async function applyTemplateToEvent(eventId: string, userId: string, temp
     const result = await bulkAddEventMetrics(
       eventId,
       userId,
-      usable.map((m) => ({ metricCode: m.code, displayOrder: m.displayOrder, isRequired: m.isRequired, customLabel: m.customLabel }))
+      usable.map((m) => ({ metricCode: m.code, displayOrder: m.displayOrder, isRequired: m.isRequired, customLabel: m.customLabel })),
+      // same transaction as the insert: a frozen event is refused before this runs
+      { afterInsert: (tx) => linkEventRevision(tx, eventId, revision.id, isMqiRequiredPreset(template)) }
     );
-    return { added: result.added, skipped, alreadyPresent: result.alreadyPresent };
+    return { added: result.added, skipped, alreadyPresent: result.alreadyPresent, templateRevision };
   } catch (e) {
     if (e instanceof EventMetricsFrozenError) throw new EventFrozenError(e.message);
     throw e;
   }
+}
+
+/**
+ * The new-event flow: the form's final test list, saved with the template the coach picked. Records the template's
+ * current revision on the event; for Foundation / Performance the revision's MQI tests are added (required) even if
+ * the list left them out, since Movement is required there. Runs once per batch: re-adding is a no-op.
+ */
+export async function bulkAddForTemplate(eventId: string, userId: string, template: EvalBatteryTemplate, requested: BulkAddItem[]) {
+  const isPreset = isMqiRequiredPreset(template);
+  const revision = await currentRevisionOf(template, userId);
+  const required: BulkAddItem[] = isPreset
+    ? revision.metrics
+        .map((m) => ({ metricCode: resolveTemplateKey(m.metricKey), displayOrder: m.displayOrder, isRequired: true, customLabel: m.customLabel }))
+        .filter((m) => isMqiMetricCode(m.metricCode))
+    : [];
+  // Listed first: when a code is on both lists the first one is kept, so the preset's required flag wins
+  const result = await bulkAddEventMetrics(eventId, userId, [...required, ...requested], {
+    afterInsert: (tx) => linkEventRevision(tx, eventId, revision.id, isPreset),
+  });
+  return { ...result, templateRevision: { id: revision.id, revision: revision.revision } };
 }
 
 /** What GET returns: a stored row, or the synthetic default when none exists yet (no timestamps or author). */

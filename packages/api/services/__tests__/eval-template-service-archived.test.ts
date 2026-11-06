@@ -9,6 +9,7 @@ vi.mock('../../db', () => {
   chain.where = () => chain;
   chain.returning = () => Promise.resolve([]);
   chain.select = () => chain;
+  chain.transaction = (fn: (tx: any) => unknown) => fn(chain);
   chain.from = () => chain;
   chain.then = (res: any, rej: any) => Promise.resolve([{ id: 't', archivedAt: new Date() }]).then(res, rej);
   return { db: chain };

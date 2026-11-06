@@ -72,6 +72,38 @@ describe('EventNew submit', () => {
     expect(mockCreateEvent.mock.calls[0][0]).not.toHaveProperty('evalTemplate');
   });
 
+  it('sends the picked template id with the list, and keeps it out of the event fields', async () => {
+    mockFormData = { ...baseForm, evalTemplateId: 'tpl-1', selectedMetrics: [metric('DASH_10YD')] };
+    mockAddBulk.mockResolvedValue({ added: ['DASH_10YD'], alreadyPresent: [], skipped: [] });
+    render(<EventNew />);
+    await submit();
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/events/ev-1'));
+    expect(mockAddBulk).toHaveBeenCalledWith('ev-1', [{ metricCode: 'DASH_10YD', isRequired: false, displayOrder: 0 }], 'tpl-1');
+    expect(mockCreateEvent.mock.calls[0][0]).not.toHaveProperty('evalTemplateId');
+  });
+
+  it('shows the server\'s template warning as a non-fatal notice in the same toast, and still navigates', async () => {
+    mockFormData = { ...baseForm, evalTemplateId: 'tpl-gone', selectedMetrics: [metric('DASH_10YD')] };
+    mockAddBulk.mockResolvedValue({ added: ['DASH_10YD'], alreadyPresent: [], skipped: [], warning: 'The template is no longer available, so the event was created without it.' });
+    render(<EventNew />);
+    await submit();
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/events/ev-1'));
+    expect(mockToast).toHaveBeenCalledTimes(1);
+    expect(mockToast.mock.calls[0][0].variant).not.toBe('destructive');
+    expect(mockToast.mock.calls[0][0].description).toContain('The template is no longer available');
+  });
+
+  it('forwards the template id with the first batch only, so the server links and re-adds MQI once', async () => {
+    mockFormData = { ...baseForm, evalTemplateId: 'tpl-1', selectedMetrics: Array.from({ length: 150 }, (_, i) => metric(`M${i}`)) };
+    render(<EventNew />);
+    await submit();
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/events/ev-1'));
+    expect(mockAddBulk).toHaveBeenCalledTimes(2);
+    expect(mockAddBulk.mock.calls[0][2]).toBe('tpl-1');
+    expect(mockAddBulk.mock.calls[1][2]).toBeUndefined();
+    expect(mockAddBulk.mock.calls[1]).toHaveLength(2);
+  });
+
   it('uses one bulk request for a hand-picked list too, never a per-metric loop', async () => {
     mockFormData = { ...baseForm, selectedMetrics: Array.from({ length: 23 }, (_, i) => metric(`M${i}`)) };
     mockAddBulk.mockResolvedValue({ added: mockFormData.selectedMetrics.map((m: any) => m.code), alreadyPresent: [], skipped: [] });

@@ -313,6 +313,8 @@ describe('EventForm', () => {
       const data = onSubmit.mock.calls[0][0];
       expect(data.selectedMetrics.map((m: any) => m.code)).toEqual(['DASH_10YD', 'VERTICAL_JUMP']);
       expect(data).not.toHaveProperty('evalTemplate');
+      // the picked template travels as an id, so the server can record the revision it applied
+      expect(data.evalTemplateId).toBe('tpl-1');
     });
 
     it('keeps the list when the user steps away from the metrics step and back', async () => {
