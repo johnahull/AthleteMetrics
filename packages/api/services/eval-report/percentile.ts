@@ -1,7 +1,10 @@
 /** Smallest reference sample a percentile is reported from; below this the answer is null (AM-FEAT-024). */
 export const MIN_NORM_N = 30;
 
-/** Mid-rank percentile (0-100; 0 for an empty sample) of x in an ascending `sorted` sample: (below + 0.5 * equal) / n. */
+/**
+ * Mid-rank percentile (0-100; 0 for an empty sample): (below + 0.5 * equal) / n.
+ * sorted must be ascending; percentile() sorts a copy first.
+ */
 export function midRankPercentile(sorted: number[], x: number): number {
   if (sorted.length === 0) return 0; // no sample to rank against; avoids 0/0 = NaN
   const lowerBound = (target: number, strict: boolean) => {
@@ -29,7 +32,9 @@ export function percentile(
   direction: "lower_is_better" | "higher_is_better",
   minN: number = MIN_NORM_N,
 ): number | null {
-  if (values.length === 0 || values.length < minN || !Number.isFinite(x) || values.some(Number.isNaN)) return null;
+  if (values.length === 0 || values.length < minN || !Number.isFinite(x)) return null;
+  // defensive guard for future non-DB callers; the loader's z.number().finite() already rejects NaN at write time
+  if (values.some(Number.isNaN)) return null;
   const p = midRankPercentile([...values].sort((a, b) => a - b), x);
   return direction === "lower_is_better" ? 100 - p : p;
 }

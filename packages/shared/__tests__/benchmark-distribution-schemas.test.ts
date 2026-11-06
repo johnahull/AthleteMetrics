@@ -19,6 +19,11 @@ describe("createBenchmarkDistributionSchema", () => {
     expect(ok([row()], { source: "bad\u0000source" }).success).toBe(false);
     expect(ok([row()], { source: "Combine 2024, n=1,200" }).success).toBe(true);
   });
+  it("rejects control characters in notes, accepts normal and absent notes", () => {
+    expect(ok([row()], { notes: "bad\u0007note" }).success).toBe(false);
+    expect(ok([row()], { notes: "Line one.\nLine two" }).success).toBe(true);
+    expect(ok([row()]).success).toBe(true);
+  });
   it("rejects bad sex, kind, ages, non-finite or empty values", () => {
     expect(ok([row({ sex: "x" })]).success).toBe(false);
     expect(ok([row({ kind: "quantiles" })]).success).toBe(false);
