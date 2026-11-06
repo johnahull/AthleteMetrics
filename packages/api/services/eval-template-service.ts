@@ -384,15 +384,16 @@ export async function applyTemplateToEvent(eventId: string, userId: string, temp
  * the list left them out, since Movement is required there. Runs once per batch: re-adding is a no-op.
  */
 export async function bulkAddForTemplate(eventId: string, userId: string, template: EvalBatteryTemplate, requested: BulkAddItem[]) {
+  const isPreset = isMqiRequiredPreset(template);
   const revision = await currentRevisionOf(template, userId);
-  const required: BulkAddItem[] = isMqiRequiredPreset(template)
+  const required: BulkAddItem[] = isPreset
     ? revision.metrics
         .map((m) => ({ metricCode: resolveTemplateKey(m.metricKey), displayOrder: m.displayOrder, isRequired: true, customLabel: m.customLabel }))
         .filter((m) => isMqiMetricCode(m.metricCode))
     : [];
   // Listed first: when a code is on both lists the first one is kept, so the preset's required flag wins
   const result = await bulkAddEventMetrics(eventId, userId, [...required, ...requested], {
-    afterInsert: (tx) => linkEventRevision(tx, eventId, revision.id, isMqiRequiredPreset(template)),
+    afterInsert: (tx) => linkEventRevision(tx, eventId, revision.id, isPreset),
   });
   return { ...result, templateRevision: { id: revision.id, revision: revision.revision } };
 }
