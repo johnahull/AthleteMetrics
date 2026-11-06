@@ -195,13 +195,14 @@ describe("EvalReportDialog", () => {
     expect(screen.getByRole("switch", { name: "Fresh & Healthy" })).toBeChecked();
   });
 
-  it("compares to the age group only when switched on: off by default, and off disables strengths and radar", async () => {
+  it("compares to the age group only when switched on: off by default", async () => {
     setupApi();
     renderDialog();
     await ready();
     const compare = screen.getByRole("switch", { name: "Compare to age group" });
     expect(compare).not.toBeChecked();
-    expect(screen.getByRole("switch", { name: "Radar chart" })).toBeDisabled();
+    // The percentile radar does not depend on the age-group comparison
+    expect(screen.getByRole("switch", { name: "Radar chart" })).toBeEnabled();
 
     await user.click(compare);
     expect(screen.getByRole("switch", { name: "Radar chart" })).toBeEnabled();
@@ -718,6 +719,59 @@ describe("EvalReportDialog", () => {
       await user.click(screen.getByRole("button", { name: "Save as default for this preset" }));
       await waitFor(() => expect(mockToast).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive" })));
       expect(callsTo("PUT", "/eval-report-settings")).toHaveLength(0);
+    });
+  });
+
+  describe("compare against (AM-FEAT-024)", () => {
+    const TEAM = "8c3f2c0e-6a5b-4c5e-9d0e-0a1b2c3d4e5f";
+    const withTeams = () => {
+      const base = mockApiRequest.getMockImplementation()!;
+      mockApiRequest.mockImplementation(async (method: string, url: string, body?: any) =>
+        method === "GET" && String(url).startsWith("/api/teams")
+          ? { ok: true, json: async () => [{ id: TEAM, name: "U14 Boys", isArchived: false }, { id: "old", name: "Gone", isArchived: true }] }
+          : base(method, url, body),
+      );
+    };
+
+    it("shows the group control only while the radar is on, defaulting to site norms", async () => {
+      setupApi();
+      renderDialog();
+      await ready();
+      expect(screen.queryByRole("combobox", { name: "Compare against" })).not.toBeInTheDocument();
+      await user.click(screen.getByRole("switch", { name: "Radar chart" }));
+      expect(screen.getByRole("combobox", { name: "Compare against" })).toHaveTextContent("Site norms");
+
+      await user.click(screen.getByRole("button", { name: "Generate report" }));
+      await screen.findByText(/report saved/i);
+      expect(lastBody("POST", "/eval-report").selection.radarCohort).toEqual({ kind: "norm" });
+    });
+
+    it("sends this event as the group", async () => {
+      setupApi();
+      renderDialog();
+      await ready();
+      await user.click(screen.getByRole("switch", { name: "Radar chart" }));
+      await user.click(screen.getByRole("combobox", { name: "Compare against" }));
+      await user.click(await screen.findByRole("option", { name: "This event" }));
+      await user.click(screen.getByRole("button", { name: "Generate report" }));
+      await screen.findByText(/report saved/i);
+      expect(lastBody("POST", "/eval-report").selection.radarCohort).toEqual({ kind: "event" });
+    });
+
+    it("lists the organization's teams for the team group and sends the chosen one", async () => {
+      setupApi();
+      withTeams();
+      renderDialog();
+      await ready();
+      await user.click(screen.getByRole("switch", { name: "Radar chart" }));
+      await user.click(screen.getByRole("combobox", { name: "Compare against" }));
+      await user.click(await screen.findByRole("option", { name: "A team" }));
+      await user.click(await screen.findByRole("combobox", { name: "Team" }));
+      expect(screen.queryByRole("option", { name: "Gone" })).not.toBeInTheDocument();
+      await user.click(await screen.findByRole("option", { name: "U14 Boys" }));
+      await user.click(screen.getByRole("button", { name: "Generate report" }));
+      await screen.findByText(/report saved/i);
+      expect(lastBody("POST", "/eval-report").selection.radarCohort).toEqual({ kind: "team", teamId: TEAM });
     });
   });
 });

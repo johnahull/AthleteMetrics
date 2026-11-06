@@ -5,7 +5,7 @@
  */
 
 import { sql } from "drizzle-orm";
-import { pgTable, varchar, uuid, integer, decimal, timestamp, boolean, unique, index, text, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, varchar, uuid, integer, decimal, timestamp, boolean, unique, index, text, jsonb, doublePrecision, foreignKey } from "drizzle-orm/pg-core";
 import { organizationTypeEnum } from "../enums";
 import { organizations, users } from "./core";
 import { siteMetrics } from "./metrics";
@@ -190,4 +190,35 @@ export const organizationBenchmarkSets = pgTable("organization_benchmark_sets", 
 }, (table) => ({
   uniqueOrgSet: unique("organization_benchmark_sets_unique").on(table.organizationId, table.siteSetId),
   orgIdx: index("org_benchmark_sets_org_idx").on(table.organizationId),
+}));
+
+// Reference distributions (AM-FEAT-024, migration 0179). Immutable: the DB trigger lives in the manual migration,
+// which db:push never runs, so benchmark-distribution-service enforces the same rules.
+export const benchmarkDistributionVersions = pgTable("benchmark_distribution_versions", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  label: varchar("label", { length: 200 }).notNull().unique("benchmark_distribution_versions_label_uniq"),
+  source: varchar("source", { length: 200 }).notNull(),
+  notes: text("notes"),
+  createdBy: varchar("created_by", { length: 36 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  // Explicit short names: the generated ones exceed Postgres's 63-char limit
+  createdByFk: foreignKey({ name: "bdv_created_by_fk", columns: [table.createdBy], foreignColumns: [users.id] }).onDelete('set null'),
+}));
+
+export const benchmarkDistributions = pgTable("benchmark_distributions", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  versionId: varchar("version_id", { length: 36 }).notNull(),
+  metricCode: varchar("metric_code", { length: 50 }).notNull(),
+  sex: varchar("sex", { length: 6 }).notNull(), // 'male' | 'female'
+  ageMin: integer("age_min").notNull(),
+  ageMax: integer("age_max").notNull(),
+  kind: varchar("kind", { length: 10 }).notNull().default('raw'), // 'raw' | 'quantiles'
+  n: integer("n").notNull(),
+  values: doublePrecision("values").array().notNull(), // ascending
+}, (table) => ({
+  versionFk: foreignKey({ name: "bd_version_id_fk", columns: [table.versionId], foreignColumns: [benchmarkDistributionVersions.id] }).onDelete('restrict'),
+  metricFk: foreignKey({ name: "bd_metric_code_fk", columns: [table.metricCode], foreignColumns: [siteMetrics.code] }).onDelete('restrict'),
+  bandUniq: unique("benchmark_distributions_band_uniq").on(table.versionId, table.metricCode, table.sex, table.ageMin),
+  metricSexIdx: index("benchmark_distributions_metric_sex_idx").on(table.metricCode, table.sex),
 }));

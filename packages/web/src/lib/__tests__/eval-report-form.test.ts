@@ -40,6 +40,8 @@ const base: EvalFormValues = {
   strengthsOn: true,
   retestTrend: true,
   radar: false,
+  radarCohort: "norm",
+  radarTeamId: null,
   ageGroupComparison: true,
   load: "none",
   coachNote: "",
@@ -225,5 +227,47 @@ describe("a saved eval whose stored selection is empty", () => {
 
   it("uses High school when nothing is known", () => {
     expect(buildInitialValues({ defaults: saved, settings: undefined, age: null }).preset).toBe("high_school");
+  });
+});
+
+describe("radar comparison group (AM-FEAT-024)", () => {
+  const ctx = { offered, hasPrior: true };
+  const sel = (values: Partial<EvalFormValues>) => {
+    const built = toRequest({ ...base, ...values }, ctx);
+    return built.ok ? built.body.selection : built;
+  };
+
+  it("sends no radarCohort while the radar is off", () => {
+    expect(sel({ radar: false, radarCohort: "event" })).not.toHaveProperty("radarCohort");
+  });
+
+  it("sends the chosen group when the radar is on: norm by default, event, or a team with its id", () => {
+    expect(sel({ radar: true })).toMatchObject({ radarCohort: { kind: "norm" } });
+    expect(sel({ radar: true, radarCohort: "event" })).toMatchObject({ radarCohort: { kind: "event" } });
+    const teamId = "8c3f2c0e-6a5b-4c5e-9d0e-0a1b2c3d4e5f";
+    expect(sel({ radar: true, radarCohort: "team", radarTeamId: teamId })).toMatchObject({ radarCohort: { kind: "team", teamId } });
+  });
+
+  it("refuses a team group with no team chosen", () => {
+    expect(toRequest({ ...base, radar: true, radarCohort: "team", radarTeamId: null }, ctx)).toMatchObject({ ok: false });
+  });
+
+  it("clears a saved team that is not in the loaded team list", () => {
+    const teamId = "8c3f2c0e-6a5b-4c5e-9d0e-0a1b2c3d4e5f";
+    const d = defaults({ source: "saved", selection: { preset: "high_school", metricKeys: ["DASH_10"], sections: { radar: true }, radarCohort: { kind: "team", teamId } } });
+    expect(buildInitialValues({ defaults: d, settings: undefined, age: 14, teamIds: [] }).radarTeamId).toBeNull();
+    expect(buildInitialValues({ defaults: d, settings: undefined, age: 14, teamIds: [teamId] }).radarTeamId).toBe(teamId);
+  });
+
+  it("reopens a saved eval with its group", () => {
+    const teamId = "8c3f2c0e-6a5b-4c5e-9d0e-0a1b2c3d4e5f";
+    const initial = buildInitialValues({
+      defaults: defaults({ source: "saved", selection: { preset: "high_school", metricKeys: ["DASH_10"], sections: { radar: true }, radarCohort: { kind: "team", teamId } } }),
+      settings: undefined,
+      age: 14,
+    });
+    expect(initial.radarCohort).toBe("team");
+    expect(initial.radarTeamId).toBe(teamId);
+    expect(buildInitialValues({ defaults: defaults(), settings: undefined, age: 14 })).toMatchObject({ radarCohort: "norm", radarTeamId: null });
   });
 });

@@ -38,6 +38,7 @@ export interface EvalDefaultsSelection {
     retestTrend?: boolean;
     radar?: boolean;
   };
+  radarCohort?: { kind: "norm" | "event" | "team"; teamId?: string };
 }
 
 export interface EvalDefaults {

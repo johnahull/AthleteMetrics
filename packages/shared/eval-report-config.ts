@@ -41,6 +41,11 @@ const metricId = z.string().min(1).max(METRIC_KEY_MAX_LENGTH).regex(METRIC_ID);
 
 const metricKeyList = z.array(metricId).max(MAX_METRICS);
 
+/** Comparison group of the radar (AM-FEAT-024): site norms, this event's athletes, or one team of the organization */
+export const evalRadarCohortSchema = z
+  .object({ kind: z.enum(["norm", "event", "team"]), teamId: z.string().uuid().optional() })
+  .refine((c) => c.kind !== "team" || !!c.teamId, { message: "Choose a team to compare against" });
+
 /** What the coach chose on the selection screen. Every field is optional; the preset fills the rest. */
 export const evalSelectionInputSchema = z.object({
   preset: evalPresetSchema.optional(),
@@ -64,6 +69,7 @@ export const evalSelectionInputSchema = z.object({
       radar: z.boolean().optional(),
     })
     .optional(),
+  radarCohort: evalRadarCohortSchema.optional(),
 });
 
 /** Body of the preview and save routes. Unknown keys are stripped. */
@@ -92,6 +98,9 @@ export const frozenModelSchema = z
     limiter: z.string().nullable(),
     coachNote: z.string().nullable(),
     selection: z.object({ preset: evalPresetSchema, noteFirst: z.boolean() }).passthrough(),
+    /** Absent on rows saved before the percentile radar (AM-FEAT-024) */
+    modelVersion: z.number().int().optional(),
+    radar: z.record(z.unknown()).optional(),
   })
   .passthrough()
   .refine((model) => !hasWellnessKey(model), { message: "The model must not contain survey fields" });
