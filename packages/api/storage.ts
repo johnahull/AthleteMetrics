@@ -5116,21 +5116,27 @@ export class DatabaseStorage implements IStorage {
       );
     }
 
-    // Loaded reference distributions are immutable and block deletion (ON DELETE RESTRICT)
-    const [distributionCount] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(benchmarkDistributions)
-      .where(eq(benchmarkDistributions.metricCode, code));
+    // Loaded reference distributions are immutable and block deletion (ON DELETE RESTRICT). Check and delete in one
+    // transaction behind a row lock: createDistributionVersion takes FOR SHARE on the metric row, so a concurrent
+    // load either finishes first (and is counted here) or waits until this delete is done.
+    await db.transaction(async (tx) => {
+      await tx.select({ code: siteMetrics.code }).from(siteMetrics).where(eq(siteMetrics.code, code)).for("update");
 
-    if (Number(distributionCount.count) > 0) {
-      throw new Error(
-        `Cannot delete metric ${code}: ${distributionCount.count} benchmark distribution(s) exist. ` +
-        `Disable the metric instead to hide it from new measurements.`
-      );
-    }
+      const [distributionCount] = await tx
+        .select({ count: sql<number>`count(*)` })
+        .from(benchmarkDistributions)
+        .where(eq(benchmarkDistributions.metricCode, code));
 
-    // Delete the metric (this will cascade to organization_metrics)
-    await db.delete(siteMetrics).where(eq(siteMetrics.code, code));
+      if (Number(distributionCount.count) > 0) {
+        throw new Error(
+          `Cannot delete metric ${code}: ${distributionCount.count} benchmark distribution(s) exist. ` +
+          `Disable the metric instead to hide it from new measurements.`
+        );
+      }
+
+      // Delete the metric (this will cascade to organization_metrics)
+      await tx.delete(siteMetrics).where(eq(siteMetrics.code, code));
+    });
   }
 
   // ========================================================================

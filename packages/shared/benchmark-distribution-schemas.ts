@@ -39,6 +39,7 @@ export const createBenchmarkDistributionSchema = z
       bands.sort((a, b) => a.ageMin - b.ageMin);
       let maxEnd = bands[0].ageMax; // running max: a wide band overlaps every later band it covers
       for (let k = 1; k < bands.length; k++) {
+        // Bands are inclusive on both ends, so touching bands such as [10,12] and [12,15] overlap at age 12.
         if (bands[k].ageMin <= maxEnd) {
           ctx.addIssue({ code: "custom", message: "Age bands overlap or repeat for this metric and sex", path: ["distributions", bands[k].i, "ageMin"] });
         }
