@@ -17,7 +17,7 @@
  * └── tables/               - Domain-based table definitions
  *     ├── core.ts           - organizations, teams, users, athleteProfiles, userTeams
  *     ├── metrics.ts        - siteMetrics, organizationMetrics, siteSports, sitePositions
- *     ├── benchmarks.ts     - siteBenchmarks, customBenchmarks, organizationBenchmarks
+ *     ├── benchmarks.ts     - siteBenchmarks, customBenchmarks, organizationBenchmarks, benchmarkDistributionVersions, benchmarkDistributions
  *     ├── measurements.ts   - measurements, peerPercentileCache
  *     ├── membership.ts     - userOrganizations, invitations, membershipRequests
  *     ├── auth.ts           - auditLogs, sessions, emailVerificationTokens, accountLinkingTokens
