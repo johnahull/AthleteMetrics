@@ -1051,6 +1051,20 @@ describe('ReportWizard Component', () => {
       expect(screen.queryByRole('combobox', { name: /Start from template/i })).not.toBeInTheDocument();
     });
 
+    it('links to the template manager from step 1, with and without templates, and closes the wizard', async () => {
+      wiz.templates = [];
+      const { unmount } = render_();
+      fireEvent.click(await screen.findByRole('link', { name: 'Manage templates' }));
+      expect(mockOnClose).toHaveBeenCalled();
+      unmount();
+
+      mockOnClose.mockClear();
+      wiz.templates = [{ id: 't1', name: 'Speed', description: null, metrics: ['FLY10_TIME'], benchmarkSetIds: [], siteBenchmarkIds: [], customBenchmarkIds: [], charts: {} }];
+      render_();
+      const link = await screen.findByRole('link', { name: 'Manage templates' });
+      expect(link).toHaveAttribute('href', '/reports/templates');
+    });
+
     it('prefills metrics, sets, picks and charts from a template and notes what is gone', async () => {
       wiz.sets = [{ id: 'set-a', name: 'Set A' }];
       wiz.setDetails['set-a'] = loaded(setWith('set-a', 'Set A', [['custom-bench-1', 'custom']]));

@@ -13,6 +13,17 @@ Not stored: timeframe, filters, audience, athletes, composite weights.
 
 In the wizard the report gets the deduped union of every chosen set's items and the individual picks.
 
+## Managing templates
+
+Reports page, **Manage templates** (also linked from wizard step 1): `/reports/templates` lists the organization's templates with Edit and Delete; `/reports/templates/new` and `/reports/templates/:templateId` edit name, description, metrics, benchmark sets, individual benchmarks and the team and individual chart choices. Pages: `packages/web/src/pages/report-templates.tsx`, `report-template-edit.tsx`; the pickers are shared with the wizard (`components/reports/template-fields/`).
+
+- Access: coach, org admin, site admin of the organization (`canManageEvent`, org-scoped), otherwise redirected. The API already 404s everyone else.
+- Organization: the chosen one, else the member's first (`use-template-organization.ts`).
+- **Unavailable items stay.** Metrics, benchmarks and sets that were removed or switched off since the template was saved show as "Unavailable" and are saved unchanged until the user removes them. The wizard still drops them when applying a template. If a metric, benchmark or set list fails to load (or a set fails with anything but 404), Save is disabled.
+- Charts: a chart type (team / individual) the user never touches is saved exactly as stored; touching one writes that type's full set of keys (`setTemplateCharts`).
+- No GET-by-id route: the editor finds the template in the cached list.
+- Concurrent edits are last-write-wins (PATCH has no version check): saving in the editor can overwrite a change made in the wizard meanwhile.
+
 ## API
 
 | Method | Path | Notes |

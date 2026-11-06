@@ -1,11 +1,13 @@
 import { useState, useCallback } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
+import { canManageEvent } from "@/lib/event-permissions";
+import { useTemplateOrganizationId } from "@/hooks/use-template-organization";
 import { useDeleteReport, useArchiveReport, useBulkArchiveReports, useBulkDeleteReports } from "@/hooks/use-reports";
 import { useReportFilters } from "@/hooks/use-report-filters";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, CheckSquare, X, Send, Archive, Trash2 } from "lucide-react";
+import { Plus, CheckSquare, X, Send, Archive, Trash2, ClipboardList } from "lucide-react";
 import { ReportWizard } from "@/components/reports/ReportWizard";
 import { ReportsFilterBar } from "@/components/reports/ReportsFilterBar";
 import { PinnedReportsSection } from "@/components/reports/PinnedReportsSection";
@@ -24,7 +26,8 @@ import {
 import type { Report, ReportWithSentStatus } from "@/types/report-types";
 
 export default function Reports() {
-  const { user, organizationContext } = useAuth();
+  const { user, organizationContext, userOrganizations } = useAuth();
+  const templateOrganizationId = useTemplateOrganizationId();
   const [, setLocation] = useLocation();
   const [showWizard, setShowWizard] = useState(false);
   const [deleteReportId, setDeleteReportId] = useState<string | null>(null);
@@ -83,6 +86,8 @@ export default function Reports() {
 
   // Only coaches and admins can create reports
   const canCreateReports = user.isSiteAdmin || user.role === "coach" || user.role === "org_admin";
+  // Templates are managed by the writers of the organization they live in (org-scoped role, not the session role)
+  const canManageTemplates = !!templateOrganizationId && canManageEvent(user, userOrganizations, { organizationId: templateOrganizationId });
 
   const handleViewReport = (report: Report) => {
     // In selection mode, toggle selection instead of navigating
@@ -151,6 +156,14 @@ export default function Reports() {
             >
               <CheckSquare className="h-4 w-4 mr-2" />
               {isSelectionMode ? "Cancel" : "Select"}
+            </Button>
+          )}
+          {canManageTemplates && !isSelectionMode && (
+            <Button asChild variant="outline" data-testid="manage-report-templates-button">
+              <Link href="/reports/templates">
+                <ClipboardList className="h-4 w-4 mr-2" aria-hidden="true" />
+                Manage templates
+              </Link>
             </Button>
           )}
           {canCreateReports && !isSelectionMode && (
