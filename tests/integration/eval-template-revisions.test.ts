@@ -150,6 +150,13 @@ describe('eval template revisions and MQI required', () => {
       await api.patch(`/api/eval-templates/${tpl}`).send({ name: `${PREFIX}-renamed` }).expect(200);
       await api.patch(`/api/eval-templates/${tpl}`).send({ metrics: [{ metricKey: 'DASH_10', isRequired: false, displayOrder: 1 }] }).expect(200);
       expect(await revisionsOf(tpl)).toHaveLength(2);
+      // a full-list PATCH that changes only the name leaves the current revision where it was
+      const before = (await db.select({ c: evalBatteryTemplates.currentRevisionId }).from(evalBatteryTemplates).where(eq(evalBatteryTemplates.id, tpl)))[0].c;
+      const res = await api.patch(`/api/eval-templates/${tpl}`).send({ name: `${PREFIX}-renamed-2`, metrics: [{ metricKey: 'DASH_10', isRequired: false, displayOrder: 1 }] });
+      expect(res.status).toBe(200);
+      expect(res.body.currentRevisionId).toBe(before);
+      expect((await db.select({ c: evalBatteryTemplates.currentRevisionId }).from(evalBatteryTemplates).where(eq(evalBatteryTemplates.id, tpl)))[0].c).toBe(before);
+      expect(await revisionsOf(tpl)).toHaveLength(2);
     });
 
     it('deleting an organization template removes its revisions with it', async () => {

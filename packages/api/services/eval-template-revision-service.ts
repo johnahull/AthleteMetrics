@@ -17,6 +17,13 @@ type Executor = Pick<typeof db, "select">;
 const metricsKey = (list: EvalTemplateMetric[]) => JSON.stringify(list.map((m) => [m.metricKey, m.isRequired, m.displayOrder, m.customLabel ?? null]));
 export const sameMetrics = (a: EvalTemplateMetric[], b: EvalTemplateMetric[]) => metricsKey(a) === metricsKey(b);
 
+/** The row array of a `tx.execute()` result: node-postgres-style `{ rows }` or a plain array (postgres-js). */
+function rowsOf(result: unknown): unknown[] {
+  if (Array.isArray(result)) return result;
+  const rows = (result as { rows?: unknown } | null)?.rows;
+  return Array.isArray(rows) ? rows : [];
+}
+
 /** A 404: the template vanished (deleted between the authorization check and the write). */
 export class TemplateNotFoundError extends Error {
   constructor() {
@@ -78,7 +85,7 @@ export async function linkEventRevision(tx: Tx, eventId: string, revisionId: str
   // Shared lock on the template row: deleteTemplate takes it FOR UPDATE, so the two serialize. A template deleted
   // meanwhile (its revisions went with it) fails the whole transaction cleanly instead of an FK error or a lost link.
   const locked = await tx.execute(sql`SELECT t.id FROM eval_battery_templates t JOIN eval_battery_template_revisions r ON r.template_id = t.id WHERE r.id = ${revisionId} FOR SHARE OF t`);
-  if (((locked as unknown as { rows?: unknown[] }).rows ?? (locked as unknown as unknown[])).length === 0) throw new TemplateNotFoundError();
+  if (rowsOf(locked).length === 0) throw new TemplateNotFoundError();
   const notPresetLinked = sql`(${events.evalTemplateRevisionId} IS NULL OR ${events.evalTemplateRevisionId} NOT IN (
     SELECT r.id FROM eval_battery_template_revisions r JOIN eval_battery_templates t ON t.id = r.template_id WHERE t.preset_key IS NOT NULL))`;
   await tx

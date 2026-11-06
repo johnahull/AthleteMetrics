@@ -116,7 +116,7 @@ export function EvalTemplatePicker({ organizationId, value, onChange, onSelected
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">Fills the tests below. Add or remove tests before you create the event.</p>
-        {selected?.currentRevision && (
+        {selected?.currentRevision != null && (
           <p className="text-xs text-muted-foreground" data-testid="eval-template-revision">
             Applying {selected.name}, currently at revision {selected.currentRevision}.
           </p>
