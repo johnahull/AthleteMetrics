@@ -244,7 +244,7 @@ function EditorForm({ organizationId, template, back }: { organizationId: string
               {unavailableMetrics.map((code) => (
                 <Badge key={code} variant="outline" className="gap-1">
                   Unavailable: {code}
-                  <button type="button" aria-label={`Remove ${code}`} onClick={() => toggleMetric(code)}>
+                  <button type="button" className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Remove ${code}`} onClick={() => toggleMetric(code)}>
                     <X className="h-3 w-3" />
                   </button>
                 </Badge>
@@ -281,7 +281,7 @@ function EditorForm({ organizationId, template, back }: { organizationId: string
               {unavailableBenchmarks.map((id) => (
                 <Badge key={id} variant="outline" className="gap-1">
                   Unavailable benchmark {id.slice(-6)}
-                  <button type="button" aria-label={`Remove unavailable benchmark ${id.slice(-6)}`} onClick={() => removeBenchmark(id)}>
+                  <button type="button" className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Remove unavailable benchmark ${id.slice(-6)}`} onClick={() => removeBenchmark(id)}>
                     <X className="h-3 w-3" />
                   </button>
                 </Badge>

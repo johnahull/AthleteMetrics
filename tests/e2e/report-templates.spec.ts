@@ -77,7 +77,7 @@ test.describe('Report templates', () => {
 
     await page.getByRole('link', { name: /New template/ }).click();
     await page.getByLabel(/Template name/i).fill(templateName);
-    await page.getByRole('checkbox').first().check(); // first metric
+    await page.getByRole('region', { name: /Metrics/ }).getByRole('checkbox').first().check(); // first metric
     const created = page.waitForResponse((r) => r.url().includes('/report-templates') && r.request().method() === 'POST');
     await page.getByRole('button', { name: 'Save template' }).click();
     createdTemplateIds.push((await (await created).json()).id);
