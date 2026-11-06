@@ -118,6 +118,24 @@ describe("EvalTemplatePicker", () => {
     expect(await screen.findByTestId("eval-template-revision")).toHaveTextContent("Applying Foundation, currently at revision 2");
   });
 
+  it("shows the revision badge for revision 0 too, and none when the template has no revision", async () => {
+    mockUseEvalTemplates.mockReturnValue({
+      data: [
+        { id: "t-zero", organizationId: null, name: "Zero", sport: "ALL", metrics: [{ metricKey: "DASH_10", isRequired: true, displayOrder: 0 }], currentRevision: 0 },
+        { id: "t-none", organizationId: null, name: "NoRev", sport: "ALL", metrics: [{ metricKey: "DASH_10", isRequired: true, displayOrder: 0 }], currentRevision: null },
+      ],
+      isLoading: false,
+      isError: false,
+    });
+    resolvedByTemplate["t-zero"] = { template: { id: "t-zero", name: "Zero" }, metrics: [r("DASH_10", "DASH_10YD", 0, true)] };
+    resolvedByTemplate["t-none"] = { template: { id: "t-none", name: "NoRev" }, metrics: [r("DASH_10", "DASH_10YD", 0, true)] };
+    render(<Host />);
+    await pick("Zero");
+    expect(await screen.findByTestId("eval-template-revision")).toHaveTextContent("Applying Zero, currently at revision 0");
+    await pick("NoRev");
+    await waitFor(() => expect(screen.queryByTestId("eval-template-revision")).not.toBeInTheDocument());
+  });
+
   it("choosing a template fills the list with its required tests, in order", async () => {
     render(<Host />);
     await pick("Soccer eval (yards)");
