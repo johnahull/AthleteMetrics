@@ -59,6 +59,7 @@ export interface NormDistribution {
   ageMin: number;
   ageMax: number;
   kind: string;
+  // n omitted: for kind 'raw', n === values.length
   values: number[];
 }
 

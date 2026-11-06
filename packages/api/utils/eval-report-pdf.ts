@@ -401,7 +401,8 @@ const groupText = (a: RadarAxis) => `vs ${a.cohortLabel}, n=${a.n}`;
 
 /** Movement (band word + raw MQI total) beside the radar; a missing total reads Not tested and is never scored. */
 function movementRow(movement: EvalRadar["movement"]): Row {
-  const text = movement.total === null ? PDF_COPY.notTested : `${movement.band ?? ""} (${PDF_COPY.mqiTotalLabel} ${movement.total} of 24)`.trim();
+  const total = `${PDF_COPY.mqiTotalLabel} ${movement.total} of 24`;
+  const text = movement.total === null ? PDF_COPY.notTested : movement.band === null ? total : `${movement.band} (${total})`;
   return {
     height: 8,
     draw(d, y) {

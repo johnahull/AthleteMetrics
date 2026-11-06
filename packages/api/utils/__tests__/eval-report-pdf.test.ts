@@ -365,6 +365,14 @@ describe('eval report PDF: duration (mm:ss) metrics', () => {
       expect(text).toMatch(/Movement[\s\S]*Not tested/);
     });
 
+    it('prints the MQI total without parentheses when there is no band, and with the band in parentheses otherwise', () => {
+      const noBand = pdfText(buildEvalReportPdf(radarModel(6, { total: 17, band: null }), org).doc);
+      expect(noBand).toContain('MQI total 17 of 24');
+      expect(noBand).not.toContain('(MQI total');
+      const withBand = pdfText(buildEvalReportPdf(radarModel(6, { total: 20, band: 'Efficient' }), org).doc);
+      expect(withBand).toContain('Efficient (MQI total 20 of 24)');
+    });
+
     it('prints only WinAnsi-safe text for the radar', () => {
       const text = pdfText(buildEvalReportPdf(radarModel(6), org).doc);
       expect(text).not.toMatch(/[^\n\x20-\x7e\xa0-\xff]/);
