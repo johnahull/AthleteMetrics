@@ -24,6 +24,7 @@ vi.mock('express-rate-limit', async (importOriginal) => {
 });
 
 import { registerRoutes } from '../../packages/api/routes';
+import * as templateSvc from '../../packages/api/services/eval-template-service';
 import { deleteTemplate, TemplateInUseError, TemplateNotFoundError } from '../../packages/api/services/eval-template-service';
 import { currentRevisionOf, linkEventRevision } from '../../packages/api/services/eval-template-revision-service';
 import fs from 'fs';
@@ -318,6 +319,28 @@ describe('eval template revisions and MQI required', () => {
     it('currentRevisionOf throws TemplateNotFoundError when the template is gone, not an FK error', async () => {
       const ghost: any = { id: '00000000-0000-4000-8000-000000000001', currentRevisionId: null, metrics, organizationId: orgA };
       await expect(currentRevisionOf(ghost, coach.id)).rejects.toBeInstanceOf(TemplateNotFoundError);
+    });
+
+    it('a template deleted after the usable check but before the link falls back to a plain add with the warning, not a 404', async () => {
+      const made = await api.post(`/api/organizations/${orgA}/eval-templates`).send({ name: `${PREFIX}-vanish`, sport: 'SOCCER', metrics });
+      const tpl = made.body.id as string;
+      const ev = await newEvent('vanish');
+      const original = templateSvc.bulkAddForTemplate;
+      // the delete lands between the route's check and the service's link
+      const spy = vi.spyOn(templateSvc, 'bulkAddForTemplate').mockImplementationOnce(async (...args) => {
+        await deleteTemplate(tpl, coach.id);
+        return original(...args);
+      });
+      try {
+        const res = await api.post(`/api/events/${ev}/metrics/bulk`).send({ evalTemplateId: tpl, metrics: [{ metricCode: 'DASH_10YD', displayOrder: 0 }] });
+        expect(res.status).toBe(200);
+        expect(res.body.added).toEqual(['DASH_10YD']);
+        expect(res.body.warning).toMatch(/template/i);
+        expect(await eventRevisionId(ev)).toBeNull();
+        expect(spy).toHaveBeenCalled();
+      } finally {
+        spy.mockRestore();
+      }
     });
 
     it('a later plain batch leaves the link the first batch recorded', async () => {

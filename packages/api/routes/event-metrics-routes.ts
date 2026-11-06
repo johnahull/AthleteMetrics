@@ -249,11 +249,16 @@ export function registerEventMetricsRoutes(app: Express) {
           // A template archived, deleted or not usable for this event since the coach picked it must not fail the whole
           // list: add the tests plainly, link nothing, and say so
           const usable = template && !template.archivedAt && (!template.organizationId || template.organizationId === event.organizationId);
-          if (usable) return res.json(await bulkAddForTemplate(eventId, user.id, template, parsed.data.metrics));
-          return res.json({
-            ...(await bulkAddEventMetrics(eventId, user.id, parsed.data.metrics)),
-            warning: "The template is no longer available, so the tests were added without it.",
-          });
+          const warning = "The template is no longer available, so the tests were added without it.";
+          if (usable) {
+            try {
+              return res.json(await bulkAddForTemplate(eventId, user.id, template, parsed.data.metrics));
+            } catch (error) {
+              // Deleted after the check above: that transaction rolled back, so the same list goes in plainly, as at check time
+              if (!(error instanceof TemplateNotFoundError)) throw error;
+            }
+          }
+          return res.json({ ...(await bulkAddEventMetrics(eventId, user.id, parsed.data.metrics)), warning });
         }
         return res.json(await bulkAddEventMetrics(eventId, user.id, parsed.data.metrics));
       } catch (error) {
