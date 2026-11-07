@@ -105,6 +105,8 @@ const OrgMetrics = React.lazy(() => import("./pages/org-metrics"));
 
 // Lazy load report pages
 const Reports = React.lazy(() => import("./pages/reports"));
+const ReportTemplates = React.lazy(() => import("./pages/report-templates"));
+const ReportTemplateEdit = React.lazy(() => import("./pages/report-template-edit"));
 const ReportView = React.lazy(() => import("./pages/report-view"));
 const MultiReportView = React.lazy(() => import("./pages/multi-report-view"));
 const PublicReport = React.lazy(() => import("./pages/public-report"));
@@ -510,6 +512,17 @@ function Router() {
       <Route path="/reports/multi">
         <RouteWrapper loadingText="Loading Reports...">
           <MultiReportView />
+        </RouteWrapper>
+      </Route>
+      {/* Report templates: before /reports/:id, which would otherwise match "templates" as a report id */}
+      <Route path="/reports/templates/:templateId">
+        <RouteWrapper loadingText="Loading Template...">
+          <ReportTemplateEdit />
+        </RouteWrapper>
+      </Route>
+      <Route path="/reports/templates">
+        <RouteWrapper loadingText="Loading Templates...">
+          <ReportTemplates />
         </RouteWrapper>
       </Route>
       <Route path="/reports/:id">
