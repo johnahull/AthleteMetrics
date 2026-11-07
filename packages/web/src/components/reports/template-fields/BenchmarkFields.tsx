@@ -7,7 +7,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { BenchmarkSetPreview } from "@/components/benchmark-sets";
 import { BenchmarkSetCombobox } from "@/components/benchmark-sets/BenchmarkSetCombobox";
 import { BenchmarkChecklist, type BenchmarkChecklistProps } from "@/components/benchmarks/BenchmarkChecklist";
-import type { useBenchmarkSets } from "@/lib/benchmark-sets-api";
+import { isBenchmarkSetNotFound, type useBenchmarkSets } from "@/lib/benchmark-sets-api";
 import { resolveBenchmarkSelection, splitBenchmarkSelection } from "../benchmark-selection";
 import type { useBenchmarkSetDetails } from "./useBenchmarkSetDetails";
 
@@ -128,6 +128,13 @@ export function BenchmarkFields({
         )}
         {setQueries.map((q, idx) => {
           const setId = setIds[idx];
+          if (isBenchmarkSetNotFound(q.error)) {
+            return (
+              <p key={setId} role="status" className="text-sm text-muted-foreground">
+                A benchmark set is no longer available. It stays until you remove it.
+              </p>
+            );
+          }
           if (q.isError) {
             return (
               <div key={setId} role="alert" className="border border-destructive rounded-lg p-3 text-sm text-destructive">

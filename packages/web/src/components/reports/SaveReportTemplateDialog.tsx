@@ -43,6 +43,14 @@ function serverMessage(error: string): string | undefined {
   }
 }
 
+/** User-facing text for a failed template save (409 duplicate name, 400 validation, anything else). */
+export function saveErrorMessage(e: unknown): string {
+  const message = e instanceof Error ? e.message : "";
+  return message.startsWith("409")
+    ? "A template with this name already exists."
+    : (message.startsWith("400") && serverMessage(message)) || "Could not save the template. Please try again.";
+}
+
 // Not a <form>: React bubbles submit events through the dialog portal into the wizard's own form.
 export function SaveReportTemplateDialog({
   open,
@@ -81,12 +89,7 @@ export function SaveReportTemplateDialog({
       onSaved(saved);
       onClose();
     } catch (e) {
-      const message = e instanceof Error ? e.message : "";
-      setError(
-        message.startsWith("409")
-          ? "A template with this name already exists."
-          : (message.startsWith("400") && serverMessage(message)) || "Could not save the template. Please try again.",
-      );
+      setError(saveErrorMessage(e));
     }
   };
 

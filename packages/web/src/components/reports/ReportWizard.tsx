@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
+import { Link } from "wouter";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery } from "@tanstack/react-query";
@@ -509,7 +510,8 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
 
               {templates && templates.length === 0 && (
                 <p className="text-sm text-muted-foreground">
-                  No templates yet. Choose your metrics and benchmarks, then click Save as template on the last step to reuse them next time.
+                  No templates yet. Choose your metrics and benchmarks, then click Save as template on the last step to reuse them next time.{" "}
+                  <Link href="/reports/templates" onClick={onClose} className="underline">Manage templates</Link>
                 </p>
               )}
               {templates && templates.length > 0 && (
@@ -551,6 +553,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                       Templates are unavailable because metrics, benchmarks or benchmark sets failed to load.
                     </p>
                   )}
+                  <Link href="/reports/templates" onClick={onClose} className="text-sm underline">Manage templates</Link>
                   {loadedTemplate && droppedCount > 0 && (
                     <p className="text-sm text-muted-foreground">
                       {droppedCount} {droppedCount === 1 ? "item is" : "items are"} no longer available and {droppedCount === 1 ? "was" : "were"} left out.
