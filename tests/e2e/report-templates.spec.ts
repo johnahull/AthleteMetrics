@@ -28,6 +28,38 @@ async function toBenchmarksStep(page: Page, name: string, pickMetric: boolean) {
   };
 }
 
+/**
+ * The editor lists only metrics enabled for the org, and a site admin (the CI/E2E user, never an org
+ * member) works in an org only after picking it on /organizations. CI seeds site metrics but enables
+ * none, so create an org with FLY10_TIME enabled instead of relying on other specs' leftovers.
+ */
+async function createOrgWithMetric(page: Page) {
+  // Org creation is rate limited (also in CI), so reuse an existing org and create one only if none exists
+  const existing = (await (await page.request.get(`${BASE_URL}/api/organizations`)).json()) as { id: string }[];
+  let orgId = existing[0]?.id;
+  if (!orgId) {
+    const res = await page.request.post(`${BASE_URL}/api/organizations`, { data: { name: `E2E templates org ${unique()}` } });
+    expect(res.ok()).toBeTruthy();
+    orgId = ((await res.json()) as { id: string }).id;
+  }
+  const metrics = (await (await page.request.get(`${BASE_URL}/api/organizations/${orgId}/metrics?enabledOnly=true`)).json()) as { metricCode: string }[];
+  if (!metrics.some((m) => m.metricCode === 'FLY10_TIME')) {
+    const enabled = await page.request.post(`${BASE_URL}/api/organizations/${orgId}/metrics/FLY10_TIME/enable`);
+    expect(enabled.ok()).toBeTruthy();
+  }
+  return orgId;
+}
+
+/** Org context lives in memory, so pick the org, then move to `path` without a reload that would drop it. */
+async function openInOrg(page: Page, orgId: string, path: string) {
+  await page.goto(`${BASE_URL}/organizations`);
+  await page.getByTestId(`organization-link-${orgId}`).click();
+  await page.evaluate((to) => {
+    history.pushState({}, '', to);
+    dispatchEvent(new PopStateEvent('popstate'));
+  }, path);
+}
+
 test.describe('Report templates', () => {
   const createdTemplateIds: string[] = [];
 
@@ -67,6 +99,42 @@ test.describe('Report templates', () => {
     await next(page);
     await next(page);
     await expect(page.getByRole('checkbox', { checked: true }).first()).toBeVisible();
+  });
+
+  test('creates, edits and deletes a template on the manage page', async ({ page }) => {
+    const templateName = `E2E managed ${unique()}`;
+    const orgId = await createOrgWithMetric(page);
+    await openInOrg(page, orgId, '/reports');
+    await page.getByRole('link', { name: 'Manage templates' }).click();
+    await expect(page).toHaveURL(/\/reports\/templates$/);
+
+    await page.getByRole('link', { name: /New template/ }).click();
+    await page.getByLabel(/Template name/i).fill(templateName);
+    await page.getByRole('region', { name: /Metrics/ }).getByRole('checkbox').first().check(); // first metric
+    const created = page.waitForResponse((r) => r.url().includes('/report-templates') && r.request().method() === 'POST');
+    await page.getByRole('button', { name: 'Save template' }).click();
+    createdTemplateIds.push((await (await created).json()).id);
+    await expect(page.getByRole('heading', { name: templateName })).toBeVisible();
+
+    // Rename it on the edit page
+    await page.getByRole('link', { name: `Edit ${templateName}` }).click();
+    await page.getByLabel(/Template name/i).fill(`${templateName} v2`);
+    await page.getByRole('button', { name: 'Save template' }).click();
+    await expect(page.getByRole('heading', { name: `${templateName} v2` })).toBeVisible();
+
+    // The wizard offers the renamed template
+    await openInOrg(page, orgId, '/reports');
+    await page.getByRole('button', { name: /new report|create report/i }).first().click();
+    await page.getByRole('combobox', { name: /Start from template/i }).click();
+    await expect(page.getByRole('option', { name: `${templateName} v2` })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+
+    // Delete it
+    await openInOrg(page, orgId, '/reports/templates');
+    await page.getByRole('button', { name: `Delete ${templateName} v2` }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
+    await expect(page.getByRole('heading', { name: `${templateName} v2` })).toBeHidden();
   });
 
   test('shows a duplicate-name error when saving a template twice', async ({ page }) => {

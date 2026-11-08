@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { templateToFormValues, formToTemplate, type ReportTemplateData } from "../report-template";
+import { templateToFormValues, formToTemplate, setTemplateCharts, type ReportTemplateData } from "../report-template";
 import { DEFAULT_CHART_SELECTION } from "@shared/report-charts";
 
 const template: ReportTemplateData = {
@@ -91,5 +91,22 @@ describe("formToTemplate", () => {
     expect(out.charts.individual?.sprintRuns).toBe(false);
     const { values } = templateToFormValues({ ...template, charts: out.charts }, "individual", available);
     expect(values.charts.sprintRuns).toBe(false);
+  });
+});
+
+describe("setTemplateCharts", () => {
+  it("replaces one report type and keeps the other exactly as stored", () => {
+    const stored = { team: { trends: false }, individual: { radar: false } };
+    const next = setTemplateCharts(stored, "team", { ...DEFAULT_CHART_SELECTION, trends: true, leaderboard: false });
+    expect(next.individual).toBe(stored.individual);
+    expect(next.team).toEqual({ benchmarkStanding: true, trends: true, boxSwarm: true, leaderboard: false, tierDistribution: true });
+  });
+
+  it("writes only the keys the report type uses", () => {
+    const next = setTemplateCharts({}, "individual", DEFAULT_CHART_SELECTION);
+    expect(Object.keys(next.individual!).sort()).toEqual(
+      ["benchmarkStanding", "distribution", "fvProfile", "radar", "sprintRuns", "trends"],
+    );
+    expect(next.team).toBeUndefined();
   });
 });

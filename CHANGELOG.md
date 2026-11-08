@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-11-07
+
+### Added
+- Report templates manage page and editor. `/reports/templates` lists the organization's templates with Edit and Delete (linked from the Reports page and wizard step 1); `/reports/templates/new` and `/reports/templates/:templateId` edit name, description, metrics, benchmark sets, individual benchmarks and team and individual chart choices. Coaches, org admins and site admins only. Removed or disabled items show as "Unavailable" and are kept until the user removes them (#739)
+
+### Changed
+- The metric, benchmark and chart pickers are now shared components between the report wizard and the template editor; no wizard behavior change (#738)
+
+### Deployment notes
+- No migrations, no API changes, no new environment variables. Web only.
+- Known limit: concurrent template edits are last-write-wins (PATCH has no version check).
+
 ## [0.36.0] - 2026-11-05
 
 ### Added

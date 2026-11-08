@@ -77,3 +77,9 @@ export function formToTemplate(
     } as ReportTemplateCharts,
   };
 }
+
+/** Charts with one report type's choices replaced; the other type's stored entry is left untouched. */
+export function setTemplateCharts(charts: ReportTemplateCharts, reportType: ReportType, value: Charts): ReportTemplateCharts {
+  const keys = reportType === "team" ? TEAM_CHART_KEYS : INDIVIDUAL_CHART_KEYS;
+  return { ...charts, [reportType]: Object.fromEntries(keys.map((k) => [k, value[k]])) } as ReportTemplateCharts;
+}

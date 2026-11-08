@@ -1,23 +1,21 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
+import { Link } from "wouter";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useQuery, useQueries } from "@tanstack/react-query";
-import { apiRequest, STALE_TIME } from "@/lib/queryClient";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { useCreateReport } from "@/hooks/use-reports";
 import { useOrganizationMetrics } from "@/lib/metrics-api";
 import { useOrganizationBenchmarks } from "@/lib/benchmarks-api";
-import { useBenchmarkSets, fetchBenchmarkSet, benchmarkSetKeys, isBenchmarkSetNotFound } from "@/lib/benchmark-sets-api";
+import { useBenchmarkSets } from "@/lib/benchmark-sets-api";
 import { useReportTemplates, useDeleteReportTemplate, type ReportTemplate } from "@/lib/report-templates-api";
-import { BenchmarkSetPreview } from "@/components/benchmark-sets";
-import { BenchmarkChecklist } from "@/components/benchmarks/BenchmarkChecklist";
-import { splitBenchmarkSelection, resolveBenchmarkSelection } from "./benchmark-selection";
+import { resolveBenchmarkSelection } from "./benchmark-selection";
 import { templateToFormValues, formToTemplate, templateCharts } from "./report-template";
 import { SaveReportTemplateDialog } from "./SaveReportTemplateDialog";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
-import { BenchmarkSetCombobox } from "@/components/benchmark-sets/BenchmarkSetCombobox";
 import {
   Dialog,
   DialogContent,
@@ -41,25 +39,16 @@ import {
 } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { AlertTriangle, ChevronLeft, ChevronRight, Trash2, Users, X } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { ChevronLeft, ChevronRight, Trash2, Users } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { TeamAthleteSelector } from "@/components/ui/team-athlete-selector";
-import type { OrganizationBenchmarkWithDetails } from "@shared/schema";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { DEFAULT_CHART_SELECTION } from "@shared/report-charts";
-import { groupPickerMetrics } from "@/lib/metric-groups";
-import { MetricGroupHeading } from "./MetricGroupHeading";
-
-// Module-level so BenchmarkChecklist's memos keep stable accessor props across renders
-const getBenchmarkKey = (b: OrganizationBenchmarkWithDetails) => b.benchmarkId;
-const getBenchmarkLabel = (b: OrganizationBenchmarkWithDetails) => b.name;
-const getBenchmarkMeta = (b: OrganizationBenchmarkWithDetails) => ({
-  metricCode: b.metricCode,
-  gender: b.gender,
-  level: b.level,
-  tierGroupId: b.tierGroupId,
-});
+import { MetricPicker } from "./template-fields/MetricPicker";
+import { BenchmarkFields } from "./template-fields/BenchmarkFields";
+import { ChartChoices } from "./template-fields/ChartChoices";
+import { chartItems, type ChartItem } from "./template-fields/chart-items";
+import { useBenchmarkSetDetails } from "./template-fields/useBenchmarkSetDetails";
 
 const reportConfigSchema = z.object({
   reportType: z.enum(["team", "individual"]),
@@ -179,8 +168,6 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     true // enabledOnly
   );
 
-  const groupedMetrics = useMemo(() => groupPickerMetrics(metrics ?? []), [metrics]);
-
   // Fetch teams
   const { data: teams, isLoading: teamsLoading, error: teamsError } = useQuery({
     queryKey: ["/api/teams", organizationContext],
@@ -239,16 +226,10 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const benchmarkListContext = useMemo(() => ({ gender: wizardGender }), [wizardGender]);
 
   // Fetch every selected set; Create / Save-as-template wait for all of them to load
-  const setQueries = useQueries({
-    queries: selectedBenchmarkSetIds.map((setId) => ({
-      queryKey: benchmarkSetKeys.detail(organizationContext || "", setId),
-      queryFn: () => fetchBenchmarkSet(organizationContext || "", setId),
-      staleTime: STALE_TIME.STATIC,
-      enabled: !!organizationContext,
-    })),
-  });
-  const setsReady = setQueries.every((q) => q.isSuccess);
-  const setsFailed = setQueries.some((q) => q.isError);
+  const { queries: setQueries, ready: setsReady, failed: setsFailed, goneIds: goneSetIds } = useBenchmarkSetDetails(
+    organizationContext || "",
+    selectedBenchmarkSetIds,
+  );
 
   const { data: templates } = useReportTemplates(organizationContext || "");
   const deleteTemplate = useDeleteReportTemplate();
@@ -258,10 +239,6 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const templateListsFailed = !!(metricsError || benchmarksError || benchmarkSetsError);
 
   // A set deleted since the template was saved (404) is dropped and counted as no longer available
-  // Invariant: setQueries[i] is the query for selectedBenchmarkSetIds[i] (useQueries keeps input order)
-  const goneSetIds = setQueries
-    .map((q, i) => (isBenchmarkSetNotFound(q.error) ? selectedBenchmarkSetIds[i] : null))
-    .filter((id): id is string => !!id);
   // JSON key: a stable dependency that needs no delimiter, so any id round-trips
   const goneKey = JSON.stringify(goneSetIds);
   useEffect(() => {
@@ -282,44 +259,10 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     [enabledBenchmarks]
   );
 
-  // One merged picker; split the chosen benchmarkIds back into the two form fields by type
+  // One merged picker
   const allBenchmarks = useMemo(() => [...siteBenchmarks, ...customBenchmarks], [siteBenchmarks, customBenchmarks]);
-  const handleBenchmarkSelection = useCallback(
-    (ids: string[]) => {
-      const { site, custom } = splitBenchmarkSelection(
-        ids,
-        new Set(siteBenchmarks.map((b) => b.benchmarkId)),
-        new Set(customBenchmarks.map((b) => b.benchmarkId)),
-        { site: getValues("siteBenchmarks") || [], custom: getValues("customBenchmarks") || [] },
-      );
-      setValue("siteBenchmarks", site);
-      setValue("customBenchmarks", custom);
-    },
-    [siteBenchmarks, customBenchmarks, getValues, setValue],
-  );
   const watchedSiteIds = watch("siteBenchmarks");
   const watchedCustomIds = watch("customBenchmarks");
-  const selectedBenchmarkIds = useMemo(
-    () => [...(watchedSiteIds || []), ...(watchedCustomIds || [])],
-    [watchedSiteIds, watchedCustomIds],
-  );
-
-  // Overlapping sets can bring several tier groups for one metric; the team badge and PDF show only the first
-  const multiTierGroup = useMemo(() => {
-    if (!setsReady) return false;
-    const { site, custom } = resolveBenchmarkSelection(
-      setQueries.map((q) => q.data!),
-      watchedSiteIds || [],
-      watchedCustomIds || [],
-    );
-    const chosen = new Set([...site, ...custom]);
-    const groups = new Map<string, Set<string>>();
-    for (const b of allBenchmarks) {
-      if (!chosen.has(b.benchmarkId) || !b.tierGroupId) continue;
-      groups.set(b.metricCode, (groups.get(b.metricCode) ?? new Set()).add(b.tierGroupId));
-    }
-    return Array.from(groups.values()).some((g) => g.size > 1);
-  }, [setsReady, setQueries, watchedSiteIds, watchedCustomIds, allBenchmarks]);
 
   const applyTemplate = (template: ReportTemplate, type: "team" | "individual") => {
     const { values, droppedCount: dropped } = templateToFormValues(template, type, {
@@ -358,42 +301,16 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     }
   };
 
-  // Chart selection items shown in the step-8 "Charts to include" panel.
-  // Individual and team reports show different chart sets (team doesn't use
-  // the individual-only `distribution` histogram — it uses `boxSwarm` instead).
-  type ChartItemKey = keyof NonNullable<ReportFormData["charts"]>;
-  const individualChartItems: ReadonlyArray<readonly [ChartItemKey, string, string]> = [
-    ['radar', 'All-around profile (radar)', 'Percentile shape across all metrics (needs ≥3 metrics)'],
-    ['benchmarkStanding', 'Benchmark standing', 'Where the athlete sits vs each benchmark'],
-    ['trends', 'Progress over time', 'Trend line per metric (needs ≥2 measurements)'],
-    ['distribution', 'Where you stand (distribution)', 'The group spread with the athlete marked'],
-    // Only offered when the sprint-FV module is enabled for the site AND org.
-    ...(fvEnabled
-      ? [['fvProfile', 'Force-Velocity profile', 'Latest sprint F-V profile in the report window (KPIs, chart, analysis)'] as const]
-      : []),
-    ['sprintRuns', 'Sprint runs', 'Device-imported dash runs in the report window: gate times, intervals and bests'],
-  ];
-  const teamChartItems: ReadonlyArray<readonly [ChartItemKey, string, string]> = [
-    ['benchmarkStanding', 'Benchmark standing', `Where the ${labels.team.toLowerCase()} average sits vs each benchmark`],
-    ['trends', 'Progress over time', `${labels.team} average trend line per metric (needs ≥2 measurements)`],
-    ['boxSwarm', 'Distribution (box + swarm)', `The spread of every ${labels.athlete.toLowerCase()}'s performance per metric`],
-    ['leaderboard', 'Leaderboard', `Ranked bar chart of ${labels.athletes.toLowerCase()} per metric`],
-    ['tierDistribution', 'Tier distribution', `${labels.team} composition across benchmark tiers`],
-  ];
-  const renderChartCheckboxes = (items: ReadonlyArray<readonly [ChartItemKey, string, string]>) => (
-    <>
-      {items.map(([key, title, desc]) => (
-        <div key={key} className="flex items-start gap-x-2">
-          <Checkbox id={`chart-${key}`} checked={!comparisonChartOff(key) && (charts?.[key] ?? true)}
-            disabled={comparisonChartOff(key)}
-            onCheckedChange={(v) => setValue(`charts.${key}` as const, v as boolean)} className="mt-1" />
-          <div>
-            <Label htmlFor={`chart-${key}`} className="cursor-pointer font-medium">{title}</Label>
-            <p className="text-sm text-muted-foreground">{desc}</p>
-          </div>
-        </div>
-      ))}
-    </>
+  // Chart selection items shown in the step-8 "Charts to include" panel
+  const individualChartItems = chartItems("individual", labels, fvEnabled);
+  const teamChartItems = chartItems("team", labels, fvEnabled);
+  const renderChartCheckboxes = (items: ReadonlyArray<ChartItem>) => (
+    <ChartChoices
+      items={items}
+      value={charts}
+      isDisabled={comparisonChartOff}
+      onChange={(key, checked) => setValue(`charts.${key}` as const, checked)}
+    />
   );
 
   const handleNext = (e?: React.MouseEvent) => {
@@ -593,7 +510,8 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
 
               {templates && templates.length === 0 && (
                 <p className="text-sm text-muted-foreground">
-                  No templates yet. Choose your metrics and benchmarks, then click Save as template on the last step to reuse them next time.
+                  No templates yet. Choose your metrics and benchmarks, then click Save as template on the last step to reuse them next time.{" "}
+                  <Link href="/reports/templates" onClick={onClose} className="underline">Manage templates</Link>
                 </p>
               )}
               {templates && templates.length > 0 && (
@@ -635,6 +553,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                       Templates are unavailable because metrics, benchmarks or benchmark sets failed to load.
                     </p>
                   )}
+                  <Link href="/reports/templates" onClick={onClose} className="text-sm underline">Manage templates</Link>
                   {loadedTemplate && droppedCount > 0 && (
                     <p className="text-sm text-muted-foreground">
                       {droppedCount} {droppedCount === 1 ? "item is" : "items are"} no longer available and {droppedCount === 1 ? "was" : "were"} left out.
@@ -757,48 +676,13 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
           {step === 5 && (
             <div className="grid gap-y-4">
               <Label>Select Metrics *</Label>
-              {metricsLoading ? (
-                <div className="flex justify-center py-8">
-                  <LoadingSpinner />
-                </div>
-              ) : metricsError ? (
-                <div className="border border-destructive rounded-lg p-4 text-center">
-                  <p className="text-destructive">Failed to load metrics</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {metricsError instanceof Error ? metricsError.message : "Please try again"}
-                  </p>
-                </div>
-              ) : !metrics || metrics.length === 0 ? (
-                <div className="border rounded-lg p-4 text-center text-muted-foreground">
-                  <p>No metrics enabled for this organization</p>
-                  <p className="text-sm mt-1">Please enable metrics in Settings first</p>
-                </div>
-              ) : (
-                <div className="space-y-4 border rounded-lg p-4 max-h-96 overflow-y-auto">
-                  {groupedMetrics.map((g) => (
-                    <div key={g.group} className="space-y-2">
-                      <MetricGroupHeading label={g.label} />
-                      {g.metrics.map((metric) => {
-                        const metricCode = metric.metricCode;
-                        const displayName = metric.customLabel || metric.siteMetric.label;
-                        return (
-                          <div key={metricCode} className="flex items-center gap-x-2">
-                            <Checkbox
-                              id={metricCode}
-                              checked={selectedMetrics?.includes(metricCode)}
-                              onCheckedChange={() => toggleMetric(metricCode)}
-                            />
-                            <Label htmlFor={metricCode} className="cursor-pointer flex-1">
-                              <div className="font-medium">{displayName}</div>
-                              <div className="text-sm text-muted-foreground">{metric.siteMetric.unit}</div>
-                            </Label>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ))}
-                </div>
-              )}
+              <MetricPicker
+                metrics={metrics}
+                isLoading={metricsLoading}
+                error={metricsError}
+                selected={selectedMetrics}
+                onToggle={toggleMetric}
+              />
               {errors.metrics && (
                 <p className="text-sm text-destructive">{errors.metrics.message}</p>
               )}
@@ -813,108 +697,27 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                 Add benchmark sets, pick individual benchmarks, or both. The report uses everything chosen.
               </p>
 
-              <div className="space-y-2">
-                <h3 className="text-sm font-medium leading-none">Benchmark sets</h3>
-                {selectedBenchmarkSetIds.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {selectedBenchmarkSetIds.map((setId, idx) => {
-                      const name = setQueries[idx]?.data?.name ?? benchmarkSets?.find((s) => s.id === setId)?.name ?? "Benchmark set";
-                      return (
-                        <Badge key={setId} variant="secondary" className="gap-1">
-                          {name}
-                          <button
-                            type="button"
-                            aria-label={`Remove ${name}`}
-                            className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                            onClick={() => setSelectedBenchmarkSetIds((ids) => ids.filter((id) => id !== setId))}
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </Badge>
-                      );
-                    })}
-                  </div>
-                )}
-                {!benchmarkSetsLoading && benchmarkSets && benchmarkSets.length > 0 && (
-                  <BenchmarkSetCombobox
-                    organizationId={organizationContext || ""}
-                    value={null}
-                    onChange={(id) =>
-                      id && setSelectedBenchmarkSetIds((ids) => (ids.includes(id) ? ids : [...ids, id]))
-                    }
-                    context={benchmarkSetContext}
-                    placeholder="Add a benchmark set"
-                  />
-                )}
-                {setQueries.map((q, idx) => {
-                  const setId = selectedBenchmarkSetIds[idx];
-                  if (q.isError) {
-                    return (
-                      <div key={setId} role="alert" className="border border-destructive rounded-lg p-3 text-sm text-destructive">
-                        Failed to load a benchmark set. Remove it or retry before continuing.
-                        <Button type="button" variant="outline" size="sm" className="ml-2" onClick={() => q.refetch()}>
-                          Retry
-                        </Button>
-                      </div>
-                    );
-                  }
-                  return q.data ? (
-                    <BenchmarkSetPreview key={setId} set={q.data} />
-                  ) : (
-                    <div key={setId} role="status" aria-label="Loading benchmark set" className="flex justify-center py-4">
-                      <LoadingSpinner />
-                    </div>
-                  );
-                })}
-                {multiTierGroup && (
-                  <div role="alert" className="flex items-start gap-x-2 border border-amber-500/50 rounded-lg p-3 text-sm">
-                    <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-amber-600" />
-                    <span>
-                      The chosen sets include more than one tier group for the same metric. Tier distribution
-                      charts show all of them, but the team table badge and PDF label use only the first.
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              <h3 className="text-sm font-medium leading-none">Individual benchmarks</h3>
-              {benchmarksLoading ? (
-                <div className="flex justify-center py-8">
-                  <LoadingSpinner />
-                </div>
-              ) : (
-                <>
-                  {benchmarksError && (
-                    <div className="border border-destructive rounded-lg p-4 text-center">
-                      <p className="text-sm text-destructive">Failed to load benchmarks</p>
-                    </div>
-                  )}
-
-                  {allBenchmarks.length > 0 && (
-                    <BenchmarkChecklist
-                      items={allBenchmarks}
-                      getKey={getBenchmarkKey}
-                      getLabel={getBenchmarkLabel}
-                      getMeta={getBenchmarkMeta}
-                      selected={selectedBenchmarkIds}
-                      onChange={handleBenchmarkSelection}
-                      context={benchmarkListContext}
-                      renderDetail={(b) => (
-                        <span className="text-xs text-muted-foreground">
-                          {b.benchmarkType === "site" ? "Site" : "Custom"}
-                        </span>
-                      )}
-                    />
-                  )}
-
-                  {!benchmarksError && allBenchmarks.length === 0 && (
-                    <div className="border rounded-lg p-4 text-center text-muted-foreground">
-                      <p>No enabled benchmarks available</p>
-                      <p className="text-sm mt-1">You can skip this step or enable benchmarks in Settings</p>
-                    </div>
-                  )}
-                </>
-              )}
+              <BenchmarkFields
+                organizationId={organizationContext || ""}
+                benchmarkSets={benchmarkSets}
+                benchmarkSetsLoading={benchmarkSetsLoading}
+                setIds={selectedBenchmarkSetIds}
+                onAddSet={(id) => setSelectedBenchmarkSetIds((ids) => (ids.includes(id) ? ids : [...ids, id]))}
+                onRemoveSet={(id) => setSelectedBenchmarkSetIds((ids) => ids.filter((x) => x !== id))}
+                setQueries={setQueries}
+                setsReady={setsReady}
+                allBenchmarks={allBenchmarks}
+                benchmarksLoading={benchmarksLoading}
+                benchmarksError={benchmarksError}
+                siteIds={watchedSiteIds || []}
+                customIds={watchedCustomIds || []}
+                onBenchmarksChange={({ site, custom }) => {
+                  setValue("siteBenchmarks", site);
+                  setValue("customBenchmarks", custom);
+                }}
+                setContext={benchmarkSetContext}
+                listContext={benchmarkListContext}
+              />
             </div>
           )}
 
