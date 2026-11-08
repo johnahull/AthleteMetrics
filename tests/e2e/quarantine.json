@@ -335,7 +335,6 @@
  "report-sharing-to-athletes.spec.ts › Report Sharing to Athletes › Sidebar Badge › should show badge count in sidebar for unread reports",
  "report-team-charts.spec.ts",
  "report-templates.spec.ts › Report templates › combines two benchmark sets in one report",
- "report-templates.spec.ts › Report templates › creates, edits and deletes a template on the manage page",
  "report-templates.spec.ts › Report templates › saves a template from the wizard and prefills a new report from it",
  "report-templates.spec.ts › Report templates › shows a duplicate-name error when saving a template twice",
  "report-trends.spec.ts › Report Time-Range Trends › renders the trend chart on the public shared link",
