@@ -845,7 +845,20 @@ describe('FLY10 run-in variants', () => {
     expect(result.athletes[0].drills.some(d => d.metric === 'FLY10_TIME')).toBe(false);
   });
 
-  it.each(['25', '0', ''])('skips yard Flying with Start Distance "%s" with a specific warning', (start) => {
+  it.each([
+    ['0', 'Imperial', 'DASH_10YD'],
+    ['0.000000', 'Imperial', 'DASH_10YD'],
+    ['1', 'Imperial', 'DASH_10YD'],
+    ['1.000000', 'Imperial', 'DASH_10YD'],
+    ['0', 'Metric', 'DASH_10M'],
+    ['1', 'Metric', 'DASH_10M'],
+  ])('treats Flying with Start Distance %s (%s) as a dash: %s', (start, units, code) => {
+    const result = drills([row({ type: 'Flying', start, units, time: 1.8, dist: 10 })]);
+    expect(result.athletes[0].drills.map(d => d.metric)).toEqual([code]);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it.each(['25', ''])('skips yard Flying with Start Distance "%s" with a specific warning', (start) => {
     const result = drills([row({ type: 'Flying', start, time: 1.2, dist: 10 })]);
     expect(result.athletes.flatMap(a => a.drills)).toHaveLength(0);
     expect(result.warnings.some(w => /Flying 10.*Start Distance/.test(w))).toBe(true);
