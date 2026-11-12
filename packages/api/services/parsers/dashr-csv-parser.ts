@@ -201,7 +201,7 @@ const FLY10_YD_BY_START: Record<number, string> = {
   30: MetricType.FLY10_TIME_RI30,
 };
 
-/** A Flying row with a 0 or 1 yd run-in is effectively a standing start, so it is a dash. */
+/** A Flying row with a 0 or 1 run-in (in the row's units) is effectively a standing start, so it is a dash. */
 function isZeroRunInFly(row: DashrRow): boolean {
   const start = parseFloat_(row['Start Distance']);
   return (row['Type'] || '').trim() === 'Flying' && (start === 0 || start === 1);
@@ -479,7 +479,7 @@ function selectBestAttempts(rows: DashrRow[]): DashrRow[] {
       date || '',
       (row['Direction'] || '').toLowerCase().trim(),
       // Agility exports may or may not fill Final Distance; it is not part of their identity.
-      NO_DISTANCE_TYPES.has((row['Type'] || '').trim()) ? '' : row['Final Distance'] || '',
+      NO_DISTANCE_TYPES.has((row['Type'] || '').trim()) ? '' : String(parseFloat_(row['Final Distance']) ?? ''),
       // A metric and a yard 5-0-5 are different protocols (_M vs _YD), never alternate attempts.
       getDistanceUnit(row),
       // Different yard run-ins on the same day are different metrics, not attempts at one.

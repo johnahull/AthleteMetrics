@@ -801,6 +801,7 @@ describe('FLY10 run-in variants', () => {
     units?: string;
     time: number;
     dist: number;
+    distText?: string; // raw Final Distance text, to vary formatting
     date?: string;
     split1?: [number, number];
     // Gates 2..6 as [time, distance]
@@ -823,7 +824,7 @@ describe('FLY10 run-in variants', () => {
       set(`Split Distance ${i + 2}`, d.toFixed(6));
     });
     set('Final Time', opts.time.toFixed(6));
-    set('Final Distance', opts.dist.toFixed(6));
+    set('Final Distance', opts.distText ?? opts.dist.toFixed(6));
     return f.join(',');
   }
   const csv = (rows: string[]) => Buffer.from([HEADER.join(','), ...rows].join('\n'));
@@ -856,6 +857,15 @@ describe('FLY10 run-in variants', () => {
     const result = drills([row({ type: 'Flying', start, units, time: 1.8, dist: 10 })]);
     expect(result.athletes[0].drills.map(d => d.metric)).toEqual([code]);
     expect(result.warnings).toEqual([]);
+  });
+
+  it.each(['0', '1'])('a Start %s fly and a same-day dash compete for one DASH_10YD result', (start) => {
+    const result = drills([
+      row({ type: 'Dash', time: 1.9, dist: 10 }),
+      row({ type: 'Flying', start, time: 1.7, dist: 10, distText: '10' }),
+    ]);
+    const dashes = result.athletes[0].drills.filter(d => d.metric === 'DASH_10YD');
+    expect(dashes.map(d => d.value)).toEqual([1.7]);
   });
 
   it.each(['25', ''])('skips yard Flying with Start Distance "%s" with a specific warning', (start) => {
