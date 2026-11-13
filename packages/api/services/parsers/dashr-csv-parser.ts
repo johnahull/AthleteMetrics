@@ -201,18 +201,25 @@ const FLY10_YD_BY_START: Record<number, string> = {
   30: MetricType.FLY10_TIME_RI30,
 };
 
+/** A Flying row with a 0 or 1 run-in (in the row's units) is effectively a standing start, so it is a dash. */
+function isZeroRunInFly(row: DashrRow): boolean {
+  const start = parseFloat_(row['Start Distance']);
+  return (row['Type'] || '').trim() === 'Flying' && (start === 0 || start === 1);
+}
+
 /** True for a yard Flying row over 10 yd, whose code depends on Start Distance. */
 function isYardFly10(row: DashrRow): boolean {
   return (row['Type'] || '').trim() === 'Flying'
     && parseFloat_(row['Final Distance']) === 10
-    && getDistanceUnit(row) === 'YD';
+    && getDistanceUnit(row) === 'YD'
+    && !isZeroRunInFly(row);
 }
 
 /**
  * Determine the metric code from a Dashr row based on Type + distances
  */
 function mapDrillType(row: DashrRow): string | null {
-  const type = (row['Type'] || '').trim();
+  const type = isZeroRunInFly(row) ? 'Dash' : (row['Type'] || '').trim();
   const finalDist = parseFloat_(row['Final Distance']);
   const direction = (row['Direction'] || '').trim().toUpperCase();
   const unit = getDistanceUnit(row);
@@ -467,11 +474,12 @@ function selectBestAttempts(rows: DashrRow[]): DashrRow[] {
     const key = [
       (row['First Name'] || '').toLowerCase().trim(),
       (row['Last Name'] || '').toLowerCase().trim(),
-      (row['Type'] || '').toLowerCase().trim(),
+      // A 0 run-in fly is a dash, so it competes with dashes for best attempt
+      (isZeroRunInFly(row) ? 'dash' : (row['Type'] || '').toLowerCase().trim()),
       date || '',
       (row['Direction'] || '').toLowerCase().trim(),
       // Agility exports may or may not fill Final Distance; it is not part of their identity.
-      NO_DISTANCE_TYPES.has((row['Type'] || '').trim()) ? '' : row['Final Distance'] || '',
+      NO_DISTANCE_TYPES.has((row['Type'] || '').trim()) ? '' : String(parseFloat_(row['Final Distance']) ?? ''),
       // A metric and a yard 5-0-5 are different protocols (_M vs _YD), never alternate attempts.
       getDistanceUnit(row),
       // Different yard run-ins on the same day are different metrics, not attempts at one.
