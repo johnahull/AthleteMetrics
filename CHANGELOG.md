@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.37.1] - 2026-11-13
+
+### Fixed
+- Dashr CSV import: Flying rows with a 0 or 1 yd run-in are treated as dashes, and best attempts are grouped by numeric Final Distance (#748)
+
+### Deployment notes
+- No migrations, no API changes, no new environment variables.
+
 ## [0.37.0] - 2026-11-07
 
 ### Added
