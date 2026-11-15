@@ -30,7 +30,10 @@ export function formatStyleExampleBlock(text: string): string {
  * name (3+ chars) matches only as stored (capitalised), so members named Will or Long do not block
  * everyday lowercase words. Whole words only. Returns the members' full names.
  */
-export function memberNamesIn(text: string, names: string[]): string[] {
+export function memberNamesIn(rawText: string, rawNames: string[]): string[] {
+  // NFKC like the prompt path, so full-width / decomposed spellings of a name are caught
+  const text = rawText.normalize("NFKC");
+  const names = rawNames.map((n) => n.normalize("NFKC"));
   const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const word = (part: string, flags: string) =>
     new RegExp(`(?<![\\p{L}\\d])${escape(part)}(?![\\p{L}\\d])`, flags).test(text);

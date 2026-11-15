@@ -84,6 +84,22 @@ describe('OrgAdminSettings style example field', () => {
     await waitFor(() => expect(mockUpdate).toHaveBeenCalledWith({ aiStyleExample: null }));
   });
 
+  it('lets an admin remove a saved example while AI insights are off', async () => {
+    mockOrg.aiEnabled = false;
+    mockOrg.aiStyleExample = 'Old example';
+    renderPage();
+    expect(screen.getByLabelText('Example analysis (your style)')).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: /clear saved example/i }));
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledWith({ aiStyleExample: null }));
+  });
+
+  it('shows no clear button when nothing is saved', () => {
+    mockOrg.aiEnabled = false;
+    renderPage();
+    expect(screen.queryByRole('button', { name: /clear saved example/i })).toBeNull();
+  });
+
   it('is disabled while AI insights are off, with an enable-first hint', () => {
     mockOrg.aiEnabled = false;
     renderPage();
