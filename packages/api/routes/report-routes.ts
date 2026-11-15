@@ -1639,7 +1639,8 @@ export function registerReportRoutes(app: Express) {
       }
 
       // Build report data for AI
-      const reportData = await buildReportDataForAI(report, user.id, reportService);
+      const includeCoachNotes = isMeasurementWriterRole(await getOrgRole(user, report.organizationId));
+      const reportData = await buildReportDataForAI(report, user.id, reportService, { includeCoachNotes });
 
       // Generate insights using AI service
       const insights = await generateCoachingInsights(modelKey as AIModelKey, reportData);
@@ -5039,7 +5040,13 @@ function calculateBenchmarkAchievements(athleteRankings: any[], teamStatistics?:
  *
  * Exported only so the integration test can assert the prompt data; routes should not import it.
  */
-export async function buildReportDataForAI(report: Report, userId: string, reportService: ReportService): Promise<import("../services/ai-insights-service").ReportData> {
+export async function buildReportDataForAI(
+  report: Report,
+  userId: string,
+  reportService: ReportService,
+  // Coach notes are for writers of the report's organization only; callers opt in once they have checked that
+  opts: { includeCoachNotes?: boolean } = {},
+): Promise<import("../services/ai-insights-service").ReportData> {
   // Data size limits to prevent large AI payloads
   const MAX_METRICS = 20;
   const MAX_HISTORY_POINTS = 30;
@@ -5433,7 +5440,7 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
     };
 
     // Coach notes steer the insights of an individual report; team and eval rows never carry them
-    if (report.reportType === 'individual') {
+    if (report.reportType === 'individual' && opts.includeCoachNotes) {
       const notes = coachNotesSchema.safeParse(report.coachNotes);
       if (notes.success && Object.keys(notes.data).length > 0) aiReportData.coachNotes = notes.data;
     }
