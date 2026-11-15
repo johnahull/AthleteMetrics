@@ -785,6 +785,8 @@ function coachText(input: string, maxLength: number, reportData: ReportData): st
     if (rest.length > 0) text = text.replace(word(full, 'gi'), '{{first_name}}');
     text = text.replace(word(escapeRegExp(first.toUpperCase()), 'g'), '{{first_name}}');
     text = text.replace(word(escapeRegExp(first), 'g'), '{{first_name}}');
+    // Lower-case first name on its own ("evelyn ran"): a child's name outweighs the rare ordinary-word first name
+    text = text.replace(word(escapeRegExp(first.toLowerCase()), 'g'), '{{first_name}}');
     for (const part of rest) {
       text = text.replace(word(escapeRegExp(part.toUpperCase()), 'g'), 'the athlete');
       text = text.replace(word(escapeRegExp(part), 'g'), 'the athlete');

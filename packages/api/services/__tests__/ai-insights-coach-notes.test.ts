@@ -183,6 +183,11 @@ describe('de-identification of coach text', () => {
     }
   });
 
+  it('redacts a lower-case first name written without the last name', () => {
+    const p = buildPrompt(individual({ coachNotes: { whatISaw: 'evelyn ran flat-footed' } }));
+    expect(p).not.toContain('evelyn');
+  });
+
   it('keeps words that only contain a name (word boundary)', () => {
     const prompt = buildPrompt(individual({ athleteName: 'Al Ray', coachNotes: { whatISaw: 'Alan and Raymond are fine; Al ran' } }));
     expect(prompt).toContain('Alan and Raymond');
