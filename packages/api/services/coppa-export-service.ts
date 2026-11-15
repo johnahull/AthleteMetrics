@@ -113,6 +113,13 @@ export interface ExportBundle {
     createdAt: Date;
     config: unknown;
   }>;
+  /** Coach-authored notes on this athlete's individual reports (about the child; not shown to athletes in-app) */
+  coachNotes: Array<{
+    reportId: string;
+    organizationId: string;
+    reportName: string;
+    coachNotes: unknown;
+  }>;
 }
 
 // ============================================================================
@@ -423,6 +430,19 @@ export class CoppaExportService extends BaseService {
         sql`${reports.config}->>'athleteId' = ${athleteUserId}`,
       ));
 
+    const athleteCoachNotes = await db.select({
+      reportId: reports.id,
+      organizationId: reports.organizationId,
+      reportName: reports.name,
+      coachNotes: reports.coachNotes,
+    })
+      .from(reports)
+      .where(and(
+        eq(reports.reportType, 'individual'),
+        sql`${reports.config}->>'athleteId' = ${athleteUserId}`,
+        sql`${reports.coachNotes} IS NOT NULL`,
+      ));
+
     return {
       exportedAt: new Date().toISOString(),
       athlete: {
@@ -443,6 +463,7 @@ export class CoppaExportService extends BaseService {
       eventParticipations: athleteEvents,
       reportSnapshots: athleteReportSnapshots,
       evalReports: athleteEvalReports,
+      coachNotes: athleteCoachNotes,
     };
   }
 

@@ -56,6 +56,8 @@ import { hexToRgb, isSafeLogoUrl, fetchLogoBase64, sanitizeFilename } from "./re
 import { renderEvalReportPdf } from "../utils/eval-report-pdf";
 import { canAccessEvalRow, hasInaccessibleEval } from "./eval-report-access";
 import { EVAL_REPORT_TYPE, frozenModelSchema } from "@shared/eval-report-config";
+import { coachNotesSchema } from "@shared/coach-notes";
+import { omitCoachNotes, writerOrgIds, forViewer } from "./report-coach-notes-access";
 import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { formatCalendarDate, formatEventReportTimeframe } from "../utils/calendar-date";
@@ -543,7 +545,9 @@ export function registerReportRoutes(app: Express) {
       }
 
       // Step 4: Enrich reports with sentToAthlete status and targetAthlete name
-      const reportsWithSentStatus = reportsList.map((report) => {
+      const coachNoteWriterOrgs = await writerOrgIds(user, reportsList.map((r) => r.organizationId));
+      const reportsWithSentStatus = reportsList.map((row) => {
+        const report = coachNoteWriterOrgs.has(row.organizationId) ? row : omitCoachNotes(row);
         if (report.reportType !== 'individual') {
           return stripEvalModel(report);
         }
@@ -611,7 +615,7 @@ export function registerReportRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied to this report" });
       }
 
-      res.json(report);
+      res.json(await forViewer(user, report));
     } catch (error) {
       console.error("Error fetching report:", error);
       res.status(500).json({ message: "Failed to fetch report" });
@@ -670,7 +674,7 @@ export function registerReportRoutes(app: Express) {
         .where(eq(reports.id, reportId))
         .returning();
 
-      res.json(updated);
+      res.json(await forViewer(user, updated));
     } catch (error) {
       if (error instanceof ZodError) {
         return res.status(400).json({
@@ -1819,6 +1823,54 @@ export function registerReportRoutes(app: Express) {
       res.status(500).json({
         message: "Failed to update coaching insights"
       });
+    }
+  });
+
+  /**
+   * Save the coach notes the AI insights read. An empty object `{}` clears them (express.json strict mode
+   * rejects a literal `null` body, so null cannot be sent).
+   * PATCH /api/reports/:id/coach-notes
+   */
+  app.patch("/api/reports/:id/coach-notes", reportLimiter, requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const notes = coachNotesSchema.parse(req.body ?? {});
+      const report = await storage.getReport(req.params.id);
+      if (!report) {
+        return res.status(404).json({ message: "Report not found" });
+      }
+
+      // A non-writer must not learn that this id is an eval
+      if (!(await canAccessEvalRow(user, report))) return res.status(404).json(REPORT_NOT_FOUND);
+      if (report.reportType === EVAL_REPORT_TYPE) {
+        return res.status(400).json({ message: "Coach notes are not available for eval reports" });
+      }
+      if (report.reportType !== 'individual') {
+        return res.status(400).json({ message: "Coach notes are only available for individual reports" });
+      }
+
+      // The role in the report's own organization decides (requireRole would check the primary org only)
+      if (!isMeasurementWriterRole(await getOrgRole(user, report.organizationId))) {
+        return res.status(403).json({ message: "Access denied to this report" });
+      }
+
+      const [updated] = await db
+        .update(reports)
+        .set({ coachNotes: Object.keys(notes).length ? notes : null, updatedAt: new Date() })
+        .where(eq(reports.id, report.id))
+        .returning({ coachNotes: reports.coachNotes });
+
+      res.json({ coachNotes: updated.coachNotes });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Error updating coach notes:", error);
+      res.status(500).json({ message: "Failed to update coach notes" });
     }
   });
 

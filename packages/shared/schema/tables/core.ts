@@ -37,6 +37,7 @@ export const organizations = pgTable("organizations", {
   customMetricsEnabled: boolean("custom_metrics_enabled").default(false).notNull(),
   // AI prompt context for customizing coaching insights (added in migration 0107)
   aiPromptContext: text("ai_prompt_context"),
+  aiStyleExample: text("ai_style_example"),
   // PDF branding fields (added in migration 0106)
   brandLogoUrl: text("brand_logo_url"),
   brandPrimaryColor: varchar("brand_primary_color", { length: 7 }),

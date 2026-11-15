@@ -1383,6 +1383,9 @@ export type ActorType = (typeof actorTypeEnum)[number];
 export type ClaimStatus = (typeof claimStatusEnum)[number];
 
 // Insert schemas
+// NOTE: this file's `organizations` table is a stale copy without ai_prompt_context / ai_style_example, so those
+// columns cannot be .omit()ted here (TS2322) and are already absent from this schema; the guard test is
+// packages/shared/__tests__/coach-notes.test.ts. Do not add them to this table copy without omitting them.
 export const insertOrganizationSchema = createInsertSchema(organizations).omit({
   id: true,
   createdAt: true,
@@ -2283,6 +2286,9 @@ export const toggleSiteSetVisibilitySchema = z.object({
 });
 
 // Report Schemas
+// NOTE: this file's `reports` table is a stale copy without coach_notes, so coachNotes cannot be .omit()ted here
+// (TS2322) and is already absent from this schema; the guard test is packages/shared/__tests__/coach-notes.test.ts.
+// Do not add it to this table copy without omitting it.
 export const insertReportSchema = createInsertSchema(reports).omit({
   id: true,
   createdAt: true,

@@ -27,6 +27,7 @@ import {
 import { EVAL_REPORT_TYPE, evalReportConfigSchema, evalReportRequestSchema } from "@shared/eval-report-config";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { z, ZodError } from "zod";
+import { stripCoachNotesForViewer } from "./report-coach-notes-access";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 
 // Lighter limit for the eval report preview and defaults (reads; nothing is saved)
@@ -172,7 +173,8 @@ export function registerEventReportRoutes(app: Express) {
           .orderBy(desc(reports.createdAt));
 
         // The list does not need an eval row's frozen model; keep its event date
-        const payload = eventReports.map((report) => {
+        const visibleReports = await stripCoachNotesForViewer(req.user!, eventReports);
+        const payload = visibleReports.map((report) => {
           if (report.reportType !== EVAL_REPORT_TYPE) return report;
           const { model, ...rest } = (report.config ?? {}) as Record<string, unknown> & { model?: { eventDate?: string } };
           return { ...report, config: { ...rest, eventDate: model?.eventDate } };

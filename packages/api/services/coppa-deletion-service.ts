@@ -363,6 +363,24 @@ export class CoppaDeletionService extends BaseService {
           deletedCategories.push(`ai_coaching_insights_cleared (${affectedReportIds.length} reports)`);
         }
 
+        // STEP 4b-2: Coach notes (and any AI insights derived from them) on EVERY individual report of this athlete,
+        // shared or not. The athlete is named only in config.athleteId, so the shares above do not find them.
+        const clearedNotes = await tx.update(reports)
+          .set({
+            coachNotes: null,
+            coachingInsights: null,
+            coachingInsightsGeneratedAt: null,
+            coachingInsightsModel: null,
+          })
+          .where(and(
+            eq(reports.reportType, 'individual'),
+            sql`${reports.config}->>'athleteId' = ${athleteUserId}`,
+          ))
+          .returning({ id: reports.id });
+        if (clearedNotes.length > 0) {
+          deletedCategories.push(`coach_notes_cleared (${clearedNotes.length} reports)`);
+        }
+
         // STEP 4c: Delete the athlete's eval reports, shared or not. The athlete is only named in
         // config.athleteId (no FK), so the user cascade never reaches them; report_shares and
         // report_snapshots cascade from reports.id. Like the other steps this is keyed on the user id, not the org.

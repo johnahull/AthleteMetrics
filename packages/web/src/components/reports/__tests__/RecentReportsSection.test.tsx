@@ -36,6 +36,7 @@ const mockRecentReports: Report[] = [
     coachingInsights: null,
     coachingInsightsGeneratedAt: null,
     coachingInsightsModel: null,
+    coachNotes: null,
     archivedAt: null,
   },
   {
@@ -53,6 +54,7 @@ const mockRecentReports: Report[] = [
     coachingInsights: null,
     coachingInsightsGeneratedAt: null,
     coachingInsightsModel: null,
+    coachNotes: null,
     archivedAt: null,
   },
   {
@@ -70,6 +72,7 @@ const mockRecentReports: Report[] = [
     coachingInsights: null,
     coachingInsightsGeneratedAt: null,
     coachingInsightsModel: null,
+    coachNotes: null,
     archivedAt: null,
   },
 ];
@@ -250,6 +253,7 @@ describe('RecentReportsSection', () => {
       coachingInsights: null,
       coachingInsightsGeneratedAt: null,
       coachingInsightsModel: null,
+      coachNotes: null,
     archivedAt: null,
     }));
 

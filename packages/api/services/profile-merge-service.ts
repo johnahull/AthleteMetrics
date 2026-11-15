@@ -107,6 +107,7 @@ export interface MergeResult {
     eventRegistrationsTransferred: number;
     /** Eval reports re-pointed to the target. Always set by a live merge; the dry-run preview does not count them, so it is omitted there. */
     evalReportsTransferred?: number;
+    individualReportsTransferred?: number;
     emailsMerged: number;
     sessionsInvalidated: number;
   };
@@ -313,6 +314,7 @@ export class ProfileMergeService extends BaseService {
         wellnessResponsesTransferred: 0,
         eventRegistrationsTransferred: 0,
         evalReportsTransferred: 0,
+        individualReportsTransferred: 0,
         emailsMerged: 0,
         sessionsInvalidated: 0,
       };
@@ -490,6 +492,18 @@ export class ProfileMergeService extends BaseService {
         ))
         .returning({ id: reports.id });
       summary.evalReportsTransferred = evalReportsResult.length;
+
+      // 8c. Re-point ALL individual reports keyed to the source athlete, in every organization: they name the
+      // athlete only in config.athleteId, which COPPA deletion and export key on, so reports (and the coach notes
+      // and AI insights on them) must follow the surviving athlete wherever they live.
+      const individualReportsResult = await tx.update(reports)
+        .set({ config: sql`jsonb_set(${reports.config}, '{athleteId}', to_jsonb(${targetUserId}::text))` })
+        .where(and(
+          eq(reports.reportType, 'individual'),
+          sql`${reports.config}->>'athleteId' = ${sourceUserId}`,
+        ))
+        .returning({ id: reports.id });
+      summary.individualReportsTransferred = individualReportsResult.length;
 
       // 9. Transfer/merge athlete profile
       const [sourceProfile] = await tx.select()

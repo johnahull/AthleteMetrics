@@ -241,6 +241,8 @@ export interface Report {
   coachingInsights?: string | null;
   coachingInsightsGeneratedAt?: string | null;
   coachingInsightsModel?: string | null;
+  /** Absent/null for non-writers: the server strips it. */
+  coachNotes?: unknown | null;
   archivedAt?: string | null;
 }
 
