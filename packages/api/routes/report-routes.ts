@@ -666,7 +666,7 @@ export function registerReportRoutes(app: Express) {
       // config and type: only name and description can change.
       const validatedData = report.reportType === EVAL_REPORT_TYPE
         ? evalReportUpdateSchema.parse(req.body)
-        : updateReportSchema.extend({ config: insertReportSchema.shape.config.optional() }).strict().parse(req.body);
+        : reportPutSchema.parse(req.body);
 
       // Update report
       const [updated] = await db
@@ -3997,6 +3997,7 @@ function stripEvalModel<T extends { reportType: string; config: unknown }>(repor
 }
 
 /** PUT body for an eval: name and description are the only editable fields. */
+const reportPutSchema = updateReportSchema.extend({ config: insertReportSchema.shape.config.optional() }).strict();
 const evalReportUpdateSchema = z.object({
   name: z.string().trim().min(1, "Report name is required").max(200).optional(),
   description: z.string().max(1000).nullable().optional(),
