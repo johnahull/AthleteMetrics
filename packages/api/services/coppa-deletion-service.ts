@@ -365,6 +365,7 @@ export class CoppaDeletionService extends BaseService {
 
         // STEP 4b-2: Coach notes (and any AI insights derived from them) on EVERY individual report of this athlete,
         // shared or not. The athlete is named only in config.athleteId, so the shares above do not find them.
+        // Unlike STEP 4b (shared reports only), this covers unshared rows; the overlap on shared rows is harmless.
         const clearedNotes = await tx.update(reports)
           .set({
             coachNotes: null,
