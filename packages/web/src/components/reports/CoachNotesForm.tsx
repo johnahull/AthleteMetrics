@@ -77,7 +77,8 @@ function toNotes(v: FormValues): CoachNotes {
   if (v.seasonPhase) n.seasonPhase = v.seasonPhase;
   if (v.trainingAgeYears !== "") n.trainingAgeYears = Number(v.trainingAgeYears);
   if (v.maturation) n.maturation = v.maturation;
-  if (v.restrictionArea.trim() || v.restrictionStatus.trim() || v.restrictionPtCleared) {
+  // PT-cleared alone says nothing clinical, so it is only sent together with an area or status
+  if (v.restrictionArea.trim() || v.restrictionStatus.trim()) {
     n.restriction = { area: v.restrictionArea, status: v.restrictionStatus, ptCleared: v.restrictionPtCleared };
   }
   if (v.testDayFlags.length) n.testDayFlags = v.testDayFlags;
