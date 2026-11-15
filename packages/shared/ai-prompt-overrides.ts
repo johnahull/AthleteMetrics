@@ -49,7 +49,7 @@ const role = z
 
 const checklist = slot().refine(
   (v) => v === "" || v.split("\n").length === AI_PROMPT_CHECKLIST_LINES,
-  `analysisChecklist needs exactly ${AI_PROMPT_CHECKLIST_LINES} lines (checklist items 2, 3, 4, 6, 7, 8 and 9, in order), or leave it empty for the default`,
+  `analysisChecklist needs exactly ${AI_PROMPT_CHECKLIST_LINES} lines (checklist items 2, 3, 4, 6, 7, 8 and 9, in order; blank lines do not count), or leave it empty for the default`,
 );
 
 export const aiPromptOverridesSchema = z

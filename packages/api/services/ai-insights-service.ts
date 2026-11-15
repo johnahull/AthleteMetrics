@@ -905,6 +905,7 @@ function coachNoteLines(reportData: ReportData): string[] {
 function buildAnalysisInstruction(checklist?: string): string {
   // One line per item, in order; a line the admin left out keeps the default, numbers they typed are dropped
   const typed = (checklist ?? '').split('\n').map((l) => l.replace(/^\(?\d+[).]\s*/, '').trim()).filter(Boolean);
+  // Items 1 and 5 are locked; these are items 2-4 and 6-9
   const [i2, i3, i4, i6, i7, i8, i9] = CHECKLIST_DEFAULT.map((d, i) => typed[i] ?? d);
   return [
     `First write an <analysis>...</analysis> block working through this checklist, in short notes. Then write the headed summary after it.`,
