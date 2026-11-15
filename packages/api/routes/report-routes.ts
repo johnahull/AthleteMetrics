@@ -667,7 +667,7 @@ export function registerReportRoutes(app: Express) {
       // config and type: only name and description can change.
       const validatedData = report.reportType === EVAL_REPORT_TYPE
         ? evalReportUpdateSchema.parse(req.body)
-        : updateReportSchema.extend({ config: insertReportSchema.shape.config.optional() }).strict().parse(req.body);
+        : reportPutSchema.parse(req.body);
 
       // Update report
       const [updated] = await db
@@ -1644,7 +1644,8 @@ export function registerReportRoutes(app: Express) {
       }
 
       // Build report data for AI
-      const reportData = await buildReportDataForAI(report, user.id, reportService);
+      const includeCoachNotes = isMeasurementWriterRole(await getOrgRole(user, report.organizationId));
+      const reportData = await buildReportDataForAI(report, user.id, reportService, { includeCoachNotes });
 
       // Site-admin prompt wording. A stored value that no longer parses must not fail generation for every
       // organization: use the code defaults and say so in the log.
@@ -1850,7 +1851,12 @@ export function registerReportRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      const notes = coachNotesSchema.parse(req.body ?? {});
+      // `{}` clears the notes; a missing body must not (it would silently erase them)
+      // (express.json leaves req.body = {} when nothing was sent, so test the content type instead)
+      if (!req.is('application/json')) {
+        return res.status(400).json({ message: "Request body is required" });
+      }
+      const notes = coachNotesSchema.parse(req.body);
       const report = await storage.getReport(req.params.id);
       if (!report) {
         return res.status(404).json({ message: "Report not found" });
@@ -1870,12 +1876,34 @@ export function registerReportRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied to this report" });
       }
 
-      const [updated] = await db
-        .update(reports)
-        .set({ coachNotes: Object.keys(notes).length ? notes : null, updatedAt: new Date() })
-        .where(eq(reports.id, report.id))
-        .returning({ coachNotes: reports.coachNotes });
+      const athleteId = (report.config as { athleteId?: string } | null)?.athleteId;
+      if (!athleteId) return res.status(400).json({ message: "Coach notes are only available for individual reports" });
 
+      // Atomic with COPPA deletion: deletion takes FOR UPDATE on the athlete's user row first, so this either
+      // finishes before deletion (which then clears the notes) or waits and sees the athlete deleted.
+      // The update re-states the authorized organization, type and athlete, so a concurrent PUT that moved the
+      // report cannot be written through the old authorization.
+      const updated = await db.transaction(async (tx) => {
+        const [athlete] = await tx
+          .select({ deletedAt: users.deletedAt })
+          .from(users)
+          .where(eq(users.id, athleteId))
+          .for('share');
+        if (!athlete || athlete.deletedAt) return undefined;
+        const [row] = await tx
+          .update(reports)
+          .set({ coachNotes: Object.keys(notes).length ? notes : null, updatedAt: new Date() })
+          .where(and(
+            eq(reports.id, report.id),
+            eq(reports.organizationId, report.organizationId),
+            eq(reports.reportType, 'individual'),
+            sql`${reports.config}->>'athleteId' = ${athleteId}`,
+          ))
+          .returning({ coachNotes: reports.coachNotes });
+        return row;
+      });
+
+      if (!updated) return res.status(404).json({ message: "Report not found" });
       res.json({ coachNotes: updated.coachNotes });
     } catch (error) {
       if (error instanceof ZodError) {
@@ -4004,6 +4032,7 @@ function stripEvalModel<T extends { reportType: string; config: unknown }>(repor
 }
 
 /** PUT body for an eval: name and description are the only editable fields. */
+const reportPutSchema = updateReportSchema.extend({ config: insertReportSchema.shape.config.optional() }).strict();
 const evalReportUpdateSchema = z.object({
   name: z.string().trim().min(1, "Report name is required").max(200).optional(),
   description: z.string().max(1000).nullable().optional(),
@@ -5024,7 +5053,13 @@ function calculateBenchmarkAchievements(athleteRankings: any[], teamStatistics?:
  *
  * Exported only so the integration test can assert the prompt data; routes should not import it.
  */
-export async function buildReportDataForAI(report: Report, userId: string, reportService: ReportService): Promise<import("../services/ai-insights-service").ReportData> {
+export async function buildReportDataForAI(
+  report: Report,
+  userId: string,
+  reportService: ReportService,
+  // Coach notes are for writers of the report's organization only; callers opt in once they have checked that
+  opts: { includeCoachNotes?: boolean } = {},
+): Promise<import("../services/ai-insights-service").ReportData> {
   // Data size limits to prevent large AI payloads
   const MAX_METRICS = 20;
   const MAX_HISTORY_POINTS = 30;
@@ -5433,7 +5468,7 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
     }
 
     // Coach notes steer the insights of an individual report; team and eval rows never carry them
-    if (report.reportType === 'individual') {
+    if (report.reportType === 'individual' && opts.includeCoachNotes) {
       const notes = coachNotesSchema.safeParse(report.coachNotes);
       if (notes.success && Object.keys(notes.data).length > 0) aiReportData.coachNotes = notes.data;
     }

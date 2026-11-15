@@ -35,7 +35,9 @@ const afterFence = (prompt: string) => prompt.slice(prompt.indexOf('</report_dat
 describe('buildPrompt without notes or goals', () => {
   it.each(['coach', 'athlete', 'parent'] as const)('adds only the analysis instruction (%s)', (audience) => {
     const prompt = buildPrompt(individual({ audience }));
-    expect(prompt).toContain(ANALYSIS_INSTRUCTION);
+    // an instruction, so after the data fence, never inside it
+    expect(afterFence(prompt)).toContain(ANALYSIS_INSTRUCTION);
+    expect(fenced(prompt)).not.toContain(ANALYSIS_INSTRUCTION);
     expect(prompt).not.toContain('## Coach Notes');
     expect(prompt).not.toContain('## Goals');
     expect(prompt).not.toContain('Path to Goal');
@@ -181,6 +183,19 @@ describe('de-identification of coach text', () => {
       for (const s of ['Evelyn', 'evelyn', 'EVELYN', 'Garcia', 'Northside']) expect(prompt).not.toContain(s);
       expect(fenced(prompt)).toContain('{{first_name}}');
     }
+  });
+
+  it('keeps the rest of each name-bearing field, not just the placeholder', () => {
+    const data = fenced(buildPrompt(individual({ coachNotes: notes })));
+    expect(data).toContain('wants varsity at the organization');
+    expect(data).toContain('drifted wide');
+    expect(data).toContain("ankle");
+    expect(data).toContain('cleared by the organization PT');
+  });
+
+  it('redacts a distinctive organization word in any case', () => {
+    const p = buildPrompt(individual({ coachNotes: { whatISaw: 'trains at NORTHSIDE and northside on weekends' } }));
+    expect(p.toLowerCase()).not.toContain('northside');
   });
 
   it('redacts a lower-case first name written without the last name', () => {
@@ -394,6 +409,24 @@ describe('leaksCoachNotes (output guard, all audiences)', () => {
     expect(leaksCoachNotes(text, data('coach'))).toBe(true);
     expect(leaksCoachNotes(text, data('athlete'))).toBe(true);
     expect(leaksCoachNotes(text, data('parent'))).toBe(true);
+  });
+
+  it('flags an echo that uses the real first name where the notes carried the placeholder', () => {
+    const d = individual({ coachNotes: { restriction: { area: "Evelyn's ankle", status: 'taped', ptCleared: false } } });
+    expect(leaksCoachNotes("Evelyn's ankle needs rest", d)).toBe(true);
+    expect(leaksCoachNotes("{{first_name}}'s ankle needs rest", d)).toBe(true);
+  });
+
+  it('flags an echo of the maturation note and of a distinctive test-day flag', () => {
+    const d = individual({ coachNotes: { maturation: 'circa', testDayFlags: ['protocol_deviation', 'weather'] } });
+    expect(leaksCoachNotes('He is around peak height velocity now', d)).toBe(true);
+    expect(leaksCoachNotes('Note the protocol deviation on test day', d)).toBe(true);
+    expect(leaksCoachNotes('The weather was fine and the surface good', d)).toBe(false);
+  });
+
+  it('says PT cleared is unknown when the coach left it unset', () => {
+    const p = buildPrompt(individual({ coachNotes: { restriction: { area: 'knee', status: 'sore' } } as any }));
+    expect(p).toContain('PT cleared: unknown');
   });
 
   it('flags a 12+ character window of the notes across markdown and spacing', () => {

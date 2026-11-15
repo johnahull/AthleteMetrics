@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { IndividualReportView } from '../IndividualReportView';
 import { TeamReportView } from '../TeamReportView';
@@ -80,6 +80,11 @@ describe.each([
     fetchMock.mockResolvedValue({ ok: true, json: async () => ({ id: 'org-1', aiEnabled: true, aiEnabledBySiteAdmin: false }) });
     mountWith(data, ui);
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    // Let the response be consumed before asserting, so "still off" is not just "not loaded yet"
+    await act(async () => {
+      await fetchMock.mock.results[0].value;
+      await new Promise((r) => setTimeout(r, 0));
+    });
     expect(screen.getByTestId('insights')).toHaveAttribute('data-ai', 'false');
   });
 });
