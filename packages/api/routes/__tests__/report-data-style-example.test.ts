@@ -62,4 +62,15 @@ describe('buildReportDataForAI styleExample', () => {
     expect(logged).not.toContain('Jordan');
     expect(logged).not.toContain('Great job');
   });
+
+  it('drops it and still builds the report data when the member lookup throws', async () => {
+    memberNames.mockRejectedValue(new Error('db down'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const data = await buildReportDataForAI(teamReport, 'u1', service(teamData));
+    expect(data.styleExample).toBeUndefined();
+    expect(data.reportName).toBe('T');
+    const logged = warn.mock.calls.flat().join(' ');
+    expect(logged).toContain('org-1');
+    expect(logged).not.toContain('Solid block');
+  });
 });

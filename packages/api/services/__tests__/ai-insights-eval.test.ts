@@ -190,3 +190,11 @@ describe('checkInsights on recorded samples', () => {
     })).toEqual([]);
   });
 });
+
+describe('checkInsights and the style example', () => {
+  it('flags a number that only the style example contains as ungrounded', () => {
+    const data = { ...golden('individual-benchmarks').data, audience: 'coach' as const, styleExample: 'Your vertical hit 987.65 in the old report.' };
+    const failures = checkInsights({ output: '## Summary\n- Vertical of 987.65 is great.', data });
+    expect(failures.some(f => f.includes('987.65'))).toBe(true);
+  });
+});

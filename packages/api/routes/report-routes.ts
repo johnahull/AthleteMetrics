@@ -5412,11 +5412,15 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
     // Org style example (raw org row, not the admin-gated memberships). Names are re-checked now because a
     // member who joined after the save may match; if so it is dropped for this generation, not the request.
     if (org?.aiStyleExample) {
-      const matched = memberNamesIn(org.aiStyleExample, await storage.getOrganizationMemberNames(report.organizationId));
-      if (matched.length > 0) {
-        console.warn(`[AI] Style example dropped for organization ${report.organizationId}: it now names a member`);
-      } else {
-        aiReportData.styleExample = org.aiStyleExample;
+      try {
+        const matched = memberNamesIn(org.aiStyleExample, await storage.getOrganizationMemberNames(report.organizationId));
+        if (matched.length > 0) {
+          console.warn(`[AI] Style example dropped for organization ${report.organizationId}: it now names a member`);
+        } else {
+          aiReportData.styleExample = org.aiStyleExample;
+        }
+      } catch {
+        console.warn(`[AI] Style example dropped for organization ${report.organizationId}: member name check failed`);
       }
     }
 

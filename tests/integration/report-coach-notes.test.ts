@@ -181,11 +181,11 @@ describe('PATCH /api/reports/:id/coach-notes', () => {
 });
 
 describe('generic report routes cannot write coachNotes', () => {
-  it('PUT /api/reports/:id ignores coachNotes', async () => {
+  it('PUT /api/reports/:id rejects coachNotes (unrecognized key) and stores nothing', async () => {
     const r = await mkReport(orgB, 'individual', u.athlete.id, null);
     const res = await request(app).put(`/api/reports/${r.id}`).set('Cookie', await login(u.coach.username))
       .send({ name: 'renamed', coachNotes: { goals: 'injected' } });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(400);
     expect(await stored(r.id)).toBeNull();
   });
 

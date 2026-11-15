@@ -42,6 +42,22 @@ describe('buildPrompt style example', () => {
   });
 });
 
+describe('buildPrompt style example edge cases', () => {
+  it('redacts the organization name from the example', () => {
+    const p = buildPrompt(base({ organizationName: 'Northside Athletics', styleExample: '## Snapshot\nAt Northside Athletics we train fast; Northside rules.' }));
+    const block = p.slice(p.indexOf('<style_example>'), p.indexOf('</style_example>'));
+    expect(block).not.toContain('Northside');
+    expect(block).toContain('the organization');
+    expect(block).toContain('## Snapshot');
+  });
+
+  it('adds no fence when nothing is left after sanitizing', () => {
+    const p = buildPrompt(base({ styleExample: ' <<>> ' }));
+    expect(p).not.toContain('style_example');
+    expect(p).not.toContain('style example');
+  });
+});
+
 describe('SYSTEM_PROMPT style example rule', () => {
   it('says the example sets depth, structure and voice only', () => {
     expect(SYSTEM_PROMPT).toContain(
