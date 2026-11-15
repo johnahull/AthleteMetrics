@@ -179,7 +179,7 @@ describe('grounded recommendations (system prompt)', () => {
 
   it('ties next steps to a named metric gap and allows general advice only with a gap', () => {
     expect(SYSTEM_PROMPT).toMatch(/ties to a named metric gap from the Key Facts or Areas of Concern/);
-    expect(SYSTEM_PROMPT).toMatch(/general training advice only attached to such a gap/i);
+    expect(SYSTEM_PROMPT).toMatch(/general training advice only attached to a gap, a goal, or a coach note/i);
   });
 
   it('says to state when the data is limited', () => {

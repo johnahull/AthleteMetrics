@@ -5405,6 +5405,12 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
       audience,
     };
 
+    // Coach notes steer the insights of an individual report; team and eval rows never carry them
+    if (report.reportType === 'individual') {
+      const notes = coachNotesSchema.safeParse(report.coachNotes);
+      if (notes.success && Object.keys(notes.data).length > 0) aiReportData.coachNotes = notes.data;
+    }
+
     // Add team-specific data
     if (report.reportType === 'team') {
       aiReportData.athleteCount = typedReportData.athleteCount || 0;
