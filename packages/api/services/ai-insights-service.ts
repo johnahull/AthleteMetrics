@@ -497,9 +497,9 @@ export const INSIGHT_HEADINGS: Record<NonNullable<ReportData['audience']>, strin
 export const PATH_TO_GOAL_HEADING = 'Path to Goal';
 
 /** Headings for an audience; parent folds goals into "What to Work On", so it never gets the extra one. */
-export function insightHeadings(audience: NonNullable<ReportData['audience']>, hasGoals = false): string[] {
+export function insightHeadings(audience: NonNullable<ReportData['audience']>, withGoals = false): string[] {
   const headings = INSIGHT_HEADINGS[audience];
-  if (!hasGoals || audience === 'parent') return headings;
+  if (!withGoals || audience === 'parent') return headings;
   const at = headings.indexOf('What to Work On') + 1;
   return [...headings.slice(0, at), PATH_TO_GOAL_HEADING, ...headings.slice(at)];
 }
@@ -518,12 +518,12 @@ export function insightWordRange(
   reportType: ReportData['reportType'],
   audience: ReportData['audience'] = 'coach',
   limited = false,
-  hasGoals = false,
+  withGoals = false,
 ): [number, number] {
   const [min, max]: [number, number] = reportType === 'team'
     ? [200, 350]
     : audience === 'athlete' ? [150, 200] : audience === 'parent' ? [200, 300] : [150, 250];
-  return [limited ? 60 : min, hasGoals ? max + 50 : max];
+  return [limited ? 60 : min, withGoals ? max + 50 : max];
 }
 
 /** Replace the {{first_name}} placeholder the prompt asks for (spacing and case tolerated). */
@@ -642,7 +642,14 @@ export function stripAnalysisBlock(
 export function leaksCoachNotes(output: string, reportData: ReportData): boolean {
   const notes = reportData.coachNotes;
   if (reportData.reportType !== 'individual' || !notes) return false;
-  const norm = (t: string) => t.toLowerCase().replace(/[*_`#]/g, '').replace(/\s+/g, ' ').trim();
+  // The placeholder and the athlete's real first name (a model may ignore the placeholder) compare as one sentinel
+  const first = (reportData.athleteName ?? '').trim().split(/\s+/)[0]?.toLowerCase();
+  const firstRe = first && first.length >= 2 ? word(escapeRegExp(first), 'g') : null;
+  const norm = (t: string) => {
+    let x = t.toLowerCase().replace(/\{\{\s*first_name\s*\}\}/g, '§');
+    if (firstRe) x = x.replace(firstRe, '§');
+    return x.replace(/[*_`#]/g, '').replace(/\s+/g, ' ').trim();
+  };
   const haystack = norm(output);
   const WINDOW = 12;
   const phrases = [notes.restriction?.area, notes.restriction?.status]
@@ -747,7 +754,8 @@ const word = (pattern: string, flags: string) => new RegExp(`(?<![\\p{L}\\d])${p
  * de-identification the rest of the prompt has). The full organization name is redacted from the raw
  * text first (whatever punctuation sanitizing would strip); the athlete's names after sanitizing, so
  * the {{first_name}} placeholder keeps its underscore. Athlete names match as written, in capitals, or
- * as the lower-case full name, so ordinary words that equal a name ("long") survive.
+ * as the lower-case full name, so ordinary words that equal a name ("long") survive. A lone lower-case
+ * LAST name is kept on purpose for the same reason; do not add that case.
  */
 function coachText(input: string, maxLength: number, reportData: ReportData): string {
   let raw = input ?? '';
@@ -792,7 +800,7 @@ function coachNoteLines(reportData: ReportData): string[] {
   if (n.restriction) {
     const area = coachText(n.restriction.area ?? '', 200, reportData);
     const status = coachText(n.restriction.status ?? '', 200, reportData);
-    lines.push(`- Restriction: ${area}; ${status}; PT cleared: ${n.restriction.ptCleared === true ? 'yes' : 'no'}`);
+    lines.push(`- Restriction: ${area}; ${status}; PT cleared: ${n.restriction.ptCleared === undefined ? 'unknown' : n.restriction.ptCleared ? 'yes' : 'no'}`);
   }
   const flags = (n.testDayFlags ?? []).map((f) => mapped(TEST_DAY_FLAG, f)).filter((f): f is string => !!f);
   if (flags.length > 0) lines.push(`- Test day flags: ${flags.join(', ')}`);
