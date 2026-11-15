@@ -149,6 +149,32 @@ describe('buildReportDataForAI — team', () => {
   });
 });
 
+describe('buildReportDataForAI — coach notes', () => {
+  const coachNotes = { goals: 'make varsity', whatISaw: 'short strides' };
+
+  it('copies the coach notes of an individual report', async () => {
+    const data = await buildReportDataForAI({ ...individualReport, coachNotes }, 'u1', service(individualData()));
+    expect(data.coachNotes).toEqual(coachNotes);
+    expect(buildPrompt(data)).toContain('make varsity');
+  });
+
+  it('leaves coachNotes off when the report has none', async () => {
+    const data = await buildReportDataForAI({ ...individualReport, coachNotes: null }, 'u1', service(individualData()));
+    expect(data).not.toHaveProperty('coachNotes');
+  });
+
+  it('never copies notes into a team report', async () => {
+    const data = await buildReportDataForAI({ ...teamReport, coachNotes }, 'u1', service(teamData()));
+    expect(data).not.toHaveProperty('coachNotes');
+    expect(buildPrompt(data)).not.toContain('make varsity');
+  });
+
+  it('never copies notes into an eval report', async () => {
+    const data = await buildReportDataForAI({ ...individualReport, reportType: 'eval', coachNotes }, 'u1', service(individualData()));
+    expect(data).not.toHaveProperty('coachNotes');
+  });
+});
+
 describe('buildReportDataForAI — individual', () => {
   it('reads athlete.positions (array) for the position', async () => {
     const data = await buildReportDataForAI(individualReport, 'u1', service(individualData()));

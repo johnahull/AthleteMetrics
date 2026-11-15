@@ -10,7 +10,8 @@
 
 import {
   buildPrompt,
-  INSIGHT_HEADINGS,
+  hasGoals,
+  insightHeadings,
   insightWordRange,
   isLimitedData,
   type ReportData,
@@ -74,15 +75,17 @@ export function athleteNamesIn(output: string, names: string[]): string[] {
 }
 
 /** Problems with the "## " heading lines against the audience headings: missing, extra, order. */
-export function headingIssues(output: string, audience: NonNullable<ReportData["audience"]>): string[] {
-  const expected = INSIGHT_HEADINGS[audience];
+export function headingIssues(output: string, audience: NonNullable<ReportData["audience"]>, withGoals = false): string[] {
+  const expected = insightHeadings(audience, withGoals);
+  // "Path to Goal" is optional: the model may fold a thin goal section into What to Work On
+  const optional: string[] = expected.filter((h) => h === "Path to Goal");
   const found = output
     .replace(/’/g, "'")
     .split("\n")
     .map((line) => line.match(/^##\s+(.*?)\s*$/)?.[1].replace(/\*\*/g, "").replace(/:$/, "").trim())
     .filter((h): h is string => !!h);
   const issues: string[] = [];
-  const missing = expected.filter((h) => !found.includes(h));
+  const missing = expected.filter((h) => !found.includes(h) && !optional.includes(h));
   const extra = found.filter((h) => !expected.includes(h));
   if (missing.length > 0) issues.push(`missing headings: ${missing.join(", ")}`);
   if (extra.length > 0) issues.push(`extra headings: ${extra.join(", ")}`);
@@ -140,9 +143,9 @@ export function checkInsights(input: {
     if (words.length > 0) failures.push(`change over time claimed without history: ${words.join(", ")}`);
   }
 
-  failures.push(...headingIssues(output, audience));
+  failures.push(...headingIssues(output, audience, hasGoals(data)));
 
-  const [min, max] = insightWordRange(data.reportType, audience, isLimitedData(data));
+  const [min, max] = insightWordRange(data.reportType, audience, isLimitedData(data), hasGoals(data));
   const words = countWords(output);
   if (words < min || words > max) failures.push(`word count ${words} outside ${min}-${max}`);
 

@@ -30,3 +30,14 @@ Provide coaching insights in markdown format with these sections:
 (2-3 specific, actionable training recommendations, each naming the metric gap it targets)
 
 Keep it short (60-250 words total). Be direct and objective. Use bullet points and **bold** for emphasis. Avoid technical jargon.
+
+First write an <analysis>...</analysis> block working through this checklist, in short notes. Then write the headed summary after it.
+(1) Validity: test-day flags, missing tests.
+(2) Snapshot against the benchmark and the athlete's own history; a small change may be test noise, say so.
+(3) Ratios present in the data, for example force-velocity force against velocity deficit.
+(4) Connections between metrics, for example a good jump with a slow fly 10 means power is not reaching top speed.
+(5) ONE primary limiter (and at most one secondary) with its evidence; the coach's limiter call wins when given.
+(6) Filters: maturation, training age, season phase, restriction.
+(7) Each goal: the relevant metrics, the current gap, the main lever.
+(8) The next 4-6 week emphasis, one KPI, the retest date.
+(9) Unknowns and what to test next.
