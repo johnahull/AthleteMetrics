@@ -333,7 +333,7 @@ export function CoachingInsightsCard({
       <CardContent className="space-y-4">
         {canGenerate && notesForm}
         <div className="prose prose-sm max-w-none dark:prose-invert" data-testid="insights-display">
-          <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{initialInsights || ""}</ReactMarkdown>
+          <ReactMarkdown rehypePlugins={[rehypeSanitize]} disallowedElements={['img']}>{initialInsights || ""}</ReactMarkdown>
         </div>
         <div className="flex items-center gap-2 pt-4 border-t text-sm text-muted-foreground">
           <span>
