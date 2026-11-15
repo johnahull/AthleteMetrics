@@ -2,17 +2,18 @@
  * "AI insights prompt" card on the site admin page.
  */
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AdminPage from '../admin';
+import type { AIPromptOverrides } from '@shared/ai-prompt-overrides';
 
 let mockUser: Record<string, unknown> | null;
-let stored: Record<string, string> | null;
+let stored: AIPromptOverrides | null;
 const mockToast = vi.fn();
 const mockApiRequest = vi.fn();
-let invalidateSpy: any;
+let invalidateSpy: MockInstance;
 
 const DEFAULTS = {
   role: 'You are an expert athletic performance coach.',

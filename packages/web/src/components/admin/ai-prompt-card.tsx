@@ -126,7 +126,6 @@ export function AiPromptCard() {
       // The submitted values are already sanitized by the schema: show them, so the form is not left dirty with raw text
       reset({ ...EMPTY, ...saved });
       queryClient.invalidateQueries({ queryKey: ["/api/site-settings"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/site-settings/ai-prompt-defaults"] });
       toast({ title: "AI prompt updated", description: "The change applies to all organizations." });
     },
     onError: (error: unknown) => {
