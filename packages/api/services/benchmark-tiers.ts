@@ -57,6 +57,7 @@ export function filterTierRowsForAthlete<
     })
     .map((r) => ({ r, rank: r.position == null ? null : positionRank(r.position, r.sport, athlete.positions) }))
     .filter((x) => x.rank !== -1);
+  // No position-specific rows: Math.min() of nothing is Infinity, which no rank equals, so only generic (null) rows stay
   const best = Math.min(...ranked.map((x) => x.rank).filter((k): k is number => k !== null));
   return ranked.filter((x) => x.rank === null || x.rank === best).map((x) => x.r);
 }
