@@ -4,6 +4,7 @@
  */
 import { storage } from "../storage";
 import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
+import { isSiteAdmin } from "../permissions/helpers";
 
 type Viewer = Parameters<typeof getOrgRole>[0];
 
@@ -16,10 +17,10 @@ export function omitCoachNotes<T extends { coachNotes?: unknown }>(report: T): O
 export async function writerOrgIds(user: Viewer, orgIds: string[]): Promise<Set<string>> {
   const unique = [...new Set(orgIds)];
   if (unique.length === 0) return new Set();
-  if (await getOrgRole(user, unique[0]) === 'site_admin') return new Set(unique);
+  if (isSiteAdmin(user)) return new Set(unique);
   const memberships = (await storage.getUserOrganizations(user.id)) ?? [];
   return new Set(
-    unique.filter((id) => isMeasurementWriterRole(memberships.find((m: any) => m.organizationId === id)?.role)),
+    unique.filter((id) => isMeasurementWriterRole(memberships.find((m) => m.organizationId === id)?.role)),
   );
 }
 
