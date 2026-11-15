@@ -134,7 +134,7 @@ ON CONFLICT (id) DO UPDATE SET
 
 INSERT INTO benchmark_set_items (id, set_id, benchmark_id, benchmark_type, display_order)
 SELECT
-  'bsi-' || substr(md5(sb.id), 1, 32), -- 36 chars: exactly the varchar(36) limit on the real DB; shortening the md5 slice is safe, lengthening or a longer prefix truncates
+  'bsi-' || substr(md5(sb.id), 1, 32), -- 36 chars: exactly the varchar(36) limit on the real DB; a longer prefix or md5 slice would overflow it
   'set-hs-football-position-mckay2020',
   sb.id,
   'site',
