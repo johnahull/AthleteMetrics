@@ -4,7 +4,7 @@
  * Used by the unit tests on recorded sample outputs and by scripts/eval-ai-insights.ts on live
  * outputs. They catch the failures that matter most for a shared report: numbers or training
  * prescriptions the model made up, athlete names in a team report, comments on unmeasured
- * qualities, an unfilled {{placeholder}}, the athlete's name in the prompt, change over time claimed without history, wrong headings (the web card and PDF expect
+ * qualities, medical wording, an unfilled {{placeholder}}, the athlete's name in the prompt, change over time claimed without history, wrong headings (the web card and PDF expect
  * fixed sections) and length outside the range the prompt asks for.
  */
 
@@ -16,6 +16,7 @@ import {
   isLimitedData,
   type ReportData,
 } from "./ai-insights-service";
+import type { AIPromptOverrides } from "@shared/ai-prompt-overrides";
 
 // A minus sign only at the start or after a space or "(", so "5-10-5" and "1.18-1.51" stay positive.
 // A thousands separator ("1,200") is part of the number.
@@ -52,6 +53,16 @@ export function prescriptionNumbers(output: string): string[] {
 /** Comments on effort, attitude and other qualities the data does not measure. */
 export function unmeasuredQualities(output: string): string[] {
   return output.match(/\b(?:effort|attitude|coachab\w*|works? hard|lazy|motivat\w*)\b/gi) ?? [];
+}
+
+/**
+ * Diagnosis, return-to-play, injury-risk, body-weight and nutrition wording: the system prompt forbids all of it.
+ * Checked on every eval run because the editable coaching philosophy could weaken that rule.
+ */
+export function medicalWords(output: string): string[] {
+  const pattern = /\b(?:diagnos\w*|return[- ]to[- ](?:play|sport|competition)|injury[- ]risk|risk of (?:re-?)?injury|body[- ]weight|weight|nutrition\w*|diet\w*|calorie\w*)\b/gi;
+  const found = (output.match(pattern) ?? []).map((w) => w.toLowerCase().replace(/-/g, " ").replace(/^diagnos\w*$/, "diagnosis"));
+  return [...new Set(found)];
 }
 
 /**
@@ -104,11 +115,12 @@ export function checkInsights(input: {
   output: string;
   data: ReportData; // what generateCoachingInsights was given (audience included)
   athleteNames?: string[]; // roster of a team report: none may appear
+  overrides?: AIPromptOverrides; // the prompt wording the output was generated with
 }): string[] {
   const { output, data } = input;
   // Team reports are always written for coaches (buildReportDataForAI ignores any other audience for them)
   const audience = data.reportType === "team" ? "coach" : data.audience ?? "coach";
-  const prompt = buildPrompt({ ...data, audience });
+  const prompt = buildPrompt({ ...data, audience }, input.overrides);
   const failures: string[] = [];
 
   // De-identification: the model must neither see the athlete's name nor leave the placeholder unfilled
@@ -137,6 +149,9 @@ export function checkInsights(input: {
 
   const qualities = unmeasuredQualities(output);
   if (qualities.length > 0) failures.push(`unmeasured qualities: ${qualities.join(", ")}`);
+
+  const medical = medicalWords(output);
+  if (medical.length > 0) failures.push(`medical wording: ${medical.join(", ")}`);
 
   if (data.dataConfidence?.includes("no history")) {
     const words = changeWords(output);

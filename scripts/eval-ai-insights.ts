@@ -9,8 +9,10 @@
  *   AI_EVAL_MODEL=claude-haiku-4.5 ANTHROPIC_API_KEY=... npx tsx scripts/eval-ai-insights.ts
  *
  * AI_EVAL_OUT=<dir> also saves each output as <case>.<audience>.md (e.g. to record new samples).
+ * AI_EVAL_OVERRIDES_FILE=<path> evaluates a draft of the site-admin prompt wording: a JSON file with the
+ * aiPromptOverrides shape (packages/shared/ai-prompt-overrides.ts), checked with the same schema the admin save uses.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   AI_MODELS,
@@ -18,6 +20,7 @@ import {
   isModelAvailable,
   type AIModelKey,
 } from "../packages/api/services/ai-insights-service";
+import { aiPromptOverridesSchema } from "../packages/shared/ai-prompt-overrides";
 import { checkInsights } from "../packages/api/services/ai-insights-eval";
 import { GOLDEN_CASES, goldenAudiences } from "../packages/api/services/__tests__/fixtures/ai-insights-golden";
 
@@ -31,6 +34,16 @@ if (!availability.available) {
   console.error(`Set ${availability.envVar} to run the eval with ${modelKey}`);
   process.exit(2);
 }
+let overrides: ReturnType<typeof aiPromptOverridesSchema.parse> | undefined;
+if (process.env.AI_EVAL_OVERRIDES_FILE) {
+  try {
+    overrides = aiPromptOverridesSchema.parse(JSON.parse(readFileSync(process.env.AI_EVAL_OVERRIDES_FILE, "utf8")));
+  } catch (error) {
+    console.error(`AI_EVAL_OVERRIDES_FILE is not valid prompt overrides: ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(2);
+  }
+  console.log(`Using prompt overrides: ${Object.keys(overrides).join(", ") || "(none)"}`);
+}
 const outDir = process.env.AI_EVAL_OUT;
 if (outDir) mkdirSync(outDir, { recursive: true });
 
@@ -40,9 +53,9 @@ for (const c of GOLDEN_CASES) {
     const data = { ...c.data, audience };
     const label = `${c.name}.${audience}`;
     try {
-      const output = await generateCoachingInsights(modelKey as AIModelKey, data);
+      const output = await generateCoachingInsights(modelKey as AIModelKey, data, overrides);
       if (outDir) writeFileSync(join(outDir, `${label}.md`), output);
-      const failures = checkInsights({ output, data, athleteNames: c.rosterNames });
+      const failures = checkInsights({ output, data, athleteNames: c.rosterNames, overrides });
       if (failures.length > 0) failed++;
       console.log(`${failures.length === 0 ? "PASS" : "FAIL"} ${label}`);
       for (const f of failures) console.log(`     - ${f}`);

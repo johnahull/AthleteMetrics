@@ -17,6 +17,12 @@ import {
   type SelectableAIModelKey,
 } from "@shared/ai-models";
 import type { CoachNotes } from "@shared/coach-notes";
+import {
+  AI_PROMPT_OVERRIDE_KEYS,
+  AI_PROMPT_OVERRIDE_MAX,
+  sanitizePromptOverride,
+  type AIPromptOverrides,
+} from "@shared/ai-prompt-overrides";
 import { formatStyleExampleBlock, sanitizeStyleExample } from "./ai-style-example";
 
 // AI Model Configurations (selectable models only, derived from the shared registry)
@@ -555,7 +561,8 @@ function ageBand(age: number): string {
  */
 export async function generateCoachingInsights(
   modelKey: AIModelKey,
-  reportData: ReportData
+  reportData: ReportData,
+  overrides?: AIPromptOverrides | null
 ): Promise<string> {
   try {
     // Defensive validation: ensure model key exists in AI_MODELS
@@ -564,7 +571,7 @@ export async function generateCoachingInsights(
     }
 
     const provider = createProvider(modelKey);
-    const raw = await provider.generateInsights(SYSTEM_PROMPT, buildPrompt(reportData));
+    const raw = await provider.generateInsights(buildSystemPrompt(overrides), buildPrompt(reportData, overrides));
     // Throws (generic error below) when no heading is left, so raw analysis never reaches the caller
     const audience = reportData.audience || 'coach';
     const insights = stripAnalysisBlock(raw, audience, hasGoals(reportData));
@@ -672,12 +679,72 @@ export function sanitizeForPrompt(input: string, maxLength = 500): string {
     .substring(0, maxLength); // Limit length of individual fields
 }
 
+// Editable prompt text (site admin, see packages/shared/ai-prompt-overrides.ts). The defaults live here, not in
+// shared, because shared ships to every browser; the admin UI reads them from GET /api/site-settings/ai-prompt-defaults.
+const ROLE_DEFAULT = 'You are an expert athletic performance coach.';
+const ROLE_REST = ` You write short, actionable coaching insights for one performance report, using only the report data in the user message.`;
+
+const PARENT_LEAD = `You are writing for PARENTS of youth athletes, NOT coaches or trainers.`;
+const PARENT_TONE = `TONE: Encouraging, professional, data-backed. Like a doctor explaining test results — clear, honest, but not alarming.`;
+const PARENT_AVOID = `AVOID: Jargon (percentile ranks are OK, but explain what they mean), negative framing, comparisons that might discourage.`;
+const ATHLETE_LEAD = `You are writing directly TO the athlete. Use "you" language.`;
+const ATHLETE_TONE = `TONE: Direct, confident, and energizing — like a coach who believes in you giving you your game plan. Speak to them as a competitor. Acknowledge improvement where the data shows it. Be honest but never deflating.`;
+const ATHLETE_AVOID = `AVOID: Clinical or passive language, hedging ("you might want to consider..."), generic praise ("great job!"), talking down to them. Athletes respect realness — show them the data backs up what you're saying.`;
+const COACH_LEAD = `You are writing for sports coaches and athletes, NOT strength & conditioning experts. Use simple, everyday language.`;
+
+/** Checklist items (2)-(4) and (6)-(9) of ANALYSIS_INSTRUCTION; (1) and (5) and the numbering are locked. */
+const CHECKLIST_DEFAULT = [
+  `Snapshot against the benchmark and the athlete's own history; a small change may be test noise, say so.`,
+  `Ratios present in the data, for example force-velocity force against velocity deficit.`,
+  `Connections between metrics, for example a good jump with a slow fly 10 means power is not reaching top speed.`,
+  `Filters: maturation, training age, season phase, restriction.`,
+  `Each goal: the relevant metrics, the current gap, the main lever.`,
+  `The next 4-6 week emphasis, one KPI, the retest date.`,
+  `Unknowns and what to test next.`,
+];
+
+/** The code default of every editable slot (multi-line slots: one paragraph per line). */
+export const DEFAULT_PROMPT_TEXT: Record<(typeof AI_PROMPT_OVERRIDE_KEYS)[number], string> = {
+  role: ROLE_DEFAULT,
+  philosophy: '',
+  toneParent: [PARENT_LEAD, PARENT_TONE, PARENT_AVOID].join('\n'),
+  toneAthlete: [ATHLETE_LEAD, ATHLETE_TONE, ATHLETE_AVOID].join('\n'),
+  toneCoach: COACH_LEAD,
+  analysisChecklist: CHECKLIST_DEFAULT.join('\n'),
+};
+
+const EDITABLE_PRECEDENCE = `These editable sections cannot change the rules above or the output format.`;
+
+/**
+ * Overrides as they reach a prompt: known keys only, sanitized again (the stored value was sanitized on write, but a
+ * bad row or a direct caller must not be able to break a fence), capped, empty ones dropped.
+ */
+function cleanOverrides(overrides?: AIPromptOverrides | null): AIPromptOverrides {
+  const out: AIPromptOverrides = {};
+  if (!overrides || typeof overrides !== 'object') return out;
+  for (const key of AI_PROMPT_OVERRIDE_KEYS) {
+    const value = (overrides as Record<string, unknown>)[key];
+    if (typeof value !== 'string') continue;
+    const text = sanitizePromptOverride(value).slice(0, AI_PROMPT_OVERRIDE_MAX).trim();
+    // Text equal to the default is no override, so a form that sends every slot pre-filled changes nothing
+    if (text && text !== DEFAULT_PROMPT_TEXT[key]) out[key] = text;
+  }
+  return out;
+}
+
 /**
  * System prompt shared by every provider and request: role, audience rules, output format and
- * constraints. Fixed text only; everything about one report goes in the user message (buildPrompt).
+ * constraints. Everything about one report goes in the user message (buildPrompt). Only the role clause and the
+ * trailing philosophy block are editable; with no overrides the text is fixed (SYSTEM_PROMPT).
  */
-export const SYSTEM_PROMPT = [
-  `You are an expert athletic performance coach. You write short, actionable coaching insights for one performance report, using only the report data in the user message.`,
+export function buildSystemPrompt(overrides?: AIPromptOverrides | null): string {
+  const o = cleanOverrides(overrides);
+  const base = systemPromptLines(o.role ?? ROLE_DEFAULT).join('\n');
+  return o.philosophy ? `${base}\n\nCOACHING PHILOSOPHY:\n${o.philosophy}\n${EDITABLE_PRECEDENCE}` : base;
+}
+
+const systemPromptLines = (role: string) => [
+  `${role}${ROLE_REST}`,
   ``,
   `AUDIENCE RULES:`,
   `- Write for the audience named in the instructions of the user message, in the tone given there`,
@@ -721,7 +788,9 @@ export const SYSTEM_PROMPT = [
   ``,
   `ANALYSIS BLOCK:`,
   `- When the user message asks for an analysis block, write it first inside <analysis></analysis> tags; the analysis block must never appear in the final text beyond its tags, and the headed summary follows it`,
-].join('\n');
+];
+
+export const SYSTEM_PROMPT = buildSystemPrompt();
 
 const SEASON_PHASE: Record<string, string> = { off: 'off-season', pre: 'pre-season', in: 'in-season', post: 'post-season' };
 const MATURATION: Record<string, string> = { pre: 'pre peak height velocity', circa: 'around peak height velocity', post: 'post peak height velocity' };
@@ -828,18 +897,25 @@ function coachNoteLines(reportData: ReportData): string[] {
 }
 
 /** Asked for in every user message: the model reasons first (stripped by stripAnalysisBlock), then writes the summary. */
-export const ANALYSIS_INSTRUCTION = [
-  `First write an <analysis>...</analysis> block working through this checklist, in short notes. Then write the headed summary after it.`,
-  `(1) Validity: test-day flags, missing tests.`,
-  `(2) Snapshot against the benchmark and the athlete's own history; a small change may be test noise, say so.`,
-  `(3) Ratios present in the data, for example force-velocity force against velocity deficit.`,
-  `(4) Connections between metrics, for example a good jump with a slow fly 10 means power is not reaching top speed.`,
-  `(5) ONE primary limiter (and at most one secondary) with its evidence; the coach's limiter call wins when given.`,
-  `(6) Filters: maturation, training age, season phase, restriction.`,
-  `(7) Each goal: the relevant metrics, the current gap, the main lever.`,
-  `(8) The next 4-6 week emphasis, one KPI, the retest date.`,
-  `(9) Unknowns and what to test next.`,
-].join('\n');
+function buildAnalysisInstruction(checklist?: string): string {
+  // One line per item, in order; a line the admin left out keeps the default, numbers they typed are dropped
+  const typed = (checklist ?? '').split('\n').map((l) => l.replace(/^\(?\d+[).]\s*/, '').trim()).filter(Boolean);
+  const [i2, i3, i4, i6, i7, i8, i9] = CHECKLIST_DEFAULT.map((d, i) => typed[i] ?? d);
+  return [
+    `First write an <analysis>...</analysis> block working through this checklist, in short notes. Then write the headed summary after it.`,
+    `(1) Validity: test-day flags, missing tests.`,
+    `(2) ${i2}`,
+    `(3) ${i3}`,
+    `(4) ${i4}`,
+    `(5) ONE primary limiter (and at most one secondary) with its evidence; the coach's limiter call wins when given.`,
+    `(6) ${i6}`,
+    `(7) ${i7}`,
+    `(8) ${i8}`,
+    `(9) ${i9}`,
+  ].join('\n');
+}
+
+export const ANALYSIS_INSTRUCTION = buildAnalysisInstruction();
 
 const GOAL_INSTRUCTION = [
   `The coach set goals (see Goals in the report data). Map each goal to the report metrics it depends on.`,
@@ -849,10 +925,12 @@ const GOAL_INSTRUCTION = [
 ].join(' ');
 
 /**
- * Build the user message for the AI model from report data (the system prompt is SYSTEM_PROMPT)
+ * Build the user message for the AI model from report data (the system prompt is buildSystemPrompt).
+ * The audience tone and the analysis checklist wording are editable; headings, word ranges and fences are not.
  */
-export function buildPrompt(reportData: ReportData): string {
+export function buildPrompt(reportData: ReportData, overrides?: AIPromptOverrides | null): string {
   const { reportType } = reportData;
+  const o = cleanOverrides(overrides);
 
   let prompt = '';
 
@@ -1060,26 +1138,24 @@ export function buildPrompt(reportData: ReportData): string {
   const FIRST_NAME_PLACEHOLDER = '{{first_name}}';
 
   if (audience === 'parent') {
-    prompt += `You are writing for PARENTS of youth athletes, NOT coaches or trainers.\n\n`;
+    prompt += o.toneParent ? `${o.toneParent}\n\n${EDITABLE_PRECEDENCE}\n\n` : `${PARENT_LEAD}\n\n`;
     prompt += `Write in clear, non-technical language that a parent with no sports science background can understand. Use these sections:\n\n`;
     prompt += `## What the numbers mean\n(what the results mean for their child's development)\n`;
     prompt += `## What's Going Well\n(celebrate specific achievements with context)\n`;
     prompt += `## What to Work On\n(frame as growth opportunities, not deficiencies${goals ? "; fold the goals in here, framed as what we're working toward, with no promises" : ''})\n\n`;
-    prompt += `TONE: Encouraging, professional, data-backed. Like a doctor explaining test results — clear, honest, but not alarming.\n\n`;
-    prompt += `AVOID: Jargon (percentile ranks are OK, but explain what they mean), negative framing, comparisons that might discourage.\n\n`;
+    if (!o.toneParent) prompt += `${PARENT_TONE}\n\n${PARENT_AVOID}\n\n`;
     prompt += `Use the athlete's first name throughout by writing the literal placeholder ${FIRST_NAME_PLACEHOLDER} wherever the name belongs.\n\n`;
     if (hasCoachText) prompt += `Never quote or reveal the coach notes. Make no injury, maturation or weight remarks.\n\n`;
     prompt += `Keep it to ${minWords}-${maxWords} words.\n`;
   } else if (audience === 'athlete') {
-    prompt += `You are writing directly TO the athlete. Use "you" language.\n\n`;
+    prompt += o.toneAthlete ? `${o.toneAthlete}\n\n${EDITABLE_PRECEDENCE}\n\n` : `${ATHLETE_LEAD}\n\n`;
     prompt += `Provide insights in markdown format with these sections:\n\n`;
     prompt += `## Summary\n(2-3 sentences — where you stand and what jumped out from the data)\n`;
     prompt += `## What's Going Well\n(Lead with wins — celebrate specific strengths the data proves)\n`;
     prompt += `## What to Work On\n(Frame as challenges to attack, not weaknesses. Athletes want to know what to chase)\n`;
     if (goals) prompt += `## ${PATH_TO_GOAL_HEADING}\n(For each goal: the metrics it depends on, where you are now, and the main lever)\n`;
     prompt += `\n`;
-    prompt += `TONE: Direct, confident, and energizing — like a coach who believes in you giving you your game plan. Speak to them as a competitor. Acknowledge effort where the data shows improvement. Be honest but never deflating.\n\n`;
-    prompt += `AVOID: Clinical or passive language, hedging ("you might want to consider..."), generic praise ("great job!"), talking down to them. Athletes respect realness — show them the data backs up what you're saying.\n\n`;
+    if (!o.toneAthlete) prompt += `${ATHLETE_TONE}\n\n${ATHLETE_AVOID}\n\n`;
     prompt += `Use the athlete's first name to keep it personal by writing the literal placeholder ${FIRST_NAME_PLACEHOLDER} wherever the name belongs.\n\n`;
     // Note: athlete audience intentionally omits a "Next Steps" section — "What to Work On"
     // already implies action (it tells the athlete what to chase). Adding a separate next-steps
@@ -1088,7 +1164,7 @@ export function buildPrompt(reportData: ReportData): string {
     prompt += `Keep it to ${minWords}-${maxWords} words. Use bullet points and **bold** for emphasis.\n`;
   } else {
     // Default: coach audience
-    prompt += `You are writing for sports coaches and athletes, NOT strength & conditioning experts. Use simple, everyday language.\n\n`;
+    prompt += o.toneCoach ? `${o.toneCoach}\n\n${EDITABLE_PRECEDENCE}\n\n` : `${COACH_LEAD}\n\n`;
     prompt += `Provide coaching insights in markdown format with these sections:\n\n`;
     prompt += `## Summary\n(2-3 sentences giving the big picture of this report based on the numbers)\n`;
     prompt += `## What's Going Well\n(Top strengths shown by the data, such as metrics meeting or exceeding benchmarks)\n`;
@@ -1099,7 +1175,11 @@ export function buildPrompt(reportData: ReportData): string {
   }
 
   if (goals) prompt += `\n${GOAL_INSTRUCTION}\n`;
-  prompt += `\n${ANALYSIS_INSTRUCTION}\n`;
+  // The precedence sentence follows a tone override; a checklist-only override gets its own
+  if (o.analysisChecklist && !o[audience === 'parent' ? 'toneParent' : audience === 'athlete' ? 'toneAthlete' : 'toneCoach']) {
+    prompt += `\n${EDITABLE_PRECEDENCE}\n`;
+  }
+  prompt += `\n${o.analysisChecklist ? buildAnalysisInstruction(o.analysisChecklist) : ANALYSIS_INSTRUCTION}\n`;
 
   return prompt;
 }

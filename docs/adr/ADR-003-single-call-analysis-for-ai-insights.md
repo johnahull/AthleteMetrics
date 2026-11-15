@@ -37,6 +37,15 @@ Rejected: two passes and provider-native thinking as the only mechanism (below).
 - The analysis is discarded and not stored, so a bad summary cannot be audited from it.
 - `scripts/eval-ai-insights.ts` (live, paid) is the way to compare models on this format.
 
+## Addendum: editable prompt slots
+
+Prompt wording is tuned often, and a deploy per tweak is slow, so a site admin can edit a fixed set of slots (role clause, coaching philosophy, audience tone, analysis checklist wording) stored as one jsonb on `site_settings`. Decisions:
+- Only the wording slots are editable. Anything code relies on (headings, word ranges, the limiter-call rule, grounding, fencing, never-reveal and medical rules, the analysis tags) stays in code, so an edit cannot break parsing or the safety rules. Editable text sits in fixed slots and is followed by a sentence saying it cannot change the rules or the output format.
+- Defaults live in `packages/api`, not shared. The save replaces the whole object, with no per-key merge. Text is sanitized when written and again when the prompt is built.
+- No versions table, draft or eval gate: the audit log keeps before and after text, reset-to-defaults is the rollback, and the live eval (with `AI_EVAL_OVERRIDES_FILE`) is run by hand.
+- Risk accepted: a philosophy can steer the model toward text the locked rules forbid. The locked rules come first in the system prompt, and the eval checks medical wording, but the model may still comply with the later text. Review output after changing the wording.
+- The athlete tone default no longer says "Acknowledge effort", which contradicted the rule "Do NOT comment on effort".
+
 ## Follow-ups
 
 - Derived ratios and wellness/MQI in the prompt (the checklist already has a ratios step that has little data today).

@@ -6,6 +6,7 @@ import {
   checkInsights,
   countWords,
   headingIssues,
+  medicalWords,
   prescriptionNumbers,
   ungroundedNumbers,
   unmeasuredQualities,
@@ -196,5 +197,21 @@ describe('checkInsights and the style example', () => {
     const data = { ...golden('individual-benchmarks').data, audience: 'coach' as const, styleExample: 'Your vertical hit 987.65 in the old report.' };
     const failures = checkInsights({ output: '## Summary\n- Vertical of 987.65 is great.', data });
     expect(failures.some(f => f.includes('987.65'))).toBe(true);
+  });
+});
+
+describe('medicalWords', () => {
+  it('flags diagnosis, return-to-play, injury-risk and body-weight or nutrition wording', () => {
+    expect(medicalWords('This suggests a hamstring strain diagnosis; cleared for return to play. Lose weight, watch your diet, high injury risk.'))
+      .toEqual(['diagnosis', 'return to play', 'weight', 'diet', 'injury risk']);
+    expect(medicalWords('Risk of injury is raised; fix your nutrition and body weight.')).toEqual(['risk of injury', 'nutrition', 'body weight']);
+  });
+  it('passes plain training wording', () => {
+    expect(medicalWords('The left leg is 12% slower; treat it as context only and ask the coach to confirm. The restriction is noted.')).toEqual([]);
+  });
+  it('checkInsights reports it', () => {
+    const c = GOLDEN_CASES[0];
+    const failures = checkInsights({ output: '## Summary\nReturn to play is safe.', data: { ...c.data, audience: 'coach' } });
+    expect(failures).toContain('medical wording: return to play');
   });
 });

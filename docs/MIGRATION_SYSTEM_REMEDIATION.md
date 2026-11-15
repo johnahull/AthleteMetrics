@@ -42,6 +42,8 @@
 
 > 0181 (reports.coach_notes jsonb and organizations.ai_style_example text, AI coach notes; AM-FEAT-024 reserves 0179/0180) is provisional: renumber at merge if another branch lands 0181 first (file, `_down`, test `migration-0181-coach-notes`, tracking row, this line).
 
+> 0182 (site_settings.ai_prompt_overrides jsonb, the site-admin editable AI insights prompt wording, and the `site_ai_prompt_changed` audit action: the `audit_logs_action_valid` CHECK is re-defined as the 0173 list plus that value; `_down` drops the column and restores the 0173 list NOT VALID) is provisional: renumber at merge if another branch lands 0182 first (file, `_down`, test `migration-0182-ai-prompt-overrides`, tracking row, this line). Needs 0173 first.
+
 ## Current State (2025-10-30)
 
 ### Overview
