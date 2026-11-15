@@ -655,7 +655,9 @@ export function leaksCoachNotes(output: string, reportData: ReportData): boolean
   };
   const haystack = norm(output);
   const WINDOW = 12;
-  const phrases = [notes.restriction?.area, notes.restriction?.status]
+  // Maturation and the distinctive test-day flags are private too (not the common words "surface" / "weather")
+  const flagPhrases = (notes.testDayFlags ?? []).filter((f) => f === 'poor_wellness' || f === 'protocol_deviation').map((f) => TEST_DAY_FLAG[f]);
+  const phrases = [notes.restriction?.area, notes.restriction?.status, notes.maturation ? MATURATION[notes.maturation] : undefined, ...flagPhrases]
     .map((t) => norm(coachText(t ?? '', 200, reportData)))
     .filter((t) => t.length >= 3);
   if (phrases.some((p) => haystack.includes(p))) return true;
@@ -784,7 +786,7 @@ function coachText(input: string, maxLength: number, reportData: ReportData): st
   let text = sanitizeForPrompt(raw, maxLength);
   // Distinctive single words of the name too ("Northside PT" for "Northside Athletics"), not generic ones
   for (const token of orgTokens.filter((t) => t.length >= 5 && !GENERIC_ORG_WORDS.has(t.toLowerCase()))) {
-    text = text.replace(word(escapeRegExp(token), 'g'), 'the organization');
+    text = text.replace(word(escapeRegExp(token), 'gi'), 'the organization');
   }
   const [first, ...rest] = (reportData.athleteName ?? '').trim().split(/\s+/).filter((t) => t.length >= 2);
   if (first) {
