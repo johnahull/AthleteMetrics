@@ -396,6 +396,17 @@ describe('leaksCoachNotes (output guard, all audiences)', () => {
     expect(leaksCoachNotes(text, data('parent'))).toBe(true);
   });
 
+  it('flags an echo that uses the real first name where the notes carried the placeholder', () => {
+    const d = individual({ coachNotes: { restriction: { area: "Evelyn's ankle", status: 'taped', ptCleared: false } } });
+    expect(leaksCoachNotes("Evelyn's ankle needs rest", d)).toBe(true);
+    expect(leaksCoachNotes("{{first_name}}'s ankle needs rest", d)).toBe(true);
+  });
+
+  it('says PT cleared is unknown when the coach left it unset', () => {
+    const p = buildPrompt(individual({ coachNotes: { restriction: { area: 'knee', status: 'sore' } } as any }));
+    expect(p).toContain('PT cleared: unknown');
+  });
+
   it('flags a 12+ character window of the notes across markdown and spacing', () => {
     expect(leaksCoachNotes('**Stands  up   early out of the start**', data('athlete'))).toBe(true);
   });
