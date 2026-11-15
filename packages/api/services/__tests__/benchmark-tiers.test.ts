@@ -284,6 +284,16 @@ describe('filterTierRowsForAthlete', () => {
         expect(filterTierRowsForAthlete(rows, { ...male, positions: ['C'] })).toEqual([]);
       });
 
+      it('does not alias for an athlete whose listed sports do not include football (basketball C vs football OL)', () => {
+        expect(filterTierRowsForAthlete(frows, { ...male, positions: ['C'], sports: ['Basketball'] })).toEqual([]);
+        expect(filterTierRowsForAthlete(frows, { ...male, positions: ['C'], sports: ['basketball', ' Football '] }).map((r) => r.tierGroupId)).toEqual(['ol']);
+        expect(filterTierRowsForAthlete(frows, { ...male, positions: ['C'], sports: [] }).map((r) => r.tierGroupId)).toEqual(['ol']);
+      });
+
+      it('still matches a literal position code for an athlete who does not list football', () => {
+        expect(filterTierRowsForAthlete(frows, { ...male, positions: ['WR'], sports: ['Track'] }).map((r) => r.tierGroupId)).toEqual(['wr']);
+      });
+
       it('uses the first listed position when a two-way player matches several groups', () => {
         expect(gids(['WR', 'DB'])).toEqual(['wr']);
         expect(gids(['DB', 'WR'])).toEqual(['db']);

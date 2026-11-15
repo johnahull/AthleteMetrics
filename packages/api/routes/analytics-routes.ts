@@ -920,7 +920,7 @@ export function registerAnalyticsRoutes(app: Express) {
       ];
       // Narrow to the athlete's own sex / age groups first, so age-group sets (e.g. CMJ HOH) pick the right group.
       const [athleteRow] = await db
-        .select({ gender: users.gender, birthDate: users.birthDate, positions: users.positions })
+        .select({ gender: users.gender, birthDate: users.birthDate, positions: users.positions, sports: users.sports })
         .from(users)
         .where(eq(users.id, athleteId));
       const tiers = selectTierGroup(
@@ -928,6 +928,7 @@ export function registerAnalyticsRoutes(app: Express) {
           gender: athleteRow?.gender ?? null,
           age: athleteAge(athleteRow?.birthDate),
           positions: athleteRow?.positions ?? null,
+          sports: athleteRow?.sports ?? null,
         }),
       );
 

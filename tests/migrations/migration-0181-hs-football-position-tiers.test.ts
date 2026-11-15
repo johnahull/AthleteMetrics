@@ -118,8 +118,15 @@ describe.skipIf(!isDisposableTestDb)('Migration 0181: against a disposable DB (r
   it('down removes everything', async () => {
     await rollbackable(async (tx) => {
       await tx.unsafe(UP);
+      // An organization that enabled a seeded benchmark and the seeded set: DOWN must remove those links too
+      const [org] = await tx`INSERT INTO organizations (name, is_active) VALUES (${`m0181-down-${Date.now()}`}, true) RETURNING id`;
+      const [first] = await seeded(tx);
+      await tx`INSERT INTO organization_benchmarks (organization_id, benchmark_type, benchmark_id, is_enabled) VALUES (${org.id}, 'site', ${first.id as string}, true)`;
+      await tx`INSERT INTO organization_benchmark_sets (organization_id, site_set_id) VALUES (${org.id}, 'set-hs-football-position-mckay2020')`;
       await tx.unsafe(DOWN);
       expect((await seeded(tx)).length).toBe(0);
+      expect((await tx`SELECT count(*)::int AS n FROM organization_benchmarks WHERE organization_id = ${org.id}`)[0].n).toBe(0);
+      expect((await tx`SELECT count(*)::int AS n FROM organization_benchmark_sets WHERE organization_id = ${org.id}`)[0].n).toBe(0);
       const sets = await tx`SELECT count(*)::int AS n FROM benchmark_sets WHERE id = 'set-hs-football-position-mckay2020'`;
       expect(sets[0].n).toBe(0);
     });

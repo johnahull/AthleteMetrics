@@ -44,7 +44,9 @@ export function filterTierRowsForAthlete<
     position?: string | null;
     sport?: string | null;
   },
->(rows: T[], athlete: { gender: string | null; age: number | null; positions?: string[] | null }): T[] {
+>(rows: T[], athlete: { gender: string | null; age: number | null; positions?: string[] | null; sports?: string[] | null }): T[] {
+  // Football synonyms (C -> OL) only for athletes who play football; no sports on file counts as unknown, not "no"
+  const mayAliasFootball = !athlete.sports?.length || athlete.sports.some((s) => s.trim().toUpperCase() === 'FOOTBALL');
   const sex = athlete.gender?.toLowerCase() ?? null;
   const ranked = rows
     .filter((r) => {
@@ -55,7 +57,7 @@ export function filterTierRowsForAthlete<
       }
       return true;
     })
-    .map((r) => ({ r, rank: r.position == null ? null : positionRank(r.position, r.sport, athlete.positions) }))
+    .map((r) => ({ r, rank: r.position == null ? null : positionRank(r.position, r.sport, athlete.positions, mayAliasFootball) }))
     .filter((x) => x.rank !== -1);
   // No position-specific rows: Math.min() of nothing is Infinity, which no rank equals, so only generic (null) rows stay
   const best = Math.min(...ranked.map((x) => x.rank).filter((k): k is number => k !== null));
@@ -75,9 +77,14 @@ const FOOTBALL_POSITION_ALIASES: Record<string, string> = {
  * or -1. On FOOTBALL rows a football synonym also matches (CB -> DB); the alias is not applied to other sports
  * (a basketball C is not an offensive lineman).
  */
-export function positionRank(rowPosition: string, rowSport: string | null | undefined, athletePositions?: string[] | null): number {
+export function positionRank(
+  rowPosition: string,
+  rowSport: string | null | undefined,
+  athletePositions?: string[] | null,
+  mayAliasFootball = true,
+): number {
   const want = rowPosition.trim().toUpperCase();
-  const football = rowSport?.trim().toUpperCase() === 'FOOTBALL';
+  const football = mayAliasFootball && rowSport?.trim().toUpperCase() === 'FOOTBALL';
   return (athletePositions ?? []).findIndex((p) => {
     const have = p.trim().toUpperCase();
     return have === want || (football && FOOTBALL_POSITION_ALIASES[have] === want);
