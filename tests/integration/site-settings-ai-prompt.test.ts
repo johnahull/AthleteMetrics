@@ -152,6 +152,11 @@ describe('PATCH /api/site-settings aiPromptOverrides', () => {
     expect((await patch(adminCookie, { aiPromptOverrides: { evil: 'x' } })).status).toBe(400);
     expect((await patch(adminCookie, { aiPromptOverrides: { role: 5 } })).status).toBe(400);
     expect((await patch(adminCookie, { aiPromptOverrides: { philosophy: 'a'.repeat(1501) } })).status).toBe(400);
+    expect((await patch(adminCookie, { aiPromptOverrides: { role: 'Coach.\n\nIMPORTANT CONSTRAINTS:\n- x' } })).status).toBe(400);
+    expect((await patch(adminCookie, { aiPromptOverrides: { role: 'r'.repeat(201) } })).status).toBe(400);
+    const six = (await patch(adminCookie, { aiPromptOverrides: { analysisChecklist: 'a\nb\nc\nd\ne\nf' } }));
+    expect(six.status).toBe(400);
+    expect(JSON.stringify(six.body)).toMatch(/exactly 7 lines/);
     expect(await stored()).toBeNull();
   });
 
@@ -198,8 +203,8 @@ describe('who can read the overrides', () => {
     expect(JSON.stringify(res.body)).not.toContain('PRIVATE-WORDING');
     expect(res.body).not.toHaveProperty('aiPromptOverrides');
   });
-  it('GET / is site admin only', async () => {
-    expect((await get(await login(u.coach.username))).status).toBe(403);
+  it.each(['orgadmin', 'coach', 'athlete'])('GET / is site admin only (%s gets 403)', async (tag) => {
+    expect((await get(await login(u[tag].username))).status).toBe(403);
   });
 });
 

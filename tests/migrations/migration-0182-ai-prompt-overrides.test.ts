@@ -45,9 +45,22 @@ describe('Migration 0182: static analysis', () => {
     expect(DOWN).toMatch(new RegExp(`DELETE FROM manual_migrations WHERE migration_name = '${NAME}'`));
     for (const sql of [UP, DOWN]) expect(sql).not.toMatch(/^\s*(BEGIN|COMMIT);/m);
   });
-  it('the code writes the action it allows', () => {
-    const routes = fs.readFileSync(path.resolve(__dirname, '../../packages/api/routes/site-settings-routes.ts'), 'utf-8');
-    expect(routes).toContain(`'${ACTION}'`);
+  it('the code writes the action it allows, and every literal audit action in the code is allowed (bar the known exception)', () => {
+    const files = (dir: string): string[] =>
+      fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) return e.name === '__tests__' || e.name === 'node_modules' ? [] : files(full);
+        return e.name.endsWith('.ts') && !e.name.endsWith('.test.ts') ? [full] : [];
+      });
+    const call = /(?:createAuditLog|assignUnaffiliatedUser)\([^;]*?\baction:\s*["'`]([a-z_]+)["'`]/gs;
+    const used = new Set<string>();
+    for (const f of files(path.resolve(__dirname, '../../packages/api'))) {
+      for (const m of fs.readFileSync(f, 'utf-8').matchAll(call)) used.add(m[1]);
+    }
+    expect(used).toContain(ACTION);
+    const allowed = new Set(listOf(UP));
+    // waiver_submission_received: also needs a resource_type and user_id the table rejects (see the 0173 test)
+    expect([...used].filter((a) => !allowed.has(a)).sort()).toEqual(['waiver_submission_received']);
   });
 });
 

@@ -203,8 +203,12 @@ describe('checkInsights and the style example', () => {
 describe('medicalWords', () => {
   it('flags diagnosis, return-to-play, injury-risk and body-weight or nutrition wording', () => {
     expect(medicalWords('This suggests a hamstring strain diagnosis; cleared for return to play. Lose weight, watch your diet, high injury risk.'))
-      .toEqual(['diagnosis', 'return to play', 'weight', 'diet', 'injury risk']);
+      .toEqual(['diagnosis', 'return to play', 'lose weight', 'diet', 'injury risk']);
+    expect(medicalWords('Weight loss and weight gain advice.')).toEqual(['weight loss', 'weight gain']);
     expect(medicalWords('Risk of injury is raised; fix your nutrition and body weight.')).toEqual(['risk of injury', 'nutrition', 'body weight']);
+  });
+  it('does not flag plain weight wording', () => {
+    expect(medicalWords('Time in the weight room and weight training will help; the bar weight stays with the coach.')).toEqual([]);
   });
   it('passes plain training wording', () => {
     expect(medicalWords('The left leg is 12% slower; treat it as context only and ask the coach to confirm. The restriction is noted.')).toEqual([]);

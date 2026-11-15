@@ -35,6 +35,9 @@ const NEW_ACTIONS = [
  */
 const KNOWN_UNCOVERED = ['waiver_submission_received'];
 
+/** Allowed by a later migration's constraint (0182), not by 0173 */
+const ADDED_LATER = ['site_ai_prompt_changed'];
+
 /** The quoted values of one CHECK (... IN (...)) list */
 const listOf = (sql: string, constraint: string) => {
   const start = sql.indexOf(`ADD CONSTRAINT ${constraint}`);
@@ -75,8 +78,7 @@ describe('Migration 0173: static analysis', () => {
     expect(DOWN).not.toMatch(/^\s*(BEGIN|COMMIT);/m);
   });
   it('every literal action passed to createAuditLog / assignUnaffiliatedUser is allowed (bar the known exception)', () => {
-    // 0182 re-defines the constraint as the 0173 list plus site_ai_prompt_changed
-    const allowed = new Set(listOf(read('0182_add_ai_prompt_overrides.sql'), 'audit_logs_action_valid'));
+    const allowed = new Set(listOf(UP, 'audit_logs_action_valid'));
     const call = /(?:createAuditLog|assignUnaffiliatedUser)\([^;]*?\baction:\s*["'`]([a-z_]+)["'`]/gs;
     const used = new Set<string>();
     for (const file of sourceFiles(path.resolve(root, 'packages/api'))) {
@@ -84,7 +86,8 @@ describe('Migration 0173: static analysis', () => {
     }
     expect(used.size).toBeGreaterThan(50); // the scan is really finding the calls
     for (const a of NEW_ACTIONS) expect(used).toContain(a);
-    expect([...used].filter((a) => !allowed.has(a)).sort()).toEqual(KNOWN_UNCOVERED);
+    // Actions a later migration allows are that migration's concern (see migration-0182-ai-prompt-overrides.test.ts)
+    expect([...used].filter((a) => !allowed.has(a) && !ADDED_LATER.includes(a)).sort()).toEqual(KNOWN_UNCOVERED);
   });
 });
 

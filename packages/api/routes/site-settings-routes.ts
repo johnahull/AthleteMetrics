@@ -10,9 +10,9 @@ import { ZodError } from "zod";
 import { requireSiteAdmin } from "../middleware";
 import { storage } from "../storage";
 import { updateSiteSettingsSchema } from "@shared/schema";
-import { AI_PROMPT_OVERRIDE_KEYS, AI_PROMPT_OVERRIDE_MAX, type AIPromptOverrides } from "@shared/ai-prompt-overrides";
+import { AI_PROMPT_CHECKLIST_LINES, AI_PROMPT_OVERRIDE_KEYS, AI_PROMPT_OVERRIDE_MAX, AI_PROMPT_ROLE_MAX, type AIPromptOverrides } from "@shared/ai-prompt-overrides";
 import { resolveStoredOverrides } from "../services/ai-prompt-overrides-service";
-import { AI_MODELS as AI_MODELS_CONFIG, isModelAvailable } from "../services/ai-insights-service";
+import { AI_MODELS as AI_MODELS_CONFIG, DEFAULT_PROMPT_TEXT, buildSystemPrompt, isModelAvailable } from "../services/ai-insights-service";
 import { checkModelsLive, isModelKnownUnavailable } from "../services/ai-model-availability";
 import { AI_MODEL_REGISTRY, DEFAULT_AI_MODEL_KEY, findModelsNearRetirement, getAIModel, type AIModelDefinition } from "@shared/ai-models";
 
@@ -267,13 +267,13 @@ router.patch("/", requireSiteAdmin, async (req: AuthenticatedRequest, res: Respo
  */
 router.get("/ai-prompt-defaults", requireSiteAdmin, async (req, res) => {
   try {
-    // Loaded here, not at the top, so the other routes do not depend on the prompt builders
-    const { DEFAULT_PROMPT_TEXT, buildSystemPrompt } = await import("../services/ai-insights-service");
     const settings = await storage.getSiteSettings();
     const { overrides } = resolveStoredOverrides(settings?.aiPromptOverrides);
     res.json({
       defaults: DEFAULT_PROMPT_TEXT,
       maxLength: AI_PROMPT_OVERRIDE_MAX,
+      roleMaxLength: AI_PROMPT_ROLE_MAX,
+      checklistLines: AI_PROMPT_CHECKLIST_LINES,
       systemPrompt: buildSystemPrompt(overrides),
       systemPromptNote: "Read-only. The audience tone and the analysis checklist are part of the user message, which is built for each report, so they are not shown here.",
     });
