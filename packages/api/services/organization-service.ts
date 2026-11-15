@@ -282,8 +282,7 @@ export class OrganizationService extends BaseService {
       // Check if user has access to this organization
       const hasAccess = await this.validateOrganizationAccess(requestingUserId, organizationId);
       if (!hasAccess) return null;
-      const memberships = await this.storage.getUserOrganizations(requestingUserId);
-      const isOrgAdmin = memberships.find(m => m.organizationId === organizationId)?.role === 'org_admin';
+      const isOrgAdmin = (await this.storage.getUserRole(requestingUserId, organizationId)) === 'org_admin';
       return omitStyleExampleUnless(organization, isOrgAdmin);
     } catch (error) {
       console.error("OrganizationService.getOrganizationById:", error);
