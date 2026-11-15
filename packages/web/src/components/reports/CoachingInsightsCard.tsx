@@ -43,7 +43,7 @@ export function CoachingInsightsCard({
 }: CoachingInsightsCardProps) {
   const flushNotesRef = useRef<FlushNotes | null>(null);
   const notesForm = canEditNotes ? (
-    <CoachNotesForm reportId={reportId} coachNotes={coachNotes} metricOptions={metricOptions} flushRef={flushNotesRef} />
+    <CoachNotesForm key={reportId} reportId={reportId} coachNotes={coachNotes} metricOptions={metricOptions} flushRef={flushNotesRef} />
   ) : null;
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(initialInsights || "");

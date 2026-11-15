@@ -50,6 +50,11 @@ describe("formatStyleExampleBlock", () => {
 });
 
 describe("memberNamesIn", () => {
+  it("sees through full-width and decomposed spellings that NFKC folds into the member name", () => {
+    expect(memberNamesIn("\uFF2A\uFF4F\uFF52\uFF44\uFF41\uFF4E ran fast", ["Jordan Smith"])).toEqual(["Jordan Smith"]);
+    expect(memberNamesIn("Jose\u0301 ran fast", ["Jos\u00e9 Diaz"])).toEqual(["Jos\u00e9 Diaz"]);
+  });
+
   const names = ["Jordan Smith", "Al Li", "Maria Garcia-Lopez", "Will Long"];
   it("always matches a full name, case-insensitive", () => {
     expect(memberNamesIn("jordan smith ran fast", names)).toEqual(["Jordan Smith"]);

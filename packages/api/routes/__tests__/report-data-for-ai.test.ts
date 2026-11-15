@@ -153,9 +153,15 @@ describe('buildReportDataForAI — coach notes', () => {
   const coachNotes = { goals: 'make varsity', whatISaw: 'short strides' };
 
   it('copies the coach notes of an individual report', async () => {
-    const data = await buildReportDataForAI({ ...individualReport, coachNotes }, 'u1', service(individualData()));
+    const data = await buildReportDataForAI({ ...individualReport, coachNotes }, 'u1', service(individualData()), { includeCoachNotes: true });
     expect(data.coachNotes).toEqual(coachNotes);
     expect(buildPrompt(data)).toContain('make varsity');
+  });
+
+  it('leaves the coach notes out unless the caller says the requester may use them (non-writers)', async () => {
+    const data = await buildReportDataForAI({ ...individualReport, coachNotes }, 'u1', service(individualData()));
+    expect(data).not.toHaveProperty('coachNotes');
+    expect(buildPrompt(data)).not.toContain('make varsity');
   });
 
   it('leaves coachNotes off when the report has none', async () => {

@@ -689,6 +689,12 @@ export default function OrgAdminSettings() {
                         Enable Coaching Insights above to edit this field.
                       </p>
                     )}
+                    {(!aiEnabledBySiteAdmin || !isAiEnabled) && (field.value || '').length > 0 && (
+                      // The field is locked while AI is off, but a saved example can still be removed
+                      <Button type="button" variant="outline" size="sm" onClick={() => field.onChange('')}>
+                        Clear saved example
+                      </Button>
+                    )}
                     <div className="flex justify-end">
                       <span className="text-xs text-muted-foreground">
                         {(field.value || '').length} / 1500

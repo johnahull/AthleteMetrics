@@ -77,7 +77,8 @@ function toNotes(v: FormValues): CoachNotes {
   if (v.seasonPhase) n.seasonPhase = v.seasonPhase;
   if (v.trainingAgeYears !== "") n.trainingAgeYears = Number(v.trainingAgeYears);
   if (v.maturation) n.maturation = v.maturation;
-  if (v.restrictionArea.trim() || v.restrictionStatus.trim() || v.restrictionPtCleared) {
+  // PT-cleared alone says nothing clinical, so it is only sent together with an area or status
+  if (v.restrictionArea.trim() || v.restrictionStatus.trim()) {
     n.restriction = { area: v.restrictionArea, status: v.restrictionStatus, ptCleared: v.restrictionPtCleared };
   }
   if (v.testDayFlags.length) n.testDayFlags = v.testDayFlags;
@@ -179,7 +180,9 @@ export function CoachNotesForm({ reportId, coachNotes, metricOptions = [], flush
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <form onSubmit={onSubmit} className="space-y-4 p-4 pt-2" noValidate data-testid="coach-notes-form">
+        <form onSubmit={onSubmit} className="p-4 pt-2" noValidate data-testid="coach-notes-form">
+          {/* Locked while saving: the response resets the form, which would discard edits made meanwhile */}
+          <fieldset disabled={mutation.isPending} className="min-w-0 space-y-4 border-0 p-0">
           <div className="space-y-1">
             <Label htmlFor="cn-goals">Goals</Label>
             <Textarea
@@ -310,6 +313,7 @@ export function CoachNotesForm({ reportId, coachNotes, metricOptions = [], flush
               Clear
             </Button>
           </div>
+          </fieldset>
         </form>
       </CollapsibleContent>
     </Collapsible>

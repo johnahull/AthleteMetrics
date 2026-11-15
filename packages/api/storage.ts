@@ -1103,7 +1103,7 @@ export class DatabaseStorage implements IStorage {
 
     const mappedResult = result.map(({ user_teams, teams: team, organizations }: { user_teams: UserTeam, teams: Team, organizations: Organization }) => ({
       ...user_teams,
-      team: { ...team, organization: organizations }
+      team: { ...team, organization: omitStyleExampleUnless(organizations, false) }
     }));
 
     return mappedResult;
@@ -1146,7 +1146,7 @@ export class DatabaseStorage implements IStorage {
       .select({ firstName: users.firstName, lastName: users.lastName })
       .from(userOrganizations)
       .innerJoin(users, eq(userOrganizations.userId, users.id))
-      .where(eq(userOrganizations.organizationId, organizationId));
+      .where(and(eq(userOrganizations.organizationId, organizationId), isNull(users.deletedAt)));
     return rows.map((r) => `${r.firstName ?? ""} ${r.lastName ?? ""}`.trim()).filter(Boolean);
   }
 
@@ -3708,7 +3708,8 @@ export class DatabaseStorage implements IStorage {
 
     return result.map(({ teams: team, organizations }: { teams: Team, organizations: Organization }) => ({
       ...team,
-      organization: organizations
+      // Nested copies of the org never carry the admin-only style example
+      organization: omitStyleExampleUnless(organizations, false)
     }));
   }
 

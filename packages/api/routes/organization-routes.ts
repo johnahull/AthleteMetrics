@@ -10,7 +10,7 @@ import { profileMergeService } from "../services/profile-merge-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { requireOrgAccess } from "../permissions/middleware";
 import { storage } from "../storage";
-import { STYLE_EXAMPLE_MAX_CHARS, memberNamesIn } from "../services/ai-style-example";
+import { STYLE_EXAMPLE_MAX_CHARS, memberNamesIn, sanitizeStyleExample } from "../services/ai-style-example";
 import type { OrganizationType } from "@shared/schema";
 import { isSafeLogoUrl } from "./report-branding-utils";
 // Session types are loaded globally
@@ -559,10 +559,12 @@ export function registerOrganizationRoutes(app: Express) {
         if (aiStyleExample !== null && typeof aiStyleExample !== 'string') {
           return res.status(400).json({ message: "AI style example must be a string" });
         }
-        const styleText = (aiStyleExample ?? '').trim();
+        const rawText = (aiStyleExample ?? '').trim();
+        // Check and store the NFKC-sanitized form: that is what reaches the prompt, so full-width name lookalikes are caught
+        const styleText = sanitizeStyleExample(rawText);
         if (styleText === '') {
           updates.aiStyleExample = null;
-        } else if (styleText.length > STYLE_EXAMPLE_MAX_CHARS) {
+        } else if (rawText.length > STYLE_EXAMPLE_MAX_CHARS) {
           return res.status(400).json({ message: `AI style example must be ${STYLE_EXAMPLE_MAX_CHARS} characters or less` });
         } else {
           if (!org.aiEnabledBySiteAdmin) {

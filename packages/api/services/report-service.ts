@@ -1202,7 +1202,8 @@ export class ReportService extends BaseService {
       throw new Error('Access denied to this report');
     }
 
-    // Generate report data
+    // Generate report data. snapshotData is built from the generators below, never from the raw reports row,
+    // so coachNotes cannot reach snapshots or public links (tests/integration/report-coach-notes.test.ts).
     let snapshotData: TeamReportData | IndividualReportData | { reportType: 'eval'; model: unknown; orgBranding?: unknown };
     if (report.reportType === 'eval') {
       // AM-FEAT-019: an eval report snapshots its frozen model; it never goes through the individual generator

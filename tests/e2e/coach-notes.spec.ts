@@ -178,6 +178,11 @@ test.describe('Coach notes for the AI', () => {
 
     test('Clear empties the notes', async ({ page }) => {
       await openNotes(page);
+      // Own setup: save something first so this test does not depend on an earlier one
+      await page.getByLabel('Goals').fill('Goal to be cleared');
+      const saved = page.waitForResponse((r) => r.url().endsWith(`/coach-notes`) && r.request().method() === 'PATCH');
+      await page.getByRole('button', { name: 'Save notes' }).click();
+      expect((await saved).status()).toBe(200);
       await expect(page.getByLabel('Goals')).not.toHaveValue('');
       const patch = page.waitForResponse((r) => r.url().endsWith(`/coach-notes`) && r.request().method() === 'PATCH');
       await page.getByRole('button', { name: 'Clear' }).click();
