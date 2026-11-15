@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useGenerateReport } from "@/hooks/use-reports";
 import { useReportPdf } from "@/hooks/use-report-pdf";
 import { useToast } from "@/hooks/use-toast";
@@ -31,6 +30,7 @@ import { FileDown, Share2, Users, Calendar, TrendingUp, Activity, ChevronDown, S
 import { ShareReportDialog } from "./ShareReportDialog";
 import { SendReportToMultipleAthletesDialog } from "./SendReportToMultipleAthletesDialog";
 import { CoachingInsightsCard } from "./CoachingInsightsCard";
+import { useOrganizationDetails } from "@/hooks/use-organization-details";
 import { MetricExplanation } from "./MetricExplanation";
 import { ReportMetricsGlossary } from "./ReportMetricsGlossary";
 import { format } from "date-fns";
@@ -75,10 +75,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
   const { data: teams } = useTeams({ organizationId: report.organizationId });
 
   // Determine if AI is enabled for this organization
-  const { data: organization } = useQuery<{ aiEnabled?: boolean; aiEnabledBySiteAdmin?: boolean }>({
-    queryKey: ['organizations', report.organizationId, 'details'],
-    enabled: !!report.organizationId,
-  });
+  const { data: organization } = useOrganizationDetails(report.organizationId);
 
   const aiEnabled = organization?.aiEnabled && organization?.aiEnabledBySiteAdmin;
 
