@@ -135,6 +135,21 @@ describe('PATCH /api/reports/:id/coach-notes', () => {
     expect(await stored(r.id)).toBeNull();
   });
 
+  it('400 and notes untouched when the request has no JSON body', async () => {
+    const r = await mkReport(orgB, 'individual', u.athlete.id);
+    const res = await request(app).patch(`/api/reports/${r.id}/coach-notes`).set('Cookie', await login(u.coach.username));
+    expect(res.status).toBe(400);
+    expect(await stored(r.id)).toEqual(NOTES);
+  });
+
+  it('404 and notes untouched once the athlete is soft-deleted (COPPA)', async () => {
+    const gone = await mkUser('gone');
+    const r = await mkReport(orgB, 'individual', gone.id);
+    await db.update(users).set({ deletedAt: new Date() } as any).where(eq(users.id, gone.id));
+    expect((await patch(u.coach, r.id, { goals: 'back again' })).status).toBe(404);
+    expect(await stored(r.id)).toEqual(NOTES);
+  });
+
   it('403 for an athlete', async () => {
     const r = await mkReport(orgB, 'individual', u.athlete.id, null);
     expect((await patch(u.athlete, r.id, { goals: 'x' })).status).toBe(403);

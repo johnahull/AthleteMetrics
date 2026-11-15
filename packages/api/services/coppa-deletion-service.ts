@@ -261,6 +261,10 @@ export class CoppaDeletionService extends BaseService {
           throw new Error('CONCURRENT_DELETION: request was already claimed by another process');
         }
 
+        // Lock the athlete's user row so coach-notes writes (which take FOR SHARE on it) either finish before this
+        // transaction clears them or wait and then see the athlete deleted
+        await tx.select({ id: users.id }).from(users).where(eq(users.id, athleteUserId)).for('update');
+
         // STEP 1: Delete measurements
         const deletedMeasurements = await tx.delete(measurements)
           .where(eq(measurements.userId, athleteUserId))
