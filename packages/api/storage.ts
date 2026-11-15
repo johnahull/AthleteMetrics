@@ -33,6 +33,7 @@ import {
   type SecurityEvent,
 } from "@shared/schema";
 import { parentAthleteLinks } from "@shared/schema/tables/coppa";
+import { omitStyleExampleUnless } from "./services/ai-style-example";
 import type { WellnessTrend } from "@shared/wellness-types";
 import { validateMeasurementValue, MeasurementValueValidationError } from "@shared/measurement-value-validation";
 import { isMovementQualityMetric } from "@shared/peer-comparison-exclusions";
@@ -164,6 +165,8 @@ export interface IStorage {
   getOrganizations(filters?: { includeInactive?: boolean; orgType?: OrganizationType | null }): Promise<Organization[]>;
   getOrganization(id: string): Promise<Organization | undefined>;
   getOrganizationsBatch(ids: string[]): Promise<Map<string, Organization>>;
+  /** "First Last" of every user in the organization (any role), one query. */
+  getOrganizationMemberNames(organizationId: string): Promise<string[]>;
   getOrganizationByName(name: string): Promise<Organization | undefined>;
   createOrganization(organization: InsertOrganization): Promise<Organization>;
   updateOrganization(id: string, organization: Partial<InsertOrganization>): Promise<Organization>;
@@ -1033,7 +1036,8 @@ export class DatabaseStorage implements IStorage {
 
     return result.map(({ user_organizations, organizations }: any) => ({
       ...user_organizations,
-      organization: organizations
+      // The style example is org-admin material: other members never receive it.
+      organization: omitStyleExampleUnless(organizations, user_organizations.role === 'org_admin')
     }));
   }
 
@@ -1133,6 +1137,15 @@ export class DatabaseStorage implements IStorage {
   async getOrganization(id: string): Promise<Organization | undefined> {
     const [org] = await db.select().from(organizations).where(eq(organizations.id, id));
     return org || undefined;
+  }
+
+  async getOrganizationMemberNames(organizationId: string): Promise<string[]> {
+    const rows = await db
+      .select({ firstName: users.firstName, lastName: users.lastName })
+      .from(userOrganizations)
+      .innerJoin(users, eq(userOrganizations.userId, users.id))
+      .where(eq(userOrganizations.organizationId, organizationId));
+    return rows.map((r) => `${r.firstName ?? ""} ${r.lastName ?? ""}`.trim()).filter(Boolean);
   }
 
   async getOrganizationsBatch(ids: string[]): Promise<Map<string, Organization>> {
@@ -2772,7 +2785,7 @@ export class DatabaseStorage implements IStorage {
     const countMap = new Map(memberCounts.map(mc => [mc.organizationId, mc.count]));
 
     return filteredOrgs.map(org => ({
-      ...org,
+      ...omitStyleExampleUnless(org, false),
       memberCount: countMap.get(org.id) || 0,
     }));
   }

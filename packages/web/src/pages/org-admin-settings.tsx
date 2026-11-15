@@ -92,6 +92,7 @@ type OrganizationProfile = {
 const orgAdminSettingsSchema = z.object({
   aiEnabled: z.boolean().default(false),
   aiPromptContext: z.string().max(2000, "AI prompt context must be 2000 characters or less").optional().default(''),
+  aiStyleExample: z.string().max(1500, "Example analysis must be 1500 characters or less").optional().default(''),
   wellnessEnabled: z.boolean().default(true),
   eventsEnabled: z.boolean().default(false),
   brandLogoUrl: z.string().optional().default('').refine(
@@ -422,6 +423,7 @@ export default function OrgAdminSettings() {
     values: organization ? {
       aiEnabled: organization.aiEnabledBySiteAdmin ? (organization.aiEnabled || false) : false,
       aiPromptContext: organization.aiPromptContext || '',
+      aiStyleExample: organization.aiStyleExample || '',
       wellnessEnabled: siteSettings?.wellnessModuleEnabled ? (organization.wellnessEnabled ?? true) : false,
       eventsEnabled: organization.eventsEnabled ?? false,
       brandLogoUrl: organization.brandLogoUrl || '',
@@ -459,6 +461,9 @@ export default function OrgAdminSettings() {
       }
       if ((data.aiPromptContext || null) !== (organization?.aiPromptContext || null)) {
         changes.aiPromptContext = data.aiPromptContext || null;
+      }
+      if ((data.aiStyleExample || null) !== (organization?.aiStyleExample || null)) {
+        changes.aiStyleExample = data.aiStyleExample || null;
       }
 
       if (Object.keys(changes).length === 0) {
@@ -647,6 +652,46 @@ export default function OrgAdminSettings() {
                     <div className="flex justify-end">
                       <span className="text-xs text-muted-foreground">
                         {(field.value || '').length} / 2000
+                      </span>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="aiStyleExample"
+                render={({ field }) => (
+                  <FormItem className="rounded-lg border p-4">
+                    <div className="grid gap-y-0.5">
+                      <FormLabel className="text-base">Example analysis (your style)</FormLabel>
+                      <FormDescription>
+                        Paste one analysis written the way you want AI insights to read. Remove athlete names.
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Textarea
+                        {...field}
+                        placeholder={"## Snapshot\nA short, plain-language summary...\n\n## What to work on\n- ..."}
+                        maxLength={1500}
+                        rows={8}
+                        disabled={!aiEnabledBySiteAdmin || !isAiEnabled}
+                      />
+                    </FormControl>
+                    {!aiEnabledBySiteAdmin && (
+                      <p className="text-xs text-muted-foreground">
+                        AI Insights must be enabled by your site administrator before this field can be edited.
+                      </p>
+                    )}
+                    {aiEnabledBySiteAdmin && !isAiEnabled && (
+                      <p className="text-xs text-muted-foreground">
+                        Enable Coaching Insights above to edit this field.
+                      </p>
+                    )}
+                    <div className="flex justify-end">
+                      <span className="text-xs text-muted-foreground">
+                        {(field.value || '').length} / 1500
                       </span>
                     </div>
                     <FormMessage />
