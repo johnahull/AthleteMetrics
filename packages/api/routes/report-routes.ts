@@ -57,6 +57,7 @@ import { renderEvalReportPdf } from "../utils/eval-report-pdf";
 import { canAccessEvalRow, hasInaccessibleEval } from "./eval-report-access";
 import { EVAL_REPORT_TYPE, frozenModelSchema } from "@shared/eval-report-config";
 import { coachNotesSchema } from "@shared/coach-notes";
+import { memberNamesIn } from "../services/ai-style-example";
 import { omitCoachNotes, writerOrgIds, forViewer } from "./report-coach-notes-access";
 import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
@@ -5404,6 +5405,17 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
       dataConfidence,
       audience,
     };
+
+    // Org style example (raw org row, not the admin-gated memberships). Names are re-checked now because a
+    // member who joined after the save may match; if so it is dropped for this generation, not the request.
+    if (org?.aiStyleExample) {
+      const matched = memberNamesIn(org.aiStyleExample, await storage.getOrganizationMemberNames(report.organizationId));
+      if (matched.length > 0) {
+        console.warn(`[AI] Style example dropped for organization ${report.organizationId}: it now names a member`);
+      } else {
+        aiReportData.styleExample = org.aiStyleExample;
+      }
+    }
 
     // Coach notes steer the insights of an individual report; team and eval rows never carry them
     if (report.reportType === 'individual') {
