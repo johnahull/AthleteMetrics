@@ -16,7 +16,7 @@ import express, { type Express } from 'express';
 import bcrypt from 'bcrypt';
 import { eq, inArray } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
-import { organizations, users, userOrganizations, reports, reportSnapshots } from '@shared/schema';
+import { organizations, users, userOrganizations, reports, reportSnapshots, reportShares } from '@shared/schema';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 
 vi.mock('../../packages/api/vite.js', () => ({
@@ -56,22 +56,24 @@ const loginAll = async () => {
 };
 const join = (userId: string, organizationId: string, role: string) =>
   db.insert(userOrganizations).values({ userId, organizationId, role } as any);
-const mkReport = async (reportType = 'team') => {
+const mkReport = async (reportType = 'team', organizationId = orgB) => {
   const [r] = await db.insert(reports).values({
-    name: `sharegate_${stamp}_${reportIds.length}`, organizationId: orgB, createdBy: u.coach.id, reportType,
+    name: `sharegate_${stamp}_${reportIds.length}`, organizationId, createdBy: u.coach.id, reportType,
     config: reportType === 'individual' ? { ...CONFIG, athleteId: u.athlete.id } : CONFIG,
   } as any).returning();
   reportIds.push(r.id);
   return r;
 };
-const exists = async (id: string) => (await db.select().from(reports).where(eq(reports.id, id))).length === 1;
+const getRow = async (id: string) => (await db.select().from(reports).where(eq(reports.id, id)))[0];
+const exists = async (id: string) => !!(await getRow(id));
 
 beforeAll(async () => {
   app = express();
+  app.set('trust proxy', true); // lets each request carry its own client IP (see call()), so the 15/window bulk limiter is not shared
   app.use(express.json());
   await registerRoutes(app);
   const mkOrg = async (label: string) =>
-    (await db.insert(organizations).values({ name: `sharegate_${label}_${stamp}`, isActive: true } as any).returning())[0].id;
+    (await db.insert(organizations).values({ name: `sharegate_${label}_${stamp}`, isActive: true, aiEnabledBySiteAdmin: true, aiEnabled: true } as any).returning())[0].id;
   orgA = await mkOrg('a');
   orgB = await mkOrg('b');
   for (const tag of ['coach', 'orgadmin', 'athlete', 'mixed']) u[tag] = await mkUser(tag);
@@ -85,6 +87,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await db.delete(reportShares).where(inArray(reportShares.reportId, reportIds));
   await db.delete(reportSnapshots).where(inArray(reportSnapshots.reportId, reportIds));
   await db.delete(reports).where(inArray(reports.id, reportIds));
   await db.delete(userOrganizations).where(inArray(userOrganizations.userId, userIds));
@@ -92,8 +95,9 @@ afterAll(async () => {
   await db.delete(organizations).where(inArray(organizations.id, [orgA, orgB]));
 });
 
+let ipCounter = 0;
 const call = (who: string, method: 'get' | 'post' | 'delete', path: string, body?: object) => {
-  const r = request(app)[method](path).set('Cookie', cookies[who]);
+  const r = request(app)[method](path).set('Cookie', cookies[who]).set('X-Forwarded-For', `10.77.${Math.floor(++ipCounter / 250)}.${(ipCounter % 250) + 1}`);
   return body ? r.send(body) : r;
 };
 
@@ -127,18 +131,77 @@ describe('a member who is not a writer of the report organization', () => {
 });
 
 describe('writers of the report organization', () => {
-  it.each(['coach', 'orgadmin', 'site'])('%s can create, list and delete snapshots, share, and use the bulk routes', async (who) => {
+  it.each(['coach', 'orgadmin', 'site'])('%s can create, list and delete snapshots, share, and use the bulk routes (real effects)', async (who) => {
     const r = await mkReport('individual');
     const created = await call(who, 'post', `/api/reports/${r.id}/snapshots`, {});
     expect(created.status, `snapshot as ${who}: ${JSON.stringify(created.body)}`).toBe(201);
     expect((await call(who, 'get', `/api/reports/${r.id}/snapshots`)).status).toBe(200);
-    expect((await call(who, 'get', `/api/reports/${r.id}/shares`)).status).toBe(200);
     expect((await call(who, 'delete', `/api/reports/${r.id}/snapshots/${created.body.id}`)).status).toBe(200);
-    for (const [label, kind, make] of calls(r.id, created.body.id)) {
-      if (kind === 'share' || kind === 'share-bulk' || kind === 'bulk') {
-        const res = await make(who);
-        expect(res.status, `${label} as ${who}: ${JSON.stringify(res.body)}`).not.toBe(403);
-      }
+
+    const share = await call(who, 'post', `/api/reports/${r.id}/share`, { athleteId: u.athlete.id });
+    expect(share.status, JSON.stringify(share.body)).toBe(201);
+    expect((await db.select().from(reportShares).where(eq(reportShares.reportId, r.id))).length).toBe(1);
+    const bulkShare = await call(who, 'post', `/api/reports/${r.id}/share-bulk`, { athleteIds: [u.athlete.id] });
+    expect(bulkShare.status, JSON.stringify(bulkShare.body)).toBe(200);
+    expect(bulkShare.body.totalRequested).toBe(1);
+    const shares = await call(who, 'get', `/api/reports/${r.id}/shares`);
+    expect(shares.status).toBe(200);
+    expect(shares.body.shares).toHaveLength(1);
+
+    const archived = await call(who, 'post', '/api/reports/bulk-archive', { reportIds: [r.id] });
+    expect(archived.status, JSON.stringify(archived.body)).toBe(200);
+    expect(archived.body.archived).toBe(1);
+    expect((await getRow(r.id)).archivedAt).not.toBeNull();
+    const unarchived = await call(who, 'post', '/api/reports/bulk-unarchive', { reportIds: [r.id] });
+    expect(unarchived.status).toBe(200);
+    expect(unarchived.body.unarchived).toBe(1);
+    expect((await getRow(r.id)).archivedAt).toBeNull();
+    const distributed = await call(who, 'post', '/api/reports/bulk-distribute', { reportIds: [r.id] });
+    expect(distributed.status, JSON.stringify(distributed.body)).toBe(200);
+    expect(distributed.body.summary.sent + distributed.body.summary.alreadySent).toBe(1);
+
+    const deleted = await call(who, 'post', '/api/reports/bulk-delete', { reportIds: [r.id] });
+    expect(deleted.status).toBe(200);
+    expect(deleted.body.deleted).toBe(1);
+    expect(await exists(r.id)).toBe(false);
+  });
+});
+
+describe('bulk operations across two organizations', () => {
+  it('a user who is a writer in only one of them is refused for the whole request, and nothing changes', async () => {
+    const inA = await mkReport('team', orgA); // mixed is a coach here ...
+    const inB = await mkReport('team', orgB); // ... but only an athlete here
+    for (const path of ['bulk-archive', 'bulk-delete']) {
+      const res = await call('mixed', 'post', `/api/reports/${path}`, { reportIds: [inA.id, inB.id] });
+      expect(res.status, path).toBe(403);
     }
+    expect((await getRow(inA.id)).archivedAt).toBeNull();
+    expect((await getRow(inB.id)).archivedAt).toBeNull();
+    expect(await exists(inA.id)).toBe(true);
+    expect(await exists(inB.id)).toBe(true);
+  });
+});
+
+describe('generate-insights and unsharing', () => {
+  it('a coach of another organization who is only an athlete in the report org cannot generate insights', async () => {
+    const r = await mkReport();
+    const res = await call('mixed', 'post', `/api/reports/${r.id}/generate-insights`, {});
+    expect(res.status, JSON.stringify(res.body)).toBe(403);
+    expect(res.body.message).toBe('Only coaches and administrators can generate insights');
+  });
+
+  it('a user who shared a report but is no longer a writer in its organization cannot unshare it', async () => {
+    const r = await mkReport('individual');
+    const [share] = await db.insert(reportShares).values({
+      reportId: r.id, athleteId: u.athlete.id, sharedBy: u.mixed.id, organizationId: orgB,
+    } as any).returning();
+    const refused = await call('mixed', 'delete', `/api/reports/${r.id}/shares/${share.id}`);
+    expect(refused.status, JSON.stringify(refused.body)).toBe(403);
+    expect((await db.select().from(reportShares).where(eq(reportShares.id, share.id))).length).toBe(1);
+    // the sharer who is still a coach can
+    const [mine] = await db.insert(reportShares).values({
+      reportId: r.id, athleteId: u.mixed.id, sharedBy: u.coach.id, organizationId: orgB,
+    } as any).returning();
+    expect((await call('coach', 'delete', `/api/reports/${r.id}/shares/${mine.id}`)).status).toBe(200);
   });
 });

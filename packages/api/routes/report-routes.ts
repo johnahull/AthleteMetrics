@@ -1580,6 +1580,12 @@ export function registerReportRoutes(app: Express) {
         });
       }
 
+      // Writer role in the report's own organization (requireRole only sees the primary one): spends AI quota and
+      // overwrites the stored insights
+      if (!(await isOrgWriter(user, report.organizationId))) {
+        return res.status(403).json({ message: "Only coaches and administrators can generate insights" });
+      }
+
       // COPPA: check AI consent for any minor athletes in this report.
       // canAccessAI fails closed: null/undefined/false → blocked.
       if (report.reportType === 'individual') {
@@ -3649,10 +3655,13 @@ export function registerReportRoutes(app: Express) {
         // Check permissions: must be coach who shared it or org_admin
         const userRoles = await storage.getUserRoles(user.id, share.organizationId);
 
+        // Still a writer in that organization today (a coach later demoted to athlete may not unshare), and either
+        // the one who shared it, an org admin, or a site admin
         const canUnshare =
-          share.sharedBy === user.id || // Coach who created the share
-          userRoles.includes('org_admin') || // Org admin
-          isSiteAdmin(user); // Site admin
+          (await isOrgWriter(user, share.organizationId)) &&
+          (share.sharedBy === user.id || // Coach who created the share
+            userRoles.includes('org_admin') || // Org admin
+            isSiteAdmin(user)); // Site admin
 
         if (!canUnshare) {
           return res.status(403).json({
