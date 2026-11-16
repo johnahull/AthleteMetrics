@@ -45,6 +45,12 @@ describe('CoachNotesForm in CoachingInsightsCard', () => {
     expect(screen.getByLabelText(/^goals/i)).toHaveValue('make varsity');
   });
 
+  it('keeps saved notes reachable for a writer after AI is turned off (read, edit, clear)', () => {
+    render(<CoachingInsightsCard {...props} aiEnabled={false} coachNotes={{ goals: 'make varsity' }} />);
+    expect(screen.getByLabelText(/^goals/i)).toHaveValue('make varsity');
+    expect(screen.getByRole('button', { name: /^clear$/i })).toBeInTheDocument();
+  });
+
   it.each([
     ['non-writer', { canEditNotes: false }],
     ['team/eval (no flag)', { canEditNotes: undefined }],
@@ -183,12 +189,12 @@ describe('CoachNotesForm in CoachingInsightsCard', () => {
     expect(generate).not.toHaveBeenCalled();
   });
 
-  it('hides the form when COPPA-locked or AI is disabled', () => {
+  it('hides the form when COPPA-locked, but not when AI is merely disabled', () => {
     const { unmount } = render(<CoachingInsightsCard {...props} aiConsentGranted={false} />);
     expect(screen.queryByRole('button', { name: /coach notes for the ai/i })).toBeNull();
     unmount();
     render(<CoachingInsightsCard {...props} aiEnabled={false} />);
-    expect(screen.queryByRole('button', { name: /coach notes for the ai/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /coach notes for the ai/i })).toBeInTheDocument();
   });
 
   it('appends a saved limiter missing from the metric list', () => {
