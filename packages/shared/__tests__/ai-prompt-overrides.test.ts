@@ -3,6 +3,8 @@ import {
   AI_PROMPT_OVERRIDE_KEYS,
   AI_PROMPT_OVERRIDE_MAX,
   aiPromptOverridesSchema,
+  ORG_AI_PROMPT_OVERRIDE_KEYS,
+  orgAiPromptOverridesSchema,
   sanitizePromptOverride,
 } from '../ai-prompt-overrides';
 import { updateSiteSettingsSchema } from '../schema';
@@ -95,6 +97,22 @@ describe('sanitizePromptOverride', () => {
   it('is idempotent', () => {
     const once = sanitizePromptOverride('## H\n\n\n<x> {{y}} ```z```');
     expect(sanitizePromptOverride(once)).toBe(once);
+  });
+});
+
+describe('orgAiPromptOverridesSchema', () => {
+  it('lists the four org-editable keys', () => {
+    expect([...ORG_AI_PROMPT_OVERRIDE_KEYS]).toEqual(['philosophy', 'toneParent', 'toneAthlete', 'toneCoach']);
+  });
+  it('accepts the four keys and sanitizes like the site schema', () => {
+    expect(orgAiPromptOverridesSchema.parse({ philosophy: ' Be <b>kind</b>. ', toneParent: 'Warm.' })).toEqual({ philosophy: 'Be bkind/b.', toneParent: 'Warm.' });
+  });
+  it('rejects role and analysisChecklist (site-only)', () => {
+    expect(orgAiPromptOverridesSchema.safeParse({ role: 'You are a coach.' }).success).toBe(false);
+    expect(orgAiPromptOverridesSchema.safeParse({ analysisChecklist: 'a\nb\nc\nd\ne\nf\ng' }).success).toBe(false);
+  });
+  it('drops empty keys', () => {
+    expect(orgAiPromptOverridesSchema.parse({ toneCoach: '  ', toneParent: '<>' })).toEqual({});
   });
 });
 

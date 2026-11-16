@@ -41,7 +41,7 @@ interface PromptDefaults {
   systemPromptNote: string;
 }
 
-const FIELDS: Record<AIPromptOverrideKey, { label: string; controls: string; locked: string }> = {
+export const FIELDS: Record<AIPromptOverrideKey, { label: string; controls: string; locked: string }> = {
   role: {
     label: "Role",
     controls: "The opening sentence that says who the AI is. One line, up to 200 characters.",

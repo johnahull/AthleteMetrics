@@ -66,7 +66,7 @@ import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { formatCalendarDate, formatEventReportTimeframe } from "../utils/calendar-date";
 import { isValidTimezone } from "../lib/wellness-schedule-utils";
 import type { BenchmarkComparison } from "@shared/benchmark-types";
-import { resolveStoredOverrides } from "../services/ai-prompt-overrides-service";
+import { mergePromptOverrides } from "../services/ai-prompt-overrides-service";
 
 const REPORT_NOT_FOUND = { message: "Report not found" };
 
@@ -1705,13 +1705,29 @@ export function registerReportRoutes(app: Express) {
 
       // Site-admin prompt wording. A stored value that no longer parses must not fail generation for every
       // organization: use the code defaults and say so in the log.
-      const { overrides: promptOverrides, hash: overridesHash, invalid: overridesInvalid } =
-        resolveStoredOverrides(siteSettings?.aiPromptOverrides);
+      // The organization layer (philosophy and tones) sits on top. It is sent to the provider, so a member who joined
+      // after it was saved and now matches drops the whole org layer for this generation, not the request.
+      let orgRaw: unknown = org.aiPromptOverrides;
+      if (orgRaw) {
+        try {
+          const names = await storage.getOrganizationMemberNames(report.organizationId);
+          if (memberNamesIn(Object.values(orgRaw as object).filter((v) => typeof v === 'string').join('\n'), names).length > 0) {
+            console.warn(`[AI] Organization wording dropped for organization ${report.organizationId}: it now names a member`);
+            orgRaw = undefined;
+          }
+        } catch {
+          console.warn(`[AI] Organization wording dropped for organization ${report.organizationId}: member name check failed`);
+          orgRaw = undefined;
+        }
+      }
+      const { site: promptOverrides, org: orgPromptOverrides, hash: overridesHash, siteInvalid: overridesInvalid, orgInvalid } =
+        mergePromptOverrides(siteSettings?.aiPromptOverrides, orgRaw);
       if (overridesInvalid) console.warn(`Invalid AI prompt overrides in site settings; using the code defaults (report ${reportId})`);
+      if (orgInvalid) console.warn(`Invalid AI prompt overrides in organization ${report.organizationId}; using the site wording (report ${reportId})`);
       console.log(`[AI insights] report ${reportId}: AI prompt overrides ${overridesHash ?? 'none'}`);
 
       // Generate insights using AI service
-      const insights = await generateCoachingInsights(modelKey as AIModelKey, reportData, promptOverrides);
+      const insights = await generateCoachingInsights(modelKey as AIModelKey, reportData, promptOverrides, orgPromptOverrides);
 
       // Validate insights length
       if (insights.length > MAX_INSIGHTS_LENGTH) {

@@ -49,5 +49,6 @@ describe('generic write schemas never accept the coach-notes / style-example col
     const { insertReportSchema, insertOrganizationSchema } = await import('../schema-original');
     expect(insertReportSchema.shape).not.toHaveProperty('coachNotes');
     expect(insertOrganizationSchema.shape).not.toHaveProperty('aiStyleExample');
+    expect(insertOrganizationSchema.shape).not.toHaveProperty('aiPromptOverrides');
   });
 });

@@ -11,6 +11,9 @@ import { requireAuth, requireSiteAdmin } from "../middleware";
 import { requireOrgAccess } from "../permissions/middleware";
 import { storage } from "../storage";
 import { STYLE_EXAMPLE_MAX_CHARS, memberNamesIn, sanitizeStyleExample } from "../services/ai-style-example";
+import { resolveStoredOverrides } from "../services/ai-prompt-overrides-service";
+import { DEFAULT_PROMPT_TEXT } from "../services/ai-insights-service";
+import { AI_PROMPT_OVERRIDE_MAX, ORG_AI_PROMPT_OVERRIDE_KEYS, orgAiPromptOverridesSchema, sanitizePromptOverride } from "@shared/ai-prompt-overrides";
 import type { OrganizationType } from "@shared/schema";
 import { isSafeLogoUrl } from "./report-branding-utils";
 // Session types are loaded globally
@@ -371,6 +374,25 @@ export function registerOrganizationRoutes(app: Express) {
   });
 
   /**
+   * GET /api/organizations/:id/ai-prompt-defaults
+   * The wording an organization inherits for the four slots its admins may override: the site value, else the code
+   * default. Shows the site wording for those slots to that organization's admins.
+   */
+  app.get("/api/organizations/:id/ai-prompt-defaults", requireAuth, requireOrgAccess({ role: 'org_admin', fromParam: 'id' }), async (req, res) => {
+    try {
+      if (!isValidUUID(req.params.id)) {
+        return res.status(400).json({ message: "Invalid organization ID format" });
+      }
+      const { overrides: site } = resolveStoredOverrides((await storage.getSiteSettings())?.aiPromptOverrides);
+      const defaults = Object.fromEntries(ORG_AI_PROMPT_OVERRIDE_KEYS.map((k) => [k, site?.[k] ?? DEFAULT_PROMPT_TEXT[k]]));
+      res.json({ defaults, maxLength: AI_PROMPT_OVERRIDE_MAX });
+    } catch (error) {
+      console.error("Error fetching organization AI prompt defaults:", error);
+      res.status(500).json({ message: "Failed to fetch AI prompt defaults" });
+    }
+  });
+
+  /**
    * Update organization settings (Org Admin only - limited fields)
    * PATCH /api/organizations/:id/org-settings
    *
@@ -399,7 +421,7 @@ export function registerOrganizationRoutes(app: Express) {
       // Org-admin authorization is enforced by requireOrgAccess middleware.
 
       // Only allow updating specific org-admin fields
-      const { aiEnabled, wellnessEnabled, eventsEnabled, sprintFvEnabled, brandLogoUrl, brandPrimaryColor, brandSecondaryColor, brandTagline, aiPromptContext, aiStyleExample } = req.body;
+      const { aiEnabled, wellnessEnabled, eventsEnabled, sprintFvEnabled, brandLogoUrl, brandPrimaryColor, brandSecondaryColor, brandTagline, aiPromptContext, aiStyleExample, aiPromptOverrides } = req.body;
 
       // Build updates object with only the fields that were provided
       const updates: {
@@ -413,6 +435,7 @@ export function registerOrganizationRoutes(app: Express) {
         brandTagline?: string | null;
         aiPromptContext?: string | null;
         aiStyleExample?: string | null;
+        aiPromptOverrides?: Partial<Record<(typeof ORG_AI_PROMPT_OVERRIDE_KEYS)[number], string>> | null;
       } = {};
 
       // Validate and handle aiEnabled
@@ -583,6 +606,46 @@ export function registerOrganizationRoutes(app: Express) {
             });
           }
           updates.aiStyleExample = styleText;
+        }
+      }
+
+      // aiPromptOverrides: org wording for philosophy and the three tones, layered on the site wording. Whole-object
+      // replace; null / {} = inherit everything. Like the style example it is sent to the AI provider, so it must not
+      // name anyone in this organization. A value equal to the inherited one is not stored, so saving an untouched
+      // form does not freeze the site wording into the org.
+      if (aiPromptOverrides !== undefined) {
+        let wording: Partial<Record<(typeof ORG_AI_PROMPT_OVERRIDE_KEYS)[number], string>> = {};
+        if (aiPromptOverrides !== null) {
+          const parsed = orgAiPromptOverridesSchema.safeParse(aiPromptOverrides);
+          if (!parsed.success) {
+            return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid AI prompt wording" });
+          }
+          wording = parsed.data;
+        }
+        const { overrides: site } = resolveStoredOverrides((await storage.getSiteSettings())?.aiPromptOverrides);
+        for (const key of ORG_AI_PROMPT_OVERRIDE_KEYS) {
+          const text = wording[key];
+          if (text !== undefined && text === sanitizePromptOverride(site?.[key] ?? DEFAULT_PROMPT_TEXT[key])) delete wording[key];
+        }
+        if (Object.keys(wording).length === 0) {
+          updates.aiPromptOverrides = null;
+        } else {
+          if (!org.aiEnabledBySiteAdmin) {
+            return res.status(403).json({ message: "AI features must be enabled by site administrator first" });
+          }
+          if (!(updates.aiEnabled ?? org.aiEnabled)) {
+            return res.status(403).json({ message: "AI features must be enabled for this organization first" });
+          }
+          const memberNames = await storage.getOrganizationMemberNames(organizationId);
+          for (const key of ORG_AI_PROMPT_OVERRIDE_KEYS) {
+            const matched = memberNamesIn(wording[key] ?? '', memberNames);
+            if (matched.length > 0) {
+              return res.status(400).json({
+                message: `The wording contains the name of someone in your organization: ${matched.join(', ')}. Remove or replace these names and try again.`
+              });
+            }
+          }
+          updates.aiPromptOverrides = wording;
         }
       }
 

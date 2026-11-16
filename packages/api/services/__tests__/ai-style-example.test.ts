@@ -4,7 +4,7 @@ import {
   sanitizeStyleExample,
   formatStyleExampleBlock,
   memberNamesIn,
-  omitStyleExampleUnless,
+  omitOrgAiTextUnless,
 } from "../ai-style-example";
 
 describe("sanitizeStyleExample", () => {
@@ -78,13 +78,24 @@ describe("memberNamesIn", () => {
   });
 });
 
-describe("omitStyleExampleUnless", () => {
+describe("omitOrgAiTextUnless also covers aiPromptOverrides", () => {
+  const org = { id: "o1", aiStyleExample: "s", aiPromptOverrides: { toneParent: "x" } };
+  it("keeps both for allowed viewers and drops both otherwise", () => {
+    expect(omitOrgAiTextUnless(org, true)).toEqual(org);
+    const out = omitOrgAiTextUnless(org, false);
+    expect("aiStyleExample" in out).toBe(false);
+    expect("aiPromptOverrides" in out).toBe(false);
+    expect(org.aiPromptOverrides).toEqual({ toneParent: "x" });
+  });
+});
+
+describe("omitOrgAiTextUnless", () => {
   const org = { id: "o1", name: "Org", aiStyleExample: "secret" };
   it("keeps the field for allowed viewers", () => {
-    expect(omitStyleExampleUnless(org, true)).toEqual(org);
+    expect(omitOrgAiTextUnless(org, true)).toEqual(org);
   });
   it("drops the field otherwise, without mutating the input", () => {
-    const out = omitStyleExampleUnless(org, false);
+    const out = omitOrgAiTextUnless(org, false);
     expect("aiStyleExample" in out).toBe(false);
     expect(out.name).toBe("Org");
     expect(org.aiStyleExample).toBe("secret");

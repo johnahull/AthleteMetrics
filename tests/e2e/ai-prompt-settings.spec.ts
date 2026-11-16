@@ -126,3 +126,68 @@ test.describe('Site admin AI insights prompt', () => {
     await expect(page).not.toHaveURL(/\/admin$/);
   });
 });
+
+test.describe('Org admin AI insight wording (layered on the site wording)', () => {
+  test.describe.configure({ mode: 'serial' });
+  test.skip(!canTestRoleAuthorization('site_admin', 'org_admin'), 'Needs distinct site admin and org admin accounts');
+
+  const ORG_TONE = 'Short, upbeat and plain. No jargon.';
+  let orgId = '';
+  let originalOrgOverrides: unknown = null;
+  let originalAiEnabled = false;
+
+  const settingsUrl = () => `${BASE_URL}/organizations/${orgId}/settings/admin`;
+
+  test.beforeAll(async ({ browser }) => {
+    const siteCtx = await browser.newContext();
+    const sitePage = await siteCtx.newPage();
+    await loginAs(sitePage, 'site_admin');
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    await loginAs(page, 'org_admin');
+    orgId = (await (await page.request.get(`${BASE_URL}/api/auth/me/organizations`)).json())[0].organizationId;
+    const before = await (await page.request.get(`${BASE_URL}/api/organizations/${orgId}`)).json();
+    originalOrgOverrides = before.aiPromptOverrides ?? null;
+    originalAiEnabled = !!before.aiEnabled;
+    await sitePage.request.patch(`${BASE_URL}/api/organizations/${orgId}`, { data: { aiEnabledBySiteAdmin: true } });
+    await page.request.patch(`${BASE_URL}/api/organizations/${orgId}/org-settings`, { data: { aiEnabled: true } });
+    await siteCtx.close();
+    await ctx.close();
+  });
+
+  test.afterAll(async ({ browser }) => {
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    await loginAs(page, 'org_admin');
+    await page.request.patch(`${BASE_URL}/api/organizations/${orgId}/org-settings`, { data: { aiPromptOverrides: originalOrgOverrides } });
+    await page.request.patch(`${BASE_URL}/api/organizations/${orgId}/org-settings`, { data: { aiEnabled: originalAiEnabled } });
+    await ctx.close();
+  });
+
+  test('org admin sets a tone, reloads and sees it; the other slots show the inherited text', async ({ page }) => {
+    await loginAs(page, 'org_admin');
+    await page.goto(settingsUrl());
+    await expect(page.getByText('Insight wording')).toBeVisible({ timeout: 20000 });
+    await expect(page.getByRole('textbox', { name: 'Athlete tone' })).toHaveAttribute('placeholder', /\S{10}/, { timeout: 20000 });
+    // Role and checklist are site-only
+    await expect(page.getByRole('textbox', { name: 'Role' })).toHaveCount(0);
+
+    await page.getByRole('textbox', { name: 'Parent tone' }).fill(ORG_TONE);
+    await page.getByRole('button', { name: 'Save Changes' }).click();
+    await expect(page.getByText('Settings updated').first()).toBeVisible({ timeout: 10000 });
+
+    await page.reload();
+    await expect(page.getByRole('textbox', { name: 'Parent tone' })).toHaveValue(ORG_TONE, { timeout: 20000 });
+    await expect(page.getByRole('textbox', { name: 'Coach tone' })).toHaveValue('');
+  });
+
+  test('a coach cannot write the wording or read the inherited text', async ({ page }) => {
+    test.skip(!canTestRoleAuthorization('coach'), 'Needs a coach account');
+    await loginAs(page, 'coach');
+    const patch = await page.request.patch(`${BASE_URL}/api/organizations/${orgId}/org-settings`, { data: { aiPromptOverrides: { toneCoach: 'x' } } });
+    expect(patch.status()).toBe(403);
+    expect((await page.request.get(`${BASE_URL}/api/organizations/${orgId}/ai-prompt-defaults`)).status()).toBe(403);
+    const org = await (await page.request.get(`${BASE_URL}/api/organizations/${orgId}`)).json();
+    expect(org).not.toHaveProperty('aiPromptOverrides');
+  });
+});

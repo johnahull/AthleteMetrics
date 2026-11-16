@@ -65,4 +65,18 @@ export const aiPromptOverridesSchema = z
   // A key that is empty after sanitizing is removed, so it falls back to the code default
   .transform((o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v)) as AIPromptOverrides);
 
-export type AIPromptOverrides = Partial<Record<AIPromptOverrideKey, string>>;
+/** Slots an organization admin may reword for their own org; role and analysisChecklist stay site-only. */
+export const ORG_AI_PROMPT_OVERRIDE_KEYS = ["philosophy", "toneParent", "toneAthlete", "toneCoach"] as const;
+export type OrgAIPromptOverrideKey = (typeof ORG_AI_PROMPT_OVERRIDE_KEYS)[number];
+
+export const orgAiPromptOverridesSchema = z
+  .object({
+    philosophy: slot().optional(),
+    toneParent: slot().optional(),
+    toneAthlete: slot().optional(),
+    toneCoach: slot().optional(),
+  })
+  .strict()
+  .transform((o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v)) as Partial<Record<OrgAIPromptOverrideKey, string>>);
+
+export type AIPromptOverrides =Partial<Record<AIPromptOverrideKey, string>>;

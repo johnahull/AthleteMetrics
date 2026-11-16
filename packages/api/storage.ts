@@ -33,7 +33,7 @@ import {
   type SecurityEvent,
 } from "@shared/schema";
 import { parentAthleteLinks } from "@shared/schema/tables/coppa";
-import { omitStyleExampleUnless } from "./services/ai-style-example";
+import { omitOrgAiTextUnless } from "./services/ai-style-example";
 import type { WellnessTrend } from "@shared/wellness-types";
 import { validateMeasurementValue, MeasurementValueValidationError } from "@shared/measurement-value-validation";
 import { isMovementQualityMetric } from "@shared/peer-comparison-exclusions";
@@ -1042,7 +1042,7 @@ export class DatabaseStorage implements IStorage {
     return result.map(({ user_organizations, organizations }: any) => ({
       ...user_organizations,
       // The style example is org-admin material: other members never receive it.
-      organization: omitStyleExampleUnless(organizations, user_organizations.role === 'org_admin')
+      organization: omitOrgAiTextUnless(organizations, user_organizations.role === 'org_admin')
     }));
   }
 
@@ -1106,7 +1106,7 @@ export class DatabaseStorage implements IStorage {
 
     const mappedResult = result.map(({ user_teams, teams: team, organizations }: { user_teams: UserTeam, teams: Team, organizations: Organization }) => ({
       ...user_teams,
-      team: { ...team, organization: omitStyleExampleUnless(organizations, false) }
+      team: { ...team, organization: omitOrgAiTextUnless(organizations, false) }
     }));
 
     return mappedResult;
@@ -3717,7 +3717,7 @@ export class DatabaseStorage implements IStorage {
     return result.map(({ teams: team, organizations }: { teams: Team, organizations: Organization }) => ({
       ...team,
       // Nested copies of the org never carry the admin-only style example
-      organization: omitStyleExampleUnless(organizations, false)
+      organization: omitOrgAiTextUnless(organizations, false)
     }));
   }
 

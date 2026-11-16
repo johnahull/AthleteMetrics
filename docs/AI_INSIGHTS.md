@@ -101,6 +101,19 @@ Locked: the output headings and word ranges, grounding, constraints, style-examp
 - **History:** each change writes an audit row `site_ai_prompt_changed` with the changed keys and their before and after text. There is no versions table or draft step; "reset all to defaults" is the kill switch.
 - **Eval:** `AI_EVAL_OVERRIDES_FILE=<path>` (JSON in the `aiPromptOverrides` shape) runs the live eval against a draft. `checkInsights` also fails an output with diagnosis, return-to-play, injury-risk, body-weight or nutrition wording (`medicalWords`), because a philosophy could weaken that rule. Run the eval before saving new wording.
 
+## Org prompt wording (layered on the site wording)
+
+An org admin may override four of the six slots for their own organization: `philosophy`, `toneParent`, `toneAthlete`, `toneCoach` (`ORG_AI_PROMPT_OVERRIDE_KEYS`). `role` and `analysisChecklist` stay site-only (an org payload containing them is a 400). Stored in `organizations.ai_prompt_overrides` (jsonb, migration 0184, number provisional); null or a missing key means inherit.
+
+- **Precedence per slot:** org value, else site value, else code default.
+- **Placement:** org text never enters the system prompt. `buildSystemPrompt` gets only the site overrides. `buildPrompt(data, site, org)` uses the org tone (else the site tone) and, when the org has a `philosophy`, adds it as a "COACHING PHILOSOPHY (this organization)" block next to the tone text, before the existing tone precedence line. With no org overrides the prompts are identical to before (golden snapshots unchanged). The site philosophy still goes only in the system prompt.
+- **Write:** `PATCH /api/organizations/:id/org-settings` with `aiPromptOverrides` (org admin of that org, or site admin). Whole-object replace; `null` or `{}` = inherit everything. Validated with `orgAiPromptOverridesSchema` (strict, same sanitizing and 1500 cap as the site schema). A key whose text equals the inherited text (site value, else code default) is not stored, so saving an untouched form does not freeze the site wording into the org. Each value is checked against member names (`memberNamesIn`); a match is a 400 naming the members. Setting needs AI enabled by the site admin and the org; clearing is always allowed.
+- **Read:** `omitOrgAiTextUnless` (was `omitStyleExampleUnless`) removes `aiStyleExample` and `aiPromptOverrides` from organization payloads unless the viewer is an org admin of that org or a site admin. The public directory never returns them.
+- **Inherited text:** `GET /api/organizations/:id/ai-prompt-defaults` (org admin of that org) returns, for the four keys, the site value else the code default. This shows the site wording for those slots to that organization's admins.
+- **Generate:** `report-routes.ts` re-runs the member-name check on the org wording; on a match, or if the check fails, the org layer is dropped for that generation and `Organization wording dropped for organization ...` is logged. An org row that no longer parses is ignored (site wording applies) and logged as `Invalid AI prompt overrides in organization ...`. The `AI prompt overrides <8 hex>` log hash covers both layers.
+- **Audit:** none. Like `aiPromptContext` and `aiStyleExample`, org wording edits write no audit row (a new action would also need the `audit_logs_action_valid` CHECK changed).
+- **UI:** four textareas in the org settings AI card (`org-admin-settings.tsx`), shown when AI is enabled; the inherited text is the placeholder and an empty field inherits.
+
 ## Known limits
 
 - Coach-audience insights are saved on the report and are visible to athlete share viewers and in the public-link PDF. That is why the verbatim guard covers all audiences; it catches repeats, not paraphrase.

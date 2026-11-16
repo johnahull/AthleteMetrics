@@ -13,7 +13,7 @@
  */
 
 import { BaseService } from "./base-service";
-import { omitStyleExampleUnless } from "./ai-style-example";
+import { omitOrgAiTextUnless } from "./ai-style-example";
 import { MetricService } from "./metric-service";
 import { BenchmarkService } from "./benchmark-service";
 import {
@@ -449,7 +449,7 @@ export class OrganizationTypeService extends BaseService {
       }
 
       // The list spans organizations the caller may not administer: only site admins see the style examples
-      const forViewer = (orgs: Organization[]) => (isSiteAdmin ? orgs : orgs.map((o) => omitStyleExampleUnless(o, false)));
+      const forViewer = (orgs: Organization[]) => (isSiteAdmin ? orgs : orgs.map((o) => omitOrgAiTextUnless(o, false)));
 
       // Try cache first
       const cachedOrganizations = this.organizationsCache.get(cacheKey);
