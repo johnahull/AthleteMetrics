@@ -679,6 +679,7 @@ export function registerReportRoutes(app: Express) {
         .where(eq(reports.id, reportId))
         .returning();
 
+      if (!updated) return res.status(404).json({ message: "Report not found" });
       res.json(await forViewer(user, updated));
     } catch (error) {
       if (error instanceof ZodError) {
