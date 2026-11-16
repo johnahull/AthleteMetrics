@@ -203,7 +203,7 @@ describe('eval report access hardening', () => {
       ['DELETE report', 'delete', (id) => `/api/reports/${id}`],
     ];
 
-    const ROLE_GATED = ['POST share', 'POST share-bulk', 'PATCH archive', 'PATCH unarchive', 'GET shares'];
+    const ROLE_GATED = ['POST share', 'POST share-bulk', 'GET shares'];
     for (const [label, method, path, body] of cases) {
       it(`${label}: 404 with the not-found body for outsiders, identical to an unknown id`, async () => {
         for (const key of outsiders) {

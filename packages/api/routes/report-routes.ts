@@ -244,6 +244,11 @@ const bulkOperationLimiter = rateLimit({
 
 const reportService = new ReportService();
 
+/** Writer (coach / org_admin / site admin) of the report's own organization. */
+async function isReportWriter(user: Parameters<typeof getOrgRole>[0], report: { organizationId: string }): Promise<boolean> {
+  return isMeasurementWriterRole(await getOrgRole(user, report.organizationId));
+}
+
 export function registerReportRoutes(app: Express) {
   /**
    * Create a new report
@@ -660,6 +665,12 @@ export function registerReportRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied to this report" });
       }
 
+      // Changing a report needs a writer role in the report's own organization (requireRole only sees the
+      // primary one), or being the creator, so athletes keep their own reports
+      if (!(await isReportWriter(user, report)) && report.createdBy !== user.id) {
+        return res.status(403).json({ message: "Only coaches and administrators can change this report" });
+      }
+
       // Whitelist of writable fields (name, description, config, isTemplate). Unknown TOP-LEVEL keys
       // such as coachingInsights* or organizationId are rejected; nested config keys are not checked.
       // A submitted config must satisfy the full create-time config schema. An eval keeps its frozen
@@ -734,6 +745,12 @@ export function registerReportRoutes(app: Express) {
             .json({ message: "Access denied to this report" });
         }
 
+        // Changing a report needs a writer role in the report's own organization (requireRole only sees the
+        // primary one), or being the creator, so athletes keep their own reports
+        if (!(await isReportWriter(user, report)) && report.createdBy !== user.id) {
+          return res.status(403).json({ message: "Only coaches and administrators can change this report" });
+        }
+
         // Delete report (cascades to snapshots and benchmarks)
         await db.delete(reports).where(eq(reports.id, reportId));
 
@@ -786,6 +803,11 @@ export function registerReportRoutes(app: Express) {
           return res
             .status(403)
             .json({ message: "Access denied to this report" });
+        }
+
+        // Writer role in the report's own organization (requireRole only sees the primary one)
+        if (!(await isReportWriter(user, report))) {
+          return res.status(403).json({ message: "Only coaches and administrators can change this report" });
         }
 
         // Check pinned reports count (limit to 10)
@@ -863,6 +885,11 @@ export function registerReportRoutes(app: Express) {
             .json({ message: "Access denied to this report" });
         }
 
+        // Writer role in the report's own organization (requireRole only sees the primary one)
+        if (!(await isReportWriter(user, report))) {
+          return res.status(403).json({ message: "Only coaches and administrators can change this report" });
+        }
+
         // Unpin the report
         await db
           .update(reports)
@@ -885,7 +912,6 @@ export function registerReportRoutes(app: Express) {
     "/api/reports/:id/archive",
     reportLimiter,
     requireAuth,
-    requireRole('coach'),
     async (req, res) => {
       try {
         const user = req.session.user;
@@ -919,6 +945,11 @@ export function registerReportRoutes(app: Express) {
           return res
             .status(403)
             .json({ message: "Access denied to this report" });
+        }
+
+        // Writer role in the report's own organization (requireRole only sees the primary one)
+        if (!(await isReportWriter(user, report))) {
+          return res.status(403).json({ message: "Only coaches and administrators can change this report" });
         }
 
         // Archive the report
@@ -943,7 +974,6 @@ export function registerReportRoutes(app: Express) {
     "/api/reports/:id/unarchive",
     reportLimiter,
     requireAuth,
-    requireRole('coach'),
     async (req, res) => {
       try {
         const user = req.session.user;
@@ -977,6 +1007,11 @@ export function registerReportRoutes(app: Express) {
           return res
             .status(403)
             .json({ message: "Access denied to this report" });
+        }
+
+        // Writer role in the report's own organization (requireRole only sees the primary one)
+        if (!(await isReportWriter(user, report))) {
+          return res.status(403).json({ message: "Only coaches and administrators can change this report" });
         }
 
         // Unarchive the report
