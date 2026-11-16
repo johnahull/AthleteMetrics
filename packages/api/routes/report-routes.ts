@@ -61,6 +61,7 @@ import { coachNotesSchema } from "@shared/coach-notes";
 import { memberNamesIn } from "../services/ai-style-example";
 import { omitCoachNotes, writerOrgIds, forViewer } from "./report-coach-notes-access";
 import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
+import { isOrgWriter } from "./report-write-access";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { formatCalendarDate, formatEventReportTimeframe } from "../utils/calendar-date";
 import { isValidTimezone } from "../lib/wellness-schedule-utils";
@@ -1115,6 +1116,11 @@ export function registerReportRoutes(app: Express) {
           return res.status(404).json(REPORT_NOT_FOUND);
         }
 
+        // A snapshot mints a link served without login: writers of the report's own organization only
+        if (!(await isOrgWriter(user, target.organizationId))) {
+          return res.status(403).json({ message: "Only coaches and administrators can create a public link" });
+        }
+
         const snapshot = await reportService.createSnapshot(
           reportId,
           user.id,
@@ -1174,6 +1180,11 @@ export function registerReportRoutes(app: Express) {
             .json({ message: "Access denied to this report" });
         }
 
+        // Writer role in the report's own organization (requireRole only sees the primary one)
+        if (!(await isOrgWriter(user, report.organizationId))) {
+          return res.status(403).json({ message: "Only coaches and administrators can do this for a report" });
+        }
+
         // Get snapshots
         const snapshots = await db
           .select()
@@ -1216,6 +1227,9 @@ export function registerReportRoutes(app: Express) {
           .limit(1);
         // An unknown id and a hidden eval answer the same 404 (no existence oracle)
         if (!owner || !(await canAccessEvalRow(user, owner))) return res.status(404).json(REPORT_NOT_FOUND);
+        if (!(await isOrgWriter(user, owner.organizationId))) {
+          return res.status(403).json({ message: "Only coaches and administrators can revoke a public link" });
+        }
 
         await reportService.revokeSnapshot(snapshotId, user.id);
 
@@ -1600,6 +1614,12 @@ export function registerReportRoutes(app: Express) {
         return res.status(403).json({
           message: "Access denied to this report"
         });
+      }
+
+      // Writer role in the report's own organization (requireRole only sees the primary one): spends AI quota and
+      // overwrites the stored insights
+      if (!(await isOrgWriter(user, report.organizationId))) {
+        return res.status(403).json({ message: "Only coaches and administrators can generate insights" });
       }
 
       // COPPA: check AI consent for any minor athletes in this report.
@@ -2001,6 +2021,11 @@ export function registerReportRoutes(app: Express) {
             .json({ message: "Access denied to this report" });
         }
 
+        // Writer role in the report's own organization (requireRole only sees the primary one)
+        if (!(await isOrgWriter(user, report.organizationId))) {
+          return res.status(403).json({ message: "Only coaches and administrators can do this for a report" });
+        }
+
         // Verify athlete exists and is in same organization
         const athleteOrgMemberships = await db
           .select()
@@ -2265,6 +2290,11 @@ export function registerReportRoutes(app: Express) {
           return res
             .status(403)
             .json({ message: "Access denied to this report" });
+        }
+
+        // Writer role in the report's own organization (requireRole only sees the primary one)
+        if (!(await isOrgWriter(user, report.organizationId))) {
+          return res.status(403).json({ message: "Only coaches and administrators can do this for a report" });
         }
 
         // Determine target athletes
@@ -2658,6 +2688,12 @@ export function registerReportRoutes(app: Express) {
           if (!hasAccess) {
             return res.status(403).json({
               message: "Access denied to one or more report organizations",
+            });
+          }
+          // Writer role in every involved organization (requireRole only sees the primary one)
+          if (!(await isOrgWriter(user, orgId))) {
+            return res.status(403).json({
+              message: "Only coaches and administrators can change reports in one or more organizations",
             });
           }
         }
@@ -3061,6 +3097,12 @@ export function registerReportRoutes(app: Express) {
               message: "Access denied to one or more report organizations",
             });
           }
+          // Writer role in every involved organization (requireRole only sees the primary one)
+          if (!(await isOrgWriter(user, orgId))) {
+            return res.status(403).json({
+              message: "Only coaches and administrators can change reports in one or more organizations",
+            });
+          }
         }
 
         // Archive all reports in a transaction for consistency
@@ -3160,6 +3202,12 @@ export function registerReportRoutes(app: Express) {
               message: "Access denied to one or more report organizations",
             });
           }
+          // Writer role in every involved organization (requireRole only sees the primary one)
+          if (!(await isOrgWriter(user, orgId))) {
+            return res.status(403).json({
+              message: "Only coaches and administrators can change reports in one or more organizations",
+            });
+          }
         }
 
         // Unarchive all reports in a transaction for consistency
@@ -3232,6 +3280,12 @@ export function registerReportRoutes(app: Express) {
           if (!hasAccess) {
             return res.status(403).json({
               message: "Access denied to one or more report organizations",
+            });
+          }
+          // Writer role in every involved organization (requireRole only sees the primary one)
+          if (!(await isOrgWriter(user, orgId))) {
+            return res.status(403).json({
+              message: "Only coaches and administrators can change reports in one or more organizations",
             });
           }
         }
@@ -3644,10 +3698,13 @@ export function registerReportRoutes(app: Express) {
         // Check permissions: must be coach who shared it or org_admin
         const userRoles = await storage.getUserRoles(user.id, share.organizationId);
 
+        // Still a writer in that organization today (a coach later demoted to athlete may not unshare), and either
+        // the one who shared it, an org admin, or a site admin
         const canUnshare =
-          share.sharedBy === user.id || // Coach who created the share
-          userRoles.includes('org_admin') || // Org admin
-          isSiteAdmin(user); // Site admin
+          (await isOrgWriter(user, share.organizationId)) &&
+          (share.sharedBy === user.id || // Coach who created the share
+            userRoles.includes('org_admin') || // Org admin
+            isSiteAdmin(user)); // Site admin
 
         if (!canUnshare) {
           return res.status(403).json({
@@ -3708,6 +3765,11 @@ export function registerReportRoutes(app: Express) {
           return res
             .status(403)
             .json({ message: "Access denied to this report" });
+        }
+
+        // Writer role in the report's own organization (requireRole only sees the primary one)
+        if (!(await isOrgWriter(user, report.organizationId))) {
+          return res.status(403).json({ message: "Only coaches and administrators can do this for a report" });
         }
 
         // Get shares with athlete and sharedBy info

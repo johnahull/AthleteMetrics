@@ -326,11 +326,11 @@ describe('eval report access hardening', () => {
       expect(pairs).toEqual([`${rid.adult}:${u.adult.id}`, `${rid.athleteRole}:${u.athleteRole.id}`].sort());
     });
 
-    it('bulk-distribute by an org member who is not a writer skips the eval without leaking its name', async () => {
+    it('bulk-distribute by an org member who is not a writer is refused without leaking the eval name', async () => {
       const [row] = await db.select().from(reports).where(eq(reports.id, rid.kid));
       const res = await as('coachBathleteA', 'post', '/api/reports/bulk-distribute').send({ reportIds: [rid.kid] });
-      expect(res.status).toBe(400);
-      expect(res.body.skipped).toEqual([{ reportId: rid.kid, reportName: '', reason: 'Report not found' }]);
+      // Refused for the organization, exactly as for any non-eval report there, so it says nothing about the eval
+      expect(res.status).toBe(403);
       expect(JSON.stringify(res.body)).not.toContain(row.name);
       expect(await db.select().from(reportShares).where(eq(reportShares.reportId, rid.kid))).toEqual([]);
     });
