@@ -906,6 +906,52 @@ describe('Benchmark Service', () => {
       }
     });
 
+    it('applies football position aliases only to athletes who play football (basketball C is not an offensive lineman)', async () => {
+      const benchmark = await storage.createSiteBenchmark({
+        metricCode: testMetricCode,
+        name: 'OL Only Speed',
+        benchmarkValue: 1.00,
+        comparisonOperator: 'lte',
+        sport: 'FOOTBALL',
+        position: 'OL',
+      }, siteAdminUserId);
+      createdBenchmarkIds.push(benchmark.id);
+      await storage.enableBenchmarkForOrg(testOrgId, benchmark.id, 'site');
+
+      const mk = async (tag: string, sports: string[] | null) => {
+        const [a] = await db.insert(users).values({
+          username: `alias${tag}${Date.now()}`,
+          emails: [`alias${tag}@example.com`],
+          password: 'hashedpassword',
+          firstName: tag,
+          lastName: 'Athlete',
+          fullName: `${tag} Athlete`,
+          isSiteAdmin: false,
+          birthYear: 2000,
+          positions: ['C'],
+          sports,
+        }).returning();
+        await storage.addUserToOrganization(a.id, testOrgId, 'athlete');
+        return a;
+      };
+      const hoops = await mk('hoops', ['Basketball']);
+      const gridiron = await mk('grid', ['Football']);
+      const unknown = await mk('unk', null);
+
+      try {
+        const has = async (id: string) =>
+          (await benchmarkService.getAthleteBenchmarkStatus(id, testOrgId)).some(s => s.benchmarkId === benchmark.id);
+        expect(await has(hoops.id)).toBe(false);
+        expect(await has(gridiron.id)).toBe(true);
+        expect(await has(unknown.id)).toBe(true);
+      } finally {
+        for (const a of [hoops, gridiron, unknown]) {
+          await storage.removeUserFromOrganization(a.id, testOrgId, false).catch(() => {});
+          await db.delete(users).where(eq(users.id, a.id));
+        }
+      }
+    });
+
     it('should only return benchmarks applicable to athlete filters', async () => {
       // Create benchmark with age filter (ageMin: 18, ageMax: 22)
       const benchmark = await storage.createSiteBenchmark({

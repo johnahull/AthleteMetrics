@@ -6,7 +6,7 @@
 
 import { BaseService } from "./base-service";
 import { retryAuditLog } from "../utils/audit-retry";
-import { positionRank } from "./benchmark-tiers";
+import { positionRank, mayAliasFootballFor } from "./benchmark-tiers";
 import { db } from "../db";
 import crypto from "crypto";
 import {
@@ -1235,7 +1235,10 @@ export class BenchmarkService extends BaseService {
 
         // Position filter (athlete.positions is array): a position-specific benchmark applies only to athletes who
         // play it (trimmed, case-insensitive, football aliases), same rule as filterTierRowsForAthlete
-        if (benchmark.position !== null && positionRank(benchmark.position, benchmark.sport, athlete.positions) === -1) {
+        if (
+          benchmark.position !== null &&
+          positionRank(benchmark.position, benchmark.sport, athlete.positions, mayAliasFootballFor(athlete.sports)) === -1
+        ) {
           return false;
         }
 

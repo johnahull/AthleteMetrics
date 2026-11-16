@@ -45,8 +45,7 @@ export function filterTierRowsForAthlete<
     sport?: string | null;
   },
 >(rows: T[], athlete: { gender: string | null; age: number | null; positions?: string[] | null; sports?: string[] | null }): T[] {
-  // Football synonyms (C -> OL) only for athletes who play football; no sports on file counts as unknown, not "no"
-  const mayAliasFootball = !athlete.sports?.length || athlete.sports.some((s) => s.trim().toUpperCase() === 'FOOTBALL');
+  const mayAliasFootball = mayAliasFootballFor(athlete.sports);
   const sex = athlete.gender?.toLowerCase() ?? null;
   const ranked = rows
     .filter((r) => {
@@ -62,6 +61,14 @@ export function filterTierRowsForAthlete<
   // No position-specific rows: Math.min() of nothing is Infinity, which no rank equals, so only generic (null) rows stay
   const best = Math.min(...ranked.map((x) => x.rank).filter((k): k is number => k !== null));
   return ranked.filter((x) => x.rank === null || x.rank === best).map((x) => x.r);
+}
+
+/**
+ * Football synonyms (C -> OL) apply only to athletes who play football. No sports on file counts as unknown,
+ * not "no", so football players who never filled in sports keep their aliases.
+ */
+export function mayAliasFootballFor(sports?: string[] | null): boolean {
+  return !sports?.length || sports.some((s) => s.trim().toUpperCase() === 'FOOTBALL');
 }
 
 /** Football position synonyms -> the position codes the seeded football tier groups use. */
