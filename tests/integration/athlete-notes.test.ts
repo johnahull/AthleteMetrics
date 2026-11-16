@@ -215,6 +215,31 @@ describe('POST /api/athletes/:athleteId/notes and GET', () => {
     expect(ids).toEqual([flaggedOld.id, newer.id, sameDayLast.id, sameDayFirst.id, old.id]);
   });
 
+  it('GET lists writableOrganizations: the athlete\'s current organizations where the viewer is a writer, with names', async () => {
+    const athlete = await mkUser('writable');
+    await join(athlete.id, orgA, 'athlete');
+    await join(athlete.id, orgB, 'athlete');
+    const writable = async (who: any) => (await get(who, athlete.id)).body.writableOrganizations;
+    const ids = (list: Array<{ id: string }>) => list.map((o) => o.id).sort();
+
+    expect(ids(await writable(u.coach))).toEqual([orgB]);
+    expect(ids(await writable(u.otherCoach))).toEqual([orgA]);
+    expect(ids(await writable(u.siteadmin))).toEqual([orgA, orgB].sort());
+    const [first] = await writable(u.coach);
+    expect(first).toEqual({ id: orgB, name: expect.any(String) });
+  });
+
+  it('writableOrganizations leaves out an organization the athlete has left (history stays readable, but nothing can be added)', async () => {
+    const athlete = await mkUser('writable-left');
+    await join(athlete.id, orgB, 'athlete');
+    await mkNote(orgB, athlete.id, u.coach.id);
+    await db.delete(userOrganizations).where(eq(userOrganizations.userId, athlete.id));
+    const res = await get(u.coach, athlete.id);
+    expect(res.status).toBe(200);
+    expect(res.body.notes).toHaveLength(1);
+    expect(res.body.writableOrganizations).toEqual([]);
+  });
+
   it('notes stay readable as history after the athlete leaves the organization', async () => {
     const athlete = await mkUser('left');
     await join(athlete.id, orgB, 'athlete');

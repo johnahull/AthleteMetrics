@@ -75,7 +75,14 @@ export function registerAthleteNoteRoutes(app: Express) {
         .where(and(eq(athleteNotes.athleteId, athleteId.data), inArray(athleteNotes.organizationId, [...writers])))
         .orderBy(desc(athleteNotes.flagged), desc(athleteNotes.observedOn), desc(athleteNotes.createdAt));
 
-      res.json({ notes: rows });
+      // Where a note can be added: the athlete's CURRENT organizations in which the viewer is a writer (POST requires membership)
+      const current = new Set(memberships.map((m: any) => m.organizationId));
+      const writableIds = [...writers].filter((id) => current.has(id));
+      const writableOrganizations = writableIds.length === 0
+        ? []
+        : await db.select({ id: organizations.id, name: organizations.name }).from(organizations).where(inArray(organizations.id, writableIds));
+
+      res.json({ notes: rows, writableOrganizations });
     } catch (error) {
       sendError(res, error, "fetching notes");
     }
