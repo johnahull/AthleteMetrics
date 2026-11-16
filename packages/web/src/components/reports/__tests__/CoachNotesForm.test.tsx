@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { CoachingInsightsCard } from '../CoachingInsightsCard';
 
 const mockToast = vi.fn();
@@ -201,5 +201,50 @@ describe('CoachNotesForm in CoachingInsightsCard', () => {
     render(<CoachingInsightsCard {...props} coachNotes={{ limiterOverride: 'OLD_METRIC' }} />);
     expect(screen.getByRole('option', { name: 'OLD_METRIC' })).toBeInTheDocument();
     expect(screen.getByLabelText(/coach's limiter call/i)).toHaveValue('OLD_METRIC');
+  });
+
+  it('two same-tick Generate clicks (no re-render between them) save once and generate once', async () => {
+    render(<CoachingInsightsCard {...props} />);
+    open();
+    fireEvent.change(screen.getByLabelText(/^goals/i), { target: { value: 'g' } });
+    const btn = screen.getByRole('button', { name: /generate insights/i });
+    act(() => {
+      btn.click();
+      btn.click();
+    });
+    await waitFor(() => expect(generate).toHaveBeenCalledTimes(1));
+    expect(saveNotes).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['restriction area', /restriction area/i, 'cn-r-area-err'],
+    ['restriction status', /restriction status/i, 'cn-r-status-err'],
+  ])('marks an invalid %s with aria-invalid and a described error', async (_n, label, errId) => {
+    render(<CoachingInsightsCard {...props} />);
+    open();
+    fireEvent.change(screen.getByLabelText(label), { target: { value: 'x'.repeat(201) } });
+    fireEvent.click(screen.getByRole('button', { name: /save notes/i }));
+    const input = screen.getByLabelText(label);
+    await waitFor(() => expect(input).toHaveAttribute('aria-invalid', 'true'));
+    expect(input).toHaveAttribute('aria-describedby', errId);
+    expect(document.getElementById(errId)).toHaveAttribute('role', 'alert');
+  });
+
+  it('hides the form on a COPPA-locked card that already has insights', () => {
+    render(<CoachingInsightsCard {...props} initialInsights="Some text" aiConsentGranted={false} />);
+    expect(screen.queryByRole('button', { name: /coach notes for the ai/i })).toBeNull();
+  });
+
+  it('two same-tick Edit clicks save the dirty notes once', async () => {
+    render(<CoachingInsightsCard {...props} initialInsights="Some text" />);
+    open();
+    fireEvent.change(screen.getByLabelText(/^goals/i), { target: { value: 'g2' } });
+    const btn = screen.getByRole('button', { name: /^edit/i });
+    act(() => {
+      btn.click();
+      btn.click();
+    });
+    expect(await screen.findByTestId('insights-editor')).toBeInTheDocument();
+    expect(saveNotes).toHaveBeenCalledTimes(1);
   });
 });
