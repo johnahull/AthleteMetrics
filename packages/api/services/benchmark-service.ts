@@ -6,6 +6,7 @@
 
 import { BaseService } from "./base-service";
 import { retryAuditLog } from "../utils/audit-retry";
+import { positionRank, mayAliasFootballFor } from "./benchmark-tiers";
 import { db } from "../db";
 import crypto from "crypto";
 import {
@@ -1232,11 +1233,13 @@ export class BenchmarkService extends BaseService {
           return false;
         }
 
-        // Position filter (athlete.positions is array)
-        if (benchmark.position !== null && athlete.positions && athlete.positions.length > 0) {
-          if (!athlete.positions.includes(benchmark.position)) {
-            return false;
-          }
+        // Position filter (athlete.positions is array): a position-specific benchmark applies only to athletes who
+        // play it (trimmed, case-insensitive, football aliases), same rule as filterTierRowsForAthlete
+        if (
+          benchmark.position !== null &&
+          positionRank(benchmark.position, benchmark.sport, athlete.positions, mayAliasFootballFor(athlete.sports)) === -1
+        ) {
+          return false;
         }
 
         // Level filter (not currently in users table - skip for now)
