@@ -113,6 +113,13 @@ describe('PATCH org-settings aiStyleExample', () => {
     expect(res.body.message).toContain('1500 characters');
   });
 
+  it('rejects text that is within 1500 characters but expands past it under NFKC (never truncates silently)', async () => {
+    const res = await patch('admin', { aiStyleExample: '\uFB01'.repeat(1000) }); // each ligature becomes "fi"
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain('1500 characters');
+    expect(await dbExample()).not.toContain('fi');
+  });
+
   it('rejects a non-string value', async () => {
     const res = await patch('admin', { aiStyleExample: 42 });
     expect(res.status).toBe(400);

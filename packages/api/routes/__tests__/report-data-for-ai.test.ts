@@ -179,6 +179,13 @@ describe('buildReportDataForAI — coach notes', () => {
     const data = await buildReportDataForAI({ ...individualReport, reportType: 'eval', coachNotes }, 'u1', service(individualData()));
     expect(data).not.toHaveProperty('coachNotes');
   });
+
+  it('never copies notes into an eval report even when the caller opts in (the guard is the safety net)', async () => {
+    const data = await buildReportDataForAI(
+      { ...individualReport, reportType: 'eval', coachNotes }, 'u1', service(individualData()), { includeCoachNotes: true },
+    );
+    expect(data).not.toHaveProperty('coachNotes');
+  });
 });
 
 describe('buildReportDataForAI — individual', () => {

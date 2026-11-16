@@ -32,18 +32,69 @@ export interface SourcedTierRow extends TierBenchmarkRow {
  * (e.g. Female HS, not the lowest displayOrder group of the other sex). A row with a null gender / age bound
  * applies to everyone; an unknown athlete age skips the age check; an unknown athlete sex drops sex-specific rows.
  * Bounds are inclusive and 0 is a real bound.
+ * A row with a position applies only to athletes who play it (trimmed, case-insensitive; football aliases below);
+ * an athlete with no positions drops position-specific rows, like unknown sex. A two-way player keeps only the
+ * position rows of the FIRST position in their list that has any, so the coach controls the group by list order.
  */
 export function filterTierRowsForAthlete<
-  T extends { gender?: string | null; ageMin?: number | null; ageMax?: number | null },
->(rows: T[], athlete: { gender: string | null; age: number | null }): T[] {
+  T extends {
+    gender?: string | null;
+    ageMin?: number | null;
+    ageMax?: number | null;
+    position?: string | null;
+    sport?: string | null;
+  },
+>(rows: T[], athlete: { gender: string | null; age: number | null; positions?: string[] | null; sports?: string[] | null }): T[] {
+  const mayAliasFootball = mayAliasFootballFor(athlete.sports);
   const sex = athlete.gender?.toLowerCase() ?? null;
-  return rows.filter((r) => {
-    if (r.gender != null && r.gender.toLowerCase() !== sex) return false;
-    if (athlete.age != null) {
-      if (r.ageMin != null && athlete.age < r.ageMin) return false;
-      if (r.ageMax != null && athlete.age > r.ageMax) return false;
-    }
-    return true;
+  const ranked = rows
+    .filter((r) => {
+      if (r.gender != null && r.gender.toLowerCase() !== sex) return false;
+      if (athlete.age != null) {
+        if (r.ageMin != null && athlete.age < r.ageMin) return false;
+        if (r.ageMax != null && athlete.age > r.ageMax) return false;
+      }
+      return true;
+    })
+    .map((r) => ({ r, rank: r.position == null ? null : positionRank(r.position, r.sport, athlete.positions, mayAliasFootball) }))
+    .filter((x) => x.rank !== -1);
+  // No position-specific rows: Math.min() of nothing is Infinity, which no rank equals, so only generic (null) rows stay
+  const best = Math.min(...ranked.map((x) => x.rank).filter((k): k is number => k !== null));
+  return ranked.filter((x) => x.rank === null || x.rank === best).map((x) => x.r);
+}
+
+/**
+ * Football synonyms (C -> OL) apply only to athletes who play football. No sports on file counts as unknown,
+ * not "no", so football players who never filled in sports keep their aliases.
+ */
+export function mayAliasFootballFor(sports?: string[] | null): boolean {
+  return !sports?.length || sports.some((s) => s.trim().toUpperCase() === 'FOOTBALL');
+}
+
+/** Football position synonyms -> the position codes the seeded football tier groups use. */
+const FOOTBALL_POSITION_ALIASES: Record<string, string> = {
+  CB: 'DB', S: 'DB', FS: 'DB', SS: 'DB',
+  OT: 'OL', OG: 'OL', C: 'OL',
+  DT: 'DL', NT: 'DL',
+  ILB: 'LB', OLB: 'LB', MLB: 'LB',
+};
+
+/**
+ * Index in the athlete's position list of the first position matching `rowPosition` (trimmed, case-insensitive),
+ * or -1. On FOOTBALL rows a football synonym also matches (CB -> DB); the alias is not applied to other sports
+ * (a basketball C is not an offensive lineman).
+ */
+export function positionRank(
+  rowPosition: string,
+  rowSport: string | null | undefined,
+  athletePositions?: string[] | null,
+  mayAliasFootball = true,
+): number {
+  const want = rowPosition.trim().toUpperCase();
+  const football = mayAliasFootball && rowSport?.trim().toUpperCase() === 'FOOTBALL';
+  return (athletePositions ?? []).findIndex((p) => {
+    const have = p.trim().toUpperCase();
+    return have === want || (football && FOOTBALL_POSITION_ALIASES[have] === want);
   });
 }
 

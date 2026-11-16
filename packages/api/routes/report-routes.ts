@@ -1652,7 +1652,7 @@ export function registerReportRoutes(app: Express) {
       // organization: use the code defaults and say so in the log.
       const { overrides: promptOverrides, hash: overridesHash, invalid: overridesInvalid } =
         resolveStoredOverrides(siteSettings?.aiPromptOverrides);
-      if (overridesInvalid) console.warn('Invalid AI prompt overrides in site settings; using the code defaults');
+      if (overridesInvalid) console.warn(`Invalid AI prompt overrides in site settings; using the code defaults (report ${reportId})`);
       console.log(`[AI insights] report ${reportId}: AI prompt overrides ${overridesHash ?? 'none'}`);
 
       // Generate insights using AI service

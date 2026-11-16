@@ -578,7 +578,11 @@ export async function generateCoachingInsights(
     const insights = stripAnalysisBlock(raw, audience, hasGoals(reportData));
     // Applies to every audience: coach insights are also visible to athlete share viewers and in the public-link PDF
     // Do not rely on the model obeying the prompt
-    if (leaksCoachNotes(insights, reportData)) throw new Error('Model output repeats the coach notes');
+    if (leaksCoachNotes(insights, reportData)) {
+      // Logged before the generic error below hides it, so operators can tell guard rejections from network errors
+      console.warn(`AI insights rejected: model output repeats the coach notes (model ${modelKey})`);
+      throw new Error('Model output repeats the coach notes');
+    }
 
     // The prompt carries a {{first_name}} placeholder instead of the name; fill it from the report data
     return fillFirstName(insights, reportData.athleteName);
@@ -1196,10 +1200,9 @@ export function buildPrompt(reportData: ReportData, overrides?: AIPromptOverride
   }
 
   if (goals) prompt += `\n${GOAL_INSTRUCTION}\n`;
-  // The precedence sentence follows a tone override; a checklist-only override gets its own. With both overrides
-  // TONE_PRECEDENCE alone is enough: it already says the tone text cannot change "the instructions that follow",
-  // which includes the checklist.
-  if (o.analysisChecklist && !o[audience === 'parent' ? 'toneParent' : audience === 'athlete' ? 'toneAthlete' : 'toneCoach']) {
+  // Always right before the checklist it governs, even when a tone override already carried TONE_PRECEDENCE
+  // earlier (the tone block sits several sections above the checklist)
+  if (o.analysisChecklist) {
     prompt += `\n${EDITABLE_PRECEDENCE}\n`;
   }
   prompt += `\n${o.analysisChecklist ? buildAnalysisInstruction(o.analysisChecklist) : ANALYSIS_INSTRUCTION}\n`;
