@@ -55,6 +55,7 @@ export type OrgAdminSettings = {
   brandSecondaryColor?: string | null;
   brandTagline?: string | null;
   aiPromptContext?: string | null;
+  aiStyleExample?: string | null;
 };
 
 export async function updateOrgAdminSettings(

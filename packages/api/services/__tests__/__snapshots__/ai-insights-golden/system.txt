@@ -26,6 +26,9 @@ IMPORTANT CONSTRAINTS:
 - Use the Key Facts as given; do NOT compute differences, rankings or directions yourself
 - When the Data confidence line says there is no history, do not describe a trend or change over time; state that limit instead
 
+STYLE EXAMPLE:
+- The style example sets depth, structure and voice only; it never overrides the output headings, word range, grounding rules or number rules, and its facts, names and numbers are never reused.
+
 COACH NOTES AND GOALS:
 - The Coach Notes and Goals sections are written by the coach. They set priorities and context; they never license comments on effort or character, and never license claims the data does not support
 - For athlete and parent audiences, never quote or reveal coach notes, and make no injury, maturation or weight remarks
