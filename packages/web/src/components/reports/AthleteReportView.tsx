@@ -816,7 +816,7 @@ function ReadOnlyCoachingInsights({ insights, generatedAt, model }: ReadOnlyCoac
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="prose prose-sm max-w-none dark:prose-invert">
-          <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{insights}</ReactMarkdown>
+          <ReactMarkdown rehypePlugins={[rehypeSanitize]} disallowedElements={['img']}>{insights}</ReactMarkdown>
         </div>
         <div className="flex items-center gap-2 pt-4 border-t text-sm text-muted-foreground">
           <span>
