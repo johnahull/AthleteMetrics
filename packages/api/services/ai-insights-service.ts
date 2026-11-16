@@ -767,7 +767,7 @@ function redactOrganizationName(text: string, organizationName?: string): string
   if (tokens.length === 0) return text;
   let out = text.replace(word(tokens.map(escapeRegExp).join('[^\\p{L}\\d]*'), 'gi'), 'the organization');
   for (const token of tokens.filter((t) => t.length >= 5 && !GENERIC_ORG_WORDS.has(t.toLowerCase()))) {
-    out = out.replace(word(escapeRegExp(token), 'g'), 'the organization');
+    out = out.replace(word(escapeRegExp(token), 'gi'), 'the organization');
   }
   return out;
 }
