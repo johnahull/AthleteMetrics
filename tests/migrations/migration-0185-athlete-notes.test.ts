@@ -1,5 +1,5 @@
 /**
- * Migration 0184: athlete_notes table (AM-FEAT-025). CI builds its DB with db:push, so the static tests prove the
+ * Migration 0185: athlete_notes table (AM-FEAT-025). CI builds its DB with db:push, so the static tests prove the
  * SQL matches the Drizzle definition (columns, ON DELETE, index); the live test runs the up/down pair in a
  * rolled-back transaction, only on a disposable test DB.
  */
@@ -13,7 +13,7 @@ import { athleteNotes } from '../../packages/shared/schema/tables/athlete-notes'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const read = (f: string) => fs.readFileSync(path.resolve(__dirname, '../../migrations', f), 'utf-8');
-const NAME = '0184_add_athlete_notes';
+const NAME = '0185_add_athlete_notes';
 const UP = read(`${NAME}.sql`);
 const DOWN = read(`${NAME}_down.sql`);
 
@@ -21,7 +21,7 @@ const dbUrl = process.env.DATABASE_URL || '';
 const isDisposableTestDb =
   process.env.NODE_ENV === 'test' && (/@(localhost|127\.0\.0\.1)[:/]/.test(dbUrl) || process.env.CI === 'true');
 
-describe('Migration 0184: static analysis', () => {
+describe('Migration 0185: static analysis', () => {
   it('is idempotent, runs no BEGIN/COMMIT, and down drops the table and forgets the tracking row', () => {
     expect(UP).toMatch(/CREATE TABLE IF NOT EXISTS athlete_notes/);
     expect(UP).toMatch(/CREATE INDEX IF NOT EXISTS athlete_notes_athlete_org_observed_idx/);
@@ -53,7 +53,7 @@ describe('Migration 0184: static analysis', () => {
   });
 });
 
-describe.skipIf(!isDisposableTestDb)('Migration 0184: against a disposable DB (rolled back)', () => {
+describe.skipIf(!isDisposableTestDb)('Migration 0185: against a disposable DB (rolled back)', () => {
   let sql: ReturnType<typeof postgres>;
   beforeAll(() => {
     sql = postgres(dbUrl, { max: 1, onnotice: () => {} });

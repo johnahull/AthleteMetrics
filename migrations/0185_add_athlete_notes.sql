@@ -1,4 +1,4 @@
--- Migration 0184: athlete_notes (AM-FEAT-025, athlete coaching notes)
+-- Migration 0185: athlete_notes (AM-FEAT-025, athlete coaching notes)
 --
 -- A dated, organization-scoped log a coach keeps about an athlete. Visible only to writers (coach / org_admin /
 -- site admin) of the note's organization. Must match packages/shared/schema/tables/athlete-notes.ts exactly
@@ -9,8 +9,8 @@
 --   event_id         -> events.id         ON DELETE SET NULL
 -- observed_on has no default: the client sends the coach's local date.
 --
--- The number is provisional: renumber at merge if another branch lands 0184 first (file, `_down`, test
--- `migration-0184-athlete-notes`, tracking row, the line in docs/MIGRATION_SYSTEM_REMEDIATION.md).
+-- The number is provisional: renumber at merge if another branch lands 0185 first (file, `_down`, test
+-- `migration-0185-athlete-notes`, tracking row, the line in docs/MIGRATION_SYSTEM_REMEDIATION.md).
 --
 -- IDEMPOTENT: safe to run multiple times.
 

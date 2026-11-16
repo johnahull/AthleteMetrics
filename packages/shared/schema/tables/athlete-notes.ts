@@ -4,7 +4,7 @@
  * athleteNotes: dated, organization-scoped observations a coach keeps about an athlete.
  * Visible only to writers (coach / org_admin / site admin) of the note's organization.
  * CASCADE on athlete and organization: deleteAthlete, hardDeleteUser and deleteOrganization hard-delete those
- * rows, which a plain FK would block. The SQL migration (0184) must match this definition exactly.
+ * rows, which a plain FK would block. The SQL migration (0185) must match this definition exactly.
  */
 
 import { sql } from "drizzle-orm";
