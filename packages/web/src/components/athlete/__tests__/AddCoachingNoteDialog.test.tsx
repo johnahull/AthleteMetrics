@@ -1,11 +1,13 @@
 import React from "react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom";
 import { AddCoachingNoteDialog } from "../AddCoachingNoteDialog";
 import type { AthleteNoteRow } from "@/lib/athlete-notes-api";
 
+const { EVENT_ID } = vi.hoisted(() => ({ EVENT_ID: "6f1c2d3e-4a5b-4c6d-8e7f-1a2b3c4d5e6f" }));
 const toast = vi.fn();
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast }) }));
 
@@ -18,7 +20,7 @@ vi.mock("@/lib/api", () => ({
     organizations: () => ({ queryKey: ["organizations"], queryFn: async () => [{ id: "orgA", name: "Org A" }] }),
     athletes: (f: any) => ({ queryKey: ["athletes", f], queryFn: async () => [{ id: "a9", fullName: "Pat Picked" }] }),
   },
-  apiClient: { get: vi.fn(async () => [{ id: "e1", name: "Spring Eval" }]) },
+  apiClient: { get: vi.fn(async () => [{ id: EVENT_ID, name: "Spring Eval" }]) },
 }));
 
 const createNote = vi.fn();
@@ -51,6 +53,14 @@ const renderDialog = (props: Partial<React.ComponentProps<typeof AddCoachingNote
       <AddCoachingNoteDialog open onOpenChange={vi.fn()} {...props} />
     </QueryClientProvider>,
   );
+
+// Radix Select needs these in jsdom
+beforeAll(() => {
+  Element.prototype.hasPointerCapture ??= () => false;
+  Element.prototype.setPointerCapture ??= () => {};
+  Element.prototype.releasePointerCapture ??= () => {};
+  Element.prototype.scrollIntoView ??= () => {};
+});
 
 describe("AddCoachingNoteDialog", () => {
   beforeEach(() => {
@@ -195,5 +205,34 @@ describe("AddCoachingNoteDialog", () => {
     fireEvent.click(screen.getByTestId("save-note"));
     await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.objectContaining({ variant: "destructive" })));
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  it("saves the linked event with the note", async () => {
+    const user = userEvent.setup();
+    renderDialog({ athlete: { id: "a1", name: "Sam Sprinter" }, organizationOptions: [{ id: "orgX", name: "Org X" }] });
+    await user.click(await screen.findByLabelText("Event (optional)"));
+    await user.click(await screen.findByRole("option", { name: "Spring Eval" }));
+    fireEvent.change(screen.getByLabelText("Note"), { target: { value: "At the eval" } });
+    fireEvent.click(screen.getByTestId("save-note"));
+    await waitFor(() => expect(createNote).toHaveBeenCalledWith(expect.objectContaining({ organizationId: "orgX", eventId: EVENT_ID })));
+  });
+
+  it("drops the linked event when the organization changes (an event belongs to one organization)", async () => {
+    const user = userEvent.setup();
+    renderDialog({
+      athlete: { id: "a1", name: "Sam Sprinter" },
+      defaultOrganizationId: "orgX",
+      organizationOptions: [{ id: "orgX", name: "Org X" }, { id: "orgY", name: "Org Y" }],
+    });
+    await user.click(await screen.findByLabelText("Event (optional)"));
+    await user.click(await screen.findByRole("option", { name: "Spring Eval" }));
+
+    await user.click(screen.getByTestId("note-org-select"));
+    await user.click(await screen.findByRole("option", { name: "Org Y" }));
+
+    fireEvent.change(screen.getByLabelText("Note"), { target: { value: "Moved organization" } });
+    fireEvent.click(screen.getByTestId("save-note"));
+    await waitFor(() => expect(createNote).toHaveBeenCalledTimes(1));
+    expect(createNote).toHaveBeenCalledWith(expect.objectContaining({ organizationId: "orgY", eventId: null }));
   });
 });
