@@ -46,7 +46,6 @@
 
 > 0183 (site_settings.ai_prompt_overrides jsonb, the site-admin editable AI insights prompt wording, and the `site_ai_prompt_changed` audit action: the `audit_logs_action_valid` CHECK is re-defined as the 0173 list plus that value; `_down` drops the column and restores the 0173 list NOT VALID) is provisional: renumber at merge if another branch lands 0183 first (file, `_down`, test `migration-0183-ai-prompt-overrides`, tracking row, this line). Needs 0173 first.
 
-
 ## Current State (2025-10-30)
 
 ### Overview
