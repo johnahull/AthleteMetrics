@@ -82,7 +82,7 @@ export const users = pgTable("users", {
   graduationYear: integer("graduation_year"),
   school: text("school"),
   phoneNumbers: text("phone_numbers").array(),
-  sports: text("sports").array(), // ["Soccer"] - restricted to soccer only
+  sports: text("sports").array(), // free text, e.g. ["Soccer"] or ["Football"]; no DB restriction (benchmark matching compares case-insensitively)
   positions: text("positions").array(), // ["F", "M", "D", "GK"] for soccer positions
   height: integer("height"), // inches
   weight: integer("weight"), // pounds
