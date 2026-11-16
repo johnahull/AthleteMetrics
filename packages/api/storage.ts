@@ -59,6 +59,9 @@ function whereUserNotDeleted(): SQL {
 }
 
 /** InsertMeasurement omits `units`; import callers may supply it to override the metric's configured unit. */
+/** What the unauthenticated public directory may show about an organization (the join-organization page's fields). */
+export type PublicOrganization = Pick<Organization, 'id' | 'name' | 'description' | 'location' | 'orgType'> & { memberCount: number };
+
 export type CreateMeasurementInput = InsertMeasurement & { units?: string | null };
 
 /** Optional behavior of storage.createMeasurement (the storage-based import paths). */
@@ -270,7 +273,7 @@ export interface IStorage {
   getUserPendingInvitations(userId: string): Promise<Array<EventInvitation & { event: Event }>>;
 
   // Public Organization Directory
-  getPublicOrganizations(filters?: { search?: string; orgType?: OrganizationType }): Promise<(Organization & { memberCount: number })[]>;
+  getPublicOrganizations(filters?: { search?: string; orgType?: OrganizationType }): Promise<PublicOrganization[]>;
   getOrganizationByJoinCode(joinCode: string): Promise<Organization | undefined>;
   regenerateJoinCode(organizationId: string, customCode?: string): Promise<string>;
   updateOrganizationMembershipSettings(organizationId: string, settings: {
@@ -2725,7 +2728,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Public Organization Directory
-  async getPublicOrganizations(filters?: { search?: string; orgType?: OrganizationType }): Promise<(Organization & { memberCount: number })[]> {
+  async getPublicOrganizations(filters?: { search?: string; orgType?: OrganizationType }): Promise<PublicOrganization[]> {
     const conditions = [
       eq(organizations.isPublicDirectory, true),
       eq(organizations.isActive, true),
@@ -2736,13 +2739,18 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(organizations.orgType, filters.orgType));
     }
 
-    // Get organizations
-    let query = db.select()
+    // Get organizations. This feeds an unauthenticated endpoint, so select the public fields explicitly:
+    // a new organizations column must never become public by default (join code, AI settings, ...).
+    const orgs = await db.select({
+      id: organizations.id,
+      name: organizations.name,
+      description: organizations.description,
+      location: organizations.location,
+      orgType: organizations.orgType,
+    })
       .from(organizations)
       .where(and(...conditions))
       .orderBy(organizations.name);
-
-    const orgs = await query;
 
     // If search filter, apply client-side filtering (PostgreSQL ILIKE would be better but keeping it simple)
     let filteredOrgs = orgs;
