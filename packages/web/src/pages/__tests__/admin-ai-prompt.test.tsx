@@ -49,7 +49,7 @@ function renderPage() {
     },
   });
   invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
-  return render(<QueryClientProvider client={queryClient}><AdminPage /></QueryClientProvider>);
+  return { ...render(<QueryClientProvider client={queryClient}><AdminPage /></QueryClientProvider>), queryClient };
 }
 
 const field = (label: string) => screen.findByLabelText(label);
@@ -167,6 +167,17 @@ describe('AI insights prompt card', () => {
     renderPage();
     await waitFor(() => expect(screen.getByLabelText('Parent tone')).toHaveValue('Be kind.'));
     expect(screen.getByText('8 / 1500')).toBeInTheDocument();
+  });
+
+  it('a background refetch updates untouched fields but keeps what the admin is typing', async () => {
+    stored = { toneParent: 'Be kind.' };
+    const { queryClient } = renderPage();
+    await waitFor(() => expect(screen.getByLabelText('Parent tone')).toHaveValue('Be kind.'));
+    fireEvent.change(screen.getByLabelText('Coach tone'), { target: { value: 'My draft' } });
+    stored = { toneParent: 'Be kinder.' }; // another admin saved meanwhile
+    await queryClient.invalidateQueries({ queryKey: ['/api/site-settings'] });
+    await waitFor(() => expect(screen.getByLabelText('Parent tone')).toHaveValue('Be kinder.'));
+    expect(screen.getByLabelText('Coach tone')).toHaveValue('My draft');
   });
 
   it('save sends the whole object with only non-empty fields', async () => {

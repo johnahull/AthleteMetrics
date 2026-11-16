@@ -111,10 +111,11 @@ export function AiPromptCard() {
   });
   const { register, handleSubmit, watch, setValue, reset, setError, formState } = form;
 
-  // Reload the fields when the saved value changes (after a save or the first load)
+  // Reload the fields when the saved value changes (after a save or the first load). A background refetch
+  // (window focus, another admin's save) must not wipe what this admin is typing, so touched fields stay.
   const storedJson = JSON.stringify(settings?.aiPromptOverrides ?? {});
   useEffect(() => {
-    reset({ ...EMPTY, ...JSON.parse(storedJson) });
+    reset({ ...EMPTY, ...JSON.parse(storedJson) }, { keepDirtyValues: true });
   }, [storedJson, reset]);
 
   const save = useMutation({
