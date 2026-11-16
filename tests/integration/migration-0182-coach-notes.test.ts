@@ -1,4 +1,4 @@
-/** Migration 0181: reports.coach_notes + organizations.ai_style_example. Runs in a rolled-back transaction on a disposable DB. */
+/** Migration 0182: reports.coach_notes + organizations.ai_style_example. Runs in a rolled-back transaction on a disposable DB. */
 process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 
 import fs from 'fs';
@@ -9,8 +9,8 @@ import postgres from 'postgres';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const read = (f: string) => fs.readFileSync(path.resolve(__dirname, '../../migrations', f), 'utf-8');
-const UP = read('0181_add_coach_notes_and_ai_style_example.sql');
-const DOWN = read('0181_add_coach_notes_and_ai_style_example_down.sql');
+const UP = read('0182_add_coach_notes_and_ai_style_example.sql');
+const DOWN = read('0182_add_coach_notes_and_ai_style_example_down.sql');
 
 const dbUrl = process.env.DATABASE_URL || '';
 const isDisposableTestDb =
@@ -18,7 +18,7 @@ const isDisposableTestDb =
 
 class Rollback extends Error {}
 
-describe.skipIf(!isDisposableTestDb)('Migration 0181 against a disposable DB (rolled back)', () => {
+describe.skipIf(!isDisposableTestDb)('Migration 0182 against a disposable DB (rolled back)', () => {
   let sql: ReturnType<typeof postgres>;
   beforeAll(() => { sql = postgres(dbUrl, { max: 1, onnotice: () => {} }); });
   afterAll(async () => { await sql.end(); });
