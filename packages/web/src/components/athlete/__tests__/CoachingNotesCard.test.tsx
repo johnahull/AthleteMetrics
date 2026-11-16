@@ -125,6 +125,15 @@ describe("CoachingNotesCard", () => {
     expect(screen.queryByRole("button", { name: "Edit note" })).toBeNull();
   });
 
+  it("lets a site admin delete someone else's note even though they are a member of no organization", () => {
+    mockUser = { id: "me", isSiteAdmin: true };
+    mockOrgs = [];
+    query = { isSuccess: true, data: [note({ id: "theirs", authorId: "other", authorName: "Other Coach" })] };
+    renderCard();
+    expect(screen.getByRole("button", { name: "Delete note" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit note" })).toBeNull();
+  });
+
   it("is org admin only per organization: admin of org2 cannot delete a note in org1", () => {
     mockOrgs = [{ organizationId: "org2", organizationName: "Org Two", role: "org_admin", createdAt: "" }];
     query = { isSuccess: true, data: [note({ id: "theirs", authorId: "other" })] };
