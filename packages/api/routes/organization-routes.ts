@@ -560,12 +560,15 @@ export function registerOrganizationRoutes(app: Express) {
           return res.status(400).json({ message: "AI style example must be a string" });
         }
         const rawText = (aiStyleExample ?? '').trim();
+        // Reject over-long input before sanitizing (which would silently cut it): both as typed and after NFKC,
+        // which can expand characters (the ligature U+FB01 becomes "fi")
+        if (Math.max(rawText.length, rawText.normalize("NFKC").length) > STYLE_EXAMPLE_MAX_CHARS) {
+          return res.status(400).json({ message: `AI style example must be ${STYLE_EXAMPLE_MAX_CHARS} characters or less` });
+        }
         // Check and store the NFKC-sanitized form: that is what reaches the prompt, so full-width name lookalikes are caught
         const styleText = sanitizeStyleExample(rawText);
         if (styleText === '') {
           updates.aiStyleExample = null;
-        } else if (rawText.length > STYLE_EXAMPLE_MAX_CHARS) {
-          return res.status(400).json({ message: `AI style example must be ${STYLE_EXAMPLE_MAX_CHARS} characters or less` });
         } else {
           if (!org.aiEnabledBySiteAdmin) {
             return res.status(403).json({ message: "AI features must be enabled by site administrator first" });
