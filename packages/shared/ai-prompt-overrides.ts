@@ -77,6 +77,8 @@ export const orgAiPromptOverridesSchema = z
     toneCoach: slot().optional(),
   })
   .strict()
-  .transform((o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v)) as Partial<Record<OrgAIPromptOverrideKey, string>>);
+  .transform((o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v)) as OrgAIPromptOverrides);
+
+export type OrgAIPromptOverrides = Partial<Record<OrgAIPromptOverrideKey, string>>;
 
 export type AIPromptOverrides = Partial<Record<AIPromptOverrideKey, string>>;

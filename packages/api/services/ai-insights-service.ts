@@ -23,6 +23,7 @@ import {
   AI_PROMPT_ROLE_MAX,
   sanitizePromptOverride,
   type AIPromptOverrides,
+  type OrgAIPromptOverrides,
 } from "@shared/ai-prompt-overrides";
 import { formatStyleExampleBlock, sanitizeStyleExample } from "./ai-style-example";
 
@@ -564,7 +565,7 @@ export async function generateCoachingInsights(
   modelKey: AIModelKey,
   reportData: ReportData,
   overrides?: AIPromptOverrides | null,
-  orgOverrides?: AIPromptOverrides | null
+  orgOverrides?: OrgAIPromptOverrides | null
 ): Promise<string> {
   try {
     // Defensive validation: ensure model key exists in AI_MODELS
@@ -954,7 +955,7 @@ const GOAL_INSTRUCTION = [
  * Build the user message for the AI model from report data (the system prompt is buildSystemPrompt).
  * The audience tone and the analysis checklist wording are editable; headings, word ranges and fences are not.
  */
-export function buildPrompt(reportData: ReportData, overrides?: AIPromptOverrides | null, orgOverrides?: AIPromptOverrides | null): string {
+export function buildPrompt(reportData: ReportData, overrides?: AIPromptOverrides | null, orgOverrides?: OrgAIPromptOverrides | null): string {
   const { reportType } = reportData;
   const site = cleanOverrides(overrides);
   const org = cleanOverrides(orgOverrides);

@@ -98,7 +98,12 @@ const orgAdminSettingsSchema = z.object({
   aiEnabled: z.boolean().default(false),
   aiPromptContext: z.string().max(2000, "AI prompt context must be 2000 characters or less").optional().default(''),
   aiStyleExample: z.string().max(1500, "Example analysis must be 1500 characters or less").optional().default(''),
-  aiPromptOverrides: z.object(Object.fromEntries(ORG_AI_PROMPT_OVERRIDE_KEYS.map((k) => [k, z.string().max(1500, "Must be 1500 characters or less")]))).partial().default({}),
+  aiPromptOverrides: z.object({
+    philosophy: z.string().max(1500, "Must be 1500 characters or less"),
+    toneParent: z.string().max(1500, "Must be 1500 characters or less"),
+    toneAthlete: z.string().max(1500, "Must be 1500 characters or less"),
+    toneCoach: z.string().max(1500, "Must be 1500 characters or less"),
+  }).partial().default({}),
   wellnessEnabled: z.boolean().default(true),
   eventsEnabled: z.boolean().default(false),
   brandLogoUrl: z.string().optional().default('').refine(

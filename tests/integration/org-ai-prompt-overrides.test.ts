@@ -334,7 +334,22 @@ describe('POST /api/reports/:id/generate-insights uses the org layer', () => {
     await db.update(organizations).set({ aiPromptOverrides: { role: 'x' } as any }).where(eq(organizations.id, org.id));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     expect((await generate()).status).toBe(200);
-    expect(warn.mock.calls.flat().join('\n')).toMatch(/invalid ai prompt overrides in organization/i);
+    expect(warn.mock.calls.flat().join('\n')).toMatch(/schema-invalid ai prompt overrides in organization/i);
+    warn.mockRestore();
+  });
+
+  it.each([
+    ['a string', () => 'Some stray text'],
+    ['an array holding a member name', () => [member.fullName]],
+  ])('a stored %s is ignored as schema-invalid (not the member-name drop), site wording applies, no throw', async (_n, value) => {
+    await setSite({ toneCoach: 'SITE-TONE' });
+    await db.update(organizations).set({ aiPromptOverrides: value() as any }).where(eq(organizations.id, org.id));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect((await generate()).status).toBe(200);
+    const warned = warn.mock.calls.flat().join('\n');
+    expect(warned).toMatch(/schema-invalid ai prompt overrides in organization/i);
+    expect(warned).not.toMatch(/now names a member|name check failed/);
+    expect(sentUser()).toContain('SITE-TONE');
     warn.mockRestore();
   });
 });

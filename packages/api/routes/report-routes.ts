@@ -1708,10 +1708,11 @@ export function registerReportRoutes(app: Express) {
       // The organization layer (philosophy and tones) sits on top. It is sent to the provider, so a member who joined
       // after it was saved and now matches drops the whole org layer for this generation, not the request.
       let orgRaw: unknown = org.aiPromptOverrides;
-      if (orgRaw) {
+      // Only a plain object is name-checked; anything else is left for the schema check below to reject
+      if (orgRaw !== null && typeof orgRaw === 'object' && !Array.isArray(orgRaw)) {
         try {
           const names = await storage.getOrganizationMemberNames(report.organizationId);
-          if (memberNamesIn(Object.values(orgRaw as object).filter((v) => typeof v === 'string').join('\n'), names).length > 0) {
+          if (memberNamesIn(Object.values(orgRaw as Record<string, unknown>).filter((v) => typeof v === 'string').join('\n'), names).length > 0) {
             console.warn(`[AI] Organization wording dropped for organization ${report.organizationId}: it now names a member`);
             orgRaw = undefined;
           }
@@ -1723,7 +1724,7 @@ export function registerReportRoutes(app: Express) {
       const { site: promptOverrides, org: orgPromptOverrides, hash: overridesHash, siteInvalid: overridesInvalid, orgInvalid } =
         mergePromptOverrides(siteSettings?.aiPromptOverrides, orgRaw);
       if (overridesInvalid) console.warn(`Invalid AI prompt overrides in site settings; using the code defaults (report ${reportId})`);
-      if (orgInvalid) console.warn(`Invalid AI prompt overrides in organization ${report.organizationId}; using the site wording (report ${reportId})`);
+      if (orgInvalid) console.warn(`Schema-invalid AI prompt overrides in organization ${report.organizationId}; using the site wording (report ${reportId})`);
       console.log(`[AI insights] report ${reportId}: AI prompt overrides ${overridesHash ?? 'none'}`);
 
       // Generate insights using AI service

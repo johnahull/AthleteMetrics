@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { aiPromptOverridesSchema, orgAiPromptOverridesSchema, type AIPromptOverrides } from "@shared/ai-prompt-overrides";
+import { aiPromptOverridesSchema, orgAiPromptOverridesSchema, type AIPromptOverrides, type OrgAIPromptOverrides } from "@shared/ai-prompt-overrides";
 
 /**
  * Stored site_settings.ai_prompt_overrides as the prompt builders should see it. A row that fails the schema
@@ -25,13 +25,13 @@ const sortedEntries = (o: AIPromptOverrides | undefined) => Object.entries(o ?? 
  */
 export function mergePromptOverrides(siteRaw: unknown, orgRaw: unknown): {
   site: AIPromptOverrides | undefined;
-  org: AIPromptOverrides | undefined;
+  org: OrgAIPromptOverrides | undefined;
   hash: string | null;
   siteInvalid: boolean;
   orgInvalid: boolean;
 } {
   const s = resolveStoredOverrides(siteRaw);
-  let org: AIPromptOverrides | undefined;
+  let org: OrgAIPromptOverrides | undefined;
   let orgInvalid = false;
   if (orgRaw !== null && orgRaw !== undefined) {
     const parsed = orgAiPromptOverridesSchema.safeParse(orgRaw);
