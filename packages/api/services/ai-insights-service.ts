@@ -772,19 +772,24 @@ function coachText(input: string, maxLength: number, reportData: ReportData): st
     text = text.replace(word(escapeRegExp(token), 'gi'), 'the organization');
   }
   const [first, ...rest] = (reportData.athleteName ?? '').trim().split(/\s+/).filter((t) => t.length >= 2);
+  // The placeholder is a non-letter sentinel while names are replaced, so a name such as "First" or "Name" cannot
+  // match inside the finished {{first_name}} token
+  const PH = '\uE000';
+  text = text.split(PH).join('');
   if (first) {
     const full = [first, ...rest].map(escapeRegExp).join('\\s+');
-    text = text.replace(word(full, 'g'), '{{first_name}}');
-    if (rest.length > 0) text = text.replace(word(full, 'gi'), '{{first_name}}');
-    text = text.replace(word(escapeRegExp(first.toUpperCase()), 'g'), '{{first_name}}');
-    text = text.replace(word(escapeRegExp(first), 'g'), '{{first_name}}');
+    text = text.replace(word(full, 'g'), PH);
+    if (rest.length > 0) text = text.replace(word(full, 'gi'), PH);
+    text = text.replace(word(escapeRegExp(first.toUpperCase()), 'g'), PH);
+    text = text.replace(word(escapeRegExp(first), 'g'), PH);
     // Lower-case first name on its own ("evelyn ran"): a child's name outweighs the rare ordinary-word first name
-    text = text.replace(word(escapeRegExp(first.toLowerCase()), 'g'), '{{first_name}}');
+    text = text.replace(word(escapeRegExp(first.toLowerCase()), 'g'), PH);
     for (const part of rest) {
       text = text.replace(word(escapeRegExp(part.toUpperCase()), 'g'), 'the athlete');
       text = text.replace(word(escapeRegExp(part), 'g'), 'the athlete');
     }
   }
+  text = text.split(PH).join('{{first_name}}');
   return text;
 }
 
