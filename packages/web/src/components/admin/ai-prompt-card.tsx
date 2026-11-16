@@ -125,6 +125,8 @@ export function AiPromptCard() {
     },
     onSuccess: (_data, saved) => {
       // The submitted values are already sanitized by the schema: show them, so the form is not left dirty with raw text
+      // Deliberately NOT keepDirtyValues: the fields must show the sanitized text that was saved. The Save button is
+      // disabled while the request is in flight, so edits made during it are not expected.
       reset({ ...EMPTY, ...saved });
       queryClient.invalidateQueries({ queryKey: ["/api/site-settings"] });
       toast({ title: "AI prompt updated", description: "The change applies to all organizations." });
