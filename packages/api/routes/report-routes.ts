@@ -1869,7 +1869,7 @@ export function registerReportRoutes(app: Express) {
       }
 
       const athleteId = (report.config as { athleteId?: string } | null)?.athleteId;
-      if (!athleteId) return res.status(400).json({ message: "Coach notes are only available for individual reports" });
+      if (!athleteId) return res.status(400).json({ message: "Report is missing its athlete configuration" });
 
       // Atomic with COPPA deletion: deletion takes FOR UPDATE on the athlete's user row first, so this either
       // finishes before deletion (which then clears the notes) or waits and sees the athlete deleted.
