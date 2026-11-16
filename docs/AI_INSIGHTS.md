@@ -12,7 +12,7 @@ Key files:
 | `packages/api/routes/report-routes.ts` | `POST /api/reports/:id/generate-insights`, `PATCH /api/reports/:id/coach-notes`, `buildReportDataForAI` |
 | `packages/api/routes/report-coach-notes-access.ts` | read gate for `coachNotes` |
 | `packages/api/routes/organization-routes.ts` | org AI settings (`aiPromptContext`, `aiStyleExample`) |
-| `migrations/0181_add_coach_notes_and_ai_style_example.sql` | `reports.coach_notes` jsonb, `organizations.ai_style_example` text (number provisional, see `docs/MIGRATION_SYSTEM_REMEDIATION.md`) |
+| `migrations/0182_add_coach_notes_and_ai_style_example.sql` | `reports.coach_notes` jsonb, `organizations.ai_style_example` text (number provisional, see `docs/MIGRATION_SYSTEM_REMEDIATION.md`) |
 | `scripts/eval-ai-insights.ts`, `packages/api/services/ai-insights-eval.ts` | live eval and output checks |
 
 ## How insights are generated
