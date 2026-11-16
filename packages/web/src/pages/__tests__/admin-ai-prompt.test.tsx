@@ -80,6 +80,14 @@ describe('AI insights prompt card', () => {
     expect(screen.getByText(/one line, up to 200 characters/i)).toBeInTheDocument();
   });
 
+  it('Enter in the Role input does not submit the form', async () => {
+    renderPage();
+    const role = await field('Role');
+    fireEvent.change(role, { target: { value: 'You are a coach' } });
+    // fireEvent returns false when the event's default action was prevented
+    expect(fireEvent.keyDown(role, { key: 'Enter' })).toBe(false);
+  });
+
   it('Role over 200 characters shows the 200 limit, not 1500', async () => {
     renderPage();
     fireEvent.change(await field('Role'), { target: { value: 'r'.repeat(201) } });
