@@ -28,6 +28,7 @@ import { measurements } from '@shared/schema/tables/measurements';
 import { wellnessResponses } from '@shared/schema/tables/wellness';
 import { eventRegistrations } from '@shared/schema/tables/events';
 import { reportSnapshots, reports, reportShares } from '@shared/schema/tables/reports';
+import { athleteNotes } from '@shared/schema/tables/athlete-notes';
 import { EVAL_REPORT_TYPE } from '@shared/eval-report-config';
 import { COPPA_ACTIONS, getAuditRetentionDate } from '@shared/coppa-utils';
 
@@ -119,6 +120,19 @@ export interface ExportBundle {
     organizationId: string;
     reportName: string;
     coachNotes: unknown;
+  }>;
+  /** Coaching notes about this athlete, every organization (coach-authored data about the child; not shown to athletes in-app) */
+  athleteNotes: Array<{
+    id: string;
+    organizationId: string;
+    authorId: string | null;
+    eventId: string | null;
+    category: string | null;
+    flagged: boolean;
+    observedOn: string;
+    body: string;
+    createdAt: Date;
+    updatedAt: Date;
   }>;
 }
 
@@ -443,6 +457,21 @@ export class CoppaExportService extends BaseService {
         sql`${reports.coachNotes} IS NOT NULL`,
       ));
 
+    const athleteNoteRows = await db.select({
+      id: athleteNotes.id,
+      organizationId: athleteNotes.organizationId,
+      authorId: athleteNotes.authorId,
+      eventId: athleteNotes.eventId,
+      category: athleteNotes.category,
+      flagged: athleteNotes.flagged,
+      observedOn: athleteNotes.observedOn,
+      body: athleteNotes.body,
+      createdAt: athleteNotes.createdAt,
+      updatedAt: athleteNotes.updatedAt,
+    })
+      .from(athleteNotes)
+      .where(eq(athleteNotes.athleteId, athleteUserId));
+
     return {
       exportedAt: new Date().toISOString(),
       athlete: {
@@ -464,6 +493,7 @@ export class CoppaExportService extends BaseService {
       reportSnapshots: athleteReportSnapshots,
       evalReports: athleteEvalReports,
       coachNotes: athleteCoachNotes,
+      athleteNotes: athleteNoteRows,
     };
   }
 

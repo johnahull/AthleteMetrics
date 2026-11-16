@@ -44,6 +44,8 @@
 
 > 0183 (site_settings.ai_prompt_overrides jsonb, the site-admin editable AI insights prompt wording, and the `site_ai_prompt_changed` audit action: the `audit_logs_action_valid` CHECK is re-defined as the 0173 list plus that value; `_down` drops the column and restores the 0173 list NOT VALID) is provisional: renumber at merge if another branch lands 0183 first (file, `_down`, test `migration-0183-ai-prompt-overrides`, tracking row, this line). Needs 0173 first.
 
+> 0184 (athlete_notes table, AM-FEAT-025 athlete coaching notes: athlete_id and organization_id ON DELETE CASCADE, author_id and event_id ON DELETE SET NULL, index on (athlete_id, organization_id, observed_on); `_down` drops the table) is provisional: renumber at merge if another branch lands 0184 first (file, `_down`, test `migration-0184-athlete-notes`, tracking row, this line). AM-FEAT-024 (#733-735) also holds provisional numbers. Needs `users`, `organizations` and `events`.
+
 ## Current State (2025-10-30)
 
 ### Overview

@@ -1,6 +1,6 @@
 import { DEFAULT_AI_MODEL_KEY } from "@shared/ai-models";
 import {
-  organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs, emailVerificationTokens, accountLinkingTokens, passwordResetTokens, athleteProfiles,
+  organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs, emailVerificationTokens, accountLinkingTokens, passwordResetTokens, athleteProfiles, athleteNotes,
   siteMetrics, organizationMetrics,
   siteBenchmarks, customBenchmarks, organizationBenchmarks,
   siteSettings, reports,
@@ -964,6 +964,9 @@ export class DatabaseStorage implements IStorage {
       // Delete athlete profiles
       await tx.delete(athleteProfiles).where(eq(athleteProfiles.userId, id));
 
+      // Delete coaching notes about this athlete (the FK also cascades; explicit so a reader sees it)
+      await tx.delete(athleteNotes).where(eq(athleteNotes.athleteId, id));
+
       // Delete user-team relationships
       await tx.delete(userTeams).where(eq(userTeams.userId, id));
 
@@ -1240,7 +1243,8 @@ export class DatabaseStorage implements IStorage {
         throw new Error(`Cannot delete organization with active dependencies: ${errors.join(', ')}`);
       }
 
-      // 3. Delete organization atomically
+      // 3. Delete organization atomically (coaching notes cascade; explicit so a reader sees it)
+      await tx.delete(athleteNotes).where(eq(athleteNotes.organizationId, id));
       await tx.delete(organizations).where(eq(organizations.id, id));
     });
   }
@@ -3640,6 +3644,9 @@ export class DatabaseStorage implements IStorage {
 
       // Delete athlete profiles
       await tx.delete(athleteProfiles).where(eq(athleteProfiles.userId, id));
+
+      // Delete coaching notes about this athlete (the FK also cascades; explicit so a reader sees it)
+      await tx.delete(athleteNotes).where(eq(athleteNotes.athleteId, id));
 
       // Delete all user-team relationships
       await tx.delete(userTeams).where(eq(userTeams.userId, id));

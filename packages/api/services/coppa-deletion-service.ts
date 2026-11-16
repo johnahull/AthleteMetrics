@@ -16,6 +16,7 @@
  * 4.  Report shares (removes athlete from shared reports)
  * 5.  AI coaching insights (nulled on report snapshots — not hard-deleted)
  * 5b. Eval reports (code STEP 4c; reports.report_type = 'eval' with config.athleteId = athlete; shares/snapshots cascade)
+ * 5c. Athlete coaching notes (code STEP 6d, next to the athlete profile; notes in EVERY organization)
  * 6.  Global athlete links (unlink from cross-org profile)
  * 7.  Organization memberships + team memberships
  * 8.  Parent-athlete links
@@ -48,6 +49,7 @@ import { measurements } from '@shared/schema/tables/measurements';
 import { wellnessResponses } from '@shared/schema/tables/wellness';
 import { eventRegistrations, eventInvitations } from '@shared/schema/tables/events';
 import { reportShares, reports } from '@shared/schema/tables/reports';
+import { athleteNotes } from '@shared/schema/tables/athlete-notes';
 import { userGlobalAthleteLinks } from '@shared/schema/tables/global-athletes';
 import { pushSubscriptions, notificationPreferences, notificationHistory } from '@shared/schema/tables/notifications';
 import { userAchievements, goals } from '@shared/schema/tables/gamification';
@@ -429,6 +431,15 @@ export class CoppaDeletionService extends BaseService {
           .returning({ id: athleteProfiles.id });
         if (deletedProfiles.length > 0) {
           deletedCategories.push(`athlete_profiles (${deletedProfiles.length})`);
+        }
+
+        // STEP 6d: Delete coaching notes about the athlete, in every organization (the user row is only
+        // soft-deleted below, so the FK cascade would never reach them)
+        const deletedNotes = await tx.delete(athleteNotes)
+          .where(eq(athleteNotes.athleteId, athleteUserId))
+          .returning({ id: athleteNotes.id });
+        if (deletedNotes.length > 0) {
+          deletedCategories.push(`athlete_notes (${deletedNotes.length})`);
         }
 
         // STEP 7: Delete parent-athlete links
