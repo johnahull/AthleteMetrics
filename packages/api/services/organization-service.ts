@@ -273,17 +273,19 @@ export class OrganizationService extends BaseService {
       const organization = await this.storage.getOrganization(organizationId);
       if (!organization) return null;
 
-      // Site admins can access any organization
+      // Site admins can access any organization, with the admin-only style example (storage.getUserRole reports
+      // membership roles only, never 'site_admin', so the flag is checked here)
       const requestingUser = await this.storage.getUser(requestingUserId);
-      if (requestingUser?.isSiteAdmin === true) {
+      const isSiteAdmin = requestingUser?.isSiteAdmin === true;
+      if (isSiteAdmin) {
         return organization;
       }
 
       // Check if user has access to this organization
       const hasAccess = await this.validateOrganizationAccess(requestingUserId, organizationId);
       if (!hasAccess) return null;
-      const isOrgAdmin = (await this.storage.getUserRole(requestingUserId, organizationId)) === 'org_admin';
-      return omitStyleExampleUnless(organization, isOrgAdmin);
+      const role = await this.storage.getUserRole(requestingUserId, organizationId);
+      return omitStyleExampleUnless(organization, isSiteAdmin || role === 'org_admin');
     } catch (error) {
       console.error("OrganizationService.getOrganizationById:", error);
       return null;
