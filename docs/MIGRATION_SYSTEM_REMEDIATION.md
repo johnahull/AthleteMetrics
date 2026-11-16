@@ -42,7 +42,7 @@
 
 > 0182 (reports.coach_notes jsonb and organizations.ai_style_example text, AI coach notes; AM-FEAT-024 reserves 0179/0180) was renumbered from 0181 when #756 landed 0181 first. Tracking is by file name, so environments that applied the old `0181_add_coach_notes_and_ai_style_example` row run the 0182 file once more; it is idempotent (IF NOT EXISTS). It is provisional: renumber at merge if another branch lands 0182 first (file, `_down`, test `migration-0182-coach-notes`, tracking row, this line).
 
-> 0182 (site_settings.ai_prompt_overrides jsonb, the site-admin editable AI insights prompt wording, and the `site_ai_prompt_changed` audit action: the `audit_logs_action_valid` CHECK is re-defined as the 0173 list plus that value; `_down` drops the column and restores the 0173 list NOT VALID) is provisional: renumber at merge if another branch lands 0182 first (file, `_down`, test `migration-0182-ai-prompt-overrides`, tracking row, this line). Needs 0173 first.
+> 0183 (site_settings.ai_prompt_overrides jsonb, the site-admin editable AI insights prompt wording, and the `site_ai_prompt_changed` audit action: the `audit_logs_action_valid` CHECK is re-defined as the 0173 list plus that value; `_down` drops the column and restores the 0173 list NOT VALID) is provisional: renumber at merge if another branch lands 0183 first (file, `_down`, test `migration-0183-ai-prompt-overrides`, tracking row, this line). Needs 0173 first.
 
 ## Current State (2025-10-30)
 

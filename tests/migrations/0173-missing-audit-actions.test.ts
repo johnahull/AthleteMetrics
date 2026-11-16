@@ -35,7 +35,7 @@ const NEW_ACTIONS = [
  */
 const KNOWN_UNCOVERED = ['waiver_submission_received'];
 
-/** Allowed by a later migration's constraint (0182), not by 0173 */
+/** Allowed by a later migration's constraint (0183), not by 0173 */
 const ADDED_LATER = ['site_ai_prompt_changed'];
 
 /** The quoted values of one CHECK (... IN (...)) list */
@@ -86,7 +86,7 @@ describe('Migration 0173: static analysis', () => {
     }
     expect(used.size).toBeGreaterThan(50); // the scan is really finding the calls
     for (const a of NEW_ACTIONS) expect(used).toContain(a);
-    // Actions a later migration allows are that migration's concern (see migration-0182-ai-prompt-overrides.test.ts)
+    // Actions a later migration allows are that migration's concern (see migration-0183-ai-prompt-overrides.test.ts)
     expect([...used].filter((a) => !allowed.has(a) && !ADDED_LATER.includes(a)).sort()).toEqual(KNOWN_UNCOVERED);
   });
 });

@@ -1,4 +1,4 @@
--- Migration 0182: site_settings.ai_prompt_overrides and the 'site_ai_prompt_changed' audit action
+-- Migration 0183: site_settings.ai_prompt_overrides and the 'site_ai_prompt_changed' audit action
 --
 -- ai_prompt_overrides: site-admin wording for the editable slots of the AI insights prompt (jsonb, validated by
 -- aiPromptOverridesSchema in packages/shared/ai-prompt-overrides.ts; null or a missing key = the code default).
@@ -6,8 +6,8 @@
 -- site_ai_prompt_changed: audit row written by that PATCH. The audit_logs_action_valid CHECK is re-defined as the
 -- list of migration 0173 plus this value (a strict superset, so every existing row still conforms).
 --
--- The number is provisional: renumber at merge if another branch lands 0182 first (file, `_down`, test
--- `migration-0182-ai-prompt-overrides`, tracking row, the line in docs/MIGRATION_SYSTEM_REMEDIATION.md).
+-- The number is provisional: renumber at merge if another branch lands 0183 first (file, `_down`, test
+-- `migration-0183-ai-prompt-overrides`, tracking row, the line in docs/MIGRATION_SYSTEM_REMEDIATION.md).
 --
 -- IDEMPOTENT: safe to run multiple times.
 
@@ -188,9 +188,9 @@ ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_action_valid CHECK (action IN (
     'org_metrics_bulk_updated',        -- services/metric-service.ts
     'profile_completed',               -- routes/profile-routes.ts
 
-    -- Site-admin edit of the AI insights prompt wording (migration 0182)
+    -- Site-admin edit of the AI insights prompt wording (migration 0183)
     'site_ai_prompt_changed'           -- routes/site-settings-routes.ts
 ));
 
 COMMENT ON CONSTRAINT audit_logs_action_valid ON audit_logs IS
-  'Valid audit log actions: list of 0173 plus site_ai_prompt_changed (migration 0182).';
+  'Valid audit log actions: list of 0173 plus site_ai_prompt_changed (migration 0183).';

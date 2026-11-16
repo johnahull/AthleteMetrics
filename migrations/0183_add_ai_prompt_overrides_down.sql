@@ -1,9 +1,9 @@
--- Down migration 0182: drop site_settings.ai_prompt_overrides (the wording in it is lost) and restore the
+-- Down migration 0183: drop site_settings.ai_prompt_overrides (the wording in it is lost) and restore the
 -- audit_logs action list of migration 0173 (without site_ai_prompt_changed)
 --
 -- The constraint is re-added NOT VALID so existing site_ai_prompt_changed rows are kept and do not block the
 -- rollback; new inserts of that action are rejected again. Forgets the manual_migrations row so
--- db:migrate:manual re-applies 0182.
+-- db:migrate:manual re-applies 0183.
 
 ALTER TABLE site_settings DROP COLUMN IF EXISTS ai_prompt_overrides;
 
@@ -185,6 +185,6 @@ ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_action_valid CHECK (action IN (
 DO $$
 BEGIN
   IF to_regclass('manual_migrations') IS NOT NULL THEN
-    DELETE FROM manual_migrations WHERE migration_name = '0182_add_ai_prompt_overrides';
+    DELETE FROM manual_migrations WHERE migration_name = '0183_add_ai_prompt_overrides';
   END IF;
 END $$;
