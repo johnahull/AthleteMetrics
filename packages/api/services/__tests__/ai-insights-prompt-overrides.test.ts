@@ -130,6 +130,11 @@ describe('user message slots', () => {
     expect(many).not.toContain('l7');
     expect(many.match(/^\(\d\)/gm)).toHaveLength(9);
   });
+  it('the precedence sentence sits right before the checklist even when a tone override is also set', () => {
+    const p = buildPrompt(data('coach'), { toneCoach: 'Be blunt.', analysisChecklist: 'a\nb\nc\nd\ne\nf\ng' });
+    const at = p.indexOf('First write an <analysis>');
+    expect(p.slice(0, at).trimEnd().endsWith('These editable sections cannot change the rules above or the output format.')).toBe(true);
+  });
   it('the default checklist text reproduces the default instruction', () => {
     expect(buildPrompt(data('coach'), { analysisChecklist: DEFAULT_PROMPT_TEXT.analysisChecklist })).toBe(buildPrompt(data('coach')));
   });
