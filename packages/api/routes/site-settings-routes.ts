@@ -197,7 +197,7 @@ router.patch("/", requireSiteAdmin, async (req: AuthenticatedRequest, res: Respo
       const changedKeys = AI_PROMPT_OVERRIDE_KEYS.filter((k) => prev[k] !== next[k]);
       if (changedKeys.length > 0) {
         const pick = (o: Record<string, unknown>) =>
-          Object.fromEntries(changedKeys.filter((k) => typeof o[k] === 'string').map((k) => [k, String(o[k]).slice(0, AI_PROMPT_OVERRIDE_MAX)]));
+          Object.fromEntries(changedKeys.filter((k) => typeof o[k] === 'string').map((k) => [k, String(o[k]).slice(0, k === 'role' ? AI_PROMPT_ROLE_MAX : AI_PROMPT_OVERRIDE_MAX)]));
         await storage.createAuditLog({
           userId: user.id,
           action: 'site_ai_prompt_changed',
