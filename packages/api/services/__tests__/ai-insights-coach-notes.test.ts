@@ -209,6 +209,14 @@ describe('de-identification of coach text', () => {
     expect(fenced(p)).not.toContain('Garcia');
   });
 
+  it.each(['First', 'Name'])('does not corrupt the placeholder when the first name is %s', (first) => {
+    const p = buildPrompt(individual({ athleteName: `${first} Garcia`, coachNotes: { whatISaw: `${first} Garcia drifted; ${first.toLowerCase()} again` } }));
+    const data = fenced(p);
+    expect(data).toContain('{{first_name}} drifted');
+    expect(data).not.toContain('{{{{');
+    expect(data).not.toMatch(/\{\{first_name\}\}_name|\{\{\{/);
+  });
+
   it('keeps words that only contain a name (word boundary)', () => {
     const prompt = buildPrompt(individual({ athleteName: 'Al Ray', coachNotes: { whatISaw: 'Alan and Raymond are fine; Al ran' } }));
     expect(prompt).toContain('Alan and Raymond');

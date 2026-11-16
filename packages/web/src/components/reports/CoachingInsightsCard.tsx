@@ -198,7 +198,8 @@ export function CoachingInsightsCard({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {canGenerate && notesForm}
+          {/* COPPA lock hides it; AI being off does not, so saved notes can still be read, edited or cleared */}
+          {aiConsentGranted === true && notesForm}
           <div className="text-center py-8 space-y-4">
             <p className="text-muted-foreground">
               {aiEnabled
@@ -331,7 +332,7 @@ export function CoachingInsightsCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {canGenerate && notesForm}
+        {aiConsentGranted === true && notesForm}
         <div className="prose prose-sm max-w-none dark:prose-invert" data-testid="insights-display">
           <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{initialInsights || ""}</ReactMarkdown>
         </div>
