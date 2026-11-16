@@ -16,8 +16,8 @@
  * 4.  Report shares (removes athlete from shared reports)
  * 5.  AI coaching insights (nulled on report snapshots — not hard-deleted)
  * 5b. Eval reports (code STEP 4c; reports.report_type = 'eval' with config.athleteId = athlete; shares/snapshots cascade)
- * 5c. Athlete coaching notes (code STEP 6d, next to the athlete profile; notes in EVERY organization)
  * 6.  Global athlete links (unlink from cross-org profile)
+ * 6d. Athlete coaching notes (code STEP 6d, next to the athlete profile; notes in EVERY organization)
  * 7.  Organization memberships + team memberships
  * 8.  Parent-athlete links
  * 9.  Parental consent records (marked revoked — NOT deleted; retained for audit)

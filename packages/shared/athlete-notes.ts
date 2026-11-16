@@ -18,6 +18,7 @@ const fields = {
   eventId: z.string().uuid().nullable().optional(),
 };
 
+/** The note form (web): the fields a coach edits. The API takes athleteNoteCreateSchema (adds organizationId) and athleteNoteUpdateSchema. */
 export const athleteNoteInputSchema = z.object(fields).strict();
 
 export const athleteNoteCreateSchema = z.object({ ...fields, organizationId: z.string().uuid() }).strict();

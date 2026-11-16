@@ -21,6 +21,9 @@ import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-
 import { writerOrgIds } from "./report-coach-notes-access";
 
 const NOT_FOUND = { message: "Note not found" };
+
+/** The only part of a membership row this route reads (storage.getUserOrganizations is typed any[]) */
+type Membership = { organizationId: string };
 const uuid = z.string().uuid();
 
 /** An event may be linked only when it belongs to the note's own organization (a null-org event never matches). */
@@ -49,7 +52,7 @@ export function registerAthleteNoteRoutes(app: Express) {
       const memberships = (await storage.getUserOrganizations(athleteId.data)) ?? [];
       const noted = await db.selectDistinct({ organizationId: athleteNotes.organizationId })
         .from(athleteNotes).where(eq(athleteNotes.athleteId, athleteId.data));
-      const writers = await writerOrgIds(user, [...memberships.map((m: any) => m.organizationId), ...noted.map((n) => n.organizationId)]);
+      const writers = await writerOrgIds(user, [...memberships.map((m: Membership) => m.organizationId), ...noted.map((n) => n.organizationId)]);
       if (writers.size === 0) return res.status(404).json(NOT_FOUND);
 
       const rows = await db.select({
@@ -76,7 +79,7 @@ export function registerAthleteNoteRoutes(app: Express) {
         .orderBy(desc(athleteNotes.flagged), desc(athleteNotes.observedOn), desc(athleteNotes.createdAt));
 
       // Where a note can be added: the athlete's CURRENT organizations in which the viewer is a writer (POST requires membership)
-      const current = new Set(memberships.map((m: any) => m.organizationId));
+      const current = new Set(memberships.map((m: Membership) => m.organizationId));
       const writableIds = [...writers].filter((id) => current.has(id));
       const writableOrganizations = writableIds.length === 0
         ? []
@@ -97,7 +100,7 @@ export function registerAthleteNoteRoutes(app: Express) {
 
       if (!isMeasurementWriterRole(await getOrgRole(user, input.organizationId))) return res.status(404).json(NOT_FOUND);
       const memberships = (await storage.getUserOrganizations(athleteId.data)) ?? [];
-      if (!memberships.some((m: any) => m.organizationId === input.organizationId)) return res.status(404).json(NOT_FOUND);
+      if (!memberships.some((m: Membership) => m.organizationId === input.organizationId)) return res.status(404).json(NOT_FOUND);
       if (input.eventId && !(await eventInOrganization(input.eventId, input.organizationId))) {
         return res.status(400).json({ message: "Event does not belong to this organization" });
       }
@@ -116,7 +119,8 @@ export function registerAthleteNoteRoutes(app: Express) {
       if (!id.success) return res.status(404).json(NOT_FOUND);
       const [note] = await db.select().from(athleteNotes).where(eq(athleteNotes.id, id.data));
       if (!note || !isMeasurementWriterRole(await getOrgRole(user, note.organizationId))) return res.status(404).json(NOT_FOUND);
-      // They can already see the note, so 403 reveals nothing
+      // They can already see the note, so 403 reveals nothing. A note whose author account is gone (author_id null) matches
+      // nobody, so it can no longer be edited by anyone; an org admin can still delete it.
       if (note.authorId !== user.id) return res.status(403).json({ message: "Only the author can edit a note" });
 
       const input = athleteNoteUpdateSchema.parse(req.body);
@@ -126,6 +130,8 @@ export function registerAthleteNoteRoutes(app: Express) {
 
       const [updated] = await db.update(athleteNotes).set({ ...input, updatedAt: new Date() })
         .where(eq(athleteNotes.id, note.id)).returning();
+      // Deleted by someone else between the read above and this update
+      if (!updated) return res.status(404).json(NOT_FOUND);
       res.json({ note: updated });
     } catch (error) {
       sendError(res, error, "updating the note");
@@ -141,7 +147,7 @@ export function registerAthleteNoteRoutes(app: Express) {
       const role = note ? await getOrgRole(user, note.organizationId) : undefined;
       if (!note || !isMeasurementWriterRole(role)) return res.status(404).json(NOT_FOUND);
       if (note.authorId !== user.id && role !== "org_admin" && role !== "site_admin") {
-        return res.status(403).json({ message: "Only the author or an organization admin can delete a note" });
+        return res.status(403).json({ message: "Only the author, an organization admin or a site admin can delete a note" });
       }
 
       await db.delete(athleteNotes).where(eq(athleteNotes.id, note.id));

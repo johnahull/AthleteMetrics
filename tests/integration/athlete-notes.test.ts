@@ -240,6 +240,12 @@ describe('POST /api/athletes/:athleteId/notes and GET', () => {
     expect(res.body.writableOrganizations).toEqual([]);
   });
 
+  it('a site admin asking about an athlete id that does not exist gets 404, not an empty list', async () => {
+    const res = await get(u.siteadmin, '00000000-0000-4000-8000-000000000000');
+    expect(res.status).toBe(404);
+    expect((await get(u.siteadmin, 'not-a-uuid')).status).toBe(404);
+  });
+
   it('notes stay readable as history after the athlete leaves the organization', async () => {
     const athlete = await mkUser('left');
     await join(athlete.id, orgB, 'athlete');
