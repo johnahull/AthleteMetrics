@@ -3,6 +3,7 @@ import { useLocation } from 'wouter';
 import { EnhancedUser, ImpersonationStatus, UserOrganization } from './types/user';
 import { apiClient } from './api';
 import { clearFormStorageForUser } from './form-storage';
+import { queryClient } from './queryClient';
 
 interface AuthContextType {
   user: EnhancedUser | null;
@@ -199,6 +200,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setImpersonationStatus(null);
       // Clear CSRF token cache to prevent session desync on re-login
       apiClient.clearCsrfTokenCache();
+      // Cached API responses belong to this user (e.g. admin-only organization fields): never reuse them for the next sign-in
+      queryClient.clear();
       setLocation('/login');
     } catch (error) {
       console.error('Logout failed:', error);
@@ -212,6 +215,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setImpersonationStatus(null);
       // Clear CSRF token cache even on error
       apiClient.clearCsrfTokenCache();
+      queryClient.clear();
       setLocation('/login');
     }
   };

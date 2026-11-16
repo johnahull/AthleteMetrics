@@ -13,6 +13,7 @@
  */
 
 import { BaseService } from "./base-service";
+import { omitStyleExampleUnless } from "./ai-style-example";
 import { MetricService } from "./metric-service";
 import { BenchmarkService } from "./benchmark-service";
 import {
@@ -447,11 +448,14 @@ export class OrganizationTypeService extends BaseService {
         throw new Error("Only site administrators can view inactive organizations");
       }
 
+      // The list spans organizations the caller may not administer: only site admins see the style examples
+      const forViewer = (orgs: Organization[]) => (isSiteAdmin ? orgs : orgs.map((o) => omitStyleExampleUnless(o, false)));
+
       // Try cache first
       const cachedOrganizations = this.organizationsCache.get(cacheKey);
       if (cachedOrganizations) {
         this.performanceMetrics.cacheHits++;
-        return cachedOrganizations;
+        return forViewer(cachedOrganizations);
       }
 
       this.performanceMetrics.cacheMisses++;
@@ -471,7 +475,7 @@ export class OrganizationTypeService extends BaseService {
       // Update performance metrics
       this.updatePerformanceMetrics(startTime);
 
-      return organizations || [];
+      return forViewer(organizations || []);
     } catch (error) {
       console.error(`OrganizationTypeService.getOrganizationsByType:`, error);
       

@@ -255,4 +255,22 @@ export const GOLDEN_CASES: GoldenCase[] = [
       },
     },
   })),
+  {
+    name: 'individual-style-example',
+    data: {
+      reportType: 'individual',
+      reportName: 'Style example check',
+      organizationName: 'Northside Athletics',
+      timeframe: 'Current Season',
+      styleExample: '## Summary\nA steady block with clear speed strengths.\n\n## What to Work On\n- Close the gap on the 10-yard fly.',
+      metrics: [
+        { code: 'VERTICAL_JUMP', label: 'Vertical Jump', values: [22.5], unit: 'in', lowerIsBetter: false },
+      ],
+      improvements: [],
+      concerns: [],
+      benchmarkComparisons: [],
+      keyFacts: [],
+      dataConfidence: 'Best value per metric only; no history over time in this report; no benchmarks',
+    },
+  },
 ];
