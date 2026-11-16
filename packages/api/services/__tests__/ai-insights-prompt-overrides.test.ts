@@ -207,6 +207,23 @@ describe('generateCoachingInsights', () => {
     expect(call.system).toContain('PHILO-MARK');
     expect(call.messages[0].content).toContain('TONE-MARK');
   });
+  it('an org philosophy replaces the site philosophy: system prompt has no site block, user message has the org one', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'test-key');
+    anthropicSpy.mockResolvedValue({ content: [{ type: 'text', text: '## Summary\nfine' }], stop_reason: 'end_turn' });
+    await generateCoachingInsights(model, data('coach'), { philosophy: 'SITE-PHIL', role: 'You are a calm coach.' }, { philosophy: 'ORG-PHIL' });
+    const call = anthropicSpy.mock.calls.at(-1)![0] as { system: string; messages: Array<{ content: string }> };
+    expect(call.system).not.toContain('SITE-PHIL');
+    expect(call.system).not.toContain('COACHING PHILOSOPHY');
+    expect(call.system.startsWith('You are a calm coach.')).toBe(true);
+    expect(call.messages[0].content).toContain('ORG-PHIL');
+  });
+  it('without an org philosophy the site philosophy stays in the system prompt', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'test-key');
+    anthropicSpy.mockResolvedValue({ content: [{ type: 'text', text: '## Summary\nfine' }], stop_reason: 'end_turn' });
+    await generateCoachingInsights(model, data('coach'), { philosophy: 'SITE-PHIL' }, { toneCoach: 'ORG-TONE' });
+    const call = anthropicSpy.mock.calls.at(-1)![0] as { system: string };
+    expect(call.system).toContain('SITE-PHIL');
+  });
   it('stripAnalysisBlock is still the heading gate', () => {
     expect(() => stripAnalysisBlock('no headings', 'coach')).toThrow();
   });

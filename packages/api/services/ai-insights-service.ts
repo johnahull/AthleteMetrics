@@ -573,7 +573,7 @@ export async function generateCoachingInsights(
     }
 
     const provider = createProvider(modelKey);
-    const raw = await provider.generateInsights(buildSystemPrompt(overrides), buildPrompt(reportData, overrides, orgOverrides));
+    const raw = await provider.generateInsights(buildSystemPrompt(orgOverrides?.philosophy ? { ...overrides, philosophy: undefined } : overrides), buildPrompt(reportData, overrides, orgOverrides));
     // Throws (generic error below) when no heading is left, so raw analysis never reaches the caller
     const audience = reportData.audience || 'coach';
     const insights = stripAnalysisBlock(raw, audience, hasGoals(reportData));

@@ -90,6 +90,9 @@ type OrganizationProfile = {
   invitations: PendingInvitation[];
 };
 
+// The org philosophy goes in the user message and replaces the site philosophy for this org
+const ORG_PHILOSOPHY_HELP = "Optional principles for your organization. Replaces the site-wide philosophy for your insights; they cannot override the safety or medical rules.";
+
 // Schema for org admin settable fields
 const orgAdminSettingsSchema = z.object({
   aiEnabled: z.boolean().default(false),
@@ -737,7 +740,7 @@ export default function OrgAdminSettings() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>{AI_PROMPT_FIELDS[key].label}</FormLabel>
-                          <FormDescription>{AI_PROMPT_FIELDS[key].controls}</FormDescription>
+                          <FormDescription>{key === 'philosophy' ? ORG_PHILOSOPHY_HELP : AI_PROMPT_FIELDS[key].controls}</FormDescription>
                           <FormControl>
                             <Textarea
                               {...field}

@@ -79,4 +79,4 @@ export const orgAiPromptOverridesSchema = z
   .strict()
   .transform((o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v)) as Partial<Record<OrgAIPromptOverrideKey, string>>);
 
-export type AIPromptOverrides =Partial<Record<AIPromptOverrideKey, string>>;
+export type AIPromptOverrides = Partial<Record<AIPromptOverrideKey, string>>;

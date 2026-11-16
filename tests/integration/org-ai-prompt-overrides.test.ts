@@ -59,6 +59,8 @@ let org: { id: string };
 let otherOrg: { id: string };
 const cookies: Record<string, string> = {};
 const usernames: Record<string, string> = {};
+const ids: Record<string, string> = {};
+let teamId = '';
 let member: { fullName: string };
 const userIds: string[] = [];
 const orgIds: string[] = [];
@@ -110,8 +112,13 @@ beforeAll(async () => {
   ] as const) {
     const user = await mkUser(tag, o, role);
     usernames[tag] = user.username;
+    ids[tag] = user.id;
     cookies[tag] = await login(user.username);
   }
+  const { teams, userTeams } = await import('@shared/schema/tables/core');
+  const [team] = await db.insert(teams).values({ organizationId: org.id, name: `${PREFIX}team` } as any).returning();
+  teamId = team.id;
+  for (const tag of ['coach', 'athlete']) await db.insert(userTeams).values({ userId: ids[tag], teamId } as any);
   member = await mkUser('member', org.id, 'athlete'); // a member whose name must not appear in the wording
   // The site row may not exist on a fresh DB; a PATCH creates it so the direct updates below hit a row
   await request(app).patch('/api/site-settings').set('Cookie', siteAdminCookie).send({ aiPromptOverrides: null });
@@ -127,7 +134,7 @@ beforeEach(async () => {
 afterAll(async () => {
   await setSite(siteBefore);
   for (const id of reportIds) await db.delete(reports).where(eq(reports.id, id)).catch(() => {});
-  await purgeTestRows({ usernameLike: [`${PREFIX}%`], userIds, orgIds });
+  await purgeTestRows({ usernameLike: [`${PREFIX}%`], userIds, orgIds, teamIds: [teamId] });
 });
 
 describe('PATCH org-settings aiPromptOverrides', () => {
@@ -137,6 +144,12 @@ describe('PATCH org-settings aiPromptOverrides', () => {
     expect(await stored()).toEqual({ philosophy: 'Be bkind/b', toneParent: 'Warm.' });
     expect((await patch('admin', { aiPromptOverrides: { toneCoach: 'Dry.' } })).status).toBe(200);
     expect(await stored()).toEqual({ toneCoach: 'Dry.' });
+  });
+
+  it('site admin can write it', async () => {
+    const res = await patch('siteadmin', { aiPromptOverrides: { toneCoach: 'From the site admin.' } });
+    expect(res.status).toBe(200);
+    expect(await stored()).toEqual({ toneCoach: 'From the site admin.' });
   });
 
   it.each([[null], [{}]])('%j resets to inherit', async (value) => {
@@ -205,6 +218,16 @@ describe('read exposure', () => {
     expect(JSON.stringify(login.body)).not.toContain(MARK);
   });
 
+  it.each(['coach', 'athlete'])('%s: orgs nested in team reads never carry the wording', async (key) => {
+    const { storage } = await import('../../packages/api/storage');
+    expect(JSON.stringify(await storage.getUserTeams(ids[key]))).not.toContain(MARK);
+    expect(JSON.stringify(await storage.getAthleteTeams(ids[key]))).not.toContain(MARK);
+    for (const path of ['/api/teams', `/api/teams/${teamId}`]) {
+      const res = await request(app).get(path).set('Cookie', cookies[key]);
+      expect(JSON.stringify(res.body), path).not.toContain(MARK);
+    }
+  });
+
   it('org admin and site admin receive it from the organization read', async () => {
     for (const k of ['admin', 'siteadmin']) {
       const res = await request(app).get(`/api/organizations/${org.id}`).set('Cookie', cookies[k]);
@@ -216,8 +239,9 @@ describe('read exposure', () => {
   it('the public directory never returns it', async () => {
     await db.update(organizations).set({ isPublicDirectory: true }).where(eq(organizations.id, org.id));
     const res = await request(app).get('/api/organizations/public');
+    expect(res.status).toBe(200);
+    expect(res.body.organizations.map((o: { id: string }) => o.id)).toContain(org.id);
     expect(JSON.stringify(res.body)).not.toContain(MARK);
-    expect(res.body).toBeTruthy();
   });
 });
 
@@ -279,7 +303,8 @@ describe('POST /api/reports/:id/generate-insights uses the org layer', () => {
     expect(sentUser()).toContain('ORG-TONE');
     expect(sentUser()).toContain('ORG-PHIL');
     expect(sentUser()).not.toContain('SITE-TONE');
-    expect(sentSystem()).toContain('SITE-PHIL');
+    // the org philosophy replaces the site one
+    expect(sentSystem()).not.toContain('SITE-PHIL');
     expect(sentSystem()).not.toContain('ORG-PHIL');
     expect(sentSystem()).not.toContain('ORG-TONE');
     const orgHash = log.mock.calls.flat().join('\n').match(/overrides ([0-9a-f]{8})/i)?.[1];

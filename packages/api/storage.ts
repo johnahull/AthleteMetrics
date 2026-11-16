@@ -1469,7 +1469,7 @@ export class DatabaseStorage implements IStorage {
     const result: any[] = await query;
     return result.map(({ teams: team, organizations: org }) => ({
       ...team,
-      organization: org
+      organization: omitOrgAiTextUnless(org, false)
     }));
   }
 
@@ -1482,7 +1482,7 @@ export class DatabaseStorage implements IStorage {
     if (result.length === 0) return undefined;
 
     const { teams: team, organizations: org } = result[0];
-    return { ...team, organization: org };
+    return { ...team, organization: omitOrgAiTextUnless(org, false) };
   }
 
   async createTeam(team: InsertTeam): Promise<Team> {
