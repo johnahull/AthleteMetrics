@@ -648,7 +648,7 @@ A dated, organization-scoped log a coach keeps about an athlete (`athlete_notes`
 **Rule: only coach / org admin / site admin of the note's own organization may read or write a note; everyone else, including the athlete, gets 404. Roles come from `getOrgRole(user, note.organizationId)`, never `session.user.role`. Edit is author-only; delete is the author, an org admin of that organization, or a site admin. Any new route that reads notes must apply the same gate.** Reports and AI insights do not read notes yet. When they do: only notes the coach picks, copied and frozen into the report, and `injury` / `readiness` notes never reach families or the AI (see the spec).
 
 **Key files:**
-- `packages/shared/schema/tables/athlete-notes.ts`, `packages/shared/athlete-notes.ts` (Zod), `migrations/0184_add_athlete_notes.sql` (number provisional; renumber at merge)
+- `packages/shared/schema/tables/athlete-notes.ts`, `packages/shared/athlete-notes.ts` (Zod), `migrations/0185_add_athlete_notes.sql` (number provisional; renumber at merge)
 - `packages/api/routes/athlete-note-routes.ts` (GET also returns `writableOrganizations`: where a note can be added for this athlete)
 - Child privacy: `coppa-deletion-service.ts` (step 6d), `coppa-export-service.ts` (`athleteNotes`), `profile-merge-service.ts` (step 8d); the table cascades on athlete and organization delete
 - Web: `components/athlete/CoachingNotesCard.tsx`, `AddCoachingNoteDialog.tsx`, `add-note-dialog-provider.tsx`, `lib/athlete-notes-api.ts`
