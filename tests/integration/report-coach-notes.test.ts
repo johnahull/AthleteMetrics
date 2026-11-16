@@ -248,8 +248,9 @@ describe('coachNotes read strip', () => {
     expect(JSON.stringify(mixed.body)).not.toContain(SECRET); // ... without the notes
   });
 
-  it('PUT response is stripped for a non-writer', async () => {
+  it('PUT response is stripped for a non-writer (the creator, the only non-writer who may PUT)', async () => {
     const r = await mkReport(orgB, 'individual', u.athlete.id);
+    await db.update(reports).set({ createdBy: u.athlete.id }).where(eq(reports.id, r.id));
     const res = await request(app).put(`/api/reports/${r.id}`).set('Cookie', await login(u.athlete.username)).send({ description: 'd' });
     expect(res.status).toBe(200);
     expect(JSON.stringify(res.body)).not.toContain(SECRET);

@@ -2795,7 +2795,7 @@ export class DatabaseStorage implements IStorage {
     const countMap = new Map(memberCounts.map(mc => [mc.organizationId, mc.count]));
 
     return filteredOrgs.map(org => ({
-      ...org,
+      ...org, // already the public allow-list: aiStyleExample is not selected
       memberCount: countMap.get(org.id) || 0,
     }));
   }
