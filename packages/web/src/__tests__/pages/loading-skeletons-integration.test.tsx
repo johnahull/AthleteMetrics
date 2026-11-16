@@ -31,6 +31,10 @@ vi.mock('@/lib/auth', () => ({
 }));
 
 // Mock metrics hook
+vi.mock('@/components/athlete/add-note-dialog-provider', () => ({
+  useAddNoteDialog: () => ({ openAddNote: vi.fn() }),
+}));
+
 vi.mock('@/hooks/use-available-metrics', () => ({
   useAvailableMetrics: () => ({
     metrics: [],
