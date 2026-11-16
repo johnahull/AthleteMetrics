@@ -36,6 +36,7 @@ const mockPinnedReports: Report[] = [
     coachingInsights: null,
     coachingInsightsGeneratedAt: null,
     coachingInsightsModel: null,
+    coachNotes: null,
     archivedAt: null,
   },
   {
@@ -53,6 +54,7 @@ const mockPinnedReports: Report[] = [
     coachingInsights: null,
     coachingInsightsGeneratedAt: null,
     coachingInsightsModel: null,
+    coachNotes: null,
     archivedAt: null,
   },
 ];
@@ -191,6 +193,7 @@ describe('PinnedReportsSection', () => {
       coachingInsights: null,
       coachingInsightsGeneratedAt: null,
       coachingInsightsModel: null,
+      coachNotes: null,
     archivedAt: null,
     }));
 
@@ -224,6 +227,7 @@ describe('PinnedReportsSection', () => {
       coachingInsights: null,
       coachingInsightsGeneratedAt: null,
       coachingInsightsModel: null,
+      coachNotes: null,
     archivedAt: null,
     }));
 

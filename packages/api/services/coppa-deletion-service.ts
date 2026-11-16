@@ -261,6 +261,10 @@ export class CoppaDeletionService extends BaseService {
           throw new Error('CONCURRENT_DELETION: request was already claimed by another process');
         }
 
+        // Lock the athlete's user row so coach-notes writes (which take FOR SHARE on it) either finish before this
+        // transaction clears them or wait and then see the athlete deleted
+        await tx.select({ id: users.id }).from(users).where(eq(users.id, athleteUserId)).for('update');
+
         // STEP 1: Delete measurements
         const deletedMeasurements = await tx.delete(measurements)
           .where(eq(measurements.userId, athleteUserId))
@@ -361,6 +365,25 @@ export class CoppaDeletionService extends BaseService {
             })
             .where(inArray(reports.id, affectedReportIds));
           deletedCategories.push(`ai_coaching_insights_cleared (${affectedReportIds.length} reports)`);
+        }
+
+        // STEP 4b-2: Coach notes (and any AI insights derived from them) on EVERY individual report of this athlete,
+        // shared or not. The athlete is named only in config.athleteId, so the shares above do not find them.
+        // Unlike STEP 4b (shared reports only), this covers unshared rows; the overlap on shared rows is harmless.
+        const clearedNotes = await tx.update(reports)
+          .set({
+            coachNotes: null,
+            coachingInsights: null,
+            coachingInsightsGeneratedAt: null,
+            coachingInsightsModel: null,
+          })
+          .where(and(
+            eq(reports.reportType, 'individual'),
+            sql`${reports.config}->>'athleteId' = ${athleteUserId}`,
+          ))
+          .returning({ id: reports.id });
+        if (clearedNotes.length > 0) {
+          deletedCategories.push(`coach_notes_cleared (${clearedNotes.length} reports)`);
         }
 
         // STEP 4c: Delete the athlete's eval reports, shared or not. The athlete is only named in

@@ -209,6 +209,9 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
           generatedAt={report.coachingInsightsGeneratedAt}
           model={report.coachingInsightsModel}
           aiEnabled={aiEnabled || false}
+          canEditNotes={canExportForLlm}
+          coachNotes={report.coachNotes}
+          metricOptions={measurementCodes.map((code) => ({ code, label: metricLabels?.[code] || code }))}
         />
       )}
 

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useGenerateInsights, useUpdateInsights } from "@/lib/reports-api";
 import { MAX_INSIGHTS_LENGTH } from "@shared/schema";
 import { getAIModel } from "@shared/ai-models";
+import { CoachNotesForm, type FlushNotes, type MetricOption } from "./CoachNotesForm";
 
 interface CoachingInsightsCardProps {
   reportId: string;
@@ -21,6 +22,10 @@ interface CoachingInsightsCardProps {
    *  Defaults to true for adult athletes (COPPA not applicable).
    *  Use strict === true check — null/undefined must block access (fail-closed). */
   aiConsentGranted?: boolean;
+  /** Individual reports only: show the coach-notes form (writers in the report's org). */
+  canEditNotes?: boolean;
+  coachNotes?: unknown;
+  metricOptions?: MetricOption[];
 }
 
 // Use MAX_INSIGHTS_LENGTH from shared schema for consistency with database constraint
@@ -32,7 +37,14 @@ export function CoachingInsightsCard({
   model,
   aiEnabled,
   aiConsentGranted = true,
+  canEditNotes = false,
+  coachNotes,
+  metricOptions,
 }: CoachingInsightsCardProps) {
+  const flushNotesRef = useRef<FlushNotes | null>(null);
+  const notesForm = canEditNotes ? (
+    <CoachNotesForm key={reportId} reportId={reportId} coachNotes={coachNotes} metricOptions={metricOptions} flushRef={flushNotesRef} />
+  ) : null;
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(initialInsights || "");
   const { toast } = useToast();
@@ -50,7 +62,30 @@ export function CoachingInsightsCard({
   const hasInsights = !!initialInsights;
   const isGenerating = generateMutation.isPending;
 
+  // Guards double clicks while the pending notes save is in flight (ref: state lags a same-tick click).
+  const flushingRef = useRef(false);
+  const [flushing, setFlushing] = useState(false);
+  const saveNotesFirst = useCallback(async (flush: FlushNotes) => {
+    flushingRef.current = true;
+    setFlushing(true);
+    try {
+      return await flush();
+    } finally {
+      flushingRef.current = false;
+      setFlushing(false);
+    }
+  }, []);
+
   const handleGenerate = useCallback(() => {
+    // Unsaved notes are saved first; a failed save (or invalid form) aborts the generation.
+    if (flushingRef.current) return;
+    const flush = flushNotesRef.current;
+    if (flush) {
+      void saveNotesFirst(flush).then((ok) => ok && runGenerate());
+    } else {
+      runGenerate();
+    }
+    function runGenerate() {
     generateMutation.mutate(undefined, {
       onSuccess: () => {
         toast({
@@ -66,12 +101,17 @@ export function CoachingInsightsCard({
         });
       },
     });
+    }
   }, [generateMutation, toast]);
 
-  const handleEdit = useCallback(() => {
+  // Switching to the editor unmounts the notes form, so unsaved notes are saved first (abort on failure).
+  const handleEdit = useCallback(async () => {
+    if (flushingRef.current) return;
+    const flush = flushNotesRef.current;
+    if (flush && !(await saveNotesFirst(flush))) return;
     setEditedContent(initialInsights || "");
     setIsEditing(true);
-  }, [initialInsights]);
+  }, [initialInsights, saveNotesFirst]);
 
   const handleCancel = useCallback(() => {
     setEditedContent(initialInsights || "");
@@ -158,19 +198,21 @@ export function CoachingInsightsCard({
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {/* COPPA lock hides it; AI being off does not, so saved notes can still be read, edited or cleared */}
+          {aiConsentGranted === true && notesForm}
           <div className="text-center py-8 space-y-4">
             <p className="text-muted-foreground">
               {aiEnabled
                 ? "Write insights, or generate them to get personalized coaching recommendations based on this report's performance data."
                 : "Add coaching insights for this report."}
             </p>
-            <div className="flex justify-center gap-2">
-              <Button variant={canGenerate ? "outline" : "default"} onClick={handleEdit}>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button variant={canGenerate ? "outline" : "default"} onClick={handleEdit} disabled={flushing}>
                 <Edit className="h-4 w-4 mr-2" />
                 Write Insights
               </Button>
               {canGenerate && (
-                <Button onClick={handleGenerate}>
+                <Button onClick={handleGenerate} disabled={flushing}>
                   <Sparkles className="h-4 w-4 mr-2" />
                   Generate Insights
                 </Button>
@@ -280,7 +322,7 @@ export function CoachingInsightsCard({
                 variant="outline"
                 size="sm"
                 onClick={handleRegenerate}
-                disabled={isGenerating}
+                disabled={isGenerating || flushing}
               >
                 <RefreshCw className={`h-4 w-4 mr-2 ${isGenerating ? 'animate-spin' : ''}`} />
                 Regenerate
@@ -290,6 +332,7 @@ export function CoachingInsightsCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {aiConsentGranted === true && notesForm}
         <div className="prose prose-sm max-w-none dark:prose-invert" data-testid="insights-display">
           <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{initialInsights || ""}</ReactMarkdown>
         </div>
