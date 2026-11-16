@@ -8,8 +8,8 @@ import { loginAsDefaultUser } from './helpers/auth';
  *   and a pinned note that stays on top)
  * - Quick-add from the dashboard: pick the organization, then the athlete, then write the note
  *
- * Each test creates its own organization and athlete through the API, so it works against any environment
- * where the default user is a site admin.
+ * Each test creates its own athlete through the API (in an existing organization: see getOrganization), so it works
+ * against any environment where the default user is a site admin.
  *
  * That the athlete never sees notes is covered by tests/integration/athlete-notes.test.ts (404 for the athlete) and
  * CoachingNotesCard.test.tsx (nothing renders unless the server answers 200): an athlete created through the API is
@@ -18,12 +18,25 @@ import { loginAsDefaultUser } from './helpers/auth';
 
 const BASE_URL = process.env.TESTING_URL || process.env.STAGING_URL || 'http://localhost:5000';
 
-async function createOrgAndAthlete(page: Page, extra: Record<string, unknown> = {}) {
-  const tag = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  const orgResponse = await page.request.post(`${BASE_URL}/api/organizations`, { data: { name: `NotesOrg_${tag}` } });
-  expect(orgResponse.ok()).toBeTruthy();
-  const org = await orgResponse.json();
+// Organization creation is rate limited (5 per 15 minutes) and the budget is shared by the whole E2E suite, so reuse
+// an existing organization and create one only when there is none.
+async function getOrganization(page: Page): Promise<{ id: string; name: string }> {
+  const listResponse = await page.request.get(`${BASE_URL}/api/organizations`);
+  expect(listResponse.ok()).toBeTruthy();
+  const existing = (await listResponse.json()) as Array<{ id: string; name: string; isActive?: boolean }>;
+  const usable = existing.find((o) => o.isActive !== false);
+  if (usable) return usable;
 
+  const orgResponse = await page.request.post(`${BASE_URL}/api/organizations`, {
+    data: { name: `NotesOrg_${Date.now().toString(36)}` },
+  });
+  expect(orgResponse.ok()).toBeTruthy();
+  return orgResponse.json();
+}
+
+async function createOrgAndAthlete(page: Page) {
+  const org = await getOrganization(page);
+  const tag = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const athleteResponse = await page.request.post(`${BASE_URL}/api/athletes`, {
     data: {
       firstName: 'Noted',
@@ -32,12 +45,11 @@ async function createOrgAndAthlete(page: Page, extra: Record<string, unknown> = 
       sports: ['Football'],
       status: 'active',
       organizationId: org.id,
-      ...extra,
     },
   });
   expect(athleteResponse.ok()).toBeTruthy();
   const athlete = await athleteResponse.json();
-  return { org, athlete, tag };
+  return { org, athlete };
 }
 
 const card = (page: Page) => page.getByTestId('coaching-notes-card');
@@ -103,8 +115,14 @@ test.describe('Athlete coaching notes', () => {
     await page.getByTestId('dashboard-add-note').click();
     await expect(dialog(page)).toBeVisible();
 
-    await dialog(page).getByTestId('note-org-select').click();
-    await page.getByRole('option', { name: org.name }).click();
+    // With a single organization there is nothing to pick: the dialog chooses it
+    const orgCount = ((await (await page.request.get(`${BASE_URL}/api/organizations`)).json()) as unknown[]).length;
+    if (orgCount > 1) {
+      await dialog(page).getByTestId('note-org-select').click();
+      await page.getByRole('option', { name: org.name, exact: true }).click();
+    } else {
+      await expect(dialog(page).getByTestId('note-org-select')).toHaveCount(0);
+    }
 
     await dialog(page).getByTestId('note-athlete-selector').click();
     await dialog(page).getByTestId('note-athlete-selector-search-input').fill(athlete.lastName);
