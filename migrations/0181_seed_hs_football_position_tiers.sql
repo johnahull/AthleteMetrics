@@ -12,6 +12,8 @@
 --
 -- Rows are bounded to ages 13-18 (the paper has no ages; it covers grades 9-11), so adults are not graded on them.
 -- The eval report matcher skips position-specific rows (tier-match.ts), since it does not know the position.
+-- Needs the DASH_40YD, AGILITY_5105, VERTICAL_JUMP and JUMP_BROAD site_metrics rows (JUMP_BROAD comes from migration 0136);
+-- site_benchmarks.metric_code has a foreign key to site_metrics.code.
 -- Behavior to expect: an athlete with no positions on file is not shown position-specific benchmarks (before, they saw
 -- all of them), and football synonyms (CB, C, ...) match only for athletes who list football or list no sports.
 -- Each row carries position, so the athlete-profile tier lookup only grades a player against their own position's
