@@ -242,4 +242,74 @@ describe('filterTierRowsForAthlete', () => {
   it('lets selectTierGroup pick the athlete group instead of the lowest displayOrder', () => {
     expect(selectTierGroup(filterTierRowsForAthlete(rows, { gender: 'Female', age: 16 }))[0].tierGroupId).toBe('f-hs');
   });
+
+  describe('position', () => {
+    const prow = (tierGroupId: string, position: string | null, displayOrder: number) =>
+      ({ tierName: tierGroupId, tierOrder: 1, _source: 'site', tierGroupId, displayOrder, gender: 'Male', ageMin: null, ageMax: null, position });
+    const prows = [prow('wr', 'WR', 1), prow('ol', 'OL', 2), prow('any', null, 500)];
+    const pids = (r: typeof prows) => r.map((x) => x.tierGroupId);
+    const male = { gender: 'Male', age: 16 };
+
+    it('keeps position rows only for athletes who play that position; null-position rows apply to all', () => {
+      expect(pids(filterTierRowsForAthlete(prows, { ...male, positions: ['WR'] }))).toEqual(['wr', 'any']);
+      expect(pids(filterTierRowsForAthlete(prows, { ...male, positions: ['OL', 'DL'] }))).toEqual(['ol', 'any']);
+    });
+
+    it('matches position trimmed and case-insensitive', () => {
+      expect(pids(filterTierRowsForAthlete(prows, { ...male, positions: [' wr '] }))).toEqual(['wr', 'any']);
+    });
+
+    it('drops position rows when the athlete has no positions (unknown or empty)', () => {
+      expect(pids(filterTierRowsForAthlete(prows, { ...male, positions: null }))).toEqual(['any']);
+      expect(pids(filterTierRowsForAthlete(prows, { ...male, positions: [] }))).toEqual(['any']);
+      expect(pids(filterTierRowsForAthlete(prows, male))).toEqual(['any']);
+    });
+
+    describe('football aliases and two-way players', () => {
+      const frow = (tierGroupId: string, position: string, displayOrder = 0, sport: string | null = 'FOOTBALL') =>
+        ({ tierName: tierGroupId, tierOrder: 1, _source: 'site', tierGroupId, displayOrder, gender: 'Male', ageMin: null, ageMax: null, position, sport });
+      const frows = [frow('db', 'DB'), frow('ol', 'OL'), frow('dl', 'DL'), frow('lb', 'LB'), frow('wr', 'WR')];
+      const gids = (positions: string[]) => filterTierRowsForAthlete(frows, { ...male, positions }).map((r) => r.tierGroupId);
+
+      it.each([
+        ['CB', 'db'], ['S', 'db'], ['FS', 'db'], ['SS', 'db'], ['OT', 'ol'], ['OG', 'ol'], ['C', 'ol'],
+        ['DT', 'dl'], ['NT', 'dl'], ['ILB', 'lb'], ['OLB', 'lb'], ['MLB', 'lb'],
+      ])('maps %s to the %s group on football rows', (alias, group) => {
+        expect(gids([alias])).toEqual([group]);
+        expect(gids([` ${alias.toLowerCase()} `])).toEqual([group]);
+      });
+
+      it('does not alias on rows that are not FOOTBALL (a basketball C is not an offensive lineman)', () => {
+        const rows = [frow('ol', 'OL', 0, 'BASKETBALL')];
+        expect(filterTierRowsForAthlete(rows, { ...male, positions: ['C'] })).toEqual([]);
+      });
+
+      it('does not alias for an athlete whose listed sports do not include football (basketball C vs football OL)', () => {
+        expect(filterTierRowsForAthlete(frows, { ...male, positions: ['C'], sports: ['Basketball'] })).toEqual([]);
+        expect(filterTierRowsForAthlete(frows, { ...male, positions: ['C'], sports: ['basketball', ' Football '] }).map((r) => r.tierGroupId)).toEqual(['ol']);
+        expect(filterTierRowsForAthlete(frows, { ...male, positions: ['C'], sports: [] }).map((r) => r.tierGroupId)).toEqual(['ol']);
+      });
+
+      it('still matches a literal position code for an athlete who does not list football', () => {
+        expect(filterTierRowsForAthlete(frows, { ...male, positions: ['WR'], sports: ['Track'] }).map((r) => r.tierGroupId)).toEqual(['wr']);
+      });
+
+      it('uses the first listed position when a two-way player matches several groups', () => {
+        expect(gids(['WR', 'DB'])).toEqual(['wr']);
+        expect(gids(['DB', 'WR'])).toEqual(['db']);
+        expect(gids(['CB', 'WR'])).toEqual(['db']); // alias resolves at its own list position
+        expect(gids(['QB', 'DB', 'WR'])).toEqual(['db']); // QB has no group in this set, so the next listed one wins
+      });
+
+      it('keeps null-position rows alongside the chosen position group', () => {
+        const rows = [frow('wr', 'WR'), frow('db', 'DB'), { ...frow('any', 'x'), position: null }];
+        expect(filterTierRowsForAthlete(rows, { ...male, positions: ['DB', 'WR'] }).map((r) => r.tierGroupId)).toEqual(['db', 'any']);
+      });
+    });
+
+    it('lets selectTierGroup pick the WR group for a WR and the OL group for an OL', () => {
+      expect(selectTierGroup(filterTierRowsForAthlete(prows, { ...male, positions: ['WR'] }))[0].tierGroupId).toBe('wr');
+      expect(selectTierGroup(filterTierRowsForAthlete(prows, { ...male, positions: ['OL'] }))[0].tierGroupId).toBe('ol');
+    });
+  });
 });

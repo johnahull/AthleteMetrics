@@ -8,6 +8,8 @@ export interface TierCandidateRow extends SourcedTierRow {
   sport: string | null;
   /** "HS" for age-group rows, "D1" for the college standard */
   level: string | null;
+  /** Set on position-specific groups (e.g. HS football WR); eval never uses those */
+  position?: string | null;
   ageMin: number | null;
   ageMax: number | null;
 }
@@ -150,6 +152,7 @@ export function matchTierGroup(args: {
       c.metricCode === metricCode &&
       sexOf(c.gender) === sex &&
       sameText(c.sport, athlete.sport) &&
+      c.position == null && // eval ignores position, so a position-specific group could be the wrong one
       c.ageMin !== null &&
       c.ageMax !== null &&
       age >= c.ageMin &&

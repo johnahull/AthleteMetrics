@@ -456,7 +456,7 @@ describe('GET /api/analytics/benchmark-tiers', () => {
 
 describe('GET /api/analytics/benchmark-tiers: age-group / sex-specific tier groups', () => {
   // Male group has the LOWER displayOrder, so without athlete filtering it would always win.
-  const seedGroup = async (prefix: string, gender: string, displayOrder: number, cut: number) => {
+  const seedGroup = async (prefix: string, gender: string | null, displayOrder: number, cut: number, position: string | null = null) => {
     const tierGroupId = randomUUID();
     const tiers = await db.insert(customBenchmarks).values(
       [
@@ -474,8 +474,9 @@ describe('GET /api/analytics/benchmark-tiers: age-group / sex-specific tier grou
         tierName: t.tierName,
         tierColor: t.tierColor,
         gender,
-        ageMin: 14,
-        ageMax: 18,
+        ...(position ? { sport: 'FOOTBALL', position } : {}),
+        ageMin: gender ? 14 : null,
+        ageMax: gender ? 18 : null,
         displayOrder,
         isActive: true,
       })),
@@ -514,6 +515,16 @@ describe('GET /api/analytics/benchmark-tiers: age-group / sex-specific tier grou
   it('scores a male 16-year-old against the Male group', async () => {
     await db.update(users).set({ gender: 'Male', birthDate: ageYearsAgo(16) }).where(eq(users.id, testAthlete.id));
     expect(await tierFor()).toBe('M-High'); // 27.5 >= 20
+  });
+
+  it('scores a WR against the WR group (lowest displayOrder) but an athlete with no or another position against the base group', async () => {
+    await seedGroup('WR', null, 0, 20, 'WR'); // 27.5 >= 20 -> WR-High; the base group would say Good
+    await db.update(users).set({ gender: null, birthDate: null, positions: ['wr'] }).where(eq(users.id, testAthlete.id));
+    expect(await tierFor()).toBe('WR-High');
+    await db.update(users).set({ positions: ['OL'] }).where(eq(users.id, testAthlete.id));
+    expect(await tierFor()).toBe('Good');
+    await db.update(users).set({ positions: null }).where(eq(users.id, testAthlete.id));
+    expect(await tierFor()).toBe('Good');
   });
 
   it('falls back to the org-wide (no sex, no age) group when the athlete matches no sex-specific group', async () => {
