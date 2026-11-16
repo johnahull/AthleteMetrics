@@ -5,6 +5,7 @@ process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret-key-for-
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import express, { type Express } from 'express';
+import { eq, inArray } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
 import { registerEventReportRoutes } from '../../packages/api/routes/event-report-routes';
 import { events, organizations, reports, userOrganizations, users } from '@shared/schema';
@@ -56,8 +57,8 @@ describe('event reports list and coachNotes', () => {
   });
 
   afterAll(async () => {
-    await db.delete(reports).where(require_name());
-    await db.delete(events).where(require_events());
+    await db.delete(reports).where(eq(reports.name, `EvtNotes ${suffix}`));
+    await db.delete(events).where(inArray(events.id, [orgEvent, publicEvent]));
     await purgeTestRows({ usernameLike: [`evtnotes-%-${suffix}`], userIds: Object.values(u).map((r: any) => r.id), orgIds: [orgA, orgB] });
   });
 
@@ -75,6 +76,3 @@ describe('event reports list and coachNotes', () => {
   });
 });
 
-import { like, inArray } from 'drizzle-orm';
-function require_name() { return like(reports.name, `EvtNotes ${suffix}`); }
-function require_events() { return inArray(events.id, [orgEvent, publicEvent]); }

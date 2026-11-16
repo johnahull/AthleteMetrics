@@ -203,6 +203,12 @@ describe('de-identification of coach text', () => {
     expect(p).not.toContain('evelyn');
   });
 
+  it('does not redact a lone lower-case last name (intentional, so ordinary words survive)', () => {
+    const p = buildPrompt(individual({ coachNotes: { whatISaw: 'garcia looked flat; Garcia again' } }));
+    expect(fenced(p)).toContain('garcia looked flat');
+    expect(fenced(p)).not.toContain('Garcia');
+  });
+
   it('keeps words that only contain a name (word boundary)', () => {
     const prompt = buildPrompt(individual({ athleteName: 'Al Ray', coachNotes: { whatISaw: 'Alan and Raymond are fine; Al ran' } }));
     expect(prompt).toContain('Alan and Raymond');
@@ -409,6 +415,12 @@ describe('leaksCoachNotes (output guard, all audiences)', () => {
     expect(leaksCoachNotes(text, data('coach'))).toBe(true);
     expect(leaksCoachNotes(text, data('athlete'))).toBe(true);
     expect(leaksCoachNotes(text, data('parent'))).toBe(true);
+  });
+
+  it('pins the false-positive path: output that happens to reuse the restriction wording is rejected', () => {
+    const d = individual({ coachNotes: { restriction: { area: 'right hamstring', status: 'light jogging only', ptCleared: false } } });
+    expect(leaksCoachNotes('Build hamstring strength with right hamstring curls', d)).toBe(true);
+    expect(leaksCoachNotes('Build posterior chain strength with curls', d)).toBe(false);
   });
 
   it('flags an echo that uses the real first name where the notes carried the placeholder', () => {
