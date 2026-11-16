@@ -17,7 +17,7 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcrypt';
-import { and, eq, like, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
 import { users, organizations } from '@shared/schema/tables/core';
 import { userOrganizations } from '@shared/schema/tables/membership';
@@ -107,7 +107,8 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  await patch(adminCookie, { aiPromptOverrides: null });
+  // A silent reset failure would bleed one test's overrides into the next
+  expect((await patch(adminCookie, { aiPromptOverrides: null })).status).toBe(200);
 });
 
 afterAll(async () => {
