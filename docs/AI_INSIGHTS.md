@@ -12,7 +12,7 @@ Key files:
 | `packages/api/routes/report-routes.ts` | `POST /api/reports/:id/generate-insights`, `PATCH /api/reports/:id/coach-notes`, `buildReportDataForAI` |
 | `packages/api/routes/report-coach-notes-access.ts` | read gate for `coachNotes` |
 | `packages/api/routes/organization-routes.ts` | org AI settings (`aiPromptContext`, `aiStyleExample`) |
-| `migrations/0181_add_coach_notes_and_ai_style_example.sql` | `reports.coach_notes` jsonb, `organizations.ai_style_example` text (number provisional, see `docs/MIGRATION_SYSTEM_REMEDIATION.md`) |
+| `migrations/0182_add_coach_notes_and_ai_style_example.sql` | `reports.coach_notes` jsonb, `organizations.ai_style_example` text (number provisional, see `docs/MIGRATION_SYSTEM_REMEDIATION.md`) |
 | `scripts/eval-ai-insights.ts`, `packages/api/services/ai-insights-eval.ts` | live eval and output checks |
 
 ## How insights are generated
@@ -82,7 +82,7 @@ Coach-authored context for one **individual** report, stored in `reports.coach_n
 
 ## Site-admin prompt wording
 
-A site admin can reword a few slots of the prompt without a deploy; safety, grounding, fencing and everything code parses stay in code. The wording is global (one set for every organization) and stored in `site_settings.ai_prompt_overrides` (jsonb, migration 0182). A missing key or `null` means the code default, so behaviour is unchanged until someone edits it.
+A site admin can reword a few slots of the prompt without a deploy; safety, grounding, fencing and everything code parses stay in code. The wording is global (one set for every organization) and stored in `site_settings.ai_prompt_overrides` (jsonb, migration 0183). A missing key or `null` means the code default, so behaviour is unchanged until someone edits it.
 
 | Key | What it replaces | Where it goes |
 |-----|------------------|---------------|

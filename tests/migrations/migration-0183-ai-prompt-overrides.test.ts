@@ -1,5 +1,5 @@
 /**
- * Migration 0182: site_settings.ai_prompt_overrides jsonb (site-admin editable AI insights prompt) and the
+ * Migration 0183: site_settings.ai_prompt_overrides jsonb (site-admin editable AI insights prompt) and the
  * 'site_ai_prompt_changed' audit action. CI builds its DB with db:push, which has no audit CHECK, so only this
  * test (on a DB with the manual migrations applied) proves the CHECK accepts the action.
  * Live checks run in a rolled-back transaction and only on a disposable test DB.
@@ -12,7 +12,7 @@ import postgres from 'postgres';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const read = (f: string) => fs.readFileSync(path.resolve(__dirname, '../../migrations', f), 'utf-8');
-const NAME = '0182_add_ai_prompt_overrides';
+const NAME = '0183_add_ai_prompt_overrides';
 const UP = read(`${NAME}.sql`);
 const DOWN = read(`${NAME}_down.sql`);
 const PREV_UP = read('0173_add_missing_audit_actions.sql');
@@ -29,7 +29,7 @@ const dbUrl = process.env.DATABASE_URL || '';
 const isDisposableTestDb =
   process.env.NODE_ENV === 'test' && (/@(localhost|127\.0\.0\.1)[:/]/.test(dbUrl) || process.env.CI === 'true');
 
-describe('Migration 0182: static analysis', () => {
+describe('Migration 0183: static analysis', () => {
   it('the up list is the 0173 list plus site_ai_prompt_changed; the down list is exactly 0173 (NOT VALID)', () => {
     const previous = listOf(PREV_UP);
     expect(previous.length).toBeGreaterThan(100);
@@ -64,7 +64,7 @@ describe('Migration 0182: static analysis', () => {
   });
 });
 
-describe.skipIf(!isDisposableTestDb)('Migration 0182: against a manual-migrations DB (rolled back)', () => {
+describe.skipIf(!isDisposableTestDb)('Migration 0183: against a manual-migrations DB (rolled back)', () => {
   let sql: ReturnType<typeof postgres>;
   beforeAll(() => {
     sql = postgres(dbUrl, { max: 1, onnotice: () => {} });
@@ -105,7 +105,7 @@ describe.skipIf(!isDisposableTestDb)('Migration 0182: against a manual-migration
     await rollbackable(async (tx) => {
       await tx`DELETE FROM audit_logs`;
       await tx`INSERT INTO users (username, first_name, last_name, full_name, password)
-               SELECT 'mig0182_user', 'Mig', 'Test', 'Mig Test', 'x' WHERE NOT EXISTS (SELECT 1 FROM users)`;
+               SELECT 'mig0183_user', 'Mig', 'Test', 'Mig Test', 'x' WHERE NOT EXISTS (SELECT 1 FROM users)`;
       await tx.unsafe(UP);
       await tx.unsafe(UP); // idempotent
       expect(await hasColumn(tx)).toBe(true);
