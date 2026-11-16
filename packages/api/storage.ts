@@ -47,6 +47,7 @@ import crypto from "crypto";
 import { hashToken } from "./lib/token-hash";
 import { BCRYPT_SALT_ROUNDS } from "@shared/constants";
 import { isValidBenchmarkId } from "@shared/benchmark-utils";
+import type { AIPromptOverrides } from "@shared/ai-prompt-overrides";
 import { getPgErrorCode, PG_UNIQUE_VIOLATION } from "./lib/pg-error";
 
 /**
@@ -475,6 +476,7 @@ export interface IStorage {
     aiModel?: string;
     wellnessModuleEnabled?: boolean;
     sprintFvEnabled?: boolean;
+    aiPromptOverrides?: AIPromptOverrides | null;
     updatedBy: string | null;
   }): Promise<SiteSettings>;
 
@@ -6116,6 +6118,7 @@ export class DatabaseStorage implements IStorage {
     aiModel?: string;
     wellnessModuleEnabled?: boolean;
     sprintFvEnabled?: boolean;
+    aiPromptOverrides?: AIPromptOverrides | null;
     updatedBy: string | null;
   }): Promise<SiteSettings> {
     // Singleton pattern - check if settings exist
@@ -6140,6 +6143,10 @@ export class DatabaseStorage implements IStorage {
         updateData.sprintFvEnabled = settings.sprintFvEnabled;
       }
 
+      if (settings.aiPromptOverrides !== undefined) {
+        updateData.aiPromptOverrides = settings.aiPromptOverrides;
+      }
+
       const [updated] = await db
         .update(siteSettings)
         .set(updateData)
@@ -6154,6 +6161,7 @@ export class DatabaseStorage implements IStorage {
           aiModel: settings.aiModel || DEFAULT_AI_MODEL_KEY,
           wellnessModuleEnabled: settings.wellnessModuleEnabled ?? true,
           sprintFvEnabled: settings.sprintFvEnabled ?? false,
+          aiPromptOverrides: settings.aiPromptOverrides ?? null,
           updatedBy: settings.updatedBy,
         })
         .returning();

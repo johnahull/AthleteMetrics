@@ -65,6 +65,7 @@ import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { formatCalendarDate, formatEventReportTimeframe } from "../utils/calendar-date";
 import { isValidTimezone } from "../lib/wellness-schedule-utils";
 import type { BenchmarkComparison } from "@shared/benchmark-types";
+import { resolveStoredOverrides } from "../services/ai-prompt-overrides-service";
 
 const REPORT_NOT_FOUND = { message: "Report not found" };
 
@@ -1682,8 +1683,15 @@ export function registerReportRoutes(app: Express) {
       const includeCoachNotes = isMeasurementWriterRole(await getOrgRole(user, report.organizationId));
       const reportData = await buildReportDataForAI(report, user.id, reportService, { includeCoachNotes });
 
+      // Site-admin prompt wording. A stored value that no longer parses must not fail generation for every
+      // organization: use the code defaults and say so in the log.
+      const { overrides: promptOverrides, hash: overridesHash, invalid: overridesInvalid } =
+        resolveStoredOverrides(siteSettings?.aiPromptOverrides);
+      if (overridesInvalid) console.warn(`Invalid AI prompt overrides in site settings; using the code defaults (report ${reportId})`);
+      console.log(`[AI insights] report ${reportId}: AI prompt overrides ${overridesHash ?? 'none'}`);
+
       // Generate insights using AI service
-      const insights = await generateCoachingInsights(modelKey as AIModelKey, reportData);
+      const insights = await generateCoachingInsights(modelKey as AIModelKey, reportData, promptOverrides);
 
       // Validate insights length
       if (insights.length > MAX_INSIGHTS_LENGTH) {

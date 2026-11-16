@@ -9,6 +9,7 @@ import { isSafePublicUrl } from "./url-safety";
 import type { DerivedCalculationConfig } from "./schema/tables/metrics";
 import { displayFormatEnum } from "./schema/enums";
 import { DEFAULT_AI_MODEL_KEY, SELECTABLE_AI_MODEL_KEYS } from "./ai-models";
+import { aiPromptOverridesSchema } from "./ai-prompt-overrides";
 
 // AI Coaching Insights constants
 export const MAX_INSIGHTS_LENGTH = 10000;
@@ -2784,6 +2785,8 @@ export const updateSiteSettingsSchema = z.object({
   aiModel: z.enum(AI_MODELS).optional(),
   wellnessModuleEnabled: z.boolean().optional(),
   sprintFvEnabled: z.boolean().optional(),
+  // Whole-object replace; null or {} resets every slot to the code default
+  aiPromptOverrides: aiPromptOverridesSchema.nullable().optional(),
 });
 
 export const insertSiteSettingsSchema = createInsertSchema(siteSettings).omit({

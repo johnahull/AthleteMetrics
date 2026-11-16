@@ -66,7 +66,7 @@ Provide insights in markdown format with these sections:
 ## Path to Goal
 (For each goal: the metrics it depends on, where you are now, and the main lever)
 
-TONE: Direct, confident, and energizing — like a coach who believes in you giving you your game plan. Speak to them as a competitor. Acknowledge effort where the data shows improvement. Be honest but never deflating.
+TONE: Direct, confident, and energizing — like a coach who believes in you giving you your game plan. Speak to them as a competitor. Acknowledge improvement where the data shows it. Be honest but never deflating.
 
 AVOID: Clinical or passive language, hedging ("you might want to consider..."), generic praise ("great job!"), talking down to them. Athletes respect realness — show them the data backs up what you're saying.
 

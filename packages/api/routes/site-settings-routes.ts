@@ -10,7 +10,9 @@ import { ZodError } from "zod";
 import { requireSiteAdmin } from "../middleware";
 import { storage } from "../storage";
 import { updateSiteSettingsSchema } from "@shared/schema";
-import { AI_MODELS as AI_MODELS_CONFIG, isModelAvailable } from "../services/ai-insights-service";
+import { AI_PROMPT_CHECKLIST_LINES, AI_PROMPT_OVERRIDE_KEYS, AI_PROMPT_OVERRIDE_MAX, AI_PROMPT_ROLE_MAX, type AIPromptOverrides } from "@shared/ai-prompt-overrides";
+import { resolveStoredOverrides } from "../services/ai-prompt-overrides-service";
+import { AI_MODELS as AI_MODELS_CONFIG, DEFAULT_PROMPT_TEXT, buildSystemPrompt, isModelAvailable } from "../services/ai-insights-service";
 import { checkModelsLive, isModelKnownUnavailable } from "../services/ai-model-availability";
 import { AI_MODEL_REGISTRY, DEFAULT_AI_MODEL_KEY, findModelsNearRetirement, getAIModel, type AIModelDefinition } from "@shared/ai-models";
 
@@ -84,6 +86,7 @@ router.get("/", requireSiteAdmin, async (req, res) => {
         aiModel: DEFAULT_AI_MODEL_KEY,
         wellnessModuleEnabled: true,
         sprintFvEnabled: false,
+        aiPromptOverrides: null,
         updatedAt: new Date().toISOString(),
         updatedBy: null,
       });
@@ -151,6 +154,15 @@ router.patch("/", requireSiteAdmin, async (req: AuthenticatedRequest, res: Respo
       updateData.sprintFvEnabled = validated.sprintFvEnabled;
     }
 
+    // Whole-object replace; null and {} both mean "all code defaults"
+    const newOverrides: AIPromptOverrides | null | undefined =
+      validated.aiPromptOverrides === undefined
+        ? undefined
+        : validated.aiPromptOverrides && Object.keys(validated.aiPromptOverrides).length > 0
+          ? validated.aiPromptOverrides
+          : null;
+    if (newOverrides !== undefined) updateData.aiPromptOverrides = newOverrides;
+
     // Get previous settings for audit log
     const previousSettings = await storage.getSiteSettings();
     const previousModel = previousSettings?.aiModel || DEFAULT_AI_MODEL_KEY;
@@ -176,6 +188,26 @@ router.patch("/", requireSiteAdmin, async (req: AuthenticatedRequest, res: Respo
         ipAddress: req.ip || null,
         userAgent: req.get('user-agent') || null,
       });
+    }
+
+    // Audit log for AI prompt wording: only the keys that changed, with their before and after text
+    if (user?.id && newOverrides !== undefined) {
+      const prev = (previousSettings?.aiPromptOverrides ?? {}) as Record<string, unknown>;
+      const next = (newOverrides ?? {}) as Record<string, unknown>;
+      const changedKeys = AI_PROMPT_OVERRIDE_KEYS.filter((k) => prev[k] !== next[k]);
+      if (changedKeys.length > 0) {
+        const pick = (o: Record<string, unknown>) =>
+          Object.fromEntries(changedKeys.filter((k) => typeof o[k] === 'string').map((k) => [k, String(o[k]).slice(0, k === 'role' ? AI_PROMPT_ROLE_MAX : AI_PROMPT_OVERRIDE_MAX)]));
+        await storage.createAuditLog({
+          userId: user.id,
+          action: 'site_ai_prompt_changed',
+          resourceType: 'site_settings',
+          resourceId: 'global',
+          details: JSON.stringify({ changedKeys, before: pick(prev), after: pick(next) }),
+          ipAddress: req.ip || null,
+          userAgent: req.get('user-agent') || null,
+        });
+      }
     }
 
     // Audit log for wellness module toggle
@@ -223,6 +255,32 @@ router.patch("/", requireSiteAdmin, async (req: AuthenticatedRequest, res: Respo
 
     res.status(500).json({
       message: sanitizeError(error, "Failed to update site settings"),
+    });
+  }
+});
+
+/**
+ * GET /api/site-settings/ai-prompt-defaults
+ * Default text of every editable AI prompt slot, plus the system prompt as it is sent now (read-only preview).
+ * Tone and checklist wording live in the user message, which is built per report, so they are not in the preview.
+ * Access: Site admin only
+ */
+router.get("/ai-prompt-defaults", requireSiteAdmin, async (req, res) => {
+  try {
+    const settings = await storage.getSiteSettings();
+    const { overrides } = resolveStoredOverrides(settings?.aiPromptOverrides);
+    res.json({
+      defaults: DEFAULT_PROMPT_TEXT,
+      maxLength: AI_PROMPT_OVERRIDE_MAX,
+      roleMaxLength: AI_PROMPT_ROLE_MAX,
+      checklistLines: AI_PROMPT_CHECKLIST_LINES,
+      systemPrompt: buildSystemPrompt(overrides),
+      systemPromptNote: "Read-only. The audience tone and the analysis checklist are part of the user message, which is built for each report, so they are not shown here.",
+    });
+  } catch (error) {
+    console.error("Error fetching AI prompt defaults:", error);
+    res.status(500).json({
+      message: sanitizeError(error, "Failed to fetch AI prompt defaults"),
     });
   }
 });
