@@ -164,6 +164,23 @@ describe('matchTierGroup: multi-tier groups', () => {
   });
 });
 
+describe('matchTierGroup: position-specific rows', () => {
+  const posTiers = tiers({ sport: 'SOCCER', position: 'WR', displayOrder: 0 }).map((r) => ({ ...r, tierName: `Pos-${r.tierName}` }));
+
+  it('never uses a position-specific tier group (eval ignores position, so it could grade the wrong one)', () => {
+    expect(match({ candidates: posTiers })).toBeNull();
+  });
+
+  it('falls back to the generic group when position-specific groups outrank it', () => {
+    const generic = tiers({ tierGroupId: 'generic', displayOrder: 5 });
+    expect(tierName(match({ candidates: [...posTiers, ...generic] }))).toBe('Good');
+  });
+
+  it('ignores a position-specific Average row too', () => {
+    expect(match({ candidates: [avgRow({ position: 'WR' })] })).toBeNull();
+  });
+});
+
 describe('matchTierGroup: eligibility', () => {
   it('returns null when gender is missing (never defaults to Female)', () => {
     expect(match({ athlete: { ...girl, gender: null } })).toBeNull();
