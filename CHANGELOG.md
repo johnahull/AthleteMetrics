@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-11-15
+
+### Added
+- Per-report coach notes for individual reports (goals, season phase, training age, maturation, restrictions, test-day flags, limiter call, sessions per week, retest date, what the coach saw), saved with `PATCH /api/reports/:id/coach-notes` and edited in a collapsible "Coach notes for the AI" form on the insights card. Writers only: notes are stripped from every read path for non-writers and never appear in snapshots or share payloads. COPPA deletion, export and profile merge cover them. Adds the organization `ai_style_example` column for the follow-up PRs (#753)
+- HS football position benchmark tiers (DB, DL, LB, DE, TE, OL, QB, RB, WR) for 40 yd, pro agility, vertical jump and broad jump, from McKay et al. 2020. Not auto-enabled. The tier lookup and benchmark status endpoint now match position rows to the athlete's position (with football aliases); the eval report matcher skips position-specific rows (#756)
+
+### Fixed
+- `PUT /api/reports/:id` only accepts name, description, config and isTemplate for non-eval reports. Other fields (coaching insights, organization, report type, creator, pinned, archived) were writable by any org member and are now rejected with 400 (#752)
+
+### Changed
+- Dependency bumps: Radix scroll-area and popover, jspdf-autotable, simple-statistics 8 (#749)
+
+### Deployment notes
+- Two migrations, both numbered 0181: `0181_add_coach_notes_and_ai_style_example` (additive columns) and `0181_seed_hs_football_position_tiers` (seed rows). They are tracked by file name, so both apply. Already applied to the testing database by CI.
+- No new environment variables.
+- Clients that PUT extra fields on a report now get 400.
+
 ## [0.37.1] - 2026-11-13
 
 ### Fixed
