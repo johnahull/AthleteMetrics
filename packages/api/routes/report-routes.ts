@@ -16,6 +16,7 @@ import { requireAuth, requireAIEnabled, type AuthenticatedRequest } from "../mid
 import { storage } from "../storage";
 import {
   insertReportSchema,
+  updateReportSchema,
   reports,
   reportSnapshots,
   reportBenchmarks,
@@ -658,11 +659,13 @@ export function registerReportRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied to this report" });
       }
 
-      // Validate request body with Zod schema (partial for updates).
-      // An eval keeps its frozen config and type: only name and description can change.
+      // Whitelist of writable fields (name, description, config, isTemplate). Unknown TOP-LEVEL keys
+      // such as coachingInsights* or organizationId are rejected; nested config keys are not checked.
+      // A submitted config must satisfy the full create-time config schema. An eval keeps its frozen
+      // config and type: only name and description can change.
       const validatedData = report.reportType === EVAL_REPORT_TYPE
         ? evalReportUpdateSchema.parse(req.body)
-        : insertReportSchema.partial().parse(req.body);
+        : updateReportSchema.extend({ config: insertReportSchema.shape.config.optional() }).strict().parse(req.body);
 
       // Update report
       const [updated] = await db
