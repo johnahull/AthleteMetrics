@@ -567,7 +567,11 @@ export async function generateCoachingInsights(
     const insights = stripAnalysisBlock(raw, audience, hasGoals(reportData));
     // Applies to every audience: coach insights are also visible to athlete share viewers and in the public-link PDF
     // Do not rely on the model obeying the prompt
-    if (leaksCoachNotes(insights, reportData)) throw new Error('Model output repeats the coach notes');
+    if (leaksCoachNotes(insights, reportData)) {
+      // Logged before the generic error below hides it, so operators can tell guard rejections from network errors
+      console.warn(`AI insights rejected: model output repeats the coach notes (model ${modelKey})`);
+      throw new Error('Model output repeats the coach notes');
+    }
 
     // The prompt carries a {{first_name}} placeholder instead of the name; fill it from the report data
     return fillFirstName(insights, reportData.athleteName);
