@@ -4,7 +4,7 @@
  */
 
 import express, { type Express } from "express";
-import { DEFAULT_AI_MODEL_KEY, getAIModel } from "@shared/ai-models";
+import { DEFAULT_AI_MODEL_KEY } from "@shared/ai-models";
 import rateLimit from "express-rate-limit";
 import { sortCodesByGroups, isGenericReport } from "@shared/metric-order";
 import { buildMeasurementRows, buildBenchmarkRows, buildStatsRows, buildAchievementRows, groupLabelFor } from "./pdf-metric-rows";
@@ -1263,17 +1263,25 @@ export function registerReportRoutes(app: Express) {
       // helper guards the public PDF-export routes so they cannot diverge.
       if (!(await enforcePublicSnapshotAccess(req, res, snapshot))) return;
 
-      // Eval snapshots are not re-ordered, so skip the owner lookup for them
+      // Eval snapshots are not re-ordered and carry no insights, so skip the owner lookup for them
       const [owner] = isGenericReport(snapshot.snapshotData)
         ? await db
-            .select({ organizationId: reports.organizationId })
+            .select({
+              organizationId: reports.organizationId,
+              coachingInsights: reports.coachingInsights,
+              coachingInsightsGeneratedAt: reports.coachingInsightsGeneratedAt,
+            })
             .from(reports)
             .where(eq(reports.id, snapshot.reportId))
             .limit(1)
         : [];
+      const ordered = await reportService.orderForResponse(snapshot.snapshotData, owner?.organizationId);
       res.json({
         ...snapshot,
-        snapshotData: await reportService.orderForResponse(snapshot.snapshotData, owner?.organizationId),
+        // The coach's insights are read live (a coach edit reaches every link). Never the model key or coach notes.
+        snapshotData: owner
+          ? { ...(ordered as Record<string, unknown>), coachingInsights: owner.coachingInsights, coachingInsightsGeneratedAt: owner.coachingInsightsGeneratedAt }
+          : ordered,
       });
     } catch (error) {
       console.error("Error fetching public snapshot:", error);
@@ -3449,6 +3457,7 @@ export function registerReportRoutes(app: Express) {
             reportConfig: reports.config,
             reportDescription: reports.description,
             reportCoachingInsights: reports.coachingInsights,
+            reportCoachingInsightsGeneratedAt: reports.coachingInsightsGeneratedAt,
             reportCreatedBy: reports.createdBy,
             sharedById: reportShares.sharedBy,
             sharedByFirstName: users.firstName,
@@ -3490,6 +3499,7 @@ export function registerReportRoutes(app: Express) {
             reportType: share.reportType as 'team' | 'individual' | 'eval',
             config: share.reportConfig,
             coachingInsights: share.reportCoachingInsights,
+            coachingInsightsGeneratedAt: share.reportCoachingInsightsGeneratedAt?.toISOString() ?? null,
             // These fields are required by IndividualReportView/TeamReportView
             isTemplate: false,
             isPinned: false,
@@ -4193,6 +4203,104 @@ export async function generatePDF(report: any, reportData: any, format: 'visual'
     return f ? formatMeasurement(value, f) : null;
   };
 
+  // Coach's Coaching Insights. Drawn right after the athlete / summary block; never names the model (reader document).
+  const drawInsights = (startY: number): number => {
+    let yPos = startY;
+    if (report.coachingInsights) {
+      // Check if we need a new page
+      if (yPos > 220) {
+        doc.addPage();
+        yPos = 20;
+      }
+
+      doc.setFontSize(16);
+      if (isVisual) doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+      doc.text("Coaching Insights", 14, yPos);
+      doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+      yPos += 10;
+
+      // Render markdown with structure preserved (headers bold, bullets indented)
+      const insightsPageWidth = doc.internal.pageSize.getWidth();
+      const insightsContentWidth = insightsPageWidth - 28; // 14mm margins each side
+      const lineHeight = 5;
+
+      doc.setFontSize(8);
+      const markdownLines = report.coachingInsights.split('\n');
+
+      for (const rawLine of markdownLines) {
+        const trimmed = rawLine.trim();
+        if (!trimmed) {
+          yPos += 3; // Blank line = paragraph spacing
+          continue;
+        }
+
+        // Check for page break
+        if (yPos > 280) {
+          doc.addPage();
+          yPos = 20;
+        }
+
+        // Headers (## Section Title)
+        if (/^#{1,3}\s+/.test(trimmed)) {
+          const headerText = trimmed.replace(/^#{1,6}\s+/, '').replace(/\*\*/g, '');
+          yPos += 3; // Extra spacing before header
+          doc.setFontSize(9);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+          doc.text(headerText, 14, yPos);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+          doc.setFontSize(8);
+          yPos += lineHeight + 1;
+          continue;
+        }
+
+        // Bullet points (- or * or •)
+        const bulletMatch = trimmed.match(/^[-*•]\s+(.*)/);
+        if (bulletMatch) {
+          const bulletText = bulletMatch[1].replace(/\*\*(.*?)\*\*/g, '$1');
+          const bulletLines = doc.splitTextToSize(bulletText, insightsContentWidth - 8);
+          for (let i = 0; i < bulletLines.length; i++) {
+            if (yPos > 280) { doc.addPage(); yPos = 20; }
+            if (i === 0) {
+              doc.text('•', 16, yPos);
+              doc.text(bulletLines[i], 22, yPos);
+            } else {
+              doc.text(bulletLines[i], 22, yPos); // Continuation indented
+            }
+            yPos += lineHeight;
+          }
+          continue;
+        }
+
+        // Regular paragraph text — strip bold markers and wrap
+        const plainText = trimmed.replace(/\*\*(.*?)\*\*/g, '$1');
+        const wrappedLines = doc.splitTextToSize(plainText, insightsContentWidth);
+        for (const wLine of wrappedLines) {
+          if (yPos > 280) { doc.addPage(); yPos = 20; }
+          doc.text(wLine, 14, yPos);
+          yPos += lineHeight;
+        }
+      }
+
+      yPos += 5;
+
+      // Add generation metadata
+      if (report.coachingInsightsGeneratedAt) {
+        if (yPos > 280) { doc.addPage(); yPos = 20; }
+        doc.setFontSize(8);
+        doc.setTextColor(100, 100, 100);
+        const generatedDate = formatReportDate(report.coachingInsightsGeneratedAt, timeZone, true);
+        doc.text(`Written: ${generatedDate}`, 14, yPos);
+        doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+        yPos += 10;
+      }
+      // The next section draws its heading at the returned yPos without its own page check
+      if (yPos > 250) { doc.addPage(); yPos = 20; }
+    }
+    return yPos;
+  };
+
   // --- Cover page for individual reports ---
   if (reportData.reportType === 'individual') {
     const athlete = reportData.athlete;
@@ -4350,6 +4458,8 @@ export async function generatePDF(report: any, reportData: any, format: 'visual'
     });
 
     yPos = (doc as any).lastAutoTable.finalY + 15;
+
+    yPos = drawInsights(yPos);
 
     // 2. Performance Snapshot (Team Statistics)
     doc.setFontSize(16);
@@ -4657,6 +4767,8 @@ export async function generatePDF(report: any, reportData: any, format: 'visual'
       yPos += 5;
     }
 
+    yPos = drawInsights(yPos);
+
     yPos += 5; // Add spacing before measurements table
 
     if (athlete.measurements) {
@@ -4850,100 +4962,6 @@ export async function generatePDF(report: any, reportData: any, format: 'visual'
       }
 
       yPos += 5;
-    }
-  }
-
-  // Add Coaching Insights section (if available)
-  if (report.coachingInsights) {
-    // Check if we need a new page
-    if (yPos > 220) {
-      doc.addPage();
-      yPos = 20;
-    }
-
-    doc.setFontSize(16);
-    if (isVisual) doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
-    doc.text("Coaching Insights", 14, yPos);
-    doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
-    yPos += 10;
-
-    // Render markdown with structure preserved (headers bold, bullets indented)
-    const insightsPageWidth = doc.internal.pageSize.getWidth();
-    const insightsContentWidth = insightsPageWidth - 28; // 14mm margins each side
-    const lineHeight = 5;
-
-    doc.setFontSize(8);
-    const markdownLines = report.coachingInsights.split('\n');
-
-    for (const rawLine of markdownLines) {
-      const trimmed = rawLine.trim();
-      if (!trimmed) {
-        yPos += 3; // Blank line = paragraph spacing
-        continue;
-      }
-
-      // Check for page break
-      if (yPos > 280) {
-        doc.addPage();
-        yPos = 20;
-      }
-
-      // Headers (## Section Title)
-      if (/^#{1,3}\s+/.test(trimmed)) {
-        const headerText = trimmed.replace(/^#{1,6}\s+/, '').replace(/\*\*/g, '');
-        yPos += 3; // Extra spacing before header
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
-        doc.text(headerText, 14, yPos);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
-        doc.setFontSize(8);
-        yPos += lineHeight + 1;
-        continue;
-      }
-
-      // Bullet points (- or * or •)
-      const bulletMatch = trimmed.match(/^[-*•]\s+(.*)/);
-      if (bulletMatch) {
-        const bulletText = bulletMatch[1].replace(/\*\*(.*?)\*\*/g, '$1');
-        const bulletLines = doc.splitTextToSize(bulletText, insightsContentWidth - 8);
-        for (let i = 0; i < bulletLines.length; i++) {
-          if (yPos > 280) { doc.addPage(); yPos = 20; }
-          if (i === 0) {
-            doc.text('•', 16, yPos);
-            doc.text(bulletLines[i], 22, yPos);
-          } else {
-            doc.text(bulletLines[i], 22, yPos); // Continuation indented
-          }
-          yPos += lineHeight;
-        }
-        continue;
-      }
-
-      // Regular paragraph text — strip bold markers and wrap
-      const plainText = trimmed.replace(/\*\*(.*?)\*\*/g, '$1');
-      const wrappedLines = doc.splitTextToSize(plainText, insightsContentWidth);
-      for (const wLine of wrappedLines) {
-        if (yPos > 280) { doc.addPage(); yPos = 20; }
-        doc.text(wLine, 14, yPos);
-        yPos += lineHeight;
-      }
-    }
-
-    yPos += 5;
-
-    // Add generation metadata
-    if (report.coachingInsightsGeneratedAt) {
-      doc.setFontSize(8);
-      doc.setTextColor(100, 100, 100);
-      const generatedDate = formatReportDate(report.coachingInsightsGeneratedAt, timeZone, true);
-      const modelText = report.coachingInsightsModel
-        ? ` (${getAIModel(report.coachingInsightsModel)?.label ?? report.coachingInsightsModel})`
-        : '';
-      doc.text(`Evaluation Written: ${generatedDate}${modelText}`, 14, yPos);
-      doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
-      yPos += 10;
     }
   }
 
