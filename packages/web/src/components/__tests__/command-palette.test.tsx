@@ -16,6 +16,9 @@ vi.mock('@/lib/auth', () => ({
   useAuth: vi.fn(() => ({ user: mockUser, userOrganizations: mockUserOrganizations })),
 }));
 vi.mock('wouter', () => ({ useLocation: vi.fn(() => ['/', vi.fn()]) }));
+vi.mock('@/components/athlete/add-note-dialog-provider', () => ({
+  useAddNoteDialog: () => ({ openAddNote: vi.fn() }),
+}));
 vi.mock('../command-palette/command-palette-provider', () => ({
   useCommandPalette: vi.fn(() => ({ isOpen: true, close: vi.fn() })),
 }));

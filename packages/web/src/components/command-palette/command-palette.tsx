@@ -9,6 +9,7 @@ import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, C
 import { useCommandPalette } from './command-palette-provider';
 import { useGlobalSearch } from '@/hooks/use-global-search';
 import { useAuth } from '@/lib/auth';
+import { useAddNoteDialog } from '@/components/athlete/add-note-dialog-provider';
 import type { Permission } from '@shared/role-types';
 import { anyOrgGrants } from '@/lib/org-roles';
 import { getCommandActions, filterActionsByQuery, filterActionsByPermissions } from '@/lib/command-palette-actions';
@@ -23,6 +24,7 @@ export function CommandPalette() {
   const [, setLocation] = useLocation();
   const { user, userOrganizations } = useAuth();
   const { getLabel, formats } = useMetricLabels();
+  const { openAddNote } = useAddNoteDialog();
 
   // Navigation function compatible with wouter
   const navigate = (path: string) => setLocation(path);
@@ -47,7 +49,7 @@ export function CommandPalette() {
   }, [isOpen]);
 
   // Get actions and filter by permissions
-  const allActions = getCommandActions(navigate);
+  const allActions = getCommandActions(navigate, openAddNote);
   // No single organization is in scope: available if any membership grants it (site admins
   // always), matching Ctrl+M. Never the session role.
   const userHasPermission = (permission: Permission) => anyOrgGrants(user, userOrganizations, permission);

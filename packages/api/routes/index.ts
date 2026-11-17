@@ -43,6 +43,7 @@ import { registerEventMetricsRoutes } from "./event-metrics-routes";
 import { registerEventMeasurementsRoutes } from "./event-measurements-routes";
 import { registerEventResultsRoutes } from "./event-results-routes";
 import { registerEventReportRoutes } from "./event-report-routes";
+import { registerAthleteNoteRoutes } from "./athlete-note-routes";
 import { registerEvalTemplateRoutes } from "./eval-template-routes";
 import { registerReportTemplateRoutes } from "./report-template-routes";
 import enhancedAuthRoutes from "./enhanced-auth";
@@ -225,6 +226,9 @@ export function registerAllRoutes(app: Express) {
 
   // Sprint Force-Velocity profile routes (Morin F-V profiling)
   registerSprintFvRoutes(app);
+
+  // Athlete coaching notes (AM-FEAT-025)
+  registerAthleteNoteRoutes(app);
 
   // LLM export route (athlete → Markdown/JSON for paste-into-LLM program design)
   registerLlmExportRoutes(app);

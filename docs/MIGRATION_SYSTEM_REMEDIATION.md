@@ -46,6 +46,8 @@
 
 > 0184 (organizations.ai_prompt_overrides jsonb, the org-admin AI insights prompt wording layered on the site wording; `_down` drops the column) is provisional: renumber at merge if another branch lands 0184 first (file, `_down`, test `migration-0184-org-ai-prompt-overrides`, tracking row, this line).
 
+> 0185 (athlete_notes table, AM-FEAT-025 athlete coaching notes: athlete_id and organization_id ON DELETE CASCADE, author_id and event_id ON DELETE SET NULL, index on (athlete_id, organization_id, observed_on); `_down` drops the table) is provisional: renumber at merge if another branch lands 0185 first (open PR #770 holds 0184) (file, `_down`, test `migration-0185-athlete-notes`, tracking row, this line). AM-FEAT-024 (#733-735) also holds provisional numbers. Needs `users`, `organizations` and `events`.
+
 ## Current State (2025-10-30)
 
 ### Overview

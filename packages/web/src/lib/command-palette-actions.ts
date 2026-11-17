@@ -3,7 +3,7 @@
  * Defines all quick actions available in the command palette
  */
 
-import { type LucideIcon, UserPlus, Activity, Users, Upload, BarChart, Settings } from 'lucide-react';
+import { type LucideIcon, UserPlus, Activity, Users, Upload, BarChart, Settings, NotebookPen } from 'lucide-react';
 import { type Permission } from '@shared/role-types';
 
 export interface CommandAction {
@@ -18,7 +18,7 @@ export interface CommandAction {
 /**
  * Get all command actions with navigation callbacks
  */
-export function getCommandActions(navigate: (path: string) => void): CommandAction[] {
+export function getCommandActions(navigate: (path: string) => void, openAddNote?: () => void): CommandAction[] {
   return [
     {
       id: 'add-athlete',
@@ -36,6 +36,17 @@ export function getCommandActions(navigate: (path: string) => void): CommandActi
       permission: 'CREATE_MEASUREMENTS',
       action: () => navigate('/data-entry'),
     },
+    ...(openAddNote
+      ? [{
+          id: 'add-coaching-note',
+          title: 'Add Coaching Note',
+          icon: NotebookPen,
+          keywords: ['add', 'new', 'coaching', 'note', 'notes', 'observation', 'athlete'],
+          // Same people who can record measurements are the coaches and admins who can write notes
+          permission: 'CREATE_MEASUREMENTS' as Permission,
+          action: openAddNote,
+        }]
+      : []),
     {
       id: 'add-team',
       title: 'Add Team',

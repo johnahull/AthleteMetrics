@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Athlete coaching notes (AM-FEAT-025): coaches and admins keep a dated, organization-scoped log of observations about an athlete (add, edit, delete) on the athlete profile, with an optional category, an optional event link and a pin for active restrictions. Quick-add from the dashboard and the command palette. Notes are visible only to coaches, org admins and site admins of the note's own organization; athletes and parents never see them. Reports do not use notes yet.
+
+### Deployment notes
+- Migration `0185_add_athlete_notes.sql` (provisional number: renumber at merge). No new environment variables.
+
 ## [0.37.1] - 2026-11-13
 
 ### Fixed
