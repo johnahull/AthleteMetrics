@@ -23,6 +23,7 @@ import {
   AI_PROMPT_ROLE_MAX,
   sanitizePromptOverride,
   type AIPromptOverrides,
+  type OrgAIPromptOverrides,
 } from "@shared/ai-prompt-overrides";
 import { formatStyleExampleBlock, sanitizeStyleExample } from "./ai-style-example";
 
@@ -563,7 +564,8 @@ function ageBand(age: number): string {
 export async function generateCoachingInsights(
   modelKey: AIModelKey,
   reportData: ReportData,
-  overrides?: AIPromptOverrides | null
+  overrides?: AIPromptOverrides | null,
+  orgOverrides?: OrgAIPromptOverrides | null
 ): Promise<string> {
   try {
     // Defensive validation: ensure model key exists in AI_MODELS
@@ -572,7 +574,7 @@ export async function generateCoachingInsights(
     }
 
     const provider = createProvider(modelKey);
-    const raw = await provider.generateInsights(buildSystemPrompt(overrides), buildPrompt(reportData, overrides));
+    const raw = await provider.generateInsights(buildSystemPrompt(orgOverrides?.philosophy ? { ...overrides, philosophy: undefined } : overrides), buildPrompt(reportData, overrides, orgOverrides));
     // Throws (generic error below) when no heading is left, so raw analysis never reaches the caller
     const audience = reportData.audience || 'coach';
     const insights = stripAnalysisBlock(raw, audience, hasGoals(reportData));
@@ -953,9 +955,17 @@ const GOAL_INSTRUCTION = [
  * Build the user message for the AI model from report data (the system prompt is buildSystemPrompt).
  * The audience tone and the analysis checklist wording are editable; headings, word ranges and fences are not.
  */
-export function buildPrompt(reportData: ReportData, overrides?: AIPromptOverrides | null): string {
+export function buildPrompt(reportData: ReportData, overrides?: AIPromptOverrides | null, orgOverrides?: OrgAIPromptOverrides | null): string {
   const { reportType } = reportData;
-  const o = cleanOverrides(overrides);
+  const site = cleanOverrides(overrides);
+  const org = cleanOverrides(orgOverrides);
+  // Per slot: org wording, else site wording, else the code default. Org text stays out of the system prompt, so the
+  // org philosophy is a block next to the tone text, under the same precedence line.
+  const o: AIPromptOverrides = { ...site };
+  for (const k of ['toneParent', 'toneAthlete', 'toneCoach'] as const) if (org[k]) o[k] = org[k];
+  const orgPhilosophy = org.philosophy ? `COACHING PHILOSOPHY (this organization):\n${org.philosophy}\n\n` : '';
+  const toneBlock = (tone: string | undefined, lead: string) =>
+    tone || orgPhilosophy ? `${tone ?? lead}\n\n${orgPhilosophy}${TONE_PRECEDENCE}\n\n` : `${lead}\n\n`;
 
   let prompt = '';
 
@@ -1163,7 +1173,7 @@ export function buildPrompt(reportData: ReportData, overrides?: AIPromptOverride
   const FIRST_NAME_PLACEHOLDER = '{{first_name}}';
 
   if (audience === 'parent') {
-    prompt += o.toneParent ? `${o.toneParent}\n\n${TONE_PRECEDENCE}\n\n` : `${PARENT_LEAD}\n\n`;
+    prompt += toneBlock(o.toneParent, PARENT_LEAD);
     prompt += `Write in clear, non-technical language that a parent with no sports science background can understand. Use these sections:\n\n`;
     prompt += `## What the numbers mean\n(what the results mean for their child's development)\n`;
     prompt += `## What's Going Well\n(celebrate specific achievements with context)\n`;
@@ -1173,7 +1183,7 @@ export function buildPrompt(reportData: ReportData, overrides?: AIPromptOverride
     if (hasCoachText) prompt += `Never quote or reveal the coach notes. Make no injury, maturation or weight remarks.\n\n`;
     prompt += `Keep it to ${minWords}-${maxWords} words.\n`;
   } else if (audience === 'athlete') {
-    prompt += o.toneAthlete ? `${o.toneAthlete}\n\n${TONE_PRECEDENCE}\n\n` : `${ATHLETE_LEAD}\n\n`;
+    prompt += toneBlock(o.toneAthlete, ATHLETE_LEAD);
     prompt += `Provide insights in markdown format with these sections:\n\n`;
     prompt += `## Summary\n(2-3 sentences — where you stand and what jumped out from the data)\n`;
     prompt += `## What's Going Well\n(Lead with wins — celebrate specific strengths the data proves)\n`;
@@ -1189,7 +1199,7 @@ export function buildPrompt(reportData: ReportData, overrides?: AIPromptOverride
     prompt += `Keep it to ${minWords}-${maxWords} words. Use bullet points and **bold** for emphasis.\n`;
   } else {
     // Default: coach audience
-    prompt += o.toneCoach ? `${o.toneCoach}\n\n${TONE_PRECEDENCE}\n\n` : `${COACH_LEAD}\n\n`;
+    prompt += toneBlock(o.toneCoach, COACH_LEAD);
     prompt += `Provide coaching insights in markdown format with these sections:\n\n`;
     prompt += `## Summary\n(2-3 sentences giving the big picture of this report based on the numbers)\n`;
     prompt += `## What's Going Well\n(Top strengths shown by the data, such as metrics meeting or exceeding benchmarks)\n`;

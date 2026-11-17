@@ -44,9 +44,9 @@ export function memberNamesIn(rawText: string, rawNames: string[]): string[] {
   );
 }
 
-/** Copy of the org row without aiStyleExample unless the viewer may see it (org admin / site admin). */
-export function omitStyleExampleUnless<T extends { aiStyleExample?: string | null }>(org: T, canSee: boolean): T {
+/** Copy of the org row without aiStyleExample and aiPromptOverrides unless the viewer may see them (org admin / site admin). */
+export function omitOrgAiTextUnless<T extends { aiStyleExample?: string | null; aiPromptOverrides?: unknown }>(org: T, canSee: boolean): T {
   if (canSee) return org;
-  const { aiStyleExample: _omit, ...rest } = org;
+  const { aiStyleExample: _omit, aiPromptOverrides: _omit2, ...rest } = org;
   return rest as T;
 }

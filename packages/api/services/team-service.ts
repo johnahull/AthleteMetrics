@@ -16,6 +16,7 @@ import {
   type UserTeam,
   type InsertTeam,
 } from '@shared/schema';
+import { omitOrgAiTextUnless } from './ai-style-example';
 import { db } from '../db';
 import { eq, and, asc, ne, sql } from 'drizzle-orm';
 
@@ -58,7 +59,7 @@ export class TeamService {
 
     return result.map(({ teams: team, organizations: org }) => ({
       ...team,
-      organization: org,
+      organization: omitOrgAiTextUnless(org, false),
     }));
   }
 
@@ -79,7 +80,7 @@ export class TeamService {
     if (result.length === 0) return undefined;
 
     const { teams: team, organizations: org } = result[0];
-    return { ...team, organization: org };
+    return { ...team, organization: omitOrgAiTextUnless(org, false) };
   }
 
   /**

@@ -7,7 +7,7 @@ import { insertOrganizationSchema, updateOrganizationSchema } from "@shared/sche
 import type { Organization, InsertOrganization, UpdateOrganization, User, UserOrganization } from "@shared/schema";
 import crypto from "crypto";
 import { invitationsVisibleTo, toSafeUser, visibilityForRole } from "../lib/safe-user";
-import { omitStyleExampleUnless } from "./ai-style-example";
+import { omitOrgAiTextUnless } from "./ai-style-example";
 
 export interface OrganizationFilters {
   search?: string;
@@ -285,7 +285,7 @@ export class OrganizationService extends BaseService {
       const hasAccess = await this.validateOrganizationAccess(requestingUserId, organizationId);
       if (!hasAccess) return null;
       const role = await this.storage.getUserRole(requestingUserId, organizationId);
-      return omitStyleExampleUnless(organization, isSiteAdmin || role === 'org_admin');
+      return omitOrgAiTextUnless(organization, isSiteAdmin || role === 'org_admin');
     } catch (error) {
       console.error("OrganizationService.getOrganizationById:", error);
       return null;
@@ -359,7 +359,7 @@ export class OrganizationService extends BaseService {
       const athletes = users.filter(u => u.role === 'athlete');
 
       return {
-        organization: omitStyleExampleUnless(organization, isSiteAdmin || roleInOrg === 'org_admin'),
+        organization: omitOrgAiTextUnless(organization, isSiteAdmin || roleInOrg === 'org_admin'),
         coaches,
         athletes,
         invitations
@@ -526,7 +526,7 @@ export class OrganizationService extends BaseService {
         batch.forEach((orgId, index) => {
           const visibility = visibilityForRole(roleIn(orgId), isSiteAdmin);
           profilesMap.set(orgId, {
-            organization: orgs[index] && omitStyleExampleUnless(orgs[index], isSiteAdmin || roleIn(orgId) === 'org_admin'),
+            organization: orgs[index] && omitOrgAiTextUnless(orgs[index], isSiteAdmin || roleIn(orgId) === 'org_admin'),
             users: (usersArrays[index] || []).map(u => ({ ...u, user: toSafeUser(u.user, visibility) })),
             invitations: invitationsVisibleTo(invitationsArrays[index] || [], roleIn(orgId), isSiteAdmin)
           });

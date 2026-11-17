@@ -17,6 +17,8 @@ import { isSafePublicUrl } from "@shared/url-safety";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { SiteSettings } from "@shared/schema";
+import { ORG_AI_PROMPT_OVERRIDE_KEYS, type OrgAIPromptOverrideKey } from "@shared/ai-prompt-overrides";
+import { FIELDS as AI_PROMPT_FIELDS } from "@/components/admin/ai-prompt-card";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -88,11 +90,20 @@ type OrganizationProfile = {
   invitations: PendingInvitation[];
 };
 
+// The org philosophy goes in the user message and replaces the site philosophy for this org
+const ORG_PHILOSOPHY_HELP = "Optional principles for your organization. Replaces the site-wide philosophy for your insights; they cannot override the safety or medical rules.";
+
 // Schema for org admin settable fields
 const orgAdminSettingsSchema = z.object({
   aiEnabled: z.boolean().default(false),
   aiPromptContext: z.string().max(2000, "AI prompt context must be 2000 characters or less").optional().default(''),
   aiStyleExample: z.string().max(1500, "Example analysis must be 1500 characters or less").optional().default(''),
+  aiPromptOverrides: z.object({
+    philosophy: z.string().max(1500, "Must be 1500 characters or less"),
+    toneParent: z.string().max(1500, "Must be 1500 characters or less"),
+    toneAthlete: z.string().max(1500, "Must be 1500 characters or less"),
+    toneCoach: z.string().max(1500, "Must be 1500 characters or less"),
+  }).partial().default({}),
   wellnessEnabled: z.boolean().default(true),
   eventsEnabled: z.boolean().default(false),
   brandLogoUrl: z.string().optional().default('').refine(
@@ -153,6 +164,12 @@ export default function OrgAdminSettings() {
     queryKey: ["/api/site-settings/public"],
     enabled: !!organizationId,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
+  // Wording the org inherits (site wording, else the code default), shown as the placeholder of each field
+  const { data: aiPromptDefaults } = useQuery<{ defaults: Record<OrgAIPromptOverrideKey, string> }>({
+    queryKey: [`/api/organizations/${organizationId}/ai-prompt-defaults`],
+    enabled: !!organizationId && !!organization?.aiEnabledBySiteAdmin,
   });
 
   // Update mutation for org settings
@@ -424,6 +441,7 @@ export default function OrgAdminSettings() {
       aiEnabled: organization.aiEnabledBySiteAdmin ? (organization.aiEnabled || false) : false,
       aiPromptContext: organization.aiPromptContext || '',
       aiStyleExample: organization.aiStyleExample || '',
+      aiPromptOverrides: organization.aiPromptOverrides ?? {},
       wellnessEnabled: siteSettings?.wellnessModuleEnabled ? (organization.wellnessEnabled ?? true) : false,
       eventsEnabled: organization.eventsEnabled ?? false,
       brandLogoUrl: organization.brandLogoUrl || '',
@@ -464,6 +482,12 @@ export default function OrgAdminSettings() {
       }
       if ((data.aiStyleExample || null) !== (organization?.aiStyleExample || null)) {
         changes.aiStyleExample = data.aiStyleExample || null;
+      }
+      // Whole-object replace: send every non-empty field when any of the four changed
+      const savedWording = organization?.aiPromptOverrides ?? {};
+      if (ORG_AI_PROMPT_OVERRIDE_KEYS.some((k) => (data.aiPromptOverrides?.[k]?.trim() || '') !== (savedWording[k] || ''))) {
+        const wording = Object.fromEntries(ORG_AI_PROMPT_OVERRIDE_KEYS.flatMap((k) => (data.aiPromptOverrides?.[k]?.trim() ? [[k, data.aiPromptOverrides[k]!.trim()]] : [])));
+        changes.aiPromptOverrides = Object.keys(wording).length > 0 ? wording : null;
       }
 
       if (Object.keys(changes).length === 0) {
@@ -704,6 +728,40 @@ export default function OrgAdminSettings() {
                   </FormItem>
                 )}
               />
+
+              {aiEnabledBySiteAdmin && isAiEnabled && (
+                <div className="rounded-lg border p-4 space-y-4">
+                  <div className="grid gap-y-0.5">
+                    <p className="text-base font-medium">Insight wording</p>
+                    <p className="text-sm text-muted-foreground">
+                      Reword how AI insights sound for your organization. Leave a field empty to use the default shown in it. Remove athlete names.
+                    </p>
+                  </div>
+                  {ORG_AI_PROMPT_OVERRIDE_KEYS.map((key) => (
+                    <FormField
+                      key={key}
+                      control={form.control}
+                      name={`aiPromptOverrides.${key}`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{AI_PROMPT_FIELDS[key].label}</FormLabel>
+                          <FormDescription>{key === 'philosophy' ? ORG_PHILOSOPHY_HELP : AI_PROMPT_FIELDS[key].controls}</FormDescription>
+                          <FormControl>
+                            <Textarea
+                              {...field}
+                              value={field.value ?? ''}
+                              placeholder={aiPromptDefaults?.defaults?.[key] || undefined}
+                              maxLength={1500}
+                              rows={4}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
