@@ -949,6 +949,22 @@ describe('ReportWizard Component', () => {
       expect(payload.config.charts.distribution).toBe(false);
     });
 
+    it('individual report defaults to the parent audience, never coach', async () => {
+      renderWithQueryClient(<ReportWizard open={true} onClose={mockOnClose} onSuccess={mockOnSuccess} />);
+      await goToFilters('individual');
+      const payload = await submit();
+      expect(payload.config.audience).toBe('parent');
+    });
+
+    it('team report keeps the coach audience', async () => {
+      renderWithQueryClient(<ReportWizard open={true} onClose={mockOnClose} onSuccess={mockOnSuccess} />);
+      await goToFilters('team');
+      await waitFor(() => expect(screen.getByLabelText('Team A')).toBeInTheDocument());
+      fireEvent.click(screen.getByLabelText('Team A'));
+      const payload = await submit();
+      expect(payload.config.audience).toBe('coach');
+    });
+
     it('individual report sends charts.sprintRuns true by default, and false once its checkbox is cleared', async () => {
       renderWithQueryClient(<ReportWizard open={true} onClose={mockOnClose} onSuccess={mockOnSuccess} />);
       await goToFilters('individual');

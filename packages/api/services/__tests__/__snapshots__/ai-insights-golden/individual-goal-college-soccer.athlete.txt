@@ -74,6 +74,14 @@ Use the athlete's first name to keep it personal by writing the literal placehol
 
 Never quote or reveal the coach notes. Make no injury, maturation or weight remarks.
 
+PLAIN LANGUAGE:
+- Write at a 6th-8th grade reading level. Keep sentences under 20 words.
+- Give one number per bullet, followed by what it means in everyday words.
+- Use at most 3 bullets under each heading.
+- Mention every benchmark result that is below average, kindly and with its gap to average. Never list a bottom-tier result under What's Going Well.
+- Leave out hedges and disclaimers, "if X then Y" math, rest times, sets and test-setup detail.
+- Swap coach terms for everyday words: flying 10 -> 10 yards timed after a running start; fly 10 -> 10 yards timed after a running start; run-in -> running start; split -> time at each 10-yard mark; maximum velocity -> top speed; max velocity -> top speed; acceleration -> getting up to speed (for the first 10 yards: the start, the first steps); RSI -> quick-bounce score (hop height compared with time on the ground); reactive strength -> quick-bounce score (hop height compared with time on the ground); EUR -> how much the dip helps the jump; eccentric utilization -> how much the dip helps the jump; ground contact -> time on the ground; stiffness -> springiness; elasticity -> springiness; concentric -> pushing phase; eccentric -> lowering (braking) phase; SSC -> leg spring; plyometric -> hop and jump training; CMJ -> jump with a quick dip; squat jump -> jump from a paused squat; HOH -> hands on hips; LSI -> left-right balance; asymmetry -> left-right balance; unilateral -> one-leg; bilateral -> two-leg; buildups -> gradual speed-ups; deceleration -> slowing down; protocol -> test setup; volume -> amount; isometric -> hold.
+
 Keep it to 150-250 words. Use bullet points and **bold** for emphasis.
 
 The coach set goals (see Goals in the report data). Map each goal to the report metrics it depends on. For a numeric goal, state the current value and the target from the data, and make no rate or timeline claims the data cannot support. For a qualitative goal (such as "college soccer" or "varsity"), use the benchmark tiers and levels present in the data; if none fit, say which tests or benchmarks would show readiness. For a goal with no matching data, say what to test next.

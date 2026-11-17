@@ -100,6 +100,22 @@ describe('user message slots', () => {
     // the default carries those lines
     for (const line of DEFAULT_PROMPT_TEXT[key].split('\n')) expect(base).toContain(line);
   });
+  it.each([
+    ['parent', 'toneParent'],
+    ['athlete', 'toneAthlete'],
+  ] as const)('%s prompt carries the plain-language rules, with or without a tone override, after the tone and before the word range', (audience, key) => {
+    for (const p of [buildPrompt(data(audience)), buildPrompt(data(audience), { [key]: 'Warm and plain.' })]) {
+      expect(p).toContain('PLAIN LANGUAGE:');
+      expect(p).toContain('6th-8th grade');
+      expect(p).toContain('flying 10 -> 10 yards timed after a running start');
+      expect(p).toContain('Mention every benchmark result that is below average');
+      expect(p.indexOf('PLAIN LANGUAGE:')).toBeGreaterThan(p.indexOf('</report_data>'));
+      expect(p.indexOf('PLAIN LANGUAGE:')).toBeLessThan(p.search(/Keep it to \d+-\d+ words/));
+    }
+  });
+  it('coach prompt has no plain-language block', () => {
+    expect(buildPrompt(data('coach'))).not.toContain('PLAIN LANGUAGE:');
+  });
   it('only the matching audience slot is used', () => {
     expect(buildPrompt(data('coach'), { toneParent: 'PARENTONLY', toneAthlete: 'ATHLETEONLY' })).toBe(buildPrompt(data('coach')));
   });

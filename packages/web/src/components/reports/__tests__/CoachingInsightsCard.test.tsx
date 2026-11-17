@@ -239,6 +239,18 @@ describe('CoachingInsightsCard — manual write/edit', () => {
     expect(screen.getByTestId('insights-editor')).toBeInTheDocument();
   });
 
+  it('editor lists hard words for families as the coach types, and hides the list when there are none', () => {
+    render(<CoachingInsightsCard {...baseProps} aiEnabled={false} />);
+    fireEvent.click(screen.getByRole('button', { name: /write insights/i }));
+    expect(screen.queryByTestId('hard-words')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId('insights-editor'), { target: { value: 'His RSI and flying 10 are good.' } });
+    expect(screen.getByTestId('hard-words')).toHaveTextContent('Hard words for families: RSI, flying 10');
+
+    fireEvent.change(screen.getByTestId('insights-editor'), { target: { value: 'He ran 5.26 seconds.' } });
+    expect(screen.queryByTestId('hard-words')).not.toBeInTheDocument();
+  });
+
   it('with AI disabled and insights present: Edit shown, Regenerate hidden', () => {
     render(
       <CoachingInsightsCard

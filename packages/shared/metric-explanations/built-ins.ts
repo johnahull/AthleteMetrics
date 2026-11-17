@@ -125,9 +125,9 @@ export const BUILT_IN_METRIC_EXPLANATIONS: Record<string, MetricExplanation> = {
     title: 'Reactive Strength Index',
     shortDescription: 'How efficiently you bounce off the ground — spring and stiffness in one number.',
     whatItMeasures:
-      'RSI measures the ratio of jump height to ground contact time during drop jumps. It indicates how efficiently you can use the stretch-shortening cycle.',
+      'Hop height compared with the time your feet stay on the ground. A higher score means you jump high and leave the ground quickly.',
     whyItMatters:
-      'RSI reflects your ability to rapidly switch from eccentric to concentric muscle action — crucial for jumping, sprinting, and change of direction. Higher values indicate better reactive ability.',
+      'It shows how springy your legs are. Springy legs store energy when they hit the ground and give it back fast. That helps sprinting, jumping and cutting.',
     unitNote: 'Dimensionless ratio; higher is better.',
     directionOfBetter: 'higher',
   },

@@ -266,9 +266,9 @@ const METRIC_EDUCATION: Record<string, MetricEducation> = {
   RSI: {
     name: 'Reactive Strength Index',
     description:
-      'RSI measures the ratio of jump height to ground contact time during drop jumps. It indicates how efficiently you can use the stretch-shortening cycle.',
+      'Hop height compared with the time your feet stay on the ground. A higher score means you jump high and leave the ground quickly.',
     whyItMatters:
-      'RSI reflects your ability to rapidly switch from eccentric to concentric muscle action—crucial for jumping, sprinting, and change of direction. Higher values indicate better reactive ability.',
+      'It shows how springy your legs are. Springy legs store energy when they hit the ground and give it back fast. That helps sprinting, jumping and cutting.',
     howToImprove: [
       'Start with spring ankle work — pogo jumps and ankle stiffness drills before progressing to depth jumps',
       'Progress through BTA\'s plyometric tiers: pogos → hurdle hops → depth jumps',
