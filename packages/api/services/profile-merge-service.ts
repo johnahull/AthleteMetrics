@@ -30,6 +30,7 @@ import {
   reportShares,
   reports,
   athleteProfiles,
+  athleteNotes,
   userGlobalAthleteLinks,
   pushSubscriptions,
   notificationPreferences,
@@ -108,6 +109,7 @@ export interface MergeResult {
     /** Eval reports re-pointed to the target. Always set by a live merge; the dry-run preview does not count them, so it is omitted there. */
     evalReportsTransferred?: number;
     individualReportsTransferred?: number;
+    athleteNotesTransferred?: number;
     emailsMerged: number;
     sessionsInvalidated: number;
   };
@@ -315,6 +317,7 @@ export class ProfileMergeService extends BaseService {
         eventRegistrationsTransferred: 0,
         evalReportsTransferred: 0,
         individualReportsTransferred: 0,
+        athleteNotesTransferred: 0,
         emailsMerged: 0,
         sessionsInvalidated: 0,
       };
@@ -504,6 +507,14 @@ export class ProfileMergeService extends BaseService {
         ))
         .returning({ id: reports.id });
       summary.individualReportsTransferred = individualReportsResult.length;
+
+      // 8d. Re-point the source athlete's coaching notes in EVERY organization (AM-FEAT-025), like step 8c:
+      // COPPA deletion and export key on athlete_id, so notes must follow the surviving athlete wherever they live.
+      const athleteNotesResult = await tx.update(athleteNotes)
+        .set({ athleteId: targetUserId })
+        .where(eq(athleteNotes.athleteId, sourceUserId))
+        .returning({ id: athleteNotes.id });
+      summary.athleteNotesTransferred = athleteNotesResult.length;
 
       // 9. Transfer/merge athlete profile
       const [sourceProfile] = await tx.select()

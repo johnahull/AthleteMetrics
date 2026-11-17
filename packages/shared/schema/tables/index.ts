@@ -22,3 +22,4 @@ export * from "./imports";
 export * from "./sprint-fv-profiles";
 export * from "./waivers";
 export * from "./eval-reports";
+export * from "./athlete-notes";

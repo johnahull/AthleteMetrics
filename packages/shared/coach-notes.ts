@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const isRealDate = (s: string) => {
+export const isRealDate = (s: string) => {
   const d = new Date(`${s}T00:00:00Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
 };

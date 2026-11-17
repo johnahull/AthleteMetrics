@@ -24,11 +24,14 @@ function hasWellnessKey(value: unknown): boolean {
 export const evalPresetSchema = z.enum(["middle_school", "high_school", "senior"]);
 export const evalLoadSchema = z.enum(["light", "medium", "heavy"]);
 
+/** Strip control characters (newline and tab stay) and trim. Shared with the athlete coaching notes. */
+// eslint-disable-next-line no-control-regex
+export const stripControlChars = (s: string) => s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim();
+
 /** Strip control characters (newline and tab stay), trim, and cap the length. Empty becomes null. */
 const coachNoteSchema = z
   .string()
-  // eslint-disable-next-line no-control-regex
-  .transform((s) => s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim())
+  .transform(stripControlChars)
   .pipe(z.string().max(COACH_NOTE_MAX_LENGTH))
   .transform((s) => (s === "" ? null : s));
 
