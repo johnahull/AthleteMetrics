@@ -47,6 +47,8 @@ import type { MetricExplanation as MetricExplanationData } from "@shared/metric-
 import type { ReportTrends, TeamReportTrends, TeamReportDistributions } from "@shared/report-trends-types";
 import type { TeamReportConfig, AthleteRanking } from "@/types/report-types";
 import { EvalReportBody } from "@/components/reports/EvalReportView";
+import { ReadOnlyCoachingInsights } from "@/components/reports/ReadOnlyCoachingInsights";
+import { formatDateRange } from "@/components/reports/report-utils";
 
 export default function PublicReport() {
   const labels = useContextualLabels();
@@ -114,6 +116,18 @@ export default function PublicReport() {
   const teamStatistics = (snapshotData.teamStatistics ?? []) as any[];
   const athleteRankings = (snapshotData.athleteRankings ?? []) as AthleteRanking[];
   const teamTierDistributions = calculateTierDistributions(athleteRankings);
+  const coachingInsights = snapshotData.coachingInsights as string | null | undefined;
+  const coachingInsightsGeneratedAt = snapshotData.coachingInsightsGeneratedAt as string | null | undefined;
+  const insightsCard = coachingInsights
+    ? <ReadOnlyCoachingInsights insights={coachingInsights} generatedAt={coachingInsightsGeneratedAt} />
+    : null;
+  const teamTimeframe = (snapshotData.reportConfig as TeamReportConfig | undefined)?.timeframe;
+  const teamMetricsList = teamStatistics
+    .map((s) => {
+      const unit = metricUnits[s.metric] ?? s.units;
+      return `${metricLabels[s.metric] ?? s.metric}${unit ? ` (${unit})` : ''}`;
+    })
+    .join(', ');
 
   // Glossary order recomputed from the real data (was previously read from a
   // stale `dataSnapshot` shape that the producer no longer emits).
@@ -211,6 +225,38 @@ export default function PublicReport() {
         {/* Coach / Team Report View */}
         {reportType === 'team' && (
           <>
+            {/* Report Summary (team names are not in a snapshot, so they are left out) */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Report Summary</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {teamTimeframe && (
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Testing Period</p>
+                      <p className="text-base font-semibold mt-1">{formatDateRange(teamTimeframe)}</p>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">{labels.athletes} Tested</p>
+                    <p className="text-base font-semibold mt-1">
+                      {snapshotData.athleteCount ?? 0} {snapshotData.athleteCount === 1 ? labels.athlete.toLowerCase() : labels.athletes.toLowerCase()}
+                    </p>
+                  </div>
+                  {teamMetricsList && (
+                    <div className="md:col-span-2">
+                      <p className="text-sm font-medium text-muted-foreground">Metrics</p>
+                      <p className="text-base font-semibold mt-1 wrap-break-word">{teamMetricsList}</p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Coaching Insights (the coach's words, before any metrics) */}
+            {insightsCard}
+
             {/* Performance Snapshot */}
             {teamStatistics.length > 0 && (
               <Card>
@@ -420,6 +466,9 @@ export default function PublicReport() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Coaching Insights (the coach's words, before any metrics) */}
+            {insightsCard}
 
             {/* Performance Table */}
             {athlete.measurements && Object.keys(athlete.measurements).length > 0 && (
