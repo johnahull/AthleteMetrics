@@ -15,6 +15,7 @@ import NotFound from "@/pages/not-found";
 import { performanceMonitor } from "./utils/performance-monitoring";
 import { CommandPaletteProvider, useCommandPalette } from "./components/command-palette/command-palette-provider";
 import { CommandPalette } from "./components/command-palette/command-palette";
+import { AddNoteDialogProvider } from "./components/athlete/add-note-dialog-provider";
 import { KeyboardShortcutsHelp } from "./components/command-palette/keyboard-shortcuts-help";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PWAInstallPrompt } from "./components/pwa-install-prompt";
@@ -665,7 +666,9 @@ function App() {
           <AthleteOrgProvider>
             <OnboardingProvider>
               <CommandPaletteProvider>
-                <AppContent />
+                <AddNoteDialogProvider>
+                  <AppContent />
+                </AddNoteDialogProvider>
               </CommandPaletteProvider>
             </OnboardingProvider>
           </AthleteOrgProvider>

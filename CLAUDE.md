@@ -642,6 +642,18 @@ Coach-generated, family-facing PDF for one athlete at one evaluation event. Each
 
 **Docs:** `docs/EVAL_REPORT.md` (guide, API, testing, troubleshooting, release gate), `docs/adr/ADR-002-eval-report-v2.md` (decisions), `docs/EVAL_REPORT_FOLLOWUPS.md` (open items). The eval E2E (`tests/e2e/eval-report.spec.ts`) is run locally until the E2E suite is green (#490).
 
+### Athlete Coaching Notes (AM-FEAT-025)
+A dated, organization-scoped log a coach keeps about an athlete (`athlete_notes`): body, observed date, optional category (`technique, effort, readiness, injury, mindset, goal, other`), optional event link, `flagged` pin. Add / edit / delete from the athlete profile card, plus quick-add from the dashboard and the command palette.
+
+**Rule: only coach / org admin / site admin of the note's own organization may read or write a note; everyone else, including the athlete, gets 404. Roles come from `getOrgRole(user, note.organizationId)`, never `session.user.role`. Edit is author-only; delete is the author, an org admin of that organization, or a site admin. Any new route that reads notes must apply the same gate.** The under-13 COPPA data export includes notes (the parent's right to review what is held, same as per-report coach notes); that is not in-app visibility. Reports and AI insights do not read notes yet. When they do: only notes the coach picks, copied and frozen into the report, and `injury` / `readiness` notes never reach families or the AI (see the spec).
+
+**Key files:**
+- `packages/shared/schema/tables/athlete-notes.ts`, `packages/shared/athlete-notes.ts` (Zod), `migrations/0185_add_athlete_notes.sql` (number provisional; renumber at merge)
+- `packages/api/routes/athlete-note-routes.ts` (GET also returns `writableOrganizations`: where a note can be added for this athlete)
+- Child privacy: `coppa-deletion-service.ts` (step 6d), `coppa-export-service.ts` (`athleteNotes`), `profile-merge-service.ts` (step 8d); the table cascades on athlete and organization delete
+- Web: `components/athlete/CoachingNotesCard.tsx`, `AddCoachingNoteDialog.tsx`, `add-note-dialog-provider.tsx`, `lib/athlete-notes-api.ts`
+- Tests: `tests/integration/athlete-notes.test.ts`, `tests/e2e/athlete-notes-crud.spec.ts` (run locally until the E2E suite is green, #490)
+
 ### Data Import/Export
 - CSV import with comprehensive validation and preview
 - Support for matching existing players or creating new ones

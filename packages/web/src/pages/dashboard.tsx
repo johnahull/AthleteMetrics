@@ -2,10 +2,13 @@ import React, { useEffect, useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
-import { Users, UsersRound, Clock, ArrowUp, Activity } from "lucide-react";
+import { Users, UsersRound, Clock, ArrowUp, Activity, NotebookPen } from "lucide-react";
 import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
 import { formatValueWithUnit } from "@/lib/metrics";
 import { useAuth } from "@/lib/auth";
+import { anyOrgGrants } from "@/lib/org-roles";
+import { Button } from "@/components/ui/button";
+import { useAddNoteDialog } from "@/components/athlete/add-note-dialog-provider";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
 import { useMetricLabels } from "@/hooks/use-metric-labels";
 import { formatMeasurement } from "@shared/duration-format";
@@ -82,6 +85,8 @@ export default function Dashboard() {
   const isMobile = useIsMobile();
   const labels = useContextualLabels();
   const { user, organizationContext, userOrganizations } = useAuth();
+  const { openAddNote } = useAddNoteDialog();
+  const canAddNote = anyOrgGrants(user, userOrganizations, "CREATE_MEASUREMENTS");
   const [, setLocation] = useLocation();
 
   // Get available metrics for the organization
@@ -405,6 +410,11 @@ export default function Dashboard() {
                 }}
               />
             </div>
+          )}
+          {canAddNote && (
+            <Button variant="outline" onClick={openAddNote} data-testid="dashboard-add-note">
+              <NotebookPen className="mr-2 h-4 w-4" /> Add coaching note
+            </Button>
           )}
         </div>
       </div>
