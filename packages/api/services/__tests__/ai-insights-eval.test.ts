@@ -253,6 +253,14 @@ describe('family checks (meaning, not data)', () => {
     it('flags a sentence that is mostly the number', () => {
       expect(bareNumberSentences('- 40-yard dash: 5.26 s.\n- Top speed: 1.12 s')).toHaveLength(2);
     });
+    it('naming a test is not a number: labels and distance tokens are removed first', () => {
+      expect(bareNumberSentences('The 40-yard dash and the 5-10-5 shuttle are low.')).toEqual([]);
+      expect(bareNumberSentences('5-10-5 Agility is 4.96 s.', ['5-10-5 Agility'])).toHaveLength(1);
+      expect(bareNumberSentences('A 40-yard dash is where the start shows up most clearly for this athlete.', ['40-Yard Dash'])).toEqual([]);
+    });
+    it('flags a long sentence that restates two results', () => {
+      expect(bareNumberSentences('The jump from a paused squat was 18.9 inches and the jump with a quick dip was 19.1 inches today.')).toHaveLength(1);
+    });
     it('passes a number given with its meaning, and sentences with no number', () => {
       expect(bareNumberSentences('The first 10 yards took 1.74 seconds, so a quicker start lowers the top speed needed later.')).toEqual([]);
       expect(bareNumberSentences('## The big picture\nCasey is working hard.')).toEqual([]);

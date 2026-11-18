@@ -16,7 +16,7 @@ const MEANINGS: Array<{ codes: string[]; meaning: string }> = [
   },
   {
     codes: ['DASH_30YD', 'DASH_30M'],
-    meaning: 'How well speed keeps building as the athlete nears top speed. Links the start to top speed and shows when top speed arrives.',
+    meaning: 'How well speed keeps building as the athlete nears top speed. Links the start to top speed and hints at where top speed arrives.',
   },
   {
     codes: ['DASH_40YD', 'DASH_40M'],
@@ -24,7 +24,7 @@ const MEANINGS: Array<{ codes: string[]; meaning: string }> = [
   },
   {
     codes: ['FLY10_TIME', 'FLY10M_TIME', 'FLY10_TIME_RI5', 'FLY10_TIME_RI10', 'FLY10_TIME_RI15', 'FLY10_TIME_RI30'],
-    meaning: 'How fast the athlete moves once already running. Compare only times from the same running start; when it comes from one longer run, it is a piece of that run, not a separate sprint. Short running starts are mostly still speeding up; long ones are close to top speed. Top speed matters most in longer sprints.',
+    meaning: 'How fast the athlete moves once already running; the running start is the distance run before timing starts. Short running starts are still speeding up, long ones are near top speed. Compare only times with the same running start. Matters most in longer sprints.',
   },
   {
     codes: ['AGILITY_5105', 'AGILITY_5105_L', 'AGILITY_5105_R'],
@@ -39,15 +39,19 @@ const MEANINGS: Array<{ codes: string[]; meaning: string }> = [
     meaning: 'Moving forward, sideways and backward with quick changes. Shows footwork and control in every direction; good for following footwork over time.',
   },
   {
-    codes: ['JUMP_CMJ_HOH', 'VERTICAL_JUMP'],
-    meaning: 'How high the athlete jumps after a quick dip with no arm swing; leg power on its own. Supports jumping and the push of the first sprint steps; read it with the paused-squat jump.',
+    codes: ['JUMP_CMJ_HOH'],
+    meaning: 'How high the athlete jumps after a quick dip with no arm swing; leg power on its own. Supports jumping and the push of the first sprint steps; read it with the paused-squat jump. Compare only jumps done the same way.',
+  },
+  {
+    codes: ['VERTICAL_JUMP'],
+    meaning: 'How high the athlete jumps straight up: leg power. Supports jumping and the push of the first sprint steps. Compare only jumps done the same way, since arm swing changes the result.',
   },
   {
     codes: ['JUMP_SJ_HEIGHT'],
     meaning: 'A jump from a paused squat with no dip: how much push the legs make from a still start. Compared with the jump with a dip, it shows whether the athlete gains from the dip yet.',
   },
   {
-    codes: ['POWER_EUR', 'EUR'],
+    codes: ['POWER_EUR'],
     meaning: 'Compares the jump with a dip to the jump from a pause. When close, the athlete gains little from the dip so far; a skill that can grow. One test day is not enough to judge it.',
   },
   {
@@ -60,7 +64,7 @@ const MEANINGS: Array<{ codes: string[]; meaning: string }> = [
   },
   {
     codes: ['RSI_105_GCT'],
-    meaning: 'How long the feet stay down on each hop; shorter at the same height means a quicker bounce. A short touch is part of fast running; never chase it by hopping lower.',
+    meaning: 'How long the feet stay down on each hop; shorter at the same height means a quicker bounce. A short touch is part of fast running.',
   },
   {
     codes: ['HOP_SL_TRIPLE_L', 'HOP_SL_TRIPLE_R'],
@@ -68,7 +72,7 @@ const MEANINGS: Array<{ codes: string[]; meaning: string }> = [
   },
   {
     codes: ['HOP_SL_TRIPLE_LSI'],
-    meaning: 'How close the two legs\' hop distances are. Close means similar distances, not equal strength or being ready for anything. Read with the distances; two legs can match and both have room to go farther.',
+    meaning: 'How close the two legs\' hop distances are. Close means similar distances, not equal strength. Read with the distances; both legs can match and still have room to go farther.',
   },
   {
     codes: ['JUMP_BROAD'],

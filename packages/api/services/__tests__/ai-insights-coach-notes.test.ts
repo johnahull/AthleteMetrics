@@ -10,7 +10,7 @@ import {
   type ReportData,
 } from '../ai-insights-service';
 import { headingIssues } from '../ai-insights-eval';
-import { MEANING_RULES } from '../ai-insights-meaning';
+import { meaningRules } from '../ai-insights-meaning';
 
 function individual(overrides: Partial<ReportData> = {}): ReportData {
   return {
@@ -43,7 +43,7 @@ describe('buildPrompt without notes or goals', () => {
     expect(prompt).not.toContain('## Goals');
     expect(prompt).not.toContain('Path to Goal');
     expect(prompt).not.toContain("Coach's limiter call");
-    expect(afterFence(prompt).replace(ANALYSIS_INSTRUCTION, '').replace(MEANING_RULES, '')).not.toMatch(/goal/i);
+    expect(afterFence(prompt).replace(ANALYSIS_INSTRUCTION, '').replace(meaningRules(false), '')).not.toMatch(/goal/i);
   });
 
   it('keeps the word range', () => {

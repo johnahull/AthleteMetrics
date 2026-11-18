@@ -1,4 +1,15 @@
 import type { ReportData } from '../../ai-insights-service';
+import { belowAverageResults } from '../../ai-insights-meaning';
+import type { ComparisonLike } from '../../benchmark-standing';
+
+const tierOf = (tierName: string, tiers: string[]): ComparisonLike => ({ comparisonOperator: 'range', tierName, allTiers: tiers.map((t) => ({ tierName: t })) });
+const HS_TIERS = ['Good', 'Average'];
+
+/** The below-average list the report builder would make for these metrics and benchmark comparisons. */
+const withBelowAverage = (data: ReportData, comparisons: Record<string, ComparisonLike[]> = {}): ReportData => ({
+  ...data,
+  belowAverage: belowAverageResults(data.metrics, comparisons),
+});
 
 /**
  * Golden set for the AI insights eval harness: ReportData shaped like buildReportDataForAI output
@@ -277,7 +288,7 @@ export const GOLDEN_CASES: GoldenCase[] = [
   {
     // Chris-like: a long-sprint goal, three results at the bottom of the range, splits from one 40
     name: 'eval-long-sprint-goal',
-    data: {
+    data: withBelowAverage({
       reportType: 'individual',
       reportName: 'Casey Moore Winter Testing',
       organizationName: 'Northside Athletics',
@@ -310,23 +321,21 @@ export const GOLDEN_CASES: GoldenCase[] = [
         { metric: '5-10-5 Agility', performance: 'Average tier of High School Boys Tiers; needs 0.20 s less to reach Good' },
         { metric: 'Countermovement Jump', performance: 'Average tier of High School Boys Tiers; needs 1.50 in more to reach Good' },
       ],
-      belowAverage: [
-        { code: 'DASH_40YD', label: '40-Yard Dash', wording: 'at the bottom of the range for the comparison group' },
-        { code: 'AGILITY_5105', label: '5-10-5 Agility', wording: 'at the bottom of the range for the comparison group' },
-        { code: 'JUMP_CMJ_HOH', label: 'Countermovement Jump', wording: 'at the bottom of the range for the comparison group' },
-      ],
       keyFacts: [
         'Strongest metric: 10-Yard Dash, 30th percentile vs the comparison group',
         'Biggest gap: 5-10-5 Agility, Average tier of High School Boys Tiers; needs 0.20 s less to reach Good',
       ],
       dataConfidence: 'Best value per metric only; no history over time in this report; benchmarks for 3 of 11 metrics',
       coachNotes: { goals: 'Casey wants to run a 7.0-7.1 s 60' },
-    },
+    }, {
+      DASH_40YD: [tierOf('Average', HS_TIERS)], AGILITY_5105: [tierOf('Average', HS_TIERS)], JUMP_CMJ_HOH: [tierOf('Average', HS_TIERS)],
+      DASH_10YD: [tierOf('Good', HS_TIERS)], DASH_20YD: [tierOf('Good', HS_TIERS)], DASH_30YD: [tierOf('Good', HS_TIERS)], FLY10_TIME_RI30: [tierOf('Good', HS_TIERS)],
+    }),
   },
   {
     // Short-sprint goal: the start leads
     name: 'eval-short-sprint-goal',
-    data: {
+    data: withBelowAverage({
       reportType: 'individual',
       reportName: 'Devon Reyes Combine Prep',
       organizationName: 'Northside Athletics',
@@ -343,22 +352,18 @@ export const GOLDEN_CASES: GoldenCase[] = [
       improvements: [],
       concerns: [{ metric: '10-Yard Dash', concern: 'Developing tier of Speed Tiers; needs 0.10 s less to reach Advanced' }],
       benchmarkComparisons: [{ metric: '10-Yard Dash', performance: 'Developing tier of Speed Tiers; needs 0.10 s less to reach Advanced' }],
-      belowAverage: [
-        { code: 'DASH_10YD', label: '10-Yard Dash', wording: 'below average for the comparison group' },
-        { code: 'DASH_40YD', label: '40-Yard Dash', wording: 'below average for the comparison group' },
-      ],
       keyFacts: [
         'Strongest metric: Broad Jump, 60th percentile vs the comparison group',
         'Biggest gap: 10-Yard Dash, Developing tier of Speed Tiers; needs 0.10 s less to reach Advanced',
       ],
       dataConfidence: 'Best value per metric only; no history over time in this report; benchmarks for 1 of 3 metrics',
       coachNotes: { goals: 'Devon wants a 40-yard dash under 5.5' },
-    },
+    }, { DASH_10YD: [tierOf('Developing', ['Elite', 'Advanced', 'Developing'])] }),
   },
   {
     // No goal, a girl, a limited battery and test-day flags the family may hear about
     name: 'eval-no-goal-test-conditions',
-    data: {
+    data: withBelowAverage({
       reportType: 'individual',
       reportName: 'Alex Kim Spring Testing',
       organizationName: 'Northside Athletics',
@@ -375,19 +380,18 @@ export const GOLDEN_CASES: GoldenCase[] = [
       improvements: [],
       concerns: [],
       benchmarkComparisons: [],
-      belowAverage: [{ code: 'JUMP_CMJ_HOH', label: 'Countermovement Jump', wording: 'below average for the comparison group' }],
       keyFacts: [
         'Strongest metric: 5-10-5 Agility, 71st percentile vs the comparison group',
         'Biggest gap: Countermovement Jump, 44th percentile vs the comparison group',
       ],
       dataConfidence: 'Best value per metric only; no history over time in this report; no benchmarks',
       coachNotes: { testDayFlags: ['surface'] },
-    },
+    }),
   },
   {
     // Height and weight are in the data but must never reach a family prompt
     name: 'eval-body-measures',
-    data: {
+    data: withBelowAverage({
       reportType: 'individual',
       reportName: 'Taylor Brooks Fall Testing',
       organizationName: 'Northside Athletics',
@@ -406,12 +410,11 @@ export const GOLDEN_CASES: GoldenCase[] = [
       improvements: [],
       concerns: [],
       benchmarkComparisons: [],
-      belowAverage: [{ code: 'JUMP_CMJ_HOH', label: 'Countermovement Jump', wording: 'below average for the comparison group' }],
       keyFacts: [
         'Strongest metric: 20-Yard Dash, 55th percentile vs the comparison group',
         'Biggest gap: Countermovement Jump, 38th percentile vs the comparison group',
       ],
       dataConfidence: 'Best value per metric only; no history over time in this report; no benchmarks',
-    },
+    }),
   },
 ];

@@ -11,6 +11,7 @@ import { buildMeasurementRows, buildBenchmarkRows, buildStatsRows, buildAchievem
 import { ReportService } from "../services/report-service";
 import { BIGGEST_CHANGE_PREFIX } from "../services/ai-insights-service";
 import { belowAverageResults } from "../services/ai-insights-meaning";
+import { isBelowAverageComparison } from "../services/benchmark-standing";
 import { createReportsFromInput, ReportCreateError } from "../services/report-create";
 import { planChartPageBreaks, chartGroupHeadings, addHeadingHeights } from "./pdf-chart-layout";
 import { requireAuth, requireAIEnabled, type AuthenticatedRequest } from "../middleware";
@@ -5378,8 +5379,6 @@ export async function buildReportDataForAI(
     // Build benchmark comparisons array
     const benchmarkComparisons: Array<{ metric: string; performance: string }> = [];
     const keyFacts: string[] = [];
-    // Individual reports: metric code -> name of the bottom tier the athlete sits in (a tier group of 2+ tiers)
-    const bottomTierNames: Record<string, string> = {};
     let metricsWithBenchmarks = 0;
     let historyText: string;
     let sampleText: string;
@@ -5481,12 +5480,9 @@ export async function buildReportDataForAI(
         for (const c of comparisons) {
           if (c.comparisonOperator === 'range') {
             tierRows.push({ m, c });
-            const position = tierIndex(c);
-            if (position && position.n > 1 && position.i === position.n - 1 && c.tierName) bottomTierNames[m.code] = c.tierName;
             benchmarkComparisons.push({ metric: m.label, performance: tierText(c) + tierGapText(c, m) });
             // Only the lower half of its own group is a concern; a higher non-best tier is a next step
-            const idx = tierIndex(c);
-            if (idx && idx.n > 1 && idx.i >= idx.n / 2) {
+            if (isBelowAverageComparison(c)) {
               concerns.push({ metric: m.label, concern: tierText(c) + tierGapText(c, m) });
             }
           } else {
@@ -5589,7 +5585,7 @@ export async function buildReportDataForAI(
       dataConfidence,
       audience,
     };
-    if (report.reportType === 'individual') aiReportData.belowAverage = belowAverageResults(metrics, bottomTierNames);
+    if (report.reportType === 'individual') aiReportData.belowAverage = belowAverageResults(metrics, typedReportData.athlete?.benchmarkComparisons ?? {});
 
     // Org style example (raw org row, not the admin-gated memberships). Names are re-checked now because a
     // member who joined after the save may match; if so it is dropped for this generation, not the request.

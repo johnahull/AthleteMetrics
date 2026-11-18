@@ -174,7 +174,7 @@ describe('buildPrompt output spec', () => {
 
 describe('grounded recommendations (system prompt)', () => {
   it('requires every claim to cite a metric and its value', () => {
-    expect(SYSTEM_PROMPT).toContain('names the metric and rests on its value');
+    expect(SYSTEM_PROMPT).toContain('names the metric and cites its value');
   });
 
   it('ties next steps to a named metric gap and allows general advice only with a gap', () => {

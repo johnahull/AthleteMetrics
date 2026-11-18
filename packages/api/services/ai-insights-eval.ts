@@ -117,12 +117,25 @@ const sentencesOf = (output: string) =>
     .map((s) => s.replace(/^\s*(?:[-*]|\d+[.)])\s+/, '').replace(/\*\*/g, '').trim())
     .filter((s) => s !== '' && !s.startsWith('#'));
 
+const UNIT_WORDS = new Set(['seconds', 'second', 'secs', 'inches', 'inch', 'mph', 'yards', 'yard', 'percent']);
+
 /**
  * Sentences that state a number without saying what it means (family text: "a number always comes with its meaning").
- * Heuristic: a sentence with a digit and fewer than 7 words of 3+ letters is mostly the number, e.g. "40-yard dash: 5.26 s".
+ * Metric labels and distance tokens ("40-yard", "5-10-5") are removed first, so naming a test is not a number. Heuristic:
+ * a sentence is bare when it has a value left and fewer than 5 words of 3+ letters (not counting units), or 2+ decimal
+ * values (a restated pair of results).
  */
-export function bareNumberSentences(output: string): string[] {
-  return sentencesOf(output).filter((s) => /\d/.test(s) && (s.match(/\p{L}{3,}/gu) ?? []).length < 7);
+export function bareNumberSentences(output: string, labels: string[] = []): string[] {
+  const escape = (l: string) => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const labelRe = labels.length > 0 ? new RegExp(labels.filter(Boolean).sort((a, b) => b.length - a.length).map(escape).join('|'), 'gi') : undefined;
+  return sentencesOf(output).filter((sentence) => {
+    let t = labelRe ? sentence.replace(labelRe, ' ') : sentence;
+    t = t.replace(/\b\d+(?:-\d+)+\b/g, ' ').replace(/\b\d+\s*-?\s*(?:yards?|yds?|meters?|m)\b/gi, ' ');
+    t = t.replace(/(\d+\.\d+)\s*(?:to|-|\u2013)\s*(\d+\.\d+)/g, '$1'); // a range is one value
+    if (!/\d/.test(t)) return false;
+    const words = (t.match(/\p{L}{3,}/gu) ?? []).filter((w) => !UNIT_WORDS.has(w.toLowerCase()));
+    return words.length < 5 || (t.match(/\d+\.\d+/g) ?? []).length >= 2;
+  });
 }
 
 const EXERCISE_NOUNS = /\b(?<!paused[- ])squats?\b(?![- ]jump)|\b(?:lunges?|deadlifts?|sled (?:pushes|sprints|work)|box jumps?|depth jumps?|hip thrusts?|nordics?|wall drills?)\b/i;
@@ -219,7 +232,7 @@ export function checkInsights(input: {
 
   // Family texts (parent, athlete): meaning, not data
   if (audience !== "coach") {
-    const bare = bareNumberSentences(output);
+    const bare = bareNumberSentences(output, data.metrics.map((m) => m.label));
     if (bare.length > 0) failures.push(`bare numbers (no meaning with them): ${bare.join(" | ")}`);
     const banned = neverSayHits(output);
     if (banned.length > 0) failures.push(`never-say wording: ${banned.join(", ")}`);

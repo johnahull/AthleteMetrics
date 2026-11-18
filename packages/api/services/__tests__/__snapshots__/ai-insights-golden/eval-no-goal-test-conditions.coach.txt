@@ -21,13 +21,6 @@ Coach-supplied context, not measured data.
 - Strongest metric: 5-10-5 Agility, 71st percentile vs the comparison group
 - Biggest gap: Countermovement Jump, 44th percentile vs the comparison group
 
-## Below Average Results
-- Countermovement Jump: below average for the comparison group
-
-## What the metrics mean (vetted)
-Sport meaning of these results, vetted by the performance staff. Use it for sport-meaning claims; add nothing of your own.
-- Countermovement Jump: How high the athlete jumps after a quick dip with no arm swing; leg power on its own. Supports jumping and the push of the first sprint steps; read it with the paused-squat jump.
-
 ## Performance Metrics
 - Countermovement Jump: 15.20 in (higher is better)
   - Average of the comparison group: 15.90 in (athlete is -0.70, worse than the average)

@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   BUILT_IN_METRIC_MEANINGS,
   NO_MEANING,
@@ -26,11 +28,22 @@ describe('built-in metric meanings coverage', () => {
     expect(BUILT_IN_METRIC_CODE_LIST.filter((c, i) => BUILT_IN_METRIC_CODE_LIST.indexOf(c) !== i)).toEqual([]);
   });
 
-  it('meaning text has no digits and stays within 60 words', () => {
+  it('meaning text has no digits and stays within 45 words', () => {
     for (const [code, entry] of Object.entries(BUILT_IN_METRIC_MEANINGS)) {
       expect(entry, code).not.toMatch(/\d/);
-      expect(entry.split(/\s+/).length, code).toBeLessThanOrEqual(60);
+      expect(entry.split(/\s+/).length, code).toBeLessThanOrEqual(45);
     }
+  });
+
+  it('every mapped, NO_MEANING and PENDING code is a built-in code (no template keys such as EUR)', () => {
+    const unknown = [...metricMeaningCodes(), ...NO_MEANING, ...PENDING_MEANING].filter((c) => !BUILT_IN_METRIC_CODE_LIST.includes(c));
+    expect(unknown).toEqual([]);
+  });
+
+  it('every code of the checked-in list is named in a migration (the list is not invented)', () => {
+    const dir = join(__dirname, '../../../migrations');
+    const sql = readdirSync(dir).filter((f) => f.endsWith('.sql') && !f.endsWith('_down.sql')).map((f) => readFileSync(join(dir, f), 'utf8')).join('\n');
+    expect(BUILT_IN_METRIC_CODE_LIST.filter((c) => !sql.includes(`'${c}'`))).toEqual([]);
   });
 
   it('the Chris battery is mapped', () => {

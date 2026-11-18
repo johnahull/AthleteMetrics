@@ -21,15 +21,6 @@ Coach-supplied, in the coach's words.
 - Strongest metric: Broad Jump, 60th percentile vs the comparison group
 - Biggest gap: 10-Yard Dash, Developing tier of Speed Tiers; needs 0.10 s less to reach Advanced
 
-## Below Average Results
-- 10-Yard Dash: below average for the comparison group
-- 40-Yard Dash: below average for the comparison group
-
-## What the metrics mean (vetted)
-Sport meaning of these results, vetted by the performance staff. Use it for sport-meaning claims; add nothing of your own.
-- 10-Yard Dash: How fast the athlete gets going from a standstill. A slow time means the first steps have room to grow. Every sprint starts here; a quicker start lowers the top speed a long sprint goal needs.
-- 40-Yard Dash: Overall straight-line speed. A slow time can come from the start, from top speed, or both; the splits tell which. Read the splits before choosing what to train.
-
 ## Performance Metrics
 - 10-Yard Dash: 1.92 s (lower is better)
   - Average of the comparison group: 1.78 s (athlete is +0.14, worse than the average)

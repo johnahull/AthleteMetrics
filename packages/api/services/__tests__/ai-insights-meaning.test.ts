@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildPrompt, buildSystemPrompt, stripAnalysisBlock, insightWordRange, INSIGHT_HEADINGS, type ReportData } from '../ai-insights-service';
-import { sprintGoalLength, selectMeaningMetrics, belowAverageResults, MAX_MEANING_METRICS } from '../ai-insights-meaning';
+import { sprintGoalLength, selectMeaningMetrics, belowAverageResults, dropNoMeaningMetrics, MAX_MEANING_METRICS } from '../ai-insights-meaning';
 
 const metric = (code: string, label: string, value: number, unit = 's', lowerIsBetter = true) => ({ code, label, values: [value], unit, lowerIsBetter });
 
@@ -135,7 +135,8 @@ describe('test-day line', () => {
 describe('system prompt', () => {
   it('lets sport-meaning claims come from the vetted sections, audience-neutrally', () => {
     const s = buildSystemPrompt();
-    expect(s).not.toContain('Every observation names the metric and cites its value');
+    expect(s).toContain('names the metric and cites its value');
+    expect(s).toContain('family report (parent, athlete) states a value only together with what it means');
     expect(s).not.toContain('Focus only on what the numbers show');
     expect(s).toContain('sport-meaning claims only from the vetted sections');
   });
@@ -150,16 +151,109 @@ describe('legacy parent heading', () => {
   });
 });
 
+
 describe('belowAverageResults', () => {
   const m = (code: string, percentile?: number) => ({ ...metric(code, code, 1), percentile });
+  const t = (tierName: string, tiers: string[]) => ({ comparisonOperator: 'range', tierName, allTiers: tiers.map((x) => ({ tierName: x })) });
   it('ranks the bottom tier as below average even when its label says Average', () => {
-    const r = belowAverageResults([m('DASH_40YD')], { DASH_40YD: 'Average' });
+    const r = belowAverageResults([m('DASH_40YD')], { DASH_40YD: [t('Average', ['Good', 'Average'])] });
     expect(r).toEqual([{ code: 'DASH_40YD', label: 'DASH_40YD', wording: 'at the bottom of the range for the comparison group' }]);
   });
-  it('a bottom tier with another label is plainly below average', () => {
-    expect(belowAverageResults([m('DASH_40YD')], { DASH_40YD: 'Developing' })[0].wording).toBe('below average for the comparison group');
+  it('a bottom-half tier with another label is plainly below average', () => {
+    expect(belowAverageResults([m('A')], { A: [t('Developing', ['Elite', 'Advanced', 'Developing'])] })[0].wording).toBe('below average for the comparison group');
+    expect(belowAverageResults([m('A')], { A: [t('C', ['A', 'B', 'C', 'D'])] })[0].wording).toBe('below average for the comparison group');
   });
-  it('without a tier, a percentile under 50 is below average and 50 or more is not', () => {
+  it('a failed single-threshold benchmark is below average', () => {
+    expect(belowAverageResults([m('A')], { A: [{ comparisonOperator: 'gte', meetsOrExceeds: false }] }).map((r) => r.code)).toEqual(['A']);
+  });
+  it('a Good-tier result at the 40th percentile is not below average (the benchmark decides)', () => {
+    expect(belowAverageResults([m('A', 40)], { A: [t('Good', ['Good', 'Average'])] })).toEqual([]);
+  });
+  it('the percentile counts only without any benchmark comparison', () => {
     expect(belowAverageResults([m('A', 30), m('B', 50), m('C', 80), m('D')], {}).map((r) => r.code)).toEqual(['A']);
+  });
+});
+
+describe('sprintGoalLength: not a sprint goal', () => {
+  it.each(['squat 100 kg', 'a 40-inch vertical', 'throw 60 mph', 'the 40-man roster', 'top 100 recruit', 'bench 60 lb', 'make varsity'])('%s', (g) => {
+    expect(sprintGoalLength(g)).toBeUndefined();
+  });
+  it('needs a sprint unit or a time before the distance; the longest distance wins', () => {
+    expect(sprintGoalLength('run the 60 yd')).toBe('long');
+    expect(sprintGoalLength('a 7.0 60')).toBe('long');
+    expect(sprintGoalLength('sub 4.6 in the 40')).toBe('short');
+    expect(sprintGoalLength('a 40-yard dash under 5.0 and a 60 yard sprint')).toBe('long');
+    expect(sprintGoalLength('100m dash')).toBe('long');
+  });
+});
+
+describe('selectMeaningMetrics: fly variants share one text', () => {
+  it('counts the fly codes once so they do not crowd out other results', () => {
+    const codes = ['FLY10_TIME_RI5', 'FLY10_TIME_RI10', 'FLY10_TIME_RI15', 'FLY10_TIME_RI30', 'DASH_40YD', 'AGILITY_5105', 'JUMP_BROAD'];
+    const d = data({ metrics: codes.map((c) => metric(c, c, 1)), belowAverage: codes.map((c) => ({ code: c, label: c, wording: 'x' })) });
+    const picked = selectMeaningMetrics(d, 'long');
+    expect(picked.filter((c) => c.startsWith('FLY10'))).toHaveLength(1);
+    expect(picked).toEqual(expect.arrayContaining(['DASH_40YD', 'AGILITY_5105', 'JUMP_BROAD']));
+  });
+  it('the short running starts are not goal results', () => {
+    const d = data({ metrics: [metric('FLY10_TIME_RI5', 'f5', 1), metric('FLY10_TIME_RI30', 'f30', 1)], belowAverage: [] });
+    expect(selectMeaningMetrics(d, 'long')).toEqual(['FLY10_TIME_RI30']);
+  });
+});
+
+describe('dropNoMeaningMetrics keeps look-alike labels', () => {
+  it('removes only the exact labels of NO_MEANING metrics', () => {
+    const d = data({
+      audience: 'parent',
+      metrics: [
+        metric('PEAK_POWER_W', 'Peak Power (Sayers)', 3200, 'W', false),
+        metric('PEAK_POWER_REL', 'Relative Peak Power (Sayers)', 48, 'W/kg', false),
+        metric('HEIGHT_IN', 'Height', 64, 'in', false),
+        metric('JUMP_CMJ_HOH', 'Countermovement Jump Height', 16, 'in', false),
+      ],
+      keyFacts: ['Strongest metric: Peak Power (Sayers), 90th percentile', 'Biggest gap: Relative Peak Power (Sayers), 20th percentile', 'Biggest gap: Height, 5th percentile', 'Strongest metric: Countermovement Jump Height, 60th percentile'],
+      concerns: [{ metric: 'Relative Peak Power (Sayers)', concern: 'c' }, { metric: 'Peak Power (Sayers)', concern: 'c' }],
+    });
+    const out = dropNoMeaningMetrics(d);
+    expect(out.metrics.map((x) => x.code)).toEqual(['PEAK_POWER_REL', 'JUMP_CMJ_HOH']);
+    expect(out.keyFacts).toEqual(['Biggest gap: Relative Peak Power (Sayers), 20th percentile', 'Strongest metric: Countermovement Jump Height, 60th percentile']);
+    expect(out.concerns).toEqual([{ metric: 'Relative Peak Power (Sayers)', concern: 'c' }]);
+  });
+});
+
+describe('coach prompt is unchanged by the family blocks', () => {
+  it('has no vetted or below-average block', () => {
+    const p = buildPrompt(data({ audience: 'coach' }));
+    expect(p).not.toContain('## What the metrics mean (vetted)');
+    expect(p).not.toContain('## Below Average Results');
+  });
+});
+
+describe('family rule text', () => {
+  const p = buildPrompt(data());
+  it('overrides the checklist examples, bans goal speeds, teammate comparisons and promises', () => {
+    expect(p).toContain('override the checklist examples');
+    expect(p).toContain('Never work out a goal speed or predicted time');
+    expect(p).toContain('named teammates');
+    expect(p).toContain('scholarships');
+  });
+  it('explains the bottom of the range once and says "from one 40-yard run"', () => {
+    expect(p).toContain('"bottom of the range" means the lowest group for that age and sex, not pass or fail');
+    expect(p).toContain('"from one 40-yard run"');
+  });
+  it('the long-goal focus line says distance, not race', () => {
+    expect(buildPrompt(data({ coachNotes: { goals: 'a 7.0 60' } }))).toContain('more than half the distance is run near top speed');
+  });
+  it('the LSI swap does not say left-right balance, and there is no "How results connect" clause without that section', () => {
+    expect(p).toContain("LSI -> how close the two legs' results are");
+    expect(p).not.toContain('left-right balance');
+    expect(p).not.toContain('a result that explains a limiter');
+  });
+});
+
+describe('legacy and new parent heading together', () => {
+  it('drops the second big picture with its body', () => {
+    const t = '## What the numbers mean\nold\n## The big picture\nnew\n## What to Work On\ny';
+    expect(stripAnalysisBlock(t, 'parent')).toBe('## The big picture\nold\n## What to Work On\ny');
   });
 });
