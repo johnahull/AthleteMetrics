@@ -10,6 +10,18 @@ set -e
 #   collections. Every zod 3.x is affected and the fix is zod >= 4.6.6, a breaking upgrade
 #   (also needs drizzle-zod and @hookform/resolvers bumps). Not exploitable without very large
 #   payloads; request body size limits apply. Revisit: remove when the zod 4 migration lands.
+# - GHSA-fc5q-39xc-vjpf (picomatch, high): ReDoS through single-branch repeated extglobs. GitHub lists the
+#   advisory as WITHDRAWN and no patched picomatch exists (npm audit still reports <= 4.0.7, the latest
+#   release). picomatch is only reached through build and test tooling (vite, vitest, tinyglobby,
+#   vite-plugin-pwa/workbox), which glob developer-written patterns, never request data. Revisit: remove
+#   when npm stops reporting it or a patched picomatch ships.
+# - GHSA-82fw-gwwq-j7x9 (vitest, high) and GHSA-qxg6-89mg-rqv8 (vitest, medium): path traversal / arbitrary
+#   file read and code injection through unauthenticated mock registration on the Vitest dev server
+#   WebSocket (@vitest/mocker). Both need the Vitest dev server (UI or browser mode) to be reachable by an attacker.
+#   This project only runs `vitest run` in CI and `vitest --ui` on localhost during development; vitest
+#   is a devDependency and never ships. The fix is vitest >= 4.1.12, a major upgrade that breaks the
+#   existing suite (vi.fn constructor mocks: 90 test files fail against 71 on develop), so it needs its
+#   own migration. Revisit: remove when vitest 4 lands (then also drop the tinypool override).
 # Every other advisory that was excluded earlier (glob CLI, claude-code
 # workspace trust, esbuild Deno, the undici/jsdom chain) no longer matches anything in the
 # audit output, so the exclusions were pruned (issues #523, #562). To exclude an advisory again, add
@@ -17,6 +29,9 @@ set -e
 # (reachability, dev-only, no upstream fix) and when to revisit it.
 #
 # package.json overrides added for audit fixes (remove when no longer needed):
+# - glob ^14.0.2 and minimatch ^11.0.1: patched releases for GHSA-3g3m-2fjr-6pw4 (glob) and GHSA-g3hv-75wg-m249
+#   (minimatch); every dependent (rimraf, archiver-utils, workbox-build, typescript-eslint) pins an older
+#   range. Drop them once those packages widen their ranges.
 # - tinypool: drop once vitest >= 4 (vitest 4 no longer depends on tinypool; 3.x pins ^1).
 # - postcss-selector-parser: still needed after the Tailwind 4 migration (issue #523): @tailwindcss/typography
 #   pins 6.0.10 exactly (GHSA-rj75-hqrm-r3gf, moderate); the override forces the patched 7.x. Drop it once typography widens its range.
@@ -34,7 +49,7 @@ npm audit --audit-level=moderate --json > audit-results.json || true
 
 # List of excluded vulnerability advisory IDs (false positives)
 # These are vulnerabilities that don't affect our usage patterns
-EXCLUDED_ADVISORIES="GHSA-mrhx-c7xc-m3w5"
+EXCLUDED_ADVISORIES="GHSA-mrhx-c7xc-m3w5 GHSA-fc5q-39xc-vjpf GHSA-82fw-gwwq-j7x9 GHSA-qxg6-89mg-rqv8"
 
 # Validate that audit results were generated
 if [ ! -f "audit-results.json" ] || [ ! -s "audit-results.json" ]; then
