@@ -49,7 +49,7 @@ describe('buildReportDataForAI: relationships and split facts', () => {
       sprintRunMeasurements: run('a', [1.74, 3.01, 4.14, 5.26]),
     }));
     expect(data.splitFacts?.[1]).toBe('Fastest 10 yards of that run: 1.12 s (yards 30-40), about 18.3 mph');
-    expect(data.connections?.join(' ')).toContain('Speed stopped rising');
+    expect(data.connections?.join(' ')).toContain('Speed stopped rising after about 20 yards');
   });
 
   it('never builds splits from best-per-code values or from gates of different runs', async () => {
@@ -66,6 +66,32 @@ describe('buildReportDataForAI: relationships and split facts', () => {
   it('is silent when the sprint runs are not in the report', async () => {
     const data = await buildReportDataForAI(report, 'u1', service({ athlete: athlete({ DASH_40YD: 5.26 }), metricLabels: {} }));
     expect(data.splitFacts).toBeUndefined();
+    expect(data.connections).toBeUndefined();
+  });
+
+  it('asks for units only when both jump codes are present, and survives a failed lookup', async () => {
+    let calls = 0;
+    const svc = (data: any, fail = false) => ({
+      generateIndividualReport: async () => data,
+      getMetricLabelsAndUnits: async (codes: string[]) => {
+        if (codes.includes('JUMP_CMJ_HOH') && codes.length === 2) {
+          calls++;
+          if (fail) throw new Error('db down');
+        }
+        return { labels: {}, units: { JUMP_CMJ_HOH: 'in', JUMP_SJ_HEIGHT: 'in' } };
+      },
+    }) as any;
+    await buildReportDataForAI(report, 'u1', svc({ athlete: athlete({ DASH_40YD: 5.26 }), metricLabels: {} }));
+    expect(calls).toBe(0);
+    const both = { athlete: athlete({ POWER_EUR: 1.01, JUMP_CMJ_HOH: 19.1, JUMP_SJ_HEIGHT: 18.9 }), metricLabels: {} };
+    expect((await buildReportDataForAI(report, 'u1', svc(both))).connections).toHaveLength(1);
+    const failed = await buildReportDataForAI(report, 'u1', svc(both, true));
+    expect(failed.connections).toBeUndefined();
+    expect(calls).toBe(2);
+  });
+
+  it('a dip relationship from best values of different days stays silent', async () => {
+    const data = await buildReportDataForAI(report, 'u1', service({ athlete: athlete({ POWER_EUR: 1.01, JUMP_CMJ_HOH: 19.1, JUMP_SJ_HEIGHT: 17 }), metricLabels: {} }));
     expect(data.connections).toBeUndefined();
   });
 });

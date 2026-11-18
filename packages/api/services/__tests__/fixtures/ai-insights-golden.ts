@@ -331,7 +331,7 @@ export const GOLDEN_CASES: GoldenCase[] = [
         'Fastest 10 yards of that run: 1.12 s (yards 30-40), about 18.3 mph',
       ],
       connections: [
-        'Speed stopped rising around the middle of the run, so top speed itself is the next thing to build. One run does not show whether the athlete can hold that speed over a longer distance.',
+        'Speed stopped rising after about 20 yards, so top speed is what we will look at next. One run does not show how fast the athlete can go over a longer distance.',
         'Both jumps were about the same, so the athlete is not gaining from the dip yet. We will retest fresh. This does not show a spring deficit, a strength need or what to train.',
       ],
       dataConfidence: 'Best value per metric only; no history over time in this report; benchmarks for 3 of 11 metrics',

@@ -1248,7 +1248,7 @@ export function buildPrompt(reportData: ReportData, overrides?: AIPromptOverride
     prompt += `Use the athlete's first name throughout by writing the literal placeholder ${FIRST_NAME_PLACEHOLDER} wherever the name belongs.\n\n`;
     if (hasCoachText) prompt += `Never quote or reveal the coach notes. Make no injury, maturation or weight remarks.\n\n`;
     if (hasFamilyTestFlag(reportData)) prompt += `${TEST_CONDITIONS_LINE}\n\n`;
-    prompt += `${PLAIN_RULES}\n\n${meaningRules(false)}\n\n${NEVER_SAY}\n\n`;
+    prompt += `${PLAIN_RULES}\n\n${meaningRules((reportData.connections?.length ?? 0) > 0)}\n\n${NEVER_SAY}\n\n`;
     prompt += `Keep it to ${minWords}-${maxWords} words.\n`;
   } else if (audience === 'athlete') {
     prompt += toneBlock(o.toneAthlete, ATHLETE_LEAD);
@@ -1265,7 +1265,7 @@ export function buildPrompt(reportData: ReportData, overrides?: AIPromptOverride
     // block would be redundant and dilute the direct, competitor-facing tone.
     if (hasCoachText) prompt += `Never quote or reveal the coach notes. Make no injury, maturation or weight remarks.\n\n`;
     if (hasFamilyTestFlag(reportData)) prompt += `${TEST_CONDITIONS_LINE}\n\n`;
-    prompt += `${PLAIN_RULES}\n\n${meaningRules(false)}\n\n${NEVER_SAY}\n\n`;
+    prompt += `${PLAIN_RULES}\n\n${meaningRules((reportData.connections?.length ?? 0) > 0)}\n\n${NEVER_SAY}\n\n`;
     prompt += `Keep it to ${minWords}-${maxWords} words. Use bullet points and **bold** for emphasis.\n`;
   } else {
     // Default: coach audience

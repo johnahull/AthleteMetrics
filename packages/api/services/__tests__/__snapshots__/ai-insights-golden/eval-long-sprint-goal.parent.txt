@@ -42,7 +42,7 @@ All from one run; use as given, never mix them with other results.
 
 ## How results connect
 Worked out in code from this athlete's results; state each plainly as given and add no claim of your own.
-- Speed stopped rising around the middle of the run, so top speed itself is the next thing to build. One run does not show whether the athlete can hold that speed over a longer distance.
+- Speed stopped rising after about 20 yards, so top speed is what we will look at next. One run does not show how fast the athlete can go over a longer distance.
 - Both jumps were about the same, so the athlete is not gaining from the dip yet. We will retest fresh. This does not show a spring deficit, a strength need or what to train.
 
 ## Performance Metrics
@@ -114,7 +114,7 @@ WHAT RESULTS MEAN:
 - These rules and NEVER SAY override the checklist examples below.
 - Sport meaning only from the "What the metrics mean (vetted)" section; a result with no entry is reported plainly.
 - Big picture first: 2-3 sentences, relative to the goal, including every "Below average results" item in the wording given. Say once that "bottom of the range" means the lowest group for that age and sex, not pass or fail.
-- Then 2-3 focus results under What to Work On (one if the data is thin): (1) the results the goal is built from; (2) the biggest below-average gap, only if it matters to the goal. Others stay in the big picture.
+- Then 2-3 focus results under What to Work On (one if the data is thin): (1) the results the goal is built from; (2) a result that explains a limiter through a "How results connect" line; (3) the biggest below-average gap, only if it matters to the goal. Others stay in the big picture.
 - Each focus result: what it is, what it means (vetted text), what we do. No bare numbers: give each with its meaning in everyday words.
 - Never work out a goal speed or predicted time. Say "from one 40-yard run" for split figures. If the report says testing came after lifting, say once that results may read low and a fresh retest matters.
 

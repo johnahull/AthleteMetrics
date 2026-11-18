@@ -5684,7 +5684,15 @@ export async function buildReportDataForAI(
         const s = standingOf(athlete.benchmarkComparisons?.[code], athlete.percentiles?.[code]);
         if (s) standing[code] = s;
       }
-      const { units } = await reportService.getMetricLabelsAndUnits(RELATIONSHIP_CODES.filter((c) => c in values), report.organizationId);
+      // Units matter only for the jump relationship; a failed lookup leaves it silent, it never fails the AI build
+      let units: Record<string, string> | undefined;
+      if ('JUMP_CMJ_HOH' in values && 'JUMP_SJ_HEIGHT' in values) {
+        try {
+          units = (await reportService.getMetricLabelsAndUnits(['JUMP_CMJ_HOH', 'JUMP_SJ_HEIGHT'], report.organizationId)).units;
+        } catch {
+          units = undefined;
+        }
+      }
       const splits = sameRunSplits(typedReportData.sprintRunMeasurements);
       const connections = firedRelationships({ values, standing, units, splits }).map((r) => r.text);
       if (connections.length > 0) aiReportData.connections = connections;

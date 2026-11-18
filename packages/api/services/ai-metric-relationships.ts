@@ -7,8 +7,14 @@
  * Split math uses only rows of ONE run (calculationMetadata.runId). The report's best-per-code values come from
  * different runs and must never feed it. Codes are listed here on purpose (not imported from EVAL_METRIC_CODES, which
  * lacks several of them).
+ *
+ * Split facts and the speed-shape relationships need the report's sprint-runs chart (that chart's rows are the only
+ * run rows the report carries); without it they stay silent, like every relationship with a missing input.
+ * "Slow" and "good" are the one below-average rule of benchmark-standing.ts (below average = slow, otherwise good).
  */
 import type { SprintRunMeasurement } from "@shared/report-sprint-runs-types";
+import { selectSameRunSources } from "./same-run-sources";
+import { belowAverageStanding, type ComparisonLike } from "./benchmark-standing";
 
 /** Gate times in seconds of one run at 10, 20, 30 and 40 yards. */
 export type SameRunSplits = Record<10 | 20 | 30 | 40, number>;
@@ -39,16 +45,19 @@ export const STILL_GAINING_DELTA_S = 0.05;
 export const EUR_LOW = 1.05;
 /** [J] Jump with a dip minus paused-squat jump at most this many inches: about one test-retest error. */
 export const DIP_GAIN_MAX_IN = 0.5;
-/** [J] 5-10-5 minus the 20-yard dash at least this many seconds: the turns, not the straight speed, cost time. */
-export const TURN_COST_MIN_S = 1.8;
-/** [J] Without a tier, a percentile under this is slow and one at or over GOOD_PERCENTILE is good; in between is unknown. */
-export const SLOW_PERCENTILE = 25;
-export const GOOD_PERCENTILE = 50;
+/**
+ * [J] 5-10-5 minus the 20-yard dash at least this many seconds: the turns, not the straight speed, cost time. Raised from
+ * 1.80: a 5-10-5 has two 180-degree turns, so a sound athlete already loses about 1.5-1.8 s to them against a straight 20.
+ */
+export const TURN_COST_MIN_S = 2.0;
+/** EUR is stored to two decimals: CMJ / SJ within this of the EUR means the three values come from one derived row. */
+export const EUR_ROUNDING = 0.01;
 
 const START_YD = "DASH_10YD";
 const TWENTY_YD = "DASH_20YD";
-const LATE_SPEED_CODES = ["FLY10_TIME", "FLY10_TIME_RI5", "FLY10_TIME_RI10", "FLY10_TIME_RI15", "FLY10_TIME_RI30", "TOP_SPEED", "TOP_SPEED_MPH"];
-const EUR_CODES = ["POWER_EUR", "EUR"];
+// Fly times after a run-in of 15 yards or more (FLY10_TIME is the 20-yard run-in) and top speed: close to top speed
+const LATE_SPEED_CODES = ["FLY10_TIME", "FLY10_TIME_RI15", "FLY10_TIME_RI30", "TOP_SPEED", "TOP_SPEED_MPH"];
+const EUR_CODE = "POWER_EUR";
 const CMJ = "JUMP_CMJ_HOH";
 const SJ = "JUMP_SJ_HEIGHT";
 const AGILITY_5105 = "AGILITY_5105";
@@ -57,45 +66,50 @@ const round3 = (n: number) => Math.round(n * 1000) / 1000;
 const EPS = 1e-9;
 
 /** The last two 10-yard intervals of a run: yards 20-30 and 30-40. */
-const lateIntervals = (s: SameRunSplits) => ({ a: round3(s[30] - s[20]), b: round3(s[40] - s[30]) });
+const lateIntervals = (s: SameRunSplits) => {
+  const ok = s[10] > 0 && s[20] > s[10] && s[30] > s[20] && s[40] > s[30];
+  return ok ? { a: round3(s[30] - s[20]), b: round3(s[40] - s[30]) } : undefined;
+};
 
 export const RELATIONSHIPS: Relationship[] = [
   {
     id: "start-costs-time",
     metrics: [START_YD, ...LATE_SPEED_CODES],
-    when: ({ standing }) => standing[START_YD] === "slow" && LATE_SPEED_CODES.some((c) => standing[c] === "good"),
-    text: "Top speed is fine for the group; the first steps are where time is lost. This does not by itself show a technique fault.",
+    when: ({ standing }) =>
+      standing[START_YD] === "slow" && LATE_SPEED_CODES.some((c) => standing[c] === "good") && !LATE_SPEED_CODES.some((c) => standing[c] === "slow"),
+    text: "Top speed is holding up well for the group; the first steps are where more time can be found.",
   },
   {
     id: "speed-levels-off",
     metrics: ["DASH_20YD", "DASH_30YD", "DASH_40YD"],
     when: ({ splits }) => {
-      if (!splits) return false;
-      const { a, b } = lateIntervals(splits);
-      return Math.abs(a - b) <= LEVEL_OFF_TOLERANCE_S + EPS;
+      const late = splits && lateIntervals(splits);
+      return !!late && Math.abs(late.a - late.b) <= LEVEL_OFF_TOLERANCE_S + EPS;
     },
-    text: "Speed stopped rising around the middle of the run, so top speed itself is the next thing to build. One run does not show whether the athlete can hold that speed over a longer distance.",
+    text: "Speed stopped rising after about 20 yards, so top speed is what we will look at next. One run does not show how fast the athlete can go over a longer distance.",
   },
   {
     id: "speed-still-gaining",
     metrics: ["DASH_20YD", "DASH_30YD", "DASH_40YD"],
     when: ({ splits }) => {
-      if (!splits) return false;
-      const { a, b } = lateIntervals(splits);
-      return a - b >= STILL_GAINING_DELTA_S - EPS;
+      const late = splits && lateIntervals(splits);
+      return !!late && late.a - late.b >= STILL_GAINING_DELTA_S - EPS;
     },
     text: "The athlete was still speeding up at the end of the run, so a longer run may show more. One run does not show how long that speed can be held.",
   },
   {
     id: "no-gain-from-dip",
-    metrics: [...EUR_CODES, CMJ, SJ],
+    metrics: [EUR_CODE, CMJ, SJ],
     when: ({ values, units }) => {
-      const eur = EUR_CODES.map((c) => values[c]).find((v) => v !== undefined);
+      const eur = values[EUR_CODE];
       const cmj = values[CMJ];
       const sj = values[SJ];
-      if (eur === undefined || cmj === undefined || sj === undefined) return false;
+      if (!(eur > 0) || !(cmj > 0) || !(sj > 0)) return false;
       if (units?.[CMJ]?.toLowerCase() !== "in" || units?.[SJ]?.toLowerCase() !== "in") return false;
-      return eur < EUR_LOW && round3(cmj - sj) <= DIP_GAIN_MAX_IN + EPS;
+      // The best of each code can come from different days; EUR is CMJ / SJ of one day, so a mismatch means mixed sources
+      if (Math.abs(cmj / sj - eur) > EUR_ROUNDING + EPS) return false;
+      // A squat jump well above the jump with a dip is a different story: silent
+      return eur < EUR_LOW && Math.abs(round3(cmj - sj)) <= DIP_GAIN_MAX_IN + EPS;
     },
     text: "Both jumps were about the same, so the athlete is not gaining from the dip yet. We will retest fresh. This does not show a spring deficit, a strength need or what to train.",
   },
@@ -105,7 +119,7 @@ export const RELATIONSHIPS: Relationship[] = [
     when: ({ values, standing }) => {
       const turns = values[AGILITY_5105];
       const straight = values[TWENTY_YD];
-      if (turns === undefined || straight === undefined || standing[TWENTY_YD] !== "good") return false;
+      if (!(turns > 0) || !(straight > 0) || standing[TWENTY_YD] !== "good") return false;
       return round3(turns - straight) >= TURN_COST_MIN_S - EPS;
     },
     text: "Straight speed is fine; the turns cost time. This does not show a mobility problem.",
@@ -122,24 +136,13 @@ export function firedRelationships(input: RelationshipInput): Relationship[] {
  * fastest 40 when several are complete. Rows without a run id are never used: they are pools of best values.
  */
 export function sameRunSplits(rows: readonly SprintRunMeasurement[] | undefined): SameRunSplits | undefined {
-  const runs = new Map<string, Partial<Record<10 | 20 | 30 | 40, number>>>();
-  for (const r of rows ?? []) {
-    const runId = r.calculationMetadata?.runId;
-    const m = /^DASH_(10|20|30|40)YD$/.exec(r.metric);
-    const time = parseFloat(r.value);
-    if (!runId || !m || !r.isVerified || !Number.isFinite(time) || time <= 0) continue;
-    const d = Number(m[1]) as 10 | 20 | 30 | 40;
-    const run = runs.get(runId) ?? {};
-    run[d] = run[d] === undefined ? time : Math.min(run[d]!, time);
-    runs.set(runId, run);
-  }
-  let best: SameRunSplits | undefined;
-  for (const run of runs.values()) {
-    if (run[10] === undefined || run[20] === undefined || run[30] === undefined || run[40] === undefined) continue;
-    const complete = run as SameRunSplits;
-    if (!best || complete[40] < best[40]) best = complete;
-  }
-  return best;
+  const codes = [10, 20, 30, 40].map((d) => `DASH_${d}YD`);
+  // Only verified yard rows that carry a run id: rows without one are pools of best values (selectSameRunSources would pool them)
+  const candidates = (rows ?? []).filter((r) => r.isVerified && !!r.calculationMetadata?.runId && codes.includes(r.metric) && parseFloat(r.value) > 0);
+  const picked = selectSameRunSources(candidates, codes, () => false); // a gate split beats the drill's Final Time within a run
+  if (!picked) return undefined;
+  const t = (d: number) => parseFloat(picked.get(`DASH_${d}YD`)!.value);
+  return { 10: t(10), 20: t(20), 30: t(30), 40: t(40) };
 }
 
 const YD_PER_S_TO_MPH = 2.04545; // 3 ft per yard, 3600 s over 5280 ft
@@ -162,23 +165,8 @@ export function splitFacts(s: SameRunSplits): string[] {
 /** Every code a relationship reads (best values, standings and units are gathered for these only). */
 export const RELATIONSHIP_CODES = [...new Set(RELATIONSHIPS.flatMap((r) => r.metrics))];
 
-/**
- * Standing of one metric from the benchmark comparison already computed: a tier row says 'slow' in the bottom tier of its
- * group (a group of 2+ tiers) and 'good' above it; without one, the percentile; otherwise unknown (undefined = silent).
- */
-export function standingOf(
-  comparisons: ReadonlyArray<{ comparisonOperator?: string; tierName?: string; allTiers?: ReadonlyArray<{ tierName: string }> }> | undefined,
-  percentile?: number,
-): "slow" | "good" | undefined {
-  let good = false;
-  for (const c of comparisons ?? []) {
-    const n = c.allTiers?.length ?? 0;
-    const i = c.allTiers?.findIndex((t) => t.tierName === c.tierName) ?? -1;
-    if (c.comparisonOperator !== "range" || n < 2 || i < 0) continue;
-    if (i === n - 1) return "slow";
-    good = true;
-  }
-  if (good) return "good";
-  if (percentile === undefined) return undefined;
-  return percentile < SLOW_PERCENTILE ? "slow" : percentile >= GOOD_PERCENTILE ? "good" : undefined;
+/** Standing of one metric from the one below-average rule: slow = below average, good = not; unknown = undefined (silent). */
+export function standingOf(comparisons: ReadonlyArray<ComparisonLike> | undefined, percentile?: number): "slow" | "good" | undefined {
+  const below = belowAverageStanding(comparisons, percentile);
+  return below === undefined ? undefined : below ? "slow" : "good";
 }

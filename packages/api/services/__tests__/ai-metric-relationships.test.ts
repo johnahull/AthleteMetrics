@@ -43,6 +43,10 @@ describe('sameRunSplits', () => {
     expect(sameRunSplits(rows)).toBeUndefined();
     expect(sameRunSplits([10, 20, 30, 40].map((d) => row(`DASH_${d}M`, d / 8, 'a')))).toBeUndefined();
   });
+  it('a gate split beats the drill Final Time row of the same run, even when the drill is faster', () => {
+    const rows = [row('DASH_10YD', 1.74, 'a'), row('DASH_20YD', 3.01, 'a'), row('DASH_30YD', 4.14, 'a'), row('DASH_40YD', 5.26, 'a'), row('DASH_40YD', 5.2, 'a', 'drill')];
+    expect(sameRunSplits(rows)?.[40]).toBe(5.26);
+  });
   it('a drill row (Final Time) counts as the gate at its own distance', () => {
     const rows = [row('DASH_10YD', 1.74, 'a'), row('DASH_20YD', 3.01, 'a'), row('DASH_30YD', 4.14, 'a'), row('DASH_40YD', 5.26, 'a', 'drill')];
     expect(sameRunSplits(rows)?.[40]).toBe(5.26);
@@ -67,6 +71,12 @@ describe('relationship 1: the start costs time', () => {
   it('fires: slow start, late speed average or better', () => expect(ids(base)).toContain('start-costs-time'));
   it('does not fire when top speed is slow too', () => expect(ids({ ...base, standing: { DASH_10YD: 'slow', FLY10_TIME_RI30: 'slow' } })).not.toContain('start-costs-time'));
   it('does not fire when the start is fine', () => expect(ids({ ...base, standing: { DASH_10YD: 'good', FLY10_TIME_RI30: 'good' } })).not.toContain('start-costs-time'));
+  it('the short run-ins (5 and 10 yards) are not late speed', () => {
+    expect(ids({ values: {}, standing: { DASH_10YD: 'slow', FLY10_TIME_RI5: 'good', FLY10_TIME_RI10: 'good' } })).not.toContain('start-costs-time');
+  });
+  it('does not fire when any late-speed result is slow, even if another is good', () => {
+    expect(ids({ values: {}, standing: { DASH_10YD: 'slow', FLY10_TIME_RI30: 'good', TOP_SPEED: 'slow' } })).not.toContain('start-costs-time');
+  });
   it('is silent when either standing is unknown', () => {
     expect(ids({ values: {}, standing: { DASH_10YD: 'slow' } })).not.toContain('start-costs-time');
     expect(ids({ values: {}, standing: { FLY10_TIME_RI30: 'good' } })).not.toContain('start-costs-time');
@@ -92,22 +102,38 @@ describe('relationship 2: the shape of late speed (same-run splits)', () => {
 });
 
 describe('relationship 3: not gaining from the dip', () => {
-  const base: RelationshipInput = { values: { POWER_EUR: 1.01, JUMP_CMJ_HOH: 19.1, JUMP_SJ_HEIGHT: 18.9 }, standing: {}, units: { JUMP_CMJ_HOH: 'in', JUMP_SJ_HEIGHT: 'in' } };
-  it('fires with a low EUR and the two jumps within the difference', () => expect(ids(base)).toContain('no-gain-from-dip'));
-  it('does not fire when EUR is 1.05 or more', () => expect(ids({ ...base, values: { ...base.values, POWER_EUR: 1.05 } })).not.toContain('no-gain-from-dip'));
-  it('fires at exactly the difference (0.5 in)', () => expect(ids({ ...base, values: { ...base.values, JUMP_CMJ_HOH: 19.4 } })).toContain('no-gain-from-dip'));
-  it('does not fire at a larger difference', () => expect(ids({ ...base, values: { ...base.values, JUMP_CMJ_HOH: 19.5 } })).not.toContain('no-gain-from-dip'));
-  it('is silent when an input is missing or the unit is not inches', () => {
+  const inch = { JUMP_CMJ_HOH: 'in', JUMP_SJ_HEIGHT: 'in' };
+  // EUR is CMJ / SJ of one day, stored to two decimals
+  const dip = (cmj: number, sj: number, eur = Math.round((cmj / sj) * 100) / 100): RelationshipInput => ({
+    values: { POWER_EUR: eur, JUMP_CMJ_HOH: cmj, JUMP_SJ_HEIGHT: sj }, standing: {}, units: inch,
+  });
+  it('fires with a low EUR and the two jumps within the difference', () => expect(ids(dip(19.1, 18.9))).toContain('no-gain-from-dip'));
+  it('does not fire when EUR is 1.05 or more', () => expect(ids(dip(10.5, 10))).not.toContain('no-gain-from-dip'));
+  it('fires at exactly the difference (0.5 in) and not beyond it', () => {
+    expect(ids(dip(19.4, 18.9))).toContain('no-gain-from-dip');
+    expect(ids(dip(19.5, 18.9))).not.toContain('no-gain-from-dip');
+  });
+  it('a squat jump slightly above the jump with a dip fires; well above it is silent', () => {
+    expect(ids(dip(19.1, 19.3))).toContain('no-gain-from-dip');
+    expect(ids(dip(19.1, 19.9))).not.toContain('no-gain-from-dip');
+  });
+  it('is silent when the best values come from different days (EUR is not CMJ over SJ)', () => {
+    expect(ids(dip(19.1, 17.0, 1.01))).not.toContain('no-gain-from-dip');
+  });
+  it('is silent when an input is missing, not above zero, or the unit is not inches', () => {
+    const base = dip(19.1, 18.9);
     expect(ids({ ...base, values: { POWER_EUR: 1.01, JUMP_CMJ_HOH: 19.1 } })).not.toContain('no-gain-from-dip');
+    expect(ids({ ...base, values: { POWER_EUR: 0, JUMP_CMJ_HOH: 19.1, JUMP_SJ_HEIGHT: 18.9 } })).not.toContain('no-gain-from-dip');
     expect(ids({ ...base, units: { JUMP_CMJ_HOH: 'cm', JUMP_SJ_HEIGHT: 'cm' } })).not.toContain('no-gain-from-dip');
     expect(ids({ ...base, units: undefined })).not.toContain('no-gain-from-dip');
   });
 });
 
 describe('relationship 4: the turns cost time', () => {
-  const base: RelationshipInput = { values: { AGILITY_5105: 4.9, DASH_20YD: 3.0 }, standing: { DASH_20YD: 'good' } };
-  it('fires when 5-10-5 minus the 20-yard dash is 1.80 s or more and straight speed is fine', () => expect(ids(base)).toContain('turns-cost-time'));
-  it('does not fire below the difference', () => expect(ids({ ...base, values: { AGILITY_5105: 4.79, DASH_20YD: 3.0 } })).not.toContain('turns-cost-time'));
+  const base: RelationshipInput = { values: { AGILITY_5105: 5.0, DASH_20YD: 3.0 }, standing: { DASH_20YD: 'good' } };
+  it('fires when 5-10-5 minus the 20-yard dash is 2.00 s or more and straight speed is fine', () => expect(ids(base)).toContain('turns-cost-time'));
+  it('does not fire below the difference', () => expect(ids({ ...base, values: { AGILITY_5105: 4.99, DASH_20YD: 3.0 } })).not.toContain('turns-cost-time'));
+  it('is silent on a zero value', () => expect(ids({ ...base, values: { AGILITY_5105: 5.0, DASH_20YD: 0 } })).not.toContain('turns-cost-time'));
   it('does not fire when straight speed is also slow (Chris-like)', () => expect(ids({ ...base, standing: { DASH_20YD: 'slow' } })).not.toContain('turns-cost-time'));
   it('is silent with an unknown standing or a missing value', () => {
     expect(ids({ ...base, standing: {} })).not.toContain('turns-cost-time');
@@ -118,7 +144,7 @@ describe('relationship 4: the turns cost time', () => {
 describe('the relationship set', () => {
   it('texts carry no numbers and never use the words the family rules forbid', () => {
     for (const r of RELATIONSHIPS) {
-      expect(r.text, r.id).not.toMatch(/\d/);
+      expect(r.text, r.id).not.toMatch(/\d+\.\d+|\d{3,}/); // no measured values (the speed-shape text names "about 20 yards")
       expect(r.text, r.id).not.toMatch(/\b(?:proves?|balanced|safe|ready|cleared|diagnos\w*)\b/i);
     }
   });
@@ -127,7 +153,7 @@ describe('the relationship set', () => {
   });
   it('the Chris-like data fires relationship 2 and 3 only', () => {
     const chris: RelationshipInput = {
-      values: { DASH_20YD: 3.01, AGILITY_5105: 4.96, POWER_EUR: 1.01, JUMP_CMJ_HOH: 19.1, JUMP_SJ_HEIGHT: 18.9 },
+      values: { DASH_20YD: 3.01, AGILITY_5105: 4.96, POWER_EUR: 1.01, JUMP_CMJ_HOH: 19.1, JUMP_SJ_HEIGHT: 18.9 }, // 4.96 - 3.01 is under the turn-cost limit
       standing: { DASH_10YD: 'slow', DASH_20YD: 'slow', FLY10_TIME_RI30: 'slow' },
       units: { JUMP_CMJ_HOH: 'in', JUMP_SJ_HEIGHT: 'in' },
       splits: { 10: 1.74, 20: 3.01, 30: 4.14, 40: 5.26 },
@@ -151,6 +177,11 @@ describe('prompt blocks', () => {
     expect(fenced).toContain('## How results connect');
     expect(fenced).toContain('- Straight speed is fine; the turns cost time.');
   });
+  it('the meaning rules name "How results connect" only when that section is present', async () => {
+    const { buildPrompt } = await import('../ai-insights-service');
+    expect(buildPrompt({ ...base, connections: ['x'] })).toContain('(2) a result that explains a limiter through a "How results connect" line; (3) ');
+    expect(buildPrompt(base)).not.toContain('How results connect" line');
+  });
   it('renders neither block when nothing fired', async () => {
     const { buildPrompt } = await import('../ai-insights-service');
     const p = buildPrompt({ ...base, connections: [], splitFacts: [] });
@@ -167,7 +198,7 @@ describe('prompt blocks', () => {
 describe('standingOf', () => {
   const tiers = [{ tierName: 'Good' }, { tierName: 'Average' }];
   const tier = (tierName: string) => ({ comparisonOperator: 'range', tierName, allTiers: tiers });
-  it('the bottom tier is slow even when it is labelled Average; a higher tier is good', () => {
+  it('the bottom tier is slow even when it is labelled Average; the top tier is good', () => {
     expect(standingOf([tier('Average')])).toBe('slow');
     expect(standingOf([tier('Good')])).toBe('good');
   });
@@ -176,8 +207,12 @@ describe('standingOf', () => {
     expect(standingOf([{ comparisonOperator: 'range', tierName: 'Good', allTiers: [{ tierName: 'Good' }] }], 10)).toBe('slow');
     expect(standingOf(undefined, 60)).toBe('good');
   });
-  it('is unknown between the percentile limits and without data', () => {
-    expect(standingOf(undefined, 40)).toBeUndefined();
+  it('is the one below-average rule: a Good tier at the 40th percentile is good; a failed threshold is slow', () => {
+    expect(standingOf([tier('Good')], 40)).toBe('good');
+    expect(standingOf([{ comparisonOperator: 'gte', meetsOrExceeds: false }], 90)).toBe('slow');
+    expect(standingOf(undefined, 40)).toBe('slow');
+  });
+  it('is unknown without any data', () => {
     expect(standingOf(undefined)).toBeUndefined();
     expect(standingOf([])).toBeUndefined();
   });
