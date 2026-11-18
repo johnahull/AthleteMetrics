@@ -716,7 +716,7 @@ const PLAIN_RULES = [
   `- Give one number per bullet, followed by what it means in everyday words.`,
   `- Use at most 3 bullets under each heading.`,
   `- Mention every benchmark result that is below average, kindly and with its gap to average. Never list a bottom-tier result under What's Going Well.`,
-  `- Leave out hedges and disclaimers, "if X then Y" math, rest times, sets and test-setup detail.`,
+  `- Leave out hedges and disclaimers, "if X then Y" math, rest times, sets and test-setup detail. Keep the test-noise, limited-data and "coach to confirm" lines the rules above require.`,
   `- Swap coach terms for everyday words: ${Object.entries(JARGON_SWAPS).map(([term, plain]) => `${term} -> ${plain}`).join('; ')}.`,
 ].join('\n');
 

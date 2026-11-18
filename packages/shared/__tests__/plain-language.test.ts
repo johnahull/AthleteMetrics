@@ -27,7 +27,21 @@ describe('findJargon', () => {
   });
 });
 
+describe('findJargon false positives', () => {
+  it('leaves everyday words alone', () => {
+    expect(findJargon('Split the difference; training volume; the protocol; Reactive Strength Index')).toEqual([]);
+  });
+
+  it('finds terms after punctuation and at the start of a line', () => {
+    expect(findJargon('RSI\n(EUR), "SSC"')).toEqual(['RSI', 'EUR', 'SSC']);
+  });
+});
+
 describe('JARGON_SWAPS', () => {
+  it('no swap text contains jargon itself', () => {
+    for (const [term, plain] of Object.entries(JARGON_SWAPS)) expect(findJargon(plain), term).toEqual([]);
+  });
+
   it('gives every term a plain phrase', () => {
     for (const [term, plain] of Object.entries(JARGON_SWAPS)) {
       expect(plain.length, term).toBeGreaterThan(0);

@@ -6,12 +6,10 @@ export const JARGON_SWAPS: Record<string, string> = {
   'flying 10': '10 yards timed after a running start',
   'fly 10': '10 yards timed after a running start',
   'run-in': 'running start',
-  split: 'time at each 10-yard mark',
   'maximum velocity': 'top speed',
   'max velocity': 'top speed',
   acceleration: 'getting up to speed (for the first 10 yards: the start, the first steps)',
   RSI: 'quick-bounce score (hop height compared with time on the ground)',
-  'reactive strength': 'quick-bounce score (hop height compared with time on the ground)',
   EUR: 'how much the dip helps the jump',
   'eccentric utilization': 'how much the dip helps the jump',
   'ground contact': 'time on the ground',
@@ -30,15 +28,13 @@ export const JARGON_SWAPS: Record<string, string> = {
   bilateral: 'two-leg',
   buildups: 'gradual speed-ups',
   deceleration: 'slowing down',
-  protocol: 'test setup',
-  volume: 'amount',
   isometric: 'hold',
 };
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const JARGON_RE = new RegExp(
-  `(?<![\\w-])(${Object.keys(JARGON_SWAPS)
+  `(?:^|[^\\w-])(${Object.keys(JARGON_SWAPS)
     .sort((a, b) => b.length - a.length)
     .map(escapeRegExp)
     .join('|')})(?![\\w-])`,
