@@ -31,12 +31,13 @@ export function meaningRules(hasConnections: boolean): string {
     `- These rules and NEVER SAY override the checklist examples below.`,
     `- Sport meaning only from the "What the metrics mean (vetted)" section; a result with no entry is reported plainly. Say only what the vetted meaning line says. Never join two metrics in your own words unless a "How results connect" line does it.`,
     `- Big picture first: 2-3 sentences, relative to the goal, including every "Below average results" item in the wording given. If you use the phrase "bottom of the range", say once that it means the lowest group for that age and sex, not pass or fail.`,
-    `- "What's Going Well" only holds results at or above average. If none is, write one line: "No result is above average yet; the closest to average is" followed by that result (name it, give no percentile), or leave the section out.`,
+    `- "What's Going Well" only holds results listed under "Going Well Candidates", in the wording given (a "meets the group standard" result is never called above average). If none is listed, write one line: "No result is above average yet; the closest to average is" followed by that result (name it, give no percentile), or leave the section out.`,
     `- Then 2-3 focus results under What to Work On (one if the data is thin): (1) the results the goal is built from; ${hasConnections ? '(2) a result that explains a limiter through a "How results connect" line; (3) ' : '(2) '}the biggest below-average gap, only if it matters to the goal. Others stay in the big picture.`,
     `- Each focus result: what it is, what it means (vetted text), what we do. No bare numbers: give each with its meaning in everyday words.${hasConnections ? ' When a "How results connect" line applies, paraphrase it with its consequence (for example, "the dip is not adding height yet, so we retest fresh").' : ''}`,
     `- Give a percentile only as "faster or higher than about N out of 100 in the comparison group". Never write "lower N%", "top N%" or "bottom N%". Never print tier names: say "about 0.10 seconds faster would put the result in the next group up".`,
     `- Never mention how many metrics have benchmarks, or what the report "gives" or "cannot show". At most one plain sentence: "This shows one test day, not change over time."`,
-    `- At most 20 words per sentence. Write "jump with a quick dip" every time, never "countermovement jump". Never say "flagged".`,
+    `- At most 20 words per sentence. Write "jump with a quick dip" every time, never "countermovement jump". Never say "flagged", "splits", "KPI" or "noise". State the goal once.`,
+    `- Never say the report lacks or does not provide a result, date or test; at most say a 60-yard time would be a useful test. Put the "one test day" sentence in the big picture only. Never recommend a test or exercise that is not already in the data. Give percentiles to athletes the same way ("about N out of 100").`,
     `- Never work out a goal speed or predicted time. Say "from one 40-yard run" for split figures. If the report says testing came after lifting, say once that results may read low and a fresh retest matters.`,
   ].join('\n');
 }
@@ -112,6 +113,7 @@ export function dropNoMeaningMetrics(reportData: ReportData): ReportData {
     history: reportData.history?.filter((h) => !NO_MEANING.includes(h.code)),
     distributions: reportData.distributions?.filter((d) => !NO_MEANING.includes(d.code)),
     belowAverage: reportData.belowAverage?.filter((b) => !NO_MEANING.includes(b.code)),
+    aboveAverage: reportData.aboveAverage?.filter((b) => !NO_MEANING.includes(b.code)),
     keyFacts: reportData.keyFacts?.filter((f) => !factNames(f)),
     improvements: reportData.improvements?.filter((i) => !named(i.metric)),
     concerns: reportData.concerns?.filter((c) => !named(c.metric)),
@@ -133,6 +135,23 @@ export function belowAverageResults(
     if (!belowAverageStanding(comparisons[m.code], m.percentile)) continue;
     const atBottomAverage = (comparisons[m.code] ?? []).some((c) => tierPlace(c)?.bottom && /average/i.test(c.tierName ?? ''));
     out.push({ code: m.code, label: m.label, wording: atBottomAverage ? 'at the bottom of the range for the comparison group' : 'below average for the comparison group' });
+  }
+  return out;
+}
+
+/**
+ * Results that may go under "What's Going Well": the same one standing rule (benchmark-standing.ts), not below average.
+ * A result whose tier is fine but whose percentile is under 50 reads "meets the group standard", never "above average".
+ */
+export function aboveAverageResults(
+  metrics: ReportData['metrics'],
+  comparisons: Record<string, ReadonlyArray<ComparisonLike> | undefined>,
+): NonNullable<ReportData['belowAverage']> {
+  const out: NonNullable<ReportData['belowAverage']> = [];
+  for (const m of metrics) {
+    if (belowAverageStanding(comparisons[m.code], m.percentile) !== false) continue;
+    const middling = m.percentile !== undefined && m.percentile < 50;
+    out.push({ code: m.code, label: m.label, wording: middling ? 'meets the group standard' : 'above average for the comparison group' });
   }
   return out;
 }

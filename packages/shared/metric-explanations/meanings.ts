@@ -8,7 +8,7 @@
 const MEANINGS: Array<{ codes: string[]; meaning: string }> = [
   {
     codes: ['DASH_10YD', 'DASH_10M'],
-    meaning: 'How fast the athlete gets going from a standstill. A slow time means the first steps have room to grow. Every sprint starts here; a quicker start lowers the top speed a long sprint goal needs.',
+    meaning: 'How fast the athlete gets going from a standstill. A slow time means the first steps have room to grow. Every sprint starts here, and a slow start costs time in every sprint, including a long one.',
   },
   {
     codes: ['DASH_20YD', 'DASH_20M'],

@@ -1,5 +1,5 @@
 import type { ReportData } from '../../ai-insights-service';
-import { belowAverageResults } from '../../ai-insights-meaning';
+import { aboveAverageResults, belowAverageResults } from '../../ai-insights-meaning';
 import type { ComparisonLike } from '../../benchmark-standing';
 
 const tierOf = (tierName: string, tiers: string[]): ComparisonLike => ({ comparisonOperator: 'range', tierName, allTiers: tiers.map((t) => ({ tierName: t })) });
@@ -9,6 +9,7 @@ const HS_TIERS = ['Good', 'Average'];
 const withBelowAverage = (data: ReportData, comparisons: Record<string, ComparisonLike[]> = {}): ReportData => ({
   ...data,
   belowAverage: belowAverageResults(data.metrics, comparisons),
+  aboveAverage: aboveAverageResults(data.metrics, comparisons),
 });
 
 /**
