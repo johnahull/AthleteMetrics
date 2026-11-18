@@ -499,6 +499,7 @@ export interface ReportData {
   // relationships between metrics that fired for this athlete; both computed in code
   splitFacts?: string[];
   connections?: string[];
+  aboveAverage?: Array<{ code: string; label: string; wording: string }>;
 
   // Individual reports only: coach-supplied context (goals, restriction, test-day flags...)
   coachNotes?: CoachNotes;
@@ -1097,6 +1098,14 @@ export function buildPrompt(reportData: ReportData, overrides?: AIPromptOverride
       prompt += `## Below Average Results\n`;
       below.forEach((b) => {
         prompt += `- ${sanitizeForPrompt(b.label)}: ${sanitizeForPrompt(b.wording)}\n`;
+      });
+      prompt += `\n`;
+    }
+    const goingWell = reportData.aboveAverage ?? [];
+    if (goingWell.length > 0) {
+      prompt += `## Going Well Candidates\n`;
+      goingWell.forEach((g) => {
+        prompt += `- ${sanitizeForPrompt(g.label)}: ${sanitizeForPrompt(g.wording)}\n`;
       });
       prompt += `\n`;
     }

@@ -261,13 +261,38 @@ describe('family checks (meaning, not data)', () => {
     it('flags a long sentence that restates two results', () => {
       expect(bareNumberSentences('The jump from a paused squat was 18.9 inches and the jump with a quick dip was 19.1 inches today.')).toHaveLength(1);
     });
+    it('judges a whole bullet: a number followed by its meaning in the next sentence is not bare', () => {
+      expect(bareNumberSentences('- The 10-yard dash was 1.74 seconds. It measures how quickly the athlete gets going from a standstill.')).toEqual([]);
+    });
+    it('a line that says what each number measures is not bare', () => {
+      expect(bareNumberSentences('Use the 10-yard fly as your main KPI: its 1.12 seconds measures speed once you are moving. Then track your 1.74-second 10-yard dash for the start.')).toEqual([]);
+    });
+    it('a line that sets a result against a goal is not bare', () => {
+      expect(bareNumberSentences('You are chasing a 40-yard dash under 5.5 seconds; your current 40-yard dash is 5.71 s.')).toEqual([]);
+    });
+    it('a line with a comparison word carries its meaning', () => {
+      expect(bareNumberSentences("- Devon's 40-yard dash is 5.71 seconds, compared with the under-5.5-second goal.")).toEqual([]);
+      expect(bareNumberSentences('- Broad jump: 88 inches and 84 inches.')).toHaveLength(1);
+    });
     it('passes a number given with its meaning, and sentences with no number', () => {
       expect(bareNumberSentences('The first 10 yards took 1.74 seconds, so a quicker start lowers the top speed needed later.')).toEqual([]);
       expect(bareNumberSentences('## The big picture\nCasey is working hard.')).toEqual([]);
     });
   });
 
+  describe('ungroundedNumbers', () => {
+    it('"out of 100" in the percentile wording is not an invented number', () => {
+      const prompt = '<report_data>\n- 10-Yard Dash: 1.74 s\n</report_data>';
+      expect(ungroundedNumbers('The result is faster than about 30 out of 100 in the group.', prompt)).toEqual(['30']);
+    });
+  });
+
   describe('neverSayHits', () => {
+    it('a negated prediction is not a predicted time', () => {
+      expect(neverSayHits('This is one run result, not a prediction.')).toEqual([]);
+      expect(neverSayHits('There is no prediction here.')).toEqual([]);
+      expect(neverSayHits('Casey is projected to run 7.0.')).toContain('predicted time');
+    });
     it.each([
       ['Casey is cleared to sprint.', 'cleared'],
       ['Casey will run a 7.0 in the spring.', 'predicted time'],
