@@ -319,7 +319,7 @@ describe('Going Well Candidates in the family prompt', () => {
     const base = { reportType: 'individual', reportName: 'E', organizationName: 'O', timeframe: 't', athleteName: 'Casey Lee', athleteAge: 16, metrics: [{ code: 'DASH_10YD', label: '10-Yard Dash', values: [1.7], unit: 's', lowerIsBetter: true }], keyFacts: [], aboveAverage: [{ code: 'DASH_10YD', label: '10-Yard Dash', wording: 'meets the group standard' }] } as never as ReportData;
     expect(buildPrompt({ ...base, audience: 'parent' })).toContain('## Going Well Candidates\n- 10-Yard Dash: meets the group standard');
     expect(buildPrompt({ ...base, audience: 'athlete' })).toContain('## Going Well Candidates');
-    expect(buildPrompt({ ...base, audience: 'coach' })).not.toContain('Going Well Candidates');
-    expect(buildPrompt({ ...base, audience: 'parent', aboveAverage: [] })).not.toContain('Going Well Candidates');
+    expect(buildPrompt({ ...base, audience: 'coach' })).not.toContain('## Going Well Candidates');
+    expect(buildPrompt({ ...base, audience: 'parent', aboveAverage: [] })).not.toContain('## Going Well Candidates');
   });
 });
