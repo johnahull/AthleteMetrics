@@ -108,7 +108,7 @@ describe('relationship 3: not gaining from the dip', () => {
     values: { POWER_EUR: eur, JUMP_CMJ_HOH: cmj, JUMP_SJ_HEIGHT: sj }, standing: {}, units: inch,
   });
   it('fires with a low EUR and the two jumps within the difference', () => expect(ids(dip(19.1, 18.9))).toContain('no-gain-from-dip'));
-  it('does not fire when EUR is 1.05 or more', () => expect(ids(dip(10.5, 10))).not.toContain('no-gain-from-dip'));
+  it('fires on the inch band alone: a small jump at EUR 1.05 with a 0.5 in gap is still within test-retest error', () => expect(ids(dip(10.5, 10))).toContain('no-gain-from-dip'));
   it('fires at exactly the difference (0.5 in) and not beyond it', () => {
     expect(ids(dip(19.4, 18.9))).toContain('no-gain-from-dip');
     expect(ids(dip(19.5, 18.9))).not.toContain('no-gain-from-dip');
@@ -211,6 +211,10 @@ describe('standingOf', () => {
     expect(standingOf([tier('Good')], 40)).toBe('good');
     expect(standingOf([{ comparisonOperator: 'gte', meetsOrExceeds: false }], 90)).toBe('slow');
     expect(standingOf(undefined, 40)).toBe('slow');
+    expect(standingOf(undefined, 41)).toBeUndefined();
+    expect(standingOf(undefined, 50)).toBeUndefined();
+    expect(standingOf(undefined, 59)).toBeUndefined();
+    expect(standingOf(undefined, 60)).toBe('good');
   });
   it('is unknown without any data', () => {
     expect(standingOf(undefined)).toBeUndefined();

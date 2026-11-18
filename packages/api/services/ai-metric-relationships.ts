@@ -36,20 +36,34 @@ export interface Relationship {
   text: string;
 }
 
-// Thresholds. [J] = a value for the head of performance (John) to confirm or change.
-/** [J] Two late intervals this close are one speed level: about the timing-gate error. */
+// Thresholds, set by the head of performance (BTA). One value for all ages and sexes: where athletes differ, a
+// silence band keeps the relationship quiet instead of guessing. A false positive says something untrue to a parent.
+/**
+ * Two late intervals this close are one speed level. Electronic gates are about +-0.01 s each, so the difference of the two
+ * late intervals carries about 0.025 s of noise (one SD); 0.02 s is the finest change this timing can show. Do not go lower:
+ * hand-entered times are 0.01 s granular. Error direction: says "stopped rising" when the athlete gained about 0.04 s (mild).
+ */
 export const LEVEL_OFF_TOLERANCE_S = 0.02;
-/** [J] The last interval this much faster than the one before it: still speeding up at the end. */
+/**
+ * The last interval this much faster than the one before it: still speeding up at the end. About two SD of the interval
+ * difference, so a true gain is seen. The band between LEVEL_OFF_TOLERANCE_S and this value is silent on purpose.
+ */
 export const STILL_GAINING_DELTA_S = 0.05;
-/** EUR (jump with a dip over jump from a pause) under this means little gain from the dip. */
-export const EUR_LOW = 1.05;
-/** [J] Jump with a dip minus paused-squat jump at most this many inches: about one test-retest error. */
+/**
+ * Jump with a dip minus paused-squat jump at most this many inches: countermovement-jump test-retest error is 0.5-1 in, so
+ * a smaller gap cannot be told from none. This band alone decides (an EUR cut-off would only add a second tolerance).
+ */
 export const DIP_GAIN_MAX_IN = 0.5;
 /**
- * [J] 5-10-5 minus the 20-yard dash at least this many seconds: the turns, not the straight speed, cost time. Raised from
- * 1.80: a 5-10-5 has two 180-degree turns, so a sound athlete already loses about 1.5-1.8 s to them against a straight 20.
+ * 5-10-5 minus the 20-yard dash at least this many seconds: the turns, not the straight speed, cost time. A sound high-school
+ * athlete of either sex loses about 1.6-1.9 s to the turns, so 2.0 s is clearly more than expected; a false "turns cost time"
+ * is worse than a miss. Hand-timed 5-10-5 error is about +-0.1 s.
  */
 export const TURN_COST_MIN_S = 2.0;
+/** A percentile (metric with no benchmark comparison) at or below this is slow; at or above GOOD_PERCENTILE is good. */
+export const SLOW_PERCENTILE = 40;
+/** Between SLOW_PERCENTILE and this the standing is unknown (silent): 49th versus 51st must not flip a message. */
+export const GOOD_PERCENTILE = 60;
 /** EUR is stored to two decimals: CMJ / SJ within this of the EUR means the three values come from one derived row. */
 export const EUR_ROUNDING = 0.01;
 
@@ -109,7 +123,7 @@ export const RELATIONSHIPS: Relationship[] = [
       // The best of each code can come from different days; EUR is CMJ / SJ of one day, so a mismatch means mixed sources
       if (Math.abs(cmj / sj - eur) > EUR_ROUNDING + EPS) return false;
       // A squat jump well above the jump with a dip is a different story: silent
-      return eur < EUR_LOW && Math.abs(round3(cmj - sj)) <= DIP_GAIN_MAX_IN + EPS;
+      return Math.abs(round3(cmj - sj)) <= DIP_GAIN_MAX_IN + EPS;
     },
     text: "Both jumps were about the same, so the athlete is not gaining from the dip yet. We will retest fresh. This does not show a spring deficit, a strength need or what to train.",
   },
@@ -165,8 +179,16 @@ export function splitFacts(s: SameRunSplits): string[] {
 /** Every code a relationship reads (best values, standings and units are gathered for these only). */
 export const RELATIONSHIP_CODES = [...new Set(RELATIONSHIPS.flatMap((r) => r.metrics))];
 
-/** Standing of one metric from the one below-average rule: slow = below average, good = not; unknown = undefined (silent). */
+/**
+ * Standing of one metric: a benchmark comparison already computed decides (the one below-average rule: slow = below average,
+ * good = not). With no comparison, the percentile counts only outside the 40th-60th band; inside it, or with nothing, the
+ * standing is unknown and the relationship stays silent.
+ */
 export function standingOf(comparisons: ReadonlyArray<ComparisonLike> | undefined, percentile?: number): "slow" | "good" | undefined {
-  const below = belowAverageStanding(comparisons, percentile);
-  return below === undefined ? undefined : below ? "slow" : "good";
+  const below = belowAverageStanding(comparisons);
+  if (below !== undefined) return below ? "slow" : "good";
+  if (percentile === undefined) return undefined;
+  if (percentile <= SLOW_PERCENTILE) return "slow";
+  if (percentile >= GOOD_PERCENTILE) return "good";
+  return undefined;
 }
