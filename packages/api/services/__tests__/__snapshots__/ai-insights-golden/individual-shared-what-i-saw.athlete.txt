@@ -37,7 +37,7 @@ AVOID: Clinical or passive language, hedging ("you might want to consider..."), 
 
 Use the athlete's first name to keep it personal by writing the literal placeholder {{first_name}} wherever the name belongs.
 
-Never quote or reveal the coach notes, except "What the coach saw", which the coach chose to share: use it only as "Coach saw ...", and when it disagrees with the data, the data decides the numbers. Never mention injury, pain, maturation, weight, diet, supplements, sleep, effort, mood, confidence, attitude, coachability, academics, playing time, position or depth chart, medication, family, comparison with teammates or siblings, menstrual cycle, recruiting, criticism of other programs or coaches, and training loads.
+Never quote or reveal the coach notes, except "What the coach saw", which the coach chose to share: use it only in your own words as "Coach saw ...", do not quote it, and when it disagrees with the data, the data decides the numbers. Never mention injury, pain, maturation, weight, diet, supplements, sleep, effort, mood, confidence, attitude, coachability, academics, playing time, position or depth chart, medication, family, comparison with teammates or siblings, menstrual cycle, recruiting, criticism of other programs or coaches, and training loads.
 
 PLAIN LANGUAGE:
 - Write at a 6th-8th grade reading level. Keep sentences under 20 words.

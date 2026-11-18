@@ -73,7 +73,7 @@ async function updateInsights(
 async function updateCoachNotes(
   reportId: string,
   notes: CoachNotes
-): Promise<{ coachNotes: CoachNotes | null }> {
+): Promise<{ coachNotes: CoachNotes | null; shareLocked?: boolean }> {
   const response = await fetch(`/api/reports/${reportId}/coach-notes`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },

@@ -29,6 +29,8 @@ interface CoachingInsightsCardProps {
   canEditNotes?: boolean;
   coachNotes?: unknown;
   metricOptions?: MetricOption[];
+  /** Which family the generated text is for; the private-detail warning only applies to parent and athlete. */
+  audience?: "coach" | "athlete" | "parent";
 }
 
 // Use MAX_INSIGHTS_LENGTH from shared schema for consistency with database constraint
@@ -43,10 +45,21 @@ export function CoachingInsightsCard({
   canEditNotes = false,
   coachNotes,
   metricOptions,
+  audience,
 }: CoachingInsightsCardProps) {
   const flushNotesRef = useRef<FlushNotes | null>(null);
+  // Insights written while sharing was on stay stored until regenerated
+  const [regenNotice, setRegenNotice] = useState(false);
+  const onShareRemoved = useCallback(() => setRegenNotice(true), []);
   const notesForm = canEditNotes ? (
-    <CoachNotesForm key={reportId} reportId={reportId} coachNotes={coachNotes} metricOptions={metricOptions} flushRef={flushNotesRef} />
+    <>
+      {regenNotice && (
+        <p role="status" className="text-sm text-amber-700 text-left">
+          Regenerate the insights to remove coach observations.
+        </p>
+      )}
+      <CoachNotesForm key={reportId} reportId={reportId} coachNotes={coachNotes} metricOptions={metricOptions} flushRef={flushNotesRef} onShareRemoved={onShareRemoved} />
+    </>
   ) : null;
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(initialInsights || "");
@@ -91,6 +104,7 @@ export function CoachingInsightsCard({
     function runGenerate() {
     generateMutation.mutate(undefined, {
       onSuccess: () => {
+        setRegenNotice(false);
         toast({
           title: "Success",
           description: "Coaching insights generated successfully",
@@ -156,7 +170,7 @@ export function CoachingInsightsCard({
   const hardWords = findJargon(editedContent);
   // Only when the coach switched "What I saw" on: those words may have come from the notes
   const sharesSaw = coachNotesSchema.safeParse(coachNotes).data?.shareWhatISaw === true;
-  const sensitiveWords = sharesSaw ? findSensitiveWords(editedContent) : [];
+  const sensitiveWords = sharesSaw && (audience === "parent" || audience === "athlete") ? findSensitiveWords(editedContent) : [];
 
   // Early returns come after every hook so the hook order never changes between renders
   // Manual write/edit never needs AI; only Generate/Regenerate do
@@ -295,6 +309,7 @@ export function CoachingInsightsCard({
             className="font-mono text-sm"
             placeholder="Enter coaching insights..."
             data-testid="insights-editor"
+            aria-describedby={sensitiveWords.length > 0 ? "sensitive-words-note" : undefined}
           />
           {hardWords.length > 0 && (
             <p className="text-sm text-amber-700" data-testid="hard-words">
@@ -302,7 +317,7 @@ export function CoachingInsightsCard({
             </p>
           )}
           {sensitiveWords.length > 0 && (
-            <p className="text-sm text-amber-700" data-testid="sensitive-words">
+            <p id="sensitive-words-note" role="status" className="text-sm text-amber-700" data-testid="sensitive-words">
               Check before sharing, these may come from your notes: {sensitiveWords.join(", ")}
             </p>
           )}

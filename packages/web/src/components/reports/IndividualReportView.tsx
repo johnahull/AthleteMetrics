@@ -208,6 +208,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
           aiEnabled={aiEnabled || false}
           canEditNotes={canExportForLlm}
           coachNotes={report.coachNotes}
+          audience={(report.config as { audience?: "coach" | "athlete" | "parent" } | null)?.audience}
           metricOptions={measurementCodes.map((code) => ({ code, label: metricLabels?.[code] || code }))}
         />
       )}

@@ -20,7 +20,7 @@
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { CoachingInsightsCard } from '../CoachingInsightsCard';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
@@ -253,18 +253,30 @@ describe('CoachingInsightsCard — manual write/edit', () => {
 
   it('warns about private-detail words in the editor only when What I saw is shared', () => {
     const type = (value: string) => fireEvent.change(screen.getByTestId('insights-editor'), { target: { value } });
-    const { unmount } = render(<CoachingInsightsCard {...baseProps} aiEnabled={false} coachNotes={{ whatISaw: 'x', shareWhatISaw: true }} />);
+    const { unmount } = render(<CoachingInsightsCard {...baseProps} aiEnabled={false} coachNotes={{ whatISaw: 'x', shareWhatISaw: true }} audience="parent" />);
     fireEvent.click(screen.getByRole('button', { name: /write insights/i }));
     type('Coach saw him come back from an injury and a sore hamstring.');
     expect(screen.getByTestId('sensitive-words')).toHaveTextContent('injury, sore');
+    expect(screen.getByTestId('sensitive-words')).toHaveAttribute('role', 'status');
+    expect(screen.getByTestId('insights-editor').getAttribute('aria-describedby')).toContain(screen.getByTestId('sensitive-words').id);
     type('Coach saw quick first steps.');
     expect(screen.queryByTestId('sensitive-words')).not.toBeInTheDocument();
     unmount();
 
-    render(<CoachingInsightsCard {...baseProps} aiEnabled={false} coachNotes={{ whatISaw: 'x' }} />);
+    render(<CoachingInsightsCard {...baseProps} aiEnabled={false} coachNotes={{ whatISaw: 'x' }} audience="parent" />);
     fireEvent.click(screen.getByRole('button', { name: /write insights/i }));
     type('Coach saw an injury.');
     expect(screen.queryByTestId('sensitive-words')).not.toBeInTheDocument();
+    cleanup();
+
+    // coach audience (or none): the text is for the coach, no warning even with the switch on
+    for (const audience of ['coach', undefined] as const) {
+      render(<CoachingInsightsCard {...baseProps} aiEnabled={false} coachNotes={{ whatISaw: 'x', shareWhatISaw: true }} audience={audience} />);
+      fireEvent.click(screen.getByRole('button', { name: /write insights/i }));
+      type('Coach saw an injury.');
+      expect(screen.queryByTestId('sensitive-words')).not.toBeInTheDocument();
+      cleanup();
+    }
   });
 
   it('with AI disabled and insights present: Edit shown, Regenerate hidden', () => {

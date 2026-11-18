@@ -61,6 +61,29 @@ describe('CoachNotesForm in CoachingInsightsCard', () => {
     await waitFor(() => expect(saveNotes).toHaveBeenLastCalledWith({ whatISaw: 'quick feet' }));
   });
 
+  it('when the server locks the switch: disables it with the reason and tells the coach to regenerate', async () => {
+    saveNotes.mockImplementationOnce(async () => ({ coachNotes: { whatISaw: 'quick feet' }, shareLocked: true }));
+    render(<CoachingInsightsCard {...props} coachNotes={{ whatISaw: 'quick feet', shareWhatISaw: true }} />);
+    fireEvent.click(screen.getByRole('button', { name: /save notes/i }));
+    await waitFor(() => expect(screen.getByRole('switch', { name: /use in the family report/i })).toBeDisabled());
+    expect(screen.getByRole('switch', { name: /use in the family report/i })).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByText(/not available for this athlete/i)).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Regenerate the insights to remove coach observations');
+  });
+
+  it('shows the regenerate notice after a save turns the switch off, but not when it was never on', async () => {
+    const { unmount } = render(<CoachingInsightsCard {...props} coachNotes={{ whatISaw: 'quick feet', shareWhatISaw: true }} />);
+    fireEvent.click(screen.getByRole('switch', { name: /use in the family report/i }));
+    fireEvent.click(screen.getByRole('button', { name: /save notes/i }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Regenerate the insights to remove coach observations'));
+    unmount();
+
+    render(<CoachingInsightsCard {...props} coachNotes={{ whatISaw: 'quick feet' }} />);
+    fireEvent.click(screen.getByRole('button', { name: /save notes/i }));
+    await waitFor(() => expect(saveNotes).toHaveBeenCalled());
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
   it('prefills the switch from saved notes', () => {
     render(<CoachingInsightsCard {...props} coachNotes={{ whatISaw: 'x', shareWhatISaw: true }} />);
     expect(screen.getByRole('switch', { name: /use in the family report/i })).toHaveAttribute('aria-checked', 'true');

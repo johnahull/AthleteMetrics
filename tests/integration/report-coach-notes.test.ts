@@ -156,13 +156,34 @@ describe('PATCH /api/reports/:id/coach-notes', () => {
     expect(ok.status).toBe(200);
     expect(await stored(adult.id)).toEqual({ whatISaw: 'quick feet', shareWhatISaw: true });
 
+    // under 13: the switch is dropped, the rest is saved, and the response says it was locked
     const year = new Date().getFullYear() - 10;
     const kid = await mkUser('kid', { birthDate: `${year}-06-15` });
     const r = await mkReport(orgB, 'individual', kid.id, null);
-    expect((await patch(u.coach, r.id, { whatISaw: 'quick feet', shareWhatISaw: true })).status).toBe(400);
+    const locked = await patch(u.coach, r.id, { whatISaw: 'quick feet', shareWhatISaw: true });
+    expect(locked.status).toBe(200);
+    expect(locked.body.shareLocked).toBe(true);
+    expect(locked.body.coachNotes).toEqual({ whatISaw: 'quick feet' });
+    expect(await stored(r.id)).toEqual({ whatISaw: 'quick feet' });
+    expect(ok.body.shareLocked).toBeUndefined();
+  });
+
+  it('shareWhatISaw: dropped for an unknown date of birth, and when there is no What I saw text', async () => {
+    const unknown = await mkUser('nodob', { birthDate: '1800-01-01' });
+    const r = await mkReport(orgB, 'individual', unknown.id, null);
+    const res = await patch(u.coach, r.id, { whatISaw: 'quick feet', shareWhatISaw: true });
+    expect(res.body.shareLocked).toBe(true);
+    expect(await stored(r.id)).toEqual({ whatISaw: 'quick feet' });
+
+    const adult = await mkReport(orgB, 'individual', u.athlete.id, null);
+    expect((await patch(u.coach, adult.id, { goals: 'make varsity', shareWhatISaw: true })).status).toBe(200);
+    expect(await stored(adult.id)).toEqual({ goals: 'make varsity' });
+  });
+
+  it('a non-writer cannot set shareWhatISaw', async () => {
+    const r = await mkReport(orgB, 'individual', u.athlete.id, null);
+    expect((await patch(u.athlete, r.id, { whatISaw: 'x', shareWhatISaw: true })).status).toBe(403);
     expect(await stored(r.id)).toBeNull();
-    // the switch off (absent) still saves for the same athlete
-    expect((await patch(u.coach, r.id, { whatISaw: 'quick feet' })).status).toBe(200);
   });
 
   it('403 for an athlete', async () => {

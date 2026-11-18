@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 
 // The org and team lookups are the only direct db reads; every chained query resolves to one row.
-const dob = vi.hoisted(() => ({ value: undefined as string | undefined }));
+const dob = vi.hoisted(() => ({ value: undefined as string | undefined, throws: false }));
 vi.mock('../../db', () => {
-  const row = { name: 'Lions', sport: 'Soccer', aiPromptContext: null, get birthDate() { return dob.value; } };
+  const row = { name: 'Lions', sport: 'Soccer', aiPromptContext: null, get birthDate() { if (dob.throws) throw new Error('db down'); return dob.value; } };
   const chain: any = new Proxy({}, {
     get: (_t, prop) => (prop === 'then' ? (resolve: any) => resolve([row]) : () => chain),
   });
@@ -176,6 +176,25 @@ describe('buildReportDataForAI — coach notes', () => {
     it('drops the switch (and keeps the rest) for an under-13 athlete', async () => {
       dob.value = `${new Date().getFullYear() - 10}-06-15`;
       expect((await build()).coachNotes).toEqual({ whatISaw: 'short strides' });
+    });
+    it('fails closed when the date of birth lookup throws', async () => {
+      dob.throws = true;
+      try {
+        expect((await build()).coachNotes).toEqual({ whatISaw: 'short strides' });
+      } finally {
+        dob.throws = false;
+      }
+    });
+    it('drops the switch when there is no What I saw text to share', async () => {
+      dob.value = '1990-01-01';
+      const r = { ...individualReport, coachNotes: { goals: 'make varsity', shareWhatISaw: true } };
+      const data = await buildReportDataForAI(r, 'u1', service(individualData()), { includeCoachNotes: true });
+      expect(data.coachNotes).toEqual({ goals: 'make varsity' });
+    });
+    it('sends no notes at all when the caller may not use them, even with the switch on', async () => {
+      dob.value = '1990-01-01';
+      const data = await buildReportDataForAI({ ...individualReport, coachNotes: shared }, 'u1', service(individualData()), { includeCoachNotes: false });
+      expect(data).not.toHaveProperty('coachNotes');
     });
     it('drops the switch when the date of birth is unknown', async () => {
       dob.value = undefined;

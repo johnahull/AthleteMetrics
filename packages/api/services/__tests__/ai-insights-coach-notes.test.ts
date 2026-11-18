@@ -5,6 +5,7 @@ import {
   insightHeadings,
   insightWordRange,
   leaksCoachNotes,
+  sharesWhatISaw,
   stripAnalysisBlock,
   SYSTEM_PROMPT,
   type ReportData,
@@ -497,6 +498,8 @@ describe('shareWhatISaw (family reports)', () => {
     expect(fenced(p)).toContain('What the coach saw');
     const rules = afterFence(p);
     expect(rules).toContain('Coach saw');
+    expect(rules).toMatch(/own words/i);
+    expect(rules).toMatch(/do not quote/i);
     expect(rules).toMatch(/data decides/i);
     for (const w of ['injury', 'pain', 'maturation', 'weight', 'diet', 'supplements', 'sleep', 'mood', 'playing time', 'recruiting', 'menstrual', 'sibling'])
       expect(rules).toContain(w);
@@ -520,6 +523,33 @@ describe('shareWhatISaw (family reports)', () => {
     expect(leaksCoachNotes(echo, d('athlete', false))).toBe(true);
     expect(leaksCoachNotes(echo, d('parent', true))).toBe(false);
     expect(leaksCoachNotes(echo, d('athlete', true))).toBe(false);
+  });
+
+  it.each([
+    ['coach, switch absent', 'coach', undefined],
+    ['coach, switch false', 'coach', false],
+    ['coach, switch on', 'coach', true],
+    ['no audience, switch on', undefined, true],
+    ['parent, switch absent', 'parent', undefined],
+    ['athlete, switch false', 'athlete', false],
+  ] as const)('leak guard window stays on: %s', (_n, audience, flag) => {
+    const d = individual({ audience, coachNotes: notes(flag) });
+    expect(leaksCoachNotes('Because you stands up early out of the start, work on it.', d)).toBe(true);
+  });
+
+  it('never skips the guard for a team report or without notes', () => {
+    const team = individual({ reportType: 'team', audience: 'parent', coachNotes: notes(true) });
+    expect(leaksCoachNotes(SAW, team)).toBe(false); // team rows never carry notes: the guard has nothing to protect
+    expect(sharesWhatISaw(team)).toBe(false);
+    expect(sharesWhatISaw(individual({ audience: 'parent', coachNotes: undefined }))).toBe(false);
+  });
+
+  it('when on for parent/athlete, quoting 40+ characters of the notes is still rejected (paraphrase only)', () => {
+    for (const audience of ['parent', 'athlete'] as const) {
+      const d = individual({ audience, coachNotes: notes(true) });
+      expect(leaksCoachNotes(`Coach saw: ${SAW}.`, d)).toBe(true);
+      expect(leaksCoachNotes(text, d)).toBe(false);
+    }
   });
 
   it('leak guard: restriction, maturation and flags still checked when on', () => {

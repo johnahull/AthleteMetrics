@@ -685,16 +685,17 @@ export function leaksCoachNotes(output: string, reportData: ReportData): boolean
   };
   const haystack = norm(output);
   const WINDOW = 12;
+  const SHARED_WINDOW = 40;
   // Maturation and the distinctive test-day flags are private too (not the common words "surface" / "weather")
   const flagPhrases = (notes.testDayFlags ?? []).filter((f) => f === 'poor_wellness' || f === 'protocol_deviation').map((f) => TEST_DAY_FLAG[f]);
   const phrases = [notes.restriction?.area, notes.restriction?.status, notes.maturation ? MATURATION[notes.maturation] : undefined, ...flagPhrases]
     .map((t) => norm(coachText(t ?? '', 200, reportData)))
     .filter((t) => t.length >= 3);
   if (phrases.some((p) => haystack.includes(p))) return true;
-  // Shared notes may be used in family text; the coach audience and unshared notes never repeat them
-  if (sharesWhatISaw(reportData)) return false;
+  // Shared notes may be used in family text in the AI's own words: a short echo passes, a long verbatim run does not
+  const window = sharesWhatISaw(reportData) ? SHARED_WINDOW : WINDOW;
   const saw = norm(coachText(notes.whatISaw ?? '', 1500, reportData));
-  for (let i = 0; i + WINDOW <= saw.length; i++) if (haystack.includes(saw.slice(i, i + WINDOW))) return true;
+  for (let i = 0; i + window <= saw.length; i++) if (haystack.includes(saw.slice(i, i + window))) return true;
   return false;
 }
 
@@ -831,7 +832,7 @@ const systemPromptLines = (role: string) => [
   ``,
   `COACH NOTES AND GOALS:`,
   `- The Coach Notes and Goals sections are written by the coach. They set priorities and context; they never license comments on effort or character, and never license claims the data does not support`,
-  `- For athlete and parent audiences, never quote or reveal coach notes, and make no injury, maturation or weight remarks. The one exception: when the notes carry a "What the coach saw" line, the coach has shared it; use it only as "Coach saw ...", let the data decide any number it disagrees with, and never mention ${WHAT_I_SAW_NEVER}`,
+  `- For athlete and parent audiences, never quote or reveal coach notes, and make no injury, maturation or weight remarks. The one exception: when the notes carry a "What the coach saw" line, the coach has shared it; use it only in your own words as "Coach saw ...", do not quote it, let the data decide any number it disagrees with, and never mention ${WHAT_I_SAW_NEVER}`,
   `- Even for coaches, refer to restrictions, maturation and test-day issues in general terms (for example "a coach-noted restriction") rather than quoting the coach's wording, because shared copies must not expose sensitive detail`,
   `- For parent audiences, frame goals as what we're working toward and make no promises (never "will make varsity")`,
   ``,
@@ -932,7 +933,7 @@ export function sharesWhatISaw(reportData: ReportData): boolean {
 /** The never-reveal rule after the data fence for parent and athlete prompts; shared "What I saw" gets its own wording. */
 function coachNotesRule(reportData: ReportData): string {
   if (!sharesWhatISaw(reportData)) return `Never quote or reveal the coach notes. Make no injury, maturation or weight remarks.\n\n`;
-  return `Never quote or reveal the coach notes, except "What the coach saw", which the coach chose to share: use it only as "Coach saw ...", and when it disagrees with the data, the data decides the numbers. Never mention ${WHAT_I_SAW_NEVER}.\n\n`;
+  return `Never quote or reveal the coach notes, except "What the coach saw", which the coach chose to share: use it only in your own words as "Coach saw ...", do not quote it, and when it disagrees with the data, the data decides the numbers. Never mention ${WHAT_I_SAW_NEVER}.\n\n`;
 }
 
 /** Structured Coach Notes lines (no free-text goals); empty when the coach set none. */
