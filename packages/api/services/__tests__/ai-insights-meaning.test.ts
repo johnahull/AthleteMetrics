@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildPrompt, buildSystemPrompt, stripAnalysisBlock, insightWordRange, INSIGHT_HEADINGS, type ReportData } from '../ai-insights-service';
-import { sprintGoalLength, selectMeaningMetrics, belowAverageResults, dropNoMeaningMetrics, MAX_MEANING_METRICS } from '../ai-insights-meaning';
+import { sprintGoalLength, selectMeaningMetrics, belowAverageResults, aboveAverageResults, dropNoMeaningMetrics, meaningRules, MAX_MEANING_METRICS } from '../ai-insights-meaning';
 
 const metric = (code: string, label: string, value: number, unit = 's', lowerIsBetter = true) => ({ code, label, values: [value], unit, lowerIsBetter });
 
@@ -237,8 +237,8 @@ describe('family rule text', () => {
     expect(p).toContain('named teammates');
     expect(p).toContain('scholarships');
   });
-  it('explains the bottom of the range once and says "from one 40-yard run"', () => {
-    expect(p).toContain('"bottom of the range" means the lowest group for that age and sex, not pass or fail');
+  it('explains the bottom of the range only when used, and says "from one 40-yard run"', () => {
+    expect(p).toContain('it means the lowest group for that age and sex, not pass or fail');
     expect(p).toContain('"from one 40-yard run"');
   });
   it('the long-goal focus line says distance, not race', () => {
@@ -255,5 +255,71 @@ describe('legacy and new parent heading together', () => {
   it('drops the second big picture with its body', () => {
     const t = '## What the numbers mean\nold\n## The big picture\nnew\n## What to Work On\ny';
     expect(stripAnalysisBlock(t, 'parent')).toBe('## The big picture\nold\n## What to Work On\ny');
+  });
+});
+
+describe('meaningRules: live-eval fixes', () => {
+  const rules = meaningRules(true);
+  it('keeps a below-average result out of What is Going Well', () => {
+    expect(rules).toContain('"What\'s Going Well" only holds results listed under "Going Well Candidates"');
+    expect(rules).toContain('No result is above average yet');
+  });
+  it('gives percentiles one direction only', () => {
+    expect(rules).toContain('faster or higher than about N out of 100');
+    expect(rules).toMatch(/Never write "lower N%", "top N%" or "bottom N%"/);
+  });
+  it('joins two metrics only through a "How results connect" line', () => {
+    expect(rules).toContain('Never join two metrics in your own words unless a "How results connect" line does it');
+  });
+  it('drops meta caveats, tier names and flagged-style words', () => {
+    expect(rules).toContain('Never mention how many metrics have benchmarks');
+    expect(rules).toContain('This shows one test day, not change over time.');
+    expect(rules).toContain('Never print tier names');
+    expect(rules).toContain('Never say "flagged"');
+  });
+  it('explains "bottom of the range" only when the phrase is used', () => {
+    expect(rules).toContain('If you use the phrase "bottom of the range"');
+    expect(rules).not.toContain('Say once that "bottom of the range"');
+  });
+  it('asks for short sentences and one name for the jump test', () => {
+    expect(rules).toContain('At most 20 words per sentence');
+    expect(rules).toContain('"jump with a quick dip" every time');
+  });
+  it('paraphrases a fired connection with its consequence only when connections exist', () => {
+    expect(rules).toContain('paraphrase it with its consequence');
+    expect(meaningRules(false)).not.toContain('paraphrase it with its consequence');
+  });
+});
+
+describe('aboveAverageResults and the Going Well Candidates block', () => {
+  const tiers = [{ tierName: 'Good' }, { tierName: 'Average' }];
+  const tier = (tierName: string) => ({ comparisonOperator: 'range', tierName, allTiers: tiers });
+  const metric = (code: string, percentile?: number) => ({ code, label: code, values: [1], unit: 's', lowerIsBetter: true, percentile }) as never;
+  it('lists a result that is not below average, with the wording the standing allows', () => {
+    const out = aboveAverageResults([metric('A', 70), metric('B', 30), metric('C', 20), metric('D')], { A: [tier('Good')], B: [tier('Good')], C: [tier('Average')] });
+    expect(out.map((o) => o.code)).toEqual(['A', 'B']);
+    expect(out.find((o) => o.code === 'A')!.wording).toBe('above average for the comparison group');
+    // a Good tier with a 30th percentile meets the standard but is never called above average
+    expect(out.find((o) => o.code === 'B')!.wording).toBe('meets the group standard');
+  });
+  it('a percentile-only metric counts from the median', () => {
+    expect(aboveAverageResults([metric('A', 55), metric('B', 45)], {}).map((o) => o.code)).toEqual(['A']);
+  });
+  it('rules ban report-lacks wording, splits/KPI/noise, extra tests; one-test-day line stays in the big picture', () => {
+    const r = meaningRules(false);
+    expect(r).toContain('Never say the report lacks or does not provide');
+    expect(r).toContain('Never say "flagged", "splits", "KPI" or "noise". State the goal once.');
+    expect(r).toContain('Never recommend a test or exercise that is not already in the data');
+    expect(r).toContain('Put the "one test day" sentence in the big picture only');
+  });
+});
+
+describe('Going Well Candidates in the family prompt', () => {
+  it('prints the block for parent and athlete only, and omits it when empty', () => {
+    const base = { reportType: 'individual', reportName: 'E', organizationName: 'O', timeframe: 't', athleteName: 'Casey Lee', athleteAge: 16, metrics: [{ code: 'DASH_10YD', label: '10-Yard Dash', values: [1.7], unit: 's', lowerIsBetter: true }], keyFacts: [], aboveAverage: [{ code: 'DASH_10YD', label: '10-Yard Dash', wording: 'meets the group standard' }] } as never as ReportData;
+    expect(buildPrompt({ ...base, audience: 'parent' })).toContain('## Going Well Candidates\n- 10-Yard Dash: meets the group standard');
+    expect(buildPrompt({ ...base, audience: 'athlete' })).toContain('## Going Well Candidates');
+    expect(buildPrompt({ ...base, audience: 'coach' })).not.toContain('Going Well Candidates');
+    expect(buildPrompt({ ...base, audience: 'parent', aboveAverage: [] })).not.toContain('Going Well Candidates');
   });
 });

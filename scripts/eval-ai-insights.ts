@@ -14,6 +14,7 @@
  * The code checks cover bare numbers, never-say wording, headings, word range, naming every below-average result and
  * 2-3 focus results. Meaning accuracy is NOT code-checkable: save the outputs with AI_EVAL_OUT and have the head of
  * performance score them, and have one parent read the long-sprint case before and after.
+ * AI_EVAL_API_MODEL=<provider model id> (with AI_EVAL_MODEL naming a listed model of the same provider) tries an unlisted model.
  * AI_EVAL_OUT=<dir> also saves each output as <case>.<audience>.md (e.g. to record new samples).
  * AI_EVAL_OVERRIDES_FILE=<path> evaluates a draft of the site-admin prompt wording: a JSON file with the
  * aiPromptOverrides shape (packages/shared/ai-prompt-overrides.ts), checked with the same schema the admin save uses.
@@ -30,6 +31,13 @@ import { aiPromptOverridesSchema } from "../packages/shared/ai-prompt-overrides"
 import { checkInsights } from "../packages/api/services/ai-insights-eval";
 import { GOLDEN_CASES, goldenAudiences } from "../packages/api/services/__tests__/fixtures/ai-insights-golden";
 
+// AI_EVAL_API_MODEL=<provider model id> evaluates a model that is not in the app's list yet (e.g. a newer OpenAI model),
+// using the request settings of AI_EVAL_MODEL. Eval only: the app's model list and admin choices are not changed.
+if (process.env.AI_EVAL_API_MODEL && process.env.AI_EVAL_MODEL && Object.prototype.hasOwnProperty.call(AI_MODELS, process.env.AI_EVAL_MODEL)) {
+  const base = AI_MODELS[process.env.AI_EVAL_MODEL as AIModelKey];
+  (AI_MODELS as Record<string, typeof base>)[process.env.AI_EVAL_API_MODEL] = { ...base, model: process.env.AI_EVAL_API_MODEL };
+  process.env.AI_EVAL_MODEL = process.env.AI_EVAL_API_MODEL;
+}
 const modelKey = process.env.AI_EVAL_MODEL;
 if (!modelKey || !Object.prototype.hasOwnProperty.call(AI_MODELS, modelKey)) {
   console.error(`Set AI_EVAL_MODEL to one of: ${Object.keys(AI_MODELS).join(", ")}`);

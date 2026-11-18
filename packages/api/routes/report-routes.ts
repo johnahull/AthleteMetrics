@@ -10,7 +10,7 @@ import { sortCodesByGroups, isGenericReport } from "@shared/metric-order";
 import { buildMeasurementRows, buildBenchmarkRows, buildStatsRows, buildAchievementRows, groupLabelFor } from "./pdf-metric-rows";
 import { ReportService } from "../services/report-service";
 import { BIGGEST_CHANGE_PREFIX } from "../services/ai-insights-service";
-import { belowAverageResults } from "../services/ai-insights-meaning";
+import { aboveAverageResults, belowAverageResults } from "../services/ai-insights-meaning";
 import { isBelowAverageComparison } from "../services/benchmark-standing";
 import { RELATIONSHIP_CODES, firedRelationships, sameRunSplits, splitFacts, standingOf, type RelationshipInput } from "../services/ai-metric-relationships";
 import { createReportsFromInput, ReportCreateError } from "../services/report-create";
@@ -5588,7 +5588,10 @@ export async function buildReportDataForAI(
       dataConfidence,
       audience,
     };
-    if (report.reportType === 'individual') aiReportData.belowAverage = belowAverageResults(metrics, typedReportData.athlete?.benchmarkComparisons ?? {});
+    if (report.reportType === 'individual') {
+      aiReportData.belowAverage = belowAverageResults(metrics, typedReportData.athlete?.benchmarkComparisons ?? {});
+      aiReportData.aboveAverage = aboveAverageResults(metrics, typedReportData.athlete?.benchmarkComparisons ?? {});
+    }
 
     // Org style example (raw org row, not the admin-gated memberships). Names are re-checked now because a
     // member who joined after the save may match; if so it is dropped for this generation, not the request.
