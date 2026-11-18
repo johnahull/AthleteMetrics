@@ -40,7 +40,8 @@ export function ungroundedNumbers(output: string, prompt: string): string[] {
   const values = (reportDataOf(prompt).match(NUMBER) ?? []).map(toNumber);
   const exact = new Set(values);
   const magnitudes = new Set(values.map(Math.abs));
-  return (output.match(NUMBER) ?? []).filter((n) => {
+  // The percentile wording the rules give ("about N out of 100") names a scale, not a result
+  return (output.replace(/\bout of 100\b/gi, ' ').match(NUMBER) ?? []).filter((n) => {
     const v = toNumber(n);
     return v < 0 ? !exact.has(v) : !magnitudes.has(v);
   });
@@ -117,6 +118,16 @@ const sentencesOf = (output: string) =>
     .map((s) => s.replace(/^\s*(?:[-*]|\d+[.)])\s+/, '').replace(/\*\*/g, '').trim())
     .filter((s) => s !== '' && !s.startsWith('#'));
 
+// One bullet or line is judged whole: a number followed by its meaning in the next sentence is not bare
+const linesOf = (output: string) =>
+  output
+    .split(/\n+/)
+    .map((s) => s.replace(/^\s*(?:[-*]|\d+[.)])\s+/, '').replace(/\*\*/g, '').trim())
+    .filter((s) => s !== '' && !s.startsWith('#'));
+
+// A line that compares a result with something (average, goal, group, next tier) or says what it measures or means carries its meaning
+const COMPARISON_WORD = /\b(?:average|goal|compared|than|percentile|faster|slower|below|above|needs?|needed|less|more|group|target|under|chas\w*|measures?|means|shows?|because|which|reflects?)\b/i;
+
 const UNIT_WORDS = new Set(['seconds', 'second', 'secs', 'inches', 'inch', 'mph', 'yards', 'yard', 'percent']);
 
 /**
@@ -128,7 +139,8 @@ const UNIT_WORDS = new Set(['seconds', 'second', 'secs', 'inches', 'inch', 'mph'
 export function bareNumberSentences(output: string, labels: string[] = []): string[] {
   const escape = (l: string) => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const labelRe = labels.length > 0 ? new RegExp(labels.filter(Boolean).sort((a, b) => b.length - a.length).map(escape).join('|'), 'gi') : undefined;
-  return sentencesOf(output).filter((sentence) => {
+  return linesOf(output).filter((sentence) => {
+    if (COMPARISON_WORD.test(sentence)) return false;
     let t = labelRe ? sentence.replace(labelRe, ' ') : sentence;
     t = t.replace(/\b\d+(?:-\d+)+\b/g, ' ').replace(/\b\d+\s*-?\s*(?:yards?|yds?|meters?|m)\b/gi, ' ');
     t = t.replace(/(\d+\.\d+)\s*(?:to|-|\u2013)\s*(\d+\.\d+)/g, '$1'); // a range is one value
@@ -146,7 +158,7 @@ export function neverSayHits(output: string): string[] {
   const hits = [...medicalWords(output)];
   const find = (re: RegExp, label: string) => sentencesOf(output).some((s) => re.test(s)) && hits.push(label);
   find(/\bcleared\b/i, 'cleared');
-  find(/\b(?:will run|should run|on track to run|predict\w*|projected)\b/i, 'predicted time');
+  find(/\b(?<!not an? )(?<!no )(?:will run|should run|on track to run|predict\w*|projected)\b/i, 'predicted time');
   find(/\b(?:body[- ]?fat|body composition|weigh\w*|pounds|lbs?)\b/i, 'body weight or composition');
   find(/\bproves?\b/i, 'proof from one test');
   find(EXERCISE_NOUNS, 'exercise prescription');

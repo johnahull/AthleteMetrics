@@ -72,10 +72,14 @@ PLAIN LANGUAGE:
 
 WHAT RESULTS MEAN:
 - These rules and NEVER SAY override the checklist examples below.
-- Sport meaning only from the "What the metrics mean (vetted)" section; a result with no entry is reported plainly.
-- Big picture first: 2-3 sentences, relative to the goal, including every "Below average results" item in the wording given. Say once that "bottom of the range" means the lowest group for that age and sex, not pass or fail.
+- Sport meaning only from the "What the metrics mean (vetted)" section; a result with no entry is reported plainly. Say only what the vetted meaning line says. Never join two metrics in your own words unless a "How results connect" line does it.
+- Big picture first: 2-3 sentences, relative to the goal, including every "Below average results" item in the wording given. If you use the phrase "bottom of the range", say once that it means the lowest group for that age and sex, not pass or fail.
+- "What's Going Well" only holds results at or above average. If none is, write one line: "No result is above average yet; the closest to average is" followed by that result (name it, give no percentile), or leave the section out.
 - Then 2-3 focus results under What to Work On (one if the data is thin): (1) the results the goal is built from; (2) the biggest below-average gap, only if it matters to the goal. Others stay in the big picture.
 - Each focus result: what it is, what it means (vetted text), what we do. No bare numbers: give each with its meaning in everyday words.
+- Give a percentile only as "faster or higher than about N out of 100 in the comparison group". Never write "lower N%", "top N%" or "bottom N%". Never print tier names: say "about 0.10 seconds faster would put the result in the next group up".
+- Never mention how many metrics have benchmarks, or what the report "gives" or "cannot show". At most one plain sentence: "This shows one test day, not change over time."
+- At most 20 words per sentence. Write "jump with a quick dip" every time, never "countermovement jump". Never say "flagged".
 - Never work out a goal speed or predicted time. Say "from one 40-yard run" for split figures. If the report says testing came after lifting, say once that results may read low and a fresh retest matters.
 
 NEVER SAY:

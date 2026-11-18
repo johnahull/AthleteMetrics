@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildPrompt, buildSystemPrompt, stripAnalysisBlock, insightWordRange, INSIGHT_HEADINGS, type ReportData } from '../ai-insights-service';
-import { sprintGoalLength, selectMeaningMetrics, belowAverageResults, dropNoMeaningMetrics, MAX_MEANING_METRICS } from '../ai-insights-meaning';
+import { sprintGoalLength, selectMeaningMetrics, belowAverageResults, dropNoMeaningMetrics, meaningRules, MAX_MEANING_METRICS } from '../ai-insights-meaning';
 
 const metric = (code: string, label: string, value: number, unit = 's', lowerIsBetter = true) => ({ code, label, values: [value], unit, lowerIsBetter });
 
@@ -237,8 +237,8 @@ describe('family rule text', () => {
     expect(p).toContain('named teammates');
     expect(p).toContain('scholarships');
   });
-  it('explains the bottom of the range once and says "from one 40-yard run"', () => {
-    expect(p).toContain('"bottom of the range" means the lowest group for that age and sex, not pass or fail');
+  it('explains the bottom of the range only when used, and says "from one 40-yard run"', () => {
+    expect(p).toContain('it means the lowest group for that age and sex, not pass or fail');
     expect(p).toContain('"from one 40-yard run"');
   });
   it('the long-goal focus line says distance, not race', () => {
@@ -255,5 +255,38 @@ describe('legacy and new parent heading together', () => {
   it('drops the second big picture with its body', () => {
     const t = '## What the numbers mean\nold\n## The big picture\nnew\n## What to Work On\ny';
     expect(stripAnalysisBlock(t, 'parent')).toBe('## The big picture\nold\n## What to Work On\ny');
+  });
+});
+
+describe('meaningRules: live-eval fixes', () => {
+  const rules = meaningRules(true);
+  it('keeps a below-average result out of What is Going Well', () => {
+    expect(rules).toContain(`"What's Going Well" only holds results at or above average`);
+    expect(rules).toContain('No result is above average yet');
+  });
+  it('gives percentiles one direction only', () => {
+    expect(rules).toContain('faster or higher than about N out of 100');
+    expect(rules).toMatch(/Never write "lower N%", "top N%" or "bottom N%"/);
+  });
+  it('joins two metrics only through a "How results connect" line', () => {
+    expect(rules).toContain('Never join two metrics in your own words unless a "How results connect" line does it');
+  });
+  it('drops meta caveats, tier names and flagged-style words', () => {
+    expect(rules).toContain('Never mention how many metrics have benchmarks');
+    expect(rules).toContain('This shows one test day, not change over time.');
+    expect(rules).toContain('Never print tier names');
+    expect(rules).toContain('Never say "flagged"');
+  });
+  it('explains "bottom of the range" only when the phrase is used', () => {
+    expect(rules).toContain('If you use the phrase "bottom of the range"');
+    expect(rules).not.toContain('Say once that "bottom of the range"');
+  });
+  it('asks for short sentences and one name for the jump test', () => {
+    expect(rules).toContain('At most 20 words per sentence');
+    expect(rules).toContain('"jump with a quick dip" every time');
+  });
+  it('paraphrases a fired connection with its consequence only when connections exist', () => {
+    expect(rules).toContain('paraphrase it with its consequence');
+    expect(meaningRules(false)).not.toContain('paraphrase it with its consequence');
   });
 });
