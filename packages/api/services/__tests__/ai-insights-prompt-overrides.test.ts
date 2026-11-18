@@ -108,7 +108,7 @@ describe('user message slots', () => {
       expect(p).toContain('PLAIN LANGUAGE:');
       expect(p).toContain('6th-8th grade');
       expect(p).toContain('flying 10 -> 10 yards timed after a running start');
-      expect(p).toContain('Mention every benchmark result that is below average');
+      expect(p).toContain('Below average results');
       expect(p.indexOf('PLAIN LANGUAGE:')).toBeGreaterThan(p.indexOf('</report_data>'));
       expect(p.indexOf('PLAIN LANGUAGE:')).toBeLessThan(p.search(/Keep it to \d+-\d+ words/));
     }

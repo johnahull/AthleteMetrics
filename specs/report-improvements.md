@@ -233,7 +233,7 @@ You are writing for PARENTS of youth athletes, NOT coaches or trainers.
 Write in clear, non-technical language that a parent with no sports science
 background can understand. Focus on:
 
-1. **What the numbers mean** for their child's development
+1. **The big picture** for their child's development (what the results mean, relative to the goal)
 2. **What's going well** — celebrate specific achievements with context
 3. **What to work on** — frame as growth opportunities, not deficiencies
 4. **Why continued training matters** — connect metrics to real athletic outcomes
@@ -253,7 +253,7 @@ When audience is 'athlete':
 ## Instructions
 You are writing directly TO the athlete. Use "you" language.
 Be motivating and specific. Tell them exactly what to focus on in training.
-Keep it short (150-200 words). Be real — athletes respect honesty over hype.
+Keep it short (180-240 words). Be real — athletes respect honesty over hype.
 ```
 
 **UI Changes:**

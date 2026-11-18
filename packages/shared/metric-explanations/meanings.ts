@@ -31,7 +31,7 @@ const MEANINGS: Array<{ codes: string[]; meaning: string }> = [
     meaning: 'How quickly the athlete stops, turns and gets going again; a slow time can come from the turns or from straight speed. Change of direction in tight spaces; compare with the short straight sprint times to see what the turns cost.',
   },
   {
-    codes: ['AGILITY_505', 'AGILITY_505_L', 'AGILITY_505_R', 'AGILITY_505_M', 'AGILITY_505_M_L', 'AGILITY_505_M_R', 'AGILITY_505_YD', 'AGILITY_505_YD_L', 'AGILITY_505_YD_R'],
+    codes: ['AGILITY_505_M', 'AGILITY_505_M_L', 'AGILITY_505_M_R', 'AGILITY_505_YD', 'AGILITY_505_YD_L', 'AGILITY_505_YD_R'],
     meaning: 'How well the athlete brakes and turns once moving fast; one sharp turn, so it shows turning more than straight speed. Cutting and turning after a run; each leg can be tested alone.',
   },
   {
@@ -98,7 +98,7 @@ export const NO_MEANING: string[] = ['HEIGHT_IN', 'WEIGHT_LBS', 'PEAK_POWER_W'];
  */
 export const PENDING_MEANING: string[] = [
   'STANDING_REACH', 'WINGSPAN', 'DASH_5YD',
-  'AGILITY_505_LSI', 'AGILITY_505_M_LSI', 'AGILITY_505_YD_LSI',
+  'AGILITY_505_M_LSI', 'AGILITY_505_YD_LSI',
   'AGILITY_COD_DEFICIT_M', 'AGILITY_COD_DEFICIT_M_INTERP', 'AGILITY_COD_DEFICIT_YD',
   'JUMP_CMJ_SL_L', 'JUMP_CMJ_SL_R', 'MOMENTUM',
   'APPROACH_REACH', 'APPROACH_JUMP', 'BLOCK_REACH', 'BLOCK_JUMP',

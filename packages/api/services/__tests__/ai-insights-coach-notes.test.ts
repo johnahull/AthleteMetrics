@@ -10,6 +10,7 @@ import {
   type ReportData,
 } from '../ai-insights-service';
 import { headingIssues } from '../ai-insights-eval';
+import { MEANING_RULES } from '../ai-insights-meaning';
 
 function individual(overrides: Partial<ReportData> = {}): ReportData {
   return {
@@ -42,7 +43,7 @@ describe('buildPrompt without notes or goals', () => {
     expect(prompt).not.toContain('## Goals');
     expect(prompt).not.toContain('Path to Goal');
     expect(prompt).not.toContain("Coach's limiter call");
-    expect(afterFence(prompt).replace(ANALYSIS_INSTRUCTION, '')).not.toMatch(/goal/i);
+    expect(afterFence(prompt).replace(ANALYSIS_INSTRUCTION, '').replace(MEANING_RULES, '')).not.toMatch(/goal/i);
   });
 
   it('keeps the word range', () => {
@@ -352,7 +353,7 @@ describe('stripAnalysisBlock', () => {
     expect(() => strip(body)).not.toThrow();
     expect(() => strip("## What's Going Well\nSpeed.")).toThrow();
     expect(() => strip('## What the numbers mean\nx', 'coach')).toThrow();
-    expect(strip('## What the numbers mean\nx', 'parent')).toBe('## What the numbers mean\nx');
+    expect(strip('## The big picture\nx', 'parent')).toBe('## The big picture\nx');
   });
 
   it('knows Path to Goal only with goals', () => {

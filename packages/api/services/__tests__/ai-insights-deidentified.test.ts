@@ -113,18 +113,18 @@ describe('fillFirstName', () => {
 
 describe('generateCoachingInsights', () => {
   beforeEach(() => {
-    anthropicSpy.mockReset().mockResolvedValue({ content: [{ type: 'text', text: '<analysis>x</analysis>## What the numbers mean\n{{first_name}} ran 1.50 s.' }] });
+    anthropicSpy.mockReset().mockResolvedValue({ content: [{ type: 'text', text: '<analysis>x</analysis>## The big picture\n{{first_name}} ran 1.50 s.' }] });
     vi.stubEnv('ANTHROPIC_API_KEY', 'test-key');
   });
 
   it('sends no name to the provider and fills the first name into the output', async () => {
     const out = await generateCoachingInsights('claude-haiku-4.5', individual({ audience: 'parent' }));
-    expect(out).toBe('## What the numbers mean\nEvelyn ran 1.50 s.');
+    expect(out).toBe('## The big picture\nEvelyn ran 1.50 s.');
     expect(JSON.stringify(anthropicSpy.mock.calls[0][0])).not.toContain('Evelyn');
   });
 
   it('falls back to "your athlete" when the report has no athlete name', async () => {
     const out = await generateCoachingInsights('claude-haiku-4.5', individual({ audience: 'parent', athleteName: undefined }));
-    expect(out).toBe('## What the numbers mean\nYour athlete ran 1.50 s.');
+    expect(out).toBe('## The big picture\nYour athlete ran 1.50 s.');
   });
 });
