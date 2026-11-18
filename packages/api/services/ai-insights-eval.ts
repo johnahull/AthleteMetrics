@@ -5,7 +5,8 @@
  * outputs. They catch the failures that matter most for a shared report: numbers or training
  * prescriptions the model made up, athlete names in a team report, comments on unmeasured
  * qualities, medical wording, an unfilled {{placeholder}}, the athlete's name in the prompt, change over time claimed without history, wrong headings (the web card and PDF expect
- * fixed sections) and length outside the range the prompt asks for.
+ * fixed sections) and length outside the range the prompt asks for. Family texts (parent, athlete) also get the meaning checks: bare numbers,
+ * never-say wording, every below-average result named, 2-3 focus results.
  */
 
 import {
@@ -110,6 +111,62 @@ export function countWords(text: string): number {
   return text.split(/\s+/).filter((w) => /[\p{L}\d]/u.test(w)).length;
 }
 
+const sentencesOf = (output: string) =>
+  output
+    .split(/\n+|(?<=[.!?])\s+/)
+    .map((s) => s.replace(/^\s*(?:[-*]|\d+[.)])\s+/, '').replace(/\*\*/g, '').trim())
+    .filter((s) => s !== '' && !s.startsWith('#'));
+
+/**
+ * Sentences that state a number without saying what it means (family text: "a number always comes with its meaning").
+ * Heuristic: a sentence with a digit and fewer than 7 words of 3+ letters is mostly the number, e.g. "40-yard dash: 5.26 s".
+ */
+export function bareNumberSentences(output: string): string[] {
+  return sentencesOf(output).filter((s) => /\d/.test(s) && (s.match(/\p{L}{3,}/gu) ?? []).length < 7);
+}
+
+const EXERCISE_NOUNS = /\b(?<!paused[- ])squats?\b(?![- ]jump)|\b(?:lunges?|deadlifts?|sled (?:pushes|sprints|work)|box jumps?|depth jumps?|hip thrusts?|nordics?|wall drills?)\b/i;
+const SYMMETRY_CLAIM = /\b(?:left|right|legs?|hops?)\b.*\b(?:balanced|safe|ready|cleared)\b|\b(?:balanced|safe|ready|cleared)\b.*\b(?:left|right|legs?|hops?)\b/i;
+
+/** Wording the family rules NEVER SAY list forbids (ai-insights-meaning.ts): returns what matched, lower case. */
+export function neverSayHits(output: string): string[] {
+  const hits = [...medicalWords(output)];
+  const find = (re: RegExp, label: string) => sentencesOf(output).some((s) => re.test(s)) && hits.push(label);
+  find(/\bcleared\b/i, 'cleared');
+  find(/\b(?:will run|should run|on track to run|predict\w*|projected)\b/i, 'predicted time');
+  find(/\b(?:body[- ]?fat|body composition|weigh\w*|pounds|lbs?)\b/i, 'body weight or composition');
+  find(/\bproves?\b/i, 'proof from one test');
+  find(EXERCISE_NOUNS, 'exercise prescription');
+  find(SYMMETRY_CLAIM, 'balanced, safe or ready about left-right results');
+  return [...new Set(hits)];
+}
+
+const significantWords = (label: string) =>
+  label.toLowerCase().replace(/\([^)]*\)/g, ' ').split(/[^a-z0-9-]+/).filter((w) => w.length >= 3 || /\d/.test(w));
+
+/** First section of the output (the big picture or the athlete's Summary): everything before the second level-2 heading. */
+const firstSection = (output: string) => output.split(/^##[ \t]/m).slice(0, 2).join('##');
+
+/**
+ * Below-average results (data.belowAverage) the output does not name in its first section. Loose match: at least half
+ * of the label's significant words appear, so "5-10-5 shuttle" names "5-10-5 Agility".
+ */
+export function belowAverageNotNamed(output: string, data: ReportData): string[] {
+  const text = firstSection(output).toLowerCase();
+  return (data.belowAverage ?? [])
+    .filter((b) => {
+      const words = significantWords(b.label);
+      return words.length > 0 && words.filter((w) => text.includes(w)).length < Math.ceil(words.length / 2);
+    })
+    .map((b) => b.label);
+}
+
+/** Bullets under "What to Work On": the focus results of a family text. */
+export function focusResultCount(output: string): number {
+  const section = output.split(/^##[ \t]+/m).find((s) => s.replace(/’/g, "'").trim().startsWith('What to Work On')) ?? '';
+  return section.split('\n').filter((l) => /^\s*(?:[-*]|\d+[.)])\s+/.test(l)).length;
+}
+
 /** All checks for one output of the given report data; returns the failures (empty = pass). */
 export function checkInsights(input: {
   output: string;
@@ -159,6 +216,19 @@ export function checkInsights(input: {
   }
 
   failures.push(...headingIssues(output, audience, hasGoals(data)));
+
+  // Family texts (parent, athlete): meaning, not data
+  if (audience !== "coach") {
+    const bare = bareNumberSentences(output);
+    if (bare.length > 0) failures.push(`bare numbers (no meaning with them): ${bare.join(" | ")}`);
+    const banned = neverSayHits(output);
+    if (banned.length > 0) failures.push(`never-say wording: ${banned.join(", ")}`);
+    const unnamed = belowAverageNotNamed(output, data);
+    if (unnamed.length > 0) failures.push(`below-average results not named in the big picture: ${unnamed.join(", ")}`);
+    const focus = focusResultCount(output);
+    const minFocus = isLimitedData(data) ? 1 : 2;
+    if (focus < minFocus || focus > 3) failures.push(`focus results ${focus}, expected ${minFocus}-3`);
+  }
 
   const [min, max] = insightWordRange(data.reportType, audience, isLimitedData(data), hasGoals(data));
   const words = countWords(output);

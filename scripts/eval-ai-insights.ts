@@ -8,6 +8,12 @@
  * Run from the repository root:
  *   AI_EVAL_MODEL=claude-haiku-4.5 ANTHROPIC_API_KEY=... npx tsx scripts/eval-ai-insights.ts
  *
+ * AI_EVAL_CASES=<name,name> limits the run to those golden cases (e.g. the anonymized evaluations: eval-long-sprint-goal,
+ * eval-short-sprint-goal,eval-no-goal-test-conditions,eval-body-measures). Run once on the admin-selected model and once
+ * on the cheapest allowed model; rerun on any prompt, meaning or relationship change.
+ * The code checks cover bare numbers, never-say wording, headings, word range, naming every below-average result and
+ * 2-3 focus results. Meaning accuracy is NOT code-checkable: save the outputs with AI_EVAL_OUT and have the head of
+ * performance score them, and have one parent read the long-sprint case before and after.
  * AI_EVAL_OUT=<dir> also saves each output as <case>.<audience>.md (e.g. to record new samples).
  * AI_EVAL_OVERRIDES_FILE=<path> evaluates a draft of the site-admin prompt wording: a JSON file with the
  * aiPromptOverrides shape (packages/shared/ai-prompt-overrides.ts), checked with the same schema the admin save uses.
@@ -47,8 +53,15 @@ if (process.env.AI_EVAL_OVERRIDES_FILE) {
 const outDir = process.env.AI_EVAL_OUT;
 if (outDir) mkdirSync(outDir, { recursive: true });
 
+const only = process.env.AI_EVAL_CASES?.split(",").map((n) => n.trim()).filter(Boolean);
+const cases = only ? GOLDEN_CASES.filter((c) => only.includes(c.name)) : GOLDEN_CASES;
+if (cases.length === 0) {
+  console.error(`AI_EVAL_CASES matched no golden case: ${GOLDEN_CASES.map((c) => c.name).join(", ")}`);
+  process.exit(2);
+}
+
 let failed = 0;
-for (const c of GOLDEN_CASES) {
+for (const c of cases) {
   for (const audience of goldenAudiences(c)) {
     const data = { ...c.data, audience };
     const label = `${c.name}.${audience}`;
@@ -66,6 +79,6 @@ for (const c of GOLDEN_CASES) {
   }
 }
 
-const total = GOLDEN_CASES.reduce((n, c) => n + goldenAudiences(c).length, 0);
+const total = cases.reduce((n, c) => n + goldenAudiences(c).length, 0);
 console.log(`\n${modelKey}: ${total - failed}/${total} outputs passed`);
 process.exit(failed > 0 ? 1 : 0);

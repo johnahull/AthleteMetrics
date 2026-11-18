@@ -3,10 +3,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   athleteNamesIn,
+  bareNumberSentences,
+  belowAverageNotNamed,
   checkInsights,
   countWords,
+  focusResultCount,
   headingIssues,
   medicalWords,
+  neverSayHits,
   prescriptionNumbers,
   ungroundedNumbers,
   unmeasuredQualities,
@@ -217,5 +221,85 @@ describe('medicalWords', () => {
     const c = GOLDEN_CASES[0];
     const failures = checkInsights({ output: '## Summary\nReturn to play is safe.', data: { ...c.data, audience: 'coach' } });
     expect(failures).toContain('medical wording: return to play');
+  });
+});
+
+describe('family checks (meaning, not data)', () => {
+  const chris = golden('eval-long-sprint-goal');
+  const checkFamily = (file: string, audience: 'parent' | 'athlete' = 'parent') =>
+    checkInsights({ output: sample(file), data: { ...chris.data, audience } });
+
+  it('passes a good parent output for the long-sprint goal case', () => {
+    expect(checkFamily('long-sprint-parent-good.md')).toEqual([]);
+  });
+
+  it('catches every family failure in a bad output', () => {
+    const failures = checkFamily('long-sprint-parent-bad.md').join('\n');
+    expect(failures).toContain('bare numbers');
+    expect(failures).toContain('never-say wording');
+    expect(failures).toContain('below-average results not named');
+    expect(failures).toContain('focus results 5, expected 2-3');
+    expect(failures).toContain('missing headings: The big picture');
+    expect(failures).toContain('numbers not in the report data');
+  });
+
+  it('does not apply the family checks to a coach output', () => {
+    const failures = checkInsights({ output: sample('long-sprint-parent-bad.md'), data: { ...chris.data, audience: 'coach' } }).join('\n');
+    expect(failures).not.toContain('bare numbers');
+    expect(failures).not.toContain('focus results');
+  });
+
+  describe('bareNumberSentences', () => {
+    it('flags a sentence that is mostly the number', () => {
+      expect(bareNumberSentences('- 40-yard dash: 5.26 s.\n- Top speed: 1.12 s')).toHaveLength(2);
+    });
+    it('passes a number given with its meaning, and sentences with no number', () => {
+      expect(bareNumberSentences('The first 10 yards took 1.74 seconds, so a quicker start lowers the top speed needed later.')).toEqual([]);
+      expect(bareNumberSentences('## The big picture\nCasey is working hard.')).toEqual([]);
+    });
+  });
+
+  describe('neverSayHits', () => {
+    it.each([
+      ['Casey is cleared to sprint.', 'cleared'],
+      ['Casey will run a 7.0 in the spring.', 'predicted time'],
+      ['Body weight is the issue.', 'body weight'],
+      ['That proves a weak start.', 'proof from one test'],
+      ['Add squats twice a week.', 'exercise prescription'],
+      ['Both legs are balanced and safe.', 'balanced, safe or ready'],
+      ['The diagnosis is clear.', 'diagnosis'],
+    ])('flags %s', (text, label) => {
+      expect(neverSayHits(text).join(' ')).toContain(label);
+    });
+    it('passes plain meaning text, including the paused-squat jump', () => {
+      expect(neverSayHits('The paused-squat jump and the squat jump match. Both legs hop about the same distance.')).toEqual([]);
+    });
+  });
+
+  describe('belowAverageNotNamed', () => {
+    it('is loose about wording and only reads the first section', () => {
+      const out = '## The big picture\nThe 40-yard time, the 5-10-5 shuttle and the jump are low.\n## What to Work On\n- x';
+      expect(belowAverageNotNamed(out, chris.data)).toEqual([]);
+      const late = '## The big picture\nCasey is working.\n## What to Work On\n- The 40-yard dash, the 5-10-5 shuttle and the jump.';
+      expect(belowAverageNotNamed(late, chris.data)).toHaveLength(3);
+    });
+  });
+
+  describe('focusResultCount', () => {
+    it('counts bullets under What to Work On only', () => {
+      expect(focusResultCount("## What's Going Well\n- a\n- b\n## What to Work On\n- one\n- two\n")).toBe(2);
+      expect(focusResultCount('## The big picture\nx')).toBe(0);
+    });
+  });
+});
+
+describe('eval set', () => {
+  it('has the anonymized evaluations, none with a real name', () => {
+    const names = GOLDEN_CASES.filter((c) => c.name.startsWith('eval-')).map((c) => c.name);
+    expect(names).toEqual(['eval-long-sprint-goal', 'eval-short-sprint-goal', 'eval-no-goal-test-conditions', 'eval-body-measures']);
+  });
+  it('the long-sprint case carries the corrected gold-target numbers', () => {
+    const values = Object.fromEntries(golden('eval-long-sprint-goal').data.metrics.map((m) => [m.code, m.values[0]]));
+    expect(values).toMatchObject({ DASH_10YD: 1.74, DASH_20YD: 3.01, DASH_30YD: 4.14, DASH_40YD: 5.26, AGILITY_5105: 4.96, JUMP_CMJ_HOH: 19.1, JUMP_SJ_HEIGHT: 18.9 });
   });
 });
