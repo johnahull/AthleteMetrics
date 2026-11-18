@@ -180,7 +180,8 @@ describe('prompt blocks', () => {
   it('the meaning rules name "How results connect" only when that section is present', async () => {
     const { buildPrompt } = await import('../ai-insights-service');
     expect(buildPrompt({ ...base, connections: ['x'] })).toContain('(2) a result that explains a limiter through a "How results connect" line; (3) ');
-    expect(buildPrompt(base)).not.toContain('How results connect" line');
+    // the always-on "never join two metrics unless a How results connect line does it" rule is separate from this focus clause
+    expect(buildPrompt(base)).not.toContain('explains a limiter through a "How results connect" line');
   });
   it('renders neither block when nothing fired', async () => {
     const { buildPrompt } = await import('../ai-insights-service');
