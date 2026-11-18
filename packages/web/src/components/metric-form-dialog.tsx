@@ -60,6 +60,7 @@ const metricFormSchema = z.object({
   shortDescription: z.string().max(5000).optional(),
   whatItMeasures: z.string().max(5000).optional(),
   whyItMatters: z.string().max(5000).optional(),
+  meaning: z.string().max(400).optional(),
   metricType: z.enum(metricTypeEnum).default('lower_is_better'),
   displayFormat: z.enum(displayFormatEnum).default('decimal'),
   availableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
@@ -134,6 +135,7 @@ export default function MetricFormDialog({
       shortDescription: "",
       whatItMeasures: "",
       whyItMatters: "",
+      meaning: "",
       metricType: 'lower_is_better',
       displayFormat: 'decimal',
       availableOrgTypes: undefined,
@@ -172,6 +174,7 @@ export default function MetricFormDialog({
         shortDescription: metric.shortDescription || "",
         whatItMeasures: metric.whatItMeasures || "",
         whyItMatters: metric.whyItMatters || "",
+        meaning: metric.meaning || "",
         metricType: metric.metricType,
         displayFormat: metric.displayFormat ?? 'decimal',
         availableOrgTypes: metric.availableOrgTypes || undefined,
@@ -195,6 +198,7 @@ export default function MetricFormDialog({
         shortDescription: "",
         whatItMeasures: "",
         whyItMatters: "",
+      meaning: "",
         metricType: 'lower_is_better',
         displayFormat: 'decimal',
         availableOrgTypes: undefined,
@@ -226,6 +230,7 @@ export default function MetricFormDialog({
             shortDescription: data.shortDescription?.trim() || null,
             whatItMeasures: data.whatItMeasures?.trim() || null,
             whyItMatters: data.whyItMatters?.trim() || null,
+            meaning: data.meaning?.trim() || null,
             metricType: data.metricType,
             displayFormat: data.displayFormat,
             // Switching to mm:ss resets the precision to 1 decimal; otherwise the stored precision is kept
@@ -258,6 +263,7 @@ export default function MetricFormDialog({
           shortDescription: data.shortDescription?.trim() || undefined,
           whatItMeasures: data.whatItMeasures?.trim() || undefined,
           whyItMatters: data.whyItMatters?.trim() || undefined,
+          meaning: data.meaning?.trim() || undefined,
           metricType: data.metricType,
           availableOrgTypes: data.availableOrgTypes || undefined,
           sportAssociations: data.sportAssociations || undefined,
@@ -532,6 +538,27 @@ export default function MetricFormDialog({
                           data-testid="metric-why-it-matters-input"
                         />
                       </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="meaning"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Meaning for families</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          {...field}
+                          placeholder="What a good or slow result says about the athlete..."
+                          rows={3}
+                          maxLength={400}
+                          data-testid="metric-meaning-input"
+                        />
+                      </FormControl>
+                      <FormDescription>Written for parents, no numbers, no medical claims</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}

@@ -58,6 +58,7 @@ const formSchema = z.object({
   shortDescription: z.string().max(5000).optional(),
   whatItMeasures: z.string().max(5000).optional(),
   whyItMatters: z.string().max(5000).optional(),
+  meaning: z.string().max(400).optional(),
   validationMin: z.number().optional(),
   validationMax: z.number().optional(),
   decimalPrecision: z.number().int().min(0).max(10).optional(),
@@ -131,6 +132,7 @@ export function CustomOrgMetricForm({
       shortDescription: "",
       whatItMeasures: "",
       whyItMatters: "",
+      meaning: "",
       validationMin: undefined,
       validationMax: undefined,
       decimalPrecision: 3,
@@ -159,6 +161,7 @@ export function CustomOrgMetricForm({
         shortDescription: metric.shortDescription || "",
         whatItMeasures: metric.whatItMeasures || "",
         whyItMatters: metric.whyItMatters || "",
+        meaning: metric.meaning || "",
         validationMin: metric.validationMin ? parseFloat(metric.validationMin) : undefined,
         validationMax: metric.validationMax ? parseFloat(metric.validationMax) : undefined,
         decimalPrecision: metric.decimalPrecision ?? 3,
@@ -179,6 +182,7 @@ export function CustomOrgMetricForm({
         shortDescription: "",
         whatItMeasures: "",
         whyItMatters: "",
+      meaning: "",
         validationMin: undefined,
         validationMax: undefined,
         decimalPrecision: 3,
@@ -212,6 +216,7 @@ export function CustomOrgMetricForm({
             shortDescription: data.shortDescription?.trim() || null,
             whatItMeasures: data.whatItMeasures?.trim() || null,
             whyItMatters: data.whyItMatters?.trim() || null,
+            meaning: data.meaning?.trim() || null,
           },
         });
         toast({
@@ -226,6 +231,7 @@ export function CustomOrgMetricForm({
             shortDescription: data.shortDescription?.trim() || undefined,
             whatItMeasures: data.whatItMeasures?.trim() || undefined,
             whyItMatters: data.whyItMatters?.trim() || undefined,
+            meaning: data.meaning?.trim() || undefined,
           },
         });
         toast({
@@ -716,6 +722,27 @@ export function CustomOrgMetricForm({
                           />
                         </FormControl>
                         <FormDescription>Supports Markdown</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="meaning"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Meaning for families</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            {...field}
+                            placeholder="What a good or slow result says about the athlete..."
+                            rows={3}
+                            maxLength={400}
+                            data-testid="metric-meaning-input"
+                          />
+                        </FormControl>
+                        <FormDescription>Written for parents, no numbers, no medical claims</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}

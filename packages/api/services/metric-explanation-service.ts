@@ -31,7 +31,18 @@ export async function getMetricExplanationsMap(
   metricCodes: string[],
   organizationId?: string,
 ): Promise<Record<string, MetricExplanation>> {
-  if (metricCodes.length === 0) return {};
+  return (await getMetricExplanationsAndMeanings(metricCodes, organizationId)).explanations;
+}
+
+/**
+ * Same merge as getMetricExplanationsMap, plus `meaningMap`: code -> family-facing meaning text from
+ * custom_org_metrics (this organization) over site_metrics. Codes without stored meaning are absent.
+ */
+export async function getMetricExplanationsAndMeanings(
+  metricCodes: string[],
+  organizationId?: string,
+): Promise<{ explanations: Record<string, MetricExplanation>; meaningMap: Record<string, string> }> {
+  if (metricCodes.length === 0) return { explanations: {}, meaningMap: {} };
 
   const [siteMetricRows, siteOverrideRows, customRows] = await Promise.all([
     db
@@ -43,6 +54,7 @@ export async function getMetricExplanationsMap(
         shortDescription: siteMetrics.shortDescription,
         whatItMeasures: siteMetrics.whatItMeasures,
         whyItMatters: siteMetrics.whyItMatters,
+        meaning: siteMetrics.meaning,
       })
       .from(siteMetrics)
       .where(inArray(siteMetrics.code, metricCodes)),
@@ -59,6 +71,7 @@ export async function getMetricExplanationsMap(
             shortDescription: customOrgMetrics.shortDescription,
             whatItMeasures: customOrgMetrics.whatItMeasures,
             whyItMatters: customOrgMetrics.whyItMatters,
+            meaning: customOrgMetrics.meaning,
             unit: customOrgMetrics.unit,
             metricType: customOrgMetrics.metricType,
           })
@@ -76,6 +89,7 @@ export async function getMetricExplanationsMap(
           shortDescription: string | null;
           whatItMeasures: string | null;
           whyItMatters: string | null;
+          meaning: string | null;
           unit: string | null;
           metricType: 'lower_is_better' | 'higher_is_better' | 'tracking' | null;
         }>),
@@ -128,5 +142,9 @@ export async function getMetricExplanationsMap(
     };
   }
 
-  return buildMetricExplanationsMap(metricCodes, customMap, siteOverrides);
+  const meaningMap: Record<string, string> = {};
+  for (const row of siteMetricRows) if (row.meaning?.trim()) meaningMap[row.code] = row.meaning.trim();
+  for (const row of customRows) if (row.meaning?.trim()) meaningMap[row.code] = row.meaning.trim();
+
+  return { explanations: buildMetricExplanationsMap(metricCodes, customMap, siteOverrides), meaningMap };
 }

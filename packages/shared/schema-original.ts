@@ -10,6 +10,7 @@ import type { DerivedCalculationConfig } from "./schema/tables/metrics";
 import { displayFormatEnum } from "./schema/enums";
 import { DEFAULT_AI_MODEL_KEY, SELECTABLE_AI_MODEL_KEYS } from "./ai-models";
 import { aiPromptOverridesSchema } from "./ai-prompt-overrides";
+import { metricMeaningSchema } from "./metric-meaning";
 
 // AI Coaching Insights constants
 export const MAX_INSIGHTS_LENGTH = 10000;
@@ -180,6 +181,7 @@ export const siteMetrics = pgTable("site_metrics", {
   isActive: boolean("is_active").default(true).notNull(), // Can be globally disabled by site admin
   displayOrder: integer("display_order"),
   description: text("description"),
+  meaning: text("meaning"), // Family-facing "what this result means"; mirrors schema/tables/metrics.ts
   // Organization type availability (NULL = available to all org types)
   availableOrgTypes: text("available_org_types").array().$type<(typeof organizationTypeEnum)[number][]>(),
   // Advanced properties for sport-specific configuration
@@ -1770,6 +1772,7 @@ export const insertSiteMetricSchema = createInsertSchema(siteMetrics).omit({
   shortDescription: z.string().max(5000).optional(),
   whatItMeasures: z.string().max(5000).optional(),
   whyItMatters: z.string().max(5000).optional(),
+  meaning: metricMeaningSchema({ scan: false }).optional(),
   availableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
   sportAssociations: z.array(z.string().max(50, "Sport code must be 50 characters or less").regex(/^[A-Z0-9_]+$/, "Sport code must be uppercase letters, numbers, and underscores")).optional(),
   validationMin: z.number().optional(),
@@ -1824,6 +1827,7 @@ export const updateSiteMetricSchema = z.object({
   shortDescription: z.string().max(5000).nullable().optional(),
   whatItMeasures: z.string().max(5000).nullable().optional(),
   whyItMatters: z.string().max(5000).nullable().optional(),
+  meaning: metricMeaningSchema({ scan: false }).nullable().optional(),
   // Allow null to explicitly clear these array fields (undefined means "don't update")
   availableOrgTypes: z.array(z.enum(organizationTypeEnum)).nullable().optional(),
   sportAssociations: z.array(z.string().max(50, "Sport code must be 50 characters or less").regex(/^[A-Z0-9_]+$/, "Sport code must be uppercase letters, numbers, and underscores")).nullable().optional(),
