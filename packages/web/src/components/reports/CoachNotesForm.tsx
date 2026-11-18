@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { useUpdateCoachNotes } from "@/lib/reports-api";
@@ -41,6 +42,7 @@ interface FormValues {
   sessionsPerWeek: string;
   nextRetestDate: string;
   whatISaw: string;
+  shareWhatISaw: boolean;
 }
 
 const FLAGS: [string, string][] = [
@@ -68,6 +70,7 @@ function fromNotes(raw: unknown): FormValues {
     sessionsPerWeek: n.sessionsPerWeek?.toString() ?? "",
     nextRetestDate: n.nextRetestDate ?? "",
     whatISaw: n.whatISaw ?? "",
+    shareWhatISaw: n.shareWhatISaw ?? false,
   };
 }
 
@@ -86,6 +89,8 @@ function toNotes(v: FormValues): CoachNotes {
   if (v.sessionsPerWeek !== "") n.sessionsPerWeek = Number(v.sessionsPerWeek);
   if (v.nextRetestDate) n.nextRetestDate = v.nextRetestDate;
   if (v.whatISaw.trim()) n.whatISaw = v.whatISaw;
+  // Sharing means nothing without text to share
+  if (v.shareWhatISaw && v.whatISaw.trim()) n.shareWhatISaw = true;
   return n as CoachNotes;
 }
 
@@ -302,6 +307,21 @@ export function CoachNotesForm({ reportId, coachNotes, metricOptions = [], flush
               <FieldError id="cn-saw-err" message={errors.whatISaw?.message} />
               <span id="cn-saw-count" className="ml-auto">{sawLen} / 1500</span>
             </div>
+            <Controller
+              control={control}
+              name="shareWhatISaw"
+              render={({ field }) => (
+                <div className="flex items-start gap-2 pt-1">
+                  <Switch id="cn-share-saw" checked={field.value} onCheckedChange={field.onChange} aria-describedby="cn-share-saw-help" />
+                  <div className="space-y-0.5">
+                    <Label htmlFor="cn-share-saw">Use in the family report</Label>
+                    <p id="cn-share-saw-help" className="text-xs text-muted-foreground">
+                      The AI may use this in its own words in parent and athlete insights. Keep injury, weight and private details out; use the restriction fields for those. Facts taken from these notes (for example "lifts three times a week") need this switch too. Not available for athletes under 13 or with no date of birth.
+                    </p>
+                  </div>
+                </div>
+              )}
+            />
           </div>
 
           <div className="flex flex-wrap gap-2">

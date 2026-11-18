@@ -1963,6 +1963,11 @@ export function registerReportRoutes(app: Express) {
       const athleteId = (report.config as { athleteId?: string } | null)?.athleteId;
       if (!athleteId) return res.status(400).json({ message: "Report is missing its athlete configuration" });
 
+      // Family sharing of "What I saw" is locked off for under-13 or unknown-DOB athletes (fails closed)
+      if (notes.shareWhatISaw && (await evalShareBlocked(athleteId))) {
+        return res.status(400).json({ message: "Sharing What I saw is not available for this athlete" });
+      }
+
       // Atomic with COPPA deletion: deletion takes FOR UPDATE on the athlete's user row first, so this either
       // finishes before deletion (which then clears the notes) or waits and sees the athlete deleted.
       // The update re-states the authorized organization, type and athlete, so a concurrent PUT that moved the
@@ -5608,7 +5613,13 @@ export async function buildReportDataForAI(
     // Coach notes steer the insights of an individual report; team and eval rows never carry them
     if (report.reportType === 'individual' && opts.includeCoachNotes) {
       const notes = coachNotesSchema.safeParse(report.coachNotes);
-      if (notes.success && Object.keys(notes.data).length > 0) aiReportData.coachNotes = notes.data;
+      if (notes.success && Object.keys(notes.data).length > 0) {
+        const { shareWhatISaw, ...rest } = notes.data;
+        const athleteId = (report.config as { athleteId?: string } | null)?.athleteId;
+        // Re-checked at generation: the athlete may have been saved as shareable and the date of birth edited since
+        const locked = shareWhatISaw && (!athleteId || (await evalShareBlocked(athleteId)));
+        aiReportData.coachNotes = shareWhatISaw && !locked ? notes.data : rest;
+      }
     }
 
     // Add team-specific data

@@ -11,6 +11,8 @@ import { useGenerateInsights, useUpdateInsights } from "@/lib/reports-api";
 import { MAX_INSIGHTS_LENGTH } from "@shared/schema";
 import { getAIModel } from "@shared/ai-models";
 import { findJargon } from "@shared/plain-language";
+import { findSensitiveWords } from "@shared/coach-note-words";
+import { coachNotesSchema } from "@shared/coach-notes";
 import { CoachNotesForm, type FlushNotes, type MetricOption } from "./CoachNotesForm";
 
 interface CoachingInsightsCardProps {
@@ -152,6 +154,9 @@ export function CoachingInsightsCard({
   }, [handleGenerate]);
 
   const hardWords = findJargon(editedContent);
+  // Only when the coach switched "What I saw" on: those words may have come from the notes
+  const sharesSaw = coachNotesSchema.safeParse(coachNotes).data?.shareWhatISaw === true;
+  const sensitiveWords = sharesSaw ? findSensitiveWords(editedContent) : [];
 
   // Early returns come after every hook so the hook order never changes between renders
   // Manual write/edit never needs AI; only Generate/Regenerate do
@@ -294,6 +299,11 @@ export function CoachingInsightsCard({
           {hardWords.length > 0 && (
             <p className="text-sm text-amber-700" data-testid="hard-words">
               Hard words for families: {hardWords.join(", ")}
+            </p>
+          )}
+          {sensitiveWords.length > 0 && (
+            <p className="text-sm text-amber-700" data-testid="sensitive-words">
+              Check before sharing, these may come from your notes: {sensitiveWords.join(", ")}
             </p>
           )}
           <div className="flex justify-between items-center text-sm text-muted-foreground">

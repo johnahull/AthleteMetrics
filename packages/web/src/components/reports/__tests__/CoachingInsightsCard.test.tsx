@@ -251,6 +251,22 @@ describe('CoachingInsightsCard — manual write/edit', () => {
     expect(screen.queryByTestId('hard-words')).not.toBeInTheDocument();
   });
 
+  it('warns about private-detail words in the editor only when What I saw is shared', () => {
+    const type = (value: string) => fireEvent.change(screen.getByTestId('insights-editor'), { target: { value } });
+    const { unmount } = render(<CoachingInsightsCard {...baseProps} aiEnabled={false} coachNotes={{ whatISaw: 'x', shareWhatISaw: true }} />);
+    fireEvent.click(screen.getByRole('button', { name: /write insights/i }));
+    type('Coach saw him come back from an injury and a sore hamstring.');
+    expect(screen.getByTestId('sensitive-words')).toHaveTextContent('injury, sore');
+    type('Coach saw quick first steps.');
+    expect(screen.queryByTestId('sensitive-words')).not.toBeInTheDocument();
+    unmount();
+
+    render(<CoachingInsightsCard {...baseProps} aiEnabled={false} coachNotes={{ whatISaw: 'x' }} />);
+    fireEvent.click(screen.getByRole('button', { name: /write insights/i }));
+    type('Coach saw an injury.');
+    expect(screen.queryByTestId('sensitive-words')).not.toBeInTheDocument();
+  });
+
   it('with AI disabled and insights present: Edit shown, Regenerate hidden', () => {
     render(
       <CoachingInsightsCard

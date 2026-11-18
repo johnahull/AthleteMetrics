@@ -150,6 +150,21 @@ describe('PATCH /api/reports/:id/coach-notes', () => {
     expect(await stored(r.id)).toEqual(NOTES);
   });
 
+  it('shareWhatISaw: saved for an adult athlete; 400 and nothing stored for an under-13 athlete', async () => {
+    const adult = await mkReport(orgB, 'individual', u.athlete.id, null);
+    const ok = await patch(u.coach, adult.id, { whatISaw: 'quick feet', shareWhatISaw: true });
+    expect(ok.status).toBe(200);
+    expect(await stored(adult.id)).toEqual({ whatISaw: 'quick feet', shareWhatISaw: true });
+
+    const year = new Date().getFullYear() - 10;
+    const kid = await mkUser('kid', { birthDate: `${year}-06-15` });
+    const r = await mkReport(orgB, 'individual', kid.id, null);
+    expect((await patch(u.coach, r.id, { whatISaw: 'quick feet', shareWhatISaw: true })).status).toBe(400);
+    expect(await stored(r.id)).toBeNull();
+    // the switch off (absent) still saves for the same athlete
+    expect((await patch(u.coach, r.id, { whatISaw: 'quick feet' })).status).toBe(200);
+  });
+
   it('403 for an athlete', async () => {
     const r = await mkReport(orgB, 'individual', u.athlete.id, null);
     expect((await patch(u.athlete, r.id, { goals: 'x' })).status).toBe(403);

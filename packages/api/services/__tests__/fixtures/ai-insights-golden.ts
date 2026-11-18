@@ -267,6 +267,25 @@ export const GOLDEN_CASES: GoldenCase[] = [
     },
   })),
   {
+    name: 'individual-shared-what-i-saw',
+    data: {
+      reportType: 'individual',
+      reportName: 'Shared what I saw check',
+      organizationName: 'Northside Athletics',
+      timeframe: 'Current Season',
+      athleteName: 'Jordan Reyes',
+      metrics: [
+        { code: 'VERTICAL_JUMP', label: 'Vertical Jump', values: [22.5], unit: 'in', lowerIsBetter: false },
+      ],
+      improvements: [],
+      concerns: [],
+      benchmarkComparisons: [],
+      keyFacts: [],
+      dataConfidence: 'Best value per metric only; no history over time in this report; no benchmarks',
+      coachNotes: { whatISaw: 'Jordan stands up early out of the start.', shareWhatISaw: true },
+    },
+  },
+  {
     name: 'individual-style-example',
     data: {
       reportType: 'individual',

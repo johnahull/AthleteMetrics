@@ -40,6 +40,32 @@ describe('CoachNotesForm in CoachingInsightsCard', () => {
     expect(screen.getByLabelText(/coach's limiter call/i)).toBeInTheDocument();
   });
 
+  it('has a "Use in the family report" switch that is off by default, with help text', () => {
+    render(<CoachingInsightsCard {...props} />);
+    open();
+    const sw = screen.getByRole('switch', { name: /use in the family report/i });
+    expect(sw).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByText(/keep injury, weight and private details out/i)).toBeInTheDocument();
+  });
+
+  it('saves shareWhatISaw: true when on with text, and omits it when off or with no text', async () => {
+    render(<CoachingInsightsCard {...props} />);
+    open();
+    fireEvent.change(screen.getByLabelText(/what i saw/i), { target: { value: 'quick feet' } });
+    fireEvent.click(screen.getByRole('switch', { name: /use in the family report/i }));
+    fireEvent.click(screen.getByRole('button', { name: /save notes/i }));
+    await waitFor(() => expect(saveNotes).toHaveBeenCalledWith({ whatISaw: 'quick feet', shareWhatISaw: true }));
+
+    fireEvent.click(screen.getByRole('switch', { name: /use in the family report/i }));
+    fireEvent.click(screen.getByRole('button', { name: /save notes/i }));
+    await waitFor(() => expect(saveNotes).toHaveBeenLastCalledWith({ whatISaw: 'quick feet' }));
+  });
+
+  it('prefills the switch from saved notes', () => {
+    render(<CoachingInsightsCard {...props} coachNotes={{ whatISaw: 'x', shareWhatISaw: true }} />);
+    expect(screen.getByRole('switch', { name: /use in the family report/i })).toHaveAttribute('aria-checked', 'true');
+  });
+
   it('starts open when notes exist and prefills them', () => {
     render(<CoachingInsightsCard {...props} coachNotes={{ goals: 'make varsity' }} />);
     expect(screen.getByLabelText(/^goals/i)).toHaveValue('make varsity');

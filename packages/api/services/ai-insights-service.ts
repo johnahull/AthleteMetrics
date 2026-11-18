@@ -691,6 +691,8 @@ export function leaksCoachNotes(output: string, reportData: ReportData): boolean
     .map((t) => norm(coachText(t ?? '', 200, reportData)))
     .filter((t) => t.length >= 3);
   if (phrases.some((p) => haystack.includes(p))) return true;
+  // Shared notes may be used in family text; the coach audience and unshared notes never repeat them
+  if (sharesWhatISaw(reportData)) return false;
   const saw = norm(coachText(notes.whatISaw ?? '', 1500, reportData));
   for (let i = 0; i + WINDOW <= saw.length; i++) if (haystack.includes(saw.slice(i, i + WINDOW))) return true;
   return false;
@@ -781,6 +783,9 @@ function cleanOverrides(overrides?: AIPromptOverrides | null): AIPromptOverrides
   return out;
 }
 
+/** Never in family text, even from shared notes. */
+const WHAT_I_SAW_NEVER = 'injury, pain, maturation, weight, diet, supplements, sleep, effort, mood, confidence, attitude, coachability, academics, playing time, position or depth chart, medication, family, comparison with teammates or siblings, menstrual cycle, recruiting, criticism of other programs or coaches, and training loads';
+
 /**
  * System prompt shared by every provider and request: role, audience rules, output format and
  * constraints. Everything about one report goes in the user message (buildPrompt). Only the role clause and the
@@ -826,7 +831,7 @@ const systemPromptLines = (role: string) => [
   ``,
   `COACH NOTES AND GOALS:`,
   `- The Coach Notes and Goals sections are written by the coach. They set priorities and context; they never license comments on effort or character, and never license claims the data does not support`,
-  `- For athlete and parent audiences, never quote or reveal coach notes, and make no injury, maturation or weight remarks`,
+  `- For athlete and parent audiences, never quote or reveal coach notes, and make no injury, maturation or weight remarks. The one exception: when the notes carry a "What the coach saw" line, the coach has shared it; use it only as "Coach saw ...", let the data decide any number it disagrees with, and never mention ${WHAT_I_SAW_NEVER}`,
   `- Even for coaches, refer to restrictions, maturation and test-day issues in general terms (for example "a coach-noted restriction") rather than quoting the coach's wording, because shared copies must not expose sensitive detail`,
   `- For parent audiences, frame goals as what we're working toward and make no promises (never "will make varsity")`,
   ``,
@@ -919,6 +924,17 @@ function coachText(input: string, maxLength: number, reportData: ReportData): st
   return text;
 }
 
+/** True when the coach switched "What I saw" on for a family (parent or athlete) report. */
+export function sharesWhatISaw(reportData: ReportData): boolean {
+  return reportData.reportType === 'individual' && reportData.audience !== 'coach' && reportData.audience !== undefined && reportData.coachNotes?.shareWhatISaw === true;
+}
+
+/** The never-reveal rule after the data fence for parent and athlete prompts; shared "What I saw" gets its own wording. */
+function coachNotesRule(reportData: ReportData): string {
+  if (!sharesWhatISaw(reportData)) return `Never quote or reveal the coach notes. Make no injury, maturation or weight remarks.\n\n`;
+  return `Never quote or reveal the coach notes, except "What the coach saw", which the coach chose to share: use it only as "Coach saw ...", and when it disagrees with the data, the data decides the numbers. Never mention ${WHAT_I_SAW_NEVER}.\n\n`;
+}
+
 /** Structured Coach Notes lines (no free-text goals); empty when the coach set none. */
 function coachNoteLines(reportData: ReportData): string[] {
   const n = reportData.coachNotes;
@@ -941,7 +957,7 @@ function coachNoteLines(reportData: ReportData): string[] {
   const retest = sanitizeForPrompt(n.nextRetestDate ?? '', 10);
   if (retest) lines.push(`- Next retest date: ${retest}`);
   const saw = coachText(n.whatISaw ?? '', 1500, reportData);
-  if (saw) lines.push(`- What the coach saw: ${saw}`);
+  if (saw && (reportData.audience === 'parent' || reportData.audience === 'athlete' ? sharesWhatISaw(reportData) : true)) lines.push(`- What the coach saw: ${saw}`);
   // Printed as the metric label; a code that is not one of this report's metrics is dropped
   const wanted = (n.limiterOverride ?? '').trim().toLowerCase();
   const limiter = wanted
@@ -1246,7 +1262,7 @@ export function buildPrompt(reportData: ReportData, overrides?: AIPromptOverride
     prompt += `## What to Work On\n(up to 3 focus results, each with what it is, what it means and what we do; frame as growth opportunities, not deficiencies${goals ? "; fold the goals in here, framed as what we're working toward, with no promises" : ''})\n\n`;
     if (!o.toneParent) prompt += `${PARENT_TONE}\n\n${PARENT_AVOID}\n\n`;
     prompt += `Use the athlete's first name throughout by writing the literal placeholder ${FIRST_NAME_PLACEHOLDER} wherever the name belongs.\n\n`;
-    if (hasCoachText) prompt += `Never quote or reveal the coach notes. Make no injury, maturation or weight remarks.\n\n`;
+    if (hasCoachText) prompt += coachNotesRule(reportData);
     if (hasFamilyTestFlag(reportData)) prompt += `${TEST_CONDITIONS_LINE}\n\n`;
     prompt += `${PLAIN_RULES}\n\n${meaningRules((reportData.connections?.length ?? 0) > 0)}\n\n${NEVER_SAY}\n\n`;
     prompt += `Keep it to ${minWords}-${maxWords} words.\n`;
@@ -1263,7 +1279,7 @@ export function buildPrompt(reportData: ReportData, overrides?: AIPromptOverride
     // Note: athlete audience intentionally omits a "Next Steps" section — "What to Work On"
     // already implies action (it tells the athlete what to chase). Adding a separate next-steps
     // block would be redundant and dilute the direct, competitor-facing tone.
-    if (hasCoachText) prompt += `Never quote or reveal the coach notes. Make no injury, maturation or weight remarks.\n\n`;
+    if (hasCoachText) prompt += coachNotesRule(reportData);
     if (hasFamilyTestFlag(reportData)) prompt += `${TEST_CONDITIONS_LINE}\n\n`;
     prompt += `${PLAIN_RULES}\n\n${meaningRules((reportData.connections?.length ?? 0) > 0)}\n\n${NEVER_SAY}\n\n`;
     prompt += `Keep it to ${minWords}-${maxWords} words. Use bullet points and **bold** for emphasis.\n`;

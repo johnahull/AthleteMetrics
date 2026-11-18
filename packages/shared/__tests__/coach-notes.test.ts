@@ -51,4 +51,11 @@ describe('generic write schemas never accept the coach-notes / style-example col
     expect(insertOrganizationSchema.shape).not.toHaveProperty('aiStyleExample');
     expect(insertOrganizationSchema.shape).not.toHaveProperty('aiPromptOverrides');
   });
+
+  it('accepts shareWhatISaw as a boolean, defaults to absent, rejects other types', () => {
+    expect(coachNotesSchema.parse({ shareWhatISaw: true })).toEqual({ shareWhatISaw: true });
+    expect(coachNotesSchema.parse({})).toEqual({});
+    expect(coachNotesSchema.safeParse({ shareWhatISaw: 'yes' }).success).toBe(false);
+  });
 });
+
