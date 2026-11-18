@@ -30,6 +30,11 @@ describe('custom metric meaning validation', () => {
     expect(createCustomMetricSchema.safeParse({ ...base, meaning: 'a'.repeat(401) }).success).toBe(false);
   });
 
+  it('empty string becomes null', () => {
+    expect(createCustomMetricSchema.parse({ ...base, meaning: '' }).meaning).toBeNull();
+    expect(updateCustomMetricSchema.parse({ meaning: '  ' }).meaning).toBeNull();
+  });
+
   it('update accepts null to clear, and applies the same scan', () => {
     expect(updateCustomMetricSchema.parse({ meaning: null }).meaning).toBeNull();
     expect(updateCustomMetricSchema.safeParse({ meaning: 'cleared for sport' }).success).toBe(false);

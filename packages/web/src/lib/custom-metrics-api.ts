@@ -92,6 +92,12 @@ export async function fetchCustomOrgMetric(
 /**
  * Create a custom metric for organization
  */
+/** Server message plus any per-field validation messages (400 responses carry them in `details`). */
+function apiErrorMessage(body: { error?: string; details?: Record<string, string[]> }, fallback: string): string {
+  const fields = Object.values(body.details ?? {}).flat().filter(Boolean);
+  return [body.error || fallback, ...fields].join(': ');
+}
+
 export async function createCustomOrgMetric(
   organizationId: string,
   data: Omit<InsertCustomOrgMetric, 'organizationId' | 'code' | 'createdBy'>
@@ -104,7 +110,7 @@ export async function createCustomOrgMetric(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Failed to create custom metric' }));
-    throw new Error(error.error || 'Failed to create custom metric');
+    throw new Error(apiErrorMessage(error, 'Failed to create custom metric'));
   }
 
   return response.json();
@@ -129,7 +135,7 @@ export async function updateCustomOrgMetric(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Failed to update custom metric' }));
-    throw new Error(error.error || 'Failed to update custom metric');
+    throw new Error(apiErrorMessage(error, 'Failed to update custom metric'));
   }
 
   return response.json();

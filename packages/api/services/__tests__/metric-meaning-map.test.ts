@@ -23,23 +23,23 @@ describe('getMetricExplanationsAndMeanings', () => {
   it('returns site meanings, omitting blank and missing ones', async () => {
     queue.push([siteRow('A', ' Start speed. '), siteRow('B', null), siteRow('C', '  ')], [], []);
     const { meaningMap } = await getMetricExplanationsAndMeanings(['A', 'B', 'C'], 'org1');
-    expect(meaningMap).toEqual({ A: 'Start speed.' });
+    expect(meaningMap).toEqual({ A: { text: 'Start speed.', source: 'site' } });
   });
 
   it('custom org meaning takes precedence over the site meaning for the same code', async () => {
     queue.push([siteRow('A', 'site text'), siteRow('B', 'site b')], [], [customRow('A', 'org text')]);
     const { meaningMap } = await getMetricExplanationsAndMeanings(['A', 'B'], 'org1');
-    expect(meaningMap).toEqual({ A: 'org text', B: 'site b' });
+    expect(meaningMap).toEqual({ A: { text: 'org text', source: 'org' }, B: { text: 'site b', source: 'site' } });
   });
 
   it('a blank custom meaning does not wipe the site meaning', async () => {
     queue.push([siteRow('A', 'site text')], [], [customRow('A', null)]);
-    expect((await getMetricExplanationsAndMeanings(['A'], 'org1')).meaningMap).toEqual({ A: 'site text' });
+    expect((await getMetricExplanationsAndMeanings(['A'], 'org1')).meaningMap).toEqual({ A: { text: 'site text', source: 'site' } });
   });
 
   it('without an organization only site meanings apply', async () => {
     queue.push([siteRow('A', 'site text')], []);
-    expect((await getMetricExplanationsAndMeanings(['A'])).meaningMap).toEqual({ A: 'site text' });
+    expect((await getMetricExplanationsAndMeanings(['A'])).meaningMap).toEqual({ A: { text: 'site text', source: 'site' } });
   });
 
   it('empty code list returns empty maps', async () => {

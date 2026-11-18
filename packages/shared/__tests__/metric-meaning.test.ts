@@ -11,18 +11,33 @@ describe('findMeaningViolation', () => {
     'Shows he needs to lose weight.',
     'We predict a 7.0 sixty.',
     'His body fat is high.',
+    'It hurt when he landed.',
+    'Pain on landing means trouble.',
+    'Possible concussion effects.',
+    'Watch the ACL.',
+    'Part of his rehab.',
+    'He weighs 190 pounds.',
+    'His BMI is high.',
+    'He is on track to run a 7.0.',
+    'He projects to a faster time.',
+    'Both legs are balanced, so he is safe.',
   ])('flags %s', (t) => expect(findMeaningViolation(t)).toMatch(/must not contain/));
 
   it.each([
     'How fast he gets going from a standstill. A quicker start helps every sprint.',
     'Shows how well the legs push off the ground.',
     '',
+    'A clear improvement in the start.',
+    'Time spent in the weight room helps this.',
+    'Ready for game speed.',
+    'Quick hops help fast running and cuts.',
   ])('passes %s', (t) => expect(findMeaningViolation(t)).toBeNull());
 });
 
 describe('metricMeaningSchema', () => {
   it('trims and caps length', () => {
     expect(metricMeaningSchema({ scan: false }).parse('  hi  ')).toBe('hi');
+    expect(metricMeaningSchema({ scan: false }).parse('   ')).toBeNull();
     expect(metricMeaningSchema({ scan: false }).safeParse('x'.repeat(MAX_METRIC_MEANING_LENGTH + 1)).success).toBe(false);
     expect(metricMeaningSchema({ scan: false }).safeParse('x'.repeat(MAX_METRIC_MEANING_LENGTH)).success).toBe(true);
   });
@@ -36,10 +51,12 @@ describe('site metric schemas accept meaning', () => {
   it('create: optional, max 400', () => {
     const base = { code: 'X_TEST', label: 'X' };
     expect(insertSiteMetricSchema.parse({ ...base, meaning: 'Hello' }).meaning).toBe('Hello');
+    expect(insertSiteMetricSchema.parse({ ...base, meaning: '' }).meaning).toBeNull();
     expect(insertSiteMetricSchema.safeParse({ ...base, meaning: 'x'.repeat(401) }).success).toBe(false);
   });
   it('update: null clears, max 400', () => {
     expect(updateSiteMetricSchema.parse({ meaning: null }).meaning).toBeNull();
+    expect(updateSiteMetricSchema.parse({ meaning: '' }).meaning).toBeNull();
     expect(updateSiteMetricSchema.safeParse({ meaning: 'x'.repeat(401) }).success).toBe(false);
   });
 });

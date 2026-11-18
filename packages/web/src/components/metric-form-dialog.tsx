@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { MAX_METRIC_MEANING_LENGTH } from "@shared/metric-meaning";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,7 +61,7 @@ const metricFormSchema = z.object({
   shortDescription: z.string().max(5000).optional(),
   whatItMeasures: z.string().max(5000).optional(),
   whyItMatters: z.string().max(5000).optional(),
-  meaning: z.string().max(400).optional(),
+  meaning: z.string().max(MAX_METRIC_MEANING_LENGTH).optional(),
   metricType: z.enum(metricTypeEnum).default('lower_is_better'),
   displayFormat: z.enum(displayFormatEnum).default('decimal'),
   availableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
@@ -554,11 +555,13 @@ export default function MetricFormDialog({
                           {...field}
                           placeholder="What a good or slow result says about the athlete..."
                           rows={3}
-                          maxLength={400}
+                          maxLength={MAX_METRIC_MEANING_LENGTH}
                           data-testid="metric-meaning-input"
                         />
                       </FormControl>
-                      <FormDescription>Written for parents, no numbers, no medical claims</FormDescription>
+                      <FormDescription>
+                        Written for parents, no numbers, no medical claims ({field.value?.length ?? 0}/{MAX_METRIC_MEANING_LENGTH})
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}

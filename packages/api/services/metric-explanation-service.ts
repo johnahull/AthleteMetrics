@@ -27,6 +27,9 @@ import {
   type SiteOverridesMap,
 } from '@shared/metric-explanations';
 
+/** Family-facing meaning text and who wrote it ('org' = organization-written, to be marked as such in prompts). */
+export type MetricMeaning = { text: string; source: 'org' | 'site' };
+
 export async function getMetricExplanationsMap(
   metricCodes: string[],
   organizationId?: string,
@@ -36,12 +39,13 @@ export async function getMetricExplanationsMap(
 
 /**
  * Same merge as getMetricExplanationsMap, plus `meaningMap`: code -> family-facing meaning text from
- * custom_org_metrics (this organization) over site_metrics. Codes without stored meaning are absent.
+ * custom_org_metrics (this organization, source 'org') over site_metrics (source 'site'). Codes without stored
+ * meaning are absent.
  */
 export async function getMetricExplanationsAndMeanings(
   metricCodes: string[],
   organizationId?: string,
-): Promise<{ explanations: Record<string, MetricExplanation>; meaningMap: Record<string, string> }> {
+): Promise<{ explanations: Record<string, MetricExplanation>; meaningMap: Record<string, MetricMeaning> }> {
   if (metricCodes.length === 0) return { explanations: {}, meaningMap: {} };
 
   const [siteMetricRows, siteOverrideRows, customRows] = await Promise.all([
@@ -142,9 +146,9 @@ export async function getMetricExplanationsAndMeanings(
     };
   }
 
-  const meaningMap: Record<string, string> = {};
-  for (const row of siteMetricRows) if (row.meaning?.trim()) meaningMap[row.code] = row.meaning.trim();
-  for (const row of customRows) if (row.meaning?.trim()) meaningMap[row.code] = row.meaning.trim();
+  const meaningMap: Record<string, MetricMeaning> = {};
+  for (const row of siteMetricRows) if (row.meaning?.trim()) meaningMap[row.code] = { text: row.meaning.trim(), source: 'site' };
+  for (const row of customRows) if (row.meaning?.trim()) meaningMap[row.code] = { text: row.meaning.trim(), source: 'org' };
 
   return { explanations: buildMetricExplanationsMap(metricCodes, customMap, siteOverrides), meaningMap };
 }

@@ -5,6 +5,7 @@ import '@testing-library/jest-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import MetricFormDialog from '../metric-form-dialog';
 
+vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({}) }) as any));
 const update = vi.fn().mockResolvedValue({});
 vi.mock('@/hooks/use-toast', () => ({ useToast: () => ({ toast: vi.fn() }) }));
 vi.mock('@/lib/metrics-api', () => ({
@@ -25,6 +26,11 @@ const renderDialog = () =>
   );
 
 describe('MetricFormDialog meaning field', () => {
+  it('shows the n/400 counter', () => {
+    renderDialog();
+    expect(screen.getByText(/\(23\/400\)/)).toBeInTheDocument();
+  });
+
   it('shows "Meaning for families" prefilled with help text, and sends the edited value', async () => {
     renderDialog();
     const box = screen.getByTestId('metric-meaning-input') as HTMLTextAreaElement;
