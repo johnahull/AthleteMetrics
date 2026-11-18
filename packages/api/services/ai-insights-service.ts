@@ -495,6 +495,10 @@ export interface ReportData {
   // Individual reports: results below average for the comparison group, rank-based (the bottom tier of its group counts
   // even when its label says "Average"); wording is what to call it, without numbers
   belowAverage?: Array<{ code: string; label: string; wording: string }>;
+  // Individual reports: facts from the splits of ONE run (see ai-metric-relationships.ts) and the texts of the
+  // relationships between metrics that fired for this athlete; both computed in code
+  splitFacts?: string[];
+  connections?: string[];
 
   // Individual reports only: coach-supplied context (goals, restriction, test-day flags...)
   coachNotes?: CoachNotes;
@@ -1086,6 +1090,20 @@ export function buildPrompt(reportData: ReportData, overrides?: AIPromptOverride
         const m = getMetricMeaning(code)!;
         const label = sanitizeForPrompt(reportData.metrics.find((x) => x.code === code)?.label ?? code);
         prompt += `- ${label}${m.orgWritten ? ' (org-written)' : ''}: ${sanitizeForPrompt(m.text, 600)}\n`;
+      });
+      prompt += `\n`;
+    }
+    if (reportData.splitFacts && reportData.splitFacts.length > 0) {
+      prompt += `## Split Facts\nAll from one run; use as given, never mix them with other results.\n`;
+      reportData.splitFacts.forEach((f) => {
+        prompt += `- ${sanitizeForPrompt(f)}\n`;
+      });
+      prompt += `\n`;
+    }
+    if (reportData.connections && reportData.connections.length > 0) {
+      prompt += `## How results connect\nWorked out in code from this athlete's results; state each plainly as given and add no claim of your own.\n`;
+      reportData.connections.forEach((c) => {
+        prompt += `- ${sanitizeForPrompt(c)}\n`;
       });
       prompt += `\n`;
     }

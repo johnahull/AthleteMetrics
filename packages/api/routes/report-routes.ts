@@ -12,6 +12,7 @@ import { ReportService } from "../services/report-service";
 import { BIGGEST_CHANGE_PREFIX } from "../services/ai-insights-service";
 import { belowAverageResults } from "../services/ai-insights-meaning";
 import { isBelowAverageComparison } from "../services/benchmark-standing";
+import { RELATIONSHIP_CODES, firedRelationships, sameRunSplits, splitFacts, standingOf, type RelationshipInput } from "../services/ai-metric-relationships";
 import { createReportsFromInput, ReportCreateError } from "../services/report-create";
 import { planChartPageBreaks, chartGroupHeadings, addHeadingHeights } from "./pdf-chart-layout";
 import { requireAuth, requireAIEnabled, type AuthenticatedRequest } from "../middleware";
@@ -5277,6 +5278,8 @@ export async function buildReportDataForAI(
       comparisonLabel?: string;
       distributions?: Record<string, { stats: { min: number; q1: number; median: number; q3: number; max: number } }>;
       fvProfile?: { date: string; distanceUnit: string; f0Rel: string | null; v0: string | null; pmaxRel: string | null; fvSlope: string | null };
+      // Present only when the report's sprint runs chart is on; rows carry calculationMetadata.runId
+      sprintRunMeasurements?: import("@shared/report-sprint-runs-types").SprintRunMeasurement[];
       trends?: Record<string, { series?: Array<{ date: string; value: number }>; delta?: TrendDelta }>;
       // athleteSeries is never read: team prompts carry the team-average delta only
       teamTrends?: Record<string, { teamSeries?: unknown[]; delta?: TrendDelta }>;
@@ -5667,6 +5670,26 @@ export async function buildReportDataForAI(
           f0Rel: num(fv.f0Rel), v0: num(fv.v0), pmaxRel: num(fv.pmaxRel), fvSlope: num(fv.fvSlope),
         };
       }
+    }
+
+    // Defined relationships between metrics and same-run split facts. Evaluated on the full measurements (the
+    // MAX_METRICS cut above can drop an input); split math reads one run's rows only, never the best-per-code values.
+    if (report.reportType === 'individual' && typedReportData.athlete?.measurements) {
+      const athlete = typedReportData.athlete;
+      const values: Record<string, number> = {};
+      const standing: RelationshipInput['standing'] = {};
+      for (const code of RELATIONSHIP_CODES) {
+        const v = athlete.measurements?.[code];
+        if (typeof v === 'number') values[code] = v;
+        const s = standingOf(athlete.benchmarkComparisons?.[code], athlete.percentiles?.[code]);
+        if (s) standing[code] = s;
+      }
+      const { units } = await reportService.getMetricLabelsAndUnits(RELATIONSHIP_CODES.filter((c) => c in values), report.organizationId);
+      const splits = sameRunSplits(typedReportData.sprintRunMeasurements);
+      const connections = firedRelationships({ values, standing, units, splits }).map((r) => r.text);
+      if (connections.length > 0) aiReportData.connections = connections;
+      const facts = splits ? splitFacts(splits) : [];
+      if (facts.length > 0) aiReportData.splitFacts = facts;
     }
 
     return aiReportData;
