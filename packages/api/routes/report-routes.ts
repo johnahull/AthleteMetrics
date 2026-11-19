@@ -3507,7 +3507,7 @@ export function registerReportRoutes(app: Express) {
         }
 
         // AM-FEAT-019: never return an eval's config/model to an under-13 / no-DOB athlete
-        if (share.reportType === EVAL_REPORT_TYPE && await evalShareBlocked(user.id)) {
+        if (share.reportType === EVAL_REPORT_TYPE && await isAgeGatedForFamilyContent(user.id)) {
           return res.status(404).json({ message: "Shared report not found" });
         }
 
@@ -4142,17 +4142,18 @@ async function resolveShareWhatISaw(notes: CoachNotes, athleteId: string | undef
   if (!notes.shareWhatISaw) return { notes, locked: false };
   const { shareWhatISaw: _drop, ...rest } = notes;
   if (!notes.whatISaw?.trim()) return { notes: rest, locked: false };
-  if (!athleteId || (await evalShareBlocked(athleteId))) return { notes: rest, locked: true };
+  if (!athleteId || (await isAgeGatedForFamilyContent(athleteId))) return { notes: rest, locked: true };
   return { notes, locked: false };
 }
 
 /**
- * AM-FEAT-019: defence in depth for evals already shared to an athlete account. Blocked when the athlete is under
+ * The one age gate for family-facing content (eval shares, and "What I saw" shared into parent/athlete insights): defence
+ * in depth for content already shared to an athlete account. Blocked when the athlete is under
  * 13 today or has no usable date of birth (the same isUnder13OrUnknownDob rule the /share, /share-bulk and
  * /bulk-distribute guards apply to every report type). Age today decides: neither isMinor nor the age at the
  * event date matters (isEvalSnapshotRestricted is a separate control for PUBLIC snapshots). Fails closed on error.
  */
-async function evalShareBlocked(athleteId: string): Promise<boolean> {
+async function isAgeGatedForFamilyContent(athleteId: string): Promise<boolean> {
   try {
     const [athlete] = await db.select({ birthDate: users.birthDate }).from(users).where(eq(users.id, athleteId)).limit(1);
     return isUnder13OrUnknownDob(athlete?.birthDate);
@@ -4161,11 +4162,11 @@ async function evalShareBlocked(athleteId: string): Promise<boolean> {
   }
 }
 
-/** Remove eval shares the athlete may not be shown (see evalShareBlocked). Non-eval rows pass through. */
+/** Remove eval shares the athlete may not be shown (see isAgeGatedForFamilyContent). Non-eval rows pass through. */
 async function dropBlockedEvalShares<T extends { reportType: string }>(shares: T[], athleteId: string): Promise<T[]> {
   if (!shares.some((share) => share.reportType === EVAL_REPORT_TYPE)) return shares;
   // The decision depends only on the athlete, so look them up once for all their eval shares
-  if (!(await evalShareBlocked(athleteId))) return shares;
+  if (!(await isAgeGatedForFamilyContent(athleteId))) return shares;
   return shares.filter((share) => share.reportType !== EVAL_REPORT_TYPE);
 }
 

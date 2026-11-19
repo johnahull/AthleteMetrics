@@ -169,6 +169,8 @@ describe('PATCH /api/reports/:id/coach-notes', () => {
   });
 
   it('shareWhatISaw: dropped for an unknown date of birth, and when there is no What I saw text', async () => {
+    // Load-bearing: a year before 1900 is implausible, so isUnder13OrUnknownDob treats it as an unknown date of birth
+    // (packages/shared/coppa-utils.ts). Use another implausible value only if that rule changes.
     const unknown = await mkUser('nodob', { birthDate: '1800-01-01' });
     const r = await mkReport(orgB, 'individual', unknown.id, null);
     const res = await patch(u.coach, r.id, { whatISaw: 'quick feet', shareWhatISaw: true });

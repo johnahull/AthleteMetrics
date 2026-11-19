@@ -686,6 +686,8 @@ export function leaksCoachNotes(output: string, reportData: ReportData): boolean
   };
   const haystack = norm(output);
   const WINDOW = 12;
+  // 40 characters: the coach chose to share the note, so a short echo of a few words is fine, but a 40-character verbatim run
+  // is a copy. Do not widen without a privacy review (12 stays the window for everything not shared).
   const SHARED_WINDOW = 40;
   // Maturation and the distinctive test-day flags are private too (not the common words "surface" / "weather")
   const flagPhrases = (notes.testDayFlags ?? []).filter((f) => f === 'poor_wellness' || f === 'protocol_deviation').map((f) => TEST_DAY_FLAG[f]);
@@ -926,9 +928,12 @@ function coachText(input: string, maxLength: number, reportData: ReportData): st
   return text;
 }
 
+/** The family audiences: the readers who are not the coach. One predicate, so a new family audience is added here only. */
+export const isFamilyAudience = (audience: ReportData['audience']): boolean => audience === 'parent' || audience === 'athlete';
+
 /** True when the coach switched "What I saw" on for a family (parent or athlete) report. */
 export function sharesWhatISaw(reportData: ReportData): boolean {
-  return reportData.reportType === 'individual' && reportData.audience !== 'coach' && reportData.audience !== undefined && reportData.coachNotes?.shareWhatISaw === true;
+  return reportData.reportType === 'individual' && isFamilyAudience(reportData.audience) && reportData.coachNotes?.shareWhatISaw === true;
 }
 
 /** The never-reveal rule after the data fence for parent and athlete prompts; shared "What I saw" gets its own wording. */
@@ -959,7 +964,7 @@ function coachNoteLines(reportData: ReportData): string[] {
   const retest = sanitizeForPrompt(n.nextRetestDate ?? '', 10);
   if (retest) lines.push(`- Next retest date: ${retest}`);
   const saw = coachText(n.whatISaw ?? '', 1500, reportData);
-  if (saw && (reportData.audience === 'parent' || reportData.audience === 'athlete' ? sharesWhatISaw(reportData) : true)) lines.push(`- What the coach saw: ${saw}`);
+  if (saw && (isFamilyAudience(reportData.audience) ? sharesWhatISaw(reportData) : true)) lines.push(`- What the coach saw: ${saw}`);
   // Printed as the metric label; a code that is not one of this report's metrics is dropped
   const wanted = (n.limiterOverride ?? '').trim().toLowerCase();
   const limiter = wanted
@@ -1004,7 +1009,7 @@ const GOAL_INSTRUCTION = [
  */
 export function buildPrompt(reportData: ReportData, overrides?: AIPromptOverrides | null, orgOverrides?: OrgAIPromptOverrides | null): string {
   // Family audiences never see height, weight or absolute watts
-  if (reportData.audience === 'parent' || reportData.audience === 'athlete') reportData = dropNoMeaningMetrics(reportData);
+  if (isFamilyAudience(reportData.audience)) reportData = dropNoMeaningMetrics(reportData);
   const { reportType } = reportData;
   const site = cleanOverrides(overrides);
   const org = cleanOverrides(orgOverrides);
@@ -1092,7 +1097,7 @@ export function buildPrompt(reportData: ReportData, overrides?: AIPromptOverride
     prompt += `\n`;
   }
 
-  if (reportType === 'individual' && (reportData.audience === 'parent' || reportData.audience === 'athlete')) {
+  if (reportType === 'individual' && isFamilyAudience(reportData.audience)) {
     const below = reportData.belowAverage ?? [];
     if (below.length > 0) {
       prompt += `## Below Average Results\n`;
