@@ -11,6 +11,7 @@ import { getCustomOrgMetricService } from "../services/custom-org-metric-service
 import { rateLimit } from "express-rate-limit";
 import { displayFormatEnum } from "@shared/schema";
 import { DURATION_UNIT_ERROR } from "@shared/duration-format";
+import { metricMeaningSchema } from "@shared/metric-meaning";
 
 // Rate limiters for metric operations
 const createMetricLimiter = rateLimit({
@@ -44,6 +45,8 @@ const customMetricBaseSchema = z.object({
   shortDescription: z.string().max(5000).optional(),
   whatItMeasures: z.string().max(5000).optional(),
   whyItMatters: z.string().max(5000).optional(),
+  // Org-written, shown to families via AI insights: scanned for diagnosis/injury/clearance/weight/prediction wording
+  meaning: metricMeaningSchema({ scan: true }).optional(),
   validationMin: z.number().optional(),
   validationMax: z.number().optional(),
   decimalPrecision: z.number().int().min(0).max(10).optional(),
@@ -66,7 +69,10 @@ export const createCustomMetricSchema = customMetricBaseSchema.extend({
   displayFormat: z.enum(displayFormatEnum).default('decimal'),
 });
 
-export const updateCustomMetricSchema = customMetricBaseSchema.partial();
+// null clears the meaning
+export const updateCustomMetricSchema = customMetricBaseSchema.partial().extend({
+  meaning: metricMeaningSchema({ scan: true }).nullable().optional(),
+});
 
 export function registerCustomOrgMetricRoutes(app: Express) {
   const service = getCustomOrgMetricService();

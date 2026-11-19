@@ -39,6 +39,7 @@ import {
 import { FormulaBuilder } from "./FormulaBuilder";
 import { useSports } from "@/lib/sports-api";
 import type { CustomOrgMetric, SiteSport } from "@shared/schema";
+import { findMeaningViolation, MAX_METRIC_MEANING_LENGTH } from "@shared/metric-meaning";
 import { z } from "zod";
 
 interface CustomOrgMetricFormProps {
@@ -58,6 +59,10 @@ const formSchema = z.object({
   shortDescription: z.string().max(5000).optional(),
   whatItMeasures: z.string().max(5000).optional(),
   whyItMatters: z.string().max(5000).optional(),
+  meaning: z.string().max(MAX_METRIC_MEANING_LENGTH).superRefine((v, ctx) => {
+    const msg = findMeaningViolation(v);
+    if (msg) ctx.addIssue({ code: 'custom', message: msg });
+  }).optional(),
   validationMin: z.number().optional(),
   validationMax: z.number().optional(),
   decimalPrecision: z.number().int().min(0).max(10).optional(),
@@ -131,6 +136,7 @@ export function CustomOrgMetricForm({
       shortDescription: "",
       whatItMeasures: "",
       whyItMatters: "",
+      meaning: "",
       validationMin: undefined,
       validationMax: undefined,
       decimalPrecision: 3,
@@ -159,6 +165,7 @@ export function CustomOrgMetricForm({
         shortDescription: metric.shortDescription || "",
         whatItMeasures: metric.whatItMeasures || "",
         whyItMatters: metric.whyItMatters || "",
+        meaning: metric.meaning || "",
         validationMin: metric.validationMin ? parseFloat(metric.validationMin) : undefined,
         validationMax: metric.validationMax ? parseFloat(metric.validationMax) : undefined,
         decimalPrecision: metric.decimalPrecision ?? 3,
@@ -179,6 +186,7 @@ export function CustomOrgMetricForm({
         shortDescription: "",
         whatItMeasures: "",
         whyItMatters: "",
+        meaning: "",
         validationMin: undefined,
         validationMax: undefined,
         decimalPrecision: 3,
@@ -212,6 +220,7 @@ export function CustomOrgMetricForm({
             shortDescription: data.shortDescription?.trim() || null,
             whatItMeasures: data.whatItMeasures?.trim() || null,
             whyItMatters: data.whyItMatters?.trim() || null,
+            meaning: data.meaning?.trim() || null,
           },
         });
         toast({
@@ -226,6 +235,7 @@ export function CustomOrgMetricForm({
             shortDescription: data.shortDescription?.trim() || undefined,
             whatItMeasures: data.whatItMeasures?.trim() || undefined,
             whyItMatters: data.whyItMatters?.trim() || undefined,
+            meaning: data.meaning?.trim() || undefined,
           },
         });
         toast({
@@ -258,7 +268,7 @@ export function CustomOrgMetricForm({
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit, (errors) => { if (errors.meaning) setActiveTab("explanations"); })} className="space-y-4">
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList className="grid grid-cols-4 w-full">
                 <TabsTrigger value="basic">Basic Info</TabsTrigger>
@@ -716,6 +726,29 @@ export function CustomOrgMetricForm({
                           />
                         </FormControl>
                         <FormDescription>Supports Markdown</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="meaning"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Meaning for families</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            {...field}
+                            placeholder="What a good or slow result says about the athlete..."
+                            rows={3}
+                            maxLength={MAX_METRIC_MEANING_LENGTH}
+                            data-testid="metric-meaning-input"
+                          />
+                        </FormControl>
+                        <FormDescription>
+                        Written for parents, no numbers, no medical claims ({field.value?.length ?? 0}/{MAX_METRIC_MEANING_LENGTH})
+                      </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
