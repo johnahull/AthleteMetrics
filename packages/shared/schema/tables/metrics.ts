@@ -47,6 +47,8 @@ export const siteMetrics = pgTable("site_metrics", {
   shortDescription: text("short_description"),
   whatItMeasures: text("what_it_measures"),
   whyItMatters: text("why_it_matters"),
+  // Family-facing "what this result means" (AI insights, no numbers); max 400 chars enforced in the Zod schemas
+  meaning: text("meaning"),
   // Organization type availability (NULL = available to all org types)
   availableOrgTypes: text("available_org_types").array().$type<(typeof organizationTypeEnum)[number][]>(),
   // Advanced properties for sport-specific configuration
@@ -154,6 +156,8 @@ export const customOrgMetrics = pgTable("custom_org_metrics", {
   shortDescription: text("short_description"),
   whatItMeasures: text("what_it_measures"),
   whyItMatters: text("why_it_matters"),
+  // Family-facing "what this result means" (AI insights, no numbers); max 400 chars enforced in the Zod schemas
+  meaning: text("meaning"),
 
   // Validation rules
   validationMin: decimal("validation_min", { precision: 10, scale: 3 }),

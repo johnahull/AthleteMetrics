@@ -48,6 +48,8 @@
 
 > 0185 (athlete_notes table, AM-FEAT-025 athlete coaching notes: athlete_id and organization_id ON DELETE CASCADE, author_id and event_id ON DELETE SET NULL, index on (athlete_id, organization_id, observed_on); `_down` drops the table) is provisional: renumber at merge if another branch lands 0185 first (open PR #770 holds 0184) (file, `_down`, test `migration-0185-athlete-notes`, tracking row, this line). AM-FEAT-024 (#733-735) also holds provisional numbers. Needs `users`, `organizations` and `events`.
 
+> 0186 (`meaning` text column, nullable, on `site_metrics` and `custom_org_metrics`: the family-facing "what this result means" text edited in `/metrics` and the custom-metric form, read by `getMetricExplanationsAndMeanings`; `_down` drops both columns) is provisional: renumber at merge if another branch lands 0186 first (file, `_down`, test `migration-0186-metric-meaning`, tracking row, this line). AM-FEAT-024 (#733-735) holds provisional 0179/0180.
+
 ## Current State (2025-10-30)
 
 ### Overview

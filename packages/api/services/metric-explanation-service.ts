@@ -27,11 +27,26 @@ import {
   type SiteOverridesMap,
 } from '@shared/metric-explanations';
 
+/** Family-facing meaning text and who wrote it ('org' = organization-written, to be marked as such in prompts). */
+export type MetricMeaning = { text: string; source: 'org' | 'site' };
+
 export async function getMetricExplanationsMap(
   metricCodes: string[],
   organizationId?: string,
 ): Promise<Record<string, MetricExplanation>> {
-  if (metricCodes.length === 0) return {};
+  return (await getMetricExplanationsAndMeanings(metricCodes, organizationId)).explanations;
+}
+
+/**
+ * Same merge as getMetricExplanationsMap, plus `meaningMap`: code -> family-facing meaning text from
+ * custom_org_metrics (this organization, source 'org') over site_metrics (source 'site'). Codes without stored
+ * meaning are absent.
+ */
+export async function getMetricExplanationsAndMeanings(
+  metricCodes: string[],
+  organizationId?: string,
+): Promise<{ explanations: Record<string, MetricExplanation>; meaningMap: Record<string, MetricMeaning> }> {
+  if (metricCodes.length === 0) return { explanations: {}, meaningMap: {} };
 
   const [siteMetricRows, siteOverrideRows, customRows] = await Promise.all([
     db
@@ -43,6 +58,7 @@ export async function getMetricExplanationsMap(
         shortDescription: siteMetrics.shortDescription,
         whatItMeasures: siteMetrics.whatItMeasures,
         whyItMatters: siteMetrics.whyItMatters,
+        meaning: siteMetrics.meaning,
       })
       .from(siteMetrics)
       .where(inArray(siteMetrics.code, metricCodes)),
@@ -59,6 +75,7 @@ export async function getMetricExplanationsMap(
             shortDescription: customOrgMetrics.shortDescription,
             whatItMeasures: customOrgMetrics.whatItMeasures,
             whyItMatters: customOrgMetrics.whyItMatters,
+            meaning: customOrgMetrics.meaning,
             unit: customOrgMetrics.unit,
             metricType: customOrgMetrics.metricType,
           })
@@ -76,6 +93,7 @@ export async function getMetricExplanationsMap(
           shortDescription: string | null;
           whatItMeasures: string | null;
           whyItMatters: string | null;
+          meaning: string | null;
           unit: string | null;
           metricType: 'lower_is_better' | 'higher_is_better' | 'tracking' | null;
         }>),
@@ -128,5 +146,11 @@ export async function getMetricExplanationsMap(
     };
   }
 
-  return buildMetricExplanationsMap(metricCodes, customMap, siteOverrides);
+  const meaningMap: Record<string, MetricMeaning> = {};
+  for (const row of siteMetricRows) if (row.meaning?.trim()) meaningMap[row.code] = { text: row.meaning.trim(), source: 'site' };
+  // The custom query is by organization, not by code: keep only the codes the caller asked for
+  const asked = new Set(metricCodes);
+  for (const row of customRows) if (asked.has(row.code) && row.meaning?.trim()) meaningMap[row.code] = { text: row.meaning.trim(), source: 'org' };
+
+  return { explanations: buildMetricExplanationsMap(metricCodes, customMap, siteOverrides), meaningMap };
 }
