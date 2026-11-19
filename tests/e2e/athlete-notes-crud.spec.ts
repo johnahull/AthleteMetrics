@@ -107,6 +107,29 @@ test.describe('Athlete coaching notes', () => {
     await expect(card(page).getByTestId('coaching-note')).toHaveCount(2);
   });
 
+  test('with more than 3 notes the card starts collapsed and shows only pinned notes', async ({ page }) => {
+    await loginAsDefaultUser(page);
+    const { athlete } = await createOrgAndAthlete(page);
+
+    await page.goto(`${BASE_URL}/athletes/${athlete.id}`);
+    await addNote(page, 'Pinned: no max velocity sprinting', { date: '2025-09-01', flagged: true });
+    await addNote(page, 'Second note', { date: '2025-10-01' });
+    await addNote(page, 'Third note', { date: '2025-10-02' });
+    // The fourth note crosses the threshold; adding it keeps the card open so the new note is visible
+    await addNote(page, 'Fourth note', { date: '2025-10-03' });
+    await expect(card(page)).toContainText('Fourth note');
+
+    await page.reload();
+    const toggle = card(page).getByTestId('coaching-notes-toggle');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(card(page).getByTestId('coaching-notes-summary')).toContainText('4 notes · 1 pinned');
+    await expect(card(page).getByTestId('coaching-note')).toHaveCount(1);
+    await expect(card(page)).toContainText('Pinned: no max velocity sprinting');
+
+    await toggle.click();
+    await expect(card(page).getByTestId('coaching-note')).toHaveCount(4);
+  });
+
   test('quick-add from the dashboard: organization, athlete, then the note', async ({ page }) => {
     await loginAsDefaultUser(page);
     const { org, athlete } = await createOrgAndAthlete(page);

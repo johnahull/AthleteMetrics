@@ -444,7 +444,7 @@ export default function AthleteProfile() {
 
       <SprintRunsCard measurements={measurements} className="mb-8" />
 
-      {athleteId && <CoachingNotesCard athleteId={athleteId} athleteName={athlete?.fullName ?? "this athlete"} />}
+      {athleteId && <CoachingNotesCard key={athleteId} athleteId={athleteId} athleteName={athlete?.fullName ?? "this athlete"} />}
 
       {/* Contact Information */}
       {((athlete?.emails && athlete.emails.length > 0) || (athlete?.phoneNumbers && athlete.phoneNumbers.length > 0) || athlete?.parentEmail) && (

@@ -184,4 +184,136 @@ describe("CoachingNotesCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Edit note" }));
     expect(screen.getAllByTestId("dialog-stub").map((d) => d.textContent)).toContain("edit:mine");
   });
+
+  describe("collapsing", () => {
+    // n notes, newest first, none pinned unless listed
+    const many = (n: number, pinned: number[] = []) =>
+      Array.from({ length: n }, (_, i) =>
+        note({
+          id: `n${i}`,
+          flagged: pinned.includes(i),
+          observedOn: new Date(Date.UTC(2026, 2, 28 - i)).toISOString().slice(0, 10),
+          body: `Note body ${i}`,
+        }),
+      );
+    const toggle = () => screen.getByTestId("coaching-notes-toggle");
+    const rows = () => screen.queryAllByTestId("coaching-note");
+
+    it("starts open with 3 or fewer notes", () => {
+      query = { isSuccess: true, data: many(3) };
+      renderCard();
+      expect(rows()).toHaveLength(3);
+      expect(toggle()).toHaveAttribute("aria-expanded", "true");
+    });
+
+    it("starts collapsed with more than 3 notes and shows only the pinned ones", () => {
+      query = { isSuccess: true, data: many(6, [0, 1]) };
+      renderCard();
+      expect(toggle()).toHaveAttribute("aria-expanded", "false");
+      expect(rows()).toHaveLength(2);
+      rows().forEach((r) => expect(within(r).getByTestId("note-flagged")).toBeInTheDocument());
+    });
+
+    it("summarises count, pinned count and the latest date, even when an old note is pinned", () => {
+      const data = many(5);
+      data[4] = { ...data[4], flagged: true, observedOn: "2025-01-02" };
+      query = { isSuccess: true, data: [data[4], ...data.slice(0, 4)] };
+      renderCard();
+      expect(screen.getByTestId("coaching-notes-summary")).toHaveTextContent("5 notes · 1 pinned · last Mar 28, 2026");
+    });
+
+    it("says '1 note' and leaves out the pinned part when nothing is pinned", () => {
+      query = { isSuccess: true, data: many(1) };
+      renderCard();
+      expect(screen.getByTestId("coaching-notes-summary")).toHaveTextContent(/^1 note · last Mar 28, 2026$/);
+    });
+
+    it("shows the unpinned notes when expanded", () => {
+      query = { isSuccess: true, data: many(6, [0]) };
+      renderCard();
+      fireEvent.click(toggle());
+      expect(toggle()).toHaveAttribute("aria-expanded", "true");
+      expect(rows()).toHaveLength(6);
+    });
+
+    it("has no toggle when every note is pinned", () => {
+      query = { isSuccess: true, data: many(5, [0, 1, 2, 3, 4]) };
+      renderCard();
+      expect(screen.queryByTestId("coaching-notes-toggle")).toBeNull();
+      expect(rows()).toHaveLength(5);
+    });
+
+    it("caps the open list at 10 unpinned notes, then toggles Show N more / Show fewer", () => {
+      query = { isSuccess: true, data: many(25, [0]) };
+      renderCard();
+      fireEvent.click(toggle());
+      expect(rows()).toHaveLength(1 + 10);
+      fireEvent.click(screen.getByRole("button", { name: "Show 14 more" }));
+      expect(rows()).toHaveLength(25);
+      fireEvent.click(screen.getByRole("button", { name: "Show fewer" }));
+      expect(rows()).toHaveLength(1 + 10);
+    });
+
+    it("resets the cap when the card is collapsed again", () => {
+      query = { isSuccess: true, data: many(25) };
+      renderCard();
+      fireEvent.click(toggle());
+      fireEvent.click(screen.getByRole("button", { name: "Show 15 more" }));
+      fireEvent.click(toggle());
+      fireEvent.click(toggle());
+      expect(rows()).toHaveLength(10);
+    });
+
+    it("opens by itself when a note is added while collapsed", () => {
+      query = { isSuccess: true, data: many(5) };
+      const { rerender } = renderCard();
+      expect(toggle()).toHaveAttribute("aria-expanded", "false");
+      query = { isSuccess: true, data: [note({ id: "fresh", body: "Just added" }), ...many(5)] };
+      rerender(<CoachingNotesCard athleteId="a1" athleteName="Sam Sprinter" />);
+      expect(toggle()).toHaveAttribute("aria-expanded", "true");
+      expect(screen.getByText("Just added")).toBeInTheDocument();
+    });
+
+    it("stays collapsed when the list finishes loading (loading is not 'notes were added')", () => {
+      query = { isSuccess: false };
+      const { rerender } = renderCard();
+      query = { isSuccess: true, data: many(6) };
+      rerender(<CoachingNotesCard athleteId="a1" athleteName="Sam Sprinter" />);
+      expect(toggle()).toHaveAttribute("aria-expanded", "false");
+    });
+
+    it("does not open when a note is deleted", () => {
+      query = { isSuccess: true, data: many(6) };
+      const { rerender } = renderCard();
+      query = { isSuccess: true, data: many(5) };
+      rerender(<CoachingNotesCard athleteId="a1" athleteName="Sam Sprinter" />);
+      expect(toggle()).toHaveAttribute("aria-expanded", "false");
+    });
+
+    it("keeps the Add button usable while collapsed", () => {
+      query = { isSuccess: true, data: many(5) };
+      renderCard();
+      fireEvent.click(screen.getByTestId("add-note-button"));
+      expect(screen.getByTestId("dialog-stub")).toHaveTextContent("add:a1:org1");
+    });
+
+    it("lets a long note be expanded and collapsed, and leaves a short one alone", () => {
+      const long = "x".repeat(120);
+      query = { isSuccess: true, data: [note({ id: "long", body: long }), note({ id: "short", body: "Brief" })] };
+      renderCard();
+      const [longRow, shortRow] = rows();
+      expect(within(shortRow).queryByRole("button", { name: /show more/i })).toBeNull();
+      expect(within(longRow).getByText(long)).toHaveClass("line-clamp-2");
+      fireEvent.click(within(longRow).getByRole("button", { name: "Show more" }));
+      expect(within(longRow).getByText(long)).not.toHaveClass("line-clamp-2");
+      fireEvent.click(within(longRow).getByRole("button", { name: "Show less" }));
+      expect(within(longRow).getByText(long)).toHaveClass("line-clamp-2");
+    });
+
+    it("offers Show more for a short note with a line break", () => {
+      query = { isSuccess: true, data: [note({ id: "nl", body: "a\nb" })] };
+      renderCard();
+      expect(screen.getByRole("button", { name: "Show more" })).toBeInTheDocument();
+    });
+  });
 });
