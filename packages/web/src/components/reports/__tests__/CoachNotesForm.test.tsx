@@ -61,6 +61,17 @@ describe('CoachNotesForm in CoachingInsightsCard', () => {
     await waitFor(() => expect(saveNotes).toHaveBeenLastCalledWith({ whatISaw: 'quick feet' }));
   });
 
+  it('the switch is off and disabled until there is text in What I saw, with a hint', () => {
+    render(<CoachingInsightsCard {...props} />);
+    open();
+    const sw = screen.getByRole('switch', { name: /use in the family report/i });
+    expect(sw).toBeDisabled();
+    expect(screen.getByText(/write what you saw first/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/what i saw/i), { target: { value: 'quick feet' } });
+    expect(sw).not.toBeDisabled();
+    expect(screen.queryByText(/write what you saw first/i)).toBeNull();
+  });
+
   it('when the server locks the switch: disables it with the reason and tells the coach to regenerate', async () => {
     saveNotes.mockImplementationOnce(async () => ({ coachNotes: { whatISaw: 'quick feet' }, shareLocked: true }));
     render(<CoachingInsightsCard {...props} coachNotes={{ whatISaw: 'quick feet', shareWhatISaw: true }} />);

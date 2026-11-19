@@ -180,6 +180,7 @@ export function CoachNotesForm({ reportId, coachNotes, metricOptions = [], flush
 
   const goalsLen = watch("goals").length;
   const sawLen = watch("whatISaw").length;
+  const hasSaw = watch("whatISaw").trim().length > 0;
   const limiter = watch("limiterOverride");
   const options =
     limiter && !metricOptions.some((m) => m.code === limiter) ? [...metricOptions, { code: limiter, label: limiter }] : metricOptions;
@@ -320,12 +321,15 @@ export function CoachNotesForm({ reportId, coachNotes, metricOptions = [], flush
               name="shareWhatISaw"
               render={({ field }) => (
                 <div className="flex items-start gap-2 pt-1">
-                  <Switch id="cn-share-saw" checked={field.value && !shareLocked} disabled={shareLocked} onCheckedChange={field.onChange} aria-describedby="cn-share-saw-help" />
+                  <Switch id="cn-share-saw" checked={field.value && !shareLocked && hasSaw} disabled={shareLocked || !hasSaw} onCheckedChange={field.onChange} aria-describedby="cn-share-saw-help" />
                   <div className="space-y-0.5">
                     <Label htmlFor="cn-share-saw">Use in the family report</Label>
                     <p id="cn-share-saw-help" className="text-xs text-muted-foreground">
                       The AI may use this in its own words in parent and athlete insights. Keep injury, weight and private details out; use the restriction fields for those. Facts taken from these notes (for example "lifts three times a week") need this switch too. Not available for athletes under 13 or with no date of birth.
                     </p>
+                    {!hasSaw && !shareLocked && (
+                      <p className="text-xs text-muted-foreground">Write what you saw first, then turn this on.</p>
+                    )}
                     {shareLocked && (
                       <p className="text-xs text-destructive">Not available for this athlete (under 13, or no date of birth on file).</p>
                     )}

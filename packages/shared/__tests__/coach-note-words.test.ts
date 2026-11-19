@@ -29,4 +29,9 @@ describe('findSensitiveWords', () => {
   it('lists each word once, in order, as written', () => {
     expect(findSensitiveWords('Pain, then more pain and an Injury')).toEqual(['Pain', 'Injury']);
   });
+
+  it('Vitamin D3 is not a college division, but D3 on its own still is', () => {
+    expect(findSensitiveWords('takes Vitamin D3 for bone health')).toEqual([]);
+    expect(findSensitiveWords('looking at D3 programs')).toEqual(['D3']);
+  });
 });

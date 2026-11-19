@@ -42,6 +42,9 @@ export function findSensitiveWords(text: string): string[] {
   const found: string[] = [];
   for (const m of text.matchAll(SENSITIVE_RE)) {
     const key = m[1].toLowerCase();
+    // "Vitamin D3" is a supplement, not a college division (no lookbehind: this module also runs in older Safari)
+    const start = m.index! + m[0].length - m[1].length;
+    if (/^d[123]$/.test(key) && /vitamin\s+$/i.test(text.slice(0, start))) continue;
     if (seen.has(key)) continue;
     seen.add(key);
     found.push(m[1]);
