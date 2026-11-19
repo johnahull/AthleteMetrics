@@ -495,6 +495,10 @@ export interface ReportData {
   // Individual reports: results below average for the comparison group, rank-based (the bottom tier of its group counts
   // even when its label says "Average"); wording is what to call it, without numbers
   belowAverage?: Array<{ code: string; label: string; wording: string }>;
+  // Individual reports: facts from the splits of ONE run (see ai-metric-relationships.ts) and the texts of the
+  // relationships between metrics that fired for this athlete; both computed in code
+  splitFacts?: string[];
+  connections?: string[];
   aboveAverage?: Array<{ code: string; label: string; wording: string }>;
 
   // Individual reports only: coach-supplied context (goals, restriction, test-day flags...)
@@ -1098,6 +1102,20 @@ export function buildPrompt(reportData: ReportData, overrides?: AIPromptOverride
       });
       prompt += `\n`;
     }
+    if (reportData.splitFacts && reportData.splitFacts.length > 0) {
+      prompt += `## Split Facts\nAll from one run; use as given, never mix them with other results.\n`;
+      reportData.splitFacts.forEach((f) => {
+        prompt += `- ${sanitizeForPrompt(f)}\n`;
+      });
+      prompt += `\n`;
+    }
+    if (reportData.connections && reportData.connections.length > 0) {
+      prompt += `## How results connect\nWorked out in code from this athlete's results; state each plainly as given and add no claim of your own.\n`;
+      reportData.connections.forEach((c) => {
+        prompt += `- ${sanitizeForPrompt(c)}\n`;
+      });
+      prompt += `\n`;
+    }
   }
 
   // Performance metrics
@@ -1239,7 +1257,7 @@ export function buildPrompt(reportData: ReportData, overrides?: AIPromptOverride
     prompt += `Use the athlete's first name throughout by writing the literal placeholder ${FIRST_NAME_PLACEHOLDER} wherever the name belongs.\n\n`;
     if (hasCoachText) prompt += `Never quote or reveal the coach notes. Make no injury, maturation or weight remarks.\n\n`;
     if (hasFamilyTestFlag(reportData)) prompt += `${TEST_CONDITIONS_LINE}\n\n`;
-    prompt += `${PLAIN_RULES}\n\n${meaningRules(false)}\n\n${NEVER_SAY}\n\n`;
+    prompt += `${PLAIN_RULES}\n\n${meaningRules((reportData.connections?.length ?? 0) > 0)}\n\n${NEVER_SAY}\n\n`;
     prompt += `Keep it to ${minWords}-${maxWords} words.\n`;
   } else if (audience === 'athlete') {
     prompt += toneBlock(o.toneAthlete, ATHLETE_LEAD);
@@ -1256,7 +1274,7 @@ export function buildPrompt(reportData: ReportData, overrides?: AIPromptOverride
     // block would be redundant and dilute the direct, competitor-facing tone.
     if (hasCoachText) prompt += `Never quote or reveal the coach notes. Make no injury, maturation or weight remarks.\n\n`;
     if (hasFamilyTestFlag(reportData)) prompt += `${TEST_CONDITIONS_LINE}\n\n`;
-    prompt += `${PLAIN_RULES}\n\n${meaningRules(false)}\n\n${NEVER_SAY}\n\n`;
+    prompt += `${PLAIN_RULES}\n\n${meaningRules((reportData.connections?.length ?? 0) > 0)}\n\n${NEVER_SAY}\n\n`;
     prompt += `Keep it to ${minWords}-${maxWords} words. Use bullet points and **bold** for emphasis.\n`;
   } else {
     // Default: coach audience

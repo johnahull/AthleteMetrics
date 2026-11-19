@@ -326,6 +326,15 @@ export const GOLDEN_CASES: GoldenCase[] = [
         'Strongest metric: 10-Yard Dash, 30th percentile vs the comparison group',
         'Biggest gap: 5-10-5 Agility, Average tier of High School Boys Tiers; needs 0.20 s less to reach Good',
       ],
+      // Same-run split facts and the relationships that fire for these results (ai-metric-relationships.ts)
+      splitFacts: [
+        'From one 40-yard run: first 10 yards 1.74 s, yards 10-20 1.27 s, yards 20-30 1.13 s, yards 30-40 1.12 s',
+        'Fastest 10 yards of that run: 1.12 s (yards 30-40), about 18.3 mph',
+      ],
+      connections: [
+        'Speed stopped rising after about 20 yards, so top speed is what we will look at next. One run does not show how fast the athlete can go over a longer distance.',
+        'Both jumps were about the same, so the athlete is not gaining from the dip yet. We will retest fresh. This does not show a spring deficit, a strength need or what to train.',
+      ],
       dataConfidence: 'Best value per metric only; no history over time in this report; benchmarks for 3 of 11 metrics',
       coachNotes: { goals: 'Casey wants to run a 7.0-7.1 s 60' },
     }, {
