@@ -154,7 +154,9 @@ export function aboveAverageResults(
   const out: NonNullable<ReportData['aboveAverage']> = [];
   for (const m of metrics) {
     if (belowAverageStanding(comparisons[m.code], m.percentile) !== false) continue;
-    // The median itself (50) is not above average; belowAverageStanding treats under 50 as below
+    // Deliberate: the tier or threshold decides that a result is not below average, but a percentile at or under the median
+    // contradicts "above average" in the same text (a Good tier at the 30th percentile). The wording then says only that it
+    // meets the group standard. The median itself (50) is not above average either.
     const middling = m.percentile !== undefined && m.percentile <= BELOW_AVERAGE_PERCENTILE;
     out.push({ code: m.code, label: m.label, wording: middling ? 'meets the group standard' : 'above average for the comparison group' });
   }
