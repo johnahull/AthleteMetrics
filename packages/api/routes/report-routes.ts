@@ -10,6 +10,8 @@ import { sortCodesByGroups, isGenericReport } from "@shared/metric-order";
 import { buildMeasurementRows, buildBenchmarkRows, buildStatsRows, buildAchievementRows, groupLabelFor } from "./pdf-metric-rows";
 import { ReportService } from "../services/report-service";
 import { BIGGEST_CHANGE_PREFIX } from "../services/ai-insights-service";
+import { aboveAverageResults, belowAverageResults } from "../services/ai-insights-meaning";
+import { isBelowAverageComparison } from "../services/benchmark-standing";
 import { createReportsFromInput, ReportCreateError } from "../services/report-create";
 import { planChartPageBreaks, chartGroupHeadings, addHeadingHeights } from "./pdf-chart-layout";
 import { requireAuth, requireAIEnabled, type AuthenticatedRequest } from "../middleware";
@@ -5480,8 +5482,7 @@ export async function buildReportDataForAI(
             tierRows.push({ m, c });
             benchmarkComparisons.push({ metric: m.label, performance: tierText(c) + tierGapText(c, m) });
             // Only the lower half of its own group is a concern; a higher non-best tier is a next step
-            const idx = tierIndex(c);
-            if (idx && idx.n > 1 && idx.i >= idx.n / 2) {
+            if (isBelowAverageComparison(c)) {
               concerns.push({ metric: m.label, concern: tierText(c) + tierGapText(c, m) });
             }
           } else {
@@ -5584,6 +5585,10 @@ export async function buildReportDataForAI(
       dataConfidence,
       audience,
     };
+    if (report.reportType === 'individual') {
+      aiReportData.belowAverage = belowAverageResults(metrics, typedReportData.athlete?.benchmarkComparisons ?? {});
+      aiReportData.aboveAverage = aboveAverageResults(metrics, typedReportData.athlete?.benchmarkComparisons ?? {});
+    }
 
     // Org style example (raw org row, not the admin-gated memberships). Names are re-checked now because a
     // member who joined after the save may match; if so it is dropped for this generation, not the request.

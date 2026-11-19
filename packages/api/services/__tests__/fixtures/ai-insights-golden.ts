@@ -1,4 +1,16 @@
 import type { ReportData } from '../../ai-insights-service';
+import { aboveAverageResults, belowAverageResults } from '../../ai-insights-meaning';
+import type { ComparisonLike } from '../../benchmark-standing';
+
+const tierOf = (tierName: string, tiers: string[]): ComparisonLike => ({ comparisonOperator: 'range', tierName, allTiers: tiers.map((t) => ({ tierName: t })) });
+const HS_TIERS = ['Good', 'Average'];
+
+/** The below-average list the report builder would make for these metrics and benchmark comparisons. */
+const withBelowAverage = (data: ReportData, comparisons: Record<string, ComparisonLike[]> = {}): ReportData => ({
+  ...data,
+  belowAverage: belowAverageResults(data.metrics, comparisons),
+  aboveAverage: aboveAverageResults(data.metrics, comparisons),
+});
 
 /**
  * Golden set for the AI insights eval harness: ReportData shaped like buildReportDataForAI output
@@ -272,5 +284,138 @@ export const GOLDEN_CASES: GoldenCase[] = [
       keyFacts: [],
       dataConfidence: 'Best value per metric only; no history over time in this report; no benchmarks',
     },
+  },
+  // Anonymized evaluations for the meaning-first family text (AM insights eval set). Strings follow buildReportDataForAI.
+  {
+    // Chris-like: a long-sprint goal, three results at the bottom of the range, splits from one 40
+    name: 'eval-long-sprint-goal',
+    data: withBelowAverage({
+      reportType: 'individual',
+      reportName: 'Casey Moore Winter Testing',
+      organizationName: 'Northside Athletics',
+      timeframe: 'Current Season',
+      athleteName: 'Casey Moore',
+      athleteAge: 15,
+      athleteGender: 'Male',
+      athleteSport: 'Football',
+      metrics: [
+        { code: 'DASH_10YD', label: '10-Yard Dash', values: [1.74], unit: 's', lowerIsBetter: true, percentile: 30, teamAverage: 1.7 },
+        { code: 'DASH_20YD', label: '20-Yard Dash', values: [3.01], unit: 's', lowerIsBetter: true, percentile: 28, teamAverage: 2.95 },
+        { code: 'DASH_30YD', label: '30-Yard Dash', values: [4.14], unit: 's', lowerIsBetter: true, percentile: 22, teamAverage: 4.0 },
+        { code: 'DASH_40YD', label: '40-Yard Dash', values: [5.26], unit: 's', lowerIsBetter: true, percentile: 14, teamAverage: 5.05 },
+        { code: 'FLY10_TIME_RI30', label: '10-Yard Fly (30 yd run-in)', values: [1.12], unit: 's', lowerIsBetter: true, percentile: 25, teamAverage: 1.08 },
+        { code: 'AGILITY_5105', label: '5-10-5 Agility', values: [4.96], unit: 's', lowerIsBetter: true, percentile: 8, teamAverage: 4.62 },
+        { code: 'JUMP_CMJ_HOH', label: 'Countermovement Jump', values: [19.1], unit: 'in', lowerIsBetter: false, percentile: 15, teamAverage: 21.4 },
+        { code: 'JUMP_SJ_HEIGHT', label: 'Squat Jump', values: [18.9], unit: 'in', lowerIsBetter: false },
+        { code: 'POWER_EUR', label: 'Eccentric Utilization Ratio', values: [1.01], unit: '', lowerIsBetter: false },
+        { code: 'HOP_SL_TRIPLE_LSI', label: 'Triple Hop Limb Symmetry', values: [94], unit: '%', lowerIsBetter: false },
+        { code: 'WEIGHT_LBS', label: 'Body Weight', values: [158], unit: 'lb', lowerIsBetter: false },
+      ],
+      improvements: [],
+      concerns: [
+        { metric: '40-Yard Dash', concern: 'Average tier of High School Boys Tiers; needs 0.12 s less to reach Good' },
+        { metric: '5-10-5 Agility', concern: 'Average tier of High School Boys Tiers; needs 0.20 s less to reach Good' },
+        { metric: 'Countermovement Jump', concern: 'Average tier of High School Boys Tiers; needs 1.50 in more to reach Good' },
+      ],
+      benchmarkComparisons: [
+        { metric: '40-Yard Dash', performance: 'Average tier of High School Boys Tiers; needs 0.12 s less to reach Good' },
+        { metric: '5-10-5 Agility', performance: 'Average tier of High School Boys Tiers; needs 0.20 s less to reach Good' },
+        { metric: 'Countermovement Jump', performance: 'Average tier of High School Boys Tiers; needs 1.50 in more to reach Good' },
+      ],
+      keyFacts: [
+        'Strongest metric: 10-Yard Dash, 30th percentile vs the comparison group',
+        'Biggest gap: 5-10-5 Agility, Average tier of High School Boys Tiers; needs 0.20 s less to reach Good',
+      ],
+      dataConfidence: 'Best value per metric only; no history over time in this report; benchmarks for 3 of 11 metrics',
+      coachNotes: { goals: 'Casey wants to run a 7.0-7.1 s 60' },
+    }, {
+      DASH_40YD: [tierOf('Average', HS_TIERS)], AGILITY_5105: [tierOf('Average', HS_TIERS)], JUMP_CMJ_HOH: [tierOf('Average', HS_TIERS)],
+      DASH_10YD: [tierOf('Good', HS_TIERS)], DASH_20YD: [tierOf('Good', HS_TIERS)], DASH_30YD: [tierOf('Good', HS_TIERS)], FLY10_TIME_RI30: [tierOf('Good', HS_TIERS)],
+    }),
+  },
+  {
+    // Short-sprint goal: the start leads
+    name: 'eval-short-sprint-goal',
+    data: withBelowAverage({
+      reportType: 'individual',
+      reportName: 'Devon Reyes Combine Prep',
+      organizationName: 'Northside Athletics',
+      timeframe: 'Current Season',
+      athleteName: 'Devon Reyes',
+      athleteAge: 14,
+      athleteGender: 'Male',
+      athleteSport: 'Football',
+      metrics: [
+        { code: 'DASH_10YD', label: '10-Yard Dash', values: [1.92], unit: 's', lowerIsBetter: true, percentile: 12, teamAverage: 1.78 },
+        { code: 'DASH_40YD', label: '40-Yard Dash', values: [5.71], unit: 's', lowerIsBetter: true, percentile: 35, teamAverage: 5.6 },
+        { code: 'JUMP_BROAD', label: 'Broad Jump', values: [88], unit: 'in', lowerIsBetter: false, percentile: 60, teamAverage: 84 },
+      ],
+      improvements: [],
+      concerns: [{ metric: '10-Yard Dash', concern: 'Developing tier of Speed Tiers; needs 0.10 s less to reach Advanced' }],
+      benchmarkComparisons: [{ metric: '10-Yard Dash', performance: 'Developing tier of Speed Tiers; needs 0.10 s less to reach Advanced' }],
+      keyFacts: [
+        'Strongest metric: Broad Jump, 60th percentile vs the comparison group',
+        'Biggest gap: 10-Yard Dash, Developing tier of Speed Tiers; needs 0.10 s less to reach Advanced',
+      ],
+      dataConfidence: 'Best value per metric only; no history over time in this report; benchmarks for 1 of 3 metrics',
+      coachNotes: { goals: 'Devon wants a 40-yard dash under 5.5' },
+    }, { DASH_10YD: [tierOf('Developing', ['Elite', 'Advanced', 'Developing'])] }),
+  },
+  {
+    // No goal, a girl, a limited battery and test-day flags the family may hear about
+    name: 'eval-no-goal-test-conditions',
+    data: withBelowAverage({
+      reportType: 'individual',
+      reportName: 'Alex Kim Spring Testing',
+      organizationName: 'Northside Athletics',
+      timeframe: 'Current Season',
+      athleteName: 'Alex Kim',
+      athleteAge: 16,
+      athleteGender: 'Female',
+      athleteSport: 'Volleyball',
+      metrics: [
+        { code: 'JUMP_CMJ_HOH', label: 'Countermovement Jump', values: [15.2], unit: 'in', lowerIsBetter: false, percentile: 44, teamAverage: 15.9 },
+        { code: 'AGILITY_5105', label: '5-10-5 Agility', values: [4.88], unit: 's', lowerIsBetter: true, percentile: 71, teamAverage: 5.02 },
+        { code: 'TOP_SPEED', label: 'Top Speed', values: [17.1], unit: 'mph', lowerIsBetter: false, percentile: 58, teamAverage: 16.8 },
+      ],
+      improvements: [],
+      concerns: [],
+      benchmarkComparisons: [],
+      keyFacts: [
+        'Strongest metric: 5-10-5 Agility, 71st percentile vs the comparison group',
+        'Biggest gap: Countermovement Jump, 44th percentile vs the comparison group',
+      ],
+      dataConfidence: 'Best value per metric only; no history over time in this report; no benchmarks',
+      coachNotes: { testDayFlags: ['surface'] },
+    }),
+  },
+  {
+    // Height and weight are in the data but must never reach a family prompt
+    name: 'eval-body-measures',
+    data: withBelowAverage({
+      reportType: 'individual',
+      reportName: 'Taylor Brooks Fall Testing',
+      organizationName: 'Northside Athletics',
+      timeframe: 'Current Season',
+      athleteName: 'Taylor Brooks',
+      athleteAge: 13,
+      athleteGender: 'Male',
+      athleteSport: 'Soccer',
+      metrics: [
+        { code: 'HEIGHT_IN', label: 'Height', values: [64], unit: 'in', lowerIsBetter: false },
+        { code: 'WEIGHT_LBS', label: 'Body Weight', values: [118], unit: 'lb', lowerIsBetter: false },
+        { code: 'PEAK_POWER_W', label: 'Peak Power', values: [3210], unit: 'W', lowerIsBetter: false },
+        { code: 'JUMP_CMJ_HOH', label: 'Countermovement Jump', values: [16.4], unit: 'in', lowerIsBetter: false, percentile: 38, teamAverage: 17.5 },
+        { code: 'DASH_20YD', label: '20-Yard Dash', values: [3.18], unit: 's', lowerIsBetter: true, percentile: 55, teamAverage: 3.22 },
+      ],
+      improvements: [],
+      concerns: [],
+      benchmarkComparisons: [],
+      keyFacts: [
+        'Strongest metric: 20-Yard Dash, 55th percentile vs the comparison group',
+        'Biggest gap: Countermovement Jump, 38th percentile vs the comparison group',
+      ],
+      dataConfidence: 'Best value per metric only; no history over time in this report; no benchmarks',
+    }),
   },
 ];
