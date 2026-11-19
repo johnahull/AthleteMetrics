@@ -17,6 +17,7 @@ import {
   type SelectableAIModelKey,
 } from "@shared/ai-models";
 import type { CoachNotes } from "@shared/coach-notes";
+import { JARGON_SWAPS } from "@shared/plain-language";
 import {
   AI_PROMPT_OVERRIDE_KEYS,
   AI_PROMPT_OVERRIDE_MAX,
@@ -708,6 +709,17 @@ const ATHLETE_TONE = `TONE: Direct, confident, and energizing — like a coach w
 const ATHLETE_AVOID = `AVOID: Clinical or passive language, hedging ("you might want to consider..."), generic praise ("great job!"), talking down to them. Athletes respect realness — show them the data backs up what you're saying.`;
 const COACH_LEAD = `You are writing for sports coaches and athletes, NOT strength & conditioning experts. Use simple, everyday language.`;
 
+/** Locked reading-level rules for the family-facing audiences; sits after the tone text so a tone override cannot remove it. */
+const PLAIN_RULES = [
+  `PLAIN LANGUAGE:`,
+  `- Write at a 6th-8th grade reading level. Keep sentences under 20 words.`,
+  `- Give one number per bullet, followed by what it means in everyday words.`,
+  `- Use at most 3 bullets under each heading.`,
+  `- Mention every benchmark result that is below average, kindly and with its gap to average. Never list a bottom-tier result under What's Going Well.`,
+  `- Leave out hedges and disclaimers, "if X then Y" math, rest times, sets and test-setup detail. Keep the test-noise, limited-data and "coach to confirm" lines the rules above require.`,
+  `- Swap coach terms for everyday words: ${Object.entries(JARGON_SWAPS).map(([term, plain]) => `${term} -> ${plain}`).join('; ')}.`,
+].join('\n');
+
 /** Checklist items (2)-(4) and (6)-(9) of ANALYSIS_INSTRUCTION; (1) and (5) and the numbering are locked. */
 const CHECKLIST_DEFAULT = [
   `Snapshot against the benchmark and the athlete's own history; a small change may be test noise, say so.`,
@@ -1181,6 +1193,7 @@ export function buildPrompt(reportData: ReportData, overrides?: AIPromptOverride
     if (!o.toneParent) prompt += `${PARENT_TONE}\n\n${PARENT_AVOID}\n\n`;
     prompt += `Use the athlete's first name throughout by writing the literal placeholder ${FIRST_NAME_PLACEHOLDER} wherever the name belongs.\n\n`;
     if (hasCoachText) prompt += `Never quote or reveal the coach notes. Make no injury, maturation or weight remarks.\n\n`;
+    prompt += `${PLAIN_RULES}\n\n`;
     prompt += `Keep it to ${minWords}-${maxWords} words.\n`;
   } else if (audience === 'athlete') {
     prompt += toneBlock(o.toneAthlete, ATHLETE_LEAD);
@@ -1196,6 +1209,7 @@ export function buildPrompt(reportData: ReportData, overrides?: AIPromptOverride
     // already implies action (it tells the athlete what to chase). Adding a separate next-steps
     // block would be redundant and dilute the direct, competitor-facing tone.
     if (hasCoachText) prompt += `Never quote or reveal the coach notes. Make no injury, maturation or weight remarks.\n\n`;
+    prompt += `${PLAIN_RULES}\n\n`;
     prompt += `Keep it to ${minWords}-${maxWords} words. Use bullet points and **bold** for emphasis.\n`;
   } else {
     // Default: coach audience

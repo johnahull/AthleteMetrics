@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useGenerateInsights, useUpdateInsights } from "@/lib/reports-api";
 import { MAX_INSIGHTS_LENGTH } from "@shared/schema";
 import { getAIModel } from "@shared/ai-models";
+import { findJargon } from "@shared/plain-language";
 import { CoachNotesForm, type FlushNotes, type MetricOption } from "./CoachNotesForm";
 
 interface CoachingInsightsCardProps {
@@ -150,6 +151,8 @@ export function CoachingInsightsCard({
     handleGenerate();
   }, [handleGenerate]);
 
+  const hardWords = findJargon(editedContent);
+
   // Early returns come after every hook so the hook order never changes between renders
   // Manual write/edit never needs AI; only Generate/Regenerate do
   const canGenerate = aiEnabled && aiConsentGranted === true;
@@ -288,6 +291,11 @@ export function CoachingInsightsCard({
             placeholder="Enter coaching insights..."
             data-testid="insights-editor"
           />
+          {hardWords.length > 0 && (
+            <p className="text-sm text-amber-700" data-testid="hard-words">
+              Hard words for families: {hardWords.join(", ")}
+            </p>
+          )}
           <div className="flex justify-between items-center text-sm text-muted-foreground">
             <span>
               Characters: {editedContent.length} / {MAX_INSIGHTS_LENGTH}

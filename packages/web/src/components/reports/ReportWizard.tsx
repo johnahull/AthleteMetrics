@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { Link } from "wouter";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -118,7 +118,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     getValues,
     setValue,
     handleSubmit,
-    formState: { errors, dirtyFields },
+    formState: { errors },
   } = useForm<ReportFormData>({
     resolver: zodResolver(reportConfigSchema),
     defaultValues: {
@@ -144,15 +144,19 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const reportType = watch("reportType");
   const reportName = watch("name");
 
-  // Default audience based on report type — reset to coach for team reports
-  // since athlete/parent audiences only make sense for individual reports
+  // Default audience based on report type: coach for team reports (athlete/parent audiences only make sense for
+  // individual reports), parent for individual reports since they go to families. Once the coach picks an audience
+  // themselves, a re-run of this effect must not overwrite it, so the choice is tracked in a ref (RHF's dirtyFields
+  // compares against the coach default and flips back to clean when the coach picks coach again).
+  const audienceChosen = useRef(false);
   useEffect(() => {
     if (reportType === "team") {
+      audienceChosen.current = false;
       setValue("audience", "coach");
-    } else if (!dirtyFields.audience) {
-      setValue("audience", "coach");
+    } else if (!audienceChosen.current) {
+      setValue("audience", "parent");
     }
-  }, [reportType, setValue, dirtyFields.audience]);
+  }, [reportType, setValue]);
   const timeframeType = watch("timeframeType");
   const selectedMetrics = watch("metrics");
   const enableCompositeIndex = watch("enableCompositeIndex");
@@ -815,7 +819,10 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
               </Label>
               <RadioGroup
                 value={watch("audience")}
-                onValueChange={(value) => setValue("audience", value as "coach" | "athlete" | "parent", { shouldDirty: true })}
+                onValueChange={(value) => {
+                  audienceChosen.current = true;
+                  setValue("audience", value as "coach" | "athlete" | "parent", { shouldDirty: true });
+                }}
               >
                 <div className="flex items-center gap-x-2 border rounded-lg p-3 cursor-pointer hover:bg-accent">
                   <RadioGroupItem value="coach" id="audience-coach" />
