@@ -20,4 +20,10 @@ describe('custom metric API errors', () => {
     failWith({ error: 'Not found' });
     await expect(updateCustomOrgMetric('o', 'C', {})).rejects.toThrow(/^Not found$/);
   });
+
+  it('separates several field messages with semicolons', async () => {
+    const two = { error: 'Validation failed', details: { meaning: ['A.'], label: ['B.'] } };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 400, json: async () => two }));
+    await expect(createCustomOrgMetric('o', { label: 'x' } as any)).rejects.toThrow('Validation failed: A.; B.');
+  });
 });

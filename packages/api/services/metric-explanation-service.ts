@@ -148,7 +148,9 @@ export async function getMetricExplanationsAndMeanings(
 
   const meaningMap: Record<string, MetricMeaning> = {};
   for (const row of siteMetricRows) if (row.meaning?.trim()) meaningMap[row.code] = { text: row.meaning.trim(), source: 'site' };
-  for (const row of customRows) if (row.meaning?.trim()) meaningMap[row.code] = { text: row.meaning.trim(), source: 'org' };
+  // The custom query is by organization, not by code: keep only the codes the caller asked for
+  const asked = new Set(metricCodes);
+  for (const row of customRows) if (asked.has(row.code) && row.meaning?.trim()) meaningMap[row.code] = { text: row.meaning.trim(), source: 'org' };
 
   return { explanations: buildMetricExplanationsMap(metricCodes, customMap, siteOverrides), meaningMap };
 }

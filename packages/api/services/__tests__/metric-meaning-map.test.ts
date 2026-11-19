@@ -37,6 +37,12 @@ describe('getMetricExplanationsAndMeanings', () => {
     expect((await getMetricExplanationsAndMeanings(['A'], 'org1')).meaningMap).toEqual({ A: { text: 'site text', source: 'site' } });
   });
 
+  it('only returns meanings for the codes asked for, including custom ones', async () => {
+    queue.push([siteRow('A', 'site a')], [], [customRow('A', 'org a'), customRow('X', 'org x, never asked for')]);
+    const { meaningMap } = await getMetricExplanationsAndMeanings(['A'], 'org1');
+    expect(meaningMap).toEqual({ A: { text: 'org a', source: 'org' } });
+  });
+
   it('without an organization only site meanings apply', async () => {
     queue.push([siteRow('A', 'site text')], []);
     expect((await getMetricExplanationsAndMeanings(['A'])).meaningMap).toEqual({ A: { text: 'site text', source: 'site' } });

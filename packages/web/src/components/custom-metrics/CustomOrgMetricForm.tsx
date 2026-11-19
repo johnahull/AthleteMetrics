@@ -186,7 +186,7 @@ export function CustomOrgMetricForm({
         shortDescription: "",
         whatItMeasures: "",
         whyItMatters: "",
-      meaning: "",
+        meaning: "",
         validationMin: undefined,
         validationMax: undefined,
         decimalPrecision: 3,

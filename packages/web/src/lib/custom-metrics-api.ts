@@ -95,7 +95,7 @@ export async function fetchCustomOrgMetric(
 /** Server message plus any per-field validation messages (400 responses carry them in `details`). */
 function apiErrorMessage(body: { error?: string; details?: Record<string, string[]> }, fallback: string): string {
   const fields = Object.values(body.details ?? {}).flat().filter(Boolean);
-  return [body.error || fallback, ...fields].join(': ');
+  return fields.length > 0 ? `${body.error || fallback}: ${fields.join('; ')}` : body.error || fallback;
 }
 
 export async function createCustomOrgMetric(

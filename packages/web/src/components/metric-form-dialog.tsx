@@ -199,7 +199,7 @@ export default function MetricFormDialog({
         shortDescription: "",
         whatItMeasures: "",
         whyItMatters: "",
-      meaning: "",
+        meaning: "",
         metricType: 'lower_is_better',
         displayFormat: 'decimal',
         availableOrgTypes: undefined,
