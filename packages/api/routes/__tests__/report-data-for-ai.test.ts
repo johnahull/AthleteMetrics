@@ -1,8 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 
 // The org and team lookups are the only direct db reads; every chained query resolves to one row.
+const dob = vi.hoisted(() => ({ value: undefined as string | undefined, throws: false }));
 vi.mock('../../db', () => {
-  const row = { name: 'Lions', sport: 'Soccer', aiPromptContext: null };
+  const row = { name: 'Lions', sport: 'Soccer', aiPromptContext: null, get birthDate() { if (dob.throws) throw new Error('db down'); return dob.value; } };
   const chain: any = new Proxy({}, {
     get: (_t, prop) => (prop === 'then' ? (resolve: any) => resolve([row]) : () => chain),
   });
@@ -162,6 +163,43 @@ describe('buildReportDataForAI — coach notes', () => {
     const data = await buildReportDataForAI({ ...individualReport, coachNotes }, 'u1', service(individualData()));
     expect(data).not.toHaveProperty('coachNotes');
     expect(buildPrompt(data)).not.toContain('make varsity');
+  });
+
+  describe('shareWhatISaw is locked off for under-13 or unknown-DOB athletes', () => {
+    const shared = { whatISaw: 'short strides', shareWhatISaw: true };
+    const build = () => buildReportDataForAI({ ...individualReport, coachNotes: shared }, 'u1', service(individualData()), { includeCoachNotes: true });
+
+    it('keeps the switch for an adult athlete', async () => {
+      dob.value = '1990-01-01';
+      expect((await build()).coachNotes).toEqual(shared);
+    });
+    it('drops the switch (and keeps the rest) for an under-13 athlete', async () => {
+      dob.value = `${new Date().getFullYear() - 10}-06-15`;
+      expect((await build()).coachNotes).toEqual({ whatISaw: 'short strides' });
+    });
+    it('fails closed when the date of birth lookup throws', async () => {
+      dob.throws = true;
+      try {
+        expect((await build()).coachNotes).toEqual({ whatISaw: 'short strides' });
+      } finally {
+        dob.throws = false;
+      }
+    });
+    it('drops the switch when there is no What I saw text to share', async () => {
+      dob.value = '1990-01-01';
+      const r = { ...individualReport, coachNotes: { goals: 'make varsity', shareWhatISaw: true } };
+      const data = await buildReportDataForAI(r, 'u1', service(individualData()), { includeCoachNotes: true });
+      expect(data.coachNotes).toEqual({ goals: 'make varsity' });
+    });
+    it('sends no notes at all when the caller may not use them, even with the switch on', async () => {
+      dob.value = '1990-01-01';
+      const data = await buildReportDataForAI({ ...individualReport, coachNotes: shared }, 'u1', service(individualData()), { includeCoachNotes: false });
+      expect(data).not.toHaveProperty('coachNotes');
+    });
+    it('drops the switch when the date of birth is unknown', async () => {
+      dob.value = undefined;
+      expect((await build()).coachNotes).toEqual({ whatISaw: 'short strides' });
+    });
   });
 
   it('leaves coachNotes off when the report has none', async () => {

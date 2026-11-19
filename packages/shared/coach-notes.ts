@@ -24,6 +24,8 @@ export const coachNotesSchema = z.object({
   sessionsPerWeek: z.number().int().min(0).max(14).optional(),
   nextRetestDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isRealDate, "Invalid date").optional(),
   whatISaw: z.string().max(1500).optional(),
+  /** Lets the AI use "What I saw" in parent and athlete insights. Absent = off; locked off for under-13 or unknown-DOB athletes. */
+  shareWhatISaw: z.boolean().optional(),
 }).strict();
 
 export type CoachNotes = z.infer<typeof coachNotesSchema>;

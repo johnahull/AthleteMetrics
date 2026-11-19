@@ -150,6 +150,44 @@ describe('PATCH /api/reports/:id/coach-notes', () => {
     expect(await stored(r.id)).toEqual(NOTES);
   });
 
+  it('shareWhatISaw: saved for an adult athlete; 400 and nothing stored for an under-13 athlete', async () => {
+    const adult = await mkReport(orgB, 'individual', u.athlete.id, null);
+    const ok = await patch(u.coach, adult.id, { whatISaw: 'quick feet', shareWhatISaw: true });
+    expect(ok.status).toBe(200);
+    expect(await stored(adult.id)).toEqual({ whatISaw: 'quick feet', shareWhatISaw: true });
+
+    // under 13: the switch is dropped, the rest is saved, and the response says it was locked
+    const year = new Date().getFullYear() - 10;
+    const kid = await mkUser('kid', { birthDate: `${year}-06-15` });
+    const r = await mkReport(orgB, 'individual', kid.id, null);
+    const locked = await patch(u.coach, r.id, { whatISaw: 'quick feet', shareWhatISaw: true });
+    expect(locked.status).toBe(200);
+    expect(locked.body.shareLocked).toBe(true);
+    expect(locked.body.coachNotes).toEqual({ whatISaw: 'quick feet' });
+    expect(await stored(r.id)).toEqual({ whatISaw: 'quick feet' });
+    expect(ok.body.shareLocked).toBeUndefined();
+  });
+
+  it('shareWhatISaw: dropped for an unknown date of birth, and when there is no What I saw text', async () => {
+    // Load-bearing: a year before 1900 is implausible, so isUnder13OrUnknownDob treats it as an unknown date of birth
+    // (packages/shared/coppa-utils.ts). Use another implausible value only if that rule changes.
+    const unknown = await mkUser('nodob', { birthDate: '1800-01-01' });
+    const r = await mkReport(orgB, 'individual', unknown.id, null);
+    const res = await patch(u.coach, r.id, { whatISaw: 'quick feet', shareWhatISaw: true });
+    expect(res.body.shareLocked).toBe(true);
+    expect(await stored(r.id)).toEqual({ whatISaw: 'quick feet' });
+
+    const adult = await mkReport(orgB, 'individual', u.athlete.id, null);
+    expect((await patch(u.coach, adult.id, { goals: 'make varsity', shareWhatISaw: true })).status).toBe(200);
+    expect(await stored(adult.id)).toEqual({ goals: 'make varsity' });
+  });
+
+  it('a non-writer cannot set shareWhatISaw', async () => {
+    const r = await mkReport(orgB, 'individual', u.athlete.id, null);
+    expect((await patch(u.athlete, r.id, { whatISaw: 'x', shareWhatISaw: true })).status).toBe(403);
+    expect(await stored(r.id)).toBeNull();
+  });
+
   it('403 for an athlete', async () => {
     const r = await mkReport(orgB, 'individual', u.athlete.id, null);
     expect((await patch(u.athlete, r.id, { goals: 'x' })).status).toBe(403);

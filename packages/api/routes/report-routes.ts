@@ -60,7 +60,7 @@ import { hexToRgb, isSafeLogoUrl, fetchLogoBase64, sanitizeFilename } from "./re
 import { renderEvalReportPdf } from "../utils/eval-report-pdf";
 import { canAccessEvalRow, hasInaccessibleEval } from "./eval-report-access";
 import { EVAL_REPORT_TYPE, frozenModelSchema } from "@shared/eval-report-config";
-import { coachNotesSchema } from "@shared/coach-notes";
+import { coachNotesSchema, type CoachNotes } from "@shared/coach-notes";
 import { memberNamesIn } from "../services/ai-style-example";
 import { omitCoachNotes, writerOrgIds, forViewer } from "./report-coach-notes-access";
 import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
@@ -1963,6 +1963,10 @@ export function registerReportRoutes(app: Express) {
       const athleteId = (report.config as { athleteId?: string } | null)?.athleteId;
       if (!athleteId) return res.status(400).json({ message: "Report is missing its athlete configuration" });
 
+      // Family sharing of "What I saw" is locked off for under-13 or unknown-DOB athletes: the switch is dropped,
+      // the rest of the notes still save, and the response says so
+      const { notes: toSave, locked: shareLocked } = await resolveShareWhatISaw(notes, athleteId);
+
       // Atomic with COPPA deletion: deletion takes FOR UPDATE on the athlete's user row first, so this either
       // finishes before deletion (which then clears the notes) or waits and sees the athlete deleted.
       // The update re-states the authorized organization, type and athlete, so a concurrent PUT that moved the
@@ -1976,7 +1980,7 @@ export function registerReportRoutes(app: Express) {
         if (!athlete || athlete.deletedAt) return undefined;
         const [row] = await tx
           .update(reports)
-          .set({ coachNotes: Object.keys(notes).length ? notes : null, updatedAt: new Date() })
+          .set({ coachNotes: Object.keys(toSave).length ? toSave : null, updatedAt: new Date() })
           .where(and(
             eq(reports.id, report.id),
             eq(reports.organizationId, report.organizationId),
@@ -1988,7 +1992,7 @@ export function registerReportRoutes(app: Express) {
       });
 
       if (!updated) return res.status(404).json({ message: "Report not found" });
-      res.json({ coachNotes: updated.coachNotes });
+      res.json({ coachNotes: updated.coachNotes, ...(shareLocked ? { shareLocked: true } : {}) });
     } catch (error) {
       if (error instanceof ZodError) {
         return res.status(400).json({ message: "Validation error", errors: error.errors });
@@ -3503,7 +3507,7 @@ export function registerReportRoutes(app: Express) {
         }
 
         // AM-FEAT-019: never return an eval's config/model to an under-13 / no-DOB athlete
-        if (share.reportType === EVAL_REPORT_TYPE && await evalShareBlocked(user.id)) {
+        if (share.reportType === EVAL_REPORT_TYPE && await isAgeGatedForFamilyContent(user.id)) {
           return res.status(404).json({ message: "Shared report not found" });
         }
 
@@ -4130,12 +4134,26 @@ export function addTrendChartsToPdf(
 }
 
 /**
- * AM-FEAT-019: defence in depth for evals already shared to an athlete account. Blocked when the athlete is under
+ * The notes with shareWhatISaw kept only when it can take effect: there is text to share and the athlete is 13 or
+ * older with a known date of birth (a missing athleteId counts as locked). `locked` is true only when the age rule
+ * dropped a switch the coach turned on.
+ */
+async function resolveShareWhatISaw(notes: CoachNotes, athleteId: string | undefined): Promise<{ notes: CoachNotes; locked: boolean }> {
+  if (!notes.shareWhatISaw) return { notes, locked: false };
+  const { shareWhatISaw: _drop, ...rest } = notes;
+  if (!notes.whatISaw?.trim()) return { notes: rest, locked: false };
+  if (!athleteId || (await isAgeGatedForFamilyContent(athleteId))) return { notes: rest, locked: true };
+  return { notes, locked: false };
+}
+
+/**
+ * The one age gate for family-facing content (eval shares, and "What I saw" shared into parent/athlete insights): defence
+ * in depth for content already shared to an athlete account. Blocked when the athlete is under
  * 13 today or has no usable date of birth (the same isUnder13OrUnknownDob rule the /share, /share-bulk and
  * /bulk-distribute guards apply to every report type). Age today decides: neither isMinor nor the age at the
  * event date matters (isEvalSnapshotRestricted is a separate control for PUBLIC snapshots). Fails closed on error.
  */
-async function evalShareBlocked(athleteId: string): Promise<boolean> {
+async function isAgeGatedForFamilyContent(athleteId: string): Promise<boolean> {
   try {
     const [athlete] = await db.select({ birthDate: users.birthDate }).from(users).where(eq(users.id, athleteId)).limit(1);
     return isUnder13OrUnknownDob(athlete?.birthDate);
@@ -4144,11 +4162,11 @@ async function evalShareBlocked(athleteId: string): Promise<boolean> {
   }
 }
 
-/** Remove eval shares the athlete may not be shown (see evalShareBlocked). Non-eval rows pass through. */
+/** Remove eval shares the athlete may not be shown (see isAgeGatedForFamilyContent). Non-eval rows pass through. */
 async function dropBlockedEvalShares<T extends { reportType: string }>(shares: T[], athleteId: string): Promise<T[]> {
   if (!shares.some((share) => share.reportType === EVAL_REPORT_TYPE)) return shares;
   // The decision depends only on the athlete, so look them up once for all their eval shares
-  if (!(await evalShareBlocked(athleteId))) return shares;
+  if (!(await isAgeGatedForFamilyContent(athleteId))) return shares;
   return shares.filter((share) => share.reportType !== EVAL_REPORT_TYPE);
 }
 
@@ -5611,7 +5629,11 @@ export async function buildReportDataForAI(
     // Coach notes steer the insights of an individual report; team and eval rows never carry them
     if (report.reportType === 'individual' && opts.includeCoachNotes) {
       const notes = coachNotesSchema.safeParse(report.coachNotes);
-      if (notes.success && Object.keys(notes.data).length > 0) aiReportData.coachNotes = notes.data;
+      if (notes.success && Object.keys(notes.data).length > 0) {
+        // Re-checked at generation: the notes may have been saved as shareable and the date of birth edited since
+        const athleteId = (report.config as { athleteId?: string } | null)?.athleteId;
+        aiReportData.coachNotes = (await resolveShareWhatISaw(notes.data, athleteId)).notes;
+      }
     }
 
     // Add team-specific data

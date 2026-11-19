@@ -22,7 +22,6 @@ Coach-supplied context, not measured data.
 - Test day flags: weather
 - Sessions per week: 3
 - Next retest date: 2026-02-15
-- What the coach saw: {{first_name}} stands up early out of the start and loses time in the first three steps.
 - Coach's limiter call: 10-Yard Fly (use it)
 
 ## Goals

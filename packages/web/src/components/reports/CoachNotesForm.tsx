@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type MutableRefObject } from "react";
+import { useState, useEffect, useCallback, useRef, type MutableRefObject } from "react";
 import { useForm, Controller } from "react-hook-form";
 import type { Resolver } from "react-hook-form";
 import { ChevronDown, Loader2, Save } from "lucide-react";
@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { useUpdateCoachNotes } from "@/lib/reports-api";
@@ -25,6 +26,8 @@ interface Props {
   coachNotes?: unknown;
   metricOptions?: MetricOption[];
   flushRef: MutableRefObject<FlushNotes | null>;
+  /** Called after a save that took "What I saw" out of family reports (switched off, or locked by the athlete's age). */
+  onShareRemoved?: () => void;
 }
 
 // Inputs are strings (empty = unset); toNotes converts to the shared schema shape.
@@ -41,6 +44,7 @@ interface FormValues {
   sessionsPerWeek: string;
   nextRetestDate: string;
   whatISaw: string;
+  shareWhatISaw: boolean;
 }
 
 const FLAGS: [string, string][] = [
@@ -68,6 +72,7 @@ function fromNotes(raw: unknown): FormValues {
     sessionsPerWeek: n.sessionsPerWeek?.toString() ?? "",
     nextRetestDate: n.nextRetestDate ?? "",
     whatISaw: n.whatISaw ?? "",
+    shareWhatISaw: n.shareWhatISaw ?? false,
   };
 }
 
@@ -86,6 +91,8 @@ function toNotes(v: FormValues): CoachNotes {
   if (v.sessionsPerWeek !== "") n.sessionsPerWeek = Number(v.sessionsPerWeek);
   if (v.nextRetestDate) n.nextRetestDate = v.nextRetestDate;
   if (v.whatISaw.trim()) n.whatISaw = v.whatISaw;
+  // Sharing means nothing without text to share
+  if (v.shareWhatISaw && v.whatISaw.trim()) n.shareWhatISaw = true;
   return n as CoachNotes;
 }
 
@@ -112,11 +119,13 @@ function FieldError({ id, message }: { id: string; message?: string }) {
   ) : null;
 }
 
-export function CoachNotesForm({ reportId, coachNotes, metricOptions = [], flushRef }: Props) {
+export function CoachNotesForm({ reportId, coachNotes, metricOptions = [], flushRef, onShareRemoved }: Props) {
   const { toast } = useToast();
   const mutation = useUpdateCoachNotes(reportId);
   const hasNotes = Object.keys(toNotes(fromNotes(coachNotes))).length > 0;
   const [open, setOpen] = useState(hasNotes);
+  const [shareLocked, setShareLocked] = useState(false);
+  const sharedRef = useRef(fromNotes(coachNotes).shareWhatISaw);
 
   // defaultValues are read on mount only; the card remounts this form after generation, which is intentional.
   const {
@@ -135,6 +144,10 @@ export function CoachNotesForm({ reportId, coachNotes, metricOptions = [], flush
       try {
         const res = await mutation.mutateAsync(notes);
         reset(fromNotes(res.coachNotes));
+        const nowShared = fromNotes(res.coachNotes).shareWhatISaw;
+        setShareLocked(res.shareLocked === true);
+        if ((sharedRef.current && !nowShared) || res.shareLocked) onShareRemoved?.();
+        sharedRef.current = nowShared;
         toast({ title: "Success", description: Object.keys(notes).length ? "Coach notes saved" : "Coach notes cleared" });
         return true;
       } catch (error: any) {
@@ -142,7 +155,7 @@ export function CoachNotesForm({ reportId, coachNotes, metricOptions = [], flush
         return false;
       }
     },
-    [mutation, reset, toast],
+    [mutation, reset, toast, onShareRemoved],
   );
 
   const flush = useCallback(async () => {
@@ -167,6 +180,7 @@ export function CoachNotesForm({ reportId, coachNotes, metricOptions = [], flush
 
   const goalsLen = watch("goals").length;
   const sawLen = watch("whatISaw").length;
+  const hasSaw = watch("whatISaw").trim().length > 0;
   const limiter = watch("limiterOverride");
   const options =
     limiter && !metricOptions.some((m) => m.code === limiter) ? [...metricOptions, { code: limiter, label: limiter }] : metricOptions;
@@ -302,6 +316,27 @@ export function CoachNotesForm({ reportId, coachNotes, metricOptions = [], flush
               <FieldError id="cn-saw-err" message={errors.whatISaw?.message} />
               <span id="cn-saw-count" className="ml-auto">{sawLen} / 1500</span>
             </div>
+            <Controller
+              control={control}
+              name="shareWhatISaw"
+              render={({ field }) => (
+                <div className="flex items-start gap-2 pt-1">
+                  <Switch id="cn-share-saw" checked={field.value && !shareLocked && hasSaw} disabled={shareLocked || !hasSaw} onCheckedChange={field.onChange} aria-describedby="cn-share-saw-help" />
+                  <div className="space-y-0.5">
+                    <Label htmlFor="cn-share-saw">Use in the family report</Label>
+                    <p id="cn-share-saw-help" className="text-xs text-muted-foreground">
+                      The AI may use this in its own words in parent and athlete insights. Keep injury, weight and private details out; use the restriction fields for those. Facts taken from these notes (for example "lifts three times a week") need this switch too. Not available for athletes under 13 or with no date of birth.
+                    </p>
+                    {!hasSaw && !shareLocked && (
+                      <p className="text-xs text-muted-foreground">Write what you saw first, then turn this on.</p>
+                    )}
+                    {shareLocked && (
+                      <p className="text-xs text-destructive">Not available for this athlete (under 13, or no date of birth on file).</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            />
           </div>
 
           <div className="flex flex-wrap gap-2">

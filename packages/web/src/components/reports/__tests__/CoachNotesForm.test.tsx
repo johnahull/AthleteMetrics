@@ -40,6 +40,66 @@ describe('CoachNotesForm in CoachingInsightsCard', () => {
     expect(screen.getByLabelText(/coach's limiter call/i)).toBeInTheDocument();
   });
 
+  it('has a "Use in the family report" switch that is off by default, with help text', () => {
+    render(<CoachingInsightsCard {...props} />);
+    open();
+    const sw = screen.getByRole('switch', { name: /use in the family report/i });
+    expect(sw).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByText(/keep injury, weight and private details out/i)).toBeInTheDocument();
+  });
+
+  it('saves shareWhatISaw: true when on with text, and omits it when off or with no text', async () => {
+    render(<CoachingInsightsCard {...props} />);
+    open();
+    fireEvent.change(screen.getByLabelText(/what i saw/i), { target: { value: 'quick feet' } });
+    fireEvent.click(screen.getByRole('switch', { name: /use in the family report/i }));
+    fireEvent.click(screen.getByRole('button', { name: /save notes/i }));
+    await waitFor(() => expect(saveNotes).toHaveBeenCalledWith({ whatISaw: 'quick feet', shareWhatISaw: true }));
+
+    fireEvent.click(screen.getByRole('switch', { name: /use in the family report/i }));
+    fireEvent.click(screen.getByRole('button', { name: /save notes/i }));
+    await waitFor(() => expect(saveNotes).toHaveBeenLastCalledWith({ whatISaw: 'quick feet' }));
+  });
+
+  it('the switch is off and disabled until there is text in What I saw, with a hint', () => {
+    render(<CoachingInsightsCard {...props} />);
+    open();
+    const sw = screen.getByRole('switch', { name: /use in the family report/i });
+    expect(sw).toBeDisabled();
+    expect(screen.getByText(/write what you saw first/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/what i saw/i), { target: { value: 'quick feet' } });
+    expect(sw).not.toBeDisabled();
+    expect(screen.queryByText(/write what you saw first/i)).toBeNull();
+  });
+
+  it('when the server locks the switch: disables it with the reason and tells the coach to regenerate', async () => {
+    saveNotes.mockImplementationOnce(async () => ({ coachNotes: { whatISaw: 'quick feet' }, shareLocked: true }));
+    render(<CoachingInsightsCard {...props} coachNotes={{ whatISaw: 'quick feet', shareWhatISaw: true }} />);
+    fireEvent.click(screen.getByRole('button', { name: /save notes/i }));
+    await waitFor(() => expect(screen.getByRole('switch', { name: /use in the family report/i })).toBeDisabled());
+    expect(screen.getByRole('switch', { name: /use in the family report/i })).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByText(/not available for this athlete/i)).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Regenerate the insights to remove coach observations');
+  });
+
+  it('shows the regenerate notice after a save turns the switch off, but not when it was never on', async () => {
+    const { unmount } = render(<CoachingInsightsCard {...props} coachNotes={{ whatISaw: 'quick feet', shareWhatISaw: true }} />);
+    fireEvent.click(screen.getByRole('switch', { name: /use in the family report/i }));
+    fireEvent.click(screen.getByRole('button', { name: /save notes/i }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Regenerate the insights to remove coach observations'));
+    unmount();
+
+    render(<CoachingInsightsCard {...props} coachNotes={{ whatISaw: 'quick feet' }} />);
+    fireEvent.click(screen.getByRole('button', { name: /save notes/i }));
+    await waitFor(() => expect(saveNotes).toHaveBeenCalled());
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('prefills the switch from saved notes', () => {
+    render(<CoachingInsightsCard {...props} coachNotes={{ whatISaw: 'x', shareWhatISaw: true }} />);
+    expect(screen.getByRole('switch', { name: /use in the family report/i })).toHaveAttribute('aria-checked', 'true');
+  });
+
   it('starts open when notes exist and prefills them', () => {
     render(<CoachingInsightsCard {...props} coachNotes={{ goals: 'make varsity' }} />);
     expect(screen.getByLabelText(/^goals/i)).toHaveValue('make varsity');

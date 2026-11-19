@@ -5,6 +5,7 @@ import {
   insightHeadings,
   insightWordRange,
   leaksCoachNotes,
+  sharesWhatISaw,
   stripAnalysisBlock,
   SYSTEM_PROMPT,
   type ReportData,
@@ -472,5 +473,93 @@ describe('coach audience rule', () => {
   it('system prompt keeps coach wording out of shared copies', () => {
     expect(SYSTEM_PROMPT).toMatch(/Even for coaches, refer to restrictions, maturation and test-day issues in general terms/);
     expect(SYSTEM_PROMPT).toMatch(/a coach-noted restriction/);
+  });
+});
+
+describe('shareWhatISaw (family reports)', () => {
+  const SAW = 'Stands up early out of the start and loses the first three steps';
+  const notes = (shareWhatISaw?: boolean) => ({ whatISaw: SAW, ...(shareWhatISaw === undefined ? {} : { shareWhatISaw }) });
+  const text = 'Coach saw him stand up early out of the start and lose steps.';
+
+  it.each(['parent', 'athlete'] as const)('%s: keeps "What the coach saw" out of the prompt when off or absent', (audience) => {
+    for (const flag of [undefined, false]) {
+      const p = buildPrompt(individual({ audience, coachNotes: notes(flag) }));
+      expect(p).not.toContain('What the coach saw');
+      expect(p).not.toContain('Stands up early');
+    }
+  });
+
+  it('coach audience always sees it', () => {
+    expect(buildPrompt(individual({ audience: 'coach', coachNotes: notes() }))).toContain('What the coach saw');
+  });
+
+  it.each(['parent', 'athlete'] as const)('%s: sends it, with the sharing rules, when on', (audience) => {
+    const p = buildPrompt(individual({ audience, coachNotes: notes(true) }));
+    expect(fenced(p)).toContain('What the coach saw');
+    const rules = afterFence(p);
+    expect(rules).toContain('Coach saw');
+    expect(rules).toMatch(/own words/i);
+    expect(rules).toMatch(/do not quote/i);
+    expect(rules).toMatch(/data decides/i);
+    for (const w of ['injury', 'pain', 'maturation', 'weight', 'diet', 'supplements', 'sleep', 'mood', 'playing time', 'recruiting', 'menstrual', 'sibling'])
+      expect(rules).toContain(w);
+    expect(rules).not.toContain('Never quote or reveal the coach notes.');
+  });
+
+  it('keeps the old never-reveal line when off', () => {
+    expect(afterFence(buildPrompt(individual({ audience: 'parent', coachNotes: { ...notes(false), goals: 'make varsity' } })))).toContain('Never quote or reveal the coach notes.');
+  });
+
+  it('system prompt names the sharing exception and the never-list', () => {
+    expect(SYSTEM_PROMPT).toContain('Coach saw');
+    expect(SYSTEM_PROMPT).toContain('recruiting');
+  });
+
+  it('leak guard: window applies to coach, and to parent/athlete when off; skipped for parent/athlete when on', () => {
+    const d = (audience: 'coach' | 'athlete' | 'parent', flag?: boolean) => individual({ audience, coachNotes: notes(flag) });
+    const echo = 'Because you stands up early out of the start, work on it.';
+    expect(leaksCoachNotes(echo, d('coach', true))).toBe(true);
+    expect(leaksCoachNotes(echo, d('parent'))).toBe(true);
+    expect(leaksCoachNotes(echo, d('athlete', false))).toBe(true);
+    expect(leaksCoachNotes(echo, d('parent', true))).toBe(false);
+    expect(leaksCoachNotes(echo, d('athlete', true))).toBe(false);
+  });
+
+  it.each([
+    ['coach, switch absent', 'coach', undefined],
+    ['coach, switch false', 'coach', false],
+    ['coach, switch on', 'coach', true],
+    ['no audience, switch on', undefined, true],
+    ['parent, switch absent', 'parent', undefined],
+    ['athlete, switch false', 'athlete', false],
+  ] as const)('leak guard window stays on: %s', (_n, audience, flag) => {
+    const d = individual({ audience, coachNotes: notes(flag) });
+    expect(leaksCoachNotes('Because you stands up early out of the start, work on it.', d)).toBe(true);
+  });
+
+  it('never skips the guard for a team report or without notes', () => {
+    const team = individual({ reportType: 'team', audience: 'parent', coachNotes: notes(true) });
+    expect(leaksCoachNotes(SAW, team)).toBe(false); // team rows never carry notes: the guard has nothing to protect
+    expect(sharesWhatISaw(team)).toBe(false);
+    expect(sharesWhatISaw(individual({ audience: 'parent', coachNotes: undefined }))).toBe(false);
+  });
+
+  it('when on for parent/athlete, quoting 40+ characters of the notes is still rejected (paraphrase only)', () => {
+    for (const audience of ['parent', 'athlete'] as const) {
+      const d = individual({ audience, coachNotes: notes(true) });
+      expect(leaksCoachNotes(`Coach saw: ${SAW}.`, d)).toBe(true);
+      expect(leaksCoachNotes(text, d)).toBe(false);
+    }
+  });
+
+  it('leak guard: restriction, maturation and flags still checked when on', () => {
+    const d = individual({
+      audience: 'parent',
+      coachNotes: { whatISaw: SAW, shareWhatISaw: true, maturation: 'circa', restriction: { area: 'left ankle', status: 'taped', ptCleared: false }, testDayFlags: ['protocol_deviation'] },
+    });
+    expect(leaksCoachNotes('His left ankle is taped', d)).toBe(true);
+    expect(leaksCoachNotes('He is around peak height velocity', d)).toBe(true);
+    expect(leaksCoachNotes('Note the protocol deviation', d)).toBe(true);
+    expect(leaksCoachNotes(text, d)).toBe(false);
   });
 });
