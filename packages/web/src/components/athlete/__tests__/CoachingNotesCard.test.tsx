@@ -192,7 +192,7 @@ describe("CoachingNotesCard", () => {
         note({
           id: `n${i}`,
           flagged: pinned.includes(i),
-          observedOn: `2026-03-${String(28 - i).padStart(2, "0")}`,
+          observedOn: new Date(Date.UTC(2026, 2, 28 - i)).toISOString().slice(0, 10),
           body: `Note body ${i}`,
         }),
       );
@@ -243,12 +243,12 @@ describe("CoachingNotesCard", () => {
       expect(rows()).toHaveLength(5);
     });
 
-    it("caps the open list at 10 unpinned notes, then toggles Show all / Show fewer", () => {
+    it("caps the open list at 10 unpinned notes, then toggles Show N more / Show fewer", () => {
       query = { isSuccess: true, data: many(25, [0]) };
       renderCard();
       fireEvent.click(toggle());
       expect(rows()).toHaveLength(1 + 10);
-      fireEvent.click(screen.getByRole("button", { name: "Show all 25 notes" }));
+      fireEvent.click(screen.getByRole("button", { name: "Show 14 more" }));
       expect(rows()).toHaveLength(25);
       fireEvent.click(screen.getByRole("button", { name: "Show fewer" }));
       expect(rows()).toHaveLength(1 + 10);
@@ -258,7 +258,7 @@ describe("CoachingNotesCard", () => {
       query = { isSuccess: true, data: many(25) };
       renderCard();
       fireEvent.click(toggle());
-      fireEvent.click(screen.getByRole("button", { name: "Show all 25 notes" }));
+      fireEvent.click(screen.getByRole("button", { name: "Show 15 more" }));
       fireEvent.click(toggle());
       fireEvent.click(toggle());
       expect(rows()).toHaveLength(10);

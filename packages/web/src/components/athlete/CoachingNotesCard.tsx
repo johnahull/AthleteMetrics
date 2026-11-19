@@ -215,7 +215,7 @@ export function CoachingNotesCard({ athleteId, athleteName, className }: Props) 
                   <ul className={`divide-y${pinned.length > 0 ? " border-t" : ""}`}>{shown.map(row)}</ul>
                   {unpinned.length > OPEN_CAP && (
                     <Button variant="ghost" size="sm" className="mt-2" onClick={() => setShowAll((v) => !v)}>
-                      {showAll ? "Show fewer" : `Show all ${notes.length} notes`}
+                      {showAll ? "Show fewer" : `Show ${unpinned.length - OPEN_CAP} more`}
                     </Button>
                   )}
                 </CollapsibleContent>
