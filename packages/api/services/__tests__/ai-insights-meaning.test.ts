@@ -221,6 +221,24 @@ describe('dropNoMeaningMetrics keeps look-alike labels', () => {
   });
 });
 
+describe('dropNoMeaningMetrics: a label at the end of a key fact', () => {
+  it('removes a fact that ends with the label, but not a longer look-alike label', () => {
+    const d = data({
+      audience: 'parent',
+      metrics: [metric('HEIGHT_IN', 'Height', 64, 'in', false), metric('JUMP_CMJ_HOH', 'Jump Height', 16, 'in', false)],
+      keyFacts: ['Strongest metric: Height', 'Strongest metric: Jump Height', 'Biggest gap: Height, 5th percentile'],
+    });
+    expect(dropNoMeaningMetrics(d).keyFacts).toEqual(['Strongest metric: Jump Height']);
+  });
+});
+
+describe('aboveAverageResults: the median is not above average', () => {
+  it('a percentile of exactly 50 meets the group standard', () => {
+    const m = { code: 'A', label: 'A', values: [1], unit: 's', lowerIsBetter: true, percentile: 50 } as never;
+    expect(aboveAverageResults([m], {})).toEqual([{ code: 'A', label: 'A', wording: 'meets the group standard' }]);
+  });
+});
+
 describe('coach prompt is unchanged by the family blocks', () => {
   it('has no vetted or below-average block', () => {
     const p = buildPrompt(data({ audience: 'coach' }));
