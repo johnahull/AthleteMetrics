@@ -70,6 +70,7 @@ export const EUR_ROUNDING = 0.01;
 const START_YD = "DASH_10YD";
 const TWENTY_YD = "DASH_20YD";
 // Fly times after a run-in of 15 yards or more (FLY10_TIME is the 20-yard run-in) and top speed: close to top speed
+// Metre codes (FLY10M_TIME, DASH_*M) are left out on purpose: their run-in is not known, and the split and mph facts here are in yards
 const LATE_SPEED_CODES = ["FLY10_TIME", "FLY10_TIME_RI15", "FLY10_TIME_RI30", "TOP_SPEED", "TOP_SPEED_MPH"];
 const EUR_CODE = "POWER_EUR";
 const CMJ = "JUMP_CMJ_HOH";
