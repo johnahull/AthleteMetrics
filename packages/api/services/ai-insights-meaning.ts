@@ -25,7 +25,7 @@ export const NEVER_SAY = [
  * Locked for parent and athlete audiences: how to use the vetted meanings and how to shape the text. The "How results
  * connect" step is named only when that section is in the prompt.
  */
-// hasConnections is wired for the metric-relationships PR (#778); until that section exists the family prompt passes false
+// hasConnections: true when the "How results connect" section is in the prompt (the relationships in ai-metric-relationships.ts fired)
 export function meaningRules(hasConnections: boolean): string {
   return [
     `WHAT RESULTS MEAN:`,
