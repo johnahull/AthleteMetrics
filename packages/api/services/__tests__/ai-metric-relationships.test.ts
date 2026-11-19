@@ -183,6 +183,10 @@ describe('prompt blocks', () => {
     // the always-on "never join two metrics unless a How results connect line does it" rule is separate from this focus clause
     expect(buildPrompt(base)).not.toContain('explains a limiter through a "How results connect" line');
   });
+  it('a metre fly (FLY10M_TIME) does not count as late speed: its run-in is unknown', () => {
+    const input = { values: {}, standing: { DASH_10YD: 'slow', FLY10M_TIME: 'good' } } as never;
+    expect(firedRelationships(input).map((r) => r.id)).not.toContain('start-costs-time');
+  });
   it('renders neither block when nothing fired', async () => {
     const { buildPrompt } = await import('../ai-insights-service');
     const p = buildPrompt({ ...base, connections: [], splitFacts: [] });
