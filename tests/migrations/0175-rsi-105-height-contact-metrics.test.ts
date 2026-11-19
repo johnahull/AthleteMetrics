@@ -131,6 +131,8 @@ describe.skipIf(!isDisposableTestDb)('Migration 0175: against a disposable DB (r
   // Columns that are NULL on purpose for an entered, migration-seeded metric
   const NULL_ON_PURPOSE = new Set([
     'formula', 'dependent_metrics', 'calculation_config', 'auxiliary_input_config', 'created_by', 'updated_at',
+    // Family-facing meaning (0186) is written later in /metrics, not by seed migrations
+    'meaning',
   ]);
 
   it('fills every column except those that are NULL on purpose', async () => {

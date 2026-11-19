@@ -22,6 +22,7 @@ export interface InsertCustomOrgMetric {
   shortDescription?: string;
   whatItMeasures?: string;
   whyItMatters?: string;
+  meaning?: string | null;
   validationMin?: number;
   validationMax?: number;
   decimalPrecision?: number;
@@ -288,6 +289,7 @@ export class CustomOrgMetricService extends BaseService {
           shortDescription: data.shortDescription,
           whatItMeasures: data.whatItMeasures,
           whyItMatters: data.whyItMatters,
+          meaning: data.meaning || null,
           validationMin: data.validationMin?.toString(),
           validationMax: data.validationMax?.toString(),
           decimalPrecision: data.decimalPrecision ?? 3,
@@ -467,6 +469,7 @@ export class CustomOrgMetricService extends BaseService {
       if (data.shortDescription !== undefined) updateData.shortDescription = data.shortDescription;
       if (data.whatItMeasures !== undefined) updateData.whatItMeasures = data.whatItMeasures;
       if (data.whyItMatters !== undefined) updateData.whyItMatters = data.whyItMatters;
+      if (data.meaning !== undefined) updateData.meaning = data.meaning || null;
       if (data.validationMin !== undefined) updateData.validationMin = data.validationMin?.toString();
       if (data.validationMax !== undefined) updateData.validationMax = data.validationMax?.toString();
       if (data.decimalPrecision !== undefined) updateData.decimalPrecision = data.decimalPrecision;
