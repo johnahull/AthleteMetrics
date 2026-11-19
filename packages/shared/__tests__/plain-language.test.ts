@@ -37,6 +37,13 @@ describe('findJargon false positives', () => {
   });
 });
 
+describe('findJargon: acceleration is flagged on purpose', () => {
+  // Parents know the word but not how coaches use it (first 10 yards vs getting up to speed): the swap gives the plain meaning
+  it('flags acceleration so the editor offers the plain wording', () => {
+    expect(findJargon('his acceleration improved')).toEqual(['acceleration']);
+  });
+});
+
 describe('JARGON_SWAPS', () => {
   it('no swap text contains jargon itself', () => {
     for (const [term, plain] of Object.entries(JARGON_SWAPS)) expect(findJargon(plain), term).toEqual([]);
