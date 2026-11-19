@@ -3,7 +3,7 @@
  * and the goal-length focus rule. Pure functions over ReportData (type-only import, so no cycle with the service).
  */
 import { NO_MEANING, getMetricMeaning } from "@shared/metric-explanations/meanings";
-import { belowAverageStanding, tierPlace, type ComparisonLike } from "./benchmark-standing";
+import { BELOW_AVERAGE_PERCENTILE, belowAverageStanding, tierPlace, type ComparisonLike } from "./benchmark-standing";
 import type { ReportData } from "./ai-insights-service";
 
 /** At most this many metrics carry a meaning in the prompt (goal metrics first, then below-average results). */
@@ -25,6 +25,7 @@ export const NEVER_SAY = [
  * Locked for parent and athlete audiences: how to use the vetted meanings and how to shape the text. The "How results
  * connect" step is named only when that section is in the prompt.
  */
+// hasConnections is wired for the metric-relationships PR (#778); until that section exists the family prompt passes false
 export function meaningRules(hasConnections: boolean): string {
   return [
     `WHAT RESULTS MEAN:`,
@@ -106,7 +107,10 @@ export function dropNoMeaningMetrics(reportData: ReportData): ReportData {
   if (dropped.length === 0) return reportData;
   const labels = dropped.map((m) => m.label);
   const named = (metric: string) => labels.includes(metric);
-  const factNames = (fact: string) => labels.some((l) => fact.includes(`: ${l}, `));
+  // ": <label>" followed by a comma or the end of the fact, so a longer label that ends the same way is kept
+  const escape = (l: string) => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const factRes = labels.map((l) => new RegExp(`: ${escape(l)}(?:,|$)`));
+  const factNames = (fact: string) => factRes.some((re) => re.test(fact));
   return {
     ...reportData,
     metrics: reportData.metrics.filter((m) => !NO_MEANING.includes(m.code)),
@@ -146,11 +150,12 @@ export function belowAverageResults(
 export function aboveAverageResults(
   metrics: ReportData['metrics'],
   comparisons: Record<string, ReadonlyArray<ComparisonLike> | undefined>,
-): NonNullable<ReportData['belowAverage']> {
-  const out: NonNullable<ReportData['belowAverage']> = [];
+): NonNullable<ReportData['aboveAverage']> {
+  const out: NonNullable<ReportData['aboveAverage']> = [];
   for (const m of metrics) {
     if (belowAverageStanding(comparisons[m.code], m.percentile) !== false) continue;
-    const middling = m.percentile !== undefined && m.percentile < 50;
+    // The median itself (50) is not above average; belowAverageStanding treats under 50 as below
+    const middling = m.percentile !== undefined && m.percentile <= BELOW_AVERAGE_PERCENTILE;
     out.push({ code: m.code, label: m.label, wording: middling ? 'meets the group standard' : 'above average for the comparison group' });
   }
   return out;
