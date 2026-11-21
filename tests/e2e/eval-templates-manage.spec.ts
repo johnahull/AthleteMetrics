@@ -42,6 +42,16 @@ async function login(page: Page) {
   }, id);
 }
 
+/** New event form, metrics step, with the template list open */
+async function openTemplatePicker(page: Page) {
+  await page.goto(`${BASE_URL}/events/new`);
+  await page.getByLabel(/event name/i).fill(`E2E unused ${unique}`);
+  await page.getByLabel(/start date/i).fill(new Date().toISOString().split('T')[0]);
+  await page.getByRole('button', { name: /next/i }).click();
+  await page.getByRole('button', { name: /next/i }).click();
+  await page.getByRole('combobox', { name: /start from template/i }).click();
+}
+
 test.describe('Manage eval templates', () => {
   test.describe.configure({ mode: 'serial' });
 
@@ -124,13 +134,26 @@ test.describe('Manage eval templates', () => {
       ['DASH_10', true],
     ]);
 
-    await page.goto(`${BASE_URL}/events/new`);
-    await page.getByLabel(/event name/i).fill(`E2E unused ${unique}`);
-    await page.getByLabel(/start date/i).fill(new Date().toISOString().split('T')[0]);
-    await page.getByRole('button', { name: /next/i }).click();
-    await page.getByRole('button', { name: /next/i }).click();
-    await page.getByRole('combobox', { name: /start from template/i }).click();
+    // Changing the tests published a new revision (AM-FEAT-024): the list shows revision 2
+    const list = await json(await page.request.get(`${BASE_URL}/api/organizations/${created.organizationId}/eval-templates`));
+    expect(list.find((t: { id: string }) => t.id === created.templateId)?.currentRevision).toBe(2);
+
+    await openTemplatePicker(page);
     await expect(page.getByRole('option', { name: RENAMED })).toBeVisible();
+    await page.getByRole('option', { name: RENAMED }).click();
+    await expect(page.getByTestId('eval-template-revision')).toContainText(`Applying ${RENAMED}, currently at revision 2`);
+  });
+
+  test('the New event picker offers the Foundation and Performance presets and shows the revision', async ({ page }) => {
+    const presets = (await json(await page.request.get(`${BASE_URL}/api/organizations/${created.organizationId}/eval-templates`)))
+      .filter((t: { name: string; organizationId: string | null }) => !t.organizationId && ['Foundation', 'Performance'].includes(t.name));
+    test.skip(presets.length < 2, 'Migration 0180 has not seeded the presets in this database');
+    await login(page);
+    await openTemplatePicker(page);
+    await expect(page.getByRole('option', { name: 'Foundation' })).toBeVisible();
+    await expect(page.getByRole('option', { name: 'Performance' })).toBeVisible();
+    await page.getByRole('option', { name: 'Foundation' }).click();
+    await expect(page.getByTestId('eval-template-revision')).toContainText('Applying Foundation, currently at revision');
   });
 
   test('deletes an organization template after confirming', async ({ page }) => {

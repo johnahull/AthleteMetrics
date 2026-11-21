@@ -13,6 +13,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const read = (f: string) => fs.readFileSync(path.resolve(__dirname, '../../migrations', f), 'utf-8');
 const UP = read('0153_add_eval_report_templates.sql');
 const DOWN = read('0153_add_eval_report_templates_down.sql');
+// 0180 (versioned eval templates) adds objects that depend on eval_battery_templates; its down is idempotent and
+// refuses only when revisions above 1 or linked events exist, so it is safe to unwind first inside the rolled-back tx.
+const DOWN_0180 = read('0180_eval_battery_template_revisions_down.sql');
 
 const SEED_NAME = 'Soccer eval (yards)';
 const dbUrl = process.env.DATABASE_URL || '';
@@ -102,6 +105,7 @@ describe.skipIf(!isDisposableTestDb)('Migration 0153: against a disposable DB (r
     const ROLLBACK = new Error('rollback');
     try {
       await sql.begin(async (tx) => {
+        await tx.unsafe(DOWN_0180);
         await fn(tx);
         throw ROLLBACK;
       });

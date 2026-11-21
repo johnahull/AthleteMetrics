@@ -5,10 +5,11 @@
  */
 
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, decimal, timestamp, date, boolean, unique, index, jsonb, time } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, decimal, timestamp, date, boolean, unique, index, jsonb, time, foreignKey } from "drizzle-orm/pg-core";
 import { eventVisibilityEnum, eventStatusEnum, registrationModeEnum, resultsVisibilityEnum, registrationStatusEnum, eventInvitationStatusEnum } from "../enums";
 import { organizations, teams, users } from "./core";
 import { siteMetrics } from "./metrics";
+import { evalBatteryTemplateRevisions } from "./eval-reports";
 
 export const events = pgTable("events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -47,11 +48,20 @@ export const events = pgTable("events", {
   frozenBy: varchar("frozen_by").references(() => users.id, { onDelete: 'set null' }),
   frozenReason: text("frozen_reason"),
 
+  // The eval battery template revision applied to this event (AM-FEAT-024, migration 0180 PROVISIONAL); null = none applied
+  evalTemplateRevisionId: varchar("eval_template_revision_id", { length: 36 }),
+
   // Audit
   createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at"),
 }, (table) => ({
+  evalTemplateRevisionFk: foreignKey({
+    name: "events_eval_template_revision_fk",
+    columns: [table.evalTemplateRevisionId],
+    foreignColumns: [evalBatteryTemplateRevisions.id],
+  }).onDelete("set null"),
+  evalTemplateRevisionIdx: index("events_eval_template_revision_idx").on(table.evalTemplateRevisionId),
   orgIdx: index("events_org_idx").on(table.organizationId),
   statusIdx: index("events_status_idx").on(table.status),
   visibilityIdx: index("events_visibility_idx").on(table.visibility),

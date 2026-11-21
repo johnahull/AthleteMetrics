@@ -29,6 +29,8 @@ export interface EvalSelection {
   radar?: boolean;
   /** Age-group comparison on; absent on rows saved before the switch, which compared */
   ageGroupComparison?: boolean;
+  /** The battery template revision the event applied (AM-FEAT-024); absent when none was applied or on rows saved before it existed */
+  template?: { templateId: string; revision: number; name: string };
 }
 
 export interface EvalMetricResult {

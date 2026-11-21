@@ -490,6 +490,8 @@ export async function addEventMetric(
 }
 
 export interface BulkAddEventMetricsResult {
+  /** Set when the picked template could not be used; the tests were still added (non-fatal) */
+  warning?: string;
   /** Codes this request inserted */
   added: string[];
   alreadyPresent: string[];
@@ -502,12 +504,14 @@ export interface BulkAddEventMetricsResult {
  */
 export async function addEventMetricsBulk(
   eventId: string,
-  metrics: Array<{ metricCode: string; displayOrder?: number; isRequired?: boolean; customLabel?: string }>
+  metrics: Array<{ metricCode: string; displayOrder?: number; isRequired?: boolean; customLabel?: string }>,
+  /** The eval template picked on the form: the server records its current revision on the event */
+  evalTemplateId?: string
 ): Promise<BulkAddEventMetricsResult> {
   const response = await fetch(`/api/events/${eventId}/metrics/bulk`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ metrics }),
+    body: JSON.stringify({ metrics, ...(evalTemplateId ? { evalTemplateId } : {}) }),
   });
 
   if (!response.ok) {

@@ -116,6 +116,11 @@ export function EvalTemplatePicker({ organizationId, value, onChange, onSelected
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">Fills the tests below. Add or remove tests before you create the event.</p>
+        {selected?.currentRevision != null && (
+          <p className="text-xs text-muted-foreground" data-testid="eval-template-revision">
+            Applying {selected.name}, currently at revision {selected.currentRevision}.
+          </p>
+        )}
         {value && resolveFailed && (
           <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-destructive">
             <span>Could not load this template's tests. Nothing was added; try again or add tests by hand.</span>

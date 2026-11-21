@@ -51,6 +51,8 @@ type EventFormValues = z.infer<typeof eventFormSchema>;
 export interface EventFormData extends EventFormValues {
   /** The final list, including the tests an eval template filled in; saved in one request after the event exists */
   selectedMetrics: SelectedMetric[];
+  /** The eval template picked on the metrics step, if any (AM-FEAT-024): the server records its revision on the event */
+  evalTemplateId?: string;
 }
 
 interface EventFormProps {
@@ -135,6 +137,7 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, organ
       const formData: EventFormData = {
         ...data,
         selectedMetrics,
+        ...(evalTemplate ? { evalTemplateId: evalTemplate.templateId } : {}),
       };
       onSubmit(formData, isDraft);
     })();

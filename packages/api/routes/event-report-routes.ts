@@ -24,6 +24,7 @@ import {
   evalInputErrorResponse,
   loadEvalReportInputs,
 } from "../services/eval-report-service";
+import { freezeTemplateRevision } from "../services/eval-template-revision-service";
 import { EVAL_REPORT_TYPE, evalReportConfigSchema, evalReportRequestSchema } from "@shared/eval-report-config";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { z, ZodError } from "zod";
@@ -416,6 +417,7 @@ export function registerEventReportRoutes(app: Express) {
           coachNote: body.coachNote ?? null,
           overrides: { strengths: body.strengthsOverride, developmentAreas: body.developmentAreasOverride, limiter: body.limiterOverride },
         });
+        await freezeTemplateRevision(model, target.eventId);
         return res.json({ model });
       } catch (error: unknown) {
         return sendEvalError(res, error, "Failed to preview eval report");
@@ -445,6 +447,7 @@ export function registerEventReportRoutes(app: Express) {
           coachNote: body.coachNote ?? null,
           overrides: { strengths: body.strengthsOverride, developmentAreas: body.developmentAreasOverride, limiter: body.limiterOverride },
         });
+        await freezeTemplateRevision(model, target.eventId);
         const parsedConfig = evalReportConfigSchema.safeParse({
           eventId: target.eventId,
           athleteId: target.athleteId,
