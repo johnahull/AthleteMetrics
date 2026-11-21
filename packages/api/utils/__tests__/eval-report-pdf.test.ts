@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { jsPDF } from 'jspdf';
 import { barPosition, buildEvalReportPdf, headerColor, winAnsi, EVAL_PDF_BOTTOM_LIMIT, EVAL_PDF_TOP_LIMIT } from '../eval-report-pdf';
 import type { EvalMetricResult, EvalReportModel } from '../../services/eval-report/model';
+import type { EvalRadar, RadarAxis } from '../../services/eval-report/radar';
 
 /** Text drawn on the pages, in order. jsPDF writes uncompressed `(text) Tj` operators. */
 function pdfText(doc: jsPDF): string {
@@ -316,5 +317,88 @@ describe('eval report PDF: duration (mm:ss) metrics', () => {
     expect(text).toContain('4.20 s');
     expect(text).not.toContain('6:42');
     expect(text).toBe(pdfText(buildEvalReportPdf(model(0, true, { metrics: [mile({ displayFormat: 'decimal' })] }), org).doc));
+  });
+  describe('percentile radar (AM-FEAT-024)', () => {
+    const axisOf = (axis: string, label: string, percentile: number | null, value: number | null = 1.9): RadarAxis => ({
+      axis: axis as RadarAxis['axis'], label, code: 'X', value, displayValue: value === null ? null : `${value} s`, detail: null, percentile,
+      cohortKind: 'norm', cohortLabel: 'BTA data, Male 13-14', n: 30, source: 'BTA data', distributionVersionId: 'v1',
+    });
+    const ids: Array<[string, string]> = [
+      ['acceleration', 'Acceleration'], ['highSpeedRunning', 'High-speed running'], ['verticalPower', 'Vertical power'],
+      ['reactiveStrength', 'Reactive strength'], ['changeOfDirection', 'Change of direction'], ['horizontalPower', 'Horizontal power'],
+    ];
+    const radarModel = (scored: number, movement: EvalRadar['movement'] = { total: 20, band: 'Efficient' }): EvalReportModel =>
+      model(3, true, {
+        modelVersion: 2,
+        radar: {
+          cohortKind: 'norm',
+          scoredCount: scored,
+          axes: ids.map(([a, l], i) => (i < scored ? axisOf(a, l, 40 + i) : axisOf(a, l, null, null))),
+          movement,
+        },
+        selection: { ...model(3).selection, radar: true },
+      });
+
+    it('draws the percentile radar from the frozen block, labelled with the group and n, instead of the average radar', () => {
+      const { doc, blocks } = buildEvalReportPdf(radarModel(6), org);
+      expect(blocks.filter((b) => b.kind === 'radar')).toHaveLength(1);
+      const text = pdfText(doc);
+      expect(text).toContain('vs BTA data, Male 13-14, n=30');
+      expect(text).not.toContain('The darker ring marks');
+      expect(text).toContain('Percentile profile');
+      expect(text).toContain('Movement');
+      expect(text).toContain('Efficient');
+      expect(text).toContain('20');
+    });
+
+    it('with fewer than 3 scored axes shows the measurement table, not the radar', () => {
+      const { doc, blocks } = buildEvalReportPdf(radarModel(2), org);
+      expect(blocks.some((b) => b.kind === 'radar')).toBe(false);
+      expect(blocks.some((b) => b.kind === 'radarTable')).toBe(true);
+      const text = pdfText(doc);
+      expect(text).toContain('Not tested');
+      expect(text).toContain('Acceleration');
+    });
+
+    it('prints Movement as Not tested when there is no MQI total, and never as a percentile', () => {
+      const text = pdfText(buildEvalReportPdf(radarModel(6, { total: null, band: null }), org).doc);
+      expect(text).toMatch(/Movement[\s\S]*Not tested/);
+    });
+
+    it('prints the MQI total without parentheses when there is no band, and with the band in parentheses otherwise', () => {
+      const noBand = pdfText(buildEvalReportPdf(radarModel(6, { total: 17, band: null }), org).doc);
+      expect(noBand).toContain('MQI total 17 of 24');
+      expect(noBand).not.toContain('(MQI total');
+      const withBand = pdfText(buildEvalReportPdf(radarModel(6, { total: 20, band: 'Efficient' }), org).doc);
+      expect(withBand).toContain('Efficient (MQI total 20 of 24)');
+    });
+
+    it('prints only WinAnsi-safe text for the radar', () => {
+      const text = pdfText(buildEvalReportPdf(radarModel(6), org).doc);
+      expect(text).not.toMatch(/[^\n\x20-\x7e\xa0-\xff]/);
+    });
+
+    it('truncates a very long source and team name so no label runs off the page', () => {
+      const long = 'S'.repeat(200);
+      const m = radarModel(6);
+      m.radar!.axes = m.radar!.axes.map((a, i) => ({ ...a, cohortKind: i % 2 ? 'team' : 'norm', cohortLabel: i % 2 ? 'Team ' + 'T'.repeat(120) : long, source: long }));
+      const text = pdfText(buildEvalReportPdf(m, org).doc);
+      expect(text).not.toContain(long);
+      expect(text).toContain('...');
+      const t = radarModel(2);
+      t.radar!.axes = t.radar!.axes.map((a) => ({ ...a, cohortLabel: long }));
+      expect(pdfText(buildEvalReportPdf(t, org).doc)).not.toContain(long);
+    });
+
+    it('prints the group line only for axes with a value', () => {
+      const text = pdfText(buildEvalReportPdf(radarModel(4), org).doc);
+      expect(text.match(/vs BTA data, Male 13-14, n=30/g)).toHaveLength(4);
+    });
+
+    it('a saved report with no radar block keeps the average radar', () => {
+      const old = model(5, true, { selection: { ...model(3).selection, radar: true } });
+      expect(buildEvalReportPdf(old, org).blocks.some((b) => b.kind === 'radar')).toBe(true);
+      expect(pdfText(buildEvalReportPdf(old, org).doc)).toContain('The darker ring marks');
+    });
   });
 });

@@ -41,6 +41,7 @@ interface Created {
   measuredAthlete: { id: string; name: string };
   unmeasuredAthlete: { id: string; name: string };
   extraEventIds: string[];
+  extraAthleteIds: string[];
   reportIds: string[];
   templateIds: string[];
   /** The org's eval report settings before the run; put back in afterAll. Null when they could not be read. */
@@ -79,6 +80,7 @@ test.describe('Eval report (AM-FEAT-019 P5)', () => {
     measuredAthlete: { id: '', name: '' },
     unmeasuredAthlete: { id: '', name: '' },
     extraEventIds: [],
+    extraAthleteIds: [],
     reportIds: [],
     templateIds: [],
     originalSettings: null,
@@ -205,7 +207,7 @@ test.describe('Eval report (AM-FEAT-019 P5)', () => {
       for (const id of [created.eventId, ...created.extraEventIds].filter(Boolean)) {
         await api.delete(`${BASE_URL}/api/events/${id}`).catch(() => {});
       }
-      for (const id of [created.measuredAthlete.id, created.unmeasuredAthlete.id].filter(Boolean)) {
+      for (const id of [created.measuredAthlete.id, created.unmeasuredAthlete.id, ...created.extraAthleteIds].filter(Boolean)) {
         await api.delete(`${BASE_URL}/api/athletes/${id}`).catch(() => {});
       }
     } finally {
@@ -281,7 +283,8 @@ test.describe('Eval report (AM-FEAT-019 P5)', () => {
     const compare = dialog.getByRole('switch', { name: 'Compare to age group' });
     await expect(compare).not.toBeChecked();
     await expect(dialog.getByRole('switch', { name: 'Strengths and areas to develop' })).toBeEnabled();
-    await expect(dialog.getByRole('switch', { name: 'Radar chart' })).toBeDisabled();
+    // The percentile radar does not need the age-group comparison
+    await expect(dialog.getByRole('switch', { name: 'Radar chart' })).toBeEnabled();
 
     await dialog.getByRole('button', { name: 'Preview' }).click();
     const body = dialog.getByTestId('eval-report-body');
@@ -291,6 +294,77 @@ test.describe('Eval report (AM-FEAT-019 P5)', () => {
     await compare.click();
     await dialog.getByRole('button', { name: 'Preview' }).click();
     await expect(body.getByText('How your athlete compares for their age')).toBeVisible();
+  });
+
+  test('percentile radar (AM-FEAT-024): "This event" group draws the radar from 10 athletes, a team group asks for a team', async ({ page }) => {
+    // Never the global norm loader here: its rows are immutable and would score real reports. Norms are covered by the
+    // integration test. Nine more athletes give the event group its minimum of 10.
+    const api = page.request;
+    const ids: string[] = [];
+    for (let i = 0; i < 9; i++) {
+      const response = await api.post(`${BASE_URL}/api/athletes`, {
+        data: {
+          firstName: `Peer${i}`, lastName: `Radar${unique}`, fullName: `Peer${i} Radar${unique}`,
+          emails: [`peer${i}.radar.${unique}@example.com`], birthDate: `${BIRTH_YEAR_SENIOR}-02-10`, birthYear: BIRTH_YEAR_SENIOR,
+          graduationYear: new Date().getFullYear(), gender: 'Female', sports: ['Soccer'],
+        },
+      });
+      expect(response.ok(), `create peer: ${await response.text()}`).toBeTruthy();
+      const athlete = await response.json();
+      ids.push(athlete.id);
+      created.extraAthleteIds.push(athlete.id);
+      await api.patch(`${BASE_URL}/api/athletes/${athlete.id}/status`, { data: { isActive: true } });
+    }
+    const registered = await api.post(`${BASE_URL}/api/events/${created.eventId}/registrations/bulk-add`, { data: { userIds: ids, checkIn: true } });
+    expect(registered.ok(), `register peers: ${await registered.text()}`).toBeTruthy();
+    const bulk = await api.post(`${BASE_URL}/api/events/${created.eventId}/measurements/bulk`, {
+      data: {
+        measurements: ids.flatMap((userId, i) => [
+          { userId, metric: 'DASH_10YD', value: 1.7 + i / 20, date: EVENT_DATE },
+          { userId, metric: 'JUMP_CMJ_HOH', value: 15 + i, date: EVENT_DATE },
+          { userId, metric: 'AGILITY_505_M_L', value: 2.5 + i / 20, date: EVENT_DATE },
+          { userId, metric: 'AGILITY_505_M_R', value: 2.5 + i / 20, date: EVENT_DATE },
+        ]),
+      },
+    });
+    expect(bulk.ok(), `peer measurements: ${await bulk.text()}`).toBeTruthy();
+
+    await openReportsTab(page, created.eventId);
+    const dialog = await openDialog(page, created.measuredAthlete.name);
+    await expect(dialog.getByRole('combobox', { name: 'Compare against' })).toHaveCount(0);
+    await dialog.getByRole('switch', { name: 'Radar chart' }).click();
+    const group = dialog.getByRole('combobox', { name: 'Compare against' });
+    await expect(group).toHaveText(/Site norms/);
+
+    const body = dialog.getByTestId('eval-report-body');
+    // Site norms: this local/test database has no matching distribution, so every axis is unscored and the table shows
+    await dialog.getByRole('button', { name: 'Preview' }).click();
+    await expect(body.getByRole('heading', { name: 'Measurements' })).toBeVisible();
+
+    await group.click();
+    await page.getByRole('option', { name: 'This event' }).click();
+    await expect(dialog.getByText(/no sex or age filter/i)).toBeVisible();
+    await dialog.getByRole('button', { name: 'Preview' }).click();
+    await expect(body.getByRole('heading', { name: 'Percentile profile' })).toBeVisible();
+    await expect(body.getByRole('img', { name: /percentile profile/i })).toBeVisible();
+    await expect(body.getByText('vs This event (all athletes), n=10').first()).toBeVisible();
+    // The fly, reactive and broad jump tests were not run: unscored, never zero
+    await expect(body.getByTestId('radar-label-reactiveStrength')).toContainText('Not tested');
+    await expect(body.getByTestId('radar-movement')).toContainText('Not tested');
+    const radarCard = body.locator('div.rounded-lg', { has: page.getByRole('img', { name: /percentile profile/i }) });
+    await radarCard.scrollIntoViewIfNeeded();
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.waitForTimeout(300);
+    await radarCard.screenshot({ path: 'screenshots/eval-radar-desktop.png' });
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.waitForTimeout(300);
+    await radarCard.scrollIntoViewIfNeeded();
+    await radarCard.screenshot({ path: 'screenshots/eval-radar-mobile.png' });
+    await page.setViewportSize({ width: 1280, height: 720 });
+
+    await group.click();
+    await page.getByRole('option', { name: 'A team' }).click();
+    await expect(dialog.getByRole('combobox', { name: 'Team' })).toBeVisible();
   });
 
   test('generate saves the report, downloads a PDF and creates no share link', async ({ page }) => {

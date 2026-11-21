@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { MetricService } from '../metric-service';
 import { db } from '../../db';
-import { siteMetrics, organizationMetrics, organizations, users, measurements, auditLogs } from '@shared/schema';
+import { benchmarkDistributions, benchmarkDistributionVersions, siteMetrics, organizationMetrics, organizations, users, measurements, auditLogs } from '@shared/schema';
 import { eq, and, or } from 'drizzle-orm';
 
 describe('MetricService', () => {
@@ -602,6 +602,55 @@ describe('MetricService', () => {
 
       // Cleanup measurement
       await db.delete(measurements).where(eq(measurements.metric, testMetricCode));
+    });
+  });
+
+  describe('deleteSiteMetric with loaded distributions', () => {
+    it('gives a friendly error instead of a raw foreign key failure', async () => {
+      const code = `ZZ_DIST_${Date.now()}`;
+      await db.insert(siteMetrics).values({ code, label: code, category: 'speed', unit: 's', metricType: 'lower_is_better' } as any);
+      const [v] = await db.insert(benchmarkDistributionVersions).values({ label: `v-${code}`, source: 's' }).returning();
+      await db.insert(benchmarkDistributions).values({ versionId: v.id, metricCode: code, sex: 'male', ageMin: 1, ageMax: 2, n: 1, values: [1] });
+      try {
+        await expect(new MetricService().deleteSiteMetric(code, siteAdminUserId)).rejects.toThrow(/Cannot delete metric .* distribution/);
+      } finally {
+        // DBs with the 0179 trigger keep these rows (immutable); only that is tolerated.
+        const tolerate = (e: any) => { if (!/immutable|violates foreign key/.test(String(e?.message) + String(e?.cause?.message))) throw e; };
+        await db.delete(benchmarkDistributions).where(eq(benchmarkDistributions.metricCode, code)).catch(tolerate);
+        await db.delete(benchmarkDistributionVersions).where(eq(benchmarkDistributionVersions.id, v.id)).catch(tolerate);
+        await db.delete(siteMetrics).where(eq(siteMetrics.code, code)).catch(tolerate);
+      }
+    });
+  });
+
+  describe('deleteSiteMetric racing a distribution load', () => {
+    it('waits for the loader transaction, then gives the friendly error instead of a raw foreign key failure', async () => {
+      const code = `ZZ_RACE_${Date.now()}`;
+      await db.insert(siteMetrics).values({ code, label: code, category: 'speed', unit: 's', metricType: 'lower_is_better' } as any);
+      let release!: () => void;
+      let locked!: () => void;
+      const held = new Promise<void>((r) => (release = r));
+      const lockedP = new Promise<void>((r) => (locked = r));
+      // Same locking as createDistributionVersion: FOR SHARE on the metric row, insert, then hold the transaction open
+      const loader = db.transaction(async (tx) => {
+        await tx.select().from(siteMetrics).where(eq(siteMetrics.code, code)).for('share');
+        const [v] = await tx.insert(benchmarkDistributionVersions).values({ label: `v-${code}`, source: 's' }).returning();
+        await tx.insert(benchmarkDistributions).values({ versionId: v.id, metricCode: code, sex: 'male', ageMin: 1, ageMax: 2, n: 1, values: [1] });
+        locked();
+        await held;
+      });
+      await lockedP;
+      const deletion = new MetricService().deleteSiteMetric(code, siteAdminUserId);
+      const settled = deletion.then(() => 'resolved', () => 'rejected');
+      expect(await Promise.race([settled, new Promise((r) => setTimeout(() => r('waiting'), 300))])).toBe('waiting');
+      release();
+      await loader;
+      await expect(deletion).rejects.toThrow(/Cannot delete metric .* distribution/);
+      // DBs with the 0179 trigger keep these rows (immutable); only that is tolerated.
+      const tolerate = (e: any) => { if (!/immutable|violates foreign key/.test(String(e?.message) + String(e?.cause?.message))) throw e; };
+      await db.delete(benchmarkDistributions).where(eq(benchmarkDistributions.metricCode, code)).catch(tolerate);
+      await db.delete(benchmarkDistributionVersions).where(eq(benchmarkDistributionVersions.label, `v-${code}`)).catch(tolerate);
+      await db.delete(siteMetrics).where(eq(siteMetrics.code, code)).catch(tolerate);
     });
   });
 

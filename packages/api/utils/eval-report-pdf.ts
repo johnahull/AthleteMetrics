@@ -24,6 +24,8 @@ import {
   formatValue,
 } from "../services/eval-report/copy";
 import type { EvalMetricResult, EvalReportModel } from "../services/eval-report/model";
+import { radarSegments } from "@shared/eval-report-radar-geometry";
+import type { EvalRadar, RadarAxis } from "../services/eval-report/radar";
 
 type Rgb = [number, number, number];
 
@@ -280,7 +282,10 @@ function buildSections(doc: jsPDF, model: EvalReportModel, primary: Rgb, seconda
     });
   }
 
-  const radarAxes = metrics.filter((m) => m.comparison?.kind === "average").slice(0, MAX_RADAR_AXES);
+  const percentileRadar = model.radar;
+  if (percentileRadar) sections.push(buildPercentileSection(percentileRadar, primary));
+
+  const radarAxes = percentileRadar ? [] : metrics.filter((m) => m.comparison?.kind === "average").slice(0, MAX_RADAR_AXES);
   if (sel?.radar === true && radarAxes.length >= MIN_RADAR_AXES) {
     sections.push({ kind: "radar", title: PDF_COPY.radarTitle, rows: [buildRadarRow(radarAxes, primary)] });
   }
@@ -292,7 +297,8 @@ function buildSections(doc: jsPDF, model: EvalReportModel, primary: Rgb, seconda
     const text = fh.balance.status === "neutral" ? `${Math.round(fh.balance.lsiPercent * 10) / 10}% ${PDF_COPY.leftRightSuffix}` : fh.balance.label;
     fhRows.push([FRESH_AND_HEALTHY_LABELS.balance, text]);
   }
-  if (fh.movement) fhRows.push([FRESH_AND_HEALTHY_LABELS.movement, fh.movement]);
+  // With the percentile radar, Movement is shown beside it instead
+  if (fh.movement && !percentileRadar) fhRows.push([FRESH_AND_HEALTHY_LABELS.movement, fh.movement]);
   if (fhRows.length > 0) {
     sections.push({
       kind: "freshAndHealthy",
@@ -385,6 +391,123 @@ function buildRadarRow(axes: EvalMetricResult[], primary: Rgb): Row {
       doc.setFontSize(7);
       doc.setTextColor(...MUTED);
       doc.text(PDF_COPY.radarCaption, cx, y + height - 2, { align: "center" });
+    },
+  };
+}
+
+const axisPercentileText = (a: RadarAxis) =>
+  a.value === null ? PDF_COPY.notTested : a.percentile === null ? `${a.displayValue} - ${PDF_COPY.notScored}` : `${a.displayValue} - ${a.percentile} ${PDF_COPY.percentileSuffix}`;
+const groupText = (a: RadarAxis) => `vs ${a.cohortLabel}, n=${a.n}`;
+
+/** Movement (band word + raw MQI total) beside the radar; a missing total reads Not tested and is never scored. */
+function movementRow(movement: EvalRadar["movement"]): Row {
+  let text: string = PDF_COPY.notTested;
+  if (movement.total !== null) {
+    const total = `${PDF_COPY.mqiTotalLabel} ${movement.total} of 24`;
+    text = movement.band === null ? total : `${movement.band} (${total})`;
+  }
+  return {
+    height: 8,
+    draw(d, y) {
+      d.setTextColor(...TEXT);
+      d.setFont("helvetica", "bold");
+      d.setFontSize(10);
+      d.text(PDF_COPY.movementLabel, MARGIN, y + 5);
+      d.setFont("helvetica", "normal");
+      d.setFontSize(11);
+      d.text(text, MARGIN + 44, y + 5);
+    },
+  };
+}
+
+function buildPercentileSection(radar: EvalRadar, primary: Rgb): Section {
+  if (radar.scoredCount >= MIN_RADAR_AXES) {
+    return { kind: "radar", title: PDF_COPY.percentileTitle, rows: [buildPercentileRadarRow(radar.axes, primary), movementRow(radar.movement)] };
+  }
+  const rows = radar.axes.map<Row>((a) => ({
+    height: 11,
+    draw(d, y) {
+      d.setTextColor(...TEXT);
+      d.setFont("helvetica", "bold");
+      d.setFontSize(10);
+      d.text(a.label, MARGIN, y + 4);
+      d.setFont("helvetica", "normal");
+      d.text(fit(d, winAnsi(axisPercentileText(a)), CONTENT_W - 60), MARGIN + 60, y + 4);
+      if (a.value !== null) {
+        d.setFontSize(8);
+        d.setTextColor(...MUTED);
+        d.text(fit(d, winAnsi(groupText(a)), CONTENT_W - 60), MARGIN + 60, y + 8.5);
+      }
+    },
+  }));
+  const note: Row = {
+    height: 7,
+    draw(d, y) {
+      d.setFont("helvetica", "normal");
+      d.setFontSize(8);
+      d.setTextColor(...MUTED);
+      d.text(PDF_COPY.percentileTableNote, MARGIN, y + 4);
+    },
+  };
+  return { kind: "radarTable", title: PDF_COPY.percentileTableTitle, rows: [...rows, note, movementRow(radar.movement)] };
+}
+
+/** Six fixed axes, radius = percentile / 100. An unscored axis is labeled but has no point; the polygon skips it. */
+function buildPercentileRadarRow(axes: RadarAxis[], primary: Rgb): Row {
+  const R = 26;
+  const pad = 15;
+  const height = 2 * (R + pad) + 8;
+  return {
+    height,
+    draw(doc, y) {
+      const cx = PAGE_W / 2;
+      const cy = y + R + pad;
+      const n = axes.length;
+      const point = (i: number, r: number): [number, number] => [cx + r * Math.sin((2 * Math.PI * i) / n), cy - r * Math.cos((2 * Math.PI * i) / n)];
+      const ring = (f: number, style: string) => {
+        const pts = axes.map((_, i) => point(i, R * f));
+        doc.lines(pts.slice(1).map((p, i) => [p[0] - pts[i][0], p[1] - pts[i][1]]), pts[0][0], pts[0][1], [1, 1], style, true);
+      };
+      doc.setDrawColor(...LIGHT);
+      doc.setLineWidth(0.2);
+      for (const f of [0.25, 0.5, 0.75, 1]) ring(f, "S");
+      axes.forEach((_, i) => {
+        const [x, y2] = point(i, R);
+        doc.line(cx, cy, x, y2);
+      });
+      const pts = axes.map((a, i) => (a.percentile === null ? null : point(i, R * clamp(a.percentile / 100, 0, 1))));
+      if (pts.every((p) => p !== null)) {
+        const all = pts as [number, number][];
+        doc.setFillColor(...tint(primary, 0.6));
+        doc.lines(all.slice(1).map((p, i) => [p[0] - all[i][0], p[1] - all[i][1]]), all[0][0], all[0][1], [1, 1], "F", true);
+      }
+      doc.setDrawColor(...primary);
+      doc.setLineWidth(0.6);
+      for (const [i, j] of radarSegments(axes.map((a) => a.percentile))) doc.line(pts[i]![0], pts[i]![1], pts[j]![0], pts[j]![1]);
+      doc.setFillColor(...primary);
+      for (const p of pts) if (p) doc.circle(p[0], p[1], 0.9, "F");
+      axes.forEach((a, i) => {
+        const [x, y2] = point(i, R + 3);
+        const side = Math.abs(x - cx) < 1 ? "center" : x > cx ? "left" : "right";
+        // Text must stay on the page: the room is measured from the anchor to the margin on the side it grows toward
+        const room = side === "left" ? PAGE_W - MARGIN - x : side === "right" ? x - MARGIN : 2 * Math.min(x - MARGIN, PAGE_W - MARGIN - x);
+        // Top labels sit above their point, bottom labels below it, side labels centered on it
+        const top = y2 < cy - 1 ? y2 - 8 : y2 > cy + 1 ? y2 + 1.5 : y2 - 3.5;
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7.5);
+        doc.setTextColor(...TEXT);
+        doc.text(fit(doc, winAnsi(a.label), room), x, top + 2.5, { align: side });
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(7);
+        doc.text(fit(doc, winAnsi(axisPercentileText(a)), room), x, top + 5.5, { align: side });
+        if (a.value !== null) {
+          doc.setTextColor(...MUTED);
+          doc.text(fit(doc, winAnsi(groupText(a)), room), x, top + 8.5, { align: side });
+        }
+      });
+      doc.setFontSize(7);
+      doc.setTextColor(...MUTED);
+      doc.text(PDF_COPY.percentileCaption, cx, y + height - 1, { align: "center" });
     },
   };
 }
