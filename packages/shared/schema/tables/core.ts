@@ -5,7 +5,8 @@
  */
 
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, date, boolean, unique, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, date, boolean, jsonb, unique, index } from "drizzle-orm/pg-core";
+import type { OrgAIPromptOverrideKey } from "../../ai-prompt-overrides";
 import { organizationTypeEnum, coppaStatusEnum } from "../enums";
 
 export const organizations = pgTable("organizations", {
@@ -37,6 +38,9 @@ export const organizations = pgTable("organizations", {
   customMetricsEnabled: boolean("custom_metrics_enabled").default(false).notNull(),
   // AI prompt context for customizing coaching insights (added in migration 0107)
   aiPromptContext: text("ai_prompt_context"),
+  aiStyleExample: text("ai_style_example"),
+  // Org-admin wording for philosophy and the three tones (ORG_AI_PROMPT_OVERRIDE_KEYS); null / missing key = inherit the site wording (migration 0184)
+  aiPromptOverrides: jsonb("ai_prompt_overrides").$type<Partial<Record<OrgAIPromptOverrideKey, string>>>(),
   // PDF branding fields (added in migration 0106)
   brandLogoUrl: text("brand_logo_url"),
   brandPrimaryColor: varchar("brand_primary_color", { length: 7 }),
@@ -82,7 +86,7 @@ export const users = pgTable("users", {
   graduationYear: integer("graduation_year"),
   school: text("school"),
   phoneNumbers: text("phone_numbers").array(),
-  sports: text("sports").array(), // ["Soccer"] - restricted to soccer only
+  sports: text("sports").array(), // free text, e.g. ["Soccer"] or ["Football"]; no DB restriction (benchmark matching compares case-insensitively)
   positions: text("positions").array(), // ["F", "M", "D", "GK"] for soccer positions
   height: integer("height"), // inches
   weight: integer("weight"), // pounds

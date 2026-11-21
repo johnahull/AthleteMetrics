@@ -1,6 +1,6 @@
 import { DEFAULT_AI_MODEL_KEY } from "@shared/ai-models";
 import {
-  organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs, emailVerificationTokens, accountLinkingTokens, passwordResetTokens, athleteProfiles,
+  organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs, emailVerificationTokens, accountLinkingTokens, passwordResetTokens, athleteProfiles, athleteNotes,
   siteMetrics, organizationMetrics,
   siteBenchmarks, customBenchmarks, organizationBenchmarks,
   siteSettings, reports,
@@ -33,6 +33,7 @@ import {
   type SecurityEvent,
 } from "@shared/schema";
 import { parentAthleteLinks } from "@shared/schema/tables/coppa";
+import { omitOrgAiTextUnless } from "./services/ai-style-example";
 import type { WellnessTrend } from "@shared/wellness-types";
 import { validateMeasurementValue, MeasurementValueValidationError } from "@shared/measurement-value-validation";
 import { isMovementQualityMetric } from "@shared/peer-comparison-exclusions";
@@ -46,6 +47,7 @@ import crypto from "crypto";
 import { hashToken } from "./lib/token-hash";
 import { BCRYPT_SALT_ROUNDS } from "@shared/constants";
 import { isValidBenchmarkId } from "@shared/benchmark-utils";
+import type { AIPromptOverrides } from "@shared/ai-prompt-overrides";
 import { getPgErrorCode, PG_UNIQUE_VIOLATION } from "./lib/pg-error";
 
 /**
@@ -59,6 +61,9 @@ function whereUserNotDeleted(): SQL {
 }
 
 /** InsertMeasurement omits `units`; import callers may supply it to override the metric's configured unit. */
+/** What the unauthenticated public directory may show about an organization (the join-organization page's fields). */
+export type PublicOrganization = Pick<Organization, 'id' | 'name' | 'description' | 'location' | 'orgType'> & { memberCount: number };
+
 export type CreateMeasurementInput = InsertMeasurement & { units?: string | null };
 
 /** Optional behavior of storage.createMeasurement (the storage-based import paths). */
@@ -164,6 +169,8 @@ export interface IStorage {
   getOrganizations(filters?: { includeInactive?: boolean; orgType?: OrganizationType | null }): Promise<Organization[]>;
   getOrganization(id: string): Promise<Organization | undefined>;
   getOrganizationsBatch(ids: string[]): Promise<Map<string, Organization>>;
+  /** "First Last" of every user in the organization (any role), one query. */
+  getOrganizationMemberNames(organizationId: string): Promise<string[]>;
   getOrganizationByName(name: string): Promise<Organization | undefined>;
   createOrganization(organization: InsertOrganization): Promise<Organization>;
   updateOrganization(id: string, organization: Partial<InsertOrganization>): Promise<Organization>;
@@ -270,7 +277,7 @@ export interface IStorage {
   getUserPendingInvitations(userId: string): Promise<Array<EventInvitation & { event: Event }>>;
 
   // Public Organization Directory
-  getPublicOrganizations(filters?: { search?: string; orgType?: OrganizationType }): Promise<(Organization & { memberCount: number })[]>;
+  getPublicOrganizations(filters?: { search?: string; orgType?: OrganizationType }): Promise<PublicOrganization[]>;
   getOrganizationByJoinCode(joinCode: string): Promise<Organization | undefined>;
   regenerateJoinCode(organizationId: string, customCode?: string): Promise<string>;
   updateOrganizationMembershipSettings(organizationId: string, settings: {
@@ -469,6 +476,7 @@ export interface IStorage {
     aiModel?: string;
     wellnessModuleEnabled?: boolean;
     sprintFvEnabled?: boolean;
+    aiPromptOverrides?: AIPromptOverrides | null;
     updatedBy: string | null;
   }): Promise<SiteSettings>;
 
@@ -956,6 +964,9 @@ export class DatabaseStorage implements IStorage {
       // Delete athlete profiles
       await tx.delete(athleteProfiles).where(eq(athleteProfiles.userId, id));
 
+      // Delete coaching notes about this athlete (the FK also cascades; explicit so a reader sees it)
+      await tx.delete(athleteNotes).where(eq(athleteNotes.athleteId, id));
+
       // Delete user-team relationships
       await tx.delete(userTeams).where(eq(userTeams.userId, id));
 
@@ -1033,7 +1044,8 @@ export class DatabaseStorage implements IStorage {
 
     return result.map(({ user_organizations, organizations }: any) => ({
       ...user_organizations,
-      organization: organizations
+      // The style example is org-admin material: other members never receive it.
+      organization: omitOrgAiTextUnless(organizations, user_organizations.role === 'org_admin')
     }));
   }
 
@@ -1097,7 +1109,7 @@ export class DatabaseStorage implements IStorage {
 
     const mappedResult = result.map(({ user_teams, teams: team, organizations }: { user_teams: UserTeam, teams: Team, organizations: Organization }) => ({
       ...user_teams,
-      team: { ...team, organization: organizations }
+      team: { ...team, organization: omitOrgAiTextUnless(organizations, false) }
     }));
 
     return mappedResult;
@@ -1133,6 +1145,15 @@ export class DatabaseStorage implements IStorage {
   async getOrganization(id: string): Promise<Organization | undefined> {
     const [org] = await db.select().from(organizations).where(eq(organizations.id, id));
     return org || undefined;
+  }
+
+  async getOrganizationMemberNames(organizationId: string): Promise<string[]> {
+    const rows = await db
+      .select({ firstName: users.firstName, lastName: users.lastName })
+      .from(userOrganizations)
+      .innerJoin(users, eq(userOrganizations.userId, users.id))
+      .where(and(eq(userOrganizations.organizationId, organizationId), isNull(users.deletedAt)));
+    return rows.map((r) => `${r.firstName ?? ""} ${r.lastName ?? ""}`.trim()).filter(Boolean);
   }
 
   async getOrganizationsBatch(ids: string[]): Promise<Map<string, Organization>> {
@@ -1222,7 +1243,8 @@ export class DatabaseStorage implements IStorage {
         throw new Error(`Cannot delete organization with active dependencies: ${errors.join(', ')}`);
       }
 
-      // 3. Delete organization atomically
+      // 3. Delete organization atomically (coaching notes cascade; explicit so a reader sees it)
+      await tx.delete(athleteNotes).where(eq(athleteNotes.organizationId, id));
       await tx.delete(organizations).where(eq(organizations.id, id));
     });
   }
@@ -1451,7 +1473,7 @@ export class DatabaseStorage implements IStorage {
     const result: any[] = await query;
     return result.map(({ teams: team, organizations: org }) => ({
       ...team,
-      organization: org
+      organization: omitOrgAiTextUnless(org, false)
     }));
   }
 
@@ -1464,7 +1486,7 @@ export class DatabaseStorage implements IStorage {
     if (result.length === 0) return undefined;
 
     const { teams: team, organizations: org } = result[0];
-    return { ...team, organization: org };
+    return { ...team, organization: omitOrgAiTextUnless(org, false) };
   }
 
   async createTeam(team: InsertTeam): Promise<Team> {
@@ -2725,7 +2747,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Public Organization Directory
-  async getPublicOrganizations(filters?: { search?: string; orgType?: OrganizationType }): Promise<(Organization & { memberCount: number })[]> {
+  async getPublicOrganizations(filters?: { search?: string; orgType?: OrganizationType }): Promise<PublicOrganization[]> {
     const conditions = [
       eq(organizations.isPublicDirectory, true),
       eq(organizations.isActive, true),
@@ -2736,13 +2758,18 @@ export class DatabaseStorage implements IStorage {
       conditions.push(eq(organizations.orgType, filters.orgType));
     }
 
-    // Get organizations
-    let query = db.select()
+    // Get organizations. This feeds an unauthenticated endpoint, so select the public fields explicitly:
+    // a new organizations column must never become public by default (join code, AI settings, ...).
+    const orgs = await db.select({
+      id: organizations.id,
+      name: organizations.name,
+      description: organizations.description,
+      location: organizations.location,
+      orgType: organizations.orgType,
+    })
       .from(organizations)
       .where(and(...conditions))
       .orderBy(organizations.name);
-
-    const orgs = await query;
 
     // If search filter, apply client-side filtering (PostgreSQL ILIKE would be better but keeping it simple)
     let filteredOrgs = orgs;
@@ -2772,7 +2799,7 @@ export class DatabaseStorage implements IStorage {
     const countMap = new Map(memberCounts.map(mc => [mc.organizationId, mc.count]));
 
     return filteredOrgs.map(org => ({
-      ...org,
+      ...org, // already the public allow-list: aiStyleExample is not selected
       memberCount: countMap.get(org.id) || 0,
     }));
   }
@@ -3618,6 +3645,9 @@ export class DatabaseStorage implements IStorage {
       // Delete athlete profiles
       await tx.delete(athleteProfiles).where(eq(athleteProfiles.userId, id));
 
+      // Delete coaching notes about this athlete (the FK also cascades; explicit so a reader sees it)
+      await tx.delete(athleteNotes).where(eq(athleteNotes.athleteId, id));
+
       // Delete all user-team relationships
       await tx.delete(userTeams).where(eq(userTeams.userId, id));
 
@@ -3693,7 +3723,8 @@ export class DatabaseStorage implements IStorage {
 
     return result.map(({ teams: team, organizations }: { teams: Team, organizations: Organization }) => ({
       ...team,
-      organization: organizations
+      // Nested copies of the org never carry the admin-only style example
+      organization: omitOrgAiTextUnless(organizations, false)
     }));
   }
 
@@ -6094,6 +6125,7 @@ export class DatabaseStorage implements IStorage {
     aiModel?: string;
     wellnessModuleEnabled?: boolean;
     sprintFvEnabled?: boolean;
+    aiPromptOverrides?: AIPromptOverrides | null;
     updatedBy: string | null;
   }): Promise<SiteSettings> {
     // Singleton pattern - check if settings exist
@@ -6118,6 +6150,10 @@ export class DatabaseStorage implements IStorage {
         updateData.sprintFvEnabled = settings.sprintFvEnabled;
       }
 
+      if (settings.aiPromptOverrides !== undefined) {
+        updateData.aiPromptOverrides = settings.aiPromptOverrides;
+      }
+
       const [updated] = await db
         .update(siteSettings)
         .set(updateData)
@@ -6132,6 +6168,7 @@ export class DatabaseStorage implements IStorage {
           aiModel: settings.aiModel || DEFAULT_AI_MODEL_KEY,
           wellnessModuleEnabled: settings.wellnessModuleEnabled ?? true,
           sprintFvEnabled: settings.sprintFvEnabled ?? false,
+          aiPromptOverrides: settings.aiPromptOverrides ?? null,
           updatedBy: settings.updatedBy,
         })
         .returning();

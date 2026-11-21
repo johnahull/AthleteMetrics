@@ -9,6 +9,8 @@ import { isSafePublicUrl } from "./url-safety";
 import type { DerivedCalculationConfig } from "./schema/tables/metrics";
 import { displayFormatEnum } from "./schema/enums";
 import { DEFAULT_AI_MODEL_KEY, SELECTABLE_AI_MODEL_KEYS } from "./ai-models";
+import { aiPromptOverridesSchema } from "./ai-prompt-overrides";
+import { metricMeaningSchema } from "./metric-meaning";
 
 // AI Coaching Insights constants
 export const MAX_INSIGHTS_LENGTH = 10000;
@@ -179,6 +181,7 @@ export const siteMetrics = pgTable("site_metrics", {
   isActive: boolean("is_active").default(true).notNull(), // Can be globally disabled by site admin
   displayOrder: integer("display_order"),
   description: text("description"),
+  meaning: text("meaning"), // Family-facing "what this result means"; mirrors schema/tables/metrics.ts
   // Organization type availability (NULL = available to all org types)
   availableOrgTypes: text("available_org_types").array().$type<(typeof organizationTypeEnum)[number][]>(),
   // Advanced properties for sport-specific configuration
@@ -1383,6 +1386,9 @@ export type ActorType = (typeof actorTypeEnum)[number];
 export type ClaimStatus = (typeof claimStatusEnum)[number];
 
 // Insert schemas
+// NOTE: this file's `organizations` table is a stale copy without ai_prompt_context / ai_style_example, so those
+// columns cannot be .omit()ted here (TS2322) and are already absent from this schema; the guard test is
+// packages/shared/__tests__/coach-notes.test.ts. Do not add them to this table copy without omitting them.
 export const insertOrganizationSchema = createInsertSchema(organizations).omit({
   id: true,
   createdAt: true,
@@ -1766,6 +1772,7 @@ export const insertSiteMetricSchema = createInsertSchema(siteMetrics).omit({
   shortDescription: z.string().max(5000).optional(),
   whatItMeasures: z.string().max(5000).optional(),
   whyItMatters: z.string().max(5000).optional(),
+  meaning: metricMeaningSchema({ scan: false }).optional(),
   availableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
   sportAssociations: z.array(z.string().max(50, "Sport code must be 50 characters or less").regex(/^[A-Z0-9_]+$/, "Sport code must be uppercase letters, numbers, and underscores")).optional(),
   validationMin: z.number().optional(),
@@ -1820,6 +1827,7 @@ export const updateSiteMetricSchema = z.object({
   shortDescription: z.string().max(5000).nullable().optional(),
   whatItMeasures: z.string().max(5000).nullable().optional(),
   whyItMatters: z.string().max(5000).nullable().optional(),
+  meaning: metricMeaningSchema({ scan: false }).nullable().optional(),
   // Allow null to explicitly clear these array fields (undefined means "don't update")
   availableOrgTypes: z.array(z.enum(organizationTypeEnum)).nullable().optional(),
   sportAssociations: z.array(z.string().max(50, "Sport code must be 50 characters or less").regex(/^[A-Z0-9_]+$/, "Sport code must be uppercase letters, numbers, and underscores")).nullable().optional(),
@@ -2283,6 +2291,9 @@ export const toggleSiteSetVisibilitySchema = z.object({
 });
 
 // Report Schemas
+// NOTE: this file's `reports` table is a stale copy without coach_notes, so coachNotes cannot be .omit()ted here
+// (TS2322) and is already absent from this schema; the guard test is packages/shared/__tests__/coach-notes.test.ts.
+// Do not add it to this table copy without omitting it.
 export const insertReportSchema = createInsertSchema(reports).omit({
   id: true,
   createdAt: true,
@@ -2778,6 +2789,8 @@ export const updateSiteSettingsSchema = z.object({
   aiModel: z.enum(AI_MODELS).optional(),
   wellnessModuleEnabled: z.boolean().optional(),
   sprintFvEnabled: z.boolean().optional(),
+  // Whole-object replace; null or {} resets every slot to the code default
+  aiPromptOverrides: aiPromptOverridesSchema.nullable().optional(),
 });
 
 export const insertSiteSettingsSchema = createInsertSchema(siteSettings).omit({

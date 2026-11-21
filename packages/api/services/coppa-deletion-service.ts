@@ -17,6 +17,7 @@
  * 5.  AI coaching insights (nulled on report snapshots — not hard-deleted)
  * 5b. Eval reports (code STEP 4c; reports.report_type = 'eval' with config.athleteId = athlete; shares/snapshots cascade)
  * 6.  Global athlete links (unlink from cross-org profile)
+ * 6d. Athlete coaching notes (code STEP 6d, next to the athlete profile; notes in EVERY organization)
  * 7.  Organization memberships + team memberships
  * 8.  Parent-athlete links
  * 9.  Parental consent records (marked revoked — NOT deleted; retained for audit)
@@ -48,6 +49,7 @@ import { measurements } from '@shared/schema/tables/measurements';
 import { wellnessResponses } from '@shared/schema/tables/wellness';
 import { eventRegistrations, eventInvitations } from '@shared/schema/tables/events';
 import { reportShares, reports } from '@shared/schema/tables/reports';
+import { athleteNotes } from '@shared/schema/tables/athlete-notes';
 import { userGlobalAthleteLinks } from '@shared/schema/tables/global-athletes';
 import { pushSubscriptions, notificationPreferences, notificationHistory } from '@shared/schema/tables/notifications';
 import { userAchievements, goals } from '@shared/schema/tables/gamification';
@@ -261,6 +263,10 @@ export class CoppaDeletionService extends BaseService {
           throw new Error('CONCURRENT_DELETION: request was already claimed by another process');
         }
 
+        // Lock the athlete's user row so coach-notes writes (which take FOR SHARE on it) either finish before this
+        // transaction clears them or wait and then see the athlete deleted
+        await tx.select({ id: users.id }).from(users).where(eq(users.id, athleteUserId)).for('update');
+
         // STEP 1: Delete measurements
         const deletedMeasurements = await tx.delete(measurements)
           .where(eq(measurements.userId, athleteUserId))
@@ -363,6 +369,25 @@ export class CoppaDeletionService extends BaseService {
           deletedCategories.push(`ai_coaching_insights_cleared (${affectedReportIds.length} reports)`);
         }
 
+        // STEP 4b-2: Coach notes (and any AI insights derived from them) on EVERY individual report of this athlete,
+        // shared or not. The athlete is named only in config.athleteId, so the shares above do not find them.
+        // Unlike STEP 4b (shared reports only), this covers unshared rows; the overlap on shared rows is harmless.
+        const clearedNotes = await tx.update(reports)
+          .set({
+            coachNotes: null,
+            coachingInsights: null,
+            coachingInsightsGeneratedAt: null,
+            coachingInsightsModel: null,
+          })
+          .where(and(
+            eq(reports.reportType, 'individual'),
+            sql`${reports.config}->>'athleteId' = ${athleteUserId}`,
+          ))
+          .returning({ id: reports.id });
+        if (clearedNotes.length > 0) {
+          deletedCategories.push(`coach_notes_cleared (${clearedNotes.length} reports)`);
+        }
+
         // STEP 4c: Delete the athlete's eval reports, shared or not. The athlete is only named in
         // config.athleteId (no FK), so the user cascade never reaches them; report_shares and
         // report_snapshots cascade from reports.id. Like the other steps this is keyed on the user id, not the org.
@@ -406,6 +431,15 @@ export class CoppaDeletionService extends BaseService {
           .returning({ id: athleteProfiles.id });
         if (deletedProfiles.length > 0) {
           deletedCategories.push(`athlete_profiles (${deletedProfiles.length})`);
+        }
+
+        // STEP 6d: Delete coaching notes about the athlete, in every organization (the user row is only
+        // soft-deleted below, so the FK cascade would never reach them)
+        const deletedNotes = await tx.delete(athleteNotes)
+          .where(eq(athleteNotes.athleteId, athleteUserId))
+          .returning({ id: athleteNotes.id });
+        if (deletedNotes.length > 0) {
+          deletedCategories.push(`athlete_notes (${deletedNotes.length})`);
         }
 
         // STEP 7: Delete parent-athlete links

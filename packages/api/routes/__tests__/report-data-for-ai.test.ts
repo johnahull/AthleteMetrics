@@ -1,8 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 
 // The org and team lookups are the only direct db reads; every chained query resolves to one row.
+const dob = vi.hoisted(() => ({ value: undefined as string | undefined, throws: false }));
 vi.mock('../../db', () => {
-  const row = { name: 'Lions', sport: 'Soccer', aiPromptContext: null };
+  const row = { name: 'Lions', sport: 'Soccer', aiPromptContext: null, get birthDate() { if (dob.throws) throw new Error('db down'); return dob.value; } };
   const chain: any = new Proxy({}, {
     get: (_t, prop) => (prop === 'then' ? (resolve: any) => resolve([row]) : () => chain),
   });
@@ -146,6 +147,82 @@ describe('buildReportDataForAI — team', () => {
       teamTrends: { VERTICAL_JUMP: { teamSeries: [{ date: '2024-01-01', value: 1 }, { date: '2024-02-01', value: 2 }] } },
     })));
     expect(data.dataConfidence).toContain('history over time for 1 metric');
+  });
+});
+
+describe('buildReportDataForAI — coach notes', () => {
+  const coachNotes = { goals: 'make varsity', whatISaw: 'short strides' };
+
+  it('copies the coach notes of an individual report', async () => {
+    const data = await buildReportDataForAI({ ...individualReport, coachNotes }, 'u1', service(individualData()), { includeCoachNotes: true });
+    expect(data.coachNotes).toEqual(coachNotes);
+    expect(buildPrompt(data)).toContain('make varsity');
+  });
+
+  it('leaves the coach notes out unless the caller says the requester may use them (non-writers)', async () => {
+    const data = await buildReportDataForAI({ ...individualReport, coachNotes }, 'u1', service(individualData()));
+    expect(data).not.toHaveProperty('coachNotes');
+    expect(buildPrompt(data)).not.toContain('make varsity');
+  });
+
+  describe('shareWhatISaw is locked off for under-13 or unknown-DOB athletes', () => {
+    const shared = { whatISaw: 'short strides', shareWhatISaw: true };
+    const build = () => buildReportDataForAI({ ...individualReport, coachNotes: shared }, 'u1', service(individualData()), { includeCoachNotes: true });
+
+    it('keeps the switch for an adult athlete', async () => {
+      dob.value = '1990-01-01';
+      expect((await build()).coachNotes).toEqual(shared);
+    });
+    it('drops the switch (and keeps the rest) for an under-13 athlete', async () => {
+      dob.value = `${new Date().getFullYear() - 10}-06-15`;
+      expect((await build()).coachNotes).toEqual({ whatISaw: 'short strides' });
+    });
+    it('fails closed when the date of birth lookup throws', async () => {
+      dob.throws = true;
+      try {
+        expect((await build()).coachNotes).toEqual({ whatISaw: 'short strides' });
+      } finally {
+        dob.throws = false;
+      }
+    });
+    it('drops the switch when there is no What I saw text to share', async () => {
+      dob.value = '1990-01-01';
+      const r = { ...individualReport, coachNotes: { goals: 'make varsity', shareWhatISaw: true } };
+      const data = await buildReportDataForAI(r, 'u1', service(individualData()), { includeCoachNotes: true });
+      expect(data.coachNotes).toEqual({ goals: 'make varsity' });
+    });
+    it('sends no notes at all when the caller may not use them, even with the switch on', async () => {
+      dob.value = '1990-01-01';
+      const data = await buildReportDataForAI({ ...individualReport, coachNotes: shared }, 'u1', service(individualData()), { includeCoachNotes: false });
+      expect(data).not.toHaveProperty('coachNotes');
+    });
+    it('drops the switch when the date of birth is unknown', async () => {
+      dob.value = undefined;
+      expect((await build()).coachNotes).toEqual({ whatISaw: 'short strides' });
+    });
+  });
+
+  it('leaves coachNotes off when the report has none', async () => {
+    const data = await buildReportDataForAI({ ...individualReport, coachNotes: null }, 'u1', service(individualData()));
+    expect(data).not.toHaveProperty('coachNotes');
+  });
+
+  it('never copies notes into a team report', async () => {
+    const data = await buildReportDataForAI({ ...teamReport, coachNotes }, 'u1', service(teamData()));
+    expect(data).not.toHaveProperty('coachNotes');
+    expect(buildPrompt(data)).not.toContain('make varsity');
+  });
+
+  it('never copies notes into an eval report', async () => {
+    const data = await buildReportDataForAI({ ...individualReport, reportType: 'eval', coachNotes }, 'u1', service(individualData()));
+    expect(data).not.toHaveProperty('coachNotes');
+  });
+
+  it('never copies notes into an eval report even when the caller opts in (the guard is the safety net)', async () => {
+    const data = await buildReportDataForAI(
+      { ...individualReport, reportType: 'eval', coachNotes }, 'u1', service(individualData()), { includeCoachNotes: true },
+    );
+    expect(data).not.toHaveProperty('coachNotes');
   });
 });
 

@@ -98,6 +98,8 @@ ALTER TABLE reports ADD CONSTRAINT reports_coaching_insights_model_check
 - **Context-Rich Prompts**: Performance data, athlete details, benchmarks
 - **Prompt structure**: one shared `SYSTEM_PROMPT` (role, audience rules, output format, grounding and constraints) sent by every provider; `buildPrompt` builds the user message (fenced `<report_data>`, then framing for team / event / trend reports and the audience instructions). Output uses fixed `## ` headings per audience (`INSIGHT_HEADINGS`) and word ranges from `insightWordRange` (team 200-350; minimum 60 when there are no benchmarks and no history). Organization Context sits inside the fence and cannot change the rules or the output format. Temperature 0.3 where the model accepts one.
 
+Coach notes, the org style example, the single-call analysis flow and troubleshooting: `docs/AI_INSIGHTS.md`.
+
 #### API Routes
 
 **Site Settings Routes** (`packages/api/routes/site-settings-routes.ts`):

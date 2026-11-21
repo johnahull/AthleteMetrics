@@ -110,3 +110,6 @@ export function buildMetricExplanationsMap(
   }
   return out;
 }
+
+export { BUILT_IN_METRIC_MEANINGS, NO_MEANING, PENDING_MEANING, getMetricMeaning } from './meanings';
+export type { MetricMeaning } from './meanings';

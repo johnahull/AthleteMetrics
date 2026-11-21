@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-11-21
+
+### Added
+- Athlete coaching notes (AM-FEAT-025): coaches and admins keep a dated, organization-scoped log of observations about an athlete (add, edit, delete) on the athlete profile, with an optional category, an optional event link and a pin for active restrictions. Collapsible card (collapsed above 3 notes), quick-add from the dashboard and the command palette. Visible only to coaches, org admins and site admins of the note's own organization; athletes and parents never see them (#771, #772, #780)
+- Per-report coach notes for individual reports (goals, season phase, training age, maturation, restrictions, test-day flags, limiter call, sessions per week, retest date, what the coach saw), saved with `PATCH /api/reports/:id/coach-notes`. Writers only: stripped from every read path for non-writers and never in snapshots or share payloads. COPPA deletion, export and profile merge cover them (#753)
+- AI insights use the coach notes and goals in the prompt and run as a single call with a hidden analysis step; a "Path to Goal" section appears when goals exist; truncated model output is an error for all providers (#754)
+- Organization AI style example (max 1500 chars, org admins only) used for depth, structure and voice (#755)
+- Site-admin editable AI insights prompt wording (role, philosophy, per-audience tone, analysis checklist) with an "AI insights prompt" card on the admin page; safety and format rules stay locked in code (#757, #758)
+- Org-admin prompt wording (philosophy and tones) layered on the site wording (#770)
+- "Meaning for families" field on site metrics and custom org metrics, edited in `/metrics` and the custom-metric form (max 400 chars, scanned for diagnosis, injury, clearance, weight and prediction wording) (#775)
+- Family-facing insights: plain-language parent audience as the default for individual reports (#774); meaning-first parent shape with vetted built-in metric meanings and an eval set (#777); same-run split facts and metric relationships (#778); per-report switch to share "What I saw" with families, off by default and locked off for under-13 or unknown-DOB athletes (#776)
+- Coaching insights appear first in every non-eval report (web and PDF) and on the public report page; readers never see a model name or AI wording (#773)
+- HS football position benchmark tiers (DB, DL, LB, DE, TE, OL, QB, RB, WR) for 40 yd, pro agility, vertical jump and broad jump, from McKay et al. 2020. Not auto-enabled (#756)
+
+### Security
+- `PUT /api/reports/:id` only accepts name, description, config and isTemplate for non-eval reports; other fields now return 400 (#752)
+- Changing, deleting, pinning, archiving, sharing, snapshotting (public links), bulk-changing and generating insights for a report now require a coach, org admin or site admin role in the report's own organization (the creator keeps edit and delete of their own report) (#762, #763)
+- `GET /api/organizations/public` returns only its display fields; it used to expose join codes and AI prompt context (#761)
+- Model-written images no longer render in coaching insights (#758)
+- Dependency overrides for `glob` and `minimatch`; documented audit exclusions clear the Security Audit check (#779)
+
+### Changed
+- Dependency bumps: Radix scroll-area, popover and checkbox, jspdf-autotable, simple-statistics 8, @anthropic-ai/sdk 1.8.0, @tailwindcss/vite, @testing-library/user-event (#749, #765, #767, #768, #769)
+- Coach-notes migration renumbered 0181 to 0182 (#760); test-only coverage hardening (#764)
+
+### Deployment notes
+- Migrations, all idempotent and applied with `npm run db:migrate:manual`: `0181_seed_hs_football_position_tiers` (upsert seed), `0182_add_coach_notes_and_ai_style_example` (additive columns), `0183_add_ai_prompt_overrides` (column plus `audit_logs_action_valid` CHECK re-defined), `0184_add_org_ai_prompt_overrides`, `0185_add_athlete_notes` (new table), `0186_add_metric_meaning` (nullable columns). Numbers 0179 and 0180 are intentionally unused (reserved for AM-FEAT-024, #733-#735, not in this release). 0183-0185 were already applied to staging; tracking is by file name, so the re-run is a no-op.
+- No new environment variables.
+- Clients that PUT extra fields on a report now get 400. Athletes who are not the creator can no longer change, share or delete reports.
+
+### Known risks
+- #754 single-call AI analysis and coach-notes prompt never had its live eval (`scripts/eval-ai-insights.ts`) run against a real model; read real outputs before relying on quality (also applies to the later family-insight prompt changes #774-#778).
+- CI E2E is red at baseline on every PR (#490); it is not caused by this release. The eval-report and coach-notes E2E specs were run locally.
+
 ## [0.37.1] - 2026-11-13
 
 ### Fixed

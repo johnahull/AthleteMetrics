@@ -227,7 +227,8 @@ test.describe('Benchmark Management - Site Admin Tests', () => {
 
     // FLY10_TIME is a speed metric, so its benchmark appears under the Speed category
     const speedGroup = page.locator('[data-testid="category-group-speed"]');
-    await expect(speedGroup).toBeVisible({ timeout: 5000 });
+    // The catalog renders every site benchmark (hundreds of cards), which is slow on the CI runner
+    await expect(speedGroup).toBeVisible({ timeout: 20000 });
     await expect(speedGroup.getByText(benchmark.name)).toBeVisible();
 
     // Collapsing the category hides the benchmark; reopening restores it

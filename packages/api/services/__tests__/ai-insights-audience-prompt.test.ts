@@ -106,11 +106,11 @@ describe('buildPrompt audience branches', () => {
       expect(prompt).not.toContain('\n## Next Steps\n');
     });
 
-    it('should request 150-200 words for athlete audience', () => {
+    it('should request 180-240 words for athlete audience', () => {
       const data = makeBaseReportData({ audience: 'athlete' });
       const prompt = buildPrompt(data);
 
-      expect(prompt).toContain('150-200 words');
+      expect(prompt).toContain('180-240 words');
     });
 
     it('should ask for the first-name placeholder, never the real name', () => {
@@ -144,7 +144,7 @@ describe('buildPrompt audience branches', () => {
       const data = makeBaseReportData({ audience: 'parent' });
       const prompt = buildPrompt(data);
 
-      expect(prompt).toContain("\n## What the numbers mean\n");
+      expect(prompt).toContain("\n## The big picture\n");
       expect(prompt).toContain("\n## What's Going Well\n");
       expect(prompt).toContain('\n## What to Work On\n');
       expect(prompt).not.toContain('**Why Continued Training Matters**');

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,6 +10,10 @@ import { useToast } from "@/hooks/use-toast";
 import { useGenerateInsights, useUpdateInsights } from "@/lib/reports-api";
 import { MAX_INSIGHTS_LENGTH } from "@shared/schema";
 import { getAIModel } from "@shared/ai-models";
+import { findJargon } from "@shared/plain-language";
+import { findSensitiveWords } from "@shared/coach-note-words";
+import { coachNotesSchema } from "@shared/coach-notes";
+import { CoachNotesForm, type FlushNotes, type MetricOption } from "./CoachNotesForm";
 
 interface CoachingInsightsCardProps {
   reportId: string;
@@ -21,6 +25,12 @@ interface CoachingInsightsCardProps {
    *  Defaults to true for adult athletes (COPPA not applicable).
    *  Use strict === true check — null/undefined must block access (fail-closed). */
   aiConsentGranted?: boolean;
+  /** Individual reports only: show the coach-notes form (writers in the report's org). */
+  canEditNotes?: boolean;
+  coachNotes?: unknown;
+  metricOptions?: MetricOption[];
+  /** Which family the generated text is for; the private-detail warning only applies to parent and athlete. */
+  audience?: "coach" | "athlete" | "parent";
 }
 
 // Use MAX_INSIGHTS_LENGTH from shared schema for consistency with database constraint
@@ -32,7 +42,25 @@ export function CoachingInsightsCard({
   model,
   aiEnabled,
   aiConsentGranted = true,
+  canEditNotes = false,
+  coachNotes,
+  metricOptions,
+  audience,
 }: CoachingInsightsCardProps) {
+  const flushNotesRef = useRef<FlushNotes | null>(null);
+  // Insights written while sharing was on stay stored until regenerated
+  const [regenNotice, setRegenNotice] = useState(false);
+  const onShareRemoved = useCallback(() => setRegenNotice(true), []);
+  const notesForm = canEditNotes ? (
+    <>
+      {regenNotice && (
+        <p role="status" className="text-sm text-amber-700 text-left">
+          Regenerate the insights to remove coach observations.
+        </p>
+      )}
+      <CoachNotesForm key={reportId} reportId={reportId} coachNotes={coachNotes} metricOptions={metricOptions} flushRef={flushNotesRef} onShareRemoved={onShareRemoved} />
+    </>
+  ) : null;
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(initialInsights || "");
   const { toast } = useToast();
@@ -50,9 +78,33 @@ export function CoachingInsightsCard({
   const hasInsights = !!initialInsights;
   const isGenerating = generateMutation.isPending;
 
+  // Guards double clicks while the pending notes save is in flight (ref: state lags a same-tick click).
+  const flushingRef = useRef(false);
+  const [flushing, setFlushing] = useState(false);
+  const saveNotesFirst = useCallback(async (flush: FlushNotes) => {
+    flushingRef.current = true;
+    setFlushing(true);
+    try {
+      return await flush();
+    } finally {
+      flushingRef.current = false;
+      setFlushing(false);
+    }
+  }, []);
+
   const handleGenerate = useCallback(() => {
+    // Unsaved notes are saved first; a failed save (or invalid form) aborts the generation.
+    if (flushingRef.current) return;
+    const flush = flushNotesRef.current;
+    if (flush) {
+      void saveNotesFirst(flush).then((ok) => ok && runGenerate());
+    } else {
+      runGenerate();
+    }
+    function runGenerate() {
     generateMutation.mutate(undefined, {
       onSuccess: () => {
+        setRegenNotice(false);
         toast({
           title: "Success",
           description: "Coaching insights generated successfully",
@@ -66,12 +118,17 @@ export function CoachingInsightsCard({
         });
       },
     });
+    }
   }, [generateMutation, toast]);
 
-  const handleEdit = useCallback(() => {
+  // Switching to the editor unmounts the notes form, so unsaved notes are saved first (abort on failure).
+  const handleEdit = useCallback(async () => {
+    if (flushingRef.current) return;
+    const flush = flushNotesRef.current;
+    if (flush && !(await saveNotesFirst(flush))) return;
     setEditedContent(initialInsights || "");
     setIsEditing(true);
-  }, [initialInsights]);
+  }, [initialInsights, saveNotesFirst]);
 
   const handleCancel = useCallback(() => {
     setEditedContent(initialInsights || "");
@@ -109,6 +166,11 @@ export function CoachingInsightsCard({
   const handleRegenerate = useCallback(() => {
     handleGenerate();
   }, [handleGenerate]);
+
+  const hardWords = findJargon(editedContent);
+  // Only when the coach switched "What I saw" on: those words may have come from the notes
+  const sharesSaw = coachNotesSchema.safeParse(coachNotes).data?.shareWhatISaw === true;
+  const sensitiveWords = sharesSaw && (audience === "parent" || audience === "athlete") ? findSensitiveWords(editedContent) : [];
 
   // Early returns come after every hook so the hook order never changes between renders
   // Manual write/edit never needs AI; only Generate/Regenerate do
@@ -158,19 +220,21 @@ export function CoachingInsightsCard({
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {/* COPPA lock hides it; AI being off does not, so saved notes can still be read, edited or cleared */}
+          {aiConsentGranted === true && notesForm}
           <div className="text-center py-8 space-y-4">
             <p className="text-muted-foreground">
               {aiEnabled
                 ? "Write insights, or generate them to get personalized coaching recommendations based on this report's performance data."
                 : "Add coaching insights for this report."}
             </p>
-            <div className="flex justify-center gap-2">
-              <Button variant={canGenerate ? "outline" : "default"} onClick={handleEdit}>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button variant={canGenerate ? "outline" : "default"} onClick={handleEdit} disabled={flushing}>
                 <Edit className="h-4 w-4 mr-2" />
                 Write Insights
               </Button>
               {canGenerate && (
-                <Button onClick={handleGenerate}>
+                <Button onClick={handleGenerate} disabled={flushing}>
                   <Sparkles className="h-4 w-4 mr-2" />
                   Generate Insights
                 </Button>
@@ -245,7 +309,18 @@ export function CoachingInsightsCard({
             className="font-mono text-sm"
             placeholder="Enter coaching insights..."
             data-testid="insights-editor"
+            aria-describedby={sensitiveWords.length > 0 ? "sensitive-words-note" : undefined}
           />
+          {hardWords.length > 0 && (
+            <p className="text-sm text-amber-700" data-testid="hard-words">
+              Hard words for families: {hardWords.join(", ")}
+            </p>
+          )}
+          {sensitiveWords.length > 0 && (
+            <p id="sensitive-words-note" role="status" className="text-sm text-amber-700" data-testid="sensitive-words">
+              Check before sharing, these may come from your notes: {sensitiveWords.join(", ")}
+            </p>
+          )}
           <div className="flex justify-between items-center text-sm text-muted-foreground">
             <span>
               Characters: {editedContent.length} / {MAX_INSIGHTS_LENGTH}
@@ -280,7 +355,7 @@ export function CoachingInsightsCard({
                 variant="outline"
                 size="sm"
                 onClick={handleRegenerate}
-                disabled={isGenerating}
+                disabled={isGenerating || flushing}
               >
                 <RefreshCw className={`h-4 w-4 mr-2 ${isGenerating ? 'animate-spin' : ''}`} />
                 Regenerate
@@ -290,8 +365,9 @@ export function CoachingInsightsCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {aiConsentGranted === true && notesForm}
         <div className="prose prose-sm max-w-none dark:prose-invert" data-testid="insights-display">
-          <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{initialInsights || ""}</ReactMarkdown>
+          <ReactMarkdown rehypePlugins={[rehypeSanitize]} disallowedElements={['img']}>{initialInsights || ""}</ReactMarkdown>
         </div>
         <div className="flex items-center gap-2 pt-4 border-t text-sm text-muted-foreground">
           <span>

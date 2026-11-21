@@ -30,6 +30,7 @@ import { RecentActivityTimeline } from "@/components/athlete/RecentActivityTimel
 import { WellnessStatusCard } from "@/components/athlete/WellnessStatusCard";
 import { MetricProgressCard } from "@/components/athlete/MetricProgressCard";
 import { SprintRunsCard } from "@/components/athlete/SprintRunsCard";
+import { CoachingNotesCard } from "@/components/athlete/CoachingNotesCard";
 import {
   calculateMonthlyMeasurementCount,
   getLastMeasurementDate,
@@ -442,6 +443,8 @@ export default function AthleteProfile() {
       )}
 
       <SprintRunsCard measurements={measurements} className="mb-8" />
+
+      {athleteId && <CoachingNotesCard key={athleteId} athleteId={athleteId} athleteName={athlete?.fullName ?? "this athlete"} />}
 
       {/* Contact Information */}
       {((athlete?.emails && athlete.emails.length > 0) || (athlete?.phoneNumbers && athlete.phoneNumbers.length > 0) || athlete?.parentEmail) && (

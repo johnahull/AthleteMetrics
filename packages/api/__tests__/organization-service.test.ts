@@ -44,6 +44,7 @@ vi.mock('../storage', () => ({
     getUserByUsername: vi.fn(),
     createUser: vi.fn(),
     getUserRoles: vi.fn(),
+    getUserRole: vi.fn(),
     // Organization user operations
     getUserOrganizations: vi.fn(),
     getOrganizationUsers: vi.fn(),

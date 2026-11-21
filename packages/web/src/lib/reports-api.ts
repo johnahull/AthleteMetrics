@@ -4,6 +4,7 @@
  */
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import type { CoachNotes } from "@shared/coach-notes";
 
 // ============================================================================
 // API Response Types
@@ -66,6 +67,28 @@ async function updateInsights(
   return response.json();
 }
 
+/**
+ * Save coach notes for the AI (an empty object clears them)
+ */
+async function updateCoachNotes(
+  reportId: string,
+  notes: CoachNotes
+): Promise<{ coachNotes: CoachNotes | null; shareLocked?: boolean }> {
+  const response = await fetch(`/api/reports/${reportId}/coach-notes`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(notes),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || "Failed to save coach notes");
+  }
+
+  return response.json();
+}
+
 // ============================================================================
 // React Query Hooks
 // ============================================================================
@@ -120,6 +143,22 @@ export function useUpdateInsights(reportId: string) {
 
       // Invalidate reports list to update coachingInsightsGeneratedAt timestamp
       queryClient.invalidateQueries({ queryKey: ["/api/reports"] });
+    },
+  });
+}
+
+/**
+ * Hook to save coach notes for a report. Updates the report cache on success.
+ */
+export function useUpdateCoachNotes(reportId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (notes: CoachNotes) => updateCoachNotes(reportId, notes),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/reports", reportId], (old: any) =>
+        old ? { ...old, coachNotes: data.coachNotes } : old
+      );
     },
   });
 }

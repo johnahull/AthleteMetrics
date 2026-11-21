@@ -5,6 +5,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Organization, UpdateOrganization } from "@shared/schema";
+import type { OrgAIPromptOverrideKey } from "@shared/ai-prompt-overrides";
 
 // ============================================================================
 // API Client Functions
@@ -55,6 +56,8 @@ export type OrgAdminSettings = {
   brandSecondaryColor?: string | null;
   brandTagline?: string | null;
   aiPromptContext?: string | null;
+  aiStyleExample?: string | null;
+  aiPromptOverrides?: Partial<Record<OrgAIPromptOverrideKey, string>> | null;
 };
 
 export async function updateOrgAdminSettings(

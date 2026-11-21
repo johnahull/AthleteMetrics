@@ -69,6 +69,25 @@ describe('buildPrompt de-identification', () => {
   });
 });
 
+describe('buildPrompt de-identification of coach notes', () => {
+  const coachNotes = {
+    goals: 'Evelyn wants varsity at Northside Athletics',
+    whatISaw: 'Garcia drifts wide when tired',
+    restriction: { area: "Evelyn's left ankle", status: 'Northside PT cleared', ptCleared: true },
+  };
+
+  const identifying = ['Evelyn', 'Garcia', 'Northside'];
+
+  it('keeps athlete and organization names out of the goals and notes sections', () => {
+    for (const audience of ['coach', 'athlete', 'parent'] as const) {
+      const prompt = buildPrompt(individual({ audience, coachNotes }));
+      for (const s of identifying) expect(prompt).not.toContain(s);
+      expect(prompt).toContain('## Goals');
+      expect(prompt).toContain('{{first_name}} wants varsity');
+    }
+  });
+});
+
 describe('fillFirstName', () => {
   it('replaces tolerant placeholder variants', () => {
     expect(fillFirstName('Hi {{first_name}}, {{ First Name }} and {{firstname}}.', 'Evelyn')).toBe('Hi Evelyn, Evelyn and Evelyn.');
@@ -94,18 +113,18 @@ describe('fillFirstName', () => {
 
 describe('generateCoachingInsights', () => {
   beforeEach(() => {
-    anthropicSpy.mockReset().mockResolvedValue({ content: [{ type: 'text', text: '## Summary\n{{first_name}} ran 1.50 s.' }] });
+    anthropicSpy.mockReset().mockResolvedValue({ content: [{ type: 'text', text: '<analysis>x</analysis>## The big picture\n{{first_name}} ran 1.50 s.' }] });
     vi.stubEnv('ANTHROPIC_API_KEY', 'test-key');
   });
 
   it('sends no name to the provider and fills the first name into the output', async () => {
     const out = await generateCoachingInsights('claude-haiku-4.5', individual({ audience: 'parent' }));
-    expect(out).toBe('## Summary\nEvelyn ran 1.50 s.');
+    expect(out).toBe('## The big picture\nEvelyn ran 1.50 s.');
     expect(JSON.stringify(anthropicSpy.mock.calls[0][0])).not.toContain('Evelyn');
   });
 
   it('falls back to "your athlete" when the report has no athlete name', async () => {
     const out = await generateCoachingInsights('claude-haiku-4.5', individual({ audience: 'parent', athleteName: undefined }));
-    expect(out).toBe('## Summary\nYour athlete ran 1.50 s.');
+    expect(out).toBe('## The big picture\nYour athlete ran 1.50 s.');
   });
 });

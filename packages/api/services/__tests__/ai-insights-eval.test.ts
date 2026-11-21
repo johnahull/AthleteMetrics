@@ -3,9 +3,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   athleteNamesIn,
+  bareNumberSentences,
+  belowAverageNotNamed,
   checkInsights,
   countWords,
+  focusResultCount,
   headingIssues,
+  medicalWords,
+  neverSayHits,
   prescriptionNumbers,
   ungroundedNumbers,
   unmeasuredQualities,
@@ -188,5 +193,146 @@ describe('checkInsights on recorded samples', () => {
       data: { ...golden('individual-benchmarks').data, audience: 'coach' },
       athleteNames: ['Jordan Smith'],
     })).toEqual([]);
+  });
+});
+
+describe('checkInsights and the style example', () => {
+  it('flags a number that only the style example contains as ungrounded', () => {
+    const data = { ...golden('individual-benchmarks').data, audience: 'coach' as const, styleExample: 'Your vertical hit 987.65 in the old report.' };
+    const failures = checkInsights({ output: '## Summary\n- Vertical of 987.65 is great.', data });
+    expect(failures.some(f => f.includes('987.65'))).toBe(true);
+  });
+});
+
+describe('medicalWords', () => {
+  it('flags diagnosis, return-to-play, injury-risk and body-weight or nutrition wording', () => {
+    expect(medicalWords('This suggests a hamstring strain diagnosis; cleared for return to play. Lose weight, watch your diet, high injury risk.'))
+      .toEqual(['diagnosis', 'return to play', 'lose weight', 'diet', 'injury risk']);
+    expect(medicalWords('Weight loss and weight gain advice.')).toEqual(['weight loss', 'weight gain']);
+    expect(medicalWords('Risk of injury is raised; fix your nutrition and body weight.')).toEqual(['risk of injury', 'nutrition', 'body weight']);
+  });
+  it('does not flag plain weight wording', () => {
+    expect(medicalWords('Time in the weight room and weight training will help; the bar weight stays with the coach.')).toEqual([]);
+  });
+  it('passes plain training wording', () => {
+    expect(medicalWords('The left leg is 12% slower; treat it as context only and ask the coach to confirm. The restriction is noted.')).toEqual([]);
+  });
+  it('checkInsights reports it', () => {
+    const c = GOLDEN_CASES[0];
+    const failures = checkInsights({ output: '## Summary\nReturn to play is safe.', data: { ...c.data, audience: 'coach' } });
+    expect(failures).toContain('medical wording: return to play');
+  });
+});
+
+describe('family checks (meaning, not data)', () => {
+  const chris = golden('eval-long-sprint-goal');
+  const checkFamily = (file: string, audience: 'parent' | 'athlete' = 'parent') =>
+    checkInsights({ output: sample(file), data: { ...chris.data, audience } });
+
+  it('passes a good parent output for the long-sprint goal case', () => {
+    expect(checkFamily('long-sprint-parent-good.md')).toEqual([]);
+  });
+
+  it('catches every family failure in a bad output', () => {
+    const failures = checkFamily('long-sprint-parent-bad.md').join('\n');
+    expect(failures).toContain('bare numbers');
+    expect(failures).toContain('never-say wording');
+    expect(failures).toContain('below-average results not named');
+    expect(failures).toContain('focus results 5, expected 2-3');
+    expect(failures).toContain('missing headings: The big picture');
+    expect(failures).toContain('numbers not in the report data');
+  });
+
+  it('does not apply the family checks to a coach output', () => {
+    const failures = checkInsights({ output: sample('long-sprint-parent-bad.md'), data: { ...chris.data, audience: 'coach' } }).join('\n');
+    expect(failures).not.toContain('bare numbers');
+    expect(failures).not.toContain('focus results');
+  });
+
+  describe('bareNumberSentences', () => {
+    it('flags a sentence that is mostly the number', () => {
+      expect(bareNumberSentences('- 40-yard dash: 5.26 s.\n- Top speed: 1.12 s')).toHaveLength(2);
+    });
+    it('naming a test is not a number: labels and distance tokens are removed first', () => {
+      expect(bareNumberSentences('The 40-yard dash and the 5-10-5 shuttle are low.')).toEqual([]);
+      expect(bareNumberSentences('5-10-5 Agility is 4.96 s.', ['5-10-5 Agility'])).toHaveLength(1);
+      expect(bareNumberSentences('A 40-yard dash is where the start shows up most clearly for this athlete.', ['40-Yard Dash'])).toEqual([]);
+    });
+    it('flags a long sentence that restates two results', () => {
+      expect(bareNumberSentences('The jump from a paused squat was 18.9 inches and the jump with a quick dip was 19.1 inches today.')).toHaveLength(1);
+    });
+    it('judges a whole bullet: a number followed by its meaning in the next sentence is not bare', () => {
+      expect(bareNumberSentences('- The 10-yard dash was 1.74 seconds. It measures how quickly the athlete gets going from a standstill.')).toEqual([]);
+    });
+    it('a line that says what each number measures is not bare', () => {
+      expect(bareNumberSentences('Use the 10-yard fly as your main KPI: its 1.12 seconds measures speed once you are moving. Then track your 1.74-second 10-yard dash for the start.')).toEqual([]);
+    });
+    it('a line that sets a result against a goal is not bare', () => {
+      expect(bareNumberSentences('You are chasing a 40-yard dash under 5.5 seconds; your current 40-yard dash is 5.71 s.')).toEqual([]);
+    });
+    it('a line with a comparison word carries its meaning', () => {
+      expect(bareNumberSentences("- Devon's 40-yard dash is 5.71 seconds, compared with the under-5.5-second goal.")).toEqual([]);
+      expect(bareNumberSentences('- Broad jump: 88 inches and 84 inches.')).toHaveLength(1);
+    });
+    it('passes a number given with its meaning, and sentences with no number', () => {
+      expect(bareNumberSentences('The first 10 yards took 1.74 seconds, so a quicker start lowers the top speed needed later.')).toEqual([]);
+      expect(bareNumberSentences('## The big picture\nCasey is working hard.')).toEqual([]);
+    });
+  });
+
+  describe('ungroundedNumbers', () => {
+    it('"out of 100" in the percentile wording is not an invented number', () => {
+      const prompt = '<report_data>\n- 10-Yard Dash: 1.74 s\n</report_data>';
+      expect(ungroundedNumbers('The result is faster than about 30 out of 100 in the group.', prompt)).toEqual(['30']);
+    });
+  });
+
+  describe('neverSayHits', () => {
+    it('a negated prediction is not a predicted time', () => {
+      expect(neverSayHits('This is one run result, not a prediction.')).toEqual([]);
+      expect(neverSayHits('There is no prediction here.')).toEqual([]);
+      expect(neverSayHits('Casey is projected to run 7.0.')).toContain('predicted time');
+    });
+    it.each([
+      ['Casey is cleared to sprint.', 'cleared'],
+      ['Casey will run a 7.0 in the spring.', 'predicted time'],
+      ['Body weight is the issue.', 'body weight'],
+      ['That proves a weak start.', 'proof from one test'],
+      ['Add squats twice a week.', 'exercise prescription'],
+      ['Both legs are balanced and safe.', 'balanced, safe or ready'],
+      ['The diagnosis is clear.', 'diagnosis'],
+    ])('flags %s', (text, label) => {
+      expect(neverSayHits(text).join(' ')).toContain(label);
+    });
+    it('passes plain meaning text, including the paused-squat jump', () => {
+      expect(neverSayHits('The paused-squat jump and the squat jump match. Both legs hop about the same distance.')).toEqual([]);
+    });
+  });
+
+  describe('belowAverageNotNamed', () => {
+    it('is loose about wording and only reads the first section', () => {
+      const out = '## The big picture\nThe 40-yard time, the 5-10-5 shuttle and the jump are low.\n## What to Work On\n- x';
+      expect(belowAverageNotNamed(out, chris.data)).toEqual([]);
+      const late = '## The big picture\nCasey is working.\n## What to Work On\n- The 40-yard dash, the 5-10-5 shuttle and the jump.';
+      expect(belowAverageNotNamed(late, chris.data)).toHaveLength(3);
+    });
+  });
+
+  describe('focusResultCount', () => {
+    it('counts bullets under What to Work On only', () => {
+      expect(focusResultCount("## What's Going Well\n- a\n- b\n## What to Work On\n- one\n- two\n")).toBe(2);
+      expect(focusResultCount('## The big picture\nx')).toBe(0);
+    });
+  });
+});
+
+describe('eval set', () => {
+  it('has the anonymized evaluations, none with a real name', () => {
+    const names = GOLDEN_CASES.filter((c) => c.name.startsWith('eval-')).map((c) => c.name);
+    expect(names).toEqual(['eval-long-sprint-goal', 'eval-short-sprint-goal', 'eval-no-goal-test-conditions', 'eval-body-measures']);
+  });
+  it('the long-sprint case carries the corrected gold-target numbers', () => {
+    const values = Object.fromEntries(golden('eval-long-sprint-goal').data.metrics.map((m) => [m.code, m.values[0]]));
+    expect(values).toMatchObject({ DASH_10YD: 1.74, DASH_20YD: 3.01, DASH_30YD: 4.14, DASH_40YD: 5.26, AGILITY_5105: 4.96, JUMP_CMJ_HOH: 19.1, JUMP_SJ_HEIGHT: 18.9 });
   });
 });

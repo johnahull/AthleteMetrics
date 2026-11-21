@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useGenerateReport } from "@/hooks/use-reports";
 import { useReportPdf } from "@/hooks/use-report-pdf";
 import { useToast } from "@/hooks/use-toast";
@@ -25,6 +24,7 @@ import { buildReportLlmExport } from "./report-llm-export";
 import { ShareReportDialog } from "./ShareReportDialog";
 import { SendReportToAthleteDialog } from "./SendReportToAthleteDialog";
 import { CoachingInsightsCard } from "./CoachingInsightsCard";
+import { useOrganizationDetails } from "@/hooks/use-organization-details";
 import { MetricExplanation } from "./MetricExplanation";
 import { MetricGroupRowHeading, MetricGroupHeading } from "./MetricGroupHeading";
 import { groupedCodes } from "@/lib/metric-groups";
@@ -62,10 +62,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
   const canExportForLlm = orgRole === "site_admin" || orgRole === "coach" || orgRole === "org_admin";
 
   // Determine if AI is enabled for this organization
-  const { data: organization } = useQuery<{ aiEnabled?: boolean; aiEnabledBySiteAdmin?: boolean }>({
-    queryKey: ['organizations', report.organizationId, 'details'],
-    enabled: !!report.organizationId,
-  });
+  const { data: organization } = useOrganizationDetails(report.organizationId);
 
   const aiEnabled = organization?.aiEnabled && organization?.aiEnabledBySiteAdmin;
 
@@ -209,6 +206,10 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
           generatedAt={report.coachingInsightsGeneratedAt}
           model={report.coachingInsightsModel}
           aiEnabled={aiEnabled || false}
+          canEditNotes={canExportForLlm}
+          coachNotes={report.coachNotes}
+          audience={(report.config as { audience?: "coach" | "athlete" | "parent" } | null)?.audience}
+          metricOptions={measurementCodes.map((code) => ({ code, label: metricLabels?.[code] || code }))}
         />
       )}
 

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Sparkles, Heart, Zap, AlertTriangle, FileText, Bell, Calculator, Loader2 } from "lucide-react";
+import { AiPromptCard } from "@/components/admin/ai-prompt-card";
 import { AdminNotificationSettingsCard } from "@/components/notifications/admin-notification-settings-card";
 import { DEFAULT_AI_MODEL_KEY, ESTIMATED_TOKENS_PER_REPORT, estimateCostPer100Reports } from "@shared/ai-models";
 
@@ -384,6 +385,8 @@ export default function AdminPage() {
           )}
         </CardContent>
       </Card>
+
+      <AiPromptCard />
 
       {/* Global Wellness Templates */}
       <Card>

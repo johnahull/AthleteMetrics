@@ -54,6 +54,8 @@ export const reports = pgTable("reports", {
   coachingInsights: text("coaching_insights"),
   coachingInsightsGeneratedAt: timestamp("coaching_insights_generated_at"),
   coachingInsightsModel: text("coaching_insights_model"),
+  // Coach-authored context for the AI (CoachNotes, packages/shared/coach-notes.ts). Never returned to non-writers.
+  coachNotes: jsonb("coach_notes"),
 
   // Metadata
   isTemplate: boolean("is_template").default(false).notNull(),

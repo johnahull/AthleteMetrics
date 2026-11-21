@@ -41,10 +41,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { FileDown, Sparkles, Users, Calendar, TrendingUp, Activity, ChevronDown } from "lucide-react";
+import { FileDown, Users, Calendar, TrendingUp, Activity, ChevronDown } from "lucide-react";
 import { format } from "date-fns";
-import ReactMarkdown from "react-markdown";
-import rehypeSanitize from "rehype-sanitize";
 import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
 import { formatMeasurement } from "@shared/duration-format";
 import { resolveTierText } from "@shared/tier-colors";
@@ -67,6 +65,7 @@ import { useTeams } from "@/hooks/use-teams";
 import type { Report, TeamReportData, TeamStatistic, AthleteRanking, PdfFormat, IndividualReportData, BenchmarkComparison, TeamReportConfig } from "@/types/report-types";
 import { isGroupComparisonOn, resolveChartSelection } from "@shared/report-charts";
 import { SprintRunsCard } from "@/components/athlete/SprintRunsCard";
+import { ReadOnlyCoachingInsights } from "./ReadOnlyCoachingInsights";
 
 interface AthleteReportViewProps {
   report: Report;
@@ -211,7 +210,6 @@ function AthleteIndividualReportView({ report }: { report: Report }) {
         <ReadOnlyCoachingInsights
           insights={report.coachingInsights}
           generatedAt={report.coachingInsightsGeneratedAt}
-          model={report.coachingInsightsModel}
         />
       )}
 
@@ -491,7 +489,6 @@ function AthleteTeamReportView({ report }: { report: Report }) {
         <ReadOnlyCoachingInsights
           insights={report.coachingInsights}
           generatedAt={report.coachingInsightsGeneratedAt}
-          model={report.coachingInsightsModel}
         />
       )}
 
@@ -792,54 +789,5 @@ function AthleteTeamReportView({ report }: { report: Report }) {
         </div>
       )}
     </div>
-  );
-}
-
-// ============================================================================
-// Read-Only Coaching Insights Component
-// ============================================================================
-
-interface ReadOnlyCoachingInsightsProps {
-  insights: string;
-  generatedAt?: string | null;
-  model?: string | null;
-}
-
-function ReadOnlyCoachingInsights({ insights, generatedAt, model }: ReadOnlyCoachingInsightsProps) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-primary" />
-          Coaching Insights
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="prose prose-sm max-w-none dark:prose-invert">
-          <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{insights}</ReactMarkdown>
-        </div>
-        <div className="flex items-center gap-2 pt-4 border-t text-sm text-muted-foreground">
-          <span>
-            Evaluation Written:{" "}
-            {generatedAt
-              ? new Date(generatedAt).toLocaleString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                  hour: "numeric",
-                  minute: "2-digit",
-                  hour12: true,
-                })
-              : "Unknown"}
-          </span>
-          {model && (
-            <>
-              <span>•</span>
-              <Badge variant="secondary">{model}</Badge>
-            </>
-          )}
-        </div>
-      </CardContent>
-    </Card>
   );
 }

@@ -4,18 +4,22 @@
  */
 
 import express, { type Express } from "express";
-import { DEFAULT_AI_MODEL_KEY, getAIModel } from "@shared/ai-models";
+import { DEFAULT_AI_MODEL_KEY } from "@shared/ai-models";
 import rateLimit from "express-rate-limit";
 import { sortCodesByGroups, isGenericReport } from "@shared/metric-order";
 import { buildMeasurementRows, buildBenchmarkRows, buildStatsRows, buildAchievementRows, groupLabelFor } from "./pdf-metric-rows";
 import { ReportService } from "../services/report-service";
 import { BIGGEST_CHANGE_PREFIX } from "../services/ai-insights-service";
+import { aboveAverageResults, belowAverageResults } from "../services/ai-insights-meaning";
+import { isBelowAverageComparison } from "../services/benchmark-standing";
+import { RELATIONSHIP_CODES, firedRelationships, sameRunSplits, splitFacts, standingOf, type RelationshipInput } from "../services/ai-metric-relationships";
 import { createReportsFromInput, ReportCreateError } from "../services/report-create";
 import { planChartPageBreaks, chartGroupHeadings, addHeadingHeights } from "./pdf-chart-layout";
 import { requireAuth, requireAIEnabled, type AuthenticatedRequest } from "../middleware";
 import { storage } from "../storage";
 import {
   insertReportSchema,
+  updateReportSchema,
   reports,
   reportSnapshots,
   reportBenchmarks,
@@ -56,11 +60,16 @@ import { hexToRgb, isSafeLogoUrl, fetchLogoBase64, sanitizeFilename } from "./re
 import { renderEvalReportPdf } from "../utils/eval-report-pdf";
 import { canAccessEvalRow, hasInaccessibleEval } from "./eval-report-access";
 import { EVAL_REPORT_TYPE, frozenModelSchema } from "@shared/eval-report-config";
+import { coachNotesSchema, type CoachNotes } from "@shared/coach-notes";
+import { memberNamesIn } from "../services/ai-style-example";
+import { omitCoachNotes, writerOrgIds, forViewer } from "./report-coach-notes-access";
 import { getOrgRole, isMeasurementWriterRole } from "../permissions/measurement-helpers";
+import { isOrgWriter } from "./report-write-access";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { formatCalendarDate, formatEventReportTimeframe } from "../utils/calendar-date";
 import { isValidTimezone } from "../lib/wellness-schedule-utils";
 import type { BenchmarkComparison } from "@shared/benchmark-types";
+import { mergePromptOverrides } from "../services/ai-prompt-overrides-service";
 
 const REPORT_NOT_FOUND = { message: "Report not found" };
 
@@ -239,6 +248,11 @@ const bulkOperationLimiter = rateLimit({
 });
 
 const reportService = new ReportService();
+
+/** Writer (coach / org_admin / site admin) of the report's own organization. */
+async function isReportWriter(user: Parameters<typeof getOrgRole>[0], report: { organizationId: string }): Promise<boolean> {
+  return isMeasurementWriterRole(await getOrgRole(user, report.organizationId));
+}
 
 export function registerReportRoutes(app: Express) {
   /**
@@ -543,7 +557,9 @@ export function registerReportRoutes(app: Express) {
       }
 
       // Step 4: Enrich reports with sentToAthlete status and targetAthlete name
-      const reportsWithSentStatus = reportsList.map((report) => {
+      const coachNoteWriterOrgs = await writerOrgIds(user, reportsList.map((r) => r.organizationId));
+      const reportsWithSentStatus = reportsList.map((row) => {
+        const report = coachNoteWriterOrgs.has(row.organizationId) ? row : omitCoachNotes(row);
         if (report.reportType !== 'individual') {
           return stripEvalModel(report);
         }
@@ -611,7 +627,7 @@ export function registerReportRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied to this report" });
       }
 
-      res.json(report);
+      res.json(await forViewer(user, report));
     } catch (error) {
       console.error("Error fetching report:", error);
       res.status(500).json({ message: "Failed to fetch report" });
@@ -654,11 +670,19 @@ export function registerReportRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied to this report" });
       }
 
-      // Validate request body with Zod schema (partial for updates).
-      // An eval keeps its frozen config and type: only name and description can change.
+      // Changing a report needs a writer role in the report's own organization (requireRole only sees the
+      // primary one), or being the creator, so athletes keep their own reports
+      if (!(await isReportWriter(user, report)) && report.createdBy !== user.id) {
+        return res.status(403).json({ message: "Only coaches and administrators can change this report" });
+      }
+
+      // Whitelist of writable fields (name, description, config, isTemplate). Unknown TOP-LEVEL keys
+      // such as coachingInsights* or organizationId are rejected; nested config keys are not checked.
+      // A submitted config must satisfy the full create-time config schema. An eval keeps its frozen
+      // config and type: only name and description can change.
       const validatedData = report.reportType === EVAL_REPORT_TYPE
         ? evalReportUpdateSchema.parse(req.body)
-        : insertReportSchema.partial().parse(req.body);
+        : reportPutSchema.parse(req.body);
 
       // Update report
       const [updated] = await db
@@ -670,7 +694,8 @@ export function registerReportRoutes(app: Express) {
         .where(eq(reports.id, reportId))
         .returning();
 
-      res.json(updated);
+      if (!updated) return res.status(404).json({ message: "Report not found" });
+      res.json(await forViewer(user, updated));
     } catch (error) {
       if (error instanceof ZodError) {
         return res.status(400).json({
@@ -725,6 +750,12 @@ export function registerReportRoutes(app: Express) {
             .json({ message: "Access denied to this report" });
         }
 
+        // Changing a report needs a writer role in the report's own organization (requireRole only sees the
+        // primary one), or being the creator, so athletes keep their own reports
+        if (!(await isReportWriter(user, report)) && report.createdBy !== user.id) {
+          return res.status(403).json({ message: "Only coaches and administrators can change this report" });
+        }
+
         // Delete report (cascades to snapshots and benchmarks)
         await db.delete(reports).where(eq(reports.id, reportId));
 
@@ -777,6 +808,11 @@ export function registerReportRoutes(app: Express) {
           return res
             .status(403)
             .json({ message: "Access denied to this report" });
+        }
+
+        // Writer role in the report's own organization (requireRole only sees the primary one)
+        if (!(await isReportWriter(user, report))) {
+          return res.status(403).json({ message: "Only coaches and administrators can change this report" });
         }
 
         // Check pinned reports count (limit to 10)
@@ -854,6 +890,11 @@ export function registerReportRoutes(app: Express) {
             .json({ message: "Access denied to this report" });
         }
 
+        // Writer role in the report's own organization (requireRole only sees the primary one)
+        if (!(await isReportWriter(user, report))) {
+          return res.status(403).json({ message: "Only coaches and administrators can change this report" });
+        }
+
         // Unpin the report
         await db
           .update(reports)
@@ -876,7 +917,6 @@ export function registerReportRoutes(app: Express) {
     "/api/reports/:id/archive",
     reportLimiter,
     requireAuth,
-    requireRole('coach'),
     async (req, res) => {
       try {
         const user = req.session.user;
@@ -910,6 +950,11 @@ export function registerReportRoutes(app: Express) {
           return res
             .status(403)
             .json({ message: "Access denied to this report" });
+        }
+
+        // Writer role in the report's own organization (requireRole only sees the primary one)
+        if (!(await isReportWriter(user, report))) {
+          return res.status(403).json({ message: "Only coaches and administrators can change this report" });
         }
 
         // Archive the report
@@ -934,7 +979,6 @@ export function registerReportRoutes(app: Express) {
     "/api/reports/:id/unarchive",
     reportLimiter,
     requireAuth,
-    requireRole('coach'),
     async (req, res) => {
       try {
         const user = req.session.user;
@@ -968,6 +1012,11 @@ export function registerReportRoutes(app: Express) {
           return res
             .status(403)
             .json({ message: "Access denied to this report" });
+        }
+
+        // Writer role in the report's own organization (requireRole only sees the primary one)
+        if (!(await isReportWriter(user, report))) {
+          return res.status(403).json({ message: "Only coaches and administrators can change this report" });
         }
 
         // Unarchive the report
@@ -1070,6 +1119,11 @@ export function registerReportRoutes(app: Express) {
           return res.status(404).json(REPORT_NOT_FOUND);
         }
 
+        // A snapshot mints a link served without login: writers of the report's own organization only
+        if (!(await isOrgWriter(user, target.organizationId))) {
+          return res.status(403).json({ message: "Only coaches and administrators can create a public link" });
+        }
+
         const snapshot = await reportService.createSnapshot(
           reportId,
           user.id,
@@ -1129,6 +1183,11 @@ export function registerReportRoutes(app: Express) {
             .json({ message: "Access denied to this report" });
         }
 
+        // Writer role in the report's own organization (requireRole only sees the primary one)
+        if (!(await isOrgWriter(user, report.organizationId))) {
+          return res.status(403).json({ message: "Only coaches and administrators can do this for a report" });
+        }
+
         // Get snapshots
         const snapshots = await db
           .select()
@@ -1171,6 +1230,9 @@ export function registerReportRoutes(app: Express) {
           .limit(1);
         // An unknown id and a hidden eval answer the same 404 (no existence oracle)
         if (!owner || !(await canAccessEvalRow(user, owner))) return res.status(404).json(REPORT_NOT_FOUND);
+        if (!(await isOrgWriter(user, owner.organizationId))) {
+          return res.status(403).json({ message: "Only coaches and administrators can revoke a public link" });
+        }
 
         await reportService.revokeSnapshot(snapshotId, user.id);
 
@@ -1204,17 +1266,25 @@ export function registerReportRoutes(app: Express) {
       // helper guards the public PDF-export routes so they cannot diverge.
       if (!(await enforcePublicSnapshotAccess(req, res, snapshot))) return;
 
-      // Eval snapshots are not re-ordered, so skip the owner lookup for them
+      // Eval snapshots are not re-ordered and carry no insights, so skip the owner lookup for them
       const [owner] = isGenericReport(snapshot.snapshotData)
         ? await db
-            .select({ organizationId: reports.organizationId })
+            .select({
+              organizationId: reports.organizationId,
+              coachingInsights: reports.coachingInsights,
+              coachingInsightsGeneratedAt: reports.coachingInsightsGeneratedAt,
+            })
             .from(reports)
             .where(eq(reports.id, snapshot.reportId))
             .limit(1)
         : [];
+      const ordered = await reportService.orderForResponse(snapshot.snapshotData, owner?.organizationId);
       res.json({
         ...snapshot,
-        snapshotData: await reportService.orderForResponse(snapshot.snapshotData, owner?.organizationId),
+        // The coach's insights are read live (a coach edit reaches every link). Never the model key or coach notes.
+        snapshotData: owner
+          ? { ...(ordered as Record<string, unknown>), coachingInsights: owner.coachingInsights, coachingInsightsGeneratedAt: owner.coachingInsightsGeneratedAt }
+          : ordered,
       });
     } catch (error) {
       console.error("Error fetching public snapshot:", error);
@@ -1557,6 +1627,12 @@ export function registerReportRoutes(app: Express) {
         });
       }
 
+      // Writer role in the report's own organization (requireRole only sees the primary one): spends AI quota and
+      // overwrites the stored insights
+      if (!(await isOrgWriter(user, report.organizationId))) {
+        return res.status(403).json({ message: "Only coaches and administrators can generate insights" });
+      }
+
       // COPPA: check AI consent for any minor athletes in this report.
       // canAccessAI fails closed: null/undefined/false → blocked.
       if (report.reportType === 'individual') {
@@ -1635,10 +1711,35 @@ export function registerReportRoutes(app: Express) {
       }
 
       // Build report data for AI
-      const reportData = await buildReportDataForAI(report, user.id, reportService);
+      const includeCoachNotes = isMeasurementWriterRole(await getOrgRole(user, report.organizationId));
+      const reportData = await buildReportDataForAI(report, user.id, reportService, { includeCoachNotes });
+
+      // Site-admin prompt wording. A stored value that no longer parses must not fail generation for every
+      // organization: use the code defaults and say so in the log.
+      // The organization layer (philosophy and tones) sits on top. It is sent to the provider, so a member who joined
+      // after it was saved and now matches drops the whole org layer for this generation, not the request.
+      let orgRaw: unknown = org.aiPromptOverrides;
+      // Only a plain object is name-checked; anything else is left for the schema check below to reject
+      if (orgRaw !== null && typeof orgRaw === 'object' && !Array.isArray(orgRaw)) {
+        try {
+          const names = await storage.getOrganizationMemberNames(report.organizationId);
+          if (memberNamesIn(Object.values(orgRaw as Record<string, unknown>).filter((v) => typeof v === 'string').join('\n'), names).length > 0) {
+            console.warn(`[AI] Organization wording dropped for organization ${report.organizationId}: it now names a member`);
+            orgRaw = undefined;
+          }
+        } catch {
+          console.warn(`[AI] Organization wording dropped for organization ${report.organizationId}: member name check failed`);
+          orgRaw = undefined;
+        }
+      }
+      const { site: promptOverrides, org: orgPromptOverrides, hash: overridesHash, siteInvalid: overridesInvalid, orgInvalid } =
+        mergePromptOverrides(siteSettings?.aiPromptOverrides, orgRaw);
+      if (overridesInvalid) console.warn(`Invalid AI prompt overrides in site settings; using the code defaults (report ${reportId})`);
+      if (orgInvalid) console.warn(`Schema-invalid AI prompt overrides in organization ${report.organizationId}; using the site wording (report ${reportId})`);
+      console.log(`[AI insights] report ${reportId}: AI prompt overrides ${overridesHash ?? 'none'}`);
 
       // Generate insights using AI service
-      const insights = await generateCoachingInsights(modelKey as AIModelKey, reportData);
+      const insights = await generateCoachingInsights(modelKey as AIModelKey, reportData, promptOverrides, orgPromptOverrides);
 
       // Validate insights length
       if (insights.length > MAX_INSIGHTS_LENGTH) {
@@ -1823,6 +1924,85 @@ export function registerReportRoutes(app: Express) {
   });
 
   /**
+   * Save the coach notes the AI insights read. An empty object `{}` clears them (express.json strict mode
+   * rejects a literal `null` body, so null cannot be sent).
+   * PATCH /api/reports/:id/coach-notes
+   */
+  app.patch("/api/reports/:id/coach-notes", reportLimiter, requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // `{}` clears the notes; a missing body must not (it would silently erase them)
+      // (express.json leaves req.body = {} when nothing was sent, so test the content type instead)
+      if (!req.is('application/json')) {
+        return res.status(400).json({ message: "Request body is required" });
+      }
+      const notes = coachNotesSchema.parse(req.body);
+      const report = await storage.getReport(req.params.id);
+      if (!report) {
+        return res.status(404).json({ message: "Report not found" });
+      }
+
+      // A non-writer must not learn that this id is an eval
+      if (!(await canAccessEvalRow(user, report))) return res.status(404).json(REPORT_NOT_FOUND);
+      if (report.reportType === EVAL_REPORT_TYPE) {
+        return res.status(400).json({ message: "Coach notes are not available for eval reports" });
+      }
+      if (report.reportType !== 'individual') {
+        return res.status(400).json({ message: "Coach notes are only available for individual reports" });
+      }
+
+      // The role in the report's own organization decides (requireRole would check the primary org only)
+      if (!isMeasurementWriterRole(await getOrgRole(user, report.organizationId))) {
+        return res.status(403).json({ message: "Access denied to this report" });
+      }
+
+      const athleteId = (report.config as { athleteId?: string } | null)?.athleteId;
+      if (!athleteId) return res.status(400).json({ message: "Report is missing its athlete configuration" });
+
+      // Family sharing of "What I saw" is locked off for under-13 or unknown-DOB athletes: the switch is dropped,
+      // the rest of the notes still save, and the response says so
+      const { notes: toSave, locked: shareLocked } = await resolveShareWhatISaw(notes, athleteId);
+
+      // Atomic with COPPA deletion: deletion takes FOR UPDATE on the athlete's user row first, so this either
+      // finishes before deletion (which then clears the notes) or waits and sees the athlete deleted.
+      // The update re-states the authorized organization, type and athlete, so a concurrent PUT that moved the
+      // report cannot be written through the old authorization.
+      const updated = await db.transaction(async (tx) => {
+        const [athlete] = await tx
+          .select({ deletedAt: users.deletedAt })
+          .from(users)
+          .where(eq(users.id, athleteId))
+          .for('share');
+        if (!athlete || athlete.deletedAt) return undefined;
+        const [row] = await tx
+          .update(reports)
+          .set({ coachNotes: Object.keys(toSave).length ? toSave : null, updatedAt: new Date() })
+          .where(and(
+            eq(reports.id, report.id),
+            eq(reports.organizationId, report.organizationId),
+            eq(reports.reportType, 'individual'),
+            sql`${reports.config}->>'athleteId' = ${athleteId}`,
+          ))
+          .returning({ coachNotes: reports.coachNotes });
+        return row;
+      });
+
+      if (!updated) return res.status(404).json({ message: "Report not found" });
+      res.json({ coachNotes: updated.coachNotes, ...(shareLocked ? { shareLocked: true } : {}) });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return res.status(400).json({ message: "Validation error", errors: error.errors });
+      }
+      console.error("Error updating coach notes:", error);
+      res.status(500).json({ message: "Failed to update coach notes" });
+    }
+  });
+
+  /**
    * Share a report with a single athlete
    * POST /api/reports/:id/share
    */
@@ -1871,6 +2051,11 @@ export function registerReportRoutes(app: Express) {
           return res
             .status(403)
             .json({ message: "Access denied to this report" });
+        }
+
+        // Writer role in the report's own organization (requireRole only sees the primary one)
+        if (!(await isOrgWriter(user, report.organizationId))) {
+          return res.status(403).json({ message: "Only coaches and administrators can do this for a report" });
         }
 
         // Verify athlete exists and is in same organization
@@ -2137,6 +2322,11 @@ export function registerReportRoutes(app: Express) {
           return res
             .status(403)
             .json({ message: "Access denied to this report" });
+        }
+
+        // Writer role in the report's own organization (requireRole only sees the primary one)
+        if (!(await isOrgWriter(user, report.organizationId))) {
+          return res.status(403).json({ message: "Only coaches and administrators can do this for a report" });
         }
 
         // Determine target athletes
@@ -2530,6 +2720,12 @@ export function registerReportRoutes(app: Express) {
           if (!hasAccess) {
             return res.status(403).json({
               message: "Access denied to one or more report organizations",
+            });
+          }
+          // Writer role in every involved organization (requireRole only sees the primary one)
+          if (!(await isOrgWriter(user, orgId))) {
+            return res.status(403).json({
+              message: "Only coaches and administrators can change reports in one or more organizations",
             });
           }
         }
@@ -2933,6 +3129,12 @@ export function registerReportRoutes(app: Express) {
               message: "Access denied to one or more report organizations",
             });
           }
+          // Writer role in every involved organization (requireRole only sees the primary one)
+          if (!(await isOrgWriter(user, orgId))) {
+            return res.status(403).json({
+              message: "Only coaches and administrators can change reports in one or more organizations",
+            });
+          }
         }
 
         // Archive all reports in a transaction for consistency
@@ -3032,6 +3234,12 @@ export function registerReportRoutes(app: Express) {
               message: "Access denied to one or more report organizations",
             });
           }
+          // Writer role in every involved organization (requireRole only sees the primary one)
+          if (!(await isOrgWriter(user, orgId))) {
+            return res.status(403).json({
+              message: "Only coaches and administrators can change reports in one or more organizations",
+            });
+          }
         }
 
         // Unarchive all reports in a transaction for consistency
@@ -3104,6 +3312,12 @@ export function registerReportRoutes(app: Express) {
           if (!hasAccess) {
             return res.status(403).json({
               message: "Access denied to one or more report organizations",
+            });
+          }
+          // Writer role in every involved organization (requireRole only sees the primary one)
+          if (!(await isOrgWriter(user, orgId))) {
+            return res.status(403).json({
+              message: "Only coaches and administrators can change reports in one or more organizations",
             });
           }
         }
@@ -3267,6 +3481,7 @@ export function registerReportRoutes(app: Express) {
             reportConfig: reports.config,
             reportDescription: reports.description,
             reportCoachingInsights: reports.coachingInsights,
+            reportCoachingInsightsGeneratedAt: reports.coachingInsightsGeneratedAt,
             reportCreatedBy: reports.createdBy,
             sharedById: reportShares.sharedBy,
             sharedByFirstName: users.firstName,
@@ -3292,7 +3507,7 @@ export function registerReportRoutes(app: Express) {
         }
 
         // AM-FEAT-019: never return an eval's config/model to an under-13 / no-DOB athlete
-        if (share.reportType === EVAL_REPORT_TYPE && await evalShareBlocked(user.id)) {
+        if (share.reportType === EVAL_REPORT_TYPE && await isAgeGatedForFamilyContent(user.id)) {
           return res.status(404).json({ message: "Shared report not found" });
         }
 
@@ -3308,6 +3523,7 @@ export function registerReportRoutes(app: Express) {
             reportType: share.reportType as 'team' | 'individual' | 'eval',
             config: share.reportConfig,
             coachingInsights: share.reportCoachingInsights,
+            coachingInsightsGeneratedAt: share.reportCoachingInsightsGeneratedAt?.toISOString() ?? null,
             // These fields are required by IndividualReportView/TeamReportView
             isTemplate: false,
             isPinned: false,
@@ -3516,10 +3732,13 @@ export function registerReportRoutes(app: Express) {
         // Check permissions: must be coach who shared it or org_admin
         const userRoles = await storage.getUserRoles(user.id, share.organizationId);
 
+        // Still a writer in that organization today (a coach later demoted to athlete may not unshare), and either
+        // the one who shared it, an org admin, or a site admin
         const canUnshare =
-          share.sharedBy === user.id || // Coach who created the share
-          userRoles.includes('org_admin') || // Org admin
-          isSiteAdmin(user); // Site admin
+          (await isOrgWriter(user, share.organizationId)) &&
+          (share.sharedBy === user.id || // Coach who created the share
+            userRoles.includes('org_admin') || // Org admin
+            isSiteAdmin(user)); // Site admin
 
         if (!canUnshare) {
           return res.status(403).json({
@@ -3580,6 +3799,11 @@ export function registerReportRoutes(app: Express) {
           return res
             .status(403)
             .json({ message: "Access denied to this report" });
+        }
+
+        // Writer role in the report's own organization (requireRole only sees the primary one)
+        if (!(await isOrgWriter(user, report.organizationId))) {
+          return res.status(403).json({ message: "Only coaches and administrators can do this for a report" });
         }
 
         // Get shares with athlete and sharedBy info
@@ -3910,12 +4134,26 @@ export function addTrendChartsToPdf(
 }
 
 /**
- * AM-FEAT-019: defence in depth for evals already shared to an athlete account. Blocked when the athlete is under
+ * The notes with shareWhatISaw kept only when it can take effect: there is text to share and the athlete is 13 or
+ * older with a known date of birth (a missing athleteId counts as locked). `locked` is true only when the age rule
+ * dropped a switch the coach turned on.
+ */
+async function resolveShareWhatISaw(notes: CoachNotes, athleteId: string | undefined): Promise<{ notes: CoachNotes; locked: boolean }> {
+  if (!notes.shareWhatISaw) return { notes, locked: false };
+  const { shareWhatISaw: _drop, ...rest } = notes;
+  if (!notes.whatISaw?.trim()) return { notes: rest, locked: false };
+  if (!athleteId || (await isAgeGatedForFamilyContent(athleteId))) return { notes: rest, locked: true };
+  return { notes, locked: false };
+}
+
+/**
+ * The one age gate for family-facing content (eval shares, and "What I saw" shared into parent/athlete insights): defence
+ * in depth for content already shared to an athlete account. Blocked when the athlete is under
  * 13 today or has no usable date of birth (the same isUnder13OrUnknownDob rule the /share, /share-bulk and
  * /bulk-distribute guards apply to every report type). Age today decides: neither isMinor nor the age at the
  * event date matters (isEvalSnapshotRestricted is a separate control for PUBLIC snapshots). Fails closed on error.
  */
-async function evalShareBlocked(athleteId: string): Promise<boolean> {
+async function isAgeGatedForFamilyContent(athleteId: string): Promise<boolean> {
   try {
     const [athlete] = await db.select({ birthDate: users.birthDate }).from(users).where(eq(users.id, athleteId)).limit(1);
     return isUnder13OrUnknownDob(athlete?.birthDate);
@@ -3924,11 +4162,11 @@ async function evalShareBlocked(athleteId: string): Promise<boolean> {
   }
 }
 
-/** Remove eval shares the athlete may not be shown (see evalShareBlocked). Non-eval rows pass through. */
+/** Remove eval shares the athlete may not be shown (see isAgeGatedForFamilyContent). Non-eval rows pass through. */
 async function dropBlockedEvalShares<T extends { reportType: string }>(shares: T[], athleteId: string): Promise<T[]> {
   if (!shares.some((share) => share.reportType === EVAL_REPORT_TYPE)) return shares;
   // The decision depends only on the athlete, so look them up once for all their eval shares
-  if (!(await evalShareBlocked(athleteId))) return shares;
+  if (!(await isAgeGatedForFamilyContent(athleteId))) return shares;
   return shares.filter((share) => share.reportType !== EVAL_REPORT_TYPE);
 }
 
@@ -3940,6 +4178,7 @@ function stripEvalModel<T extends { reportType: string; config: unknown }>(repor
 }
 
 /** PUT body for an eval: name and description are the only editable fields. */
+const reportPutSchema = updateReportSchema.extend({ config: insertReportSchema.shape.config.optional() }).strict();
 const evalReportUpdateSchema = z.object({
   name: z.string().trim().min(1, "Report name is required").max(200).optional(),
   description: z.string().max(1000).nullable().optional(),
@@ -4000,6 +4239,104 @@ export async function generatePDF(report: any, reportData: any, format: 'visual'
   const durationText = (code: string, value: number): string | null => {
     const f = reportData.metricFormats?.[code];
     return f ? formatMeasurement(value, f) : null;
+  };
+
+  // Coach's Coaching Insights. Drawn right after the athlete / summary block; never names the model (reader document).
+  const drawInsights = (startY: number): number => {
+    let yPos = startY;
+    if (report.coachingInsights) {
+      // Check if we need a new page
+      if (yPos > 220) {
+        doc.addPage();
+        yPos = 20;
+      }
+
+      doc.setFontSize(16);
+      if (isVisual) doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+      doc.text("Coaching Insights", 14, yPos);
+      doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+      yPos += 10;
+
+      // Render markdown with structure preserved (headers bold, bullets indented)
+      const insightsPageWidth = doc.internal.pageSize.getWidth();
+      const insightsContentWidth = insightsPageWidth - 28; // 14mm margins each side
+      const lineHeight = 5;
+
+      doc.setFontSize(8);
+      const markdownLines = report.coachingInsights.split('\n');
+
+      for (const rawLine of markdownLines) {
+        const trimmed = rawLine.trim();
+        if (!trimmed) {
+          yPos += 3; // Blank line = paragraph spacing
+          continue;
+        }
+
+        // Check for page break
+        if (yPos > 280) {
+          doc.addPage();
+          yPos = 20;
+        }
+
+        // Headers (## Section Title)
+        if (/^#{1,3}\s+/.test(trimmed)) {
+          const headerText = trimmed.replace(/^#{1,6}\s+/, '').replace(/\*\*/g, '');
+          yPos += 3; // Extra spacing before header
+          doc.setFontSize(9);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+          doc.text(headerText, 14, yPos);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+          doc.setFontSize(8);
+          yPos += lineHeight + 1;
+          continue;
+        }
+
+        // Bullet points (- or * or •)
+        const bulletMatch = trimmed.match(/^[-*•]\s+(.*)/);
+        if (bulletMatch) {
+          const bulletText = bulletMatch[1].replace(/\*\*(.*?)\*\*/g, '$1');
+          const bulletLines = doc.splitTextToSize(bulletText, insightsContentWidth - 8);
+          for (let i = 0; i < bulletLines.length; i++) {
+            if (yPos > 280) { doc.addPage(); yPos = 20; }
+            if (i === 0) {
+              doc.text('•', 16, yPos);
+              doc.text(bulletLines[i], 22, yPos);
+            } else {
+              doc.text(bulletLines[i], 22, yPos); // Continuation indented
+            }
+            yPos += lineHeight;
+          }
+          continue;
+        }
+
+        // Regular paragraph text — strip bold markers and wrap
+        const plainText = trimmed.replace(/\*\*(.*?)\*\*/g, '$1');
+        const wrappedLines = doc.splitTextToSize(plainText, insightsContentWidth);
+        for (const wLine of wrappedLines) {
+          if (yPos > 280) { doc.addPage(); yPos = 20; }
+          doc.text(wLine, 14, yPos);
+          yPos += lineHeight;
+        }
+      }
+
+      yPos += 5;
+
+      // Add generation metadata
+      if (report.coachingInsightsGeneratedAt) {
+        if (yPos > 280) { doc.addPage(); yPos = 20; }
+        doc.setFontSize(8);
+        doc.setTextColor(100, 100, 100);
+        const generatedDate = formatReportDate(report.coachingInsightsGeneratedAt, timeZone, true);
+        doc.text(`Written: ${generatedDate}`, 14, yPos);
+        doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+        yPos += 10;
+      }
+      // The next section draws its heading at the returned yPos without its own page check
+      if (yPos > 250) { doc.addPage(); yPos = 20; }
+    }
+    return yPos;
   };
 
   // --- Cover page for individual reports ---
@@ -4159,6 +4496,8 @@ export async function generatePDF(report: any, reportData: any, format: 'visual'
     });
 
     yPos = (doc as any).lastAutoTable.finalY + 15;
+
+    yPos = drawInsights(yPos);
 
     // 2. Performance Snapshot (Team Statistics)
     doc.setFontSize(16);
@@ -4466,6 +4805,8 @@ export async function generatePDF(report: any, reportData: any, format: 'visual'
       yPos += 5;
     }
 
+    yPos = drawInsights(yPos);
+
     yPos += 5; // Add spacing before measurements table
 
     if (athlete.measurements) {
@@ -4659,100 +5000,6 @@ export async function generatePDF(report: any, reportData: any, format: 'visual'
       }
 
       yPos += 5;
-    }
-  }
-
-  // Add Coaching Insights section (if available)
-  if (report.coachingInsights) {
-    // Check if we need a new page
-    if (yPos > 220) {
-      doc.addPage();
-      yPos = 20;
-    }
-
-    doc.setFontSize(16);
-    if (isVisual) doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
-    doc.text("Coaching Insights", 14, yPos);
-    doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
-    yPos += 10;
-
-    // Render markdown with structure preserved (headers bold, bullets indented)
-    const insightsPageWidth = doc.internal.pageSize.getWidth();
-    const insightsContentWidth = insightsPageWidth - 28; // 14mm margins each side
-    const lineHeight = 5;
-
-    doc.setFontSize(8);
-    const markdownLines = report.coachingInsights.split('\n');
-
-    for (const rawLine of markdownLines) {
-      const trimmed = rawLine.trim();
-      if (!trimmed) {
-        yPos += 3; // Blank line = paragraph spacing
-        continue;
-      }
-
-      // Check for page break
-      if (yPos > 280) {
-        doc.addPage();
-        yPos = 20;
-      }
-
-      // Headers (## Section Title)
-      if (/^#{1,3}\s+/.test(trimmed)) {
-        const headerText = trimmed.replace(/^#{1,6}\s+/, '').replace(/\*\*/g, '');
-        yPos += 3; // Extra spacing before header
-        doc.setFontSize(9);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
-        doc.text(headerText, 14, yPos);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
-        doc.setFontSize(8);
-        yPos += lineHeight + 1;
-        continue;
-      }
-
-      // Bullet points (- or * or •)
-      const bulletMatch = trimmed.match(/^[-*•]\s+(.*)/);
-      if (bulletMatch) {
-        const bulletText = bulletMatch[1].replace(/\*\*(.*?)\*\*/g, '$1');
-        const bulletLines = doc.splitTextToSize(bulletText, insightsContentWidth - 8);
-        for (let i = 0; i < bulletLines.length; i++) {
-          if (yPos > 280) { doc.addPage(); yPos = 20; }
-          if (i === 0) {
-            doc.text('•', 16, yPos);
-            doc.text(bulletLines[i], 22, yPos);
-          } else {
-            doc.text(bulletLines[i], 22, yPos); // Continuation indented
-          }
-          yPos += lineHeight;
-        }
-        continue;
-      }
-
-      // Regular paragraph text — strip bold markers and wrap
-      const plainText = trimmed.replace(/\*\*(.*?)\*\*/g, '$1');
-      const wrappedLines = doc.splitTextToSize(plainText, insightsContentWidth);
-      for (const wLine of wrappedLines) {
-        if (yPos > 280) { doc.addPage(); yPos = 20; }
-        doc.text(wLine, 14, yPos);
-        yPos += lineHeight;
-      }
-    }
-
-    yPos += 5;
-
-    // Add generation metadata
-    if (report.coachingInsightsGeneratedAt) {
-      doc.setFontSize(8);
-      doc.setTextColor(100, 100, 100);
-      const generatedDate = formatReportDate(report.coachingInsightsGeneratedAt, timeZone, true);
-      const modelText = report.coachingInsightsModel
-        ? ` (${getAIModel(report.coachingInsightsModel)?.label ?? report.coachingInsightsModel})`
-        : '';
-      doc.text(`Evaluation Written: ${generatedDate}${modelText}`, 14, yPos);
-      doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
-      yPos += 10;
     }
   }
 
@@ -4960,7 +5207,13 @@ function calculateBenchmarkAchievements(athleteRankings: any[], teamStatistics?:
  *
  * Exported only so the integration test can assert the prompt data; routes should not import it.
  */
-export async function buildReportDataForAI(report: Report, userId: string, reportService: ReportService): Promise<import("../services/ai-insights-service").ReportData> {
+export async function buildReportDataForAI(
+  report: Report,
+  userId: string,
+  reportService: ReportService,
+  // Coach notes are for writers of the report's organization only; callers opt in once they have checked that
+  opts: { includeCoachNotes?: boolean } = {},
+): Promise<import("../services/ai-insights-service").ReportData> {
   // Data size limits to prevent large AI payloads
   const MAX_METRICS = 20;
   const MAX_HISTORY_POINTS = 30;
@@ -5043,6 +5296,8 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
       comparisonLabel?: string;
       distributions?: Record<string, { stats: { min: number; q1: number; median: number; q3: number; max: number } }>;
       fvProfile?: { date: string; distanceUnit: string; f0Rel: string | null; v0: string | null; pmaxRel: string | null; fvSlope: string | null };
+      // Present only when the report's sprint runs chart is on; rows carry calculationMetadata.runId
+      sprintRunMeasurements?: import("@shared/report-sprint-runs-types").SprintRunMeasurement[];
       trends?: Record<string, { series?: Array<{ date: string; value: number }>; delta?: TrendDelta }>;
       // athleteSeries is never read: team prompts carry the team-average delta only
       teamTrends?: Record<string, { teamSeries?: unknown[]; delta?: TrendDelta }>;
@@ -5248,8 +5503,7 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
             tierRows.push({ m, c });
             benchmarkComparisons.push({ metric: m.label, performance: tierText(c) + tierGapText(c, m) });
             // Only the lower half of its own group is a concern; a higher non-best tier is a next step
-            const idx = tierIndex(c);
-            if (idx && idx.n > 1 && idx.i >= idx.n / 2) {
+            if (isBelowAverageComparison(c)) {
               concerns.push({ metric: m.label, concern: tierText(c) + tierGapText(c, m) });
             }
           } else {
@@ -5352,6 +5606,35 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
       dataConfidence,
       audience,
     };
+    if (report.reportType === 'individual') {
+      aiReportData.belowAverage = belowAverageResults(metrics, typedReportData.athlete?.benchmarkComparisons ?? {});
+      aiReportData.aboveAverage = aboveAverageResults(metrics, typedReportData.athlete?.benchmarkComparisons ?? {});
+    }
+
+    // Org style example (raw org row, not the admin-gated memberships). Names are re-checked now because a
+    // member who joined after the save may match; if so it is dropped for this generation, not the request.
+    if (org?.aiStyleExample) {
+      try {
+        const matched = memberNamesIn(org.aiStyleExample, await storage.getOrganizationMemberNames(report.organizationId));
+        if (matched.length > 0) {
+          console.warn(`[AI] Style example dropped for organization ${report.organizationId}: it now names a member`);
+        } else {
+          aiReportData.styleExample = org.aiStyleExample;
+        }
+      } catch {
+        console.warn(`[AI] Style example dropped for organization ${report.organizationId}: member name check failed`);
+      }
+    }
+
+    // Coach notes steer the insights of an individual report; team and eval rows never carry them
+    if (report.reportType === 'individual' && opts.includeCoachNotes) {
+      const notes = coachNotesSchema.safeParse(report.coachNotes);
+      if (notes.success && Object.keys(notes.data).length > 0) {
+        // Re-checked at generation: the notes may have been saved as shareable and the date of birth edited since
+        const athleteId = (report.config as { athleteId?: string } | null)?.athleteId;
+        aiReportData.coachNotes = (await resolveShareWhatISaw(notes.data, athleteId)).notes;
+      }
+    }
 
     // Add team-specific data
     if (report.reportType === 'team') {
@@ -5412,6 +5695,34 @@ export async function buildReportDataForAI(report: Report, userId: string, repor
           f0Rel: num(fv.f0Rel), v0: num(fv.v0), pmaxRel: num(fv.pmaxRel), fvSlope: num(fv.fvSlope),
         };
       }
+    }
+
+    // Defined relationships between metrics and same-run split facts. Evaluated on the full measurements (the
+    // MAX_METRICS cut above can drop an input); split math reads one run's rows only, never the best-per-code values.
+    if (report.reportType === 'individual' && typedReportData.athlete?.measurements) {
+      const athlete = typedReportData.athlete;
+      const values: Record<string, number> = {};
+      const standing: RelationshipInput['standing'] = {};
+      for (const code of RELATIONSHIP_CODES) {
+        const v = athlete.measurements?.[code];
+        if (typeof v === 'number') values[code] = v;
+        const s = standingOf(athlete.benchmarkComparisons?.[code], athlete.percentiles?.[code]);
+        if (s) standing[code] = s;
+      }
+      // Units matter only for the jump relationship; a failed lookup leaves it silent, it never fails the AI build
+      let units: Record<string, string> | undefined;
+      if ('JUMP_CMJ_HOH' in values && 'JUMP_SJ_HEIGHT' in values) {
+        try {
+          units = (await reportService.getMetricLabelsAndUnits(['JUMP_CMJ_HOH', 'JUMP_SJ_HEIGHT'], report.organizationId)).units;
+        } catch {
+          units = undefined;
+        }
+      }
+      const splits = sameRunSplits(typedReportData.sprintRunMeasurements);
+      const connections = firedRelationships({ values, standing, units, splits }).map((r) => r.text);
+      if (connections.length > 0) aiReportData.connections = connections;
+      const facts = splits ? splitFacts(splits) : [];
+      if (facts.length > 0) aiReportData.splitFacts = facts;
     }
 
     return aiReportData;

@@ -40,6 +40,17 @@
 
 > 0176 (10/5 repeat hop metrics for all sports: clears `sport_associations` to NULL on `RSI_105`, `RSI_105_HEIGHT` and `RSI_105_GCT`, which 0175 had tagged `{Soccer}`; plain `RSI` is untouched; the prior values, NULL included, are kept in `site_metrics_sport_backup_0176` so `_down` restores each row exactly; needs 0175 first) is provisional: renumber at merge if another branch lands 0176 first (file, `_down`, test `0176-rsi-105-all-sports`, tracking row, backup table name, this line). If a code is missing the migration does nothing for it and is still recorded as applied.
 
+> 0181 (HS football position tier groups from McKay et al. 2020: `mckay2020-*` rows in `site_benchmarks` for 40 yd, pro agility, vertical and broad jump, plus template sets; upserts via ON CONFLICT; `_down` removes them). Shipped in v0.38.0 with 0182-0186.
+> 0182 (reports.coach_notes jsonb and organizations.ai_style_example text, AI coach notes; AM-FEAT-024 reserves 0179/0180) was renumbered from 0181 when #756 landed 0181 first. Tracking is by file name, so environments that applied the old `0181_add_coach_notes_and_ai_style_example` row run the 0182 file once more; it is idempotent (IF NOT EXISTS). It is provisional: renumber at merge if another branch lands 0182 first (file, `_down`, test `migration-0182-coach-notes`, tracking row, this line).
+
+> 0183 (site_settings.ai_prompt_overrides jsonb, the site-admin editable AI insights prompt wording, and the `site_ai_prompt_changed` audit action: the `audit_logs_action_valid` CHECK is re-defined as the 0173 list plus that value; `_down` drops the column and restores the 0173 list NOT VALID) is provisional: renumber at merge if another branch lands 0183 first (file, `_down`, test `migration-0183-ai-prompt-overrides`, tracking row, this line). Needs 0173 first.
+
+> 0184 (organizations.ai_prompt_overrides jsonb, the org-admin AI insights prompt wording layered on the site wording; `_down` drops the column) is provisional: renumber at merge if another branch lands 0184 first (file, `_down`, test `migration-0184-org-ai-prompt-overrides`, tracking row, this line).
+
+> 0185 (athlete_notes table, AM-FEAT-025 athlete coaching notes: athlete_id and organization_id ON DELETE CASCADE, author_id and event_id ON DELETE SET NULL, index on (athlete_id, organization_id, observed_on); `_down` drops the table) is provisional: renumber at merge if another branch lands 0185 first (open PR #770 holds 0184) (file, `_down`, test `migration-0185-athlete-notes`, tracking row, this line). AM-FEAT-024 (#733-735) also holds provisional numbers. Needs `users`, `organizations` and `events`.
+
+> 0186 (`meaning` text column, nullable, on `site_metrics` and `custom_org_metrics`: the family-facing "what this result means" text edited in `/metrics` and the custom-metric form, read by `getMetricExplanationsAndMeanings`; `_down` drops both columns) is provisional: renumber at merge if another branch lands 0186 first (file, `_down`, test `migration-0186-metric-meaning`, tracking row, this line). AM-FEAT-024 (#733-735) holds provisional 0179/0180.
+
 ## Current State (2025-10-30)
 
 ### Overview
