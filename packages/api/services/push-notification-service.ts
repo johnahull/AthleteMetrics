@@ -3,7 +3,7 @@
  * Handles all Web Push notification operations using web-push library
  */
 
-import webPush from 'web-push';
+import * as webPush from 'web-push';
 import { eq, and, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import pLimit from 'p-limit';
