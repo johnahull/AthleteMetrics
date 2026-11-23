@@ -46,7 +46,7 @@
     "resend": "^4.8.0",
     "sharp": "^0.35.4",
     "tesseract.js": "^6.0.1",
-    "web-push": "^3.6.7",
+    "web-push": "^4.0.0",
     "ws": "^8.18.0",
     "zod": "^3.24.2",
     "zod-validation-error": "^5.0.0"
