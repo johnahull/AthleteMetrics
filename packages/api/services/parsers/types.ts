@@ -12,6 +12,8 @@ export interface ParsedDrillResult {
   isOutlier?: boolean;
   outlierReason?: string;
   derivedFrom?: string;
+  runIndex: number;     // Order of this run within athlete + metric, by runAt (0 for one-per-athlete rows: derived, RSI)
+  runAt?: string;       // Row timestamp, 'YYYY-MM-DDTHH:mm:ss' (device local time)
 }
 
 export interface ParsedSplit {

@@ -116,6 +116,9 @@ export function ImportBatchHistory({ organizationId }: ImportBatchHistoryProps) 
                           {batch.athletesImported != null && (
                             <span>{batch.athletesImported} athletes</span>
                           )}
+                          {batch.runsImported ? (
+                            <span>{batch.runsImported} runs</span>
+                          ) : null}
                           {batch.measurementsCreated != null && (
                             <span>{batch.measurementsCreated} measurements</span>
                           )}
@@ -158,7 +161,8 @@ export function ImportBatchHistory({ organizationId }: ImportBatchHistoryProps) 
           <AlertDialogHeader>
             <AlertDialogTitle>Rollback Import?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will delete all {confirmBatch?.measurementsCreated ?? 0} measurements
+              This will delete all {confirmBatch?.runsImported ? `${confirmBatch.runsImported} runs (` : ''}
+              {confirmBatch?.measurementsCreated ?? 0} measurements{confirmBatch?.runsImported ? ')' : ''}
               imported from <strong>{confirmBatch?.fileName}</strong> and recalculate
               derived metrics. This action cannot be undone.
             </AlertDialogDescription>

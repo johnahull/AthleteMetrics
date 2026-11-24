@@ -122,17 +122,17 @@ describe('DashrCsvParser.parse (real sample)', () => {
     expect(split20?.value).toBe(3.19);
   });
 
-  it('parses Jul 2025 session with Flying drills — selects best attempt', () => {
+  it('parses Jul 2025 session with Flying drills — keeps every attempt', () => {
     const buffer = loadFixture('valid-multi-session.csv');
     const result = parser.parse(buffer, '2025-07-06');
 
     expect(result.athletes).toHaveLength(1);
     const christian = result.athletes[0];
 
-    // 3 Flying attempts on Jul 6: 1.25, 1.18, 1.13 → best is 1.13
-    const fly = christian.drills.find(d => d.metric === 'FLY10_TIME');
-    expect(fly).toBeDefined();
-    expect(fly!.value).toBe(1.13);
+    // 3 Flying attempts on Jul 6: 1.25, 1.18, 1.13 → all kept, best is 1.13
+    const flies = christian.drills.filter(d => d.metric === 'FLY10_TIME');
+    expect(flies.map(f => f.value).sort()).toEqual([1.13, 1.18, 1.25]);
+    expect(flies.map(f => f.runIndex).sort()).toEqual([0, 1, 2]);
   });
 
   it('parses 505 agility without direction as AGILITY_505_YD (fixture row is Imperial)', () => {
@@ -244,29 +244,27 @@ describe('drill type mapping', () => {
       expect(drills[0].metric).toBe('AGILITY_5105');
     });
 
-    it('keeps the fastest of several attempts', () => {
+    it('keeps every attempt as its own run', () => {
       const drills = agility(makeCsv([
         blankDistRow('Pro Agility', '5.10', '', '10:00:00'),
         blankDistRow('Pro Agility', '4.83', '', '10:05:00'),
       ]));
-      expect(drills).toHaveLength(1);
-      expect(drills[0].value).toBe(4.83);
+      expect(drills.map(d => [d.value, d.runIndex])).toEqual([[5.1, 0], [4.83, 1]]);
     });
 
-    it('treats a blank-distance and a 20-yard attempt of the same day as attempts of one drill', () => {
+    it('treats a blank-distance and a 20-yard attempt of the same day as runs of one drill', () => {
       const withDistance =
         '01/01/2025 10:05:00,Jane,,Doe,Pro Agility,,Imperial,,,,,,,,,,,,,,,,,,,,5.100000,20.000000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,';
       const drills = agility(makeCsv([blankDistRow('Pro Agility', '4.83'), withDistance]));
-      expect(drills).toHaveLength(1);
-      expect(drills[0].value).toBe(4.83);
+      expect(drills.map(d => d.metric)).toEqual(['AGILITY_5105', 'AGILITY_5105']);
+      expect(drills.map(d => d.value)).toEqual([4.83, 5.1]);
     });
 
-    it('groups 505 attempts with blank and filled Final Distance into one drill', () => {
+    it('maps 505 attempts with blank and filled Final Distance to one metric', () => {
       const blank = '01/01/2025 10:00:00,Jane,,Doe,505 Agility Test,,Imperial,,,,,,,,,,,,,,,,,,,,2.600000,,,,,L,,,,,,,,,,,,,,,,,,,,,,,,,,';
       const filled = '01/01/2025 10:05:00,Jane,,Doe,505 Agility Test,,Imperial,,,,,,,,,,,,,,,,,,,,2.500000,5.000000,,,,L,,,,,,,,,,,,,,,,,,,,,,,,,,';
       const drills = parser.parse(makeCsv([blank, filled])).athletes[0].drills;
-      expect(drills).toHaveLength(1);
-      expect(drills[0]).toMatchObject({ metric: 'AGILITY_505_YD_L', value: 2.5 });
+      expect(drills.map(d => [d.metric, d.value])).toEqual([['AGILITY_505_YD_L', 2.6], ['AGILITY_505_YD_L', 2.5]]);
     });
 
     it('maps Direction L to AGILITY_5105_L', () => {
@@ -352,20 +350,63 @@ describe('validation and outlier detection', () => {
 });
 
 // ============================================================================
-// Best Attempt Selection
+// Every run is kept (best is picked at read time)
 // ============================================================================
 
-describe('best attempt selection', () => {
-  it('selects fastest time when multiple attempts exist', () => {
-    const csv = makeCsv([
-      '01/01/2025 10:00:00,John,,Doe,Dash,,Imperial,,,,,,,,,,,,,,,,,,,,5.000000,30.000000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,',
-      '01/01/2025 10:05:00,John,,Doe,Dash,,Imperial,,,,,,,,,,,,,,,,,,,,4.800000,30.000000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,',
-      '01/01/2025 10:10:00,John,,Doe,Dash,,Imperial,,,,,,,,,,,,,,,,,,,,4.900000,30.000000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,',
-    ]);
-    const result = parser.parse(csv);
-    expect(result.athletes).toHaveLength(1);
-    const dash = result.athletes[0].drills.find(d => d.metric === 'DASH_30YD');
-    expect(dash!.value).toBe(4.8);
+describe('every run is kept', () => {
+  // Same column layout as makeCsv; only the named columns are filled
+  const HEADER = 'Date,First Name,Middle Name,Last Name,Type,Lane ID,Units,Start Distance,Split Time 1,Split Distance 1,Split Speed 1,Start Time 2,Split Distance 2,Split Speed 2,Start Time 3,Split Distance 3,Split Speed 3,Start Time 4,Split Distance 4,Split Speed 4,Start Time 5,Split Distance 5,Split Speed 5,Start Time 6,Split Distance 6,Split Speed 6,Final Time,Final Distance,Final Speed,Jump Distance,Reaction Time,Direction,Weight,Reps,1 RM,Lap Time 1,Lap Time 2,Lap Time 3,Lap Time 4,Lap Time 5,Lap Time 6,Lap Time 7,Lap Time 8,Lap Time 9,RAST Time 1,RAST Time 2,RAST Time 3,RAST Time 4,RAST Time 5,RAST Time 6,Average RSI,Max RSI,RSI,Speed Ratio,Symmetry Score,MultiPlanar Plyometric Index,Custom Event Results'.split(',');
+  const run = (time: string, final: number, gates: Array<[number, number]>, extra: Record<string, string> = {}) => {
+    const f = new Array(HEADER.length).fill('');
+    const set = (h: string, v: string) => (f[HEADER.indexOf(h)] = v);
+    set('Date', `01/01/2025 ${time}`);
+    set('First Name', 'John');
+    set('Last Name', 'Doe');
+    set('Type', 'Dash');
+    set('Units', 'Imperial');
+    gates.forEach(([t, d], i) => {
+      set(i === 0 ? 'Split Time 1' : `Start Time ${i + 1}`, String(t));
+      set(`Split Distance ${i + 1}`, String(d));
+    });
+    set('Final Time', String(final));
+    set('Final Distance', '30');
+    Object.entries(extra).forEach(([h, v]) => set(h, v));
+    return f.join(',');
+  };
+  // Run A: faster 30 yd. Run B (earlier in the day, later in the file): faster 10 and 20 yd gates.
+  const RUN_A = run('10:05:00', 4.4, [[1.8, 10], [3.1, 20]]);
+  const RUN_B = run('10:00:00', 4.5, [[1.7, 10], [3.0, 20]]);
+
+  it('keeps two 30 yd runs as two drills, each with its own splits', () => {
+    const drills = parser.parse(makeCsv([RUN_A, RUN_B])).athletes[0].drills.filter(d => d.metric === 'DASH_30YD');
+    expect(drills).toHaveLength(2);
+    const a = drills.find(d => d.value === 4.4)!;
+    const b = drills.find(d => d.value === 4.5)!;
+    expect(a.splits?.map(s => s.value)).toEqual([1.8, 3.1]);
+    expect(b.splits?.map(s => s.value)).toEqual([1.7, 3.0]);
+  });
+
+  it('numbers runs by their time within athlete and metric, and records runAt', () => {
+    const drills = parser.parse(makeCsv([RUN_A, RUN_B])).athletes[0].drills.filter(d => d.metric === 'DASH_30YD');
+    const a = drills.find(d => d.value === 4.4)!;
+    const b = drills.find(d => d.value === 4.5)!;
+    expect(b.runIndex).toBe(0);
+    expect(a.runIndex).toBe(1);
+    expect(b.runAt).toBe('2025-01-01T10:00:00');
+    expect(a.runAt).toBe('2025-01-01T10:05:00');
+  });
+
+  it('keeps the highest RSI even when it comes second in the file', () => {
+    const csv = makeCsv([run('10:00:00', 4.5, [], { RSI: '1.2' }), run('10:05:00', 4.6, [], { RSI: '1.9' })]);
+    const rsi = parser.parse(csv).athletes[0].drills.filter(d => d.metric === 'RSI');
+    expect(rsi.map(d => d.value)).toEqual([1.9]);
+  });
+
+  it('derives one fly per code from the fastest run', () => {
+    const fly = parser.parse(makeCsv([RUN_A, run('10:10:00', 4.6, [[1.75, 10], [3.2, 20], [4.3, 30]])]))
+      .athletes[0].drills.filter(d => d.metric === 'FLY10_TIME');
+    // A: 4.4 - 3.1 = 1.3; C: 4.3 - 3.2 = 1.1
+    expect(fly.map(d => d.value)).toEqual([1.1]);
   });
 
   it('keeps separate attempts for different dates', () => {
@@ -719,12 +760,11 @@ describe('5-0-5 protocol from the Units column', () => {
     expect(drills).toEqual(['AGILITY_505_M_L', 'AGILITY_505_YD_L']);
   });
 
-  it('still picks the fastest of two attempts with the same Units', () => {
+  it('keeps both attempts with the same Units as runs of one metric', () => {
     const drills = parser
       .parse(makeCsv([row505('Metric', 'L', '2.700000'), row505('Metric', 'L', '2.500000')]))
       .athletes[0].drills;
-    expect(drills).toHaveLength(1);
-    expect(drills[0].value).toBe(2.5);
+    expect(drills.map(d => [d.metric, d.value])).toEqual([['AGILITY_505_M_L', 2.7], ['AGILITY_505_M_L', 2.5]]);
   });
 
   it.each(['Imperial', 'imperial', 'IMPERIAL', 'Metric', 'metric', 'METRIC', ' Metric '])(
@@ -859,13 +899,13 @@ describe('FLY10 run-in variants', () => {
     expect(result.warnings).toEqual([]);
   });
 
-  it.each(['0', '1'])('a Start %s fly and a same-day dash compete for one DASH_10YD result', (start) => {
+  it.each(['0', '1'])('a Start %s fly and a same-day dash are both DASH_10YD runs', (start) => {
     const result = drills([
       row({ type: 'Dash', time: 1.9, dist: 10 }),
       row({ type: 'Flying', start, time: 1.7, dist: 10, distText: '10' }),
     ]);
     const dashes = result.athletes[0].drills.filter(d => d.metric === 'DASH_10YD');
-    expect(dashes.map(d => d.value)).toEqual([1.7]);
+    expect(dashes.map(d => d.value)).toEqual([1.9, 1.7]);
   });
 
   it.each(['25', ''])('skips yard Flying with Start Distance "%s" with a specific warning', (start) => {
@@ -897,7 +937,7 @@ describe('FLY10 run-in variants', () => {
       return f.join(',');
     };
     const buffer = Buffer.from([cols.join(','), mk('1.2'), mk('1.3')].join('\n'));
-    // two rows on the same day collapse to one best attempt
+    // two skipped rows on the same day still give one file-level warning
     const result = parser.parse(buffer);
     const startWarnings = result.warnings.filter(w => /Start Distance/.test(w));
     expect(startWarnings).toHaveLength(1);
@@ -912,14 +952,13 @@ describe('FLY10 run-in variants', () => {
     expect(result.athletes[0].drills.map(d => d.metric).sort()).toEqual(['FLY10_TIME', 'FLY10_TIME_RI10']);
   });
 
-  it('collapses two same-day metric flies with different Start Distance to the fastest FLY10M_TIME', () => {
+  it('keeps two same-day metric flies with different Start Distance as FLY10M_TIME runs', () => {
     const result = drills([
       row({ type: 'Flying', start: '10', units: 'Metric', time: 1.4, dist: 10 }),
       row({ type: 'Flying', start: '20', units: 'Metric', time: 1.2, dist: 10 }),
     ]);
     const m = result.athletes[0].drills.filter(d => d.metric === 'FLY10M_TIME');
-    expect(m).toHaveLength(1);
-    expect(m[0].value).toBe(1.2);
+    expect(m.map(d => d.value)).toEqual([1.4, 1.2]);
   });
 
   it('flags outliers for the new codes using the 0.8-3.0 range', () => {

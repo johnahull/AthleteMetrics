@@ -29,6 +29,8 @@ export interface DrillResult {
   isOutlier?: boolean;
   outlierReason?: string;
   derivedFrom?: string;
+  runIndex?: number; // Order of the run within athlete + metric
+  runAt?: string;    // Device timestamp of the run, 'YYYY-MM-DDTHH:mm:ss'
 }
 
 export interface AlternativeMatch {
@@ -81,6 +83,7 @@ export interface ParseResponse {
 
 export interface CommitResponse {
   measurementsCreated: number;
+  runsCreated?: number; // Drill results; measurementsCreated also counts their split rows
   measurementsSkipped: number;
   measurementsReplaced: number;
   athletesImported: number;

@@ -57,6 +57,7 @@ export interface CommitOptions {
 
 export interface CommitResult {
   measurementsCreated: number;
+  runsCreated: number; // Drill results inserted (each run of a drill, derived flies, RSI); measurementsCreated adds their splits
   measurementsSkipped: number;
   measurementsReplaced: number;
   athletesImported: number;
@@ -71,6 +72,7 @@ export interface BatchSummary {
   sessionDate: string | null;
   eventNameSnapshot: string | null;
   measurementsCreated: number | null;
+  runsImported: number; // Drill rows of the batch still stored (0 after a rollback)
   athletesImported: number | null;
   createdAt: Date;
   committedAt: Date | null;
@@ -156,6 +158,8 @@ export class DeviceImportService {
           splits: d.splits?.map(s => ({ metric: s.metric, value: s.value, units: s.units })),
           isOutlier: d.isOutlier,
           outlierReason: d.outlierReason,
+          runIndex: d.runIndex,
+          runAt: d.runAt,
         })),
         included: match.type !== 'none',
       };
@@ -332,6 +336,7 @@ export class DeviceImportService {
     };
 
     let created = 0;
+    let runsCreated = 0;
     let skipped = 0;
     let replaced = 0;
     const importedAthleteIds = new Set<string>();
@@ -380,6 +385,7 @@ export class DeviceImportService {
       // Single query: all device-imported measurements for affected athletes/dates
       const existingRows = affectedAthleteIds.size > 0
         ? await tx.select({
+            id: measurements.id,
             userId: measurements.userId,
             metric: measurements.metric,
             date: measurements.date,
@@ -397,23 +403,17 @@ export class DeviceImportService {
           ))
         : [];
 
-      // Lookup: "userId|metric|date" → exists (for duplicate checking)
-      const existingMetricSet = new Set(
-        existingRows.map(r => `${r.userId}|${r.metric}|${r.date}`),
-      );
-      // Lookup: "userId|date|parentMetric" → set of orphaned split metric codes.
-      // Uses calculationMetadata.parentMetric (structured) for new imports,
-      // falls back to notes parsing for data imported before this field was added.
-      const orphanSplitsMap = new Map<string, Set<string>>();
+      // Earlier device rows per duplicate unit "userId|date|drill metric". A drill row counts under its own metric,
+      // a split row under its parent drill: calculationMetadata.parentMetric, or the notes for data imported before
+      // that field existed. So a 20 yd import never matches the DASH_10YD / DASH_20YD splits of a 30 yd run.
+      const earlierByDrill = new Map<string, Array<{ id: string }>>();
       for (const r of existingRows) {
         const meta = r.calculationMetadata as Record<string, any> | null;
         const parentMetric = meta?.parentMetric
           || r.notes?.match(/^Split from (\S+)/)?.[1];
-        if (parentMetric) {
-          const key = `${r.userId}|${r.date}|${parentMetric}`;
-          if (!orphanSplitsMap.has(key)) orphanSplitsMap.set(key, new Set());
-          orphanSplitsMap.get(key)!.add(r.metric);
-        }
+        const key = `${r.userId}|${r.date}|${parentMetric ?? r.metric}`;
+        if (!earlierByDrill.has(key)) earlierByDrill.set(key, []);
+        earlierByDrill.get(key)!.push({ id: r.id });
       }
 
       // Process each athlete
@@ -432,38 +432,24 @@ export class DeviceImportService {
           // One id for the drill row and its split rows: derived metrics can pair splits within one run
           const runId = randomUUID();
 
-          // Check for duplicates via in-memory lookup (pre-fetched above).
-          // Only device-imported measurements are considered — manual entries are never touched.
-          const existsKey = `${athleteId}|${drill.metric}|${date}`;
-          const hasDuplicate = existingMetricSet.has(existsKey);
+          // Duplicates (pre-fetched above): only earlier device-imported rows of this drill's unit count;
+          // manual entries are never touched. All runs of the drill are skipped or replaced together.
+          const unitKey = `${athleteId}|${date}|${drill.metric}`;
+          const earlier = earlierByDrill.get(unitKey);
 
-          if (hasDuplicate) {
+          if (earlier) {
             if (duplicateStrategy === 'skip') {
-              skipped++;
+              // The whole run: drill row and every split
+              skipped += 1 + (drill.splits?.length ?? 0);
               continue;
             }
-            // Replace: delete parent measurement and any associated split measurements.
-            // Orphaned splits from previous imports (e.g., 4→2 gates on re-import)
-            // are found via the pre-fetched orphanSplitsMap (parsed from notes).
-            const newSplitMetrics = drill.splits?.map(s => s.metric) ?? [];
-            const orphanKey = `${athleteId}|${date}|${drill.metric}`;
-            const existingOrphans = orphanSplitsMap.get(orphanKey);
-            const metricsToDelete = [...new Set([
-              drill.metric,
-              ...newSplitMetrics,
-              ...(existingOrphans ?? []),
-            ])];
+            // Replace: delete exactly the earlier rows of this unit (drill rows + their splits, including
+            // splits the new runs no longer have), once, before the first new run of the drill
+            earlierByDrill.delete(unitKey);
             const deleted = await tx.delete(measurements)
               .where(and(
-                eq(measurements.userId, athleteId),
-                inArray(measurements.metric, metricsToDelete),
-                eq(measurements.date, date),
-                batch.eventId
-                  ? eq(measurements.eventId, batch.eventId)
-                  : isNull(measurements.eventId),
-                sql`${measurements.importSource} IS NOT NULL`,
-                // A split code shared by two drills (DASH_10YD in the 20 and 30 yd dashes) must not wipe
-                // the rows an earlier drill of this same batch just inserted
+                inArray(measurements.id, earlier.map(e => e.id)),
+                // Never the rows this same batch just inserted
                 or(isNull(measurements.importBatchId), ne(measurements.importBatchId, batchId)),
               ))
               .returning({ id: measurements.id });
@@ -497,6 +483,8 @@ export class DeviceImportService {
             calculationMetadata: {
               formula: 'direct_import',
               runId,
+              runIndex: drill.runIndex,
+              runAt: drill.runAt,
               sourceValues: {},
               calculatedAt: new Date().toISOString(),
               triggeredBy: {
@@ -506,19 +494,12 @@ export class DeviceImportService {
             },
           });
           created++;
+          runsCreated++;
           recalcPairs.add(`${athleteId}|${drill.metric}`);
 
           // Also insert split measurements inside the same transaction
           if (drill.splits) {
             for (const split of drill.splits) {
-              // Check for existing split measurements via in-memory lookup
-              if (duplicateStrategy === 'skip') {
-                const splitKey = `${athleteId}|${split.metric}|${date}`;
-                if (existingMetricSet.has(splitKey)) {
-                  skipped++;
-                  continue;
-                }
-              }
               await tx.insert(measurements).values({
                 userId: athleteId,
                 submittedBy: committedBy,
@@ -543,6 +524,8 @@ export class DeviceImportService {
                   formula: 'direct_import_split',
                   parentMetric: drill.metric,
                   runId,
+                  runIndex: drill.runIndex,
+                  runAt: drill.runAt,
                   sourceValues: {},
                   calculatedAt: new Date().toISOString(),
                   triggeredBy: {
@@ -593,6 +576,7 @@ export class DeviceImportService {
 
     return {
       measurementsCreated: created,
+      runsCreated,
       measurementsSkipped: skipped,
       measurementsReplaced: replaced,
       athletesImported: importedAthleteIds.size,
@@ -693,6 +677,10 @@ export class DeviceImportService {
         sessionDate: importBatches.sessionDate,
         eventNameSnapshot: importBatches.eventNameSnapshot,
         measurementsCreated: importBatches.measurementsCreated,
+        // Columns qualified by hand: drizzle renders them unqualified inside select fields
+        runsImported: sql<number>`(SELECT COUNT(*)::int FROM measurements m
+          WHERE m.import_batch_id = "import_batches"."id"
+            AND m.calculation_metadata->>'formula' = 'direct_import')`,
         athletesImported: importBatches.athletesImported,
         createdAt: importBatches.createdAt,
         committedAt: importBatches.committedAt,

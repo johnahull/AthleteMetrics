@@ -16,6 +16,7 @@ export interface ImportBatch {
   sessionDate: string | null;
   eventNameSnapshot: string | null;
   measurementsCreated: number | null;
+  runsImported?: number; // Drill rows still stored (0 after a rollback)
   athletesImported: number | null;
   createdAt: string;
   committedAt: string | null;

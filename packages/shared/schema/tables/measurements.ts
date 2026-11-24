@@ -49,6 +49,8 @@ export const measurements = pgTable("measurements", {
     calculationVersion?: string;  // Version of the calculator (e.g., "1.0.0")
     parentMetric?: string;  // For splits: the parent drill metric this split belongs to (e.g., "DASH_30YD")
     runId?: string;         // Device import: shared by a drill row and its split rows (see derivedCalculationConfig.sameRunInputs)
+    runIndex?: number;      // Device import: order of the run within athlete + drill metric on the day (0 = first)
+    runAt?: string;         // Device import: the run's device timestamp, 'YYYY-MM-DDTHH:mm:ss'
     triggeredBy?: {
       event: 'measurement_insert' | 'measurement_update' | 'measurement_delete' | 'manual_recalculation' | 'bulk_import';
       userId?: string;              // Who triggered the calculation (if applicable)
