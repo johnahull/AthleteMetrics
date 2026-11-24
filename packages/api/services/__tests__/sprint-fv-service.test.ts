@@ -66,6 +66,55 @@ describe('resolveSplitsFromMeasurements', () => {
     });
   });
 
+  describe('device runs (calculationMetadata.runId)', () => {
+    const run = (id: string, metric: string, value: number, runId: string): SplitMeasurementInput => ({
+      ...mk(id, metric, value),
+      calculationMetadata: { runId },
+    });
+
+    it('takes every split from one run, never the fastest split of each run', () => {
+      // Run A has the faster 30 yd, run B the faster 10 and 20 yd
+      const rows = [
+        run('a10', 'DASH_10YD', 1.73, 'A'),
+        run('a20', 'DASH_20YD', 2.95, 'A'),
+        run('a30', 'DASH_30YD', 4.05, 'A'),
+        run('b10', 'DASH_10YD', 1.69, 'B'),
+        run('b20', 'DASH_20YD', 2.85, 'B'),
+        run('b30', 'DASH_30YD', 4.15, 'B'),
+      ];
+
+      const result = resolveSplitsFromMeasurements(rows);
+
+      expect(result.splitTimes).toEqual({ '10': 1.69, '20': 2.85, '30': 4.15 });
+      expect(result.usedMeasurementIds).toEqual({ '10': 'b10', '20': 'b20', '30': 'b30' });
+    });
+
+    it('prefers the run with the most splits', () => {
+      const rows = [
+        run('a10', 'DASH_10YD', 1.65, 'A'),
+        run('a20', 'DASH_20YD', 2.8, 'A'),
+        run('a30', 'DASH_30YD', 4.0, 'A'),
+        run('b10', 'DASH_10YD', 1.7, 'B'),
+        run('b20', 'DASH_20YD', 2.9, 'B'),
+        run('b30', 'DASH_30YD', 4.1, 'B'),
+        run('b40', 'DASH_40YD', 5.2, 'B'),
+      ];
+
+      expect(resolveSplitsFromMeasurements(rows).usedMeasurementIds).toEqual({ '10': 'b10', '20': 'b20', '30': 'b30', '40': 'b40' });
+    });
+
+    it('throws when no single run has 3 splits, even if the runs together do', () => {
+      const rows = [
+        run('a10', 'DASH_10YD', 1.7, 'A'),
+        run('a20', 'DASH_20YD', 2.9, 'A'),
+        run('b30', 'DASH_30YD', 4.1, 'B'),
+        run('b40', 'DASH_40YD', 5.2, 'B'),
+      ];
+
+      expect(() => resolveSplitsFromMeasurements(rows)).toThrow(/at least 3/i);
+    });
+  });
+
   describe('meters (new DASH_*M metric types)', () => {
     it('resolves a full meters session to the meters unit', () => {
       const rows = [

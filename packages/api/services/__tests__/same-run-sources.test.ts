@@ -36,6 +36,16 @@ describe('selectSameRunSources', () => {
     expect(pick(rows)).toEqual({ DASH_10YD: '1.69', DASH_20YD: '2.95' });
   });
 
+  it('ranks runs of one import commit (same created_at) by value, whatever their order', () => {
+    const committed = new Date(2026, 9, 13, 12);
+    const slowFirst = [
+      row('DASH_10YD', 1.8, 'A', committed), row('DASH_20YD', 3.0, 'A', committed),
+      row('DASH_10YD', 1.7, 'B', committed), row('DASH_20YD', 2.9, 'B', committed),
+    ];
+    expect(pick(slowFirst)).toEqual({ DASH_10YD: '1.7', DASH_20YD: '2.9' });
+    expect(pick([...slowFirst].reverse())).toEqual({ DASH_10YD: '1.7', DASH_20YD: '2.9' });
+  });
+
   it('ignores a run that lacks one of the inputs, even when it has the best value', () => {
     const rows = [
       row('DASH_10YD', 1.5, 'A'),

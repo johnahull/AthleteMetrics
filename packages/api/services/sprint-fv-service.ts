@@ -16,6 +16,7 @@ import {
 } from '@shared/schema';
 import { eq, and, gte, lte, lt, desc, inArray, sql, or, ilike, isNull } from 'drizzle-orm';
 import { computeFvProfile } from './sprint-fv-computation';
+import { sameRunKey, selectSameRunSources } from './same-run-sources';
 import { classifyProfile, computeOptimalGap, computeDeltas, analyzeAcceleration, analyzePower, validateParameters } from './sprint-fv-analysis';
 import type { SprintFvAnalysisJson } from '@shared/schema/tables/sprint-fv-profiles';
 
@@ -89,6 +90,8 @@ export interface SplitMeasurementInput {
   id: string;
   metric: string;
   value: string;
+  /** A device import's `runId` ties one sprint's splits together (see same-run-sources.ts) */
+  calculationMetadata?: unknown;
 }
 
 export interface ResolvedSplits {
@@ -99,7 +102,8 @@ export interface ResolvedSplits {
 
 /**
  * Collapse a list of split measurements into a single session, picking the
- * fastest time per distance and resolving the distance unit.
+ * fastest time per distance and resolving the distance unit. Rows of device
+ * runs (calculationMetadata.runId) give the splits of one run, never a mix.
  *
  * Resolution rules:
  *   - If ≥3 yards splits → yards
@@ -108,6 +112,31 @@ export interface ResolvedSplits {
  *   - Else → insufficient-splits error
  */
 export function resolveSplitsFromMeasurements(
+  rows: readonly SplitMeasurementInput[],
+): ResolvedSplits {
+  if (rows.every((r) => sameRunKey(r) === '')) return resolvePooledSplits(rows);
+
+  // Device runs: the splits of one sprint only, never the fastest split of each run. The run with the most
+  // splits sets the codes; selectSameRunSources then ranks the runs that have them all (rows without a run id
+  // form one more candidate).
+  const runs = new Map<string, SplitMeasurementInput[]>();
+  for (const r of rows) runs.set(sameRunKey(r), [...(runs.get(sameRunKey(r)) ?? []), r]);
+  let longest: ResolvedSplits | undefined;
+  let firstError: unknown;
+  for (const runRows of runs.values()) {
+    try {
+      const resolved = resolvePooledSplits(runRows);
+      if (!longest || Object.keys(resolved.splitTimes).length > Object.keys(longest.splitTimes).length) longest = resolved;
+    } catch (error) {
+      firstError ??= error;
+    }
+  }
+  if (!longest) throw firstError;
+  const codes = Object.values(longest.usedMeasurementIds).map((id) => rows.find((r) => r.id === id)!.metric);
+  return resolvePooledSplits([...selectSameRunSources(rows, codes, () => false)!.values()]);
+}
+
+function resolvePooledSplits(
   rows: readonly SplitMeasurementInput[],
 ): ResolvedSplits {
   const yardsSplits: Record<string, number> = {};
@@ -255,7 +284,10 @@ export class SprintFvService {
     const sessions: EligibleSession[] = [];
 
     for (const [key, mList] of sessionMap) {
-      const availableSplits = [...new Set(mList.map(m => m.metric))];
+      // Device runs: one run must have the splits (rows without a run id pool together)
+      const splitsByRun = new Map<string, Set<string>>();
+      for (const m of mList) splitsByRun.set(sameRunKey(m), (splitsByRun.get(sameRunKey(m)) ?? new Set<string>()).add(m.metric));
+      const availableSplits = [...[...splitsByRun.values()].reduce((a, b) => (b.size > a.size ? b : a))];
       if (availableSplits.length < MIN_SPLITS_REQUIRED) continue;
 
       const date = mList[0].date;
@@ -325,7 +357,7 @@ export class SprintFvService {
     // 2. Resolve splits — pick fastest per distance, determine yards vs meters unit,
     // and reject mixed-unit sessions.
     const { distanceUnit, splitTimes, usedMeasurementIds } = resolveSplitsFromMeasurements(
-      splitMeasurements.map(m => ({ id: m.id, metric: m.metric, value: m.value })),
+      splitMeasurements.map(m => ({ id: m.id, metric: m.metric, value: m.value, calculationMetadata: m.calculationMetadata })),
     );
 
     // 4. Get body mass
