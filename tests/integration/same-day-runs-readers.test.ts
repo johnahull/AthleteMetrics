@@ -13,6 +13,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
 import {
   customBenchmarks,
+  customOrgMetrics,
   measurements,
   organizationBenchmarks,
   organizations,
@@ -36,6 +37,8 @@ const CODES = ['DASH_10YD', 'DASH_20YD', 'DASH_30YD'];
 // Derived metrics that copy DASH_30YD, one per source selection the calculator has
 const DERIVED_LATEST_BEFORE = `TST_SDR_LB_${suffix}`.toUpperCase();
 const DERIVED_LATEST_EVENT = `TST_SDR_LE_${suffix}`.toUpperCase();
+// A lower-is-better custom metric of the test organization (no site_metrics row)
+const ORG_SPRINT = `ORG_SDR_SPRINT_${suffix}`.toUpperCase();
 
 describe('readers with several same-day runs', () => {
   let orgId: string;
@@ -88,6 +91,7 @@ describe('readers with several same-day runs', () => {
     athleteId = athlete.id;
     await db.insert(userTeams).values({ userId: athleteId, teamId: team.id });
     await db.insert(userOrganizations).values({ userId: athleteId, organizationId: orgId, role: 'athlete' });
+    await db.insert(customOrgMetrics).values({ organizationId: orgId, code: ORG_SPRINT, label: 'Org Sprint', unit: 's', metricType: 'lower_is_better' } as any);
 
     for (const [code, config] of [
       [DERIVED_LATEST_BEFORE, { dateMatchStrategy: 'latest_before', missingSourceBehavior: 'skip' }],
@@ -119,23 +123,45 @@ describe('readers with several same-day runs', () => {
     await db.delete(sprintFvProfiles).where(eq(sprintFvProfiles.userId, athleteId));
     await db.delete(organizationBenchmarks).where(eq(organizationBenchmarks.organizationId, orgId));
     await db.delete(customBenchmarks).where(eq(customBenchmarks.organizationId, orgId));
+    await db.delete(customOrgMetrics).where(eq(customOrgMetrics.organizationId, orgId));
     await purgeTestRows({ userIds: [athleteId], orgIds: [orgId] });
     if (createdMetrics.length > 0) await db.delete(siteMetrics).where(inArray(siteMetrics.code, createdMetrics));
   });
 
-  // The worse run is listed last; the same-day best is 4.08 either way.
-  const sameDayRuns = () =>
+  // The best run is inserted last, so a date-only order (which tends to return insertion order) picks a worse one
+  const sameDayRuns = (metric = 'DASH_30YD') =>
     add([
-      { value: 4.5, date: '2026-09-01' },
-      { value: 4.08 },
-      { value: 4.3 },
-      { value: 4.25 },
+      { metric, value: 4.5, date: '2026-09-01' },
+      { metric, value: 4.3 },
+      { metric, value: 4.25 },
+      { metric, value: 4.08 },
     ]);
+  const peerOwnValue = async (metric: string): Promise<number | undefined> =>
+    ((await (peerComparisonService as any).getLatestMeasurements(athleteId, [metric])) as Map<string, number>).get(metric);
 
   it("peer comparison takes the day's best run as the athlete's own value", async () => {
     await sameDayRuns();
-    const latest: Map<string, number> = await (peerComparisonService as any).getLatestMeasurements(athleteId, ['DASH_30YD']);
-    expect(latest.get('DASH_30YD')).toBe(4.08);
+    expect(await peerOwnValue('DASH_30YD')).toBe(4.08);
+  });
+
+  it('peer comparison takes the highest run of a higher-is-better metric', async () => {
+    await add([
+      { metric: 'VERTICAL_JUMP', value: 30, date: '2026-09-01' },
+      { metric: 'VERTICAL_JUMP', value: 20 },
+      { metric: 'VERTICAL_JUMP', value: 22 },
+      { metric: 'VERTICAL_JUMP', value: 24 },
+    ]);
+    expect(await peerOwnValue('VERTICAL_JUMP')).toBe(24);
+  });
+
+  it('peer comparison handles two runs with the same best value', async () => {
+    await add([{ value: 4.3 }, { value: 4.08 }, { value: 4.08 }]);
+    expect(await peerOwnValue('DASH_30YD')).toBe(4.08);
+  });
+
+  it("peer comparison reads a custom org metric's direction (lower is better)", async () => {
+    await sameDayRuns(ORG_SPRINT);
+    expect(await peerOwnValue(ORG_SPRINT)).toBe(4.08);
   });
 
   it("benchmark aggregation and status count the day's best run", async () => {
@@ -190,7 +216,7 @@ describe('readers with several same-day runs', () => {
   });
 
   it("derived latest_event takes the best of runs committed together", async () => {
-    await add([{ value: 4.3 }, { value: 4.08 }, { value: 4.25 }]);
+    await add([{ value: 4.3 }, { value: 4.25 }, { value: 4.08 }]);
     expect(await derivedValue(DERIVED_LATEST_EVENT)).toEqual([4.08]);
   });
 
@@ -207,7 +233,8 @@ describe('readers with several same-day runs', () => {
     const profile = await new SprintFvService().generateProfile(athleteId, DATE, athleteId, { bodyMassLbsOverride: 160 });
     const sources = await db.select().from(measurements).where(inArray(measurements.id, profile.sourceMeasurementIds));
     expect(new Set(sources.map((s) => (s.calculationMetadata as any)?.runId)).size).toBe(1);
-    expect(profile.splitTimesJson).toEqual({ '10': 1.69, '20': 2.85, '30': 4.15 });
+    // The run with the faster full sprint (30 yd) wins, not the one with the faster first split
+    expect(profile.splitTimesJson).toEqual({ '10': 1.73, '20': 2.95, '30': 4.05 });
   });
 
   it('Sprint F-V lists a session only when one run has enough splits', async () => {

@@ -132,7 +132,11 @@ export function resolveSplitsFromMeasurements(
     }
   }
   if (!longest) throw firstError;
-  const codes = Object.values(longest.usedMeasurementIds).map((id) => rows.find((r) => r.id === id)!.metric);
+  // Longest distance first: runs are ranked by their full sprint time, then by the shorter splits
+  const rowsById = new Map(rows.map((r) => [r.id, r]));
+  const codes = Object.entries(longest.usedMeasurementIds)
+    .sort(([a], [b]) => Number(b) - Number(a))
+    .map(([, id]) => rowsById.get(id)!.metric);
   return resolvePooledSplits([...selectSameRunSources(rows, codes, () => false)!.values()]);
 }
 

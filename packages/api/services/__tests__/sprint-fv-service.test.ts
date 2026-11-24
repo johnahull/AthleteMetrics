@@ -85,8 +85,27 @@ describe('resolveSplitsFromMeasurements', () => {
 
       const result = resolveSplitsFromMeasurements(rows);
 
-      expect(result.splitTimes).toEqual({ '10': 1.69, '20': 2.85, '30': 4.15 });
-      expect(result.usedMeasurementIds).toEqual({ '10': 'b10', '20': 'b20', '30': 'b30' });
+      expect(result.splitTimes).toEqual({ '10': 1.73, '20': 2.95, '30': 4.05 });
+      expect(result.usedMeasurementIds).toEqual({ '10': 'a10', '20': 'a20', '30': 'a30' });
+    });
+
+    it('ranks runs by the full sprint time first, then the shorter splits', () => {
+      // A is faster over 30 yd although every earlier split of B is faster; listed second so order cannot decide
+      const rows = [
+        run('b10', 'DASH_10YD', 1.6, 'B'),
+        run('b20', 'DASH_20YD', 2.8, 'B'),
+        run('b30', 'DASH_30YD', 4.2, 'B'),
+        run('a10', 'DASH_10YD', 1.75, 'A'),
+        run('a20', 'DASH_20YD', 2.98, 'A'),
+        run('a30', 'DASH_30YD', 4.05, 'A'),
+        // Same 30 yd: the faster 20 yd decides
+        run('c10', 'DASH_10YD', 1.7, 'C'),
+        run('c20', 'DASH_20YD', 2.9, 'C'),
+        run('c30', 'DASH_30YD', 4.05, 'C'),
+      ];
+
+      expect(resolveSplitsFromMeasurements(rows).usedMeasurementIds).toEqual({ '10': 'c10', '20': 'c20', '30': 'c30' });
+      expect(resolveSplitsFromMeasurements(rows.slice(0, 6)).usedMeasurementIds).toEqual({ '10': 'a10', '20': 'a20', '30': 'a30' });
     });
 
     it('prefers the run with the most splits', () => {

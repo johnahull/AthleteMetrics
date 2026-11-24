@@ -8,7 +8,6 @@ import { measurements, teams, organizations, users, userTeams, siteMetrics, orga
 import { isPeerComparisonExcludedMetric, PeerComparisonExcludedMetricError } from '@shared/peer-comparison-exclusions';
 import { eq, and, gte, lte, lt, ne, desc, inArray, sql } from 'drizzle-orm';
 import { getAthleteIdsForScope } from '../utils/athlete-filters';
-import { bestValueFirst } from './best-of-day-order';
 
 /**
  * Dashboard statistics time window
@@ -852,7 +851,7 @@ export class AnalyticsService {
           CAST(value AS NUMERIC) as value,
           date,
           -- First day's best run: with only one day of runs, first equals best (no improvement)
-          ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY date ASC, ${bestValueFirst}) as first_row,
+          ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY date ASC, value ${lowerIsBetter ? sql`ASC` : sql`DESC`}) as first_row,
           ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY date DESC) as last_row
         FROM measurements
         WHERE user_id = ANY(${sql.raw(`ARRAY[${athleteIds.map(id => `'${id}'`).join(',')}]::text[]`)})
