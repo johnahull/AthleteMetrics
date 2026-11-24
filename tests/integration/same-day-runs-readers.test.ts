@@ -128,13 +128,14 @@ describe('readers with several same-day runs', () => {
     if (createdMetrics.length > 0) await db.delete(siteMetrics).where(inArray(siteMetrics.code, createdMetrics));
   });
 
-  // The best run is inserted last, so a date-only order (which tends to return insertion order) picks a worse one
+  // The best run sits in the middle: a date-only order returns ties in insertion order or its reverse, so either way
+  // it picks a worse run (4.3 or 4.25)
   const sameDayRuns = (metric = 'DASH_30YD') =>
     add([
       { metric, value: 4.5, date: '2026-09-01' },
       { metric, value: 4.3 },
-      { metric, value: 4.25 },
       { metric, value: 4.08 },
+      { metric, value: 4.25 },
     ]);
   const peerOwnValue = async (metric: string): Promise<number | undefined> =>
     ((await (peerComparisonService as any).getLatestMeasurements(athleteId, [metric])) as Map<string, number>).get(metric);
@@ -147,9 +148,9 @@ describe('readers with several same-day runs', () => {
   it('peer comparison takes the highest run of a higher-is-better metric', async () => {
     await add([
       { metric: 'VERTICAL_JUMP', value: 30, date: '2026-09-01' },
-      { metric: 'VERTICAL_JUMP', value: 20 },
       { metric: 'VERTICAL_JUMP', value: 22 },
       { metric: 'VERTICAL_JUMP', value: 24 },
+      { metric: 'VERTICAL_JUMP', value: 20 },
     ]);
     expect(await peerOwnValue('VERTICAL_JUMP')).toBe(24);
   });
