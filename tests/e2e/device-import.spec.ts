@@ -178,8 +178,8 @@ test.describe('Device Import — Review and Commit', () => {
 
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog.getByText('Review Athletes')).toBeVisible({ timeout: 15000 });
-    // 2 dash runs + the derived FLY10_TIME and FLY10_TIME_RI10
-    await expect(dialog.getByText('4 runs', { exact: true })).toBeVisible();
+    // 2 dash runs; the derived FLY10_TIME and FLY10_TIME_RI10 are not counted as runs
+    await expect(dialog.getByText('2 runs', { exact: true })).toBeVisible();
 
     // Expand the athlete row
     await dialog.locator('tr', { hasText: 'Christian' }).getByRole('button').first().click();

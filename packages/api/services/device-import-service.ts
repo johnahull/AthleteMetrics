@@ -23,6 +23,7 @@ import { eq, and, inArray, isNull, sql, desc, ne, or, gt } from 'drizzle-orm';
 import { findBestAthleteMatch, type MatchingCriteria } from '../athlete-matching';
 import { DashrCsvParser } from './parsers/dashr-csv-parser';
 import { DerivedMetricCalculator } from './derived-metric-calculator';
+import { MetricType } from '@shared/schema/constants';
 import type { DeviceImportParser, ParsedImportData, ParsedSessionData } from './parsers/types';
 
 // Drizzle transaction type (same query interface as db)
@@ -57,7 +58,7 @@ export interface CommitOptions {
 
 export interface CommitResult {
   measurementsCreated: number;
-  runsCreated: number; // Drill results inserted (each run of a drill, derived flies, RSI); measurementsCreated adds their splits
+  runsCreated: number; // Runs inserted (drill rows, not derived flies or RSI); measurementsCreated counts every row
   measurementsSkipped: number;
   measurementsReplaced: number;
   athletesImported: number;
@@ -72,7 +73,7 @@ export interface BatchSummary {
   sessionDate: string | null;
   eventNameSnapshot: string | null;
   measurementsCreated: number | null;
-  runsImported: number; // Drill rows of the batch still stored (0 after a rollback)
+  runsImported: number; // Runs of the batch still stored (0 after a rollback); derived flies and RSI are not runs
   athletesImported: number | null;
   createdAt: Date;
   committedAt: Date | null;
@@ -158,6 +159,7 @@ export class DeviceImportService {
           splits: d.splits?.map(s => ({ metric: s.metric, value: s.value, units: s.units })),
           isOutlier: d.isOutlier,
           outlierReason: d.outlierReason,
+          derivedFrom: d.derivedFrom,
           runIndex: d.runIndex,
           runAt: d.runAt,
         })),
@@ -308,13 +310,14 @@ export class DeviceImportService {
             .where(inArray(users.id, [...allAthleteIds]))
         : Promise.resolve([]),
       allMetricCodes.size > 0
-        ? db.select({ code: siteMetrics.code, unit: siteMetrics.unit }).from(siteMetrics)
+        ? db.select({ code: siteMetrics.code, unit: siteMetrics.unit, metricType: siteMetrics.metricType }).from(siteMetrics)
             .where(inArray(siteMetrics.code, [...allMetricCodes]))
         : Promise.resolve([]),
     ]);
 
     const birthDateMap = new Map(userRows.map(u => [u.id, u.birthDate]));
     const unitMap = new Map(metricRows.map(m => [m.code, m.unit]));
+    const higherIsBetter = (code: string) => metricRows.some(m => m.code === code && m.metricType === 'higher_is_better');
 
     const missingBirthDateAthletes = new Set<string>();
 
@@ -388,6 +391,7 @@ export class DeviceImportService {
             id: measurements.id,
             userId: measurements.userId,
             metric: measurements.metric,
+            value: measurements.value,
             date: measurements.date,
             calculationMetadata: measurements.calculationMetadata,
             notes: measurements.notes,
@@ -406,14 +410,14 @@ export class DeviceImportService {
       // Earlier device rows per duplicate unit "userId|date|drill metric". A drill row counts under its own metric,
       // a split row under its parent drill: calculationMetadata.parentMetric, or the notes for data imported before
       // that field existed. So a 20 yd import never matches the DASH_10YD / DASH_20YD splits of a 30 yd run.
-      const earlierByDrill = new Map<string, Array<{ id: string }>>();
+      const earlierByDrill = new Map<string, Array<{ id: string; value: number }>>();
       for (const r of existingRows) {
         const meta = r.calculationMetadata as Record<string, any> | null;
         const parentMetric = meta?.parentMetric
           || r.notes?.match(/^Split from (\S+)/)?.[1];
         const key = `${r.userId}|${r.date}|${parentMetric ?? r.metric}`;
         if (!earlierByDrill.has(key)) earlierByDrill.set(key, []);
-        earlierByDrill.get(key)!.push({ id: r.id });
+        earlierByDrill.get(key)!.push({ id: r.id, value: Number(r.value) });
       }
 
       // Process each athlete
@@ -443,13 +447,24 @@ export class DeviceImportService {
               skipped += 1 + (drill.splits?.length ?? 0);
               continue;
             }
+            // A derived fly is one value per day computed from the session's runs: keep the better of the
+            // earlier and the new one, so a slower 20 yd import never replaces the fly of an earlier 30 yd run
+            if (drill.derivedFrom) {
+              const higher = higherIsBetter(drill.metric);
+              const better = (a: number, b: number) => (higher ? a > b : a < b);
+              // Only a strictly better earlier value is kept; an equal one is replaced like any re-import
+              if (earlier.some(e => better(e.value, drill.value))) {
+                skipped++;
+                continue;
+              }
+            }
             // Replace: delete exactly the earlier rows of this unit (drill rows + their splits, including
             // splits the new runs no longer have), once, before the first new run of the drill
             earlierByDrill.delete(unitKey);
             const deleted = await tx.delete(measurements)
               .where(and(
                 inArray(measurements.id, earlier.map(e => e.id)),
-                // Never the rows this same batch just inserted
+                // Safety net: the ids come from the pre-fetch, so they never belong to this batch
                 or(isNull(measurements.importBatchId), ne(measurements.importBatchId, batchId)),
               ))
               .returning({ id: measurements.id });
@@ -483,6 +498,7 @@ export class DeviceImportService {
             calculationMetadata: {
               formula: 'direct_import',
               runId,
+              ...(drill.derivedFrom ? { derivedFrom: drill.derivedFrom } : {}),
               runIndex: drill.runIndex,
               runAt: drill.runAt,
               sourceValues: {},
@@ -494,7 +510,7 @@ export class DeviceImportService {
             },
           });
           created++;
-          runsCreated++;
+          if (!drill.derivedFrom && drill.metric !== MetricType.RSI) runsCreated++;
           recalcPairs.add(`${athleteId}|${drill.metric}`);
 
           // Also insert split measurements inside the same transaction
@@ -680,7 +696,9 @@ export class DeviceImportService {
         // Columns qualified by hand: drizzle renders them unqualified inside select fields
         runsImported: sql<number>`(SELECT COUNT(*)::int FROM measurements m
           WHERE m.import_batch_id = "import_batches"."id"
-            AND m.calculation_metadata->>'formula' = 'direct_import')`,
+            AND m.calculation_metadata->>'formula' = 'direct_import'
+            AND m.calculation_metadata->>'derivedFrom' IS NULL
+            AND m.metric <> ${MetricType.RSI})`,
         athletesImported: importBatches.athletesImported,
         createdAt: importBatches.createdAt,
         committedAt: importBatches.committedAt,

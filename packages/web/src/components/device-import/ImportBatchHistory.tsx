@@ -162,7 +162,7 @@ export function ImportBatchHistory({ organizationId }: ImportBatchHistoryProps) 
             <AlertDialogTitle>Rollback Import?</AlertDialogTitle>
             <AlertDialogDescription>
               This will delete all {confirmBatch?.runsImported ? `${confirmBatch.runsImported} runs (` : ''}
-              {confirmBatch?.measurementsCreated ?? 0} measurements{confirmBatch?.runsImported ? ')' : ''}
+              {confirmBatch?.measurementsCreated ?? 0} measurements{confirmBatch?.runsImported ? ')' : ''}{' '}
               imported from <strong>{confirmBatch?.fileName}</strong> and recalculate
               derived metrics. This action cannot be undone.
             </AlertDialogDescription>

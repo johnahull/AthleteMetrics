@@ -131,9 +131,9 @@ describe('device import keeps every run', () => {
   it('stores both runs, each with its own splits; best 30 yd is from A, best 10 / 20 yd from B', async () => {
     const { batchId, result } = await importFile([RUN_A, RUN_B]);
     expect(result.measurementsCreated).toBe(8);
-    // Runs = drill results (2 dashes + 2 derived flies); the rest are split rows
-    expect(result.runsCreated).toBe(4);
-    expect((await importer.getBatches(orgId)).find((b) => b.id === batchId)?.runsImported).toBe(4);
+    // Runs = the 2 dashes; the derived flies and the split rows are not runs
+    expect(result.runsCreated).toBe(2);
+    expect((await importer.getBatches(orgId)).find((b) => b.id === batchId)?.runsImported).toBe(2);
 
     const drills = await rows('DASH_30YD');
     expect(drills.map((d) => Number(d.value)).sort()).toEqual([4.4, 4.5]);
@@ -152,29 +152,89 @@ describe('device import keeps every run', () => {
     expect(await best('DASH_10YD')).toBeCloseTo(1.7, 3);
   });
 
+  // RUN_A's derived FLY10_TIME_RI10 is 3.1 - 1.8 = 1.3 s. A 20 yd run of 3.15 s with a 1.75 s gate gives 1.4 s (slower).
+  const SLOW_20 = dash('09:30:00', 20, 3.15, [[1.75, 10]]);
   describe.each(['skip', 'replace'] as const)('a 20 yd import after a 30 yd import (%s)', (strategy) => {
     it("stores the 20 yd run and leaves the 30 yd run's splits alone", async () => {
       await importFile([RUN_A]);
       const before = await dashRows();
       expect(before).toHaveLength(3);
 
-      const { result } = await importFile([dash('09:30:00', 20, 3.05, [[1.75, 10]])], strategy);
-      // DASH_20YD drill + its DASH_10YD split are new; only the derived FLY10_TIME_RI10 (one per day) is a duplicate
-      expect(result).toMatchObject(
-        strategy === 'skip'
-          ? { measurementsCreated: 2, measurementsSkipped: 1, measurementsReplaced: 0 }
-          : { measurementsCreated: 3, measurementsSkipped: 0, measurementsReplaced: 1 },
-      );
+      const { result } = await importFile([SLOW_20], strategy);
+      // DASH_20YD drill + its DASH_10YD split are new. The derived FLY10_TIME_RI10 (one per day) is a duplicate;
+      // under replace the earlier, faster one is kept
+      expect(result).toMatchObject({ measurementsCreated: 2, measurementsSkipped: 1, measurementsReplaced: 0 });
 
       const after = await dashRows();
       expect(after).toHaveLength(5);
       // Every 30 yd row is still there, unchanged
       for (const r of before) expect(after.find((a) => a.id === r.id)?.value).toBe(r.value);
       const drill20 = after.find((r) => r.metric === 'DASH_20YD' && !(r.calculationMetadata as any)?.parentMetric)!;
-      expect(Number(drill20.value)).toBe(3.05);
+      expect(Number(drill20.value)).toBe(3.15);
       const split10 = after.filter((r) => r.metric === 'DASH_10YD' && (r.calculationMetadata as any)?.parentMetric === 'DASH_20YD');
       expect(split10.map((r) => Number(r.value))).toEqual([1.75]);
+      expect((await rows('FLY10_TIME_RI10')).map((r) => Number(r.value))).toEqual([1.3]);
     });
+  });
+
+  it('replace swaps a derived fly only when the new one is faster', async () => {
+    await importFile([RUN_A]);
+    // 2.95 - 1.75 = 1.2 s, faster than RUN_A's 1.3 s
+    const { result } = await importFile([dash('09:30:00', 20, 2.95, [[1.75, 10]])], 'replace');
+    expect(result).toMatchObject({ measurementsCreated: 3, measurementsSkipped: 0, measurementsReplaced: 1 });
+    expect((await rows('FLY10_TIME_RI10')).map((r) => Number(r.value))).toEqual([1.2]);
+  });
+
+  it('groups old split rows without parentMetric by their "Split from X" notes', async () => {
+    const old = (metric: string, value: number, notes: string) => ({
+      userId: athleteId, submittedBy: coachId, date: DATE, age: 16, metric, value: String(value), units: 's',
+      isVerified: true, organizationId: orgId, importSource: 'dashr_csv', notes,
+    });
+    const [drill30, split10] = await db.insert(measurements).values([
+      old('DASH_30YD', 4.6, 'Imported from old.csv'),
+      old('DASH_10YD', 1.9, 'Split from DASH_30YD \u2014 imported from old.csv'),
+    ] as any).returning();
+
+    // A 20 yd replace import leaves the old 30 yd run (and its split) alone
+    await importFile([SLOW_20], 'replace');
+    const ids = (await rows()).map((r) => r.id);
+    expect(ids).toContain(drill30.id);
+    expect(ids).toContain(split10.id);
+
+    // A 30 yd replace import removes both old rows
+    const { result } = await importFile([RUN_A], 'replace');
+    expect(result.measurementsReplaced).toBeGreaterThanOrEqual(2);
+    const after = (await rows()).map((r) => r.id);
+    expect(after).not.toContain(drill30.id);
+    expect(after).not.toContain(split10.id);
+  });
+
+  it('skip skips the whole run even when only some rows of the drill exist', async () => {
+    await importFile([RUN_A]);
+    // Keep only the DASH_30YD drill row of the earlier run
+    await db.delete(measurements).where(and(eq(measurements.userId, athleteId), inArray(measurements.metric, ['DASH_10YD', 'DASH_20YD'])));
+    const { result } = await importFile([RUN_A, RUN_B], 'skip');
+    expect(result.measurementsCreated).toBe(0);
+    expect((await dashRows()).map((r) => r.metric)).toEqual(['DASH_30YD']);
+  });
+
+  it('an import linked to an event and one without an event on the same date stay separate', async () => {
+    await importFile([RUN_A, RUN_B]);
+    const { result } = await importFile([RUN_A, RUN_B], 'skip', true);
+    expect(result).toMatchObject({ measurementsCreated: 8, measurementsSkipped: 0 });
+    const replaced = await importFile([RUN_A, RUN_B], 'replace', true);
+    expect(replaced.result.measurementsReplaced).toBe(8);
+    expect((await rows()).filter((r) => r.eventId === null)).toHaveLength(8);
+  });
+
+  it('a replace re-import of a file with a 20 and a 30 yd dash keeps each run its own splits', async () => {
+    const file = [RUN_A, dash('09:30:00', 20, 3.05, [[1.75, 10]])];
+    await importFile(file);
+    const { batchId } = await importFile(file, 'replace');
+    const split10 = await rows('DASH_10YD');
+    expect(split10.map((r) => (r.calculationMetadata as any).parentMetric).sort()).toEqual(['DASH_20YD', 'DASH_30YD']);
+    expect(split10.every((r) => r.importBatchId === batchId)).toBe(true);
+    expect(await dashRows()).toHaveLength(5);
   });
 
   it('re-importing the same file with skip skips every run, drill and splits', async () => {
@@ -202,6 +262,7 @@ describe('device import keeps every run', () => {
     expect(await rows()).toHaveLength(8);
     await importer.rollbackBatch(batchId, coachId, orgId);
     expect(await rows()).toHaveLength(0);
+    expect((await importer.getBatches(orgId)).find((b) => b.id === batchId)?.runsImported).toBe(0);
   });
 
   it('an eval report on A/B data takes the 10 / 20 yd pair from one run', async () => {
