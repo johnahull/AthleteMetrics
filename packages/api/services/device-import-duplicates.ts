@@ -99,6 +99,7 @@ export function decideDuplicate(args: {
     if (onePerDay) {
       const higher = args.higherIsBetter(drill.metric);
       const better = (a: number, b: number) => (higher ? a > b : a < b);
+      // drillValues holds drill rows only (a derived fly has no splits), so a split value never enters this comparison
       const earlierValues = earlier.flatMap(e => e.drillValues);
       // Skip: add the new value only when it beats every earlier one, delete nothing.
       // Replace: only a strictly better earlier value is kept; an equal one is replaced like any re-import
