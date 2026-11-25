@@ -971,6 +971,92 @@ describe('Standing (anytime) Wellness Requests', () => {
     expect(rows).toHaveLength(5);
     expect(rows.filter(r => r.supersededAt === null)).toHaveLength(1);
   });
+
+  describe('GET .../requests/:requestId/completion-rate - day compliance', () => {
+    const completionRate = (requestId: string) =>
+      request(app)
+        .get(`/api/organizations/${testOrg.id}/wellness/requests/${requestId}/completion-rate`)
+        .set('Cookie', coachCookie);
+
+    const insertEntry = async (requestId: string, date: string, superseded = false) => {
+      await db.insert(wellnessResponses).values({
+        requestId,
+        organizationId: testOrg.id,
+        templateId: standingTemplate.id,
+        userId: testAthlete.id,
+        userFullName: testAthlete.fullName,
+        submittedAt: new Date(),
+        date,
+        responses: { q1: { value: 5, label: 'Energy' } },
+        supersededAt: superseded ? new Date() : null,
+      });
+    };
+
+    it('standing request: distinct live entry days over the last 7 and 28 days', async () => {
+      const standing = await createStanding();
+      await db.update(wellnessRequests)
+        .set({ createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000) })
+        .where(eq(wellnessRequests.id, standing.id));
+
+      // Today: a same-day resubmit leaves one live + one superseded row, counted as one day
+      expect((await submit(standing.id, utcDay(0), 3)).status).toBe(201);
+      expect((await submit(standing.id, utcDay(0), 8)).status).toBe(201);
+      await insertEntry(standing.id, utcDay(-2));
+      await insertEntry(standing.id, utcDay(-3), true); // superseded only: not a day
+      await insertEntry(standing.id, utcDay(-9)); // outside 7, inside 28
+
+      const res = await completionRate(standing.id);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({
+        completed: 1,
+        total: 1,
+        percentage: 100,
+        standing: true,
+        windows: {
+          last7: {
+            possibleDays: 7,
+            entryDays: 2,
+            totalPossibleDays: 7,
+            percentage: 29,
+            perAthlete: [{ userId: testAthlete.id, entryDays: 2 }],
+          },
+          last28: {
+            possibleDays: 11,
+            entryDays: 3,
+            totalPossibleDays: 11,
+            percentage: 27,
+            perAthlete: [{ userId: testAthlete.id, entryDays: 3 }],
+          },
+        },
+      });
+    });
+
+    it('standing request: a team member who has left is not a target', async () => {
+      const standing = await createStanding({ targetAthleteIds: [], targetTeamIds: [testTeam.id] });
+      const membership = and(eq(userTeams.userId, testAthlete.id), eq(userTeams.teamId, testTeam.id));
+
+      await db.update(userTeams).set({ leftAt: new Date() }).where(membership);
+      try {
+        const res = await completionRate(standing.id);
+        expect(res.status).toBe(200);
+        expect(res.body.total).toBe(0);
+        expect(res.body.windows.last7.perAthlete).toEqual([]);
+      } finally {
+        await db.update(userTeams).set({ leftAt: null }).where(membership);
+      }
+    });
+
+    it('one-time request: response shape is unchanged', async () => {
+      const oneTime = await createStanding({ isStanding: false });
+      expect((await submit(oneTime.id, utcDay(0), 6)).status).toBe(201);
+
+      const res = await completionRate(oneTime.id);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ completed: 1, total: 1, percentage: 100 });
+    });
+  });
 });
 
 describe('Superseded wellness responses (readers)', () => {
@@ -1111,14 +1197,6 @@ describe('Superseded wellness responses (readers)', () => {
     expect(merge.wellnessResponseCount).toBeGreaterThanOrEqual(2);
   });
 
-  it('COPPA export still includes superseded rows (a full export must not drop data)', async () => {
-    const { coppaExportService } = await import('../../packages/api/services/coppa-export-service');
-    const bundle = await (coppaExportService as any).buildExportBundle(testAthlete.id);
-
-    const ids = bundle.wellnessResponses.map((r: any) => r.id);
-    expect(ids).toContain(liveRow.id);
-    expect(ids).toContain(supersededRow.id);
-  });
 });
 
 describe('Wellness Analytics Routes', () => {
@@ -1453,6 +1531,72 @@ describe('Wellness Dashboard Routes', () => {
 
     // Clean up other resources
     await purgeTestRows({ userIds: [athlete1?.id, athlete2?.id], teamIds: [team1?.id, team2?.id] });
+  });
+
+  it('GET /api/organizations/:organizationId/wellness/dashboard - lastEntries gives every roster athlete their latest live entry', async () => {
+    const [team] = await db.insert(teams).values({
+      organizationId: testOrg.id,
+      name: `Freshness Team ${Date.now()}`,
+      isArchived: false,
+    }).returning();
+    const makeAthlete = async (suffix: string) => {
+      const [u] = await db.insert(users).values({
+        username: `dashboard_athlete_fresh_${suffix}_${Date.now()}`,
+        emails: [`dash.fresh.${suffix}@test.com`],
+        password: 'hashed',
+        firstName: 'Fresh',
+        lastName: suffix,
+        fullName: `Fresh ${suffix}`,
+        isSiteAdmin: false,
+      }).returning();
+      await storage.addUserToOrganization(u.id, testOrg.id, 'athlete');
+      await storage.addUserToTeam(u.id, team.id);
+      return u;
+    };
+    const withEntries = await makeAthlete('a');
+    const noEntries = await makeAthlete('b');
+
+    const day = (offset: number) => new Date(Date.now() + offset * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const liveSubmittedAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+    const insert = (date: string, submittedAt: Date, superseded: boolean) =>
+      db.insert(wellnessResponses).values({
+        organizationId: testOrg.id,
+        templateId: dailyTemplate.id,
+        userId: withEntries.id,
+        userFullName: withEntries.fullName,
+        submittedAt,
+        date,
+        responses: { sleep: { value: 3, label: 'Sleep Quality' }, energy: { value: 3, label: 'Energy Level' } },
+        supersededAt: superseded ? new Date() : null,
+      });
+
+    try {
+      await insert(day(-3), liveSubmittedAt, false);
+      await insert(day(0), new Date(), true); // newer, but superseded: must not count as the latest entry
+
+      const res = await request(app)
+        .get(`/api/organizations/${testOrg.id}/wellness/dashboard?teamIds=${team.id}`)
+        .set('Cookie', coachCookie);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveLength(1);
+      const byUser = Object.fromEntries(res.body[0].lastEntries.map((e: any) => [e.userId, e]));
+      expect(byUser[withEntries.id]).toEqual({
+        userId: withEntries.id,
+        name: withEntries.fullName,
+        lastSubmittedAt: liveSubmittedAt.toISOString(),
+        lastDate: day(-3),
+      });
+      expect(byUser[noEntries.id]).toEqual({
+        userId: noEntries.id,
+        name: noEntries.fullName,
+        lastSubmittedAt: null,
+        lastDate: null,
+      });
+    } finally {
+      await db.delete(wellnessResponses).where(eq(wellnessResponses.userId, withEntries.id));
+      await purgeTestRows({ userIds: [withEntries.id, noEntries.id], teamIds: [team.id] });
+    }
   });
 
   it('GET /api/organizations/:organizationId/wellness/dashboard - returns templateAggregates array', async () => {

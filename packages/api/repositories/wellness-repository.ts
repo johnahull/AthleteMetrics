@@ -21,6 +21,7 @@ import {
   type WellnessSchedule,
 } from "@shared/schema";
 import type { WellnessResponseData } from "@shared/wellness-types";
+import { computeDayCompliance, type RequestCompletionRate } from "@shared/wellness-compliance";
 
 // Wellness trend data structure
 export interface WellnessTrend {
@@ -568,6 +569,25 @@ export class WellnessRepository {
   }
 
   /**
+   * Each athlete's most recent live (not superseded) response in the organization, by submittedAt.
+   * One row per athlete; athletes with no live response are absent.
+   */
+  async getLatestLiveSubmissions(
+    organizationId: string
+  ): Promise<Array<{ userId: string; submittedAt: Date; date: string }>> {
+    validateUUID(organizationId, 'organizationId');
+    return db
+      .selectDistinctOn([wellnessResponses.userId], {
+        userId: wellnessResponses.userId,
+        submittedAt: wellnessResponses.submittedAt,
+        date: wellnessResponses.date,
+      })
+      .from(wellnessResponses)
+      .where(and(eq(wellnessResponses.organizationId, organizationId), isNull(wellnessResponses.supersededAt)))
+      .orderBy(wellnessResponses.userId, desc(wellnessResponses.submittedAt));
+  }
+
+  /**
    * Batch fetch multiple wellness templates in a single query
    * Optimizes dashboard performance by avoiding sequential template lookups
    */
@@ -786,7 +806,7 @@ export class WellnessRepository {
   async getRequestCompletionRate(
     organizationId: string,
     requestId: string
-  ): Promise<{ completed: number; total: number; percentage: number }> {
+  ): Promise<RequestCompletionRate> {
     // Wrap entire calculation in transaction for consistency
     return db.transaction(async (tx) => {
       // Step 1: Get the request details
@@ -820,6 +840,8 @@ export class WellnessRepository {
             and(
               inArray(userTeams.teamId, request.targetTeamIds),
               eq(userTeams.isActive, true),
+              // Standing requests count current members only (one-time requests keep their original rule)
+              request.isStanding ? isNull(userTeams.leftAt) : undefined,
               eq(userOrganizations.organizationId, organizationId),
               eq(users.isActive, true),
               isNull(users.deletedAt)
@@ -831,8 +853,30 @@ export class WellnessRepository {
 
       const totalTargets = targetAthleteIds.size;
 
+      // Standing requests also get day compliance over the last 7 and 28 UTC days
+      let standingFields: Pick<RequestCompletionRate, 'standing' | 'windows'> = {};
+      if (request.isStanding) {
+        const now = new Date();
+        const since = new Date(now.getTime() - 27 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        const entries = await tx
+          .select({ userId: wellnessResponses.userId, date: wellnessResponses.date })
+          .from(wellnessResponses)
+          .where(
+            and(
+              eq(wellnessResponses.requestId, requestId),
+              eq(wellnessResponses.organizationId, organizationId),
+              isNull(wellnessResponses.supersededAt),
+              gte(wellnessResponses.date, since)
+            )
+          );
+        const targetUserIds = [...targetAthleteIds];
+        const compliance = (windowDays: number) =>
+          computeDayCompliance({ createdAt: request.createdAt, now, windowDays, targetUserIds, entries });
+        standingFields = { standing: true, windows: { last7: compliance(7), last28: compliance(28) } };
+      }
+
       if (totalTargets === 0) {
-        return { completed: 0, total: 0, percentage: 0 };
+        return { completed: 0, total: 0, percentage: 0, ...standingFields };
       }
 
       // Step 4: Get unique respondents for this request
@@ -856,6 +900,7 @@ export class WellnessRepository {
         completed: completedCount,
         total: totalTargets,
         percentage,
+        ...standingFields,
       };
     });
   }

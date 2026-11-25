@@ -35,6 +35,7 @@ import {
 import { parentAthleteLinks } from "@shared/schema/tables/coppa";
 import { omitOrgAiTextUnless } from "./services/ai-style-example";
 import type { WellnessTrend } from "@shared/wellness-types";
+import type { RequestCompletionRate } from "@shared/wellness-compliance";
 import { validateMeasurementValue, MeasurementValueValidationError } from "@shared/measurement-value-validation";
 import { isMovementQualityMetric } from "@shared/peer-comparison-exclusions";
 import { assertFlyInDistanceMatches, assertFlyInDistanceOnUpdate } from "@shared/fly-run-in";
@@ -517,13 +518,14 @@ export interface IStorage {
 
   // Wellness Batch Operations (Performance Optimization)
   getTeamRostersBatch(organizationId: string): Promise<Array<{ teamId: string; userId: string; userFullName: string }>>;
+  getLatestLiveSubmissions(organizationId: string): Promise<Array<{ userId: string; submittedAt: Date; date: string }>>;
   getWellnessTemplatesBatch(templateIds: string[]): Promise<WellnessTemplate[]>;
 
   // Wellness Analytics
   getTeamWellnessSummary(teamId: string, filters: { startDate: string; endDate: string }): Promise<any>;
   getAthleteWellnessSummary(userId: string, filters: { startDate: string; endDate: string }): Promise<any>;
   getWellnessTrends(organizationId: string, filters: { startDate: string; endDate: string; questionIds?: string[] }): Promise<WellnessTrend[]>;
-  getRequestCompletionRate(organizationId: string, requestId: string): Promise<{ completed: number; total: number; percentage: number }>;
+  getRequestCompletionRate(organizationId: string, requestId: string): Promise<RequestCompletionRate>;
 
   // Goals
   getGoalsByUser(userId: string, filters?: { status?: string }): Promise<Goal[]>;
@@ -6319,6 +6321,10 @@ export class DatabaseStorage implements IStorage {
     return wellnessRepository.getTeamRostersBatch(organizationId);
   }
 
+  async getLatestLiveSubmissions(organizationId: string): Promise<Array<{ userId: string; submittedAt: Date; date: string }>> {
+    return wellnessRepository.getLatestLiveSubmissions(organizationId);
+  }
+
   /**
    * Batch fetch multiple wellness templates in a single query
    * Optimizes dashboard performance by avoiding sequential template lookups
@@ -6351,7 +6357,7 @@ export class DatabaseStorage implements IStorage {
   async getRequestCompletionRate(
     organizationId: string,
     requestId: string
-  ): Promise<{ completed: number; total: number; percentage: number }> {
+  ): Promise<RequestCompletionRate> {
     return wellnessRepository.getRequestCompletionRate(organizationId, requestId);
   }
 

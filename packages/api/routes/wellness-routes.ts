@@ -1760,6 +1760,10 @@ export function registerWellnessRoutes(app: Express) {
         const templates = await storage.getWellnessTemplatesBatch(uniqueTemplateIds);
         const templateMap = new Map(templates.map(t => [t.id, t]));
 
+        // Query 4: each athlete's latest live entry, for freshness ("last entry N days ago")
+        const latestSubmissions = await storage.getLatestLiveSubmissions(organizationId);
+        const latestByUser = new Map(latestSubmissions.map(s => [s.userId, s]));
+
         // Log warning if any templates are missing
         const missingTemplates = uniqueTemplateIds.filter(id => !templateMap.has(id));
         if (missingTemplates.length > 0) {
@@ -2067,6 +2071,16 @@ export function registerWellnessRoutes(app: Express) {
             commonInjuries,
             athletes: athleteStatuses,
             templateAggregates,
+            // Every roster athlete, including those with no entry on the selected date
+            lastEntries: athleteIds.map(userId => {
+              const latest = latestByUser.get(userId);
+              return {
+                userId,
+                name: teamRoster.find(r => r.userId === userId)?.userFullName ?? null,
+                lastSubmittedAt: latest?.submittedAt ?? null,
+                lastDate: latest?.date ?? null,
+              };
+            }),
           });
         }
 
