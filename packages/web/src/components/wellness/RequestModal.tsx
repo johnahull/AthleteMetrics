@@ -16,7 +16,7 @@ import type { WellnessTemplate, DistributionMethod, RecurrenceType } from '@shar
 import { TeamAthleteSelector } from '@/components/ui/team-athlete-selector';
 import QRCodeGenerator from './QRCodeGenerator';
 
-type SendMode = 'now' | 'schedule' | 'recurring';
+type SendMode = 'now' | 'schedule' | 'recurring' | 'anytime';
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 
@@ -42,7 +42,7 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
   const [showQRCode, setShowQRCode] = useState(false);
   const [createdRequest, setCreatedRequest] = useState<any>(null);
 
-  // Send mode: now / schedule / recurring
+  // Send mode: now / schedule / recurring / anytime (standing request)
   const [sendMode, setSendMode] = useState<SendMode>('now');
 
   // One-time schedule state
@@ -154,6 +154,19 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
         return;
       }
 
+      if (sendMode === 'anytime') {
+        // Standing request: sign-in only, never expires, never scheduled
+        await createRequest.mutateAsync({
+          templateId: selectedTemplateId,
+          distributionMethod: 'athlete_account',
+          targetAthleteIds: selectedAthleteIds,
+          isStanding: true,
+        });
+        toast({ title: 'Success', description: 'Anytime check-in sent' });
+        onClose();
+        return;
+      }
+
       // One-time request (immediate or scheduled)
       const payload: any = {
         templateId: selectedTemplateId,
@@ -229,7 +242,11 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
           {/* Distribution Method */}
           <div className="grid gap-y-2">
             <Label>Distribution Method *</Label>
-            <RadioGroup value={distributionMethod} onValueChange={(value: any) => setDistributionMethod(value)}>
+            <RadioGroup
+              value={sendMode === 'anytime' ? 'athlete_account' : distributionMethod}
+              onValueChange={(value: any) => setDistributionMethod(value)}
+              disabled={sendMode === 'anytime'}
+            >
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex items-center gap-x-2 p-4 border rounded-md cursor-pointer hover:bg-gray-50 border-primary/50 bg-primary/5">
                   <RadioGroupItem value="magic_link" id="magic_link" data-testid="radio-magic-link" />
@@ -289,7 +306,7 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
           <div className="grid gap-y-3">
             <Label>When to send</Label>
             <RadioGroup value={sendMode} onValueChange={(v: any) => setSendMode(v)}>
-              <div className="flex gap-4">
+              <div className="flex flex-wrap gap-4">
                 <div className="flex items-center gap-x-2">
                   <RadioGroupItem value="now" id="send-now" data-testid="send-mode-now" />
                   <Label htmlFor="send-now" className="cursor-pointer font-medium">Send now</Label>
@@ -302,8 +319,18 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
                   <RadioGroupItem value="recurring" id="send-recurring" data-testid="send-mode-recurring" />
                   <Label htmlFor="send-recurring" className="cursor-pointer font-medium">Recurring</Label>
                 </div>
+                <div className="flex items-center gap-x-2">
+                  <RadioGroupItem value="anytime" id="send-anytime" data-testid="send-mode-anytime" />
+                  <Label htmlFor="send-anytime" className="cursor-pointer font-medium">Anytime</Label>
+                </div>
               </div>
             </RadioGroup>
+
+            {sendMode === 'anytime' && (
+              <p className="text-xs text-gray-600 p-3 bg-green-50 border border-green-200 rounded-md" data-testid="anytime-description">
+                Sent once, never expires; the athlete fills it in whenever they want. Athletes sign in to answer it.
+              </p>
+            )}
 
             {/* One-time schedule config */}
             {sendMode === 'schedule' && (
@@ -435,8 +462,8 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
             )}
           </div>
 
-          {/* Expiry Date (only for non-recurring) */}
-          {sendMode !== 'recurring' && (
+          {/* Expiry Date (only for one-time requests; recurring and anytime requests have none) */}
+          {(sendMode === 'now' || sendMode === 'schedule') && (
             <div className="grid gap-y-2">
               <Label htmlFor="expiry-date">Expiry Date</Label>
               <Input
