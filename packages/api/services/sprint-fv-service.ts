@@ -117,27 +117,41 @@ export function resolveSplitsFromMeasurements(
   if (rows.every((r) => sameRunKey(r) === '')) return resolvePooledSplits(rows);
 
   // Device runs: the splits of one sprint only, never the fastest split of each run. The run with the most
-  // splits sets the codes; selectSameRunSources then ranks the runs that have them all (rows without a run id
-  // form one more candidate).
+  // splits (then the one reaching furthest) sets the codes; selectSameRunSources then ranks the runs that have
+  // them all (rows without a run id form one more candidate).
   const runs = new Map<string, SplitMeasurementInput[]>();
   for (const r of rows) runs.set(sameRunKey(r), [...(runs.get(sameRunKey(r)) ?? []), r]);
-  let longest: ResolvedSplits | undefined;
+  const rowsById = new Map(rows.map((r) => [r.id, r]));
+  const candidates: Array<{ resolved: ResolvedSplits; codes: string[] }> = [];
   let firstError: unknown;
   for (const runRows of runs.values()) {
     try {
       const resolved = resolvePooledSplits(runRows);
-      if (!longest || Object.keys(resolved.splitTimes).length > Object.keys(longest.splitTimes).length) longest = resolved;
+      candidates.push({ resolved, codes: Object.values(resolved.usedMeasurementIds).map((id) => rowsById.get(id)!.metric) });
     } catch (error) {
       firstError ??= error;
     }
   }
-  if (!longest) throw firstError;
+  if (candidates.length === 0) throw firstError;
+  // Complete runs in both units: the session is mixed, rejected as before (pooling every row raises that error)
+  if (new Set(candidates.map((c) => c.resolved.distanceUnit)).size > 1) return resolvePooledSplits(rows);
+  const longest = candidates.reduce((a, b) => (reachesFurther(b.codes, a.codes) ? b : a));
   // Longest distance first: runs are ranked by their full sprint time, then by the shorter splits
-  const rowsById = new Map(rows.map((r) => [r.id, r]));
-  const codes = Object.entries(longest.usedMeasurementIds)
+  const codes = Object.entries(longest.resolved.usedMeasurementIds)
     .sort(([a], [b]) => Number(b) - Number(a))
     .map(([, id]) => rowsById.get(id)!.metric);
-  return resolvePooledSplits([...selectSameRunSources(rows, codes, () => false)!.values()]);
+  const sources = selectSameRunSources(rows, codes, () => false);
+  if (!sources) throw new Error(`Sprint F-V: no run has every split of the chosen run (${codes.join(', ')})`);
+  return resolvePooledSplits([...sources.values()]);
+}
+
+const SPLIT_DISTANCES: Record<string, number> = { ...SPLIT_METRICS_YARDS, ...SPLIT_METRICS_METERS };
+
+/** More split codes wins, then the code reaching furthest: profile generation and the session list pick the same run */
+function reachesFurther(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return a.length > b.length;
+  const furthest = (codes: readonly string[]) => Math.max(...codes.map((c) => SPLIT_DISTANCES[c] ?? 0));
+  return furthest(a) > furthest(b);
 }
 
 function resolvePooledSplits(
@@ -291,7 +305,7 @@ export class SprintFvService {
       // Device runs: one run must have the splits (rows without a run id pool together)
       const splitsByRun = new Map<string, Set<string>>();
       for (const m of mList) splitsByRun.set(sameRunKey(m), (splitsByRun.get(sameRunKey(m)) ?? new Set<string>()).add(m.metric));
-      const availableSplits = [...[...splitsByRun.values()].reduce((a, b) => (b.size > a.size ? b : a))];
+      const availableSplits = [...splitsByRun.values()].map((codes) => [...codes]).reduce((a, b) => (reachesFurther(b, a) ? b : a));
       if (availableSplits.length < MIN_SPLITS_REQUIRED) continue;
 
       const date = mList[0].date;

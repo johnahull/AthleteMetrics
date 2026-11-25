@@ -1287,6 +1287,7 @@ export class DerivedMetricCalculator {
         if (config.missingSourceBehavior === 'skip') return null;
         throw new Error(`Missing source measurement for metric: ${dependentMetrics[i]}`);
       }
+      // `?? true`: same default as the per-metric lookup in findSourceMeasurementsImpl
       result.set(dependentMetrics[i], newest(matching, metricConfigs?.get(codes[i])?.higherIsBetter ?? true));
     }
     return result;

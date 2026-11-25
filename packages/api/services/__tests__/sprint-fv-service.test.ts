@@ -122,6 +122,33 @@ describe('resolveSplitsFromMeasurements', () => {
       expect(resolveSplitsFromMeasurements(rows).usedMeasurementIds).toEqual({ '10': 'b10', '20': 'b20', '30': 'b30', '40': 'b40' });
     });
 
+    it('breaks a tie in split count by the run reaching furthest', () => {
+      const rows = [
+        run('a10', 'DASH_10YD', 1.7, 'A'),
+        run('a20', 'DASH_20YD', 2.9, 'A'),
+        run('a30', 'DASH_30YD', 4.0, 'A'),
+        run('b20', 'DASH_20YD', 2.95, 'B'),
+        run('b30', 'DASH_30YD', 4.1, 'B'),
+        run('b40', 'DASH_40YD', 5.2, 'B'),
+      ];
+
+      expect(resolveSplitsFromMeasurements(rows).usedMeasurementIds).toEqual({ '20': 'b20', '30': 'b30', '40': 'b40' });
+    });
+
+    it('still rejects a session with complete runs in both yards and meters', () => {
+      const rows = [
+        run('y10', 'DASH_10YD', 1.7, 'Y'),
+        run('y20', 'DASH_20YD', 2.95, 'Y'),
+        run('y30', 'DASH_30YD', 4.18, 'Y'),
+        run('m10', 'DASH_10M', 1.85, 'M'),
+        run('m20', 'DASH_20M', 3.2, 'M'),
+        run('m30', 'DASH_30M', 4.55, 'M'),
+      ];
+
+      expect(() => resolveSplitsFromMeasurements(rows)).toThrow(SprintFvValidationError);
+      expect(() => resolveSplitsFromMeasurements(rows)).toThrow(/mixed/i);
+    });
+
     it('throws when no single run has 3 splits, even if the runs together do', () => {
       const rows = [
         run('a10', 'DASH_10YD', 1.7, 'A'),

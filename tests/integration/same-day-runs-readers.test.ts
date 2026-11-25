@@ -27,6 +27,7 @@ import {
 import { DerivedMetricCalculator } from '../../packages/api/services/derived-metric-calculator';
 import { peerComparisonService } from '../../packages/api/services/peer-comparison-service';
 import { BenchmarkAnalyticsService } from '../../packages/api/services/benchmark-analytics-service';
+import { BenchmarkService } from '../../packages/api/services/benchmark-service';
 import { AnalyticsService } from '../../packages/api/services/analytics-service';
 import { SprintFvService } from '../../packages/api/services/sprint-fv-service';
 import { purgeTestRows } from '../helpers/purge-test-rows';
@@ -173,6 +174,32 @@ describe('readers with several same-day runs', () => {
     expect(await service.getAthletesByBenchmarkStatus(orgId, benchmarkId, 'met')).toEqual([athleteId]);
   });
 
+  it("athlete benchmark status takes the day's best run, wherever it sits among the runs", async () => {
+    await add([
+      { value: 4.5, date: '2026-09-01' },
+      { value: 4.3 },
+      { value: 4.08 },
+      { value: 4.25 },
+    ]);
+    const status = await new BenchmarkService().getAthleteBenchmarkStatus(athleteId, orgId);
+    const row = status.find((s) => s.benchmarkId === benchmarkId);
+    expect(row?.athleteValue).toBe(4.08);
+    expect(row?.isMet).toBe(true);
+  });
+
+  it("most improved takes the highest first-day run of a higher-is-better metric", async () => {
+    await add([
+      { metric: 'VERTICAL_JUMP', value: 20, date: '2026-09-01' },
+      { metric: 'VERTICAL_JUMP', value: 24, date: '2026-09-01' },
+      { metric: 'VERTICAL_JUMP', value: 22, date: '2026-09-01' },
+      { metric: 'VERTICAL_JUMP', value: 26 },
+    ]);
+    const { improvements } = await new AnalyticsService().getMostImproved(orgId, 'VERTICAL_JUMP');
+    expect(improvements).toHaveLength(1);
+    expect(improvements[0].previousValue).toBe(24);
+    expect(improvements[0].currentValue).toBe(26);
+  });
+
   it("most improved starts from the first day's best run", async () => {
     await add([
       { value: 4.5, date: '2026-09-01' },
@@ -200,6 +227,20 @@ describe('readers with several same-day runs', () => {
     ]);
     const { declining } = await new AnalyticsService().getAtRiskAthletes(orgId);
     expect(declining.filter((d) => d.athleteId === athleteId && d.metric === 'DASH_30YD')).toEqual([]);
+  });
+
+  it('decline trend still reports a real decline, from the best run of each date', async () => {
+    // 4.00 on three dates, then 4.40 on three dates (one with a slower extra run): a 10% decline
+    await add([
+      ...[1, 2, 3].map((d) => ({ value: 4.0, date: `2026-10-0${d}` })),
+      ...[4, 5, 6].map((d) => ({ value: 4.4, date: `2026-10-0${d}` })),
+      { value: 4.9, date: '2026-10-06' },
+    ]);
+    const { declining } = await new AnalyticsService().getAtRiskAthletes(orgId);
+    const mine = declining.filter((d) => d.athleteId === athleteId && d.metric === 'DASH_30YD');
+    expect(mine).toHaveLength(1);
+    expect(mine[0].currentValue).toBeCloseTo(4.4, 5);
+    expect(mine[0].previousValue).toBeCloseTo(4.0, 5);
   });
 
   const derivedValue = async (code: string) => {
@@ -245,6 +286,34 @@ describe('readers with several same-day runs', () => {
       { metric: 'DASH_30YD', value: 4.15, runId: 'run-b' },
     ]);
     expect(await new SprintFvService().findEligibleSessions(athleteId)).toEqual([]);
+  });
+
+  it('Sprint F-V lists a session with a complete run', async () => {
+    await add([
+      { metric: 'DASH_10YD', value: 1.73, runId: 'run-a' },
+      { metric: 'DASH_20YD', value: 2.95, runId: 'run-a' },
+      { metric: 'DASH_30YD', value: 4.05, runId: 'run-a' },
+      { metric: 'DASH_10YD', value: 1.8, runId: 'run-b' },
+    ]);
+    const sessions = await new SprintFvService().findEligibleSessions(athleteId);
+    expect(sessions).toHaveLength(1);
+    expect([...sessions[0].availableSplits].sort()).toEqual(['DASH_10YD', 'DASH_20YD', 'DASH_30YD']);
+  });
+
+  it('Sprint F-V session list and profile pick the run reaching furthest when runs have as many splits', async () => {
+    // Both runs have 3 splits; run B reaches 40 yd. Run A is listed first so first-wins would pick it.
+    await add([
+      { metric: 'DASH_10YD', value: 1.7, runId: 'run-a' },
+      { metric: 'DASH_20YD', value: 2.9, runId: 'run-a' },
+      { metric: 'DASH_30YD', value: 4.0, runId: 'run-a' },
+      { metric: 'DASH_20YD', value: 2.95, runId: 'run-b' },
+      { metric: 'DASH_30YD', value: 4.1, runId: 'run-b' },
+      { metric: 'DASH_40YD', value: 5.2, runId: 'run-b' },
+    ]);
+    const [session] = await new SprintFvService().findEligibleSessions(athleteId);
+    expect([...session.availableSplits].sort()).toEqual(['DASH_20YD', 'DASH_30YD', 'DASH_40YD']);
+    const profile = await new SprintFvService().generateProfile(athleteId, DATE, athleteId, { bodyMassLbsOverride: 160 });
+    expect(Object.keys(profile.splitTimesJson).sort()).toEqual(['20', '30', '40']);
   });
 
   it('Sprint F-V keeps the pooled fastest split for rows without a run id', async () => {
