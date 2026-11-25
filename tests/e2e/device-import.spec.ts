@@ -24,6 +24,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const DASHR_CSV = path.join(__dirname, 'fixtures/csv-files/dashr-sample.csv');
+const DASHR_MULTI_RUN_CSV = path.join(__dirname, 'fixtures/csv-files/dashr-multi-run.csv');
 
 test.describe('Device Import — Data Entry Tab Flow', () => {
 
@@ -163,6 +164,32 @@ test.describe('Device Import — Review and Commit', () => {
     await expect(
       page.locator('text=/athlete|match|review|hull|christian/i').first()
     ).toBeVisible({ timeout: 10000 });
+  });
+
+  test('lists every run of a drill and marks the best values', async ({ page }) => {
+    await navigateTo(page, '/data-entry?tab=device');
+
+    await page.click('text=Upload Device File');
+    await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
+
+    // One session, two 30 yd runs: A has the faster 30 yd, B the faster 10 / 20 yd gates
+    await page.locator('input[type="file"]').setInputFiles(DASHR_MULTI_RUN_CSV);
+    await page.locator('button:has-text("Parse File")').click();
+
+    const dialog = page.locator('[role="dialog"]');
+    await expect(dialog.getByText('Review Athletes')).toBeVisible({ timeout: 15000 });
+    // 2 dash runs; the derived FLY10_TIME and FLY10_TIME_RI10 are not counted as runs
+    await expect(dialog.getByText('2 runs', { exact: true })).toBeVisible();
+
+    // Expand the athlete row
+    await dialog.locator('tr', { hasText: 'Christian' }).getByRole('button').first().click();
+
+    const group = dialog.getByTestId('runs-DASH_30YD');
+    await expect(group.getByText('(2 runs)')).toBeVisible();
+    await expect(group.getByText('14:00:00')).toBeVisible();
+    await expect(group.getByText('14:05:00')).toBeVisible();
+    // Best 30 yd (run A) + best 10 yd and 20 yd splits (run B)
+    await expect(group.getByText('Best')).toHaveCount(3);
   });
 });
 

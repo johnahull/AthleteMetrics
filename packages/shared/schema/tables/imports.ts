@@ -40,6 +40,9 @@ export const importBatches = pgTable("import_batches", {
         splits?: Array<{ metric: string; value: number; units: string }>;
         isOutlier?: boolean;
         outlierReason?: string;
+        derivedFrom?: string; // Set on a fly derived from dash gates (not a run)
+        runIndex?: number;  // Order of the run within athlete + metric
+        runAt?: string;     // Device timestamp of the run
       }>;
       included: boolean;
     }>;

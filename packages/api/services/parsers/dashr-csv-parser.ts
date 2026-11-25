@@ -3,7 +3,8 @@
  *
  * Parses Dashr timing gate CSV exports into structured import data.
  * Handles multi-session CSVs, split extraction, drill type mapping,
- * best-attempt selection, and outlier detection.
+ * and outlier detection. Every valid run is kept (numbered by runIndex);
+ * readers pick the best per metric.
  */
 
 import * as iconv from 'iconv-lite';
@@ -172,6 +173,16 @@ function extractDateFromTimestamp(timestamp: string): string | null {
   if (!match) return null;
   const [, month, day, year] = match;
   return `${year}-${month}-${day}`;
+}
+
+/**
+ * Dashr timestamp "MM/DD/YYYY HH:mm:ss" → "YYYY-MM-DDTHH:mm:ss" (sortable), or undefined
+ */
+function extractRunAt(timestamp: string): string | undefined {
+  const match = timestamp.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) return undefined;
+  const [, month, day, year, hour, minute, second] = match;
+  return `${year}-${month}-${day}T${hour.padStart(2, '0')}:${minute}:${second ?? '00'}`;
 }
 
 /**
@@ -409,6 +420,7 @@ function deriveFly10MForAthlete(drills: ParsedDrillResult[]): ParsedDrillResult 
     value: best.value,
     units: 's',
     derivedFrom: `${best.source} splits`,
+    runIndex: 0,
     ...(outlierReason ? { isOutlier: true, outlierReason } : {}),
   };
 }
@@ -458,56 +470,9 @@ function deriveYardFly10sForAthlete(drills: ParsedDrillResult[]): ParsedDrillRes
     value,
     units: 's',
     derivedFrom: `${source} splits`,
+    runIndex: 0,
     ...(outlierReason ? { isOutlier: true, outlierReason } : {}),
   }));
-}
-
-/**
- * Group rows by athlete name + drill type + date + direction + distance unit,
- * then select the best (fastest) attempt per group.
- */
-function selectBestAttempts(rows: DashrRow[]): DashrRow[] {
-  const groups = new Map<string, DashrRow[]>();
-
-  for (const row of rows) {
-    const date = extractDateFromTimestamp(row['Date'] || '');
-    const key = [
-      (row['First Name'] || '').toLowerCase().trim(),
-      (row['Last Name'] || '').toLowerCase().trim(),
-      // A 0 run-in fly is a dash, so it competes with dashes for best attempt
-      (isZeroRunInFly(row) ? 'dash' : (row['Type'] || '').toLowerCase().trim()),
-      date || '',
-      (row['Direction'] || '').toLowerCase().trim(),
-      // Agility exports may or may not fill Final Distance; it is not part of their identity.
-      NO_DISTANCE_TYPES.has((row['Type'] || '').trim()) ? '' : String(parseFloat_(row['Final Distance']) ?? ''),
-      // A metric and a yard 5-0-5 are different protocols (_M vs _YD), never alternate attempts.
-      getDistanceUnit(row),
-      // Different yard run-ins on the same day are different metrics, not attempts at one.
-      // Metric flies ignore Start Distance (always FLY10M_TIME), so they still collapse.
-      isYardFly10(row) && (row['Start Distance'] || '').trim() !== '' ? String(parseFloat_(row['Start Distance'])) : '',
-    ].join('|');
-
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(row);
-  }
-
-  const best: DashrRow[] = [];
-  for (const [, groupRows] of groups) {
-    // Select row with fastest Final Time
-    let bestRow = groupRows[0];
-    let bestTime = parseFloat_(bestRow['Final Time']) ?? Infinity;
-
-    for (let i = 1; i < groupRows.length; i++) {
-      const time = parseFloat_(groupRows[i]['Final Time']) ?? Infinity;
-      if (time < bestTime) {
-        bestTime = time;
-        bestRow = groupRows[i];
-      }
-    }
-    best.push(bestRow);
-  }
-
-  return best;
 }
 
 export class DashrCsvParser implements DeviceImportParser {
@@ -585,14 +550,11 @@ export class DashrCsvParser implements DeviceImportParser {
       validRows.push(row);
     }
 
-    // Select best attempts per athlete/drill/date/direction
-    const bestRows = selectBestAttempts(validRows);
-
     // Group by athlete
     const athleteMap = new Map<string, ParsedAthleteResult>();
     let badUnits505Rows = 0;
 
-    for (const row of bestRows) {
+    for (const row of validRows) {
       const firstName = (row['First Name'] || '').trim();
       const lastName = (row['Last Name'] || '').trim();
       const key = `${firstName.toLowerCase()}|${lastName.toLowerCase()}`;
@@ -649,9 +611,25 @@ export class DashrCsvParser implements DeviceImportParser {
         units: 's',
         ...(mappedSplits.length > 0 ? { splits: mappedSplits } : {}),
         ...(outlierReason ? { isOutlier: true, outlierReason } : {}),
+        runIndex: 0, // numbered below, once all runs of the metric are known
+        runAt: extractRunAt(row['Date'] || ''),
       };
 
       athleteMap.get(key)!.drills.push(drill);
+    }
+
+    // Number every run within athlete + metric by its time (stable: equal times keep file order)
+    for (const [, athlete] of athleteMap) {
+      const byMetric = new Map<string, ParsedDrillResult[]>();
+      for (const d of athlete.drills) {
+        if (!byMetric.has(d.metric)) byMetric.set(d.metric, []);
+        byMetric.get(d.metric)!.push(d);
+      }
+      for (const runs of byMetric.values()) {
+        [...runs]
+          .sort((a, b) => (a.runAt ?? '').localeCompare(b.runAt ?? ''))
+          .forEach((d, i) => { d.runIndex = i; });
+      }
     }
 
     // Derive FLY10_TIME / FLY10M_TIME from dash splits when no direct
@@ -687,28 +665,24 @@ export class DashrCsvParser implements DeviceImportParser {
       }))
       .sort((a, b) => b.sessionDate.localeCompare(a.sessionDate));
 
-    // Handle RSI column if present
-    for (const row of bestRows) {
+    // Handle RSI column if present: one RSI per athlete, the highest of any row
+    const bestRsi = new Map<string, number>();
+    for (const row of validRows) {
       const rsi = parseFloat_(row['RSI']);
       if (rsi && rsi > 0) {
-        const firstName = (row['First Name'] || '').trim();
-        const lastName = (row['Last Name'] || '').trim();
-        const key = `${firstName.toLowerCase()}|${lastName.toLowerCase()}`;
-        const athlete = athleteMap.get(key);
-        if (athlete) {
-          // Only add if not already present
-          const hasRsi = athlete.drills.some(d => d.metric === MetricType.RSI);
-          if (!hasRsi) {
-            const outlierReason = checkOutlier(MetricType.RSI, rsi);
-            athlete.drills.push({
-              metric: MetricType.RSI,
-              value: rsi,
-              units: '',
-              ...(outlierReason ? { isOutlier: true, outlierReason } : {}),
-            });
-          }
-        }
+        const key = `${(row['First Name'] || '').trim().toLowerCase()}|${(row['Last Name'] || '').trim().toLowerCase()}`;
+        if (athleteMap.has(key) && rsi > (bestRsi.get(key) ?? 0)) bestRsi.set(key, rsi);
       }
+    }
+    for (const [key, rsi] of bestRsi) {
+      const outlierReason = checkOutlier(MetricType.RSI, rsi);
+      athleteMap.get(key)!.drills.push({
+        metric: MetricType.RSI,
+        value: rsi,
+        units: '',
+        runIndex: 0,
+        ...(outlierReason ? { isOutlier: true, outlierReason } : {}),
+      });
     }
 
     if (badUnits505Rows > 0) {
