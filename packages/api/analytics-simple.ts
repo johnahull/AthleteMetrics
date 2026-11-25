@@ -2,7 +2,7 @@
  * Simplified Analytics Service for initial testing
  */
 
-import { eq, and, inArray, gte, lte, sql, exists } from "drizzle-orm";
+import { eq, and, inArray, gte, lte, sql, exists, desc } from "drizzle-orm";
 import { db } from "./db";
 import { measurements, users, userOrganizations, teams, userTeams, siteMetrics } from "@shared/schema";
 import { PAGINATION } from "./constants/pagination";
@@ -516,9 +516,30 @@ export class AnalyticsService {
       }
       whereConditions.push(lte(measurements.date, formatDateForDatabase(endDate)));
 
+      // Each metric's direction from its own row (site metric, else this organization's custom metric)
+      const metricTypes = await getMetricTypes(allMetrics, request.filters.organizationId);
+
+      // The row limit must never drop the rows that decide the result, so 'best' (one row per athlete+metric) and
+      // 'trends' (one per athlete+metric+date) collapse to the best row in SQL before the limit. row_number() also
+      // drops the copies of a measurement that the userOrganizations join makes for a member of several orgs.
+      // Sort key per metric, ascending = best first: the value for lower_is_better, the latest date for tracking
+      // (what filterToBestMeasurements keeps), the negated value otherwise. Ties fall to the lowest measurement id.
+      const bestFirst = sql`CASE ${sql.join(
+        [...new Set(allMetrics)].map(code => {
+          const key = metricTypes[code] === 'lower_is_better' ? sql`${measurements.value}`
+            : metricTypes[code] === 'tracking' ? sql`-EXTRACT(EPOCH FROM ${measurements.date})::numeric`
+            : sql`-${measurements.value}`;
+          return sql`WHEN ${measurements.metric} = ${code} THEN ${key}`;
+        }),
+        sql` `
+      )} END`;
+      const partition = request.timeframe.type === 'best' ? sql`${measurements.userId}, ${measurements.metric}`
+        : request.timeframe.type === 'trends' ? sql`${measurements.userId}, ${measurements.metric}, ${measurements.date}`
+        : null;
+
       // Query to get basic data
       // Use LEFT JOIN to include measurements from soft-deleted users (Level 2 Immutability)
-      const data: QueryResult[] = await db
+      const ranked = db
         .select({
           measurementId: measurements.id,
           athleteId: measurements.userId,
@@ -532,16 +553,28 @@ export class AnalyticsService {
               WHEN ${users.deletedAt} IS NOT NULL THEN '[Deleted User]'
               ELSE ${users.firstName} || ' ' || ${users.lastName}
             END
-          `,
+          `.as('athlete_name'),
           teamName: teams.name,
           gender: users.gender,
-          birthYear: sql<number>`EXTRACT(YEAR FROM ${users.birthDate})`
+          birthYear: sql<number>`EXTRACT(YEAR FROM ${users.birthDate})`.as('birth_year'),
+          // Other timeframe types keep every row (rn = 1)
+          rn: (partition
+            ? sql<number>`row_number() OVER (PARTITION BY ${partition} ORDER BY ${bestFirst}, ${measurements.id})`
+            : sql<number>`1`).as('rn')
         })
         .from(measurements)
         .leftJoin(users, eq(measurements.userId, users.id))
         .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
         .leftJoin(teams, eq(measurements.teamId, teams.id))
         .where(and(...whereConditions))
+        .as('ranked');
+
+      // Deterministic order, so when the limit is still reached it drops the oldest rows, not random ones
+      const data: QueryResult[] = await db
+        .select()
+        .from(ranked)
+        .where(eq(ranked.rn, 1))
+        .orderBy(desc(ranked.date), ranked.measurementId)
         .limit(PAGINATION.ANALYTICS_LIMIT);
 
       // Database query completed, processing results
@@ -557,10 +590,7 @@ export class AnalyticsService {
         teamName: sanitizeString(row.teamName) || 'No Team'
       }));
 
-      // Each metric's direction from its own row (site metric, else this organization's custom metric)
-      const metricTypes = await getMetricTypes(allMetrics, request.filters.organizationId);
-
-      // Apply filtering based on timeframe type
+      // Apply filtering based on timeframe type (idempotent on the rows SQL already collapsed)
       if (request.timeframe.type === 'best') {
         chartData = filterToBestMeasurements(chartData, metricTypes);
       } else if (request.timeframe.type === 'trends') {
