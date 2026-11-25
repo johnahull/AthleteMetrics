@@ -109,7 +109,7 @@ export default function TeamStatusCard({
         )}
 
         {/* Athlete Status Counts */}
-        <div className="flex items-center gap-4 text-sm">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
           <div className="flex items-center gap-1">
             <StatusDot status="red" />
             <span className="font-medium">{redCount}</span>
@@ -126,7 +126,7 @@ export default function TeamStatusCard({
             <span className="text-gray-600">green</span>
           </div>
           {lastEntries.length > 0 && (
-            <div className="flex items-center gap-1" data-testid="no-recent-data-count">
+            <div className="flex items-center gap-1 whitespace-nowrap" data-testid="no-recent-data-count">
               <StatusDot status="none" />
               <span className="font-medium">{noRecentCount}</span>
               <span className="text-gray-600">no recent data</span>
