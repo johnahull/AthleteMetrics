@@ -978,6 +978,17 @@ describe('Standing (anytime) Wellness Requests', () => {
         .get(`/api/organizations/${testOrg.id}/wellness/requests/${requestId}/completion-rate`)
         .set('Cookie', coachCookie);
 
+    it('does not reveal another organization\'s request targets', async () => {
+      const standing = await createStanding();
+
+      const res = await request(app)
+        .get(`/api/organizations/${crypto.randomUUID()}/wellness/requests/${standing.id}/completion-rate`)
+        .set('Cookie', siteAdminCookie);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ completed: 0, total: 0, percentage: 0 });
+    });
+
     const insertEntry = async (requestId: string, date: string, superseded = false) => {
       await db.insert(wellnessResponses).values({
         requestId,

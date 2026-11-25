@@ -811,9 +811,10 @@ export class WellnessRepository {
     return db.transaction(async (tx) => {
       // Step 1: Get the request details
       const request = await tx.query.wellnessRequests.findFirst({
-        where: eq(wellnessRequests.id, requestId),
+        where: and(eq(wellnessRequests.id, requestId), eq(wellnessRequests.organizationId, organizationId)),
       });
 
+      // A request of another organization looks the same as a missing one
       if (!request) {
         return { completed: 0, total: 0, percentage: 0 };
       }
