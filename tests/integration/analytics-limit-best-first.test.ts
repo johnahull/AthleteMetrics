@@ -16,7 +16,7 @@ vi.mock('../../packages/api/constants/pagination', async (importOriginal) => {
   return { PAGINATION: { ...original.PAGINATION, ANALYTICS_LIMIT: 5 } };
 });
 
-import { inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
 import { customOrgMetrics, measurements, organizations, siteMetrics, teams, userOrganizations, users, userTeams } from '@shared/schema';
 import { filterToBestMeasurements, filterToBestMeasurementsPerDate } from '@shared/analytics-utils';
@@ -40,11 +40,12 @@ describe('analytics row limit keeps the best values', () => {
   const athletes: string[] = [];
   const createdMetrics: string[] = [];
 
-  type Row = { athlete: number; metric: string; value: number; date: string; team?: string };
+  type Row = { athlete: number; metric: string; value: number; date: string; team?: string; id?: string };
   const add = async (rows: Row[]) => {
     // One insert per row, in order, so the physical order is the listed order
     for (const r of rows) {
       await db.insert(measurements).values({
+        ...(r.id ? { id: r.id } : {}),
         userId: athletes[r.athlete],
         submittedBy: athletes[r.athlete],
         organizationId: orgId,
@@ -59,11 +60,11 @@ describe('analytics row limit keeps the best values', () => {
     }
   };
 
-  const run = (type: 'best' | 'trends', metric: string) =>
+  const run = (type: 'best' | 'trends', metric: string, additional: string[] = []) =>
     new AnalyticsService().getAnalyticsData({
       analysisType: 'intra_group',
       filters: { organizationId: orgId },
-      metrics: { primary: metric, additional: [] },
+      metrics: { primary: metric, additional },
       timeframe: { type, period: 'all_time' },
     } as any);
 
@@ -138,6 +139,31 @@ describe('analytics row limit keeps the best values', () => {
     expect(data.map((d) => [athletes.indexOf(d.athleteId), d.value]).sort()).toEqual([[0, best0], [1, best1]]);
   });
 
+  it("'best' over the limit with two metrics of opposite directions in one request", async () => {
+    // 16 rows > limit 5; each deciding row (lowest fly time, highest jump) sits mid-sequence
+    await add(
+      [0, 1].flatMap((athlete) => [
+        ...[4.5, 4.3, 3.8 + athlete / 10, 4.4].map((value, i) => ({ athlete, metric: LOWER, value, date: `2026-0${i + 1}-10` })),
+        ...[20, 22, 30 + athlete, 21].map((value, i) => ({ athlete, metric: HIGHER, value, date: `2026-0${i + 1}-10` })),
+      ])
+    );
+    const { data } = await run('best', LOWER, [HIGHER]);
+    expect(data.map((d) => `${athletes.indexOf(d.athleteId)}|${d.metric}|${d.value}`).sort()).toEqual([
+      `0|${LOWER}|3.8`, `0|${HIGHER}|30`, `1|${LOWER}|3.9`, `1|${HIGHER}|31`,
+    ].sort());
+  });
+
+  it("'best' with a tied best value keeps the later date", async () => {
+    // The earlier tied row gets the smaller id, so an id-only tie-break would pick it
+    await add([
+      { athlete: 0, metric: LOWER, value: 4.0, date: '2026-02-01', id: '00000000-0000-4000-8000-000000000001' },
+      { athlete: 0, metric: LOWER, value: 4.2, date: '2026-04-01' },
+      { athlete: 0, metric: LOWER, value: 4.0, date: '2026-03-01', id: 'ffffffff-ffff-4fff-bfff-ffffffffffff' },
+    ]);
+    const { data } = await run('best', LOWER);
+    expect(summary(data)).toEqual([`0|${LOWER}|2026-03-01|4`]);
+  });
+
   it.each([
     [ORG_LOWER, 3.7],
     // tracking keeps the latest date's value, as filterToBestMeasurements does
@@ -198,14 +224,26 @@ describe('analytics row limit keeps the best values', () => {
         { athlete: 0, metric: HIGHER, value: 31, date: '2026-04-01', team: teamB },
         { athlete: 0, metric: HIGHER, value: 24, date: '2026-04-01', team: teamA },
       ]);
+      // A soft-deleted athlete keeps their row, shown as '[Deleted User]'
+      await db.update(users).set({ deletedAt: new Date() }).where(eq(users.id, athletes[1]));
+      await add([{ athlete: 1, metric: HIGHER, value: 18, date: '2026-04-01' }]);
+
       const best = await run('best', HIGHER);
-      expect(summary(best.data)).toEqual([`0|${HIGHER}|2026-04-01|31`]);
-      expect(best.statistics[HIGHER].count).toBe(1);
+      expect(summary(best.data)).toEqual([`0|${HIGHER}|2026-04-01|31`, `1|${HIGHER}|2026-04-01|18`]);
+      expect(best.statistics[HIGHER].count).toBe(2);
+      // The selected row carries its own team and the athlete's display name
+      expect(best.data.map((d) => [athletes.indexOf(d.athleteId), d.athleteName, d.teamName]).sort()).toEqual([
+        [0, 'Limit Athlete0', `AnalyticsLimit B ${suffix}`],
+        [1, '[Deleted User]', `AnalyticsLimit A ${suffix}`],
+      ]);
 
       const trends = await run('trends', HIGHER);
-      expect(summary(trends.data)).toEqual([`0|${HIGHER}|2026-03-01|22`, `0|${HIGHER}|2026-04-01|31`]);
+      expect(summary(trends.data)).toEqual([
+        `0|${HIGHER}|2026-03-01|22`, `0|${HIGHER}|2026-04-01|31`, `1|${HIGHER}|2026-04-01|18`,
+      ]);
     } finally {
       await db.delete(userOrganizations).where(inArray(userOrganizations.organizationId, [otherOrgId]));
+      await db.update(users).set({ deletedAt: null }).where(eq(users.id, athletes[1]));
     }
   });
 

@@ -523,7 +523,8 @@ export class AnalyticsService {
       // 'trends' (one per athlete+metric+date) collapse to the best row in SQL before the limit. row_number() also
       // drops the copies of a measurement that the userOrganizations join makes for a member of several orgs.
       // Sort key per metric, ascending = best first: the value for lower_is_better, the latest date for tracking
-      // (what filterToBestMeasurements keeps), the negated value otherwise. Ties fall to the lowest measurement id.
+      // (what filterToBestMeasurements keeps), the negated value otherwise. A tied best keeps the latest date, then
+      // the lowest measurement id.
       const bestFirst = sql`CASE ${sql.join(
         [...new Set(allMetrics)].map(code => {
           const key = metricTypes[code] === 'lower_is_better' ? sql`${measurements.value}`
@@ -533,9 +534,9 @@ export class AnalyticsService {
         }),
         sql` `
       )} END`;
+      // validateAnalyticsRequest only lets 'best' and 'trends' through
       const partition = request.timeframe.type === 'best' ? sql`${measurements.userId}, ${measurements.metric}`
-        : request.timeframe.type === 'trends' ? sql`${measurements.userId}, ${measurements.metric}, ${measurements.date}`
-        : null;
+        : sql`${measurements.userId}, ${measurements.metric}, ${measurements.date}`;
 
       // Query to get basic data
       // Use LEFT JOIN to include measurements from soft-deleted users (Level 2 Immutability)
@@ -557,10 +558,9 @@ export class AnalyticsService {
           teamName: teams.name,
           gender: users.gender,
           birthYear: sql<number>`EXTRACT(YEAR FROM ${users.birthDate})`.as('birth_year'),
-          // Other timeframe types keep every row (rn = 1)
-          rn: (partition
-            ? sql<number>`row_number() OVER (PARTITION BY ${partition} ORDER BY ${bestFirst}, ${measurements.id})`
-            : sql<number>`1`).as('rn')
+          rn: sql<number>`row_number() OVER (
+            PARTITION BY ${partition} ORDER BY ${bestFirst}, ${measurements.date} DESC, ${measurements.id}
+          )`.as('rn')
         })
         .from(measurements)
         .leftJoin(users, eq(measurements.userId, users.id))
