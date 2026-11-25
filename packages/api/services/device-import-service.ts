@@ -410,7 +410,8 @@ export class DeviceImportService {
       // Earlier device rows per run "userId|date|drill metric|runAt". A drill row counts under its own metric,
       // a split row under its parent drill: calculationMetadata.parentMetric, or the notes for data imported before
       // that field existed. So a 20 yd import never matches the DASH_10YD / DASH_20YD splits of a 30 yd run.
-      // Rows without a runAt (imported before every run was kept) share the legacy bucket "userId|date|drill metric|".
+      // Rows without a runAt (imported before every run was kept) share the legacy bucket "userId|date|drill metric|";
+      // a new run without a runAt is looked up in that same bucket.
       // drillValues holds the drill rows' values: the legacy rule and the one-value-per-day rule compare them.
       const earlierByRun = new Map<string, { ids: string[]; drillValues: number[] }>();
       for (const r of existingRows) {
