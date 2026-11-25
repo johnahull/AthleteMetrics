@@ -2,12 +2,13 @@
  * Day-based compliance for standing (anytime) wellness requests (AM-FEAT-027).
  *
  * A day counts when the athlete has at least one live entry dated that UTC day. The window is the last
- * `windowDays` UTC days (today inclusive), clipped to the request's creation day so a new request is not
- * scored against days before it existed.
+ * `windowDays` COMPLETE UTC days, ending yesterday: athletes send their local date, so west of UTC they cannot
+ * have reached "today" yet. Entries dated today or later are ignored. The window is clipped to the request's
+ * creation day so a new request is not scored against days before it existed (0 possible days if created today).
  */
 
 export interface DayCompliance {
-  /** Days in the window the request has existed: min(windowDays, days since created, inclusive of today) */
+  /** min(windowDays, UTC days from the created date through yesterday, inclusive); 0 if created today */
   possibleDays: number;
   /** Sum of every targeted athlete's distinct entry days */
   entryDays: number;
@@ -38,13 +39,13 @@ export function computeDayCompliance(input: {
 }): DayCompliance {
   const today = utcDay(input.now);
   const created = utcDay(input.createdAt);
-  const daysSinceCreated = Math.round((Date.parse(today) - Date.parse(created)) / DAY_MS) + 1;
-  const possibleDays = Math.max(0, Math.min(input.windowDays, daysSinceCreated));
-  const firstDay = utcDay(new Date(Date.parse(today) - (possibleDays - 1) * DAY_MS));
+  const completeDaysSinceCreated = Math.round((Date.parse(today) - Date.parse(created)) / DAY_MS);
+  const possibleDays = Math.max(0, Math.min(input.windowDays, completeDaysSinceCreated));
+  const firstDay = utcDay(new Date(Date.parse(today) - possibleDays * DAY_MS));
 
   const datesByUser = new Map(input.targetUserIds.map(id => [id, new Set<string>()]));
   for (const { userId, date } of input.entries) {
-    if (date >= firstDay && date <= today) datesByUser.get(userId)?.add(date);
+    if (date >= firstDay && date < today) datesByUser.get(userId)?.add(date);
   }
 
   const perAthlete = [...datesByUser].map(([userId, dates]) => ({ userId, entryDays: dates.size }));

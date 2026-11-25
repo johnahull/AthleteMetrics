@@ -1,4 +1,4 @@
-/** Migration 0187: wellness_requests.is_standing + wellness_responses.superseded_at. Runs in a rolled-back transaction on a disposable DB. */
+/** Migration 0187: wellness_requests.is_standing + wellness_responses.superseded_at + wellness_responses_org_user_live_idx. Runs in a rolled-back transaction on a disposable DB. */
 process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 
 import fs from 'fs';
@@ -29,19 +29,27 @@ describe.skipIf(!isDisposableTestDb)('Migration 0187 against a disposable DB (ro
          OR (table_name = 'wellness_responses' AND column_name = 'superseded_at')
       ORDER BY table_name`) as Array<{ table_name: string; data_type: string; is_nullable: string; column_default: string | null }>;
 
-  it('adds is_standing (not null, default false) and nullable superseded_at, is re-runnable, and the down migration removes them', async () => {
+  const liveIdx = async (tx: any) =>
+    ((await tx`SELECT indexdef FROM pg_indexes WHERE indexname = 'wellness_responses_org_user_live_idx'`) as Array<{ indexdef: string }>)
+      .map((r) => r.indexdef);
+
+  it('adds is_standing (not null, default false) and nullable superseded_at, is re-runnable, adds the live-row index, and the down migration removes them', async () => {
     try {
       await sql.begin(async (tx: any) => {
         await tx.unsafe(DOWN);
         expect(await cols(tx)).toEqual([]);
+        expect(await liveIdx(tx)).toEqual([]);
         await tx.unsafe(UP);
         await tx.unsafe(UP);
+        const [def] = await liveIdx(tx);
+        expect(def).toMatch(/ON public\.wellness_responses USING btree \(organization_id, user_id, submitted_at DESC\) WHERE \(superseded_at IS NULL\)/);
         expect((await cols(tx)).map((c) => `${c.table_name}:${c.data_type}:${c.is_nullable}:${c.column_default}`)).toEqual([
           'wellness_requests:boolean:NO:false',
           'wellness_responses:timestamp without time zone:YES:null',
         ]);
         await tx.unsafe(DOWN);
         expect(await cols(tx)).toEqual([]);
+        expect(await liveIdx(tx)).toEqual([]);
         throw new Rollback();
       });
     } catch (e) {

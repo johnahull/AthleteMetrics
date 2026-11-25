@@ -1,9 +1,11 @@
--- Migration 0187: wellness_requests.is_standing and wellness_responses.superseded_at (AM-FEAT-027 anytime survey)
+-- Migration 0187: wellness_requests.is_standing, wellness_responses.superseded_at and its live-row index (AM-FEAT-027 anytime survey)
 --
 -- is_standing: a standing (anytime) request stays open until cancelled; targeted athletes answer it from their own
 -- account as often as they like. NOT NULL DEFAULT false, so every existing request stays a one-time request.
 -- superseded_at: set when an athlete resubmits a standing request for the same day; the earlier row is kept, never
 -- deleted, and current/analytic reads skip it. Nullable, no backfill (NULL = the live row).
+-- wellness_responses_org_user_live_idx: partial index on live rows for the dashboard's latest-entry-per-athlete
+-- lookup (getLatestLiveSubmissions), so it does not scan the organization's whole history.
 -- Must match packages/shared/schema/tables/wellness.ts exactly (CI builds its DB with db:push).
 --
 -- The number is provisional: renumber at merge if another branch lands 0187 first (file, `_down`, test
@@ -13,3 +15,5 @@
 
 ALTER TABLE wellness_requests ADD COLUMN IF NOT EXISTS is_standing BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE wellness_responses ADD COLUMN IF NOT EXISTS superseded_at TIMESTAMP;
+CREATE INDEX IF NOT EXISTS wellness_responses_org_user_live_idx
+  ON wellness_responses (organization_id, user_id, submitted_at DESC) WHERE superseded_at IS NULL;

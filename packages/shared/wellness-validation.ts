@@ -349,7 +349,12 @@ export const responseDataSchema = z.record(
 export const submitWellnessResponseSchema = z.object({
   requestId: z.string().uuid().optional(),
   templateId: z.string().uuid('Invalid template ID'),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format')
+    // Round-trip: Date.parse rolls impossible dates over ('2026-02-30' -> Mar 2)
+    .refine((d) => {
+      const t = Date.parse(d + 'T00:00:00Z');
+      return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === d;
+    }, 'Date is not a real calendar date'),
   responses: z.record(z.string(), z.any()), // Accept any responses structure, will be validated against template later
   accessMethod: z.string().max(50).optional(),
   athleteName: sanitizedString(200).optional(), // For magic link submissions - sanitized to prevent XSS

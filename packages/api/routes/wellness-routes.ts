@@ -71,6 +71,14 @@ const createErrorResponse = (message: string, error?: Error) => {
   return response;
 };
 
+// The team a response is stamped with: an active membership in the template's organization, preferring a team
+// the request targets
+async function pickResponseTeam(athleteId: string, organizationId: string | null, targetTeamIds?: string[] | null) {
+  const memberships = (await storage.getUserTeams(athleteId))
+    .filter(m => m.isActive && !m.leftAt && m.team.organizationId === organizationId);
+  return (memberships.find(m => targetTeamIds?.includes(m.teamId)) ?? memberships[0])?.team ?? null;
+}
+
 // Helper function to verify if an athlete is targeted by a wellness request
 async function verifyAthleteIsTargeted(request: WellnessRequest, athleteId: string): Promise<boolean> {
   // Check direct targeting
@@ -576,7 +584,8 @@ export function registerWellnessRoutes(app: Express) {
         const { id } = req.params;
 
         const request = await storage.getWellnessRequest(id);
-        if (!request) {
+        // A request of another organization looks the same as a missing one
+        if (!request || request.organizationId !== req.params.organizationId) {
           return res.status(404).json({ message: "Request not found" });
         }
 
@@ -759,7 +768,8 @@ export function registerWellnessRoutes(app: Express) {
         const { id } = req.params;
 
         const request = await storage.getWellnessRequest(id);
-        if (!request) {
+        // A request of another organization looks the same as a missing one
+        if (!request || request.organizationId !== req.params.organizationId) {
           return res.status(404).json({ message: "Request not found" });
         }
 
@@ -788,7 +798,8 @@ export function registerWellnessRoutes(app: Express) {
         const { organizationId, id } = req.params;
 
         const request = await storage.getWellnessRequest(id);
-        if (!request) {
+        // A request of another organization looks the same as a missing one
+        if (!request || request.organizationId !== req.params.organizationId) {
           return res.status(404).json({ message: "Request not found" });
         }
 
@@ -926,7 +937,8 @@ export function registerWellnessRoutes(app: Express) {
         const { id } = req.params;
 
         const request = await storage.getWellnessRequest(id);
-        if (!request) {
+        // A request of another organization looks the same as a missing one
+        if (!request || request.organizationId !== req.params.organizationId) {
           return res.status(404).json({ message: "Request not found" });
         }
 
@@ -1145,8 +1157,7 @@ export function registerWellnessRoutes(app: Express) {
               return res.status(404).json({ message: "Selected athlete not found" });
             }
 
-            const userTeams = await storage.getUserTeams(selectedAthleteId);
-            const primaryTeam = userTeams.length > 0 ? userTeams[0].team : null;
+            const primaryTeam = await pickResponseTeam(selectedAthleteId, template.organizationId, request.targetTeamIds);
 
             userId = user.id;
             userFullName = user.fullName;
@@ -1167,8 +1178,7 @@ export function registerWellnessRoutes(app: Express) {
           }
 
           // Get team details if user belongs to teams
-          const userTeams = await storage.getUserTeams(req.user!.id);
-          const primaryTeam = userTeams.length > 0 ? userTeams[0].team : null;
+          const primaryTeam = await pickResponseTeam(req.user!.id, template.organizationId, request?.targetTeamIds);
 
           userId = user.id;
           userFullName = user.fullName;

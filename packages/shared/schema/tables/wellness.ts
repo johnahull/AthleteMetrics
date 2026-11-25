@@ -110,6 +110,10 @@ export const wellnessResponses = pgTable("wellness_responses", {
   // User response history with ordering for pagination
   userSubmittedIdx: index("idx_wellness_responses_user_submitted")
     .on(table.userId, table.submittedAt.desc()),
+  // Latest live entry per athlete for the dashboard (migration 0187)
+  orgUserLiveIdx: index("wellness_responses_org_user_live_idx")
+    .on(table.organizationId, table.userId, table.submittedAt.desc())
+    .where(sql`${table.supersededAt} IS NULL`),
 }));
 
 export const wellnessSchedules = pgTable("wellness_schedules", {

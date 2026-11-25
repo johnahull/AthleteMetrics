@@ -194,6 +194,13 @@ beforeAll(async () => {
   siteAdminCookie = adminRes.headers['set-cookie']?.[0] || '';
 });
 
+// Tests compute "today" (UTC) on the test side and the server computes it again: never start one within
+// 5 seconds of midnight UTC, wait until just after it instead
+beforeEach(async () => {
+  const msToMidnight = 24 * 60 * 60 * 1000 - (Date.now() % (24 * 60 * 60 * 1000));
+  if (msToMidnight < 5000) await new Promise(resolve => setTimeout(resolve, msToMidnight + 100));
+});
+
 afterEach(async () => {
   // Clean up created responses
   if (createdResponseIds.length > 0) {
@@ -238,7 +245,7 @@ afterAll(async () => {
     userIds: [testAthlete?.id, testUser?.id, siteAdmin?.id].filter((id): id is string => !!id),
     orgIds: testOrg ? [testOrg.id] : [],
     // users created inside individual tests
-    usernameLike: ['dashboard_athlete%', 'org2_coach_%', 'standing_nontarget_%'],
+    usernameLike: ['dashboard_athlete%', 'org2_coach_%', 'standing_nontarget_%', 'standing_teampick_%'],
   });
 });
 
@@ -873,11 +880,11 @@ describe('Standing (anytime) Wellness Requests', () => {
     expect(await rowsFor(standing.id)).toHaveLength(0);
   });
 
-  it('POST /api/wellness/responses - accepts tomorrow, rejects an impossible date', async () => {
+  // Impossible dates ('2026-02-30') are rejected by the schema: packages/shared/__tests__/wellness-response-date.test.ts
+  it('POST /api/wellness/responses - accepts tomorrow', async () => {
     const standing = await createStanding();
 
     expect((await submit(standing.id, utcDay(1), 5)).status).toBe(201);
-    expect((await submit(standing.id, '2026-02-30', 5)).status).toBe(400);
   });
 
   it('POST /api/wellness/responses - rejects a template that is not the request\'s template', async () => {
@@ -923,6 +930,34 @@ describe('Standing (anytime) Wellness Requests', () => {
     } finally {
       await db.update(userTeams).set({ isActive: true, leftAt: null }).where(membership);
     }
+  });
+
+  it('POST /api/wellness/responses - stamps the athlete\'s active team in the org, not a team they left', async () => {
+    const [athlete] = await db.insert(users).values({
+      username: `standing_teampick_${Date.now()}`,
+      emails: ['standing.teampick@test.com'],
+      password: 'hashed_password_here',
+      firstName: 'Team',
+      lastName: 'Picker',
+      fullName: 'Team Picker',
+      isSiteAdmin: false,
+    }).returning();
+    await storage.addUserToOrganization(athlete.id, testOrg.id, 'athlete');
+    const [leftTeam, activeTeam] = await db.insert(teams).values([
+      { organizationId: testOrg.id, name: `Left Team ${Date.now()}`, sport: 'Soccer', level: 'Club' },
+      { organizationId: testOrg.id, name: `Active Team ${Date.now()}`, sport: 'Soccer', level: 'Club' },
+    ]).returning();
+    // The left membership comes first, so "the first membership" picks the wrong team
+    await db.insert(userTeams).values({ userId: athlete.id, teamId: leftTeam.id, isActive: false, leftAt: new Date() });
+    await db.insert(userTeams).values({ userId: athlete.id, teamId: activeTeam.id, isActive: true });
+    const cookie = (await request(app).post('/mock-login').send({ userId: athlete.id })).headers['set-cookie']?.[0] || '';
+    const standing = await createStanding({ targetAthleteIds: [athlete.id] });
+
+    const res = await submit(standing.id, utcDay(0), 5, cookie);
+
+    expect(res.status).toBe(201);
+    expect(res.body.teamId).toBe(activeTeam.id);
+    expect(res.body.teamNameSnapshot).toBe(activeTeam.name);
   });
 
   it('GET /api/wellness/requests/:requestId/check-submission - standing request is never "submitted"', async () => {
@@ -1003,18 +1038,20 @@ describe('Standing (anytime) Wellness Requests', () => {
       });
     };
 
-    it('standing request: distinct live entry days over the last 7 and 28 days', async () => {
+    it('standing request: distinct live entry days over the last 7 and 28 complete days (today excluded)', async () => {
       const standing = await createStanding();
       await db.update(wellnessRequests)
-        .set({ createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000) })
+        .set({ createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) })
         .where(eq(wellnessRequests.id, standing.id));
 
-      // Today: a same-day resubmit leaves one live + one superseded row, counted as one day
+      // Today is not a complete UTC day yet: today's entry (one live + one superseded row) is not counted
       expect((await submit(standing.id, utcDay(0), 3)).status).toBe(201);
       expect((await submit(standing.id, utcDay(0), 8)).status).toBe(201);
       await insertEntry(standing.id, utcDay(-2));
       await insertEntry(standing.id, utcDay(-3), true); // superseded only: not a day
       await insertEntry(standing.id, utcDay(-9)); // outside 7, inside 28
+      await insertEntry(standing.id, utcDay(-28)); // oldest complete day inside 28
+      await insertEntry(standing.id, utcDay(-29)); // outside 28
 
       const res = await completionRate(standing.id);
 
@@ -1027,16 +1064,16 @@ describe('Standing (anytime) Wellness Requests', () => {
         windows: {
           last7: {
             possibleDays: 7,
-            entryDays: 2,
+            entryDays: 1,
             totalPossibleDays: 7,
-            percentage: 29,
-            perAthlete: [{ userId: testAthlete.id, entryDays: 2 }],
+            percentage: 14,
+            perAthlete: [{ userId: testAthlete.id, entryDays: 1 }],
           },
           last28: {
-            possibleDays: 11,
+            possibleDays: 28,
             entryDays: 3,
-            totalPossibleDays: 11,
-            percentage: 27,
+            totalPossibleDays: 28,
+            percentage: 11,
             perAthlete: [{ userId: testAthlete.id, entryDays: 3 }],
           },
         },
@@ -1814,6 +1851,64 @@ describe('Authorization & Cross-Organization Access', () => {
       .set('Cookie', org2Cookie);
 
     expect(res.status).toBe(403);
+  });
+
+  describe('a coach of another organization cannot reach this organization\'s request by id', () => {
+    let org2Cookie: string;
+    let org1Request: any;
+
+    beforeAll(async () => {
+      org2Cookie = (await request(app).post('/mock-login').send({ userId: org2Coach.id })).headers['set-cookie']?.[0] || '';
+    });
+
+    beforeEach(async () => {
+      const template = await storage.createWellnessTemplate({
+        organizationId: testOrg.id,
+        name: 'Org 1 Request Template',
+        config: { questions: [] },
+        createdBy: testUser.id,
+      });
+      createdTemplateIds.push(template.id);
+      org1Request = await storage.createWellnessRequest({
+        organizationId: testOrg.id,
+        templateId: template.id,
+        requestedBy: testUser.id,
+        distributionMethod: 'athlete_account',
+        targetAthleteIds: [testAthlete.id],
+        status: 'active',
+      } as any);
+      createdRequestIds.push(org1Request.id);
+    });
+
+    const viaOrg2 = (path = '') => `/api/organizations/${org2.id}/wellness/requests/${org1Request.id}${path}`;
+    const stored = async () => (await db.select().from(wellnessRequests).where(eq(wellnessRequests.id, org1Request.id)))[0];
+
+    it('PUT .../cancel returns 404 and leaves the request active', async () => {
+      const res = await request(app).put(viaOrg2('/cancel')).set('Cookie', org2Cookie);
+
+      expect(res.status).toBe(404);
+      expect((await stored()).status).toBe('active');
+    });
+
+    it('DELETE returns 404 and keeps the request', async () => {
+      const res = await request(app).delete(viaOrg2()).set('Cookie', org2Cookie);
+
+      expect(res.status).toBe(404);
+      expect(await stored()).toBeDefined();
+    });
+
+    it('GET single returns 404', async () => {
+      const res = await request(app).get(viaOrg2()).set('Cookie', org2Cookie);
+
+      expect(res.status).toBe(404);
+      expect(res.body.id).toBeUndefined();
+    });
+
+    it('POST .../resend-notifications returns 404', async () => {
+      const res = await request(app).post(viaOrg2('/resend-notifications')).set('Cookie', org2Cookie);
+
+      expect(res.status).toBe(404);
+    });
   });
 
   it('should allow site admin to access all organizations', async () => {

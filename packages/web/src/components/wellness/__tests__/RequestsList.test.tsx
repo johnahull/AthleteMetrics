@@ -77,6 +77,24 @@ describe('RequestsList compliance', () => {
     );
   });
 
+  it('shows "No complete days yet" when no complete UTC day has passed', async () => {
+    vi.mocked(apiRequest).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        completed: 0,
+        total: 2,
+        percentage: 0,
+        standing: true,
+        windows: { last7: window(0, 0, 0), last28: window(0, 0, 0) },
+      }),
+    } as Response);
+
+    renderList([{ ...baseRequest, id: 'req-new', isStanding: true }]);
+
+    expect(await screen.findByText('No complete days yet')).toBeInTheDocument();
+    expect(screen.queryByText(/of 0 days/)).not.toBeInTheDocument();
+  });
+
   it('leaves one-time requests unchanged and does not fetch compliance for them', () => {
     renderList([baseRequest]);
 

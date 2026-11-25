@@ -854,11 +854,11 @@ export class WellnessRepository {
 
       const totalTargets = targetAthleteIds.size;
 
-      // Standing requests also get day compliance over the last 7 and 28 UTC days
+      // Standing requests also get day compliance over the last 7 and 28 complete UTC days (ending yesterday)
       let standingFields: Pick<RequestCompletionRate, 'standing' | 'windows'> = {};
       if (request.isStanding) {
         const now = new Date();
-        const since = new Date(now.getTime() - 27 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        const since = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
         const entries = await tx
           .select({ userId: wellnessResponses.userId, date: wellnessResponses.date })
           .from(wellnessResponses)
@@ -892,8 +892,8 @@ export class WellnessRepository {
           )
         );
 
-      // Count unique respondents (handle duplicates)
-      const uniqueRespondents = new Set(responses.map(r => r.userId));
+      // Count unique respondents who are still targets (members who left, and magic-link rows, never push completed past total)
+      const uniqueRespondents = new Set(responses.map(r => r.userId).filter(id => targetAthleteIds.has(id)));
       const completedCount = uniqueRespondents.size;
       const percentage = Math.round((completedCount / totalTargets) * 100);
 

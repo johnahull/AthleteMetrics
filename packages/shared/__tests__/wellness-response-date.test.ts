@@ -27,4 +27,14 @@ describe('submitWellnessResponseSchema date', () => {
   it('rejects a day no time zone has reached yet', () => {
     expect(dateError('2026-03-11')).toBe('Response date cannot be in the future');
   });
+
+  it('rejects impossible calendar dates instead of rolling them over', () => {
+    expect(dateError('2026-02-30')).toBe('Date is not a real calendar date');
+    expect(dateError('2026-13-01')).toBe('Date is not a real calendar date');
+  });
+
+  it('accepts a leap day and a normal date', () => {
+    expect(dateError('2024-02-29')).toBeUndefined();
+    expect(dateError('2026-03-01')).toBeUndefined();
+  });
 });

@@ -15,7 +15,7 @@
 
 import { BaseService } from "./base-service";
 import { db } from "../db";
-import { eq, and, sql, inArray } from "drizzle-orm";
+import { eq, and, sql, inArray, isNull, isNotNull, desc } from "drizzle-orm";
 import { z } from "zod";
 import {
   users,
@@ -409,6 +409,34 @@ export class ProfileMergeService extends BaseService {
         .where(eq(wellnessResponses.userId, sourceUserId))
         .returning({ id: wellnessResponses.id });
       summary.wellnessResponsesTransferred = wellnessResult.length;
+
+      // Both profiles may have answered the same request on the same day: keep the newest live row of each
+      // (request, date), supersede the rest (never delete), as a standing-request resubmit would
+      const liveRows = await tx.select({
+        id: wellnessResponses.id,
+        requestId: wellnessResponses.requestId,
+        date: wellnessResponses.date,
+        submittedAt: wellnessResponses.submittedAt,
+      })
+        .from(wellnessResponses)
+        .where(and(
+          eq(wellnessResponses.userId, targetUserId),
+          isNotNull(wellnessResponses.requestId),
+          isNull(wellnessResponses.supersededAt)
+        ))
+        .orderBy(desc(wellnessResponses.submittedAt), desc(wellnessResponses.id));
+      const keptDays = new Set<string>();
+      const supersededIds = liveRows.filter(r => {
+        const key = `${r.requestId}|${r.date}`;
+        if (keptDays.has(key)) return true;
+        keptDays.add(key);
+        return false;
+      }).map(r => r.id);
+      if (supersededIds.length > 0) {
+        await tx.update(wellnessResponses)
+          .set({ supersededAt: new Date() })
+          .where(inArray(wellnessResponses.id, supersededIds));
+      }
 
       // 6. Transfer event registrations (handle duplicates)
       const targetRegistrations = await tx.select({ eventId: eventRegistrations.eventId })
