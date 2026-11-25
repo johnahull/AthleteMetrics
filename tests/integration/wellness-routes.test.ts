@@ -19,7 +19,7 @@ process.env.ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@test.com';
 process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'TestPassword123!';
 process.env.BYPASS_GENERAL_RATE_LIMIT = 'true';
 
-import { describe, it, expect, beforeAll, afterAll, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi, afterEach, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import session from 'express-session';
@@ -48,6 +48,7 @@ vi.mock('../../packages/api/services/email-service', () => ({
     sendWellnessReminder: vi.fn().mockResolvedValue(true),
     sendWellnessAlert: vi.fn().mockResolvedValue(true),
   },
+  EmailService: vi.fn(), // constructed by CoppaExportService
 }));
 
 let app: express.Application;
@@ -969,6 +970,154 @@ describe('Standing (anytime) Wellness Requests', () => {
     const rows = await rowsFor(standing.id);
     expect(rows).toHaveLength(5);
     expect(rows.filter(r => r.supersededAt === null)).toHaveLength(1);
+  });
+});
+
+describe('Superseded wellness responses (readers)', () => {
+  // A fixed past day keeps these rows apart from rows other tests create in the same org.
+  const DAY = '2020-03-15';
+  let template: any;
+  let liveRow: any;
+  let supersededRow: any;
+  const requestIds: string[] = [];
+
+  const insertRow = async (value: number, opts: { date?: string; superseded?: boolean; requestId?: string; submittedAt?: Date } = {}) => {
+    const [row] = await db.insert(wellnessResponses).values({
+      requestId: opts.requestId ?? null,
+      organizationId: testOrg.id,
+      templateId: template.id,
+      userId: testAthlete.id,
+      userFullName: 'Test Athlete',
+      teamId: testTeam.id,
+      teamNameSnapshot: testTeam.name,
+      submittedAt: opts.submittedAt ?? new Date(`${DAY}T08:00:00Z`),
+      date: opts.date ?? DAY,
+      responses: { q1: { value, label: 'Energy' } },
+      supersededAt: opts.superseded ? new Date() : null,
+    }).returning();
+    return row;
+  };
+
+  beforeAll(async () => {
+    template = await storage.createWellnessTemplate({
+      organizationId: testOrg.id,
+      name: 'Superseded Readers Template',
+      config: {
+        questions: [{ id: 'q1', type: 'scale', label: 'Energy', scaleMin: 1, scaleMax: 10, required: true }],
+      },
+      createdBy: testUser.id,
+    });
+    createdTemplateIds.push(template.id);
+  });
+
+  beforeEach(async () => {
+    supersededRow = await insertRow(2, { superseded: true, submittedAt: new Date(`${DAY}T07:00:00Z`) });
+    liveRow = await insertRow(8);
+  });
+
+  afterEach(async () => {
+    await db.delete(wellnessResponses).where(eq(wellnessResponses.templateId, template.id));
+    for (const id of requestIds) {
+      await db.delete(wellnessRequests).where(eq(wellnessRequests.id, id));
+    }
+    requestIds.length = 0;
+  });
+
+  it('GET /api/wellness/my-responses - hides superseded rows', async () => {
+    const res = await request(app).get('/api/wellness/my-responses').set('Cookie', athleteCookie);
+
+    expect(res.status).toBe(200);
+    const ids = res.body.responses.map((r: any) => r.id);
+    expect(ids).toContain(liveRow.id);
+    expect(ids).not.toContain(supersededRow.id);
+  });
+
+  it('GET /api/organizations/:organizationId/wellness/responses - hides superseded rows', async () => {
+    const res = await request(app)
+      .get(`/api/organizations/${testOrg.id}/wellness/responses?startDate=${DAY}&endDate=${DAY}`)
+      .set('Cookie', coachCookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.map((r: any) => r.id)).toEqual([liveRow.id]);
+  });
+
+  it('GET /api/wellness/responses/:id - still returns a superseded row with supersededAt', async () => {
+    const res = await request(app).get(`/api/wellness/responses/${supersededRow.id}`).set('Cookie', coachCookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.supersededAt).not.toBeNull();
+  });
+
+  it('team and athlete summaries ignore superseded rows', async () => {
+    const team = await storage.getTeamWellnessSummary(testTeam.id, { startDate: DAY, endDate: DAY });
+    expect(team.totalResponses).toBe(1);
+    expect(team.averageScores.q1).toBe(8);
+
+    const athlete = await storage.getAthleteWellnessSummary(testAthlete.id, { startDate: DAY, endDate: DAY });
+    expect(athlete.totalResponses).toBe(1);
+    expect(athlete.averageScores.q1).toBe(8);
+  });
+
+  it('trends ignore superseded rows', async () => {
+    const trends = await storage.getWellnessTrends(testOrg.id, { startDate: DAY, endDate: DAY });
+
+    expect(trends).toHaveLength(1);
+    expect(trends[0].dataPoints).toEqual([{ date: DAY, value: 8, count: 1 }]);
+  });
+
+  it('completion rate does not count an athlete whose only row is superseded', async () => {
+    const req = await storage.createWellnessRequest({
+      organizationId: testOrg.id,
+      templateId: template.id,
+      requestedBy: testUser.id,
+      distributionMethod: 'athlete_account',
+      publicToken: crypto.randomBytes(32).toString('hex'),
+      targetAthleteIds: [testAthlete.id],
+      status: 'active',
+    } as any);
+    requestIds.push(req.id);
+    await insertRow(5, { requestId: req.id, superseded: true });
+
+    const rate = await storage.getRequestCompletionRate(testOrg.id, req.id);
+    expect(rate.completed).toBe(0);
+  });
+
+  it('digest ignores a superseded red row', async () => {
+    // Only row in the last 24h is superseded, so the athlete has no live at-risk entry.
+    await insertRow(1, { date: new Date().toISOString().split('T')[0], superseded: true, submittedAt: new Date() });
+
+    const { WellnessDigestService } = await import('../../packages/api/services/wellness-digest-service');
+    const atRisk = await new WellnessDigestService(db as any).getAtRiskAthletes(testOrg.id);
+    expect(atRisk.map(a => a.userId)).not.toContain(testAthlete.id);
+  });
+
+  it('llm export wellness section ignores superseded rows', async () => {
+    const { gatherAthleteExportData } = await import('../../packages/api/services/llm-export-service');
+    const data = await gatherAthleteExportData(testAthlete.id, testOrg.id);
+
+    expect(data.recentWellness).toHaveLength(1);
+    expect(data.recentWellness[0].responses).toEqual({ q1: { value: 8, label: 'Energy' } });
+  });
+
+  it('COPPA export and profile merge still include superseded rows', async () => {
+    const { coppaExportService } = await import('../../packages/api/services/coppa-export-service');
+    const bundle = await (coppaExportService as any).buildExportBundle(testAthlete.id);
+    expect(bundle.wellnessResponses.map((r: any) => r.id)).toEqual(
+      expect.arrayContaining([liveRow.id, supersededRow.id]),
+    );
+
+    const { profileMergeService } = await import('../../packages/api/services/profile-merge-service');
+    const merge = await (profileMergeService as any).gatherProfileData(testAthlete.id, testOrg.id);
+    expect(merge.wellnessResponseCount).toBeGreaterThanOrEqual(2);
+  });
+
+  it('COPPA export still includes superseded rows (a full export must not drop data)', async () => {
+    const { coppaExportService } = await import('../../packages/api/services/coppa-export-service');
+    const bundle = await (coppaExportService as any).buildExportBundle(testAthlete.id);
+
+    const ids = bundle.wellnessResponses.map((r: any) => r.id);
+    expect(ids).toContain(liveRow.id);
+    expect(ids).toContain(supersededRow.id);
   });
 });
 

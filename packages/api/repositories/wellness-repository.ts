@@ -503,7 +503,7 @@ export class WellnessRepository {
 
   async getWellnessResponsesByAthlete(userId: string, filters?: { startDate?: string; endDate?: string }): Promise<WellnessResponse[]> {
     validateUUID(userId, 'userId');
-    const conditions: SQL[] = [eq(wellnessResponses.userId, userId)];
+    const conditions: SQL[] = [eq(wellnessResponses.userId, userId), isNull(wellnessResponses.supersededAt)];
 
     if (filters?.startDate) {
       conditions.push(gte(wellnessResponses.date, filters.startDate));
@@ -522,7 +522,7 @@ export class WellnessRepository {
 
   async getWellnessResponsesByOrganization(organizationId: string, filters?: { startDate?: string; endDate?: string }): Promise<WellnessResponse[]> {
     validateUUID(organizationId, 'organizationId');
-    const conditions: SQL[] = [eq(wellnessResponses.organizationId, organizationId)];
+    const conditions: SQL[] = [eq(wellnessResponses.organizationId, organizationId), isNull(wellnessResponses.supersededAt)];
 
     if (filters?.startDate) {
       conditions.push(gte(wellnessResponses.date, filters.startDate));
@@ -596,7 +596,8 @@ export class WellnessRepository {
         and(
           eq(wellnessResponses.teamId, teamId),
           gte(wellnessResponses.date, filters.startDate),
-          lte(wellnessResponses.date, filters.endDate)
+          lte(wellnessResponses.date, filters.endDate),
+          isNull(wellnessResponses.supersededAt)
         )
       );
 
@@ -701,6 +702,7 @@ export class WellnessRepository {
       eq(wellnessResponses.organizationId, organizationId),
       gte(wellnessResponses.date, filters.startDate),
       lte(wellnessResponses.date, filters.endDate),
+      isNull(wellnessResponses.supersededAt),
     ];
 
     // SQL aggregation query using PostgreSQL JSON functions
@@ -840,7 +842,8 @@ export class WellnessRepository {
         .where(
           and(
             eq(wellnessResponses.requestId, requestId),
-            eq(wellnessResponses.organizationId, organizationId)
+            eq(wellnessResponses.organizationId, organizationId),
+            isNull(wellnessResponses.supersededAt)
           )
         );
 
