@@ -1006,6 +1006,7 @@ export const wellnessRequests = pgTable("wellness_requests", {
   scheduledFor: timestamp("scheduled_for"), // For scheduled requests
   expiresAt: timestamp("expires_at"), // Optional expiration
   status: varchar("status", { length: 20 }).default('active').notNull(), // 'active', 'completed', 'expired', 'cancelled'
+  isStanding: boolean("is_standing").default(false).notNull(), // Standing (anytime) request: open until cancelled (migration 0187)
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   orgIdx: index("wellness_requests_org_idx").on(table.organizationId),
@@ -1030,6 +1031,7 @@ export const wellnessResponses = pgTable("wellness_responses", {
   accessMethod: varchar("access_method", { length: 50 }), // How athlete accessed the form
   ipAddress: varchar("ip_address", { length: 45 }), // IPv6 max length
   userAgent: varchar("user_agent", { length: 500 }),
+  supersededAt: timestamp("superseded_at"), // Set when a same-day resubmit replaces this row; NULL = live row (migration 0187)
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   // Existing indexes (migrations 0002, 0049)

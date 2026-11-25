@@ -463,6 +463,7 @@ export interface CreateWellnessRequest {
   requiresAuth?: boolean;
   scheduledFor?: Date | string;
   expiresAt?: Date | string;
+  isStanding?: boolean;
 }
 
 /**

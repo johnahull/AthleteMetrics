@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { wellnessTemplateConfigSchema, wellnessStatusConfigSchema, generateResponseValidationSchema } from '../wellness-validation';
+import { wellnessTemplateConfigSchema, wellnessStatusConfigSchema, generateResponseValidationSchema, createWellnessRequestSchema } from '../wellness-validation';
 
 describe('wellnessStatusConfigSchema', () => {
   it('should validate valid statusConfig with all fields', () => {
@@ -284,5 +284,65 @@ describe('generateResponseValidationSchema', () => {
       q_2: { value: [], label: 'Pain Points' },
     };
     expect(() => responseSchema.parse(responseEmptyBodyMap)).not.toThrow();
+  });
+});
+
+describe('createWellnessRequestSchema - standing requests', () => {
+  const templateId = '11111111-1111-4111-8111-111111111111';
+  const athleteId = '22222222-2222-4222-8222-222222222222';
+  const teamId = '33333333-3333-4333-8333-333333333333';
+  const future = () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const standing = { templateId, distributionMethod: 'athlete_account', isStanding: true, targetAthleteIds: [athleteId] };
+  const messages = (input: unknown) => {
+    const result = createWellnessRequestSchema.safeParse(input);
+    return result.success ? [] : result.error.issues.map((i) => i.message);
+  };
+
+  it('defaults isStanding to false', () => {
+    const result = createWellnessRequestSchema.parse({ templateId, distributionMethod: 'athlete_account' });
+    expect(result.isStanding).toBe(false);
+  });
+
+  it('accepts a standing athlete_account request targeting athletes', () => {
+    const result = createWellnessRequestSchema.parse(standing);
+    expect(result.isStanding).toBe(true);
+  });
+
+  it('accepts a standing request targeting only teams', () => {
+    const { targetAthleteIds: _omit, ...rest } = standing;
+    expect(createWellnessRequestSchema.safeParse({ ...rest, targetTeamIds: [teamId] }).success).toBe(true);
+  });
+
+  it.each(['magic_link', 'team_link', 'qr_code'])('rejects a standing %s request', (distributionMethod) => {
+    expect(messages({ ...standing, distributionMethod })).toContain('Standing requests must use athlete accounts');
+  });
+
+  it('rejects a standing request with expiresAt', () => {
+    expect(messages({ ...standing, expiresAt: future() })).toContain('Standing requests cannot expire or be scheduled');
+  });
+
+  it('rejects a standing request with scheduledFor', () => {
+    expect(messages({ ...standing, scheduledFor: future() })).toContain('Standing requests cannot expire or be scheduled');
+  });
+
+  it.each([
+    ['no targets', {}],
+    ['empty target lists', { targetAthleteIds: [], targetTeamIds: [] }],
+  ])('rejects a standing request with %s', (_label, targets) => {
+    const { targetAthleteIds: _omit, ...rest } = standing;
+    expect(messages({ ...rest, ...targets })).toContain('Standing requests require at least one target athlete or team');
+  });
+
+  it('validates one-time requests as before', () => {
+    // athlete_account with no targets, expiry and schedule is still fine
+    expect(createWellnessRequestSchema.safeParse({
+      templateId, distributionMethod: 'athlete_account', scheduledFor: future(), expiresAt: future(),
+    }).success).toBe(true);
+    expect(createWellnessRequestSchema.safeParse({ templateId, distributionMethod: 'team_link' }).success).toBe(true);
+    // existing refines still apply
+    expect(messages({ templateId, distributionMethod: 'magic_link' }))
+      .toContain('Magic links and QR codes require at least one target athlete or team');
+    expect(messages({ templateId, distributionMethod: 'athlete_account', expiresAt: new Date(Date.now() - 1000).toISOString() }))
+      .toContain('Expiration date must be in the future');
   });
 });

@@ -252,7 +252,27 @@ export const createWellnessRequestSchema = z.object({
   requiresAuth: z.boolean().default(false),
   scheduledFor: z.coerce.date().optional(),
   expiresAt: z.coerce.date().optional(),
+  // Standing (anytime) request: open until cancelled, answered from the athlete's own account
+  isStanding: z.boolean().default(false),
 }).refine(
+  (data) => !data.isStanding || data.distributionMethod === 'athlete_account',
+  {
+    message: 'Standing requests must use athlete accounts',
+    path: ['distributionMethod'],
+  }
+).refine(
+  (data) => !data.isStanding || (!data.expiresAt && !data.scheduledFor),
+  {
+    message: 'Standing requests cannot expire or be scheduled',
+    path: ['expiresAt'],
+  }
+).refine(
+  (data) => !data.isStanding || !!(data.targetAthleteIds?.length || data.targetTeamIds?.length),
+  {
+    message: 'Standing requests require at least one target athlete or team',
+    path: ['targetAthleteIds'],
+  }
+).refine(
   (data) => {
     // For magic_link and qr_code, at least one target must be specified
     if (data.distributionMethod === 'magic_link' || data.distributionMethod === 'qr_code') {
