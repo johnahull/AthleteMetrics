@@ -508,6 +508,9 @@ export interface IStorage {
 
   // Wellness Responses
   createWellnessResponse(response: Partial<WellnessResponse>): Promise<WellnessResponse>;
+  createStandingWellnessResponse(
+    response: typeof wellnessResponses.$inferInsert & { requestId: string }
+  ): Promise<{ response: WellnessResponse; replaced: boolean }>;
   getWellnessResponse(id: string): Promise<WellnessResponse | undefined>;
   getWellnessResponsesByAthlete(userId: string, filters?: { startDate?: string; endDate?: string }): Promise<WellnessResponse[]>;
   getWellnessResponsesByOrganization(organizationId: string, filters?: { startDate?: string; endDate?: string }): Promise<WellnessResponse[]>;
@@ -6285,6 +6288,12 @@ export class DatabaseStorage implements IStorage {
 
   async createWellnessResponse(response: Partial<WellnessResponse>): Promise<WellnessResponse> {
     return wellnessRepository.createWellnessResponse(response);
+  }
+
+  async createStandingWellnessResponse(
+    response: typeof wellnessResponses.$inferInsert & { requestId: string }
+  ): Promise<{ response: WellnessResponse; replaced: boolean }> {
+    return wellnessRepository.createStandingWellnessResponse(response);
   }
 
   async getWellnessResponse(id: string): Promise<WellnessResponse | undefined> {

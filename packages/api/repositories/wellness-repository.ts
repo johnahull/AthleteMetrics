@@ -461,6 +461,36 @@ export class WellnessRepository {
     return created;
   }
 
+  /**
+   * Standing requests: insert a response and supersede the athlete's earlier live row for the same day, if any.
+   * Serialised per (request, athlete, day) by a transaction-scoped advisory lock; there is no unique index because
+   * old anonymous rows and profile merges would collide with it.
+   */
+  async createStandingWellnessResponse(
+    response: typeof wellnessResponses.$inferInsert & { requestId: string }
+  ): Promise<{ response: WellnessResponse; replaced: boolean }> {
+    return db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${response.requestId}::text || ${response.userId}::text || ${response.date}::text))`
+      );
+
+      const superseded = await tx
+        .update(wellnessResponses)
+        .set({ supersededAt: new Date() })
+        .where(and(
+          eq(wellnessResponses.requestId, response.requestId),
+          eq(wellnessResponses.userId, response.userId),
+          eq(wellnessResponses.date, response.date),
+          isNull(wellnessResponses.supersededAt),
+        ))
+        .returning({ id: wellnessResponses.id });
+
+      const [created] = await tx.insert(wellnessResponses).values(response).returning();
+
+      return { response: created, replaced: superseded.length > 0 };
+    });
+  }
+
   async getWellnessResponse(id: string): Promise<WellnessResponse | undefined> {
     validateUUID(id, 'id');
     const [response] = await db

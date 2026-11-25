@@ -81,7 +81,8 @@ async function verifyAthleteIsTargeted(request: WellnessRequest, athleteId: stri
   // Check team-based targeting
   if (request.targetTeamIds && request.targetTeamIds.length > 0) {
     const athleteTeams = await storage.getUserTeams(athleteId);
-    const athleteTeamIds = athleteTeams.map(ut => ut.team.id);
+    // Only current members: a removed athlete keeps a user_teams row with isActive=false and leftAt set
+    const athleteTeamIds = athleteTeams.filter(ut => ut.isActive && !ut.leftAt).map(ut => ut.team.id);
     return request.targetTeamIds.some(teamId => athleteTeamIds.includes(teamId));
   }
 
@@ -503,6 +504,7 @@ export function registerWellnessRoutes(app: Express) {
           scheduledFor: data.scheduledFor ? new Date(data.scheduledFor) : undefined,
           expiresAt: data.expiresAt ? new Date(data.expiresAt) : undefined,
           status: isScheduled ? 'scheduled' : 'active',
+          isStanding: data.isStanding,
         });
 
         // Skip notifications for scheduled requests — the cron job will send them when due
@@ -1019,8 +1021,8 @@ export function registerWellnessRoutes(app: Express) {
         }
 
         // Validate requestId belongs to same organization as template (prevents cross-org data leakage)
+        const request = data.requestId ? await storage.getWellnessRequest(data.requestId) : undefined;
         if (data.requestId) {
-          const request = await storage.getWellnessRequest(data.requestId);
           if (!request) {
             return res.status(404).json({ message: "Request not found" });
           }
@@ -1086,6 +1088,33 @@ export function registerWellnessRoutes(app: Express) {
           });
         }
 
+        // Standing (anytime) requests: signed-in, targeted athletes only, while active, for a day near today
+        if (request?.isStanding) {
+          // The answers were validated against data.templateId, so it must be the request's own template
+          if (request.templateId !== data.templateId) {
+            return res.status(400).json({ message: "Template does not match this check-in" });
+          }
+
+          // SECURITY: a magic link can name any targeted athlete, so it must never write to a standing request
+          if ((req.user as any).accessMethod !== 'authenticated') {
+            return res.status(403).json({ message: "Please sign in to submit this check-in" });
+          }
+
+          if (!(await verifyAthleteIsTargeted(request as any, req.user!.id))) {
+            return res.status(403).json({ message: "You are not part of this check-in" });
+          }
+
+          if (request.status !== 'active') {
+            return res.status(409).json({ message: "This check-in is no longer open" });
+          }
+
+          const oneDayMs = 24 * 60 * 60 * 1000;
+          const todayUtc = Date.parse(new Date().toISOString().split('T')[0]);
+          if (!(Math.abs(Date.parse(data.date) - todayUtc) <= oneDayMs)) {
+            return res.status(400).json({ message: "Check-in date must be yesterday, today or tomorrow" });
+          }
+        }
+
         // Get user details (handle both authenticated and magic link submissions)
         let userId: string;
         let userFullName: string;
@@ -1148,7 +1177,7 @@ export function registerWellnessRoutes(app: Express) {
         }
 
         // Create response
-        const response = await storage.createWellnessResponse({
+        const responseData = {
           requestId: data.requestId,
           organizationId: template.organizationId || '',
           templateId: data.templateId,
@@ -1162,7 +1191,17 @@ export function registerWellnessRoutes(app: Express) {
           accessMethod: (req.user as any).accessMethod || data.accessMethod || 'authenticated',
           ipAddress: req.ip || req.socket.remoteAddress || null,
           userAgent: req.get('user-agent') || null,
-        });
+        };
+
+        if (request?.isStanding) {
+          const { response, replaced } = await storage.createStandingWellnessResponse({
+            ...responseData,
+            requestId: request.id,
+          });
+          return res.status(201).json({ ...response, replaced });
+        }
+
+        const response = await storage.createWellnessResponse(responseData);
 
         res.status(201).json(response);
       } catch (error: any) {
@@ -1232,7 +1271,7 @@ export function registerWellnessRoutes(app: Express) {
         // This includes requests with targetAthleteIds containing this user
         // and requests with targetTeamIds where the user is a team member
         const userTeams = await storage.getUserTeams(userId);
-        const teamIds = userTeams.map(ut => ut.teamId);
+        const teamIds = userTeams.filter(ut => ut.isActive && !ut.leftAt).map(ut => ut.teamId);
 
         // Get user's organizations to scope requests
         const userOrgs = await storage.getUserOrganizations(userId);
@@ -1260,9 +1299,9 @@ export function registerWellnessRoutes(app: Express) {
         const userResponses = await storage.getWellnessResponsesByAthlete(userId);
         const respondedRequestIds = new Set(userResponses.map(r => r.requestId));
 
-        // Filter out requests the user has already responded to
+        // Filter out requests the user has already responded to (standing requests stay open for more check-ins)
         const pendingRequests = targetedRequests.filter(request =>
-          !respondedRequestIds.has(request.id)
+          request.isStanding || !respondedRequestIds.has(request.id)
         );
 
         res.json(pendingRequests);
@@ -1508,6 +1547,12 @@ export function registerWellnessRoutes(app: Express) {
       try {
         const { requestId } = req.params;
         const userId = req.user!.id;
+
+        // A standing request can be answered again any day, so it never counts as submitted
+        const wellnessRequest = await storage.getWellnessRequest(requestId);
+        if (wellnessRequest?.isStanding) {
+          return res.json({ hasSubmitted: false, isStanding: true });
+        }
 
         // Get all responses for this user
         const userResponses = await storage.getWellnessResponsesByAthlete(userId);

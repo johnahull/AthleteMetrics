@@ -29,12 +29,13 @@ import {
   organizations,
   users,
   teams,
+  userTeams,
   wellnessTemplates,
   wellnessRequests,
   wellnessResponses,
   siteSettings
 } from '@shared/schema';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import crypto from 'crypto';
 import type { WellnessTemplateConfig } from '@shared/wellness-types';
 import { emailService } from '../../packages/api/services/email-service';
@@ -236,7 +237,7 @@ afterAll(async () => {
     userIds: [testAthlete?.id, testUser?.id, siteAdmin?.id].filter((id): id is string => !!id),
     orgIds: testOrg ? [testOrg.id] : [],
     // users created inside individual tests
-    usernameLike: ['dashboard_athlete%', 'org2_coach_%'],
+    usernameLike: ['dashboard_athlete%', 'org2_coach_%', 'standing_nontarget_%'],
   });
 });
 
@@ -683,6 +684,291 @@ describe('Wellness Response Routes', () => {
         // Ignore if already deleted
       }
     }
+  });
+});
+
+describe('Standing (anytime) Wellness Requests', () => {
+  let standingTemplate: any;
+  let nonTargetedAthlete: any;
+  let nonTargetedCookie: string;
+  const standingRequestIds: string[] = [];
+
+  const utcDay = (offsetDays: number) =>
+    new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  const createStanding = async (overrides: Record<string, unknown> = {}) => {
+    const created = await storage.createWellnessRequest({
+      organizationId: testOrg.id,
+      templateId: standingTemplate.id,
+      requestedBy: testUser.id,
+      distributionMethod: 'athlete_account',
+      publicToken: crypto.randomBytes(32).toString('hex'),
+      targetAthleteIds: [testAthlete.id],
+      status: 'active',
+      isStanding: true,
+      ...overrides,
+    } as any);
+    standingRequestIds.push(created.id);
+    return created;
+  };
+
+  const submit = (requestId: string, date: string, value: number, cookie = athleteCookie) =>
+    request(app)
+      .post('/api/wellness/responses')
+      .set('Cookie', cookie)
+      .send({
+        requestId,
+        templateId: standingTemplate.id,
+        date,
+        responses: { q1: { value, label: 'Energy' } },
+      });
+
+  const rowsFor = (requestId: string) =>
+    db.select().from(wellnessResponses).where(eq(wellnessResponses.requestId, requestId));
+
+  beforeAll(async () => {
+    standingTemplate = await storage.createWellnessTemplate({
+      organizationId: testOrg.id,
+      name: 'Standing Request Test Template',
+      config: {
+        questions: [{ id: 'q1', type: 'scale', label: 'Energy', scaleMin: 1, scaleMax: 10, required: true }],
+      },
+      createdBy: testUser.id,
+    });
+    createdTemplateIds.push(standingTemplate.id);
+
+    const [other] = await db.insert(users).values({
+      username: `standing_nontarget_${Date.now()}`,
+      emails: ['standing.nontarget@test.com'],
+      password: 'hashed_password_here',
+      firstName: 'Other',
+      lastName: 'Athlete',
+      fullName: 'Other Athlete',
+      isSiteAdmin: false,
+    }).returning();
+    nonTargetedAthlete = other;
+    await storage.addUserToOrganization(nonTargetedAthlete.id, testOrg.id, 'athlete');
+
+    const loginRes = await request(app).post('/mock-login').send({ userId: nonTargetedAthlete.id });
+    nonTargetedCookie = loginRes.headers['set-cookie']?.[0] || '';
+  });
+
+  afterEach(async () => {
+    for (const id of standingRequestIds) {
+      await db.delete(wellnessResponses).where(eq(wellnessResponses.requestId, id));
+      await db.delete(wellnessRequests).where(eq(wellnessRequests.id, id));
+    }
+    standingRequestIds.length = 0;
+  });
+
+  it('POST /api/organizations/:organizationId/wellness/requests - stores isStanding', async () => {
+    const res = await request(app)
+      .post(`/api/organizations/${testOrg.id}/wellness/requests`)
+      .set('Cookie', coachCookie)
+      .send({
+        templateId: standingTemplate.id,
+        distributionMethod: 'athlete_account',
+        targetAthleteIds: [testAthlete.id],
+        isStanding: true,
+      });
+
+    expect(res.status).toBe(201);
+    standingRequestIds.push(res.body.id);
+    expect(res.body.isStanding).toBe(true);
+  });
+
+  it('GET /api/wellness/my-requests - keeps a standing request after a response, drops a one-time one', async () => {
+    const standing = await createStanding();
+    const oneTime = await createStanding({ isStanding: false });
+
+    expect((await submit(standing.id, utcDay(0), 6)).status).toBe(201);
+    expect((await submit(oneTime.id, utcDay(0), 6)).status).toBe(201);
+
+    const res = await request(app).get('/api/wellness/my-requests').set('Cookie', athleteCookie);
+
+    expect(res.status).toBe(200);
+    const ids = res.body.map((r: any) => r.id);
+    expect(ids).toContain(standing.id);
+    expect(ids).not.toContain(oneTime.id);
+  });
+
+  it('POST /api/wellness/responses - same-day resubmit supersedes the earlier row', async () => {
+    const standing = await createStanding();
+
+    const first = await submit(standing.id, utcDay(0), 3);
+    expect(first.status).toBe(201);
+    expect(first.body.replaced).toBe(false);
+
+    const second = await submit(standing.id, utcDay(0), 9);
+    expect(second.status).toBe(201);
+    expect(second.body.replaced).toBe(true);
+
+    const rows = await rowsFor(standing.id);
+    expect(rows).toHaveLength(2);
+    const live = rows.filter(r => r.supersededAt === null);
+    const superseded = rows.filter(r => r.supersededAt !== null);
+    expect(live).toHaveLength(1);
+    expect(live[0].id).toBe(second.body.id);
+    expect(superseded).toHaveLength(1);
+    expect(superseded[0].id).toBe(first.body.id);
+    expect((superseded[0].responses as any).q1.value).toBe(3);
+  });
+
+  it('POST /api/wellness/responses - a different date adds a second live row', async () => {
+    const standing = await createStanding();
+
+    expect((await submit(standing.id, utcDay(0), 5)).status).toBe(201);
+    const yesterday = await submit(standing.id, utcDay(-1), 7);
+    expect(yesterday.status).toBe(201);
+    expect(yesterday.body.replaced).toBe(false);
+
+    const rows = await rowsFor(standing.id);
+    expect(rows.filter(r => r.supersededAt === null)).toHaveLength(2);
+  });
+
+  it('POST /api/wellness/responses - rejects a magic-link submit to a standing request', async () => {
+    const standing = await createStanding();
+
+    const res = await request(app)
+      .post('/api/wellness/responses')
+      .query({ token: standing.publicToken, athlete: testAthlete.id })
+      .send({
+        requestId: standing.id,
+        templateId: standingTemplate.id,
+        date: utcDay(0),
+        responses: { q1: { value: 2, label: 'Energy' } },
+      });
+
+    expect(res.status).toBe(403);
+    expect(res.body.message).toMatch(/sign in/i);
+    expect(await rowsFor(standing.id)).toHaveLength(0);
+  });
+
+  it('POST /api/wellness/responses - rejects an org member who is not targeted', async () => {
+    const standing = await createStanding();
+
+    const res = await submit(standing.id, utcDay(0), 5, nonTargetedCookie);
+
+    expect(res.status).toBe(403);
+    expect(res.body.message).toMatch(/not part of this check-in/i);
+    expect(await rowsFor(standing.id)).toHaveLength(0);
+  });
+
+  it('POST /api/wellness/responses - rejects a standing submit for a cancelled request', async () => {
+    const standing = await createStanding({ status: 'cancelled' });
+
+    const res = await submit(standing.id, utcDay(0), 5);
+
+    expect(res.status).toBe(409);
+    expect(await rowsFor(standing.id)).toHaveLength(0);
+  });
+
+  it('POST /api/wellness/responses - rejects a standing submit dated outside today +/- 1 day', async () => {
+    const standing = await createStanding();
+
+    const res = await submit(standing.id, utcDay(-2), 5);
+
+    expect(res.status).toBe(400);
+    expect(await rowsFor(standing.id)).toHaveLength(0);
+  });
+
+  it('POST /api/wellness/responses - accepts tomorrow, rejects an impossible date', async () => {
+    const standing = await createStanding();
+
+    expect((await submit(standing.id, utcDay(1), 5)).status).toBe(201);
+    expect((await submit(standing.id, '2026-02-30', 5)).status).toBe(400);
+  });
+
+  it('POST /api/wellness/responses - rejects a template that is not the request\'s template', async () => {
+    const standing = await createStanding();
+    const other = await storage.createWellnessTemplate({
+      organizationId: testOrg.id,
+      name: 'Other Template',
+      config: standingTemplate.config,
+      isActive: true,
+      createdBy: testUser.id,
+    } as any);
+    createdTemplateIds.push(other.id);
+
+    const res = await request(app)
+      .post('/api/wellness/responses')
+      .set('Cookie', athleteCookie)
+      .send({
+        requestId: standing.id,
+        templateId: other.id,
+        date: utcDay(0),
+        responses: { q1: { value: 5, label: 'Energy' } },
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/template/i);
+    expect(await rowsFor(standing.id)).toHaveLength(0);
+  });
+
+  it('team-targeted standing request: member can submit; a member who left cannot submit or see it', async () => {
+    const standing = await createStanding({ targetAthleteIds: [], targetTeamIds: [testTeam.id] });
+
+    expect((await submit(standing.id, utcDay(0), 5)).status).toBe(201);
+    const visible = await request(app).get('/api/wellness/my-requests').set('Cookie', athleteCookie);
+    expect(visible.body.map((r: any) => r.id)).toContain(standing.id);
+
+    const membership = and(eq(userTeams.userId, testAthlete.id), eq(userTeams.teamId, testTeam.id));
+    await db.update(userTeams).set({ isActive: false, leftAt: new Date() }).where(membership);
+    try {
+      const blocked = await submit(standing.id, utcDay(0), 7);
+      expect(blocked.status).toBe(403);
+      const hidden = await request(app).get('/api/wellness/my-requests').set('Cookie', athleteCookie);
+      expect(hidden.body.map((r: any) => r.id)).not.toContain(standing.id);
+    } finally {
+      await db.update(userTeams).set({ isActive: true, leftAt: null }).where(membership);
+    }
+  });
+
+  it('GET /api/wellness/requests/:requestId/check-submission - standing request is never "submitted"', async () => {
+    const standing = await createStanding();
+    expect((await submit(standing.id, utcDay(0), 5)).status).toBe(201);
+
+    const res = await request(app)
+      .get(`/api/wellness/requests/${standing.id}/check-submission`)
+      .set('Cookie', athleteCookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ hasSubmitted: false, isStanding: true });
+  });
+
+  it('POST /api/wellness/responses - concurrent same-day submits leave exactly one live row', async () => {
+    const standing = await createStanding();
+
+    const results = await Promise.all([
+      submit(standing.id, utcDay(0), 4),
+      submit(standing.id, utcDay(0), 8),
+    ]);
+    expect(results.map(r => r.status)).toEqual([201, 201]);
+
+    const rows = await rowsFor(standing.id);
+    expect(rows).toHaveLength(2);
+    expect(rows.filter(r => r.supersededAt === null)).toHaveLength(1);
+  });
+
+  it('storage.createStandingWellnessResponse - parallel same-day writes leave exactly one live row', async () => {
+    const standing = await createStanding();
+    const row = (value: number) => ({
+      requestId: standing.id,
+      organizationId: testOrg.id,
+      templateId: standingTemplate.id,
+      userId: testAthlete.id,
+      userFullName: testAthlete.fullName,
+      submittedAt: new Date(),
+      date: utcDay(0),
+      responses: { q1: { value, label: 'Energy' } },
+    });
+
+    const results = await Promise.all([1, 2, 3, 4, 5].map(v => storage.createStandingWellnessResponse(row(v))));
+
+    expect(results.filter(r => !r.replaced)).toHaveLength(1);
+    const rows = await rowsFor(standing.id);
+    expect(rows).toHaveLength(5);
+    expect(rows.filter(r => r.supersededAt === null)).toHaveLength(1);
   });
 });
 
