@@ -50,7 +50,7 @@ describe('TeamAthleteList freshness', () => {
     const stale = rowFor('Stale Athlete');
     expect(within(stale).getByText('No recent data')).toBeInTheDocument();
     expect(within(stale).getByText('last entry 5 days ago')).toBeInTheDocument();
-    expect(within(stale).getByRole('img')).toHaveAttribute('aria-label', 'Status: no recent data');
+    expect(within(stale).getByRole('img')).toHaveAttribute('aria-label', 'Status: No recent data');
 
     const never = rowFor('Never Athlete');
     expect(within(never).getByText('No recent data')).toBeInTheDocument();
@@ -59,6 +59,8 @@ describe('TeamAthleteList freshness', () => {
     const yesterday = rowFor('Yesterday Athlete');
     expect(within(yesterday).getByText('Not submitted')).toBeInTheDocument();
     expect(within(yesterday).getByText('last entry 1 day ago')).toBeInTheDocument();
+    // The dot announces the same label the row shows
+    expect(within(yesterday).getByRole('img')).toHaveAttribute('aria-label', 'Status: Not submitted');
     for (const label of ['Red', 'Yellow', 'Green']) {
       expect(within(stale).queryByText(label)).not.toBeInTheDocument();
       expect(within(yesterday).queryByText(label)).not.toBeInTheDocument();

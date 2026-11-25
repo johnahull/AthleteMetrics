@@ -44,6 +44,8 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
 
   // Send mode: now / schedule / recurring / anytime (standing request)
   const [sendMode, setSendMode] = useState<SendMode>('now');
+  // Anytime forces athlete accounts, so the distribution cards read as disabled
+  const cardState = sendMode === 'anytime' ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:bg-gray-50';
 
   // One-time schedule state
   const [scheduledDateTime, setScheduledDateTime] = useState('');
@@ -246,9 +248,10 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
               value={sendMode === 'anytime' ? 'athlete_account' : distributionMethod}
               onValueChange={(value: any) => setDistributionMethod(value)}
               disabled={sendMode === 'anytime'}
+              aria-describedby={sendMode === 'anytime' ? 'anytime-description' : undefined}
             >
               <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center gap-x-2 p-4 border rounded-md cursor-pointer hover:bg-gray-50 border-primary/50 bg-primary/5">
+                <div className={`flex items-center gap-x-2 p-4 border rounded-md border-primary/50 bg-primary/5 ${cardState}`}>
                   <RadioGroupItem value="magic_link" id="magic_link" data-testid="radio-magic-link" />
                   <Label htmlFor="magic_link" className="cursor-pointer flex-1">
                     <div>
@@ -259,7 +262,7 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
                   <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Recommended</span>
                 </div>
 
-                <div className="flex items-center gap-x-2 p-4 border rounded-md cursor-pointer hover:bg-gray-50">
+                <div className={`flex items-center gap-x-2 p-4 border rounded-md ${cardState}`}>
                   <RadioGroupItem value="athlete_account" id="athlete_account" />
                   <Label htmlFor="athlete_account" className="cursor-pointer">
                     <div>
@@ -269,7 +272,7 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
                   </Label>
                 </div>
 
-                <div className="flex items-center gap-x-2 p-4 border rounded-md cursor-pointer hover:bg-gray-50">
+                <div className={`flex items-center gap-x-2 p-4 border rounded-md ${cardState}`}>
                   <RadioGroupItem value="team_link" id="team_link" data-testid="radio-team-link" />
                   <Label htmlFor="team_link" className="cursor-pointer">
                     <div>
@@ -279,7 +282,7 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
                   </Label>
                 </div>
 
-                <div className="flex items-center gap-x-2 p-4 border rounded-md cursor-pointer hover:bg-gray-50">
+                <div className={`flex items-center gap-x-2 p-4 border rounded-md ${cardState}`}>
                   <RadioGroupItem value="qr_code" id="qr_code" data-testid="radio-qr-code" />
                   <Label htmlFor="qr_code" className="cursor-pointer">
                     <div>
@@ -327,7 +330,7 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
             </RadioGroup>
 
             {sendMode === 'anytime' && (
-              <p className="text-xs text-gray-600 p-3 bg-green-50 border border-green-200 rounded-md" data-testid="anytime-description">
+              <p className="text-xs text-gray-600 p-3 bg-green-50 border border-green-200 rounded-md" id="anytime-description" data-testid="anytime-description">
                 Sent once, never expires; the athlete fills it in whenever they want. Athletes sign in to answer it.
               </p>
             )}

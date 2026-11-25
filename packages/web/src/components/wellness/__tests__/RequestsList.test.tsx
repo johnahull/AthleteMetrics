@@ -68,8 +68,8 @@ describe('RequestsList compliance', () => {
 
     expect(screen.getByText('Anytime')).toBeInTheDocument();
     const text = screen.getByTestId('completion-text-req-standing');
-    expect(await screen.findByText('7d: 5 of 7 days · 71%')).toBeInTheDocument();
-    expect(screen.getByText('28d: 12 of 28 days · 43%')).toBeInTheDocument();
+    expect(await screen.findByText('7d: 5 of 7 athlete-days · 71%')).toBeInTheDocument();
+    expect(screen.getByText('28d: 12 of 28 athlete-days · 43%')).toBeInTheDocument();
     expect(text).not.toHaveTextContent('/');
     expect(apiRequest).toHaveBeenCalledWith(
       'GET',
@@ -93,6 +93,32 @@ describe('RequestsList compliance', () => {
 
     expect(await screen.findByText('No complete days yet')).toBeInTheDocument();
     expect(screen.queryByText(/of 0 days/)).not.toBeInTheDocument();
+  });
+
+  it('shows "No athletes" when the request targets no athletes', async () => {
+    vi.mocked(apiRequest).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        completed: 0,
+        total: 0,
+        percentage: 0,
+        standing: true,
+        windows: { last7: window(0, 0, 0), last28: window(0, 0, 0) },
+      }),
+    } as Response);
+
+    renderList([{ ...baseRequest, id: 'req-empty', isStanding: true }]);
+
+    expect(await screen.findByText('No athletes')).toBeInTheDocument();
+    expect(screen.queryByText('No complete days yet')).not.toBeInTheDocument();
+  });
+
+  it('says it could not load the compliance when the request fails', async () => {
+    vi.mocked(apiRequest).mockResolvedValue({ ok: false, json: async () => ({}) } as Response);
+
+    renderList([{ ...baseRequest, id: 'req-err', isStanding: true }]);
+
+    expect(await screen.findByText('Could not load')).toBeInTheDocument();
   });
 
   it('leaves one-time requests unchanged and does not fetch compliance for them', () => {

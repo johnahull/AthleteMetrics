@@ -100,6 +100,8 @@ export function StatusBreakdownBadges({ red, yellow, green }: StatusBreakdownBad
 
 interface StatusDotProps {
   status: 'red' | 'yellow' | 'green' | 'none';
+  /** Announced in place of the default status text, so it matches a label shown next to the dot */
+  label?: string;
 }
 
 /**
@@ -107,7 +109,7 @@ interface StatusDotProps {
  * - 12px circular dot with appropriate background color
  * - Includes aria-label for accessibility
  */
-export function StatusDot({ status }: StatusDotProps) {
+export function StatusDot({ status, label }: StatusDotProps) {
   const colorClass = {
     red: STATUS_COLORS.red.bg,
     yellow: STATUS_COLORS.yellow.bg,
@@ -118,7 +120,7 @@ export function StatusDot({ status }: StatusDotProps) {
   return (
     <div
       className={`w-3 h-3 rounded-full ${colorClass[status]}`}
-      aria-label={`Status: ${status === 'none' ? 'no recent data' : status}`}
+      aria-label={`Status: ${label ?? (status === 'none' ? 'no recent data' : status)}`}
       role="img"
     />
   );

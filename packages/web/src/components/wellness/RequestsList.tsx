@@ -14,15 +14,18 @@ import QRCodeGenerator from './QRCodeGenerator';
 
 /** 7- and 28-day day compliance of a standing (anytime) request, in place of the respondent count */
 function StandingCompliance({ requestId, organizationId }: { requestId: string; organizationId: string }) {
-  const { data, isLoading } = useRequestCompletionRate(requestId, organizationId);
+  const { data, isLoading, isError } = useRequestCompletionRate(requestId, organizationId);
   if (isLoading) return <span className="text-gray-500">Loading…</span>;
+  if (isError) return <span className="text-gray-500">Could not load</span>;
   if (!data?.windows) return <span className="text-gray-500">—</span>;
+  if (data.total === 0) return <span className="text-gray-500">No athletes</span>;
   // Windows end yesterday (UTC); last28 has no possible day exactly when last7 has none
   if (data.windows.last7.totalPossibleDays === 0) return <span className="text-gray-500">No complete days yet</span>;
   return (
     <>
       {([['7d', data.windows.last7], ['28d', data.windows.last28]] as const).map(([label, w]) => (
-        <div key={label}>{`${label}: ${w.entryDays} of ${w.totalPossibleDays} days · ${w.percentage}%`}</div>
+        // totalPossibleDays is athletes x days, hence "athlete-days"
+        <div key={label}>{`${label}: ${w.entryDays} of ${w.totalPossibleDays} athlete-days · ${w.percentage}%`}</div>
       ))}
     </>
   );

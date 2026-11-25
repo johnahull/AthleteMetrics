@@ -145,6 +145,11 @@ describe('StatusDot', () => {
     expect(dot).toBeInTheDocument();
   });
 
+  test('uses the given label in its aria-label', () => {
+    render(<StatusDot status="none" label="Not submitted" />);
+    expect(screen.getByLabelText('Status: Not submitted')).toBeInTheDocument();
+  });
+
   test('is circular with correct size', () => {
     const { container } = render(<StatusDot status="green" />);
     const dot = container.querySelector('.w-3.h-3.rounded-full');

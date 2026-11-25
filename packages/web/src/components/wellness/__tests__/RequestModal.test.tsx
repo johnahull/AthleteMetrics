@@ -77,6 +77,20 @@ describe('RequestModal - Anytime mode', () => {
     expect(screen.getByText(/sent once, never expires/i)).toBeInTheDocument();
   });
 
+  it('links the disabled distribution choice to the Anytime explanation and dims the cards', async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    const distribution = () => screen.getByTestId('radio-magic-link').closest('[role="radiogroup"]') as HTMLElement;
+    expect(distribution()).not.toHaveAttribute('aria-describedby');
+
+    await user.click(screen.getByTestId('send-mode-anytime'));
+
+    expect(distribution()).toHaveAttribute('aria-describedby', 'anytime-description');
+    expect(document.getElementById('anytime-description')).toHaveTextContent(/sent once, never expires/i);
+    expect(screen.getByTestId('radio-magic-link').parentElement).toHaveClass('opacity-60', 'cursor-not-allowed');
+  });
+
   it('sends a standing athlete_account request with no expiry or schedule', async () => {
     const user = userEvent.setup();
     renderModal();

@@ -119,7 +119,7 @@ export default function TeamAthleteList({ athletes, lastEntries = [], onAthleteC
             >
               <TableCell>
                 <div className="flex items-center gap-2">
-                  <StatusDot status={athlete.status} />
+                  <StatusDot status={athlete.status} label={athlete.statusLabel} />
                   <span className={`text-sm ${athlete.status === 'none' ? 'text-gray-500' : ''}`}>{athlete.statusLabel}</span>
                 </div>
                 {athlete.lastEntryText && (

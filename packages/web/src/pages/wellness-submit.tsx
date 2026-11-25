@@ -156,11 +156,19 @@ export default function WellnessSubmit() {
       if (!res.ok) throw new Error('Failed to load athletes');
       return res.json();
     },
-    enabled: !!token,
+    // Standing requests use the signed-in athlete, so the name list is never needed
+    enabled: !!token && !!request && !request.isStanding,
   });
 
   // Standing (anytime) requests are answered by the signed-in athlete as often as they like
   const isStanding = request?.isStanding === true;
+
+  // Standing requests keep one draft per day, so an unfinished entry never carries into another day's check-in
+  const draftKey = request?.id
+    ? isStanding
+      ? `${getAutoSaveKey(request.id)}:${format(new Date(), 'yyyy-MM-dd')}`
+      : getAutoSaveKey(request.id)
+    : null;
 
   // Submit mutation
   const submitMutation = useMutation({
@@ -203,8 +211,8 @@ export default function WellnessSubmit() {
       setSubmittedAt(new Date().toLocaleString());
 
       // Clear auto-save draft
-      if (request?.id) {
-        localStorage.removeItem(getAutoSaveKey(request.id));
+      if (draftKey) {
+        localStorage.removeItem(draftKey);
       }
 
       // Invalidate wellness-my-requests query to update pending tasks banner
@@ -224,19 +232,17 @@ export default function WellnessSubmit() {
     },
   });
 
-  // Auto-save to local storage
+  // Auto-save to local storage (only once the debounce has caught up, so a cleared form never re-saves old answers)
   useEffect(() => {
-    if (request?.id && Object.keys(debouncedResponses).length > 0 && !isSubmitted) {
-      const key = getAutoSaveKey(request.id);
-      localStorage.setItem(key, JSON.stringify(debouncedResponses));
+    if (draftKey && debouncedResponses === responses && Object.keys(debouncedResponses).length > 0 && !isSubmitted) {
+      localStorage.setItem(draftKey, JSON.stringify(debouncedResponses));
     }
-  }, [debouncedResponses, request?.id, isSubmitted]);
+  }, [debouncedResponses, responses, draftKey, isSubmitted]);
 
   // Restore draft from local storage on mount
   useEffect(() => {
-    if (request?.id && template) {
-      const key = getAutoSaveKey(request.id);
-      const saved = localStorage.getItem(key);
+    if (draftKey && template) {
+      const saved = localStorage.getItem(draftKey);
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
@@ -264,7 +270,7 @@ export default function WellnessSubmit() {
         }
       }
     }
-  }, [request?.id, template]);
+  }, [draftKey, template]);
 
   // Check if token is expired
   const isExpired = request?.expiresAt && new Date(request.expiresAt) < new Date();
@@ -427,6 +433,20 @@ export default function WellnessSubmit() {
     );
   }
 
+  // A cancelled standing request still loads by token, but can no longer be answered
+  if (isStanding && request.status !== 'active') {
+    return (
+      <div className="container max-w-3xl mx-auto py-8 px-4">
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            <p className="font-semibold">This check-in is no longer available</p>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
   // Standing requests need a signed-in athlete (magic links cannot submit them)
   if (isStanding && !user) {
     return (
@@ -461,6 +481,7 @@ export default function WellnessSubmit() {
             <Button
               className="w-full sm:w-auto"
               onClick={() => {
+                if (draftKey) localStorage.removeItem(draftKey);
                 setResponses({});
                 setIsSubmitted(false);
               }}
