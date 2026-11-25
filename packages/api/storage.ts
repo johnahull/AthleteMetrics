@@ -519,6 +519,7 @@ export interface IStorage {
   // Wellness Batch Operations (Performance Optimization)
   getTeamRostersBatch(organizationId: string): Promise<Array<{ teamId: string; userId: string; userFullName: string }>>;
   getLatestLiveSubmissions(organizationId: string): Promise<Array<{ userId: string; submittedAt: Date; date: string }>>;
+  getSupersededResponses(organizationId: string, date: string): Promise<WellnessResponse[]>;
   getWellnessTemplatesBatch(templateIds: string[]): Promise<WellnessTemplate[]>;
 
   // Wellness Analytics
@@ -6323,6 +6324,10 @@ export class DatabaseStorage implements IStorage {
 
   async getLatestLiveSubmissions(organizationId: string): Promise<Array<{ userId: string; submittedAt: Date; date: string }>> {
     return wellnessRepository.getLatestLiveSubmissions(organizationId);
+  }
+
+  async getSupersededResponses(organizationId: string, date: string): Promise<WellnessResponse[]> {
+    return wellnessRepository.getSupersededResponses(organizationId, date);
   }
 
   /**

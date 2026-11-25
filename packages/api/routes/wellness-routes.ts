@@ -39,7 +39,7 @@ import {
 } from "@shared/wellness-validation";
 import type { WellnessRequest, WellnessResponse } from "@shared/wellness-types";
 import type { WellnessTrendDataPoint } from "@shared/wellness-analytics-types";
-import { calculateAthleteStatus, getCommonInjuries, calculateTrend } from "@shared/wellness-status-utils";
+import { calculateAthleteStatus, getCommonInjuries, calculateTrend, summarizeEarlierEntry } from "@shared/wellness-status-utils";
 import { WELLNESS_CONSTANTS } from "@shared/wellness-constants";
 import { userTeams, userOrganizations } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
@@ -1765,12 +1765,20 @@ export function registerWellnessRoutes(app: Express) {
         const currentDateResponses = allResponses.filter(r => r.date === date);
         const previousDateResponses = allResponses.filter(r => r.date === previousDateStr);
 
-        // Query 3: Batch fetch all unique templates
-        const uniqueTemplateIds = [...new Set(allResponses.map(r => r.templateId))];
+        // Query 3: the selected date's superseded (edited) entries, shown to the coach but never scored or counted
+        const supersededResponses = await storage.getSupersededResponses(organizationId, date);
+        const supersededByUser = new Map<string, typeof supersededResponses>();
+        for (const r of supersededResponses) {
+          if (!supersededByUser.has(r.userId)) supersededByUser.set(r.userId, []);
+          supersededByUser.get(r.userId)!.push(r);
+        }
+
+        // Query 4: Batch fetch all unique templates
+        const uniqueTemplateIds = [...new Set([...allResponses, ...supersededResponses].map(r => r.templateId))];
         const templates = await storage.getWellnessTemplatesBatch(uniqueTemplateIds);
         const templateMap = new Map(templates.map(t => [t.id, t]));
 
-        // Query 4: each athlete's latest live entry, for freshness ("last entry N days ago")
+        // Query 5: each athlete's latest live entry, for freshness ("last entry N days ago")
         const latestSubmissions = await storage.getLatestLiveSubmissions(organizationId);
         const latestByUser = new Map(latestSubmissions.map(s => [s.userId, s]));
 
@@ -1831,6 +1839,12 @@ export function registerWellnessRoutes(app: Express) {
               score: status.score,
               injuries: status.injuries,
               lastSubmission: athleteResponse.submittedAt,
+              // Never dropped: a deleted or invalid template still shows the stored answers and pain
+              earlierEntries: (supersededByUser.get(athleteId) ?? []).map(earlier => {
+                const earlierTemplate = templateMap.get(earlier.templateId);
+                const validated = earlierTemplate ? validateTemplate(earlierTemplate) : null;
+                return summarizeEarlierEntry(earlier as WellnessResponse, validated ?? undefined);
+              }),
             };
           }).filter((a): a is NonNullable<typeof a> => a !== null);
 

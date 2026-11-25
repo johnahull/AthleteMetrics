@@ -4,7 +4,9 @@ import { useSortableTable } from '@/hooks/use-sortable-table.tsx';
 import { format } from 'date-fns';
 import { StatusDot } from './ui/WellnessUIComponents';
 import { getFreshness, formatLastEntry } from '@/utils/wellness-analytics';
-import type { AthleteLastEntry } from '@/hooks/use-wellness-dashboard';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { AlertTriangle } from 'lucide-react';
+import type { AthleteLastEntry, EarlierEntry } from '@/hooks/use-wellness-dashboard';
 
 interface Athlete {
   id: string;
@@ -13,6 +15,7 @@ interface Athlete {
   score: number | null;
   injuries: { x: number; y: number; label?: string }[];
   lastSubmission: Date;
+  earlierEntries?: EarlierEntry[];
 }
 
 interface TeamAthleteListProps {
@@ -20,6 +23,79 @@ interface TeamAthleteListProps {
   /** Every roster athlete's latest entry; athletes missing from `athletes` are listed without a status */
   lastEntries?: AthleteLastEntry[];
   onAthleteClick?: (athleteId: string) => void;
+}
+
+const formatTime = (date: string) =>
+  new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(date));
+
+/** "Edited" marker for an athlete who resubmitted the day: the earlier entries stay visible to the coach */
+function EditedMarker({ name, entries }: { name: string; entries: EarlierEntry[] }) {
+  const hadPain = entries.some(e => e.painAreas.length > 0);
+  // Popover content is portalled, but React events still bubble to the row: keep the row click out
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          onClick={stop}
+          className={`mt-1 inline-flex max-w-full items-start gap-1 rounded-md border px-1.5 py-0.5 text-left text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+            hadPain ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-gray-300 bg-gray-50 text-gray-700'
+          }`}
+        >
+          {hadPain && <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />}
+          {hadPain ? (
+            <span>
+              <span className="whitespace-nowrap">Edited ·</span> earlier pain report
+            </span>
+          ) : (
+            'Edited'
+          )}
+          <span className="sr-only">
+            , show {entries.length === 1 ? 'the earlier entry' : `${entries.length} earlier entries`} for {name}
+          </span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        aria-label={`Earlier entries for ${name}`}
+        align="start"
+        collisionPadding={16}
+        className="w-72 max-w-[calc(100vw-2rem)] p-3"
+        onClick={stop}
+      >
+        <p className="text-sm font-medium">Earlier entries this day</p>
+        <p className="mb-2 text-xs text-gray-500">Replaced by a later entry; not counted in scores.</p>
+        {/* Focusable so a long list can be scrolled from the keyboard */}
+        <ul
+          className="max-h-72 space-y-3 overflow-y-auto rounded-sm p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          tabIndex={0}
+        >
+          {entries.map(entry => (
+            <li key={entry.id} className="border-t pt-2 text-sm first:border-t-0 first:pt-0">
+              <p className="font-medium">Submitted {formatTime(entry.submittedAt)}</p>
+              <p className={entry.painAreas.length > 0 ? 'text-amber-900' : 'text-gray-600'}>
+                {entry.painAreas.length > 0 ? (
+                  <>Pain: {entry.painAreas.map((area, i) => <span key={i}>{i > 0 && ', '}{area}</span>)}</>
+                ) : (
+                  'No pain reported'
+                )}
+              </p>
+              {entry.answers.length > 0 && (
+                <dl className="mt-1 space-y-1 text-xs">
+                  {entry.answers.map((answer, i) => (
+                    <div key={i}>
+                      <dt className="break-words text-gray-600">{answer.label}</dt>
+                      <dd className="break-words font-medium">{answer.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+            </li>
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 const statusConfig = {
@@ -126,7 +202,14 @@ export default function TeamAthleteList({ athletes, lastEntries = [], onAthleteC
                   <p className="text-xs text-gray-500 mt-0.5">{athlete.lastEntryText}</p>
                 )}
               </TableCell>
-              <TableCell className="font-medium">{athlete.name}</TableCell>
+              <TableCell className="font-medium">
+                {athlete.name}
+                {'earlierEntries' in athlete && athlete.earlierEntries && athlete.earlierEntries.length > 0 && (
+                  <div>
+                    <EditedMarker name={athlete.name} entries={athlete.earlierEntries} />
+                  </div>
+                )}
+              </TableCell>
               <TableCell>{athlete.score !== null ? athlete.score.toFixed(1) : 'N/A'}</TableCell>
               <TableCell className="hidden md:table-cell">
                 {athlete.injuries.length > 0 ? (

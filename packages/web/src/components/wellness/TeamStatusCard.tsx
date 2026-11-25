@@ -8,7 +8,7 @@ import TeamAthleteList from './TeamAthleteList';
 import { TrendIndicator, ScoreDisplay, StatusDot } from './ui/WellnessUIComponents';
 import { format } from 'date-fns';
 import { getFreshness } from '@/utils/wellness-analytics';
-import type { AthleteLastEntry } from '@/hooks/use-wellness-dashboard';
+import type { AthleteLastEntry, EarlierEntry } from '@/hooks/use-wellness-dashboard';
 
 interface AthleteData {
   id: string;
@@ -17,6 +17,7 @@ interface AthleteData {
   score: number | null;
   injuries: { x: number; y: number; label?: string }[];
   lastSubmission: Date;
+  earlierEntries?: EarlierEntry[];
 }
 
 interface TeamStatusCardProps {
@@ -81,6 +82,9 @@ export default function TeamStatusCard({
     e => !athletes.some(a => a.id === e.userId) && getFreshness(e.lastDate, today).isStale
   ).length;
 
+  // Said on the collapsed card too: the edit can turn the status green and hide the report
+  const earlierPainCount = athletes.filter(a => a.earlierEntries?.some(e => e.painAreas.length > 0)).length;
+
   return (
     <Card className="overflow-hidden">
       <CardHeader className="pb-3">
@@ -133,6 +137,16 @@ export default function TeamStatusCard({
             </div>
           )}
         </div>
+
+        {earlierPainCount > 0 && (
+          <p
+            className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-sm text-amber-900"
+            data-testid="earlier-pain-notice"
+          >
+            {earlierPainCount === 1 ? '1 athlete has' : `${earlierPainCount} athletes have`} an earlier pain report that
+            was edited. View athletes for details.
+          </p>
+        )}
 
         {/* Completion Rate */}
         <div>

@@ -98,7 +98,7 @@ describe('WellnessSubmit - standing requests', () => {
     mockFetch({ ...baseRequest, isStanding: true }, { hasSubmitted: false, isStanding: true });
     renderPage();
 
-    expect(await screen.findByText("Submitting again today replaces today's entry.")).toBeInTheDocument();
+    expect(await screen.findByText("Submitting again today replaces today's entry. Your coach can still see the earlier one.")).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Submit' })).toBeEnabled();
     expect(screen.queryByTestId('athlete-selector')).not.toBeInTheDocument();
   });

@@ -822,6 +822,108 @@ describe('Standing (anytime) Wellness Requests', () => {
     expect((superseded[0].responses as any).q1.value).toBe(3);
   });
 
+  it('GET .../wellness/dashboard - shows the earlier entry of an edited day, scored from the new entry only', async () => {
+    const painTemplate = await storage.createWellnessTemplate({
+      organizationId: testOrg.id,
+      name: 'Standing Pain Template',
+      config: {
+        questions: [
+          { id: 'energy', type: 'scale', label: 'Energy', scaleMin: 1, scaleMax: 10, required: true },
+          { id: 'pain', type: 'body_map', label: 'Where does it hurt?', allowMultiple: true, required: false },
+        ],
+        statusConfig: {
+          scaleOrientation: 'higher_is_better',
+          redThreshold: 3,
+          yellowThreshold: 6,
+          injuryQuestionIds: ['pain'],
+          injuryOverride: true,
+        },
+      },
+      createdBy: testUser.id,
+    });
+    createdTemplateIds.push(painTemplate.id);
+    const standing = await createStanding({ templateId: painTemplate.id });
+    const [team] = await db.insert(teams).values({ organizationId: testOrg.id, name: `Edited Team ${Date.now()}` }).returning();
+    await storage.addUserToTeam(testAthlete.id, team.id);
+    const [otherOrg] = await db.insert(organizations).values({ name: `Edited Other Org ${Date.now()}`, orgType: 'club' }).returning();
+    const [unedited] = await db.insert(users).values({
+      username: `standing_teampick_unedited_${Date.now()}`,
+      emails: ['standing.unedited@test.com'],
+      password: 'hashed_password_here',
+      firstName: 'Unedited',
+      lastName: 'Athlete',
+      fullName: 'Unedited Athlete',
+      isSiteAdmin: false,
+    }).returning();
+    await storage.addUserToOrganization(unedited.id, testOrg.id, 'athlete');
+    await storage.addUserToTeam(unedited.id, team.id);
+
+    const send = (responses: Record<string, unknown>) =>
+      request(app)
+        .post('/api/wellness/responses')
+        .set('Cookie', athleteCookie)
+        .send({ requestId: standing.id, templateId: painTemplate.id, date: utcDay(0), responses });
+
+    try {
+      const morning = await send({
+        energy: { value: 8, label: 'Energy' },
+        pain: { value: [{ x: 0.4, y: 0.7, label: 'Left knee' }], label: 'Where does it hurt?' },
+      });
+      expect(morning.body).toMatchObject({ replaced: false });
+      const evening = await send({ energy: { value: 9, label: 'Energy' }, pain: { value: [], label: 'Where does it hurt?' } });
+      expect(evening.status).toBe(201);
+      expect(evening.body.replaced).toBe(true);
+
+      await db.insert(wellnessResponses).values([
+        // another organization's superseded row for the same athlete and day: never shown here
+        {
+          organizationId: otherOrg.id,
+          templateId: painTemplate.id,
+          userId: testAthlete.id,
+          userFullName: testAthlete.fullName,
+          submittedAt: new Date(),
+          date: utcDay(0),
+          responses: { energy: { value: 1, label: 'Energy' } },
+          supersededAt: new Date(),
+        },
+        {
+          organizationId: testOrg.id,
+          templateId: painTemplate.id,
+          userId: unedited.id,
+          userFullName: unedited.fullName,
+          submittedAt: new Date(),
+          date: utcDay(0),
+          responses: { energy: { value: 7, label: 'Energy' } },
+        },
+      ]);
+
+      const res = await request(app)
+        .get(`/api/organizations/${testOrg.id}/wellness/dashboard?teamIds=${team.id}&date=${utcDay(0)}`)
+        .set('Cookie', coachCookie);
+
+      expect(res.status).toBe(200);
+      const athletes = Object.fromEntries(res.body[0].athletes.map((a: any) => [a.id, a]));
+      const edited = athletes[testAthlete.id];
+      expect(edited.score).toBe(9);
+      expect(edited.status).toBe('green');
+      expect(edited.injuries).toEqual([]);
+      expect(edited.earlierEntries).toEqual([
+        {
+          id: morning.body.id,
+          submittedAt: expect.any(String),
+          answers: [{ label: 'Energy', value: '8' }],
+          painAreas: ['Left knee'],
+        },
+      ]);
+      expect(athletes[unedited.id].earlierEntries).toEqual([]);
+      expect(res.body[0].commonInjuries).toEqual([]);
+    } finally {
+      await db.delete(wellnessResponses).where(eq(wellnessResponses.organizationId, otherOrg.id));
+      await db.delete(wellnessResponses).where(eq(wellnessResponses.userId, unedited.id));
+      await purgeTestRows({ userIds: [unedited.id], orgIds: [otherOrg.id], teamIds: [team.id] });
+    }
+  });
+
   it('POST /api/wellness/responses - a different date adds a second live row', async () => {
     const standing = await createStanding();
 

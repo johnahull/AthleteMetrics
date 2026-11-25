@@ -173,6 +173,49 @@ export function calculateAthleteStatus(
   return { status, score, injuries };
 }
 
+export interface EarlierEntrySummary {
+  id: string;
+  submittedAt: Date;
+  answers: { label: string; value: string }[];
+  painAreas: string[];
+}
+
+const isBodyPoint = (v: unknown): v is { label?: string } =>
+  typeof v === 'object' && v !== null && 'x' in v && 'y' in v;
+
+const isScalar = (v: unknown) => ['string', 'number', 'boolean'].includes(typeof v);
+
+/**
+ * Summarise a superseded (edited) response for the coach. Read from the stored answers, not the
+ * template's current configuration, so a later template change can never hide an earlier pain
+ * report. The template (optional) only supplies the order and missing labels.
+ */
+export function summarizeEarlierEntry(
+  response: WellnessResponse,
+  template?: WellnessTemplate
+): EarlierEntrySummary {
+  const responses = response.responses as WellnessResponseData;
+  const questions = template?.config.questions ?? [];
+  const ids = [...new Set([...questions.map(q => q.id), ...Object.keys(responses)])];
+
+  const answers: { label: string; value: string }[] = [];
+  const painAreas: string[] = [];
+  for (const id of ids) {
+    const answer = responses[id] as { value?: unknown; label?: string } | undefined | null;
+    const value = answer?.value;
+    if (Array.isArray(value) && value.some(isBodyPoint)) {
+      painAreas.push(...value.filter(isBodyPoint).map(point => point.label || 'unlabelled area'));
+      continue;
+    }
+    const text = typeof value === 'boolean' ? (value ? 'Yes' : 'No')
+      : Array.isArray(value) ? value.filter(isScalar).join(', ')
+      : isScalar(value) ? String(value)
+      : '';
+    if (text) answers.push({ label: answer?.label || questions.find(q => q.id === id)?.label || id, value: text });
+  }
+  return { id: response.id, submittedAt: response.submittedAt, answers, painAreas };
+}
+
 /**
  * Aggregate and count common injuries across athletes
  */

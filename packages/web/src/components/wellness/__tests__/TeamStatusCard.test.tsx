@@ -55,3 +55,24 @@ describe('TeamStatusCard freshness', () => {
     expect(screen.queryByTestId('no-recent-data-count')).not.toBeInTheDocument();
   });
 });
+
+describe('TeamStatusCard earlier pain reports', () => {
+  const entry = (painAreas: string[]) => [{ id: 'r-1', submittedAt: '2026-11-25T07:30:00', answers: [], painAreas }];
+  const athlete = (id: string, painAreas: string[]) => ({ ...baseProps.athletes[0], id, earlierEntries: entry(painAreas) });
+
+  it('says on the collapsed card how many athletes have an earlier pain report', () => {
+    render(<TeamStatusCard {...baseProps} athletes={[athlete('a-1', ['Left knee']), athlete('a-2', [])]} />);
+    expect(screen.getByTestId('earlier-pain-notice')).toHaveTextContent(
+      '1 athlete has an earlier pain report that was edited'
+    );
+  });
+
+  it('uses the plural, and shows nothing when no earlier entry had pain', () => {
+    const { rerender } = render(
+      <TeamStatusCard {...baseProps} athletes={[athlete('a-1', ['Knee']), athlete('a-2', ['Hip'])]} />
+    );
+    expect(screen.getByTestId('earlier-pain-notice')).toHaveTextContent('2 athletes have an earlier pain report');
+    rerender(<TeamStatusCard {...baseProps} athletes={[athlete('a-1', [])]} />);
+    expect(screen.queryByTestId('earlier-pain-notice')).not.toBeInTheDocument();
+  });
+});

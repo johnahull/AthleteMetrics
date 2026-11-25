@@ -6,7 +6,7 @@
  */
 
 import { db } from "../db";
-import { eq, and, desc, gte, lte, inArray, isNull, sql, type SQL } from "drizzle-orm";
+import { eq, and, desc, gte, lte, inArray, isNull, isNotNull, sql, type SQL } from "drizzle-orm";
 import {
   wellnessTemplates,
   wellnessRequests,
@@ -585,6 +585,23 @@ export class WellnessRepository {
       .from(wellnessResponses)
       .where(and(eq(wellnessResponses.organizationId, organizationId), isNull(wellnessResponses.supersededAt)))
       .orderBy(wellnessResponses.userId, desc(wellnessResponses.submittedAt));
+  }
+
+  /**
+   * The organization's superseded (edited) responses for one date, newest first.
+   * Readers that score or count must not use these; they are only shown as "earlier entries".
+   */
+  async getSupersededResponses(organizationId: string, date: string): Promise<WellnessResponse[]> {
+    validateUUID(organizationId, 'organizationId');
+    return db
+      .select()
+      .from(wellnessResponses)
+      .where(and(
+        eq(wellnessResponses.organizationId, organizationId),
+        eq(wellnessResponses.date, date),
+        isNotNull(wellnessResponses.supersededAt)
+      ))
+      .orderBy(desc(wellnessResponses.submittedAt));
   }
 
   /**

@@ -9,6 +9,15 @@ interface AthleteData {
   score: number | null;
   injuries: { x: number; y: number; label?: string }[];
   lastSubmission: Date;
+  earlierEntries?: EarlierEntry[];
+}
+
+/** A superseded (edited) entry of the selected date, shown to the coach but never scored (AM-FEAT-027) */
+export interface EarlierEntry {
+  id: string;
+  submittedAt: string;
+  answers: { label: string; value: string }[];
+  painAreas: string[];
 }
 
 interface TemplateAggregate {
