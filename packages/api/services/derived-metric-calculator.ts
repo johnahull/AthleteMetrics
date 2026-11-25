@@ -1203,7 +1203,8 @@ export class DerivedMetricCalculator {
     dependentMetrics: string[],
     targetDate: string,
     config: { missingSourceBehavior: 'skip' | 'error' },
-    scope?: MeasurementVisibilityScope
+    scope?: MeasurementVisibilityScope,
+    metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
     const codes = dependentMetrics.map((c) => c.toUpperCase());
     const candidates = await dbOrTx
@@ -1270,8 +1271,14 @@ export class DerivedMetricCalculator {
       if (!latestGroup || compare(group, latestGroup) > 0) latestGroup = group;
     }
     const latest = latestGroup?.rows;
-    const newest = (list: Measurement[]) =>
-      list.reduce((a, b) => (b.createdAt > a.createdAt ? b : a));
+    // Newest entry wins (a correction); rows created together (the runs of one device import) give their best
+    const newest = (list: Measurement[], higherIsBetter: boolean) =>
+      list.reduce((a, b) => {
+        const t = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        if (t !== 0) return t > 0 ? b : a;
+        const d = parseFloat(b.value) - parseFloat(a.value);
+        return (higherIsBetter ? d > 0 : d < 0) ? b : a;
+      });
 
     const result = new Map<string, Measurement>();
     for (let i = 0; i < dependentMetrics.length; i++) {
@@ -1280,7 +1287,8 @@ export class DerivedMetricCalculator {
         if (config.missingSourceBehavior === 'skip') return null;
         throw new Error(`Missing source measurement for metric: ${dependentMetrics[i]}`);
       }
-      result.set(dependentMetrics[i], newest(matching));
+      // `?? true`: same default as the per-metric lookup in findSourceMeasurementsImpl
+      result.set(dependentMetrics[i], newest(matching, metricConfigs?.get(codes[i])?.higherIsBetter ?? true));
     }
     return result;
   }
@@ -1344,7 +1352,7 @@ export class DerivedMetricCalculator {
     orgScope?: AnchorOrgScope
   ): Promise<Map<string, Measurement> | null> {
     if (config.sourceSelection === 'latest_event' && config.dateMatchStrategy === 'same_date') {
-      return this.findLatestEventSources(dbOrTx, userId, dependentMetrics, targetDate, config, scope);
+      return this.findLatestEventSources(dbOrTx, userId, dependentMetrics, targetDate, config, scope, metricConfigs);
     }
     const visible = visibilityCondition(scope);
 
