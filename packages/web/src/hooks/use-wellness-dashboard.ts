@@ -21,6 +21,14 @@ interface TemplateAggregate {
   status: 'red' | 'yellow' | 'green';
 }
 
+/** Every roster athlete's latest live entry (AM-FEAT-027); null = never submitted */
+export interface AthleteLastEntry {
+  userId: string;
+  name: string | null;
+  lastSubmittedAt: string | null;
+  lastDate: string | null;
+}
+
 interface TeamDashboardData {
   teamId: string;
   teamName: string;
@@ -36,6 +44,7 @@ interface TeamDashboardData {
   commonInjuries: { label: string; count: number }[];
   athletes: AthleteData[];
   templateAggregates: TemplateAggregate[];
+  lastEntries: AthleteLastEntry[];
 }
 
 interface UseWellnessDashboardOptions {

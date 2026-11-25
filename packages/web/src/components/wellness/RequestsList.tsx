@@ -7,10 +7,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Eye, X, QrCode, Trash2, Bell } from 'lucide-react';
 import type { WellnessRequest, RequestStatus } from '@shared/wellness-types';
-import { useCancelWellnessRequest, useDeleteWellnessRequest, useResendWellnessNotifications } from '@/hooks/use-wellness-requests';
+import { useCancelWellnessRequest, useDeleteWellnessRequest, useResendWellnessNotifications, useRequestCompletionRate } from '@/hooks/use-wellness-requests';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import QRCodeGenerator from './QRCodeGenerator';
+
+/** 7- and 28-day day compliance of a standing (anytime) request, in place of the respondent count */
+function StandingCompliance({ requestId, organizationId }: { requestId: string; organizationId: string }) {
+  const { data, isLoading } = useRequestCompletionRate(requestId, organizationId);
+  if (isLoading) return <span className="text-gray-500">Loading…</span>;
+  if (!data?.windows) return <span className="text-gray-500">—</span>;
+  return (
+    <>
+      {([['7d', data.windows.last7], ['28d', data.windows.last28]] as const).map(([label, w]) => (
+        <div key={label}>{`${label}: ${w.entryDays} of ${w.totalPossibleDays} days · ${w.percentage}%`}</div>
+      ))}
+    </>
+  );
+}
 
 interface RequestsListProps {
   requests: WellnessRequest[];
@@ -183,11 +197,19 @@ export default function RequestsList({ requests, organizationId }: RequestsListP
                       </TableCell>
                       <TableCell data-testid={`request-status-${request.id}`}>
                         {getStatusBadge(request.status)}
+                        {request.isStanding && (
+                          <Badge variant="outline" className="ml-1">Anytime</Badge>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">{request.distributionMethod}</Badge>
                       </TableCell>
                       <TableCell>
+                        {request.isStanding ? (
+                          <div className="text-sm min-w-[150px]" data-testid={`completion-text-${request.id}`}>
+                            <StandingCompliance requestId={request.id} organizationId={organizationId} />
+                          </div>
+                        ) : (
                         <div className="space-y-1 min-w-[150px]">
                           <div className="flex items-center justify-between text-sm">
                             <span data-testid={`completion-text-${request.id}`}>
@@ -200,6 +222,7 @@ export default function RequestsList({ requests, organizationId }: RequestsListP
                             data-testid={`progress-bar-${request.id}`}
                           />
                         </div>
+                        )}
                       </TableCell>
                       <TableCell>
                         <p className="text-sm">

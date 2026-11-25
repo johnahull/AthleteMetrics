@@ -6,6 +6,9 @@ import { Progress } from '@/components/ui/progress';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import TeamAthleteList from './TeamAthleteList';
 import { TrendIndicator, ScoreDisplay, StatusDot } from './ui/WellnessUIComponents';
+import { format } from 'date-fns';
+import { getFreshness } from '@/utils/wellness-analytics';
+import type { AthleteLastEntry } from '@/hooks/use-wellness-dashboard';
 
 interface AthleteData {
   id: string;
@@ -30,6 +33,7 @@ interface TeamStatusCardProps {
   trend: 'up' | 'down' | 'stable';
   commonInjuries: { label: string; count: number }[];
   athletes: AthleteData[];
+  lastEntries?: AthleteLastEntry[];
   isLoading?: boolean;
   onExpand?: (teamId: string) => void;
 }
@@ -48,6 +52,7 @@ export default function TeamStatusCard({
   trend,
   commonInjuries,
   athletes,
+  lastEntries = [],
   isLoading = false,
   onExpand,
 }: TeamStatusCardProps) {
@@ -69,6 +74,12 @@ export default function TeamStatusCard({
   };
 
   const submittedCount = Math.round((completionRate / 100) * totalAthletes);
+
+  // Athletes with no entry on the selected date whose last entry is stale; never counted as red/yellow/green
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const noRecentCount = lastEntries.filter(
+    e => !athletes.some(a => a.id === e.userId) && getFreshness(e.lastDate, today).isStale
+  ).length;
 
   return (
     <Card className="overflow-hidden">
@@ -114,6 +125,13 @@ export default function TeamStatusCard({
             <span className="font-medium">{greenCount}</span>
             <span className="text-gray-600">green</span>
           </div>
+          {lastEntries.length > 0 && (
+            <div className="flex items-center gap-1" data-testid="no-recent-data-count">
+              <StatusDot status="none" />
+              <span className="font-medium">{noRecentCount}</span>
+              <span className="text-gray-600">no recent data</span>
+            </div>
+          )}
         </div>
 
         {/* Completion Rate */}
@@ -164,7 +182,7 @@ export default function TeamStatusCard({
           ) : (
             <>
               <ChevronDown className="w-4 h-4 mr-2" />
-              View Athletes ({athletes.length})
+              View Athletes ({Math.max(athletes.length, lastEntries.length)})
             </>
           )}
         </Button>
@@ -172,7 +190,7 @@ export default function TeamStatusCard({
         {/* Athlete List (Expanded) */}
         {isExpanded && (
           <div className="border-t pt-4">
-            <TeamAthleteList athletes={athletes} />
+            <TeamAthleteList athletes={athletes} lastEntries={lastEntries} />
           </div>
         )}
       </CardContent>
