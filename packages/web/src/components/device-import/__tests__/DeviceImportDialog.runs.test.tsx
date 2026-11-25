@@ -125,4 +125,14 @@ describe('DeviceImportDialog review step with several runs', () => {
     expect(label.parentElement!.textContent).toContain('2');
     expect(label.parentElement!.textContent).not.toContain('4');
   });
+
+  it('explains that duplicates are matched per run time on the confirm step', () => {
+    hook.step = 'confirm';
+    renderDialog();
+    expect(
+      screen.getByText('Runs already imported (same athlete, date, drill and run time) are skipped. New run times are added.'),
+    ).toBeTruthy();
+    expect(screen.getByText('Runs already imported with the same run time are replaced. Other earlier runs are kept.')).toBeTruthy();
+    expect(screen.queryByText(/all of its new runs are skipped/)).toBeNull();
+  });
 });
