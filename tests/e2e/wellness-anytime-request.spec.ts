@@ -19,8 +19,10 @@ import { loginAsDefaultUser, loginWithCredentials } from './helpers/auth';
  * Components: RequestModal, RequestsList (/wellness Requests tab), wellness-my-requests,
  * wellness-submit, PendingTasksBanner (/my-dashboard)
  *
- * The API's write rate limits are per IP and shared with every other spec in a full run. If
- * they are already used up the tests that need the write are skipped, not failed.
+ * Quarantined in CI (tests/e2e/quarantine.json, issue #490): in a full run the one shared admin
+ * account has used up the API rate limit before this spec starts (even GETs answer 429).
+ * Run it on its own: E2E_QUARANTINE=include npx playwright test wellness-anytime-request
+ *   --config=playwright.staging.config.ts --project=chromium
  */
 
 const BASE_URL = process.env.TESTING_URL || process.env.STAGING_URL || 'http://localhost:5000';

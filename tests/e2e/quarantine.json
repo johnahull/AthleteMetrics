@@ -390,6 +390,7 @@
  "visual-regression.spec.ts › Visual Regression Tests › responsive design - mobile viewport (athlete list)",
  "visual-regression.spec.ts › Visual Regression Tests › responsive design - tablet viewport (dashboard)",
  "wellness-analytics.spec.ts",
+ "wellness-anytime-request.spec.ts",
  "wellness-athlete-dropdown.spec.ts",
  "wellness-athlete-submission.spec.ts",
  "wellness-coach-workflows.spec.ts",
