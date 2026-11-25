@@ -14,7 +14,8 @@ import {
   siteBenchmarks,
   customBenchmarks,
 } from '@shared/schema';
-import { eq, and, inArray, gte, lte, desc, sql } from 'drizzle-orm';
+import { eq, and, inArray, gte, lte, sql } from 'drizzle-orm';
+import { latestBestFirst } from './best-of-day-order';
 
 // Query result size limits to prevent OOM errors with large datasets
 const MAX_MEASUREMENT_ROWS = 50000;   // ~50MB typical payload (1KB/row) - prevents memory exhaustion
@@ -193,7 +194,7 @@ export class BenchmarkAnalyticsService extends BaseService {
                   inArray(measurements.metric, metricCodes)
                 )
               )
-              .orderBy(desc(measurements.date))
+              .orderBy(...latestBestFirst)
               .limit(MAX_MEASUREMENT_ROWS) // Limit query result size to prevent OOM
           : [];
 
@@ -702,7 +703,7 @@ export class BenchmarkAnalyticsService extends BaseService {
                   eq(measurements.metric, benchmark.metricCode)
                 )
               )
-              .orderBy(desc(measurements.date))
+              .orderBy(...latestBestFirst)
               .limit(MAX_MEASUREMENT_ROWS)
           : [];
 
