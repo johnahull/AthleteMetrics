@@ -19,7 +19,7 @@ import {
   EVENT_DATA_ENTRY_REGISTRATION_STATUSES,
   type Measurement,
 } from '@shared/schema';
-import { eq, and, inArray, isNull, sql, desc, ne, or, gt } from 'drizzle-orm';
+import { eq, and, inArray, isNull, sql, desc, ne, or, gt, count } from 'drizzle-orm';
 import { findBestAthleteMatch, type MatchingCriteria } from '../athlete-matching';
 import { DashrCsvParser } from './parsers/dashr-csv-parser';
 import { DerivedMetricCalculator } from './derived-metric-calculator';
@@ -73,7 +73,7 @@ export interface BatchSummary {
   sessionDate: string | null;
   eventNameSnapshot: string | null;
   measurementsCreated: number | null;
-  runsImported: number; // Runs of the batch still stored (0 after a rollback); derived flies and RSI are not runs
+  runsImported: number | null; // Runs of the batch still stored; null when unknown (legacy batch) or none left
   athletesImported: number | null;
   createdAt: Date;
   committedAt: Date | null;
@@ -452,7 +452,8 @@ export class DeviceImportService {
             if (drill.derivedFrom) {
               const higher = higherIsBetter(drill.metric);
               const better = (a: number, b: number) => (higher ? a > b : a < b);
-              // Only a strictly better earlier value is kept; an equal one is replaced like any re-import
+              // Only a strictly better earlier value is kept; an equal one is replaced like any re-import.
+              // `earlier` holds only fly rows here: a derived fly has no splits, so nothing is grouped under it
               if (earlier.some(e => better(e.value, drill.value))) {
                 skipped++;
                 continue;
@@ -693,12 +694,6 @@ export class DeviceImportService {
         sessionDate: importBatches.sessionDate,
         eventNameSnapshot: importBatches.eventNameSnapshot,
         measurementsCreated: importBatches.measurementsCreated,
-        // Columns qualified by hand: drizzle renders them unqualified inside select fields
-        runsImported: sql<number>`(SELECT COUNT(*)::int FROM measurements m
-          WHERE m.import_batch_id = "import_batches"."id"
-            AND m.calculation_metadata->>'formula' = 'direct_import'
-            AND m.calculation_metadata->>'derivedFrom' IS NULL
-            AND m.metric <> ${MetricType.RSI})`,
         athletesImported: importBatches.athletesImported,
         createdAt: importBatches.createdAt,
         committedAt: importBatches.committedAt,
@@ -715,7 +710,22 @@ export class DeviceImportService {
       .orderBy(desc(importBatches.createdAt))
       .limit(50);
 
-    return batches;
+    // Runs per batch: drill rows with runAt. Only device rows written since every run is kept have runAt
+    // (derived flies and RSI never do); older batches cannot tell a derived fly from a run, so they get null.
+    const runCounts = batches.length > 0
+      ? await db
+          .select({ batchId: measurements.importBatchId, runs: count() })
+          .from(measurements)
+          .where(and(
+            inArray(measurements.importBatchId, batches.map(b => b.id)),
+            sql`${measurements.calculationMetadata}->>'formula' = 'direct_import'`,
+            sql`${measurements.calculationMetadata}->>'runAt' IS NOT NULL`,
+          ))
+          .groupBy(measurements.importBatchId)
+      : [];
+    const runsByBatch = new Map(runCounts.map(r => [r.batchId, r.runs]));
+
+    return batches.map(b => ({ ...b, runsImported: runsByBatch.get(b.id) ?? null }));
   }
 
   /**

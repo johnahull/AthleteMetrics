@@ -13,7 +13,9 @@ export interface ParsedDrillResult {
   outlierReason?: string;
   derivedFrom?: string;
   runIndex: number;     // Order of this run within athlete + metric, by runAt (0 for one-per-athlete rows: derived, RSI)
-  runAt?: string;       // Row timestamp, 'YYYY-MM-DDTHH:mm:ss' (device local time)
+  // Row timestamp 'YYYY-MM-DDTHH:mm:ss' in device local time, no timezone: for display and run identity only.
+  // Never pass it to new Date() or toCalendarDate(); the measurement's date field is the calendar date.
+  runAt?: string;
 }
 
 export interface ParsedSplit {

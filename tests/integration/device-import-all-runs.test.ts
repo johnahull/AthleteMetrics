@@ -262,7 +262,42 @@ describe('device import keeps every run', () => {
     expect(await rows()).toHaveLength(8);
     await importer.rollbackBatch(batchId, coachId, orgId);
     expect(await rows()).toHaveLength(0);
-    expect((await importer.getBatches(orgId)).find((b) => b.id === batchId)?.runsImported).toBe(0);
+    // Nothing left to count: the history hides it
+    expect((await importer.getBatches(orgId)).find((b) => b.id === batchId)?.runsImported).toBeNull();
+  });
+
+  // A batch committed before every run was kept: drill rows without runAt, a derived fly without derivedFrom
+  const legacyBatch = async (rows: Array<[string, number]>) => {
+    const [b] = await db.insert(importBatches).values({
+      organizationId: orgId, source: 'dashr_csv', fileName: 'legacy.csv', sessionDate: DATE, status: 'completed',
+      createdBy: coachId, committedBy: coachId, committedAt: new Date(), measurementsCreated: rows.length,
+      athletesImported: 1, expiresAt: new Date(),
+    }).returning();
+    await db.insert(measurements).values(rows.map(([metric, value]) => ({
+      userId: athleteId, submittedBy: coachId, date: DATE, age: 16, metric, value: String(value), units: 's',
+      isVerified: true, organizationId: orgId, importSource: 'dashr_csv', importBatchId: b.id,
+      notes: 'Imported from legacy.csv',
+      calculationMetadata: { formula: 'direct_import', runId: `legacy-${metric}`, sourceValues: {}, calculatedAt: new Date().toISOString() },
+    })) as any);
+    return b.id;
+  };
+
+  it('does not count runs for a batch imported before runs were recorded', async () => {
+    const legacy = await legacyBatch([['DASH_30YD', 4.6], ['FLY10_TIME', 1.25]]);
+    // At the event, so the legacy rows (no event) are not duplicates of it
+    const { batchId } = await importFile([RUN_A, RUN_B], 'skip', true);
+    const batches = await importer.getBatches(orgId);
+    // The legacy batch cannot tell a derived fly from a run: unknown, not 2
+    expect(batches.find((b) => b.id === legacy)?.runsImported).toBeNull();
+    expect(batches.find((b) => b.id === batchId)?.runsImported).toBe(2);
+  });
+
+  it('replace keeps a faster legacy fly (no derivedFrom) over a slower new derived one', async () => {
+    await legacyBatch([['FLY10_TIME', 1.25]]);
+    // RUN_A's derived FLY10_TIME is 4.4 - 3.1 = 1.3 s, slower
+    const { result } = await importFile([RUN_A], 'replace');
+    expect(result.measurementsSkipped).toBe(1);
+    expect((await rows('FLY10_TIME')).map((r) => Number(r.value))).toEqual([1.25]);
   });
 
   it('an eval report on A/B data takes the 10 / 20 yd pair from one run', async () => {
