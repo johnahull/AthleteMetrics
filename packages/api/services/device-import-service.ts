@@ -23,6 +23,7 @@ import { eq, and, inArray, isNull, sql, desc, ne, or, gt } from 'drizzle-orm';
 import { findBestAthleteMatch, type MatchingCriteria } from '../athlete-matching';
 import { DashrCsvParser } from './parsers/dashr-csv-parser';
 import { DerivedMetricCalculator } from './derived-metric-calculator';
+import { groupEarlierRuns, decideDuplicate } from './device-import-duplicates';
 import { MetricType } from '@shared/schema/constants';
 import type { DeviceImportParser, ParsedImportData, ParsedSessionData } from './parsers/types';
 
@@ -407,27 +408,9 @@ export class DeviceImportService {
           ))
         : [];
 
-      // Earlier device rows per run "userId|date|drill metric|runAt". A drill row counts under its own metric,
-      // a split row under its parent drill: calculationMetadata.parentMetric, or the notes for data imported before
-      // that field existed. So a 20 yd import never matches the DASH_10YD / DASH_20YD splits of a 30 yd run.
-      // Rows without a runAt (imported before every run was kept) share the legacy bucket "userId|date|drill metric|";
-      // a new run without a runAt is looked up in that same bucket.
-      // drillValues holds the drill rows' values: the legacy rule and the one-value-per-day rule compare them.
-      const earlierByRun = new Map<string, { ids: string[]; drillValues: number[] }>();
-      for (const r of existingRows) {
-        const meta = r.calculationMetadata as Record<string, any> | null;
-        const parentMetric = meta?.parentMetric
-          || r.notes?.match(/^Split from (\S+)/)?.[1];
-        const key = `${r.userId}|${r.date}|${parentMetric ?? r.metric}|${meta?.runAt ?? ''}`;
-        if (!earlierByRun.has(key)) earlierByRun.set(key, { ids: [], drillValues: [] });
-        const bucket = earlierByRun.get(key)!;
-        bucket.ids.push(r.id);
-        if (!parentMetric) bucket.drillValues.push(Number(r.value));
-      }
-      // Run keys already replaced in this commit: a later run with the same key is inserted, not matched again
+      // Earlier device rows per run; the duplicate rules live in device-import-duplicates.ts
+      const earlierByRun = groupEarlierRuns(existingRows);
       const consumedKeys = new Set<string>();
-      // measurements.value is decimal(10,3)
-      const sameValue = (a: number, b: number) => Math.round(a * 1000) === Math.round(b * 1000);
 
       // Process each athlete
       for (const previewAthlete of preview.athletes) {
@@ -447,60 +430,22 @@ export class DeviceImportService {
 
           // Duplicates (pre-fetched above): only earlier device-imported rows count; manual entries are never
           // touched. The unit is one run: (athlete, date, event, drill metric, runAt).
-          const drillKey = `${athleteId}|${date}|${drill.metric}|`;
-          let matchedKeys: string[];
-          const onePerDay = !!drill.derivedFrom || drill.metric === MetricType.RSI;
-          if (onePerDay) {
-            // A derived fly or the RSI is one value per day computed from the session's runs: every earlier row
-            // of the code counts, whatever its runAt
-            matchedKeys = [...earlierByRun.keys()].filter(k => k.startsWith(drillKey));
-          } else if (drill.runAt && consumedKeys.has(drillKey + drill.runAt)) {
-            matchedKeys = [];
-          } else if (drill.runAt && earlierByRun.has(drillKey + drill.runAt)) {
-            matchedKeys = [drillKey + drill.runAt];
-          } else {
-            // No earlier row of this run time (or no runAt): a legacy group is the same session only when its
-            // drill row has the run's value; otherwise it is another session and is left alone
-            const legacy = earlierByRun.get(drillKey);
-            matchedKeys = legacy?.drillValues.some(v => sameValue(v, drill.value)) ? [drillKey] : [];
+          const decision = decideDuplicate({
+            earlierByRun, consumedKeys, athleteId, date, drill, strategy: duplicateStrategy, higherIsBetter,
+          });
+          if (decision.kind === 'skip') {
+            skipped += decision.skipped;
+            continue;
           }
-          const earlier = matchedKeys.map(k => earlierByRun.get(k)!);
-
-          if (earlier.length > 0) {
-            if (onePerDay) {
-              const higher = higherIsBetter(drill.metric);
-              const better = (a: number, b: number) => (higher ? a > b : a < b);
-              const earlierValues = earlier.flatMap(e => e.drillValues);
-              // Skip: add the new value only when it beats every earlier one, delete nothing.
-              // Replace: only a strictly better earlier value is kept; an equal one is replaced like any re-import
-              const keepEarlier = duplicateStrategy === 'skip'
-                ? !earlierValues.every(v => better(drill.value, v))
-                : earlierValues.some(v => better(v, drill.value));
-              if (keepEarlier) {
-                skipped++;
-                continue;
-              }
-            } else if (duplicateStrategy === 'skip') {
-              // The whole run: drill row and every split
-              skipped += 1 + (drill.splits?.length ?? 0);
-              continue;
-            }
-            if (duplicateStrategy === 'replace') {
-              // Delete exactly the earlier rows of the matched run(s) (drill row + its splits, including splits
-              // the new run no longer has), once: a later run with the same key finds it consumed and is inserted
-              for (const k of matchedKeys) {
-                earlierByRun.delete(k);
-                consumedKeys.add(k);
-              }
-              const deleted = await tx.delete(measurements)
-                .where(and(
-                  inArray(measurements.id, earlier.flatMap(e => e.ids)),
-                  // Safety net: the ids come from the pre-fetch, so they never belong to this batch
-                  or(isNull(measurements.importBatchId), ne(measurements.importBatchId, batchId)),
-                ))
-                .returning({ id: measurements.id });
-              replaced += deleted.length;
-            }
+          if (decision.deleteIds.length > 0) {
+            const deleted = await tx.delete(measurements)
+              .where(and(
+                inArray(measurements.id, decision.deleteIds),
+                // Safety net: the ids come from the pre-fetch, so they never belong to this batch
+                or(isNull(measurements.importBatchId), ne(measurements.importBatchId, batchId)),
+              ))
+              .returning({ id: measurements.id });
+            replaced += deleted.length;
           }
 
           // Insert measurement directly via tx — stays inside this transaction.
