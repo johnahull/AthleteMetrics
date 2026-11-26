@@ -25,6 +25,8 @@ import {
   goals,
   userAchievements,
   wellnessResponses,
+  wellnessRequests,
+  wellnessSchedules,
   eventRegistrations,
   eventInvitations,
   reportShares,
@@ -543,6 +545,19 @@ export class ProfileMergeService extends BaseService {
         .where(eq(athleteNotes.athleteId, sourceUserId))
         .returning({ id: athleteNotes.id });
       summary.athleteNotesTransferred = athleteNotesResult.length;
+
+      // 8e. Re-point wellness request and schedule targets in EVERY organization and status, like step 8d: the
+      // source's responses moved in step 5, so targets must name the surviving athlete for completion rates and
+      // future scheduled requests. A target already listed keeps its place and the source is dropped (no duplicate).
+      for (const table of [wellnessRequests, wellnessSchedules]) {
+        await tx.update(table)
+          .set({
+            targetAthleteIds: sql`CASE WHEN ${targetUserId}::text = ANY(${table.targetAthleteIds})
+              THEN array_remove(${table.targetAthleteIds}, ${sourceUserId}::text)
+              ELSE array_replace(${table.targetAthleteIds}, ${sourceUserId}::text, ${targetUserId}::text) END`,
+          })
+          .where(sql`${sourceUserId}::text = ANY(${table.targetAthleteIds})`);
+      }
 
       // 9. Transfer/merge athlete profile
       const [sourceProfile] = await tx.select()
