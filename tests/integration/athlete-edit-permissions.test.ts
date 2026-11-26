@@ -501,6 +501,63 @@ describe('Athlete edit permissions', () => {
       expect((await storage.getUser(shared.id))?.school).toBe('Unchanged Birth Date High');
     });
 
+    it.each([
+      ['an extra suffix', '1990-01-01xyz'],
+      ['a timestamp', '1990-01-01T00:00:00Z'],
+      ['leading whitespace', ' 1990-01-01'],
+      ['trailing whitespace', '1990-01-01 '],
+      ['an era suffix', '1990-01-01 BC'],
+      ['an extended year', '+01990-01-01'],
+      ['another format of the same day', '01/01/1990'],
+      ['an impossible day', '1990-02-30'],
+    ])('rejects a birth date with %s and keeps the stored one', async (_label, value) => {
+      const shared = await makeUser([[orgA, 'athlete'], [orgB, 'athlete']]);
+      const agent = await agentFor(coachA);
+      const res = await agent.put(`/api/athletes/${shared.id}`).send({ birthDate: value });
+      expect(res.status).toBe(400);
+      expect((await storage.getUser(shared.id))?.birthDate).toBe('1990-01-01');
+    });
+
+    it('rejects a malformed birth date from the user themselves too', async () => {
+      const self = await makeUser([[orgA, 'athlete']]);
+      const agent = await agentFor(self);
+      expect((await agent.put(`/api/athletes/${self.id}`).send({ birthDate: '1990-01-01 BC' })).status).toBe(400);
+      expect((await storage.getUser(self.id))?.birthDate).toBe('1990-01-01');
+    });
+
+    it('refuses another day for an athlete also in B and keeps the stored one', async () => {
+      const shared = await makeUser([[orgA, 'athlete'], [orgB, 'athlete']]);
+      const agent = await agentFor(coachA);
+      expect((await agent.put(`/api/athletes/${shared.id}`).send({ birthDate: '1990-01-02' })).status).toBe(403);
+      expect((await storage.getUser(shared.id))?.birthDate).toBe('1990-01-01');
+    });
+
+    it('accepts an empty birth date as unchanged when none is stored', async () => {
+      const shared = await makeUnclaimedAthlete([orgA, orgB]);
+      await db.update(users).set({ birthDate: null }).where(eq(users.id, shared.id));
+      const agent = await agentFor(coachA);
+      const res = await agent.put(`/api/athletes/${shared.id}`).send({
+        firstName: shared.firstName,
+        lastName: shared.lastName,
+        emails: shared.emails,
+        birthDate: '',
+        school: 'No Birth Date High',
+        parentEmail: null,
+      });
+      expect(res.status).toBe(200);
+      const after = await storage.getUser(shared.id);
+      expect(after?.school).toBe('No Birth Date High');
+      expect(after?.birthDate ?? null).toBeNull();
+    });
+
+    it('bulk-invite counts a non-member as skipped like any other refused user', async () => {
+      const outsiderCoach = await makeUser([[orgB, 'coach']]);
+      const agent = await agentFor(coachA);
+      const res = await agent.post('/api/athletes/bulk-invite').send({ athleteIds: [outsiderCoach.id], organizationId: orgA.id });
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ invited: 0, skipped: 1, message: '0 invitation(s) created, 1 skipped' });
+    });
+
     it('lets a coach change the birth date of an athlete only in their organization', async () => {
       const athlete = await makeUser([[orgA, 'athlete']]);
       const agent = await agentFor(coachA);

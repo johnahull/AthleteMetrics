@@ -244,30 +244,16 @@ export function registerAthleteRoutes(app: Express) {
           return res.status(403).json({ message: "Access denied - no organization access" });
         }
 
-        // Get the athlete's organization assignments (primary check)
+        // The athlete's organization memberships (team-derived organizations do not grant access)
         const athleteOrgs = await getCachedUserOrganizations(req, athleteId);
-
-        // Also check athlete's teams for backward compatibility
-        const athleteTeams = await storage.getUserTeams(athleteId);
-
-        // Athlete must belong to at least one organization OR have team assignments
-        if (athleteOrgs.length === 0 && athleteTeams.length === 0) {
-          return res.status(403).json({ message: "Athlete has no organization or team assignments" });
-        }
-
-        // Check if user has access to any of the athlete's organizations
         const userOrgIds = userOrgs.map(org => org.organizationId);
         const athleteOrgIds = athleteOrgs.map(org => org.organizationId);
-        const athleteTeamOrgIds = athleteTeams.map(team => team.team.organizationId);
 
-        // Combine both organization sources
-        const allAthleteOrgIds = [...new Set([...athleteOrgIds, ...athleteTeamOrgIds])];
-
-        const hasOrganizationAccess = allAthleteOrgIds.some(orgId => userOrgIds.includes(orgId));
+        const hasOrganizationAccess = athleteOrgIds.some(orgId => userOrgIds.includes(orgId));
         if (!hasOrganizationAccess) {
           // Audit log: User attempted to access athlete from different org
           logAuthorizationFailure(currentUser.id, 'read', 'athlete', {
-            attemptedOrgId: allAthleteOrgIds[0], // First org of the athlete
+            attemptedOrgId: athleteOrgIds[0], // First org of the athlete
             userOrgIds: userOrgIds,
             ipAddress: req.ip,
             userAgent: req.get('user-agent'),
@@ -277,7 +263,6 @@ export function registerAthleteRoutes(app: Express) {
           return res.status(403).json({ message: "Access denied - athlete belongs to a different organization" });
         }
 
-        // Staff role must be in an organization the athlete is a MEMBER of (team-derived organizations do not count)
         const isStaffInSharedOrg = userOrgs.some(
           (org) => athleteOrgIds.includes(org.organizationId) && (org.role === "coach" || org.role === "org_admin")
         );
@@ -436,13 +421,31 @@ export function registerAthleteRoutes(app: Express) {
       }
 
       // The birth date drives age and COPPA handling in every organization, so changing it is account-level too.
-      if (validatedData.birthDate !== undefined && !userIsSiteAdmin && !isSelf) {
-        if (!authority?.target) return res.status(404).json({ message: "Athlete not found" });
-        const day = (value: unknown) => (value ? String(value).slice(0, 10) : "");
-        if (day(validatedData.birthDate) !== day(authority.target.birthDate) && !managesWholeAccount(authority)) {
-          return res.status(403).json({
-            message: "This user also belongs to organizations you do not manage, so you cannot change their birth date",
-          });
+      // Only an exact calendar day (YYYY-MM-DD, year 1900 or later) or "" (no date) is accepted, compared as that
+      // exact string with the stored value. An unchanged value is removed from the update so it is never rewritten.
+      if (validatedData.birthDate !== undefined) {
+        const submitted = validatedData.birthDate === "" ? null : validatedData.birthDate;
+        const parsed = submitted === null ? NaN : Date.parse(`${submitted}T00:00:00Z`);
+        const isCalendarDay =
+          submitted !== null &&
+          /^\d{4}-\d{2}-\d{2}$/.test(submitted) &&
+          Number(submitted.slice(0, 4)) >= 1900 &&
+          !Number.isNaN(parsed) &&
+          new Date(parsed).toISOString().slice(0, 10) === submitted;
+        if (submitted !== null && !isCalendarDay) {
+          return res.status(400).json({ message: "Birth date must be a calendar date in the form YYYY-MM-DD" });
+        }
+        const stored = (authority?.target ?? (await storage.getUser(athleteId)))?.birthDate ?? null;
+        if (submitted === stored) {
+          delete validatedData.birthDate;
+        } else {
+          if (!userIsSiteAdmin && !isSelf && !(authority && managesWholeAccount(authority))) {
+            return res.status(403).json({
+              message: "This user also belongs to organizations you do not manage, so you cannot change their birth date",
+            });
+          }
+          // "" clears the date
+          (validatedData as { birthDate?: string | null }).birthDate = submitted;
         }
       }
 
@@ -727,36 +730,21 @@ export function registerAthleteRoutes(app: Express) {
       const athleteData = await Promise.all(
         athleteIds.map(async (athleteId) => {
           try {
-            const [athlete, athleteOrgs, athleteTeams] = await Promise.all([
+            const [athlete, athleteOrgs] = await Promise.all([
               storage.getAthlete(athleteId),
               getCachedUserOrganizations(req, athleteId),
-              storage.getUserTeams(athleteId)
             ]);
 
             if (!athlete) {
               return { athleteId, valid: false, reason: 'not_found' };
             }
 
-            // Verify athlete belongs to the target organization
-            const athleteOrgIds = athleteOrgs.map(org => org.organizationId);
-            const athleteTeamOrgIds = athleteTeams.map(team => team.team.organizationId);
-            const allAthleteOrgIds = [...new Set([...athleteOrgIds, ...athleteTeamOrgIds])];
-
-            const belongsToOrganization = allAthleteOrgIds.includes(organizationId);
-            if (!belongsToOrganization) {
+            // Membership and authority come first, so no later reason says anything about a user outside the
+            // caller's reach.
+            const membership = athleteOrgs.find((org) => org.organizationId === organizationId);
+            if (!membership) {
               console.warn(`[BULK INVITE] Athlete ${athleteId} does not belong to organization ${organizationId}`);
               return { athleteId, valid: false, reason: 'wrong_organization' };
-            }
-
-            // Skip if athlete has no email
-            if (!athlete.emails || athlete.emails.length === 0) {
-              return { athleteId, valid: false, reason: 'no_email' };
-            }
-
-            // Only users the caller manages in this organization, and only accounts nobody has activated yet
-            // (an invitation for an activated account would hand its login to whoever holds the email).
-            if (!athleteOrgs.some((org) => org.organizationId === organizationId && org.role === 'athlete')) {
-              return { athleteId, valid: false, reason: 'not_athlete' };
             }
             if (!userIsSiteAdmin) {
               const authority = await getAthleteAuthority(currentUser, athleteId);
@@ -764,6 +752,18 @@ export function registerAthleteRoutes(app: Express) {
                 return { athleteId, valid: false, reason: 'not_managed' };
               }
             }
+
+            // Only athletes, and only accounts nobody has activated yet (an invitation for an activated account
+            // would hand its login to whoever holds the email).
+            if (membership.role !== 'athlete') {
+              return { athleteId, valid: false, reason: 'not_athlete' };
+            }
+
+            // Skip if athlete has no email
+            if (!athlete.emails || athlete.emails.length === 0) {
+              return { athleteId, valid: false, reason: 'no_email' };
+            }
+
             if (await isClaimedAccount(athlete)) {
               return { athleteId, valid: false, reason: 'already_activated' };
             }
