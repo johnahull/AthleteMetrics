@@ -7,7 +7,7 @@ import { db } from "../db";
 import {
   globalAthletes, userGlobalAthleteLinks, globalAthleteAuditLog,
   users, measurements, userOrganizations, organizations,
-  globalAthleteClaims,
+  globalAthleteClaims, emailVerificationTokens,
   type GlobalAthlete, type UserGlobalAthleteLink, type GlobalAthleteClaim, type Measurement
 } from "@shared/schema";
 import crypto from "crypto";
@@ -31,6 +31,25 @@ export interface LinkedUserOptions {
 const MAX_AUDIT_LOG_ENTRIES = 100;
 const MAX_ATHLETES_FOR_LINK_FILTER = 10000;
 const CLAIM_TOKEN_EXPIRY_HOURS = 24;
+
+/**
+ * SQL condition on user_global_athlete_links: the link shares data. It must be confirmed, and an automatic link
+ * (auto_email / auto_import) also needs proof of mailbox control: a redeemed email verification token of the
+ * linked account for an address that the account still holds and that belongs to the identity. A token is only
+ * ever emailed to the address it records, so neither users.isEmailVerified nor an email edit counts as proof.
+ * Links made by people (athlete_claimed, org_proposed, admin_forced) only need to be confirmed.
+ */
+export const activeGlobalAthleteLink = sql`(${userGlobalAthleteLinks.linkStatus} = 'confirmed' AND (
+  ${userGlobalAthleteLinks.linkType} NOT IN ('auto_email', 'auto_import') OR EXISTS (
+    SELECT 1 FROM ${emailVerificationTokens} evt
+    JOIN ${users} lu ON lu.id = evt.user_id
+    JOIN ${globalAthletes} lg ON lg.id = ${userGlobalAthleteLinks.globalAthleteId}
+    WHERE evt.user_id = ${userGlobalAthleteLinks.userId}
+      AND evt.is_used = true
+      AND lower(evt.email) IN (SELECT lower(e) FROM unnest(lu.emails) e)
+      AND (lower(evt.email) = lower(lg.primary_email)
+        OR lower(evt.email) IN (SELECT lower(v) FROM unnest(lg.verified_emails) v))
+  )))`;
 
 export class GlobalAthleteService extends BaseService {
   /**
@@ -287,6 +306,18 @@ export class GlobalAthleteService extends BaseService {
   }
 
   /**
+   * Get a user's global athlete link only when it shares data (see activeGlobalAthleteLink).
+   * Every read of the identity on behalf of the user goes through this.
+   */
+  async getActiveUserGlobalAthleteLink(userId: string): Promise<UserGlobalAthleteLink | null> {
+    const [link] = await db.select()
+      .from(userGlobalAthleteLinks)
+      .where(and(eq(userGlobalAthleteLinks.userId, userId), activeGlobalAthleteLink));
+
+    return link || null;
+  }
+
+  /**
    * Get a global athlete by ID
    */
   async getGlobalAthlete(globalAthleteId: string): Promise<GlobalAthlete | null> {
@@ -309,7 +340,7 @@ export class GlobalAthleteService extends BaseService {
     const conditions = [eq(userGlobalAthleteLinks.globalAthleteId, globalAthleteId)];
 
     if (confirmedOnly) {
-      conditions.push(eq(userGlobalAthleteLinks.linkStatus, "confirmed"));
+      conditions.push(activeGlobalAthleteLink);
     }
 
     if (shareMeasurementsOnly) {
@@ -326,9 +357,9 @@ export class GlobalAthleteService extends BaseService {
    * Rows never include mediaUrl (AM-FEAT-015 Decision 12).
    */
   async getUnifiedMeasurements(userId: string): Promise<Array<Omit<Measurement, "mediaUrl">>> {
-    const link = await this.getUserGlobalAthleteLink(userId);
+    const link = await this.getActiveUserGlobalAthleteLink(userId);
 
-    if (!link || link.linkStatus !== "confirmed") {
+    if (!link) {
       return [];
     }
 
@@ -433,7 +464,7 @@ export class GlobalAthleteService extends BaseService {
     notifiedAt: Date;
   }[]> {
     // Get user's link
-    const link = await this.getUserGlobalAthleteLink(userId);
+    const link = await this.getActiveUserGlobalAthleteLink(userId);
     if (!link) {
       return [];
     }
@@ -969,7 +1000,7 @@ export class GlobalAthleteService extends BaseService {
    */
   async initiateClaimRequest(userId: string, emailToClaim: string): Promise<{ success: boolean; token: string }> {
     // Get user's global athlete link
-    const link = await this.getUserGlobalAthleteLink(userId);
+    const link = await this.getActiveUserGlobalAthleteLink(userId);
     if (!link) {
       throw new Error("User does not have a global athlete profile");
     }
@@ -1107,7 +1138,7 @@ export class GlobalAthleteService extends BaseService {
    * Get pending claims for a user
    */
   async getPendingClaims(userId: string): Promise<GlobalAthleteClaim[]> {
-    const link = await this.getUserGlobalAthleteLink(userId);
+    const link = await this.getActiveUserGlobalAthleteLink(userId);
     if (!link) {
       return [];
     }
@@ -1125,7 +1156,7 @@ export class GlobalAthleteService extends BaseService {
    */
   async cancelClaim(userId: string, claimId: string): Promise<void> {
     // Get user's global athlete link
-    const link = await this.getUserGlobalAthleteLink(userId);
+    const link = await this.getActiveUserGlobalAthleteLink(userId);
     if (!link) {
       throw new Error("User does not have a global athlete profile");
     }

@@ -7,7 +7,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vites
 import { db } from "../db";
 import {
   organizations, users, userOrganizations,
-  globalAthletes, userGlobalAthleteLinks, globalAthleteAuditLog
+  globalAthletes, userGlobalAthleteLinks, globalAthleteAuditLog, emailVerificationTokens
 } from "@shared/schema";
 import { eq, inArray } from "drizzle-orm";
 import { GlobalAthleteService } from "../services/global-athlete-service";
@@ -75,6 +75,12 @@ describe("Global Athlete Notification Features", () => {
       isEmailVerified: true,
     }).returning();
     testUser2Id = user2.id;
+
+    // onEmailVerified runs after the account redeemed a verification token for the address; record that proof
+    await db.insert(emailVerificationTokens).values([
+      { userId: testUser1Id, email: TEST_EMAIL, token: `used-${testUser1Id}`, isUsed: true, expiresAt: new Date() },
+      { userId: testUser2Id, email: TEST_EMAIL, token: `used-${testUser2Id}`, isUsed: true, expiresAt: new Date() },
+    ]);
 
     // Add users to organizations
     await db.insert(userOrganizations).values([

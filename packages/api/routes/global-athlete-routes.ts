@@ -91,7 +91,7 @@ export function registerGlobalAthleteRoutes(app: Express) {
       }
 
       // Get user's global athlete link
-      const link = await globalAthleteService.getUserGlobalAthleteLink(currentUser.id);
+      const link = await globalAthleteService.getActiveUserGlobalAthleteLink(currentUser.id);
       if (!link) {
         return res.status(404).json({
           message: "No global athlete profile found",
@@ -200,7 +200,7 @@ export function registerGlobalAthleteRoutes(app: Express) {
       const { allowCrossOrgLinking } = validationResult.data;
 
       // Get user's global athlete link
-      const link = await globalAthleteService.getUserGlobalAthleteLink(currentUser.id);
+      const link = await globalAthleteService.getActiveUserGlobalAthleteLink(currentUser.id);
       if (!link) {
         return res.status(404).json({ message: "No global athlete profile found" });
       }
@@ -316,7 +316,7 @@ export function registerGlobalAthleteRoutes(app: Express) {
       }
 
       // Get user's global athlete link
-      const link = await globalAthleteService.getUserGlobalAthleteLink(currentUser.id);
+      const link = await globalAthleteService.getActiveUserGlobalAthleteLink(currentUser.id);
 
       if (!link) {
         return res.json({
@@ -405,7 +405,7 @@ export function registerGlobalAthleteRoutes(app: Express) {
       }
 
       // Get user's global athlete link
-      const link = await globalAthleteService.getUserGlobalAthleteLink(currentUser.id);
+      const link = await globalAthleteService.getActiveUserGlobalAthleteLink(currentUser.id);
       if (!link) {
         return res.status(404).json({ message: "No global athlete profile found" });
       }

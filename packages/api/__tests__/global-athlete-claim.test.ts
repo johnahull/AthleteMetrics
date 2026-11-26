@@ -8,7 +8,7 @@ import { db } from "../db";
 import {
   organizations, users, userOrganizations,
   globalAthletes, userGlobalAthleteLinks, globalAthleteAuditLog,
-  globalAthleteClaims
+  globalAthleteClaims, emailVerificationTokens
 } from "@shared/schema";
 import { eq, inArray } from "drizzle-orm";
 import { hashToken } from '../lib/token-hash';
@@ -84,6 +84,12 @@ describe("Global Athlete Claim Features", () => {
       isEmailVerified: true,
     }).returning();
     testUser2Id = user2.id;
+
+    // onEmailVerified runs after the account redeemed a verification token for the address; record that proof
+    await db.insert(emailVerificationTokens).values([
+      { userId: testUser1Id, email: TEST_EMAIL_1, token: `used-${testUser1Id}`, isUsed: true, expiresAt: new Date() },
+      { userId: testUser2Id, email: TEST_EMAIL_2, token: `used-${testUser2Id}`, isUsed: true, expiresAt: new Date() },
+    ]);
 
     // Add users to organizations
     await db.insert(userOrganizations).values([

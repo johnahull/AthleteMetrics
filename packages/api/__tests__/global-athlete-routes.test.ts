@@ -7,7 +7,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { db } from "../db";
 import {
   organizations, users, userOrganizations, measurements,
-  globalAthletes, userGlobalAthleteLinks, globalAthleteAuditLog
+  globalAthletes, userGlobalAthleteLinks, globalAthleteAuditLog, emailVerificationTokens
 } from "@shared/schema";
 import { eq, inArray } from "drizzle-orm";
 import { GlobalAthleteService } from "../services/global-athlete-service";
@@ -70,6 +70,12 @@ describe("Global Athlete Routes", () => {
       isEmailVerified: true,
     }).returning();
     testUser2Id = user2.id;
+
+    // onEmailVerified runs after the account redeemed a verification token for the address; record that proof
+    await db.insert(emailVerificationTokens).values([
+      { userId: testUser1Id, email: TEST_EMAIL, token: `used-${testUser1Id}`, isUsed: true, expiresAt: new Date() },
+      { userId: testUser2Id, email: TEST_EMAIL, token: `used-${testUser2Id}`, isUsed: true, expiresAt: new Date() },
+    ]);
 
     const [user3] = await db.insert(users).values({
       username: TEST_USER3_USERNAME,
