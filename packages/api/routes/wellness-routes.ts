@@ -1139,7 +1139,10 @@ export function registerWellnessRoutes(app: Express) {
           if (selectedAthleteId) {
             // Athlete selected from dropdown - use real user ID
             // SECURITY: Verify athlete is in targeted list
-            const request = await storage.getWellnessRequest(data.requestId!);
+            if (!data.requestId) {
+              return res.status(400).json({ message: "requestId is required when selecting an athlete" });
+            }
+            const request = await storage.getWellnessRequest(data.requestId);
             if (!request) {
               return res.status(404).json({ message: "Request not found" });
             }
@@ -1561,7 +1564,9 @@ export function registerWellnessRoutes(app: Express) {
         // A standing request can be answered again any day, so it never counts as submitted
         const wellnessRequest = await storage.getWellnessRequest(requestId);
         if (wellnessRequest?.isStanding) {
-          return res.json({ hasSubmitted: false, isStanding: true });
+          // Only a targeted athlete learns that the request is standing; anyone else just has nothing submitted
+          const isTargeted = await verifyAthleteIsTargeted(wellnessRequest as any, userId);
+          return res.json(isTargeted ? { hasSubmitted: false, isStanding: true } : { hasSubmitted: false });
         }
 
         // Get all responses for this user

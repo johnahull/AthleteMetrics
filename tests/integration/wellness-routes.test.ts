@@ -1062,6 +1062,34 @@ describe('Standing (anytime) Wellness Requests', () => {
     expect(res.body.teamNameSnapshot).toBe(activeTeam.name);
   });
 
+  it('GET /api/wellness/requests/:requestId/check-submission - does not tell a non-targeted user a request is standing', async () => {
+    const standing = await createStanding();
+
+    const res = await request(app)
+      .get(`/api/wellness/requests/${standing.id}/check-submission`)
+      .set('Cookie', nonTargetedCookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ hasSubmitted: false });
+  });
+
+  it('POST /api/wellness/responses - a magic-link athlete selection without a requestId is a 400, not a crash', async () => {
+    const oneTime = await createStanding({ isStanding: false, distributionMethod: 'magic_link' });
+
+    const res = await request(app)
+      .post('/api/wellness/responses')
+      .query({ token: oneTime.publicToken, athlete: testAthlete.id })
+      .send({
+        templateId: standingTemplate.id,
+        date: utcDay(0),
+        selectedAthleteId: testAthlete.id,
+        responses: { q1: { value: 5, label: 'Energy' } },
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/requestId/i);
+  });
+
   it('GET /api/wellness/requests/:requestId/check-submission - standing request is never "submitted"', async () => {
     const standing = await createStanding();
     expect((await submit(standing.id, utcDay(0), 5)).status).toBe(201);

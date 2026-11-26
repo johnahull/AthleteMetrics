@@ -157,7 +157,8 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
       }
 
       if (sendMode === 'anytime') {
-        // Standing request: sign-in only, never expires, never scheduled
+        // Standing request: sign-in only, never expires, never scheduled. TeamAthleteSelector turns a
+        // picked team into its athletes' ids, so (as in the other modes) there are no team targets to send
         await createRequest.mutateAsync({
           templateId: selectedTemplateId,
           distributionMethod: 'athlete_account',
