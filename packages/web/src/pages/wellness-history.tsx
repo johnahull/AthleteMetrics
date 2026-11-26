@@ -153,7 +153,7 @@ export default function WellnessHistory() {
               <div className="space-y-4" data-testid="response-detail">
                 {selectedTemplate &&
                   selectedTemplate.config.questions.map((question) => {
-                    const answer = selectedResponse.responses[question.id];
+                    const answer = selectedResponse.responses[question.id]?.value;
 
                     return (
                       <div key={question.id} className="border-b pb-4 last:border-0">
@@ -182,9 +182,9 @@ export default function WellnessHistory() {
                           {question.type === 'body_map' && Array.isArray(answer) && (
                             <div className="flex flex-wrap gap-2">
                               {answer.length > 0 ? (
-                                answer.map((part: string) => (
-                                  <Badge key={part} variant="outline">
-                                    {part}
+                                answer.map((point, i) => (
+                                  <Badge key={i} variant="outline">
+                                    {typeof point === 'string' ? point : point.label ?? 'Marked area'}
                                   </Badge>
                                 ))
                               ) : (

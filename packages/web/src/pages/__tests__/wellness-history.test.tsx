@@ -23,7 +23,7 @@ const response = (id: string, templateName?: string) => ({
   teamNameSnapshot: null,
   submittedAt: '2026-11-20T08:00:00Z',
   date: '2026-11-20',
-  responses: { q1: { value: 7, label: 'Energy' } },
+  responses: { q1: { value: 7, label: 'Energy' }, pain: { value: [{ x: 0.4, y: 0.7, label: 'Left knee' }], label: 'Pain' } },
   templateName,
 });
 
@@ -31,7 +31,12 @@ const template = {
   id: 'tpl-1',
   organizationId: 'org-1',
   name: 'Morning check',
-  config: { questions: [{ id: 'q1', type: 'scale', label: 'Energy level', scaleMin: 1, scaleMax: 10, required: true }] },
+  config: {
+    questions: [
+      { id: 'q1', type: 'scale', label: 'Energy level', scaleMin: 1, scaleMax: 10, required: true },
+      { id: 'pain', type: 'body_map', label: 'Where does it hurt?', required: false },
+    ],
+  },
 };
 
 function mockFetch(responses: unknown[]) {
@@ -74,5 +79,9 @@ describe('WellnessHistory', () => {
     await userEvent.click(await screen.findByText('Morning check'));
     const detail = await screen.findByTestId('response-detail');
     expect(await within(detail).findByText('Energy level')).toBeInTheDocument();
+    // Stored answers are { value, label }: the value is shown, not the object
+    expect(within(detail).getByText('7')).toBeInTheDocument();
+    expect(within(detail).getByText('Left knee')).toBeInTheDocument();
+    expect(within(detail).queryByText('[object Object]')).not.toBeInTheDocument();
   });
 });
