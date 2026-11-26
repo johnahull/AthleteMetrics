@@ -250,14 +250,22 @@ test.describe.serial('Wellness Anytime requests', () => {
     await page.context().close();
   });
 
-  test('a signed-out visit to the request link asks to sign in', async ({ browser }) => {
+  test('a signed-out visit to the request link asks to sign in, then returns to the check-in', async ({ browser }) => {
     test.skip(!requestId, RATE_LIMITED);
     // New contexts get the project's signed-in storageState unless told otherwise
     const page = await (await browser.newContext({ storageState: { cookies: [], origins: [] } })).newPage();
     await page.goto(`${BASE_URL}/wellness/submit/${publicToken}`);
     await expect(page.getByText('Please sign in to submit this check-in')).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Submit' })).toHaveCount(0);
+
+    await page.getByRole('link', { name: 'Sign in' }).click();
+    await expect(page).toHaveURL(/\/login\?redirect=/);
+    await page.fill('#username, input[name="username"]', ATHLETE.username);
+    await page.fill('#password, input[name="password"]', ATHLETE.password);
+    await page.click('button[type="submit"]');
+
+    await page.waitForURL(url => url.pathname === `/wellness/submit/${publicToken}`);
+    await expect(page.getByTestId('standing-replace-note')).toBeVisible();
     await page.context().close();
   });
 });
