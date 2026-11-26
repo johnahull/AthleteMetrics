@@ -330,7 +330,7 @@ export interface IStorage {
   }>>;
   getAthlete(id: string): Promise<User | undefined>;
   createAthlete(athlete: Partial<InsertUser>): Promise<User>;
-  updateAthlete(id: string, athlete: Partial<InsertUser>): Promise<User>;
+  updateAthlete(id: string, athlete: Partial<InsertUser>, options?: { teamScopeOrgIds?: string[] }): Promise<User>;
   deleteAthlete(id: string): Promise<void>;
 
   // Measurements
@@ -3584,7 +3584,11 @@ export class DatabaseStorage implements IStorage {
     return athleteResult;
   }
 
-  async updateAthlete(id: string, athlete: Partial<InsertUser>): Promise<User> {
+  /**
+   * `options.teamScopeOrgIds`: when `teamIds` is given, replace only the athlete's teams in these organizations
+   * (the ones the caller manages) and keep the rest. Omitted (site admins) replaces every team.
+   */
+  async updateAthlete(id: string, athlete: Partial<InsertUser>, options?: { teamScopeOrgIds?: string[] }): Promise<User> {
     // List of valid database columns that can be updated
     const validUserColumns = [
       'username', 'emails', 'password', 'firstName', 'lastName',
@@ -3641,7 +3645,7 @@ export class DatabaseStorage implements IStorage {
 
     // Update teams if specified
     if (athlete.teamIds !== undefined) {
-      await this.setAthleteTeams(id, athlete.teamIds);
+      await this.setAthleteTeams(id, athlete.teamIds, options?.teamScopeOrgIds);
     }
 
     // Update any existing user records if name changed
@@ -3769,9 +3773,16 @@ export class DatabaseStorage implements IStorage {
     return await this.removeUserFromTeam(athleteId, teamId);
   }
 
-  async setAthleteTeams(athleteId: string, teamIds: string[]): Promise<void> {
-    // Remove existing teams
-    await db.delete(userTeams).where(eq(userTeams.userId, athleteId));
+  async setAthleteTeams(athleteId: string, teamIds: string[], scopeOrgIds?: string[]): Promise<void> {
+    // Remove existing teams: all of them, or only those in the given organizations
+    if (scopeOrgIds === undefined) {
+      await db.delete(userTeams).where(eq(userTeams.userId, athleteId));
+    } else if (scopeOrgIds.length > 0) {
+      await db.delete(userTeams).where(and(
+        eq(userTeams.userId, athleteId),
+        inArray(userTeams.teamId, db.select({ id: teams.id }).from(teams).where(inArray(teams.organizationId, scopeOrgIds)))
+      ));
+    }
 
     // Add new teams
     if (teamIds.length > 0) {

@@ -20,8 +20,14 @@ import { insertUserSchema, insertAthleteSchema } from "@shared/schema";
 import {
   requireAthleteManagementPermission,
   requireAthleteAccessPermission,
-  requireAthleteManagementAccess
+  requireAthleteManagementAccess,
+  getAthleteAuthority,
+  managesWholeAccount,
+  isClaimedAccount,
+  type AthleteAuthority,
 } from "../middleware/athlete-permissions";
+import { getOrgRole } from "../permissions/index";
+import { toSafeUser } from "../lib/safe-user";
 import { athleteQuerySchema } from "../validation/athlete-validation";
 import { ZodError } from "zod";
 import { isSiteAdmin } from "../utils/auth-helpers";
@@ -225,12 +231,11 @@ export function registerAthleteRoutes(app: Express) {
 
       const userIsSiteAdmin = isSiteAdmin(currentUser);
 
-      // Athletes can only view their own athlete data
-      if (currentUser.role === "athlete") {
-        if (currentUser.athleteId !== athleteId) {
-          return res.status(403).json({ message: "Athletes can only view their own profile" });
-        }
-      } else if (!userIsSiteAdmin) {
+      const isSelf = currentUser.id === athleteId || currentUser.athleteId === athleteId;
+
+      // Anyone may view themselves; others need a non-athlete role in an organization shared with the athlete
+      // (the role in THAT organization, not the session role, which comes from the first organization by name).
+      if (!isSelf && !userIsSiteAdmin) {
         // Coaches and org admins can only view athletes from their organization
         // Check if user has access to the same organization as the athlete
         const userOrgs = await getCachedUserOrganizations(req, currentUser.id);
@@ -269,6 +274,13 @@ export function registerAthleteRoutes(app: Express) {
             method: req.method,
           });
           return res.status(403).json({ message: "Access denied - athlete belongs to a different organization" });
+        }
+
+        const hasNonAthleteRoleInSharedOrg = userOrgs.some(
+          (org) => allAthleteOrgIds.includes(org.organizationId) && org.role !== "athlete"
+        );
+        if (!hasNonAthleteRoleInSharedOrg) {
+          return res.status(403).json({ message: "Athletes can only view their own profile" });
         }
       }
 
@@ -326,26 +338,37 @@ export function registerAthleteRoutes(app: Express) {
       // Get the user's organization context to assign the athlete
       const userOrgs = await getCachedUserOrganizations(req, currentUser.id);
 
-      if (!isSiteAdmin(currentUser) && userOrgs.length === 0) {
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+      if (!userIsSiteAdmin && userOrgs.length === 0) {
         return res.status(403).json({ message: "No organization context found. Athletes must belong to an organization." });
       }
 
-      // Create the athlete
-      const athlete = await storage.createAthlete(validatedData);
-
-      // Assign athlete to the user's organization
-      // For site admins with no org context, or users with an org, add them to the first org
-      if (userOrgs.length > 0) {
-        const organizationId = userOrgs[0].organizationId;
-
-        try {
-          await storage.addUserToOrganization(athlete.id, organizationId, "athlete");
-          console.log(`[CREATE ATHLETE] Assigned athlete ${athlete.id} to organization ${organizationId}`);
-        } catch (error) {
-          console.error(`[CREATE ATHLETE] Failed to assign athlete to organization:`, error);
-          // Don't fail the request, but log the error
+      // The athlete's organization: the one asked for, else the first team's, else (for a coach/org admin) the
+      // first organization where the caller has that role. Teams and organization must be ones the caller manages.
+      const teamOrgIds: string[] = [];
+      for (const teamId of validatedData.teamIds ?? []) {
+        const team = await storage.getTeam(teamId);
+        if (!team) return res.status(400).json({ message: "Team not found" });
+        teamOrgIds.push(team.organization.id);
+      }
+      const organizationId =
+        validatedData.organizationId ??
+        teamOrgIds[0] ??
+        (userIsSiteAdmin
+          ? userOrgs[0]?.organizationId
+          : userOrgs.find((org) => org.role === "org_admin" || org.role === "coach")?.organizationId);
+      if (!userIsSiteAdmin) {
+        const role = await getOrgRole(currentUser, organizationId);
+        if (role !== "org_admin" && role !== "coach") {
+          return res.status(403).json({ message: "Organization admin or coach role required in the athlete's organization" });
+        }
+        if (teamOrgIds.some((orgId) => orgId !== organizationId)) {
+          return res.status(403).json({ message: "Teams must belong to the athlete's organization" });
         }
       }
+
+      // Create the athlete; storage adds the organization membership and the teams
+      const athlete = await storage.createAthlete({ ...validatedData, organizationId } as typeof validatedData);
 
       // Auto-link athlete to global athlete identity if they have a real email
       if (athlete.emails?.[0]) {
@@ -357,7 +380,7 @@ export function registerAthleteRoutes(app: Express) {
         }
       }
 
-      res.status(201).json(athlete);
+      res.status(201).json({ ...toSafeUser(athlete, "staff"), teams: [] });
     } catch (error) {
       console.error("Create athlete error:", error);
       if (error instanceof Error && error.name === 'ZodError') {
@@ -379,6 +402,43 @@ export function registerAthleteRoutes(app: Express) {
       const updateSchema = insertAthleteSchema.partial();
       const validatedData = updateSchema.parse(req.body);
 
+      const currentUser = req.session.user!;
+      const userIsSiteAdmin = currentUser.isSiteAdmin === true;
+      const isSelf = currentUser.id === athleteId;
+      // Set by requireAthleteAccessPermission for everyone but site admins
+      const authority = res.locals.athleteAuthority as AthleteAuthority | undefined;
+
+      // Emails are the account's identity (password reset is sent to them), so a change by someone else is
+      // account-level: never on a claimed account, and only with authority in every organization of the user.
+      if (validatedData.emails !== undefined && !userIsSiteAdmin && !isSelf) {
+        if (!authority?.target) return res.status(404).json({ message: "Athlete not found" });
+        const normalize = (emails: readonly string[] | null | undefined) =>
+          [...new Set((emails ?? []).map((e) => e.trim().toLowerCase()))].sort().join("\n");
+        if (normalize(validatedData.emails) !== normalize(authority.target.emails)) {
+          if (isClaimedAccount(authority.target)) {
+            return res.status(403).json({
+              message: "Only the account owner or a site admin can change the email of an activated account",
+            });
+          }
+          if (!managesWholeAccount(authority)) {
+            return res.status(403).json({
+              message: "This user also belongs to organizations you do not manage, so you cannot change their email",
+            });
+          }
+        }
+      }
+
+      // Teams may only be set within organizations the caller manages for this user; teams elsewhere are kept.
+      if (validatedData.teamIds !== undefined && !userIsSiteAdmin) {
+        const managedOrgIds = authority?.managedOrgIds ?? [];
+        for (const teamId of validatedData.teamIds) {
+          const team = await storage.getTeam(teamId);
+          if (!team || !managedOrgIds.includes(team.organization.id)) {
+            return res.status(403).json({ message: "You can only assign teams of organizations you manage for this athlete" });
+          }
+        }
+      }
+
       // Setting parentEmail creates a parentAthleteLinks row and emails that
       // address with the minor's name — restrict to org_admin/site_admin so a
       // coach can't redirect that link (and notification) to an arbitrary
@@ -390,7 +450,6 @@ export function registerAthleteRoutes(app: Express) {
       // (alphabetically-first) org the athlete happens to also belong to.
       let parentLinkOrgId: string | null = null;
       if (validatedData.parentEmail !== undefined) {
-        const currentUser = req.session.user!;
         const athleteOrgs = await storage.getUserOrganizations(athleteId);
         if (currentUser.isSiteAdmin) {
           // A site admin has no requester-org context; fall back to the
@@ -415,7 +474,11 @@ export function registerAthleteRoutes(app: Express) {
         }
       }
 
-      const updatedAthlete = await storage.updateAthlete(athleteId, validatedData);
+      const updatedAthlete = await storage.updateAthlete(
+        athleteId,
+        validatedData,
+        userIsSiteAdmin ? undefined : { teamScopeOrgIds: authority?.managedOrgIds ?? [] },
+      );
 
       // Handle parentEmail: persist to user record and create parentAthleteLinks
       // row for minor athletes if needed. This is done after the main update so
@@ -436,7 +499,7 @@ export function registerAthleteRoutes(app: Express) {
         }
       }
 
-      res.json(updatedAthlete);
+      res.json(toSafeUser(updatedAthlete, isSelf ? "self" : "staff"));
     } catch (error) {
       console.error("Update athlete error:", error);
       if (error instanceof ZodError) {
@@ -521,23 +584,12 @@ export function registerAthleteRoutes(app: Express) {
 
       // PERFORMANCE FIX: Batch permission checks upfront to avoid N+1 queries
       if (!userIsSiteAdmin) {
-        // Get user's organizations once
-        const userOrgs = await getCachedUserOrganizations(req, currentUser.id);
-        const userOrgIds = userOrgs.map(org => org.organizationId);
-
-        // Batch fetch all athletes and their organization memberships
+        // Deleting removes the whole account, so the caller must manage the user in every organization they belong
+        // to (same rule as DELETE /api/athletes/:id).
         const athleteChecks = await Promise.all(
           athleteIds.map(async (athleteId) => {
             try {
-              const athlete = await storage.getAthlete(athleteId);
-              if (!athlete) {
-                return { athleteId, hasAccess: false };
-              }
-
-              const athleteTeams = await storage.getUserTeams(athleteId);
-              const athleteOrgIds = athleteTeams.map(team => team.team.organizationId);
-              const hasAccess = athleteOrgIds.some(orgId => userOrgIds.includes(orgId));
-
+              const hasAccess = managesWholeAccount(await getAthleteAuthority(currentUser, athleteId));
               return { athleteId, hasAccess };
             } catch (error) {
               console.error(`[BULK DELETE] Failed to check access for athlete ${athleteId}:`, error);
@@ -626,7 +678,8 @@ export function registerAthleteRoutes(app: Express) {
       // Verify user has permission for the organization
       if (!userIsSiteAdmin) {
         const userOrgs = await getCachedUserOrganizations(req, currentUser.id);
-        const hasOrgAccess = userOrgs.some(org => org.organizationId === organizationId);
+        const roleInOrg = await getOrgRole(currentUser, organizationId);
+        const hasOrgAccess = roleInOrg === "org_admin" || roleInOrg === "coach";
 
         if (!hasOrgAccess) {
           // Audit log: User attempted to invite athletes to different org

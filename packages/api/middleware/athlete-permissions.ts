@@ -5,6 +5,9 @@
 
 import type { Request, Response, NextFunction } from 'express';
 import { storage } from '../storage';
+import { INVITATION_PENDING_PASSWORD, type User } from '@shared/schema';
+import { canManageRole, type Role } from '@shared/role-types';
+import { getOrgRole, type UserForPermission } from '../permissions/measurement-helpers';
 
 /**
  * Checks if user has permission to manage athletes (create/update)
@@ -54,15 +57,69 @@ export async function requireAthleteManagementPermission(
 }
 
 /**
- * Factory for athlete-access middleware.
+ * Who may act on another user's account through the athlete routes.
  *
- * Requires org_admin/coach role in an organization shared with the athlete
- * (site admins always pass). When `allowSelf` is true, an athlete may also
- * access their own record — appropriate for reads and self-profile edits, but
- * NOT for destructive actions (delete, status toggle) where self-access would
- * let an athlete delete themselves or reverse an admin's deactivation.
+ * Rules (site admins always pass; they are the only ones who may act on a site admin):
+ * - The caller needs coach/org_admin IN an organization the target belongs to. A role held in a different
+ *   organization never counts (the role comes from `getOrgRole(caller, thatOrg)`, not the session role).
+ * - In that organization the caller's role must outrank the target's role there (`canManageRole`): a coach
+ *   manages athletes (and parents/guests), an org admin also manages coaches. Nobody manages a peer or a superior.
+ * - Such an organization is a "managed" organization. One is enough for ordinary profile edits.
+ * - Account-level actions (status toggle, delete, email change) affect the whole account in every organization,
+ *   so they need every organization of the target to be managed.
  */
-function athleteAccessPermission(options: { allowSelf: boolean }) {
+export interface AthleteAuthority {
+  target: User | undefined;
+  /** Organizations the target is a member of */
+  targetOrgIds: string[];
+  /** The subset of targetOrgIds in which the caller may manage the target */
+  managedOrgIds: string[];
+}
+
+export async function getAthleteAuthority(
+  caller: Pick<UserForPermission, 'id' | 'isSiteAdmin' | 'role'>,
+  targetId: string
+): Promise<AthleteAuthority> {
+  const [target, targetOrgs] = await Promise.all([
+    storage.getUser(targetId),
+    storage.getUserOrganizations(targetId),
+  ]);
+  const callerRoles = await Promise.all(targetOrgs.map((org) => getOrgRole(caller, org.organizationId)));
+  const managedOrgIds = targetOrgs
+    .filter((org, i) => {
+      const callerRole = callerRoles[i];
+      return (callerRole === 'org_admin' || callerRole === 'coach') && canManageRole(callerRole, org.role as Role);
+    })
+    .map((org) => org.organizationId);
+  return { target, targetOrgIds: targetOrgs.map((org) => org.organizationId), managedOrgIds };
+}
+
+/** True when the caller manages the target in every one of the target's organizations (and the target is not a site admin). */
+export function managesWholeAccount(authority: AthleteAuthority): boolean {
+  return (
+    !!authority.target &&
+    !authority.target.isSiteAdmin &&
+    authority.targetOrgIds.length > 0 &&
+    authority.managedOrgIds.length === authority.targetOrgIds.length
+  );
+}
+
+/** An account someone has activated: a real password or an OAuth login. Its email is the owner's to change. */
+export function isClaimedAccount(user: Pick<User, 'password' | 'googleId' | 'appleId'>): boolean {
+  return (!!user.password && user.password !== INVITATION_PENDING_PASSWORD) || !!user.googleId || !!user.appleId;
+}
+
+/**
+ * Factory for athlete-access middleware (rules above).
+ *
+ * When `allowSelf` is true, a user may also access their own record, which is right for reads and self-profile
+ * edits but NOT for destructive actions (delete, status toggle), where self-access would let an athlete delete
+ * themselves or reverse an admin's deactivation. When `wholeAccount` is true the caller must manage the target in
+ * every organization of the target.
+ *
+ * For non-site-admins the computed authority is left in `res.locals.athleteAuthority` for the handler.
+ */
+function athleteAccessPermission(options: { allowSelf: boolean; wholeAccount: boolean }) {
   return async function (req: Request, res: Response, next: NextFunction) {
     try {
       const currentUser = req.session.user;
@@ -85,44 +142,32 @@ function athleteAccessPermission(options: { allowSelf: boolean }) {
         return next();
       }
 
+      const authority = await getAthleteAuthority(currentUser, athleteId);
+      res.locals.athleteAuthority = authority;
+
       // Athletes can access their own profile (read/self-edit only)
       if (options.allowSelf && currentUser.id === athleteId) {
         return next();
       }
 
-      const [userOrgs, athleteOrgs] = await Promise.all([
-        storage.getUserOrganizations(currentUser.id),
-        storage.getUserOrganizations(athleteId)
-      ]);
-
-      if (userOrgs.length === 0) {
-        return res.status(403).json({ message: "No organization access" });
-      }
-
-      // Check if user has appropriate role
-      const hasRole = userOrgs.some(org =>
-        org.role === 'org_admin' || org.role === 'coach'
-      );
-
-      if (!hasRole) {
-        return res.status(403).json({
-          message: "Organization admin or coach role required"
-        });
-      }
-
-      // Check if athlete exists (athleteOrgs will be empty if user doesn't exist)
-      if (athleteOrgs.length === 0) {
+      // Check if athlete exists (a user with no organization is not an athlete anyone but a site admin manages)
+      if (!authority.target || authority.targetOrgIds.length === 0) {
         return res.status(404).json({ message: "Athlete not found" });
       }
 
-      // Check if athlete is in user's organization
-      const athleteOrgIds = athleteOrgs.map(org => org.organizationId);
-      const userOrgIds = userOrgs.map(org => org.organizationId);
-      const hasSharedOrg = athleteOrgIds.some(orgId => userOrgIds.includes(orgId));
+      if (authority.target.isSiteAdmin) {
+        return res.status(403).json({ message: "Only a site admin can manage a site admin account" });
+      }
 
-      if (!hasSharedOrg) {
+      if (authority.managedOrgIds.length === 0) {
         return res.status(403).json({
-          message: "Access denied - athlete not in your organization"
+          message: "Access denied - you need a coach or organization admin role above this user's role in their organization"
+        });
+      }
+
+      if (options.wholeAccount && !managesWholeAccount(authority)) {
+        return res.status(403).json({
+          message: "Access denied - this user also belongs to organizations you do not manage"
         });
       }
 
@@ -135,15 +180,16 @@ function athleteAccessPermission(options: { allowSelf: boolean }) {
 }
 
 /**
- * Access to a specific athlete for reads and self-profile edits.
- * Athletes may access their own record; org_admin/coach may access athletes in
- * a shared organization; site admins may access any.
+ * Access to a specific athlete for reads and profile edits.
+ * Users may access their own record; org_admin/coach may access users they manage in at least one shared
+ * organization; site admins may access any. Account-level fields (emails) are checked again in the handler.
  */
-export const requireAthleteAccessPermission = athleteAccessPermission({ allowSelf: true });
+export const requireAthleteAccessPermission = athleteAccessPermission({ allowSelf: true, wholeAccount: false });
 
 /**
  * Access to a specific athlete for destructive/management actions (delete,
- * status toggle). Same as above but WITHOUT the athlete self-access branch, so
- * an athlete cannot delete or re-activate their own record.
+ * status toggle). No self-access branch, so an athlete cannot delete or
+ * re-activate their own record, and the caller must manage the target in
+ * every organization the target belongs to.
  */
-export const requireAthleteManagementAccess = athleteAccessPermission({ allowSelf: false });
+export const requireAthleteManagementAccess = athleteAccessPermission({ allowSelf: false, wholeAccount: true });
