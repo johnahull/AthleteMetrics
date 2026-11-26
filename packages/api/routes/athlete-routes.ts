@@ -277,8 +277,9 @@ export function registerAthleteRoutes(app: Express) {
           return res.status(403).json({ message: "Access denied - athlete belongs to a different organization" });
         }
 
+        // Staff role must be in an organization the athlete is a MEMBER of (team-derived organizations do not count)
         const isStaffInSharedOrg = userOrgs.some(
-          (org) => allAthleteOrgIds.includes(org.organizationId) && (org.role === "coach" || org.role === "org_admin")
+          (org) => athleteOrgIds.includes(org.organizationId) && (org.role === "coach" || org.role === "org_admin")
         );
         if (!isStaffInSharedOrg) {
           return res.status(403).json({ message: "Access denied - only coaches and organization admins can view other members' profiles" });
@@ -421,7 +422,7 @@ export function registerAthleteRoutes(app: Express) {
         const normalize = (emails: readonly string[] | null | undefined) =>
           [...new Set((emails ?? []).map((e) => e.trim().toLowerCase()))].sort().join("\n");
         if (normalize(validatedData.emails) !== normalize(authority.target.emails)) {
-          if (isClaimedAccount(authority.target)) {
+          if (await isClaimedAccount(authority.target)) {
             return res.status(403).json({
               message: "Only the account owner or a site admin can change the email of an activated account",
             });
@@ -431,6 +432,17 @@ export function registerAthleteRoutes(app: Express) {
               message: "This user also belongs to organizations you do not manage, so you cannot change their email",
             });
           }
+        }
+      }
+
+      // The birth date drives age and COPPA handling in every organization, so changing it is account-level too.
+      if (validatedData.birthDate !== undefined && !userIsSiteAdmin && !isSelf) {
+        if (!authority?.target) return res.status(404).json({ message: "Athlete not found" });
+        const day = (value: unknown) => (value ? String(value).slice(0, 10) : "");
+        if (day(validatedData.birthDate) !== day(authority.target.birthDate) && !managesWholeAccount(authority)) {
+          return res.status(403).json({
+            message: "This user also belongs to organizations you do not manage, so you cannot change their birth date",
+          });
         }
       }
 
@@ -743,13 +755,16 @@ export function registerAthleteRoutes(app: Express) {
 
             // Only users the caller manages in this organization, and only accounts nobody has activated yet
             // (an invitation for an activated account would hand its login to whoever holds the email).
+            if (!athleteOrgs.some((org) => org.organizationId === organizationId && org.role === 'athlete')) {
+              return { athleteId, valid: false, reason: 'not_athlete' };
+            }
             if (!userIsSiteAdmin) {
               const authority = await getAthleteAuthority(currentUser, athleteId);
               if (!authority.managedOrgIds.includes(organizationId)) {
                 return { athleteId, valid: false, reason: 'not_managed' };
               }
             }
-            if (isClaimedAccount(athlete)) {
+            if (await isClaimedAccount(athlete)) {
               return { athleteId, valid: false, reason: 'already_activated' };
             }
 

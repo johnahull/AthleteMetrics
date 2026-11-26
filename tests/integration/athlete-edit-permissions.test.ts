@@ -22,7 +22,8 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import { storage } from '../../packages/api/storage';
-import { users, userOrganizations, type Organization, type User, type Team } from '@shared/schema';
+import { users, userOrganizations, INVITATION_PENDING_PASSWORD, type Organization, type User, type Team } from '@shared/schema';
+import bcrypt from 'bcrypt';
 import { eq } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
 
@@ -426,6 +427,85 @@ describe('Athlete edit permissions', () => {
       expect(res.status).toBe(200);
       expect(res.body.invited).toBe(1);
       expect(res.body.skipped).toBe(2);
+    });
+  });
+
+  describe('pending passwords, invite roles, profile reads and birth dates', () => {
+    /** An athlete row from an older import: its pending password is stored as a bcrypt hash of the placeholder. */
+    async function makeHashedPendingAthlete(orgs: Organization[]): Promise<User> {
+      const athlete = await makeUnclaimedAthlete(orgs);
+      const hashed = await bcrypt.hash(INVITATION_PENDING_PASSWORD, 4);
+      await db.update(users).set({ password: hashed }).where(eq(users.id, athlete.id));
+      return athlete;
+    }
+
+    it('lets a coach change the email of an athlete whose pending password is stored hashed', async () => {
+      const athlete = await makeHashedPendingAthlete([orgA]);
+      const agent = await agentFor(coachA);
+      const res = await agent.put(`/api/athletes/${athlete.id}`).send({ emails: ['hashed-pending-fix@test.com'] });
+      expect(res.status).toBe(200);
+      expect((await storage.getUser(athlete.id))?.emails).toEqual(['hashed-pending-fix@test.com']);
+    });
+
+    it('bulk-invites an athlete whose pending password is stored hashed', async () => {
+      const athlete = await makeHashedPendingAthlete([orgA]);
+      const agent = await agentFor(coachA);
+      const res = await agent.post('/api/athletes/bulk-invite').send({ athleteIds: [athlete.id], organizationId: orgA.id });
+      expect(res.status).toBe(200);
+      expect(res.body.invited).toBe(1);
+    });
+
+    it('does not bulk-invite a member whose role in the organization is not athlete', async () => {
+      const uniq = `${Date.now()}${seq++}`;
+      const pendingCoach = await storage.createAthlete({
+        firstName: 'Pending',
+        lastName: `Coach${uniq}`,
+        emails: [`aependingcoach${uniq}@test.com`],
+      });
+      trackedUserIds.push(pendingCoach.id);
+      await storage.addUserToOrganization(pendingCoach.id, orgA.id, 'coach');
+      const agent = await agentFor(adminA);
+      const res = await agent.post('/api/athletes/bulk-invite').send({ athleteIds: [pendingCoach.id], organizationId: orgA.id });
+      expect(res.status).toBe(200);
+      expect(res.body.invited).toBe(0);
+      expect(res.body.skipped).toBe(1);
+    });
+
+    it('refuses a profile read granted only by a team of an organization the athlete is not a member of', async () => {
+      const athlete = await makeUser([[orgA, 'athlete']]);
+      await storage.addUserToTeam(athlete.id, teamB.id);
+      const coachB = await makeUser([[orgB, 'coach']]);
+      expect((await (await agentFor(coachB)).get(`/api/athletes/${athlete.id}`)).status).toBe(403);
+    });
+
+    it('refuses a coach of A changing the birth date of an athlete also in B', async () => {
+      const shared = await makeUser([[orgA, 'athlete'], [orgB, 'athlete']]);
+      const agent = await agentFor(coachA);
+      const res = await agent.put(`/api/athletes/${shared.id}`).send({ birthDate: '2001-02-03' });
+      expect(res.status).toBe(403);
+      expect((await storage.getUser(shared.id))?.birthDate).toBe('1990-01-01');
+    });
+
+    it('lets a coach of A save the edit dialog with an unchanged birth date for an athlete also in B', async () => {
+      const shared = await makeUser([[orgA, 'athlete'], [orgB, 'athlete']]);
+      const agent = await agentFor(coachA);
+      const res = await agent.put(`/api/athletes/${shared.id}`).send({
+        firstName: shared.firstName,
+        lastName: shared.lastName,
+        emails: shared.emails,
+        birthDate: '1990-01-01',
+        school: 'Unchanged Birth Date High',
+        parentEmail: null,
+      });
+      expect(res.status).toBe(200);
+      expect((await storage.getUser(shared.id))?.school).toBe('Unchanged Birth Date High');
+    });
+
+    it('lets a coach change the birth date of an athlete only in their organization', async () => {
+      const athlete = await makeUser([[orgA, 'athlete']]);
+      const agent = await agentFor(coachA);
+      expect((await agent.put(`/api/athletes/${athlete.id}`).send({ birthDate: '2002-03-04' })).status).toBe(200);
+      expect((await storage.getUser(athlete.id))?.birthDate).toBe('2002-03-04');
     });
   });
 });

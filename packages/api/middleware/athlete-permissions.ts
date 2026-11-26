@@ -5,7 +5,8 @@
 
 import type { Request, Response, NextFunction } from 'express';
 import { storage } from '../storage';
-import { INVITATION_PENDING_PASSWORD, type User } from '@shared/schema';
+import type { User } from '@shared/schema';
+import { isPasswordPending } from '../auth/pending-password';
 import type { UserForPermission } from '../permissions/measurement-helpers';
 
 /**
@@ -66,8 +67,9 @@ export async function requireAthleteManagementPermission(
  *   manages athletes, an org admin manages athletes and coaches. Nobody manages a peer, a superior, or a
  *   parent/guest member through these routes.
  * - Such an organization is a "managed" organization. One is enough for ordinary profile edits.
- * - Account-level actions (status toggle, delete, email change) affect the whole account in every organization,
- *   so they need every organization of the target to be managed.
+ * - Account-level actions (status toggle, delete, email change, birth date change) affect the whole account in
+ *   every organization, so they need every organization of the target to be managed. Resubmitting an unchanged
+ *   email or birth date is not a change.
  */
 export interface AthleteAuthority {
   target: User | undefined;
@@ -112,9 +114,13 @@ export function managesWholeAccount(authority: AthleteAuthority): boolean {
   );
 }
 
-/** An account someone has activated: a real password or an OAuth login. Its email is the owner's to change. */
-export function isClaimedAccount(user: Pick<User, 'password' | 'googleId' | 'appleId'>): boolean {
-  return (!!user.password && user.password !== INVITATION_PENDING_PASSWORD) || !!user.googleId || !!user.appleId;
+/**
+ * An account someone has activated: an OAuth login, or a password that is set (not the pending placeholder,
+ * which older rows store as a hash). Its email is the owner's to change.
+ */
+export async function isClaimedAccount(user: Pick<User, 'password' | 'googleId' | 'appleId'>): Promise<boolean> {
+  if (user.googleId || user.appleId) return true;
+  return !!user.password && !(await isPasswordPending(user.password));
 }
 
 /**
