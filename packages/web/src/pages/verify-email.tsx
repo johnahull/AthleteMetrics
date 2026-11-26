@@ -3,11 +3,13 @@ import { useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function VerifyEmail() {
   const [, setLocation] = useLocation();
   const [status, setStatus] = useState<'verifying' | 'success' | 'error'>('verifying');
   const [message, setMessage] = useState('');
+  const [signInToRestoreLinks, setSignInToRestoreLinks] = useState(false);
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -19,17 +21,15 @@ export default function VerifyEmail() {
       return;
     }
 
-    // Verify the email using enhanced auth endpoint
-    fetch('/api/enhanced-auth/verify-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token })
-    })
+    // Verify the email using enhanced auth endpoint. apiRequest sends the session and its CSRF token, so a
+    // signed-in redemption by the token's own account also restores linked records.
+    apiRequest('POST', '/api/enhanced-auth/verify-email', { token })
       .then(async (res) => {
         const data = await res.json();
-        if (res.ok) {
+        if (data.success) {
           setStatus('success');
           setMessage(data.message || 'Email verified successfully!');
+          setSignInToRestoreLinks(data.signInToRestoreLinks === true);
         } else {
           setStatus('error');
           setMessage(data.message || 'Verification failed');
@@ -67,6 +67,12 @@ export default function VerifyEmail() {
               <p className="text-sm text-gray-600 text-center">
                 Your email has been successfully verified. You can now sign in to your account.
               </p>
+              {signInToRestoreLinks && (
+                <p className="text-sm text-gray-600 text-center">
+                  To restore records linked from your other organizations, sign in and choose
+                  &ldquo;Verify your email to restore linked records&rdquo; on your Global Profile page.
+                </p>
+              )}
               <Button
                 onClick={() => setLocation('/login?verified=true')}
                 className="w-full"
