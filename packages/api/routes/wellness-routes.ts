@@ -37,7 +37,7 @@ import {
   submitWellnessResponseSchema,
   generateResponseValidationSchema,
 } from "@shared/wellness-validation";
-import type { WellnessRequest, WellnessResponse } from "@shared/wellness-types";
+import type { WellnessResponse } from "@shared/wellness-types";
 import type { WellnessTrendDataPoint } from "@shared/wellness-analytics-types";
 import { calculateAthleteStatus, getCommonInjuries, calculateTrend, summarizeEarlierEntry } from "@shared/wellness-status-utils";
 import { WELLNESS_CONSTANTS } from "@shared/wellness-constants";
@@ -80,7 +80,10 @@ async function pickResponseTeam(athleteId: string, organizationId: string | null
 }
 
 // Helper function to verify if an athlete is targeted by a wellness request
-async function verifyAthleteIsTargeted(request: WellnessRequest, athleteId: string): Promise<boolean> {
+async function verifyAthleteIsTargeted(
+  request: { targetAthleteIds?: string[] | null; targetTeamIds?: string[] | null },
+  athleteId: string
+): Promise<boolean> {
   // Check direct targeting
   if (request.targetAthleteIds?.includes(athleteId)) {
     return true;
@@ -1112,7 +1115,7 @@ export function registerWellnessRoutes(app: Express) {
             return res.status(403).json({ message: "Please sign in to submit this check-in" });
           }
 
-          if (!(await verifyAthleteIsTargeted(request as any, req.user!.id))) {
+          if (!(await verifyAthleteIsTargeted(request, req.user!.id))) {
             return res.status(403).json({ message: "You are not part of this check-in" });
           }
 
@@ -1147,7 +1150,7 @@ export function registerWellnessRoutes(app: Express) {
               return res.status(404).json({ message: "Request not found" });
             }
 
-            const isTargeted = await verifyAthleteIsTargeted(request as any, selectedAthleteId);
+            const isTargeted = await verifyAthleteIsTargeted(request, selectedAthleteId);
 
             if (!isTargeted) {
               return res.status(403).json({
@@ -1565,7 +1568,7 @@ export function registerWellnessRoutes(app: Express) {
         const wellnessRequest = await storage.getWellnessRequest(requestId);
         if (wellnessRequest?.isStanding) {
           // Only a targeted athlete learns that the request is standing; anyone else just has nothing submitted
-          const isTargeted = await verifyAthleteIsTargeted(wellnessRequest as any, userId);
+          const isTargeted = await verifyAthleteIsTargeted(wellnessRequest, userId);
           return res.json(isTargeted ? { hasSubmitted: false, isStanding: true } : { hasSubmitted: false });
         }
 
