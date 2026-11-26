@@ -34,9 +34,10 @@ const CLAIM_TOKEN_EXPIRY_HOURS = 24;
 
 /**
  * SQL condition on user_global_athlete_links: the link shares data. It must be confirmed, and an automatic link
- * (auto_email / auto_import) also needs proof of mailbox control: a redeemed email verification token of the
- * linked account for an address that the account still holds and that belongs to the identity. A token is only
- * ever emailed to the address it records, so neither users.isEmailVerified nor an email edit counts as proof.
+ * (auto_email / auto_import) also needs proof of mailbox control: an email verification token of the linked
+ * account, redeemed while signed in as that account (identity_proof_at), for an address that the account still
+ * holds and that belongs to the identity. A token is only ever emailed to the address it records, so neither
+ * users.isEmailVerified, an email edit, nor a token redeemed without that session counts as proof.
  * Links made by people (athlete_claimed, org_proposed, admin_forced) only need to be confirmed.
  */
 export const activeGlobalAthleteLink = sql`(${userGlobalAthleteLinks.linkStatus} = 'confirmed' AND (
@@ -45,7 +46,7 @@ export const activeGlobalAthleteLink = sql`(${userGlobalAthleteLinks.linkStatus}
     JOIN ${users} lu ON lu.id = evt.user_id
     JOIN ${globalAthletes} lg ON lg.id = ${userGlobalAthleteLinks.globalAthleteId}
     WHERE evt.user_id = ${userGlobalAthleteLinks.userId}
-      AND evt.is_used = true
+      AND evt.identity_proof_at IS NOT NULL
       AND lower(evt.email) IN (SELECT lower(e) FROM unnest(lu.emails) e)
       AND (lower(evt.email) = lower(lg.primary_email)
         OR lower(evt.email) IN (SELECT lower(v) FROM unnest(lg.verified_emails) v))
@@ -68,16 +69,30 @@ export class GlobalAthleteService extends BaseService {
     const normalizedEmail = email.toLowerCase().trim();
 
     // Delegate to the core linking logic
-    await this.linkAthleteToGlobalAthlete(userId, normalizedEmail, 'auto_import');
+    await this.linkAthleteToGlobalAthlete(userId, normalizedEmail, 'auto_import', false);
   }
 
   /**
    * Called when a user verifies their email address (after the verification token was redeemed).
    * Creates or links to existing global athlete identity, or activates a pending link to an identity that
    * carries this address.
+   * @param proven - the token was redeemed while signed in as its own user (identity proof). Without it the
+   *   link is created pending and an existing pending link stays pending.
    */
-  async onEmailVerified(userId: string, verifiedEmail: string): Promise<void> {
-    await this.linkAthleteToGlobalAthlete(userId, verifiedEmail.toLowerCase().trim(), 'auto_email');
+  async onEmailVerified(userId: string, verifiedEmail: string, proven: boolean): Promise<void> {
+    await this.linkAthleteToGlobalAthlete(userId, verifiedEmail.toLowerCase().trim(), 'auto_email', proven);
+  }
+
+  /**
+   * The account has an automatic link that does not share yet while the identity has other active accounts,
+   * so a signed-in verification would restore linked records.
+   */
+  async hasLinkAwaitingProof(userId: string): Promise<boolean> {
+    const link = await this.getUserGlobalAthleteLink(userId);
+    if (!link || link.linkStatus === 'revoked' || link.linkStatus === 'rejected') return false;
+    if (await this.getActiveUserGlobalAthleteLink(userId)) return false;
+    const others = await this.getLinkedUsers(link.globalAthleteId);
+    return others.some((l) => l.userId !== userId);
   }
 
   /**
@@ -87,19 +102,19 @@ export class GlobalAthleteService extends BaseService {
   private async linkAthleteToGlobalAthlete(
     userId: string,
     email: string,
-    linkType: 'auto_email' | 'auto_import'
+    linkType: 'auto_email' | 'auto_import',
+    proven: boolean
   ): Promise<void> {
     // Check if user already has a global athlete link
     const existingLink = await this.getUserGlobalAthleteLink(userId);
     if (existingLink) {
-      if (linkType === 'auto_email' && existingLink.linkStatus === 'pending') {
+      if (proven && existingLink.linkStatus === 'pending') {
         await this.activatePendingLink(existingLink, email);
       }
       return;
     }
 
-    // auto_email is only reached after a verification token for this address was redeemed
-    const confirmed = linkType === 'auto_email' || await this.hasRedeemedVerification(userId, email);
+    const confirmed = proven || await this.hasRedeemedVerification(userId, email);
 
     // Get user details for canonical profile
     const user = await this.storage.getUser(userId);
@@ -256,40 +271,51 @@ export class GlobalAthleteService extends BaseService {
 
     // Send notification if user is joining an existing global athlete identity
     if (shouldNotify && existingGlobalAthlete) {
-      try {
-        // Get organizations that are already linked to the global athlete
-        const linkedOrganizations = await this.getOrganizationsForGlobalAthlete(globalAthleteId);
-
-        await emailService.sendAccountLinkedNotification({
-          email: email,
-          userName: user.fullName,
-          globalAthleteName: existingGlobalAthlete.canonicalFullName,
-          linkedOrganizations: linkedOrganizations.map(org => org.name),
-        });
-
-        // Audit log for notification
-        await this.auditLog(globalAthleteId, "link_notification_sent", userId, "system", {
-          email,
-          linkedOrganizations: linkedOrganizations.map(org => org.name),
-        });
-      } catch (error) {
-        console.error("Failed to send account linked notification:", error);
-        // Audit log for notification failure (but don't fail the link creation)
-        await this.auditLog(globalAthleteId, "link_notification_failed", userId, "system", {
-          email,
-          error: error instanceof Error ? error.message : "Unknown error",
-        }).catch(e => console.error("Failed to log notification failure:", e));
-      }
+      await this.sendLinkedNotification(globalAthleteId, userId, email, user.fullName, existingGlobalAthlete.canonicalFullName);
     }
   }
 
-  /** The account redeemed an email verification token for this address (the token was emailed to it). */
+  /** Email the "account linked" notification; a failure is audited and never fails the link. */
+  private async sendLinkedNotification(
+    globalAthleteId: string,
+    userId: string,
+    email: string,
+    userName: string,
+    globalAthleteName: string
+  ): Promise<void> {
+    try {
+      // Get organizations that are already linked to the global athlete
+      const linkedOrganizations = await this.getOrganizationsForGlobalAthlete(globalAthleteId);
+
+      await emailService.sendAccountLinkedNotification({
+        email: email,
+        userName,
+        globalAthleteName,
+        linkedOrganizations: linkedOrganizations.map(org => org.name),
+      });
+
+      // Audit log for notification
+      await this.auditLog(globalAthleteId, "link_notification_sent", userId, "system", {
+        email,
+        linkedOrganizations: linkedOrganizations.map(org => org.name),
+      });
+    } catch (error) {
+      console.error("Failed to send account linked notification:", error);
+      // Audit log for notification failure (but don't fail the link creation)
+      await this.auditLog(globalAthleteId, "link_notification_failed", userId, "system", {
+        email,
+        error: error instanceof Error ? error.message : "Unknown error",
+      }).catch(e => console.error("Failed to log notification failure:", e));
+    }
+  }
+
+  /** The account proved control of this address: a token emailed to it, redeemed while signed in as the account. */
   private async hasRedeemedVerification(userId: string, email: string): Promise<boolean> {
     const [row] = await db.select({ id: emailVerificationTokens.id })
       .from(emailVerificationTokens)
       .where(and(
         eq(emailVerificationTokens.userId, userId),
-        eq(emailVerificationTokens.isUsed, true),
+        isNotNull(emailVerificationTokens.identityProofAt),
         sql`lower(${emailVerificationTokens.email}) = ${email.toLowerCase()}`
       ))
       .limit(1);
@@ -306,8 +332,14 @@ export class GlobalAthleteService extends BaseService {
       return;
     }
 
+    const others = (await this.getLinkedUsers(link.globalAthleteId)).filter((l) => l.userId !== link.userId);
     const activated = await db.update(userGlobalAthleteLinks)
-      .set({ linkStatus: "confirmed", confirmedBy: link.userId, confirmedAt: new Date() })
+      .set({
+        linkStatus: "confirmed",
+        confirmedBy: link.userId,
+        confirmedAt: new Date(),
+        ...(others.length > 0 ? { notifiedAt: new Date() } : {}),
+      })
       .where(and(eq(userGlobalAthleteLinks.id, link.id), eq(userGlobalAthleteLinks.linkStatus, "pending")))
       .returning({ id: userGlobalAthleteLinks.id });
 
@@ -318,6 +350,12 @@ export class GlobalAthleteService extends BaseService {
         userId: link.userId,
         reason: "email_verified",
       });
+
+      // The account joined an identity other accounts already share: tell the address, as on a direct link
+      if (others.length > 0 && identity) {
+        const user = await this.storage.getUser(link.userId);
+        await this.sendLinkedNotification(link.globalAthleteId, link.userId, email, user?.fullName ?? "", identity.canonicalFullName);
+      }
     }
   }
 
@@ -571,7 +609,7 @@ export class GlobalAthleteService extends BaseService {
    * Update sharing settings for a link
    */
   async updateSharingSettings(userId: string, shareMeasurements: boolean): Promise<void> {
-    const link = await this.getUserGlobalAthleteLink(userId);
+    const link = await this.getActiveUserGlobalAthleteLink(userId);
     if (!link) {
       throw new Error("User does not have a global athlete link");
     }
@@ -685,7 +723,7 @@ export class GlobalAthleteService extends BaseService {
         .from(userGlobalAthleteLinks)
         .where(and(
           inArray(userGlobalAthleteLinks.globalAthleteId, allAthleteIds),
-          eq(userGlobalAthleteLinks.linkStatus, "confirmed")
+          activeGlobalAthleteLink
         ))
         .groupBy(userGlobalAthleteLinks.globalAthleteId);
 
@@ -740,7 +778,7 @@ export class GlobalAthleteService extends BaseService {
       .from(userGlobalAthleteLinks)
       .where(and(
         inArray(userGlobalAthleteLinks.globalAthleteId, athleteIds),
-        eq(userGlobalAthleteLinks.linkStatus, "confirmed")
+        activeGlobalAthleteLink
       ))
       .groupBy(userGlobalAthleteLinks.globalAthleteId);
 
@@ -904,7 +942,7 @@ export class GlobalAthleteService extends BaseService {
     // Total linked users
     const [linksResult] = await db.select({ count: count() })
       .from(userGlobalAthleteLinks)
-      .where(eq(userGlobalAthleteLinks.linkStatus, "confirmed"));
+      .where(activeGlobalAthleteLink);
 
     // Athletes with multiple links
     const multiLinkResult = await db.select({
@@ -912,7 +950,7 @@ export class GlobalAthleteService extends BaseService {
       count: count(),
     })
       .from(userGlobalAthleteLinks)
-      .where(eq(userGlobalAthleteLinks.linkStatus, "confirmed"))
+      .where(activeGlobalAthleteLink)
       .groupBy(userGlobalAthleteLinks.globalAthleteId);
 
     const athletesWithMultipleLinks = multiLinkResult.filter(r => Number(r.count) > 1).length;
@@ -922,7 +960,7 @@ export class GlobalAthleteService extends BaseService {
     const [recentResult] = await db.select({ count: count() })
       .from(userGlobalAthleteLinks)
       .where(and(
-        eq(userGlobalAthleteLinks.linkStatus, "confirmed"),
+        activeGlobalAthleteLink,
         sql`${userGlobalAthleteLinks.confirmedAt} > ${sevenDaysAgo.toISOString()}`
       ));
 

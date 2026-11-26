@@ -564,6 +564,7 @@ export const emailVerificationTokens = pgTable("email_verification_tokens", {
   email: text("email").notNull(),
   token: text("token").notNull().unique(),
   isUsed: boolean("is_used").default(false).notNull(),
+  identityProofAt: timestamp("identity_proof_at"),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({

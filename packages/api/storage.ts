@@ -295,7 +295,7 @@ export interface IStorage {
 
   // Email Verification
   createEmailVerificationToken(userId: string, email: string): Promise<{ token: string; expiresAt: Date }>;
-  verifyEmailToken(token: string): Promise<{ success: boolean; userId?: string; email?: string }>;
+  verifyEmailToken(token: string, signedInUserId?: string): Promise<{ success: boolean; userId?: string; email?: string; identityProof?: boolean }>;
   getEmailVerificationToken(token: string): Promise<any>;
 
   // Account Linking (OAuth)
@@ -417,7 +417,7 @@ export interface IStorage {
   updatePasswordChangedAt(userId: string): Promise<void>;
   createEmailVerificationToken(userId: string, email: string): Promise<{ token: string; expiresAt: Date }>;
   getEmailVerificationToken(token: string): Promise<any>;
-  verifyEmailToken(token: string): Promise<{ success: boolean; userId?: string; email?: string }>;
+  verifyEmailToken(token: string, signedInUserId?: string): Promise<{ success: boolean; userId?: string; email?: string; identityProof?: boolean }>;
   getUserRole(userId: string, organizationId: string): Promise<string | null>;
   getUserRoles(userId: string, organizationId?: string): Promise<string[]>;
   updateUserRole(userId: string, organizationId: string, role: string): Promise<boolean>;
@@ -2198,7 +2198,11 @@ export class DatabaseStorage implements IStorage {
     return { token, expiresAt };
   }
 
-  async verifyEmailToken(token: string): Promise<{ success: boolean; userId?: string; email?: string }> {
+  /**
+   * @param signedInUserId - the user of the session that redeems the token, if any. Only when it is the token's
+   *   own user does the redemption also prove mailbox control (identityProof), recorded as identityProofAt.
+   */
+  async verifyEmailToken(token: string, signedInUserId?: string): Promise<{ success: boolean; userId?: string; email?: string; identityProof?: boolean }> {
     // Use transaction with row-level locking to prevent race conditions
     return await db.transaction(async (tx: any) => {
       // Lock the row for update to prevent concurrent verification attempts
@@ -2225,9 +2229,11 @@ export class DatabaseStorage implements IStorage {
         return { success: false };
       }
 
+      const identityProof = !!signedInUserId && signedInUserId === verificationToken.userId;
+
       // Mark token as used (within same transaction)
       await tx.update(emailVerificationTokens)
-        .set({ isUsed: true })
+        .set({ isUsed: true, ...(identityProof ? { identityProofAt: new Date() } : {}) })
         .where(eq(emailVerificationTokens.token, hashToken(token)));
 
       // Mark user's email as verified (within same transaction)
@@ -2238,7 +2244,8 @@ export class DatabaseStorage implements IStorage {
       return {
         success: true,
         userId: verificationToken.userId,
-        email: verificationToken.email
+        email: verificationToken.email,
+        identityProof,
       };
     });
   }

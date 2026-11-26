@@ -87,8 +87,8 @@ describe("Global Athlete Claim Features", () => {
 
     // onEmailVerified runs after the account redeemed a verification token for the address; record that proof
     await db.insert(emailVerificationTokens).values([
-      { userId: testUser1Id, email: TEST_EMAIL_1, token: `used-${testUser1Id}`, isUsed: true, expiresAt: new Date() },
-      { userId: testUser2Id, email: TEST_EMAIL_2, token: `used-${testUser2Id}`, isUsed: true, expiresAt: new Date() },
+      { userId: testUser1Id, email: TEST_EMAIL_1, token: `used-${testUser1Id}`, isUsed: true, identityProofAt: new Date(), expiresAt: new Date() },
+      { userId: testUser2Id, email: TEST_EMAIL_2, token: `used-${testUser2Id}`, isUsed: true, identityProofAt: new Date(), expiresAt: new Date() },
     ]);
 
     // Add users to organizations
@@ -136,7 +136,7 @@ describe("Global Athlete Claim Features", () => {
   describe("Initiate Claim Request", () => {
     it("should create a claim token for a new email", async () => {
       // User1 creates their global athlete first
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
 
       // User1 initiates a claim for user2's email
       const result = await service.initiateClaimRequest(testUser1Id, TEST_EMAIL_2);
@@ -155,7 +155,7 @@ describe("Global Athlete Claim Features", () => {
     });
 
     it("should send verification email when claim is initiated", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
       await service.initiateClaimRequest(testUser1Id, TEST_EMAIL_2);
 
       expect(emailService.sendClaimVerificationEmail).toHaveBeenCalledTimes(1);
@@ -176,7 +176,7 @@ describe("Global Athlete Claim Features", () => {
     });
 
     it("should reject duplicate pending claims for same email", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
       await service.initiateClaimRequest(testUser1Id, TEST_EMAIL_2);
 
       // Try to claim same email again
@@ -186,8 +186,8 @@ describe("Global Athlete Claim Features", () => {
     });
 
     it("should allow claim if global athlete with that email allows cross-org linking", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
-      await service.onEmailVerified(testUser2Id, TEST_EMAIL_2);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
+      await service.onEmailVerified(testUser2Id, TEST_EMAIL_2, true);
 
       // User1 tries to claim email that belongs to user2's global athlete
       const result = await service.initiateClaimRequest(testUser1Id, TEST_EMAIL_2);
@@ -195,8 +195,8 @@ describe("Global Athlete Claim Features", () => {
     });
 
     it("should reject claim if target global athlete has disabled cross-org linking", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
-      await service.onEmailVerified(testUser2Id, TEST_EMAIL_2);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
+      await service.onEmailVerified(testUser2Id, TEST_EMAIL_2, true);
 
       // Disable cross-org linking for user2's global athlete
       const user2Link = await service.getUserGlobalAthleteLink(testUser2Id);
@@ -211,7 +211,7 @@ describe("Global Athlete Claim Features", () => {
     });
 
     it("should create audit log entry for claim request", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
       await service.initiateClaimRequest(testUser1Id, TEST_EMAIL_2);
 
       const link = await service.getUserGlobalAthleteLink(testUser1Id);
@@ -225,7 +225,7 @@ describe("Global Athlete Claim Features", () => {
 
   describe("Verify Claim Token", () => {
     it("should verify a valid claim token", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
       const { token } = await service.initiateClaimRequest(testUser1Id, TEST_EMAIL_2);
 
       const result = await service.verifyClaim(token);
@@ -235,7 +235,7 @@ describe("Global Athlete Claim Features", () => {
     });
 
     it("should add email to global athlete verified emails on verification", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
       const { token } = await service.initiateClaimRequest(testUser1Id, TEST_EMAIL_2);
 
       await service.verifyClaim(token);
@@ -249,7 +249,7 @@ describe("Global Athlete Claim Features", () => {
     });
 
     it("should reject expired token", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
       const { token } = await service.initiateClaimRequest(testUser1Id, TEST_EMAIL_2);
 
       // Manually expire the token
@@ -273,7 +273,7 @@ describe("Global Athlete Claim Features", () => {
     });
 
     it("should prevent double verification", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
       const { token } = await service.initiateClaimRequest(testUser1Id, TEST_EMAIL_2);
 
       await service.verifyClaim(token);
@@ -285,7 +285,7 @@ describe("Global Athlete Claim Features", () => {
     });
 
     it("should update claim status to verified", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
       const { token } = await service.initiateClaimRequest(testUser1Id, TEST_EMAIL_2);
 
       await service.verifyClaim(token);
@@ -299,7 +299,7 @@ describe("Global Athlete Claim Features", () => {
     });
 
     it("should create audit log entry for verification", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
       const { token } = await service.initiateClaimRequest(testUser1Id, TEST_EMAIL_2);
 
       await service.verifyClaim(token);
@@ -315,7 +315,7 @@ describe("Global Athlete Claim Features", () => {
 
   describe("Get Pending Claims", () => {
     it("should return pending claims for a user", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
       await service.initiateClaimRequest(testUser1Id, TEST_EMAIL_2);
 
       const pendingClaims = await service.getPendingClaims(testUser1Id);
@@ -326,7 +326,7 @@ describe("Global Athlete Claim Features", () => {
     });
 
     it("should not return expired claims", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
       const { token } = await service.initiateClaimRequest(testUser1Id, TEST_EMAIL_2);
 
       // Manually expire the claim
@@ -347,7 +347,7 @@ describe("Global Athlete Claim Features", () => {
 
   describe("Cancel Claim", () => {
     it("should cancel a pending claim", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
       const { token } = await service.initiateClaimRequest(testUser1Id, TEST_EMAIL_2);
 
       const [claim] = await db.select()
@@ -364,7 +364,7 @@ describe("Global Athlete Claim Features", () => {
     });
 
     it("should not allow cancelling another user's claim", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
       const { token } = await service.initiateClaimRequest(testUser1Id, TEST_EMAIL_2);
 
       const [claim] = await db.select()

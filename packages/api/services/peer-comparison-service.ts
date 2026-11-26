@@ -20,6 +20,7 @@ import {
 import { isPeerComparisonExcludedMetric } from "@shared/peer-comparison-exclusions";
 import { eq, and, inArray, gte, lte, isNotNull, desc, sql } from "drizzle-orm";
 import { BaseService } from "./base-service";
+import { activeGlobalAthleteLink } from "./global-athlete-service";
 import { quantileRank, mean, quantile } from "simple-statistics";
 import crypto from "crypto";
 
@@ -490,7 +491,7 @@ export class PeerComparisonService extends BaseService {
       .from(userGlobalAthleteLinks)
       .where(
         and(
-          eq(userGlobalAthleteLinks.linkStatus, 'confirmed'),
+          activeGlobalAthleteLink,
           inArray(userGlobalAthleteLinks.userId, eligibleUserIds)
         )
       );

@@ -238,14 +238,17 @@ export class PasswordResetService {
 
   /**
    * Verify email address
+   * @param signedInUserId - user of the session redeeming the token. Only the token's own user signed in turns
+   *   the verification into proof of mailbox control for cross-organization identity links.
    */
   static async verifyEmail(
     token: string,
     ipAddress: string,
-    userAgent?: string
-  ): Promise<{ success: boolean; message: string }> {
+    userAgent?: string,
+    signedInUserId?: string
+  ): Promise<{ success: boolean; message: string; signInToRestoreLinks?: boolean }> {
     try {
-      const result = await storage.verifyEmailToken(token);
+      const result = await storage.verifyEmailToken(token, signedInUserId);
 
       if (!result.success) {
         return { success: false, message: 'Invalid or expired verification token' };
@@ -272,8 +275,10 @@ export class PasswordResetService {
 
       // Trigger global athlete auto-linking
       // This creates or links to a global athlete identity based on the verified email
+      let signInToRestoreLinks = false;
       try {
-        await globalAthleteService.onEmailVerified(userId, email);
+        await globalAthleteService.onEmailVerified(userId, email, result.identityProof === true);
+        signInToRestoreLinks = !result.identityProof && await globalAthleteService.hasLinkAwaitingProof(userId);
         console.log(`Global athlete auto-linking completed for user ${userId} with email ${email}`);
       } catch (linkError) {
         // Log but don't fail verification if auto-linking fails
@@ -292,7 +297,7 @@ export class PasswordResetService {
         console.error('Auto-join after email verification failed:', joinError);
       }
 
-      return { success: true, message: 'Email address verified successfully!' };
+      return { success: true, message: 'Email address verified successfully!', ...(signInToRestoreLinks ? { signInToRestoreLinks } : {}) };
     } catch (error) {
       console.error('Email verification error:', error);
       return { success: false, message: 'Failed to verify email address' };

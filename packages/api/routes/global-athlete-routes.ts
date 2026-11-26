@@ -243,7 +243,7 @@ export function registerGlobalAthleteRoutes(app: Express) {
       const { shareMeasurements } = validationResult.data;
 
       // Get user's global athlete link
-      const link = await globalAthleteService.getUserGlobalAthleteLink(currentUser.id);
+      const link = await globalAthleteService.getActiveUserGlobalAthleteLink(currentUser.id);
       if (!link) {
         return res.status(404).json({ message: "No global athlete profile found" });
       }

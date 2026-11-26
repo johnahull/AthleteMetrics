@@ -57,6 +57,9 @@ export const emailVerificationTokens = pgTable("email_verification_tokens", {
   email: text("email").notNull(),
   token: text("token").notNull().unique(),
   isUsed: boolean("is_used").default(false).notNull(),
+  // Set only when the token's own user redeemed it while signed in: then it proves that this account controls
+  // `email`, which global athlete links rely on. A token redeemed without that session only verifies the email.
+  identityProofAt: timestamp("identity_proof_at"),
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({

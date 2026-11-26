@@ -18,7 +18,7 @@ import crypto from 'crypto';
 import { eq, inArray } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
 import {
-  users, organizations, measurements, globalAthletes, userGlobalAthleteLinks, globalAthleteClaims,
+  users, organizations, measurements, globalAthletes, userGlobalAthleteLinks, globalAthleteClaims, emailVerificationTokens,
 } from '@shared/schema';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 import { purgeTestRows } from '../helpers/purge-test-rows';
@@ -83,10 +83,10 @@ async function addMeasurement(userId: string, organizationId: string, value: str
   } as any);
 }
 
-/** Proves the mailbox the way a user does: token issued for the address, then redeemed. */
+/** Proves the mailbox the way a user does: token issued for the address, then redeemed while signed in as that user. */
 async function verifyMailbox(userId: string, email: string) {
   const { token } = await storage.createEmailVerificationToken(userId, email);
-  const result = await PasswordResetService.verifyEmail(token, '127.0.0.1');
+  const result = await PasswordResetService.verifyEmail(token, '127.0.0.1', undefined, userId);
   expect(result.success).toBe(true);
 }
 
@@ -267,7 +267,7 @@ describe('new automatic links start pending', () => {
     const email = mail('pre');
     const proven = await mkUser('pre1', [email]);
     const { token } = await storage.createEmailVerificationToken(proven.id, email);
-    await storage.verifyEmailToken(token); // redeemed without the hook that links
+    await storage.verifyEmailToken(token, proven.id); // redeemed while signed in, without the hook that links
     await globalAthleteService.linkAthleteByEmail(proven.id, email);
     expect((await linkOf(proven.id)).linkStatus).toBe('confirmed');
 
@@ -281,6 +281,87 @@ describe('new automatic links start pending', () => {
     await storage.addUserToOrganization(u.id, orgB.id, 'athlete');
     await globalAthleteService.backfillAllAthleteLinks();
     expect((await linkOf(u.id)).linkStatus).toBe('pending');
+  });
+});
+
+describe('email verification as proof', () => {
+  let athlete: any;
+  let email: string;
+
+  beforeAll(async () => {
+    email = mail('proof');
+    athlete = await mkUser('proof', [email]);
+    await db.insert(userGlobalAthleteLinks).values({ userId: athlete.id, globalAthleteId: identityId, linkStatus: 'pending', linkType: 'auto_import' });
+    await db.update(globalAthletes).set({ verifiedEmails: [ownerEmail, email] }).where(eq(globalAthletes.id, identityId));
+  });
+
+  it('a verification email can only be requested for an address of the signed-in account', async () => {
+    const agent = await login(athlete);
+    emailMocks.sendEmailVerification.mockClear();
+    const foreign = await agent.post('/api/enhanced-auth/request-email-verification').send({ email: mail('stranger') });
+    expect(foreign.status).toBe(400);
+    expect(emailMocks.sendEmailVerification).not.toHaveBeenCalled();
+
+    const own = await agent.post('/api/enhanced-auth/request-email-verification').send({});
+    expect(own.status).toBe(200);
+    expect(own.body.success).toBe(true);
+    expect(emailMocks.sendEmailVerification).toHaveBeenCalledWith(email, expect.anything());
+  });
+
+  it('a used token from before this check, or redeemed without signing in, verifies the email but proves nothing', async () => {
+    await db.insert(emailVerificationTokens).values({ userId: athlete.id, email, token: `old-${rid()}`, isUsed: true, expiresAt: new Date() });
+    await globalAthleteService.linkAthleteByEmail(athlete.id, email);
+    expect((await linkOf(athlete.id)).linkStatus).toBe('pending');
+
+    const { token } = await storage.createEmailVerificationToken(athlete.id, email);
+    const res = await request(app).post('/api/enhanced-auth/verify-email').send({ token });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.signInToRestoreLinks).toBe(true);
+    const [u] = await db.select().from(users).where(eq(users.id, athlete.id));
+    expect(u.isEmailVerified).toBe(true);
+    expect((await linkOf(athlete.id)).linkStatus).toBe('pending');
+    expect(await globalAthleteService.getActiveUserGlobalAthleteLink(athlete.id)).toBeNull();
+  });
+
+  it('redeeming while signed in as someone else proves nothing', async () => {
+    const { token } = await storage.createEmailVerificationToken(athlete.id, email);
+    const res = await (await login(owner)).post('/api/enhanced-auth/verify-email').send({ token });
+    expect(res.body.success).toBe(true);
+    expect((await linkOf(athlete.id)).linkStatus).toBe('pending');
+  });
+
+  it('a pending account cannot change its sharing setting', async () => {
+    const res = await (await login(athlete)).patch('/api/my/global-athlete/sharing').send({ shareMeasurements: false });
+    expect(res.status).toBe(404);
+    expect((await linkOf(athlete.id)).shareMeasurements).toBe(true);
+  });
+
+  it('redeeming while signed in as the token user activates the link and notifies the address', async () => {
+    emailMocks.sendAccountLinkedNotification.mockClear();
+    const { token } = await storage.createEmailVerificationToken(athlete.id, email);
+    const res = await (await login(athlete)).post('/api/enhanced-auth/verify-email').send({ token });
+    expect(res.body.success).toBe(true);
+    expect(res.body.signInToRestoreLinks).toBeFalsy();
+    const link = await linkOf(athlete.id);
+    expect(link.linkStatus).toBe('confirmed');
+    expect(link.notifiedAt).not.toBeNull();
+    expect(await globalAthleteService.getActiveUserGlobalAthleteLink(athlete.id)).not.toBeNull();
+    expect(emailMocks.sendAccountLinkedNotification).toHaveBeenCalledWith(expect.objectContaining({ email }));
+  });
+
+  it('admin counts include only active links', async () => {
+    const before = await globalAthleteService.getGlobalAthleteStats();
+    const u = await mkUser('count', [mail('count')]);
+    await db.insert(userGlobalAthleteLinks).values({ userId: u.id, globalAthleteId: identityId, linkStatus: 'confirmed', linkType: 'auto_import', confirmedAt: new Date() });
+    const after = await globalAthleteService.getGlobalAthleteStats();
+    expect(after.totalLinkedUsers).toBe(before.totalLinkedUsers);
+    expect(after.recentLinkCount).toBe(before.recentLinkCount);
+    const { athletes } = await globalAthleteService.getAllGlobalAthletes({ search: ownerEmail });
+    const row = athletes.find((a) => a.id === identityId)!;
+    const active = await globalAthleteService.getLinkedUsers(identityId);
+    expect(row.linkedUserCount).toBe(active.length);
+    await db.delete(userGlobalAthleteLinks).where(eq(userGlobalAthleteLinks.userId, u.id));
   });
 });
 

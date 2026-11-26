@@ -78,8 +78,8 @@ describe("Global Athlete Notification Features", () => {
 
     // onEmailVerified runs after the account redeemed a verification token for the address; record that proof
     await db.insert(emailVerificationTokens).values([
-      { userId: testUser1Id, email: TEST_EMAIL, token: `used-${testUser1Id}`, isUsed: true, expiresAt: new Date() },
-      { userId: testUser2Id, email: TEST_EMAIL, token: `used-${testUser2Id}`, isUsed: true, expiresAt: new Date() },
+      { userId: testUser1Id, email: TEST_EMAIL, token: `used-${testUser1Id}`, isUsed: true, identityProofAt: new Date(), expiresAt: new Date() },
+      { userId: testUser2Id, email: TEST_EMAIL, token: `used-${testUser2Id}`, isUsed: true, identityProofAt: new Date(), expiresAt: new Date() },
     ]);
 
     // Add users to organizations
@@ -118,13 +118,13 @@ describe("Global Athlete Notification Features", () => {
   describe("Email Notification on Auto-Link", () => {
     it("should send email notification when user auto-links to existing global athlete", async () => {
       // First user verifies email - creates global athlete (no notification needed for first link)
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL, true);
 
       // Verify no notification for first link (creating own identity)
       expect(emailService.sendAccountLinkedNotification).not.toHaveBeenCalled();
 
       // Second user verifies - should auto-link AND send notification
-      await service.onEmailVerified(testUser2Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser2Id, TEST_EMAIL, true);
 
       // Should send notification to user2
       expect(emailService.sendAccountLinkedNotification).toHaveBeenCalledTimes(1);
@@ -137,8 +137,8 @@ describe("Global Athlete Notification Features", () => {
     });
 
     it("should set notifiedAt timestamp when notification is sent", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL);
-      await service.onEmailVerified(testUser2Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL, true);
+      await service.onEmailVerified(testUser2Id, TEST_EMAIL, true);
 
       // Check user2's link has notifiedAt set
       const [link] = await db.select()
@@ -150,7 +150,7 @@ describe("Global Athlete Notification Features", () => {
     });
 
     it("should not set notifiedAt for first user creating their own global athlete", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL, true);
 
       const [link] = await db.select()
         .from(userGlobalAthleteLinks)
@@ -161,8 +161,8 @@ describe("Global Athlete Notification Features", () => {
     });
 
     it("should log notification in audit log", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL);
-      await service.onEmailVerified(testUser2Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL, true);
+      await service.onEmailVerified(testUser2Id, TEST_EMAIL, true);
 
       const [globalAthlete] = await db.select()
         .from(globalAthletes)
@@ -179,8 +179,8 @@ describe("Global Athlete Notification Features", () => {
   describe("Pending Notifications API", () => {
     it("should return pending notifications for user (notifiedAt is null, unacknowledged)", async () => {
       // Create a link but mock notifiedAt as null for testing unacknowledged state
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL);
-      await service.onEmailVerified(testUser2Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL, true);
+      await service.onEmailVerified(testUser2Id, TEST_EMAIL, true);
 
       // Update user2's link to be unacknowledged (notifiedAt set but not acknowledged)
       await db.update(userGlobalAthleteLinks)
@@ -201,7 +201,7 @@ describe("Global Athlete Notification Features", () => {
     });
 
     it("should not return notifications for primary link holder", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL, true);
 
       // User1 is the primary link holder - they don't need notification
       const pendingNotifications = await service.getPendingLinkNotifications(testUser1Id);
@@ -211,8 +211,8 @@ describe("Global Athlete Notification Features", () => {
 
   describe("Acknowledge Notification", () => {
     it("should acknowledge a pending notification", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL);
-      await service.onEmailVerified(testUser2Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL, true);
+      await service.onEmailVerified(testUser2Id, TEST_EMAIL, true);
 
       // Set unacknowledged state
       const [link] = await db.select()
@@ -230,8 +230,8 @@ describe("Global Athlete Notification Features", () => {
     });
 
     it("should not allow acknowledging another user's notification", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL);
-      await service.onEmailVerified(testUser2Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL, true);
+      await service.onEmailVerified(testUser2Id, TEST_EMAIL, true);
 
       const [link] = await db.select()
         .from(userGlobalAthleteLinks)
@@ -244,8 +244,8 @@ describe("Global Athlete Notification Features", () => {
     });
 
     it("should log acknowledgment in audit log", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL);
-      await service.onEmailVerified(testUser2Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL, true);
+      await service.onEmailVerified(testUser2Id, TEST_EMAIL, true);
 
       const [link] = await db.select()
         .from(userGlobalAthleteLinks)
@@ -270,8 +270,8 @@ describe("Global Athlete Notification Features", () => {
         role: "athlete",
       });
 
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL);
-      await service.onEmailVerified(testUser2Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL, true);
+      await service.onEmailVerified(testUser2Id, TEST_EMAIL, true);
 
       expect(emailService.sendAccountLinkedNotification).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -318,9 +318,9 @@ describe("Global Athlete Notification Features", () => {
 
       try {
         // First user with XSS name creates global athlete
-        await service.onEmailVerified(xssUser1.id, `xss${xssTestSuffix}@example.com`);
+        await service.onEmailVerified(xssUser1.id, `xss${xssTestSuffix}@example.com`, true);
         // Second user auto-links - notification should be sent
-        await service.onEmailVerified(xssUser2.id, `xss${xssTestSuffix}@example.com`);
+        await service.onEmailVerified(xssUser2.id, `xss${xssTestSuffix}@example.com`, true);
 
         // Verify the email service received the data
         // The email service's escapeHtml function handles the actual XSS prevention
