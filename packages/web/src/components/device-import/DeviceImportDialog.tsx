@@ -718,7 +718,7 @@ export function DeviceImportDialog({
                   Skip duplicates
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  If a drill already has imported runs for the athlete and date, all of its new runs are skipped.
+                  Runs already imported (same athlete, date, drill and run time) are skipped. New run times are added.
                 </p>
               </div>
             </div>
@@ -729,7 +729,7 @@ export function DeviceImportDialog({
                   Replace duplicates
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Earlier imported runs of the same drill (with their splits) are replaced by the new runs.
+                  Runs already imported with the same run time are replaced. Other earlier runs are kept.
                 </p>
               </div>
             </div>

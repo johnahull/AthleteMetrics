@@ -23,6 +23,7 @@ import { eq, and, inArray, isNull, sql, desc, ne, or, gt, count } from 'drizzle-
 import { findBestAthleteMatch, type MatchingCriteria } from '../athlete-matching';
 import { DashrCsvParser } from './parsers/dashr-csv-parser';
 import { DerivedMetricCalculator } from './derived-metric-calculator';
+import { groupEarlierRuns, decideDuplicate } from './device-import-duplicates';
 import { MetricType } from '@shared/schema/constants';
 import type { DeviceImportParser, ParsedImportData, ParsedSessionData } from './parsers/types';
 
@@ -407,18 +408,9 @@ export class DeviceImportService {
           ))
         : [];
 
-      // Earlier device rows per duplicate unit "userId|date|drill metric". A drill row counts under its own metric,
-      // a split row under its parent drill: calculationMetadata.parentMetric, or the notes for data imported before
-      // that field existed. So a 20 yd import never matches the DASH_10YD / DASH_20YD splits of a 30 yd run.
-      const earlierByDrill = new Map<string, Array<{ id: string; value: number }>>();
-      for (const r of existingRows) {
-        const meta = r.calculationMetadata as Record<string, any> | null;
-        const parentMetric = meta?.parentMetric
-          || r.notes?.match(/^Split from (\S+)/)?.[1];
-        const key = `${r.userId}|${r.date}|${parentMetric ?? r.metric}`;
-        if (!earlierByDrill.has(key)) earlierByDrill.set(key, []);
-        earlierByDrill.get(key)!.push({ id: r.id, value: Number(r.value) });
-      }
+      // Earlier device rows per run; the duplicate rules live in device-import-duplicates.ts
+      const earlierByRun = groupEarlierRuns(existingRows);
+      const consumedKeys = new Set<string>();
 
       // Process each athlete
       for (const previewAthlete of preview.athletes) {
@@ -436,35 +428,19 @@ export class DeviceImportService {
           // One id for the drill row and its split rows: derived metrics can pair splits within one run
           const runId = randomUUID();
 
-          // Duplicates (pre-fetched above): only earlier device-imported rows of this drill's unit count;
-          // manual entries are never touched. All runs of the drill are skipped or replaced together.
-          const unitKey = `${athleteId}|${date}|${drill.metric}`;
-          const earlier = earlierByDrill.get(unitKey);
-
-          if (earlier) {
-            if (duplicateStrategy === 'skip') {
-              // The whole run: drill row and every split
-              skipped += 1 + (drill.splits?.length ?? 0);
-              continue;
-            }
-            // A derived fly is one value per day computed from the session's runs: keep the better of the
-            // earlier and the new one, so a slower 20 yd import never replaces the fly of an earlier 30 yd run
-            if (drill.derivedFrom) {
-              const higher = higherIsBetter(drill.metric);
-              const better = (a: number, b: number) => (higher ? a > b : a < b);
-              // Only a strictly better earlier value is kept; an equal one is replaced like any re-import.
-              // `earlier` holds only fly rows here: a derived fly has no splits, so nothing is grouped under it
-              if (earlier.some(e => better(e.value, drill.value))) {
-                skipped++;
-                continue;
-              }
-            }
-            // Replace: delete exactly the earlier rows of this unit (drill rows + their splits, including
-            // splits the new runs no longer have), once, before the first new run of the drill
-            earlierByDrill.delete(unitKey);
+          // Duplicates (pre-fetched above): only earlier device-imported rows count; manual entries are never
+          // touched. The unit is one run: (athlete, date, event, drill metric, runAt).
+          const decision = decideDuplicate({
+            earlierByRun, consumedKeys, athleteId, date, drill, strategy: duplicateStrategy, higherIsBetter,
+          });
+          if (decision.kind === 'skip') {
+            skipped += decision.skipped;
+            continue;
+          }
+          if (decision.deleteIds.length > 0) {
             const deleted = await tx.delete(measurements)
               .where(and(
-                inArray(measurements.id, earlier.map(e => e.id)),
+                inArray(measurements.id, decision.deleteIds),
                 // Safety net: the ids come from the pre-fetch, so they never belong to this batch
                 or(isNull(measurements.importBatchId), ne(measurements.importBatchId, batchId)),
               ))

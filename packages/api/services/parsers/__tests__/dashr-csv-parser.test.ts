@@ -396,6 +396,15 @@ describe('every run is kept', () => {
     expect(a.runAt).toBe('2025-01-01T10:05:00');
   });
 
+  // runAt is the import's run identity. Known limits, pinned as they are: AM/PM is ignored and missing seconds
+  // become :00, so the same run exported with and without seconds gets two different runAt values.
+  it('keeps the clock digits of the timestamp: no AM/PM conversion, missing seconds become :00', () => {
+    const runAt = (time: string) => parser.parse(makeCsv([run(time, 4.5, [])])).athletes[0].drills[0].runAt;
+    expect(runAt('9:00:00 PM')).toBe('2025-01-01T09:00:00');
+    expect(runAt('10:05')).toBe('2025-01-01T10:05:00');
+    expect(runAt('10:05:42')).not.toBe(runAt('10:05'));
+  });
+
   it('keeps the highest RSI even when it comes second in the file', () => {
     const csv = makeCsv([run('10:00:00', 4.5, [], { RSI: '1.2' }), run('10:05:00', 4.6, [], { RSI: '1.9' })]);
     const rsi = parser.parse(csv).athletes[0].drills.filter(d => d.metric === 'RSI');

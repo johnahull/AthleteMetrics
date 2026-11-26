@@ -1,6 +1,7 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { loginAsDefaultUser, loginAsAthlete, loginAsCoach } from './helpers/auth';
 import { navigateTo } from './helpers/navigation';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -190,6 +191,93 @@ test.describe('Device Import — Review and Commit', () => {
     await expect(group.getByText('14:05:00')).toBeVisible();
     // Best 30 yd (run A) + best 10 yd and 20 yd splits (run B)
     await expect(group.getByText('Best')).toHaveCount(3);
+  });
+});
+
+// Two exports of one session that share the 09:10 run: the morning file has 09:00 and 09:10, the afternoon file 09:10
+// and 14:00. Each run is a 30 yd dash with one 10 yd gate (drill row + 1 split row, no derived fly).
+const OVERLAP_BASE_URL = process.env.TESTING_URL || process.env.STAGING_URL || 'http://localhost:5000';
+// The upload is named after the athlete, so the test finds its own batches in the Import History list
+const overlapFile = (name: string, lastName: string) => ({
+  name: `${name}-${lastName}.csv`,
+  mimeType: 'text/csv',
+  buffer: Buffer.from(
+    fs.readFileSync(path.join(__dirname, `fixtures/csv-files/${name}.csv`), 'utf8').replaceAll('E2E_LAST_NAME', lastName),
+  ),
+});
+
+test.describe('Device Import — Duplicate strategy on overlapping imports', () => {
+  test.beforeEach(async ({ page }) => {
+    await loginAsDefaultUser(page);
+  });
+
+  /** An athlete in the organization the Device Import tab imports into (the user's first organization) */
+  async function createAthlete(page: Page) {
+    const orgs = await (await page.request.get(`${OVERLAP_BASE_URL}/api/auth/me/organizations`)).json();
+    const organizationId = orgs[0]?.organizationId;
+    expect(organizationId, 'the test user needs an organization').toBeTruthy();
+    const lastName = `Overlap${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    const response = await page.request.post(`${OVERLAP_BASE_URL}/api/athletes`, {
+      data: { firstName: 'Overlap', lastName, birthYear: 2008, sports: ['Football'], status: 'active', organizationId },
+    });
+    expect(response.ok()).toBeTruthy();
+    const athlete = await response.json();
+    return { id: athlete.id as string, lastName };
+  }
+
+  async function importFile(page: Page, file: ReturnType<typeof overlapFile>, strategy: 'skip' | 'replace') {
+    await navigateTo(page, '/data-entry?tab=device');
+    await page.click('text=Upload Device File');
+    const dialog = page.locator('[role="dialog"]');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+    await page.locator('input[type="file"]').setInputFiles(file);
+    await page.locator('button:has-text("Parse File")').click();
+    await expect(dialog.getByText('Review Athletes')).toBeVisible({ timeout: 15000 });
+    await dialog.getByRole('button', { name: 'Continue' }).click();
+    await dialog.getByLabel(strategy === 'skip' ? 'Skip duplicates' : 'Replace duplicates').check();
+    await dialog.getByRole('button', { name: 'Import 1 Athlete' }).click();
+    await expect(dialog.getByText('Import Complete')).toBeVisible({ timeout: 15000 });
+    const count = async (label: string) =>
+      Number(await dialog.getByText(label, { exact: true }).locator('xpath=preceding-sibling::div').textContent());
+    return { created: await count('Created'), replaced: await count('Replaced'), skipped: await count('Skipped') };
+  }
+
+  /**
+   * Runs each batch still stores, as the Import History list on the Device Import tab shows them ("N runs").
+   * Read through the UI (GET /api/import/device/batches) rather than GET /api/measurements, whose per-IP limiter
+   * the rest of the suite spends.
+   */
+  async function runsInHistory(page: Page, lastName: string) {
+    await navigateTo(page, '/data-entry?tab=device');
+    await page.getByText('Import History', { exact: true }).click();
+    const runs = async (name: string) => {
+      const row = page
+        .locator('div.flex.items-center.justify-between')
+        .filter({ has: page.getByText(`${name}-${lastName}.csv`, { exact: true }) });
+      await expect(row).toHaveCount(1, { timeout: 10000 });
+      return row.getByText(/^\d+ runs$/).textContent();
+    };
+    return { morning: await runs('dashr-overlap-morning'), afternoon: await runs('dashr-overlap-afternoon') };
+  }
+
+  test('skip: the second import adds only the new run time', async ({ page }) => {
+    const athlete = await createAthlete(page);
+    expect(await importFile(page, overlapFile('dashr-overlap-morning', athlete.lastName), 'skip')).toEqual({ created: 4, replaced: 0, skipped: 0 });
+
+    // 09:10 is already imported (drill row + split skipped); 14:00 is added
+    expect(await importFile(page, overlapFile('dashr-overlap-afternoon', athlete.lastName), 'skip')).toEqual({ created: 2, replaced: 0, skipped: 2 });
+    // Morning batch keeps 09:00 and 09:10; afternoon batch stores only 14:00
+    expect(await runsInHistory(page, athlete.lastName)).toEqual({ morning: '2 runs', afternoon: '1 runs' });
+  });
+
+  test('replace: only the rows of the same run time are replaced, the other morning run stays', async ({ page }) => {
+    const athlete = await createAthlete(page);
+    expect(await importFile(page, overlapFile('dashr-overlap-morning', athlete.lastName), 'replace')).toEqual({ created: 4, replaced: 0, skipped: 0 });
+
+    // 09:10 replaced (drill row + split), 14:00 added, 09:00 untouched
+    expect(await importFile(page, overlapFile('dashr-overlap-afternoon', athlete.lastName), 'replace')).toEqual({ created: 4, replaced: 2, skipped: 0 });
+    // The morning batch still stores 09:00 only (its 09:10 run was replaced); the afternoon batch stores 09:10 and 14:00
+    expect(await runsInHistory(page, athlete.lastName)).toEqual({ morning: '1 runs', afternoon: '2 runs' });
   });
 });
 
