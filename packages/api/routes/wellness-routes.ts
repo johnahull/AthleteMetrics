@@ -1564,8 +1564,11 @@ export function registerWellnessRoutes(app: Express) {
         // A standing request can be answered again any day, so it never counts as submitted
         const wellnessRequest = await storage.getWellnessRequest(requestId);
         if (wellnessRequest?.isStanding) {
-          // Only a targeted athlete learns that the request is standing; anyone else just has nothing submitted
-          const isTargeted = await verifyAthleteIsTargeted(wellnessRequest, userId);
+          // Only a targeted member of the request's organization learns that it is standing; anyone else just
+          // has nothing submitted
+          const isMember = (await storage.getUserOrganizations(userId))
+            .some(membership => membership.organizationId === wellnessRequest.organizationId);
+          const isTargeted = isMember && await verifyAthleteIsTargeted(wellnessRequest, userId);
           return res.json(isTargeted ? { hasSubmitted: false, isStanding: true } : { hasSubmitted: false });
         }
 

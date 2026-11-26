@@ -1073,6 +1073,23 @@ describe('Standing (anytime) Wellness Requests', () => {
     expect(res.body).toEqual({ hasSubmitted: false });
   });
 
+  it('GET /api/wellness/requests/:requestId/check-submission - hides standing from a targeted athlete outside the organization', async () => {
+    const otherOrg = await storage.createOrganization({ name: `Standing Other Org ${Date.now()}` } as any);
+    try {
+      const standing = await createStanding({ organizationId: otherOrg.id });
+
+      const res = await request(app)
+        .get(`/api/wellness/requests/${standing.id}/check-submission`)
+        .set('Cookie', athleteCookie);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ hasSubmitted: false });
+    } finally {
+      await db.delete(wellnessRequests).where(eq(wellnessRequests.organizationId, otherOrg.id));
+      await db.delete(organizations).where(eq(organizations.id, otherOrg.id));
+    }
+  });
+
   it('POST /api/wellness/responses - a magic-link athlete selection records a targeted athlete and refuses others', async () => {
     const oneTime = await createStanding({ isStanding: false, distributionMethod: 'magic_link' });
     const submitAs = (selectedAthleteId: string) =>
