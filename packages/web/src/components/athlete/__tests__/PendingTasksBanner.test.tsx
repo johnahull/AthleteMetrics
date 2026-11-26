@@ -319,4 +319,45 @@ describe('PendingTasksBanner', () => {
     // Should be singular "questionnaire"
     expect(screen.getByText(/You have 1 wellness questionnaire to complete/i)).toBeInTheDocument();
   });
+
+  it('should not count standing (anytime) requests as pending', async () => {
+    const standingRequest = { ...mockRequests[0], id: 'request-standing', isStanding: true, expiresAt: null };
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => [standingRequest, mockRequests[1]],
+    } as Response);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PendingTasksBanner />
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('pending-tasks-banner')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/You have 1 wellness questionnaire to complete/i)).toBeInTheDocument();
+  });
+
+  it('should not render when the only requests are standing (anytime) requests', async () => {
+    const standingRequest = { ...mockRequests[0], id: 'request-standing', isStanding: true, expiresAt: null };
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => [standingRequest],
+    } as Response);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PendingTasksBanner />
+      </QueryClientProvider>
+    );
+
+    // Wait for the query to resolve before asserting absence
+    await waitFor(() => {
+      expect(queryClient.getQueryState(['wellness-my-requests', mockUser.id])?.status).toBe('success');
+    });
+
+    expect(screen.queryByTestId('pending-tasks-banner')).not.toBeInTheDocument();
+  });
 });

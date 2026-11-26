@@ -14,6 +14,25 @@ import { calculateAthleteStatus as calculateAthleteStatusFromShared } from '@sha
 export { calculateAthleteStatus } from '@shared/wellness-status-utils';
 
 /**
+ * Freshness of an athlete's last live entry (AM-FEAT-027). Stale = more than 2 calendar days old, or none.
+ * @param lastDate - The last entry's calendar date (YYYY-MM-DD), or null if the athlete never submitted
+ * @param today - The viewer's calendar date (YYYY-MM-DD)
+ */
+export function getFreshness(lastDate: string | null, today: string): { daysAgo: number | null; isStale: boolean } {
+  if (!lastDate) return { daysAgo: null, isStale: true };
+  // Both parse as UTC midnight, so the difference is whole calendar days (no timezone/DST drift)
+  const daysAgo = Math.max(0, Math.round((Date.parse(today) - Date.parse(lastDate)) / 86_400_000));
+  return { daysAgo, isStale: daysAgo > 2 };
+}
+
+/** "last entry today" / "last entry N days ago" / "no entries yet" */
+export function formatLastEntry(daysAgo: number | null): string {
+  if (daysAgo === null) return 'no entries yet';
+  if (daysAgo === 0) return 'last entry today';
+  return `last entry ${daysAgo} day${daysAgo === 1 ? '' : 's'} ago`;
+}
+
+/**
  * Calculate arithmetic mean of all numeric response values
  * @param responses - Array of wellness responses
  * @param questionFilter - Optional filter function to include specific questions only

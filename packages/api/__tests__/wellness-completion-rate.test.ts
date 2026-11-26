@@ -484,6 +484,39 @@ describe('getRequestCompletionRate', () => {
     expect(result.completed).toBe(0);
   });
 
+  it('standing team request: a member who answered and then left is not counted as completed', async () => {
+    const standing = await storage.createWellnessRequest({
+      organizationId: testOrgId,
+      templateId,
+      distributionMethod: 'athlete_account',
+      targetTeamIds: [team1Id],
+      targetAthleteIds: [],
+      status: 'active',
+      isStanding: true,
+    } as any);
+    await db.insert(wellnessResponses).values({
+      organizationId: testOrgId,
+      userId: athlete1Id,
+      userFullName: 'Athlete One',
+      requestId: standing.id,
+      templateId,
+      date: '2024-01-15',
+      responses: { q1: { value: 8, label: 'How do you feel?' } },
+      submittedAt: new Date(),
+      accessMethod: 'authenticated',
+    });
+    await db
+      .update(userTeams)
+      .set({ leftAt: new Date() })
+      .where(and(eq(userTeams.userId, athlete1Id), eq(userTeams.teamId, team1Id)));
+
+    const result = await storage.getRequestCompletionRate(testOrgId, standing.id);
+
+    expect(result.total).toBe(1); // athlete2 only
+    expect(result.completed).toBe(0);
+    expect(result.percentage).toBe(0);
+  });
+
   it('should handle inactive team members', async () => {
     // Mark athlete2's team membership as inactive
     // First get the record

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { format } from 'date-fns';
-import { useRoute } from 'wouter';
+import { Link, useRoute } from 'wouter';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/lib/auth';
 import { AlertCircle, CheckCircle2, Clock } from 'lucide-react';
 import { ScaleQuestionInput } from '@/components/wellness/ScaleQuestionInput';
 import { TextQuestionInput } from '@/components/wellness/TextQuestionInput';
@@ -69,6 +70,7 @@ export default function WellnessSubmit() {
   const token = params?.token;
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user, isLoading: isAuthLoading } = useAuth();
 
   const [responses, setResponses] = useState<Record<string, any>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -154,8 +156,19 @@ export default function WellnessSubmit() {
       if (!res.ok) throw new Error('Failed to load athletes');
       return res.json();
     },
-    enabled: !!token,
+    // Standing requests use the signed-in athlete, so the name list is never needed
+    enabled: !!token && !!request && !request.isStanding,
   });
+
+  // Standing (anytime) requests are answered by the signed-in athlete as often as they like
+  const isStanding = request?.isStanding === true;
+
+  // Standing requests keep one draft per day, so an unfinished entry never carries into another day's check-in
+  const draftKey = request?.id
+    ? isStanding
+      ? `${getAutoSaveKey(request.id)}:${format(new Date(), 'yyyy-MM-dd')}`
+      : getAutoSaveKey(request.id)
+    : null;
 
   // Submit mutation
   const submitMutation = useMutation({
@@ -163,16 +176,26 @@ export default function WellnessSubmit() {
       const res = await fetch(`${API_BASE}/api/wellness/responses`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          requestId: request?.id,
-          token,
-          templateId: template?.id,
-          responses: data.responses,
-          athlete: data.selectedAthleteId, // Middleware expects 'athlete' parameter
-          selectedAthleteId: data.selectedAthleteId,
-          athleteName: data.athleteName,
-          date: format(new Date(), 'yyyy-MM-dd'),
-        }),
+        body: JSON.stringify(
+          isStanding
+            ? {
+                // The session identifies the athlete; the API refuses magic-link submits to standing requests
+                requestId: request?.id,
+                templateId: template?.id,
+                responses: data.responses,
+                date: format(new Date(), 'yyyy-MM-dd'),
+              }
+            : {
+                requestId: request?.id,
+                token,
+                templateId: template?.id,
+                responses: data.responses,
+                athlete: data.selectedAthleteId, // Middleware expects 'athlete' parameter
+                selectedAthleteId: data.selectedAthleteId,
+                athleteName: data.athleteName,
+                date: format(new Date(), 'yyyy-MM-dd'),
+              }
+        ),
       });
 
       if (!res.ok) {
@@ -188,8 +211,8 @@ export default function WellnessSubmit() {
       setSubmittedAt(new Date().toLocaleString());
 
       // Clear auto-save draft
-      if (request?.id) {
-        localStorage.removeItem(getAutoSaveKey(request.id));
+      if (draftKey) {
+        localStorage.removeItem(draftKey);
       }
 
       // Invalidate wellness-my-requests query to update pending tasks banner
@@ -209,19 +232,17 @@ export default function WellnessSubmit() {
     },
   });
 
-  // Auto-save to local storage
+  // Auto-save to local storage (only once the debounce has caught up, so a cleared form never re-saves old answers)
   useEffect(() => {
-    if (request?.id && Object.keys(debouncedResponses).length > 0 && !isSubmitted) {
-      const key = getAutoSaveKey(request.id);
-      localStorage.setItem(key, JSON.stringify(debouncedResponses));
+    if (draftKey && debouncedResponses === responses && Object.keys(debouncedResponses).length > 0 && !isSubmitted) {
+      localStorage.setItem(draftKey, JSON.stringify(debouncedResponses));
     }
-  }, [debouncedResponses, request?.id, isSubmitted]);
+  }, [debouncedResponses, responses, draftKey, isSubmitted]);
 
   // Restore draft from local storage on mount
   useEffect(() => {
-    if (request?.id && template) {
-      const key = getAutoSaveKey(request.id);
-      const saved = localStorage.getItem(key);
+    if (draftKey && template) {
+      const saved = localStorage.getItem(draftKey);
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
@@ -249,13 +270,14 @@ export default function WellnessSubmit() {
         }
       }
     }
-  }, [request?.id, template]);
+  }, [draftKey, template]);
 
   // Check if token is expired
   const isExpired = request?.expiresAt && new Date(request.expiresAt) < new Date();
 
   // Check if already submitted (checks both API and current session state)
-  const hasSubmitted = isSubmitted || (submissionCheck?.hasSubmitted ?? false);
+  // Standing requests never lock: the athlete can check in again any day
+  const hasSubmitted = !isStanding && (isSubmitted || (submissionCheck?.hasSubmitted ?? false));
 
   // Calculate progress
   const questions = template?.config?.questions || [];
@@ -296,10 +318,10 @@ export default function WellnessSubmit() {
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
-    // Validate athlete selection OR manual name
-    if (!showManualEntry && !selectedAthleteId) {
+    // Validate athlete selection OR manual name (standing requests use the signed-in athlete)
+    if (!isStanding && !showManualEntry && !selectedAthleteId) {
       newErrors['athleteSelection'] = 'Please select your name or choose manual entry';
-    } else if (showManualEntry && (!athleteName || athleteName.trim().length === 0)) {
+    } else if (!isStanding && showManualEntry && (!athleteName || athleteName.trim().length === 0)) {
       newErrors['athleteName'] = 'Please enter your name';
     }
 
@@ -361,7 +383,7 @@ export default function WellnessSubmit() {
   };
 
   // Loading state
-  if (isLoadingRequest || isLoadingTemplate || isCheckingSubmission) {
+  if (isLoadingRequest || isLoadingTemplate || isCheckingSubmission || (isStanding && isAuthLoading)) {
     return (
       <div className="container max-w-3xl mx-auto py-8 px-4">
         <Card>
@@ -411,6 +433,67 @@ export default function WellnessSubmit() {
     );
   }
 
+  // A cancelled standing request still loads by token, but can no longer be answered
+  if (isStanding && request.status !== 'active') {
+    return (
+      <div className="container max-w-3xl mx-auto py-8 px-4">
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            <p className="font-semibold">This check-in is no longer available</p>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  // Standing requests need a signed-in athlete (magic links cannot submit them)
+  if (isStanding && !user) {
+    return (
+      <div className="container max-w-3xl mx-auto py-8 px-4">
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            <p className="font-semibold">Please sign in to submit this check-in</p>
+            <Link href="/login" className="text-sm underline mt-1 inline-block">Sign in</Link>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  // Standing request just submitted: confirm, and let the athlete go back or enter again
+  if (isStanding && isSubmitted) {
+    return (
+      <div className="container max-w-3xl mx-auto py-8 px-4">
+        <Card data-testid="standing-submit-success">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-6 w-6 text-green-600" />
+              <CardTitle>Check-in saved</CardTitle>
+            </div>
+            <CardDescription>Thanks! You can fill this in again whenever you want.</CardDescription>
+          </CardHeader>
+          <CardFooter className="flex flex-col sm:flex-row gap-3">
+            <Button asChild variant="outline" className="w-full sm:w-auto">
+              <Link href="/wellness/my-requests">Back to my check-ins</Link>
+            </Button>
+            <Button
+              className="w-full sm:w-auto"
+              onClick={() => {
+                if (draftKey) localStorage.removeItem(draftKey);
+                setResponses({});
+                setIsSubmitted(false);
+              }}
+            >
+              Enter again
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
+
   // Already submitted state
   if (hasSubmitted) {
     return (
@@ -456,7 +539,14 @@ export default function WellnessSubmit() {
             </Alert>
           )}
 
-          {/* Athlete Selection */}
+          {isStanding && (
+            <Alert className="mb-6" data-testid="standing-replace-note">
+              <AlertDescription>Submitting again today replaces today's entry. Your coach can still see the earlier one.</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Athlete Selection (standing requests use the signed-in athlete) */}
+          {!isStanding && (
           <div className="mb-8 p-4 border rounded-md bg-muted/50">
             <Label className="text-base font-semibold">
               Your Name <span className="text-red-500">*</span>
@@ -551,6 +641,7 @@ export default function WellnessSubmit() {
               </>
             )}
           </div>
+          )}
 
           {/* Progress indicator */}
           <div className="mb-8" data-testid="progress-indicator">

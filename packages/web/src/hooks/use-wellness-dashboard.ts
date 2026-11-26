@@ -9,6 +9,15 @@ interface AthleteData {
   score: number | null;
   injuries: { x: number; y: number; label?: string }[];
   lastSubmission: Date;
+  earlierEntries?: EarlierEntry[];
+}
+
+/** A superseded (edited) entry of the selected date, shown to the coach but never scored (AM-FEAT-027) */
+export interface EarlierEntry {
+  id: string;
+  submittedAt: string;
+  answers: { label: string; value: string }[];
+  painAreas: string[];
 }
 
 interface TemplateAggregate {
@@ -19,6 +28,14 @@ interface TemplateAggregate {
   responseCount: number;
   trend: 'up' | 'down' | 'stable';
   status: 'red' | 'yellow' | 'green';
+}
+
+/** Every roster athlete's latest live entry (AM-FEAT-027); null = never submitted */
+export interface AthleteLastEntry {
+  userId: string;
+  name: string | null;
+  lastSubmittedAt: string | null;
+  lastDate: string | null;
 }
 
 interface TeamDashboardData {
@@ -36,6 +53,7 @@ interface TeamDashboardData {
   commonInjuries: { label: string; count: number }[];
   athletes: AthleteData[];
   templateAggregates: TemplateAggregate[];
+  lastEntries: AthleteLastEntry[];
 }
 
 interface UseWellnessDashboardOptions {

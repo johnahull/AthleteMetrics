@@ -6,7 +6,7 @@
  */
 
 import { db } from "../db";
-import { eq, and, desc, gte, lte, inArray, isNull, sql, type SQL } from "drizzle-orm";
+import { eq, and, desc, gte, lte, inArray, isNull, isNotNull, sql, type SQL } from "drizzle-orm";
 import {
   wellnessTemplates,
   wellnessRequests,
@@ -22,6 +22,7 @@ import {
   type WellnessSchedule,
 } from "@shared/schema";
 import type { WellnessResponseData } from "@shared/wellness-types";
+import { computeDayCompliance, type RequestCompletionRate } from "@shared/wellness-compliance";
 
 // Wellness trend data structure
 export interface WellnessTrend {
@@ -462,6 +463,36 @@ export class WellnessRepository {
     return created;
   }
 
+  /**
+   * Standing requests: insert a response and supersede the athlete's earlier live row for the same day, if any.
+   * Serialised per (request, athlete, day) by a transaction-scoped advisory lock; there is no unique index because
+   * old anonymous rows and profile merges would collide with it.
+   */
+  async createStandingWellnessResponse(
+    response: typeof wellnessResponses.$inferInsert & { requestId: string }
+  ): Promise<{ response: WellnessResponse; replaced: boolean }> {
+    return db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${response.requestId}::text || ${response.userId}::text || ${response.date}::text))`
+      );
+
+      const superseded = await tx
+        .update(wellnessResponses)
+        .set({ supersededAt: new Date() })
+        .where(and(
+          eq(wellnessResponses.requestId, response.requestId),
+          eq(wellnessResponses.userId, response.userId),
+          eq(wellnessResponses.date, response.date),
+          isNull(wellnessResponses.supersededAt),
+        ))
+        .returning({ id: wellnessResponses.id });
+
+      const [created] = await tx.insert(wellnessResponses).values(response).returning();
+
+      return { response: created, replaced: superseded.length > 0 };
+    });
+  }
+
   async getWellnessResponse(id: string): Promise<WellnessResponse | undefined> {
     validateUUID(id, 'id');
     const [response] = await db
@@ -474,7 +505,7 @@ export class WellnessRepository {
 
   async getWellnessResponsesByAthlete(userId: string, filters?: { startDate?: string; endDate?: string; organizationId?: string }): Promise<WellnessResponse[]> {
     validateUUID(userId, 'userId');
-    const conditions: SQL[] = [eq(wellnessResponses.userId, userId)];
+    const conditions: SQL[] = [eq(wellnessResponses.userId, userId), isNull(wellnessResponses.supersededAt)];
 
     if (filters?.organizationId) {
       conditions.push(eq(wellnessResponses.organizationId, filters.organizationId));
@@ -497,7 +528,7 @@ export class WellnessRepository {
 
   async getWellnessResponsesByOrganization(organizationId: string, filters?: { startDate?: string; endDate?: string }): Promise<WellnessResponse[]> {
     validateUUID(organizationId, 'organizationId');
-    const conditions: SQL[] = [eq(wellnessResponses.organizationId, organizationId)];
+    const conditions: SQL[] = [eq(wellnessResponses.organizationId, organizationId), isNull(wellnessResponses.supersededAt)];
 
     if (filters?.startDate) {
       conditions.push(gte(wellnessResponses.date, filters.startDate));
@@ -543,6 +574,42 @@ export class WellnessRepository {
   }
 
   /**
+   * Each athlete's most recent live (not superseded) response in the organization, by submittedAt.
+   * One row per athlete; athletes with no live response are absent.
+   */
+  async getLatestLiveSubmissions(
+    organizationId: string
+  ): Promise<Array<{ userId: string; submittedAt: Date; date: string }>> {
+    validateUUID(organizationId, 'organizationId');
+    return db
+      .selectDistinctOn([wellnessResponses.userId], {
+        userId: wellnessResponses.userId,
+        submittedAt: wellnessResponses.submittedAt,
+        date: wellnessResponses.date,
+      })
+      .from(wellnessResponses)
+      .where(and(eq(wellnessResponses.organizationId, organizationId), isNull(wellnessResponses.supersededAt)))
+      .orderBy(wellnessResponses.userId, desc(wellnessResponses.submittedAt));
+  }
+
+  /**
+   * The organization's superseded (edited) responses for one date, newest first.
+   * Readers that score or count must not use these; they are only shown as "earlier entries".
+   */
+  async getSupersededResponses(organizationId: string, date: string): Promise<WellnessResponse[]> {
+    validateUUID(organizationId, 'organizationId');
+    return db
+      .select()
+      .from(wellnessResponses)
+      .where(and(
+        eq(wellnessResponses.organizationId, organizationId),
+        eq(wellnessResponses.date, date),
+        isNotNull(wellnessResponses.supersededAt)
+      ))
+      .orderBy(desc(wellnessResponses.submittedAt));
+  }
+
+  /**
    * Batch fetch multiple wellness templates in a single query
    * Optimizes dashboard performance by avoiding sequential template lookups
    */
@@ -572,7 +639,8 @@ export class WellnessRepository {
           eq(wellnessResponses.teamId, teamId),
           eq(wellnessResponses.organizationId, filters.organizationId),
           gte(wellnessResponses.date, filters.startDate),
-          lte(wellnessResponses.date, filters.endDate)
+          lte(wellnessResponses.date, filters.endDate),
+          isNull(wellnessResponses.supersededAt)
         )
       );
 
@@ -677,6 +745,7 @@ export class WellnessRepository {
       eq(wellnessResponses.organizationId, organizationId),
       gte(wellnessResponses.date, filters.startDate),
       lte(wellnessResponses.date, filters.endDate),
+      isNull(wellnessResponses.supersededAt),
     ];
 
     // SQL aggregation query using PostgreSQL JSON functions
@@ -760,7 +829,7 @@ export class WellnessRepository {
   async getRequestCompletionRate(
     organizationId: string,
     requestId: string
-  ): Promise<{ completed: number; total: number; percentage: number }> {
+  ): Promise<RequestCompletionRate> {
     // Wrap entire calculation in transaction for consistency
     return db.transaction(async (tx) => {
       // Step 1: Get the request details
@@ -768,6 +837,7 @@ export class WellnessRepository {
         where: and(eq(wellnessRequests.id, requestId), eq(wellnessRequests.organizationId, organizationId)),
       });
 
+      // A request of another organization looks the same as a missing one
       if (!request) {
         return { completed: 0, total: 0, percentage: 0 };
       }
@@ -805,6 +875,8 @@ export class WellnessRepository {
               inArray(userTeams.teamId, request.targetTeamIds),
               eq(teams.organizationId, organizationId),
               eq(userTeams.isActive, true),
+              // Standing requests count current members only (one-time requests keep their original rule)
+              request.isStanding ? isNull(userTeams.leftAt) : undefined,
               eq(userOrganizations.organizationId, organizationId),
               eq(users.isActive, true),
               isNull(users.deletedAt)
@@ -816,8 +888,30 @@ export class WellnessRepository {
 
       const totalTargets = targetAthleteIds.size;
 
+      // Standing requests also get day compliance over the last 7 and 28 complete UTC days (ending yesterday)
+      let standingFields: Pick<RequestCompletionRate, 'standing' | 'windows'> = {};
+      if (request.isStanding) {
+        const now = new Date();
+        const since = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        const entries = await tx
+          .select({ userId: wellnessResponses.userId, date: wellnessResponses.date })
+          .from(wellnessResponses)
+          .where(
+            and(
+              eq(wellnessResponses.requestId, requestId),
+              eq(wellnessResponses.organizationId, organizationId),
+              isNull(wellnessResponses.supersededAt),
+              gte(wellnessResponses.date, since)
+            )
+          );
+        const targetUserIds = [...targetAthleteIds];
+        const compliance = (windowDays: number) =>
+          computeDayCompliance({ createdAt: request.createdAt, now, windowDays, targetUserIds, entries });
+        standingFields = { standing: true, windows: { last7: compliance(7), last28: compliance(28) } };
+      }
+
       if (totalTargets === 0) {
-        return { completed: 0, total: 0, percentage: 0 };
+        return { completed: 0, total: 0, percentage: 0, ...standingFields };
       }
 
       // Step 4: Get unique respondents for this request
@@ -827,12 +921,13 @@ export class WellnessRepository {
         .where(
           and(
             eq(wellnessResponses.requestId, requestId),
-            eq(wellnessResponses.organizationId, organizationId)
+            eq(wellnessResponses.organizationId, organizationId),
+            isNull(wellnessResponses.supersededAt)
           )
         );
 
-      // Count unique respondents (handle duplicates)
-      const uniqueRespondents = new Set(responses.map(r => r.userId));
+      // Count unique respondents who are still targets (members who left, and magic-link rows, never push completed past total)
+      const uniqueRespondents = new Set(responses.map(r => r.userId).filter(id => targetAthleteIds.has(id)));
       const completedCount = uniqueRespondents.size;
       const percentage = Math.round((completedCount / totalTargets) * 100);
 
@@ -840,6 +935,7 @@ export class WellnessRepository {
         completed: completedCount,
         total: totalTargets,
         percentage,
+        ...standingFields,
       };
     });
   }

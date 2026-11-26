@@ -51,6 +51,8 @@
 
 > 0186 (`meaning` text column, nullable, on `site_metrics` and `custom_org_metrics`: the family-facing "what this result means" text edited in `/metrics` and the custom-metric form, read by `getMetricExplanationsAndMeanings`; `_down` drops both columns) is provisional: renumber at merge if another branch lands 0186 first (file, `_down`, test `migration-0186-metric-meaning`, tracking row, this line). AM-FEAT-024 (#733-735) holds provisional 0179/0180.
 
+> 0187 (`wellness_requests.is_standing` boolean NOT NULL DEFAULT false and `wellness_responses.superseded_at` timestamp, nullable, AM-FEAT-027 anytime wellness survey: a standing request stays open until cancelled, and a same-day resubmit marks the earlier row superseded instead of deleting it; `_down` drops both columns) is provisional: renumber at merge if another branch lands 0187 first (file, `_down`, test `migration-0187-wellness-standing-requests`, tracking row, this line).
+
 ## Current State (2025-10-30)
 
 ### Overview

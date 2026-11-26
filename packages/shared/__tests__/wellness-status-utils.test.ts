@@ -10,6 +10,7 @@ import {
   getCommonInjuries,
   calculateTrend,
   getDefaultStatusConfig,
+  summarizeEarlierEntry,
 } from '../wellness-status-utils';
 import type { WellnessResponse, WellnessTemplate } from '../wellness-types';
 
@@ -824,5 +825,126 @@ describe('Modified Hooper Index - Sum Calculation Method', () => {
 
       expect(teamStatus).toBe('yellow');
     });
+  });
+});
+
+describe('summarizeEarlierEntry', () => {
+  const template: WellnessTemplate = {
+    id: 'template-1',
+    organizationId: 'org-1',
+    name: 'Daily',
+    isDefault: false,
+    isActive: true,
+    config: {
+      questions: [
+        { id: 'sleep', type: 'scale', label: 'Sleep', scaleMin: 1, scaleMax: 5, required: true },
+        { id: 'sick', type: 'boolean', label: 'Feeling sick?', required: false },
+        { id: 'notes', type: 'text', label: 'Notes', required: false },
+        { id: 'mood', type: 'multiple_choice', label: 'Mood', options: ['Calm', 'Tense'], allowMultiple: true, required: false },
+        { id: 'pain', type: 'body_map', label: 'Where does it hurt?', allowMultiple: true, required: false },
+      ],
+      statusConfig: {
+        scaleOrientation: 'higher_is_better',
+        redThreshold: 2,
+        yellowThreshold: 3,
+        injuryQuestionIds: ['pain'],
+        injuryOverride: true,
+      },
+    },
+    createdBy: null,
+    isSystemSeeded: false,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const submittedAt = new Date('2026-11-25T07:30:00Z');
+  const response = (responses: WellnessResponse['responses']) =>
+    ({ id: 'resp-1', submittedAt, responses } as unknown as WellnessResponse);
+
+  it('lists answers as short strings in template order and pain points as pain areas', () => {
+    const summary = summarizeEarlierEntry(
+      response({
+        pain: { value: [{ x: 1, y: 2, label: 'Left knee' }, { x: 3, y: 4 }], label: 'Where does it hurt?' },
+        notes: { value: 'Rough night', label: 'Notes' },
+        sleep: { value: 2, label: 'Sleep' },
+        sick: { value: false, label: 'Feeling sick?' },
+        mood: { value: ['Calm', 'Tense'], label: 'Mood' },
+      }),
+      template
+    );
+
+    expect(summary).toEqual({
+      id: 'resp-1',
+      submittedAt,
+      answers: [
+        { label: 'Sleep', value: '2' },
+        { label: 'Feeling sick?', value: 'No' },
+        { label: 'Notes', value: 'Rough night' },
+        { label: 'Mood', value: 'Calm, Tense' },
+      ],
+      painAreas: ['Left knee', 'unlabelled area'],
+    });
+  });
+
+  it('gives no pain areas and skips unanswered questions when there is no pain', () => {
+    const summary = summarizeEarlierEntry(
+      response({ sleep: { value: 4, label: 'Sleep' }, sick: { value: true, label: 'Feeling sick?' } }),
+      template
+    );
+
+    expect(summary.answers).toEqual([
+      { label: 'Sleep', value: '4' },
+      { label: 'Feeling sick?', value: 'Yes' },
+    ]);
+    expect(summary.painAreas).toEqual([]);
+  });
+
+  // An earlier pain report must never be hidden by how the template is configured today
+  const points = [{ x: 0.1, y: 0.2, label: 'Left knee' }];
+
+  it('reports pain from a body map the status config does not list', () => {
+    const partial = {
+      ...template,
+      config: { ...template.config, statusConfig: { ...template.config.statusConfig!, injuryQuestionIds: ['sleep'] } },
+    };
+    const summary = summarizeEarlierEntry(response({ pain: { value: points, label: 'Where does it hurt?' } }), partial);
+    expect(summary.painAreas).toEqual(['Left knee']);
+    expect(summary.answers).toEqual([]);
+  });
+
+  it('keeps pain and answers of questions since removed from the template', () => {
+    const summary = summarizeEarlierEntry(
+      response({
+        gone_map: { value: points, label: 'Old body map' },
+        gone_text: { value: 'Tight', label: 'Old note' },
+        sleep: { value: 3, label: 'Sleep' },
+      }),
+      template
+    );
+    expect(summary.painAreas).toEqual(['Left knee']);
+    expect(summary.answers).toEqual([{ label: 'Sleep', value: '3' }, { label: 'Old note', value: 'Tight' }]);
+  });
+
+  it('works without a template (deleted or invalid)', () => {
+    const summary = summarizeEarlierEntry(
+      response({ pain: { value: points, label: 'Where does it hurt?' }, sleep: { value: 3, label: 'Sleep' } }),
+      undefined
+    );
+    expect(summary.painAreas).toEqual(['Left knee']);
+    expect(summary.answers).toEqual([{ label: 'Sleep', value: '3' }]);
+  });
+
+  it('skips empty and unreadable values', () => {
+    const summary = summarizeEarlierEntry(
+      response({
+        mood: { value: [], label: 'Mood' },
+        odd: { value: { a: 1 }, label: 'Odd' },
+        missing: { label: 'Missing' },
+        notes: { value: '', label: 'Notes' },
+      } as any),
+      template
+    );
+    expect(summary.answers).toEqual([]);
+    expect(summary.painAreas).toEqual([]);
   });
 });

@@ -37,9 +37,9 @@ import {
   submitWellnessResponseSchema,
   generateResponseValidationSchema,
 } from "@shared/wellness-validation";
-import type { WellnessRequest, WellnessResponse } from "@shared/wellness-types";
+import type { WellnessResponse } from "@shared/wellness-types";
 import type { WellnessTrendDataPoint } from "@shared/wellness-analytics-types";
-import { calculateAthleteStatus, getCommonInjuries, calculateTrend } from "@shared/wellness-status-utils";
+import { calculateAthleteStatus, getCommonInjuries, calculateTrend, summarizeEarlierEntry } from "@shared/wellness-status-utils";
 import { WELLNESS_CONSTANTS } from "@shared/wellness-constants";
 import { userTeams, userOrganizations } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
@@ -79,8 +79,19 @@ const createErrorResponse = (message: string, error?: Error) => {
   return response;
 };
 
+// The team a response is stamped with: an active membership in the template's organization, preferring a team
+// the request targets
+async function pickResponseTeam(athleteId: string, organizationId: string | null, targetTeamIds?: string[] | null) {
+  const memberships = (await storage.getUserTeams(athleteId))
+    .filter(m => m.isActive && !m.leftAt && m.team.organizationId === organizationId);
+  return (memberships.find(m => targetTeamIds?.includes(m.teamId)) ?? memberships[0])?.team ?? null;
+}
+
 // Helper function to verify if an athlete is targeted by a wellness request
-async function verifyAthleteIsTargeted(request: WellnessRequest, athleteId: string): Promise<boolean> {
+async function verifyAthleteIsTargeted(
+  request: { organizationId: string; targetAthleteIds?: string[] | null; targetTeamIds?: string[] | null },
+  athleteId: string
+): Promise<boolean> {
   // Only members of the request's organization, through its own teams, count as targeted
   if ((await getOrganizationMemberIds(request.organizationId, [athleteId])).size === 0) {
     return false;
@@ -94,8 +105,9 @@ async function verifyAthleteIsTargeted(request: WellnessRequest, athleteId: stri
   // Check team-based targeting
   if (request.targetTeamIds && request.targetTeamIds.length > 0) {
     const athleteTeams = await storage.getUserTeams(athleteId);
+    // Only current members: a removed athlete keeps a user_teams row with isActive=false and leftAt set
     const athleteTeamIds = athleteTeams
-      .filter(ut => ut.team.organizationId === request.organizationId)
+      .filter(ut => ut.isActive && !ut.leftAt && ut.team.organizationId === request.organizationId)
       .map(ut => ut.team.id);
     return request.targetTeamIds.some(teamId => athleteTeamIds.includes(teamId));
   }
@@ -526,6 +538,7 @@ export function registerWellnessRoutes(app: Express) {
           scheduledFor: data.scheduledFor ? new Date(data.scheduledFor) : undefined,
           expiresAt: data.expiresAt ? new Date(data.expiresAt) : undefined,
           status: isScheduled ? 'scheduled' : 'active',
+          isStanding: data.isStanding,
         });
 
         // Skip notifications for scheduled requests — the cron job will send them when due
@@ -1019,8 +1032,8 @@ export function registerWellnessRoutes(app: Express) {
         }
 
         // Validate requestId belongs to same organization as template (prevents cross-org data leakage)
+        const request = data.requestId ? await storage.getWellnessRequest(data.requestId) : undefined;
         if (data.requestId) {
-          const request = await storage.getWellnessRequest(data.requestId);
           if (!request) {
             return res.status(404).json({ message: "Request not found" });
           }
@@ -1086,6 +1099,33 @@ export function registerWellnessRoutes(app: Express) {
           });
         }
 
+        // Standing (anytime) requests: signed-in, targeted athletes only, while active, for a day near today
+        if (request?.isStanding) {
+          // The answers were validated against data.templateId, so it must be the request's own template
+          if (request.templateId !== data.templateId) {
+            return res.status(400).json({ message: "Template does not match this check-in" });
+          }
+
+          // SECURITY: a magic link can name any targeted athlete, so it must never write to a standing request
+          if ((req.user as { accessMethod?: string }).accessMethod !== 'authenticated') {
+            return res.status(403).json({ message: "Please sign in to submit this check-in" });
+          }
+
+          if (!(await verifyAthleteIsTargeted(request, req.user!.id))) {
+            return res.status(403).json({ message: "You are not part of this check-in" });
+          }
+
+          if (request.status !== 'active') {
+            return res.status(409).json({ message: "This check-in is no longer open" });
+          }
+
+          const oneDayMs = 24 * 60 * 60 * 1000;
+          const todayUtc = Date.parse(new Date().toISOString().split('T')[0]);
+          if (!(Math.abs(Date.parse(data.date) - todayUtc) <= oneDayMs)) {
+            return res.status(400).json({ message: "Check-in date must be yesterday, today or tomorrow" });
+          }
+        }
+
         // Get user details (handle both authenticated and magic link submissions)
         let userId: string;
         let userFullName: string;
@@ -1098,12 +1138,12 @@ export function registerWellnessRoutes(app: Express) {
           if (selectedAthleteId) {
             // Athlete selected from dropdown - use real user ID
             // SECURITY: Verify athlete is in targeted list
-            const request = await storage.getWellnessRequest(data.requestId!);
+            // Fetched above whenever a requestId was sent (an unknown one already answered 404)
             if (!request) {
-              return res.status(404).json({ message: "Request not found" });
+              return res.status(400).json({ message: "requestId is required when selecting an athlete" });
             }
 
-            const isTargeted = await verifyAthleteIsTargeted(request as any, selectedAthleteId);
+            const isTargeted = await verifyAthleteIsTargeted(request, selectedAthleteId);
 
             if (!isTargeted) {
               return res.status(403).json({
@@ -1116,8 +1156,7 @@ export function registerWellnessRoutes(app: Express) {
               return res.status(404).json({ message: "Selected athlete not found" });
             }
 
-            const userTeams = await storage.getUserTeams(selectedAthleteId);
-            const primaryTeam = userTeams.length > 0 ? userTeams[0].team : null;
+            const primaryTeam = await pickResponseTeam(selectedAthleteId, template.organizationId, request.targetTeamIds);
 
             userId = user.id;
             userFullName = user.fullName;
@@ -1138,8 +1177,7 @@ export function registerWellnessRoutes(app: Express) {
           }
 
           // Get team details if user belongs to teams
-          const userTeams = await storage.getUserTeams(req.user!.id);
-          const primaryTeam = userTeams.length > 0 ? userTeams[0].team : null;
+          const primaryTeam = await pickResponseTeam(req.user!.id, template.organizationId, request?.targetTeamIds);
 
           userId = user.id;
           userFullName = user.fullName;
@@ -1148,7 +1186,7 @@ export function registerWellnessRoutes(app: Express) {
         }
 
         // Create response
-        const response = await storage.createWellnessResponse({
+        const responseData = {
           requestId: data.requestId,
           organizationId: template.organizationId || '',
           templateId: data.templateId,
@@ -1162,7 +1200,17 @@ export function registerWellnessRoutes(app: Express) {
           accessMethod: (req.user as any).accessMethod || data.accessMethod || 'authenticated',
           ipAddress: req.ip || req.socket.remoteAddress || null,
           userAgent: req.get('user-agent') || null,
-        });
+        };
+
+        if (request?.isStanding) {
+          const { response, replaced } = await storage.createStandingWellnessResponse({
+            ...responseData,
+            requestId: request.id,
+          });
+          return res.status(201).json({ ...response, replaced });
+        }
+
+        const response = await storage.createWellnessResponse(responseData);
 
         res.status(201).json(response);
       } catch (error: any) {
@@ -1232,7 +1280,7 @@ export function registerWellnessRoutes(app: Express) {
         // This includes requests with targetAthleteIds containing this user
         // and requests with targetTeamIds where the user is a team member
         const userTeams = await storage.getUserTeams(userId);
-        const teamIds = userTeams.map(ut => ut.teamId);
+        const teamIds = userTeams.filter(ut => ut.isActive && !ut.leftAt).map(ut => ut.teamId);
 
         // Get user's organizations to scope requests
         const userOrgs = await storage.getUserOrganizations(userId);
@@ -1260,9 +1308,9 @@ export function registerWellnessRoutes(app: Express) {
         const userResponses = await storage.getWellnessResponsesByAthlete(userId);
         const respondedRequestIds = new Set(userResponses.map(r => r.requestId));
 
-        // Filter out requests the user has already responded to
+        // Filter out requests the user has already responded to (standing requests stay open for more check-ins)
         const pendingRequests = targetedRequests.filter(request =>
-          !respondedRequestIds.has(request.id)
+          request.isStanding || !respondedRequestIds.has(request.id)
         );
 
         res.json(pendingRequests);
@@ -1509,6 +1557,17 @@ export function registerWellnessRoutes(app: Express) {
         const { requestId } = req.params;
         const userId = req.user!.id;
 
+        // A standing request can be answered again any day, so it never counts as submitted
+        const wellnessRequest = await storage.getWellnessRequest(requestId);
+        if (wellnessRequest?.isStanding) {
+          // Only a targeted member of the request's organization learns that it is standing; anyone else just
+          // has nothing submitted
+          const isMember = (await storage.getUserOrganizations(userId))
+            .some(membership => membership.organizationId === wellnessRequest.organizationId);
+          const isTargeted = isMember && await verifyAthleteIsTargeted(wellnessRequest, userId);
+          return res.json(isTargeted ? { hasSubmitted: false, isStanding: true } : { hasSubmitted: false });
+        }
+
         // Get all responses for this user
         const userResponses = await storage.getWellnessResponsesByAthlete(userId);
 
@@ -1724,10 +1783,22 @@ export function registerWellnessRoutes(app: Express) {
         const currentDateResponses = allResponses.filter(r => r.date === date);
         const previousDateResponses = allResponses.filter(r => r.date === previousDateStr);
 
-        // Query 3: Batch fetch all unique templates
-        const uniqueTemplateIds = [...new Set(allResponses.map(r => r.templateId))];
+        // Query 3: the selected date's superseded (edited) entries, shown to the coach but never scored or counted
+        const supersededResponses = await storage.getSupersededResponses(organizationId, date);
+        const supersededByUser = new Map<string, typeof supersededResponses>();
+        for (const r of supersededResponses) {
+          if (!supersededByUser.has(r.userId)) supersededByUser.set(r.userId, []);
+          supersededByUser.get(r.userId)!.push(r);
+        }
+
+        // Query 4: Batch fetch all unique templates
+        const uniqueTemplateIds = [...new Set([...allResponses, ...supersededResponses].map(r => r.templateId))];
         const templates = await storage.getWellnessTemplatesBatch(uniqueTemplateIds);
         const templateMap = new Map(templates.map(t => [t.id, t]));
+
+        // Query 5: each athlete's latest live entry, for freshness ("last entry N days ago")
+        const latestSubmissions = await storage.getLatestLiveSubmissions(organizationId);
+        const latestByUser = new Map(latestSubmissions.map(s => [s.userId, s]));
 
         // Log warning if any templates are missing
         const missingTemplates = uniqueTemplateIds.filter(id => !templateMap.has(id));
@@ -1786,6 +1857,12 @@ export function registerWellnessRoutes(app: Express) {
               score: status.score,
               injuries: status.injuries,
               lastSubmission: athleteResponse.submittedAt,
+              // Never dropped: a deleted or invalid template still shows the stored answers and pain
+              earlierEntries: (supersededByUser.get(athleteId) ?? []).map(earlier => {
+                const earlierTemplate = templateMap.get(earlier.templateId);
+                const validated = earlierTemplate ? validateTemplate(earlierTemplate) : null;
+                return summarizeEarlierEntry(earlier as WellnessResponse, validated ?? undefined);
+              }),
             };
           }).filter((a): a is NonNullable<typeof a> => a !== null);
 
@@ -2036,6 +2113,16 @@ export function registerWellnessRoutes(app: Express) {
             commonInjuries,
             athletes: athleteStatuses,
             templateAggregates,
+            // Every roster athlete, including those with no entry on the selected date
+            lastEntries: athleteIds.map(userId => {
+              const latest = latestByUser.get(userId);
+              return {
+                userId,
+                name: teamRoster.find(r => r.userId === userId)?.userFullName ?? null,
+                lastSubmittedAt: latest?.submittedAt ?? null,
+                lastDate: latest?.date ?? null,
+              };
+            }),
           });
         }
 

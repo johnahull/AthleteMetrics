@@ -8,7 +8,7 @@
  */
 
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { eq, and, gte, inArray, desc, sql } from 'drizzle-orm';
+import { eq, and, gte, inArray, desc, sql, isNull } from 'drizzle-orm';
 import type * as schema from '@shared/schema';
 import {
   organizations,
@@ -75,7 +75,8 @@ export class WellnessDigestService {
       .where(
         and(
           eq(wellnessResponses.organizationId, orgId),
-          gte(wellnessResponses.submittedAt, twentyFourHoursAgo)
+          gte(wellnessResponses.submittedAt, twentyFourHoursAgo),
+          isNull(wellnessResponses.supersededAt)
         )
       )
       .orderBy(desc(wellnessResponses.submittedAt));
