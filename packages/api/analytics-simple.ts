@@ -524,7 +524,7 @@ export class AnalyticsService {
       // drops the copies of a measurement that the userOrganizations join makes for a member of several orgs.
       // Sort key per metric, ascending = best first: the value for lower_is_better, the latest date for tracking
       // (what filterToBestMeasurements keeps), the negated value otherwise. A tied best keeps the latest date, then
-      // the lowest measurement id.
+      // the entry recorded last (two tracking entries of one date), then the lowest measurement id.
       const bestFirst = sql`CASE ${sql.join(
         [...new Set(allMetrics)].map(code => {
           const key = metricTypes[code] === 'lower_is_better' ? sql`${measurements.value}`
@@ -538,9 +538,36 @@ export class AnalyticsService {
       const partition = request.timeframe.type === 'best' ? sql`${measurements.userId}, ${measurements.metric}`
         : sql`${measurements.userId}, ${measurements.metric}, ${measurements.date}`;
 
+      // Rank only the ids: the names are joined afterwards, for the rows that survive the limit, so the sort over
+      // the whole matching history stays narrow
+      const ranked = db
+        .select({
+          measurementId: measurements.id,
+          date: measurements.date,
+          rn: sql<number>`row_number() OVER (
+            PARTITION BY ${partition}
+            ORDER BY ${bestFirst}, ${measurements.date} DESC, ${measurements.createdAt} DESC, ${measurements.id}
+          )`.as('rn')
+        })
+        .from(measurements)
+        .leftJoin(users, eq(measurements.userId, users.id))
+        .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+        .leftJoin(teams, eq(measurements.teamId, teams.id))
+        .where(and(...whereConditions))
+        .as('ranked');
+
+      // Deterministic order, so when the limit is still reached it drops the oldest rows, not random ones
+      const top = db
+        .select({ measurementId: ranked.measurementId })
+        .from(ranked)
+        .where(eq(ranked.rn, 1))
+        .orderBy(desc(ranked.date), ranked.measurementId)
+        .limit(PAGINATION.ANALYTICS_LIMIT)
+        .as('top');
+
       // Query to get basic data
       // Use LEFT JOIN to include measurements from soft-deleted users (Level 2 Immutability)
-      const ranked = db
+      const data: QueryResult[] = await db
         .select({
           measurementId: measurements.id,
           athleteId: measurements.userId,
@@ -554,28 +581,16 @@ export class AnalyticsService {
               WHEN ${users.deletedAt} IS NOT NULL THEN '[Deleted User]'
               ELSE ${users.firstName} || ' ' || ${users.lastName}
             END
-          `.as('athlete_name'),
+          `,
           teamName: teams.name,
           gender: users.gender,
-          birthYear: sql<number>`EXTRACT(YEAR FROM ${users.birthDate})`.as('birth_year'),
-          rn: sql<number>`row_number() OVER (
-            PARTITION BY ${partition} ORDER BY ${bestFirst}, ${measurements.date} DESC, ${measurements.id}
-          )`.as('rn')
+          birthYear: sql<number>`EXTRACT(YEAR FROM ${users.birthDate})`
         })
-        .from(measurements)
+        .from(top)
+        .innerJoin(measurements, eq(measurements.id, top.measurementId))
         .leftJoin(users, eq(measurements.userId, users.id))
-        .leftJoin(userOrganizations, eq(users.id, userOrganizations.userId))
         .leftJoin(teams, eq(measurements.teamId, teams.id))
-        .where(and(...whereConditions))
-        .as('ranked');
-
-      // Deterministic order, so when the limit is still reached it drops the oldest rows, not random ones
-      const data: QueryResult[] = await db
-        .select()
-        .from(ranked)
-        .where(eq(ranked.rn, 1))
-        .orderBy(desc(ranked.date), ranked.measurementId)
-        .limit(PAGINATION.ANALYTICS_LIMIT);
+        .orderBy(desc(measurements.date), measurements.id);
 
       // Database query completed, processing results
       

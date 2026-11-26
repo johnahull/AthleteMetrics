@@ -40,12 +40,13 @@ describe('analytics row limit keeps the best values', () => {
   const athletes: string[] = [];
   const createdMetrics: string[] = [];
 
-  type Row = { athlete: number; metric: string; value: number; date: string; team?: string; id?: string };
+  type Row = { athlete: number; metric: string; value: number; date: string; team?: string; id?: string; createdAt?: string };
   const add = async (rows: Row[]) => {
     // One insert per row, in order, so the physical order is the listed order
     for (const r of rows) {
       await db.insert(measurements).values({
         ...(r.id ? { id: r.id } : {}),
+        ...(r.createdAt ? { createdAt: new Date(r.createdAt) } : {}),
         userId: athletes[r.athlete],
         submittedBy: athletes[r.athlete],
         organizationId: orgId,
@@ -245,6 +246,15 @@ describe('analytics row limit keeps the best values', () => {
       await db.delete(userOrganizations).where(inArray(userOrganizations.organizationId, [otherOrgId]));
       await db.update(users).set({ deletedAt: null }).where(eq(users.id, athletes[1]));
     }
+  });
+
+  it.each(['best', 'trends'] as const)("'%s' with two tracking entries on one date keeps the one recorded last", async (type) => {
+    // The earlier entry gets the smaller id, so an id-only tie-break would pick it
+    await add([
+      { athlete: 0, metric: ORG_TRACKING, value: 60, date: '2026-03-01', createdAt: '2026-03-01T09:00:00Z', id: `00000000-${suffix}-a`.slice(0, 36) },
+      { athlete: 0, metric: ORG_TRACKING, value: 61, date: '2026-03-01', createdAt: '2026-03-01T15:00:00Z', id: `ffffffff-${suffix}-b`.slice(0, 36) },
+    ]);
+    expect(summary((await run(type, ORG_TRACKING)).data)).toEqual([`0|${ORG_TRACKING}|2026-03-01|61`]);
   });
 
   it('runs with the limit mocked down to 5', () => {
