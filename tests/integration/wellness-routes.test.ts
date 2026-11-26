@@ -1353,11 +1353,11 @@ describe('Superseded wellness responses (readers)', () => {
   });
 
   it('team and athlete summaries ignore superseded rows', async () => {
-    const team = await storage.getTeamWellnessSummary(testTeam.id, { startDate: DAY, endDate: DAY });
+    const team = await storage.getTeamWellnessSummary(testTeam.id, { startDate: DAY, endDate: DAY, organizationId: testOrg.id });
     expect(team.totalResponses).toBe(1);
     expect(team.averageScores.q1).toBe(8);
 
-    const athlete = await storage.getAthleteWellnessSummary(testAthlete.id, { startDate: DAY, endDate: DAY });
+    const athlete = await storage.getAthleteWellnessSummary(testAthlete.id, { startDate: DAY, endDate: DAY, organizationId: testOrg.id });
     expect(athlete.totalResponses).toBe(1);
     expect(athlete.averageScores.q1).toBe(8);
   });

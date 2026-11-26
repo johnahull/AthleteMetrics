@@ -20,6 +20,7 @@ import type { DistributionMethod } from '@shared/wellness-types';
 import { storage } from '../storage';
 import { WellnessAccessService } from '../auth/wellness-access';
 import { computeNextRunAt } from '../lib/wellness-schedule-utils';
+import { filterTargetsToOrganization, isTemplateUsableBy } from '../lib/wellness-org-scope';
 
 let scheduledTask: ScheduledTask | null = null;
 let isRunning = false;
@@ -144,6 +145,14 @@ async function processRecurringSchedules(
 
   for (const schedule of dueSchedules) {
     try {
+      // A schedule on a missing or another organization's template is paused instead of sending it
+      const template = await storage.getWellnessTemplate(schedule.templateId);
+      if (!template || !isTemplateUsableBy(template, schedule.organizationId)) {
+        await wellnessRepository.updateWellnessSchedule(schedule.id, { status: 'paused' });
+        console.error(`  ❌ Paused schedule ${schedule.id}: template not usable by its organization`);
+        continue;
+      }
+
       // Generate a public token for the new request
       const publicToken = WellnessAccessService.generateMagicLinkToken();
 
@@ -151,13 +160,20 @@ async function processRecurringSchedules(
       // Set expiresAt so recurring requests don't stay open indefinitely.
       const expiresAt = new Date(Date.now() + RECURRING_REQUEST_EXPIRY_HOURS * 60 * 60 * 1000);
 
+      // Only members and teams of the schedule's organization; others are skipped, the schedule keeps running
+      const targets = await filterTargetsToOrganization(
+        schedule.organizationId,
+        schedule.targetAthleteIds || [],
+        schedule.targetTeamIds || []
+      );
+
       const request = await storage.createWellnessRequest({
         organizationId: schedule.organizationId,
         templateId: schedule.templateId,
         requestedBy: schedule.createdBy,
         distributionMethod: schedule.distributionMethod,
-        targetAthleteIds: schedule.targetAthleteIds || [],
-        targetTeamIds: schedule.targetTeamIds || [],
+        targetAthleteIds: targets.athleteIds,
+        targetTeamIds: targets.teamIds,
         publicToken,
         requiresAuth: schedule.requiresAuth,
         status: 'active',
@@ -170,8 +186,8 @@ async function processRecurringSchedules(
         {
           templateId: schedule.templateId,
           distributionMethod: schedule.distributionMethod as DistributionMethod,
-          targetAthleteIds: schedule.targetAthleteIds || undefined,
-          targetTeamIds: schedule.targetTeamIds || undefined,
+          targetAthleteIds: targets.athleteIds,
+          targetTeamIds: targets.teamIds,
           expiresAt: expiresAt.toISOString(),
         },
         schedule.createdBy,

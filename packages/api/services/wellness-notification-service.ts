@@ -9,6 +9,7 @@ import { storage } from "../storage";
 import { db } from "../db";
 import { emailService } from "./email-service";
 import { WellnessAccessService } from "../auth/wellness-access";
+import { filterTargetsToOrganization } from "../lib/wellness-org-scope";
 import { getPushNotificationService } from "./push-notification-service";
 import type { NotificationPayload } from "./push-notification-service";
 import { WELLNESS_CONSTANTS } from "@shared/wellness-constants";
@@ -129,9 +130,10 @@ export async function sendWellnessRequestNotifications(
         magicLinks = await WellnessAccessService.generateMagicLinksForRequest(request.id);
       }
 
+      // Magic links are already limited to the organization; direct targets are limited here
       const athleteIds = magicLinks
         ? Array.from(magicLinks.keys())
-        : (data.targetAthleteIds || []);
+        : (await filterTargetsToOrganization(organizationId, data.targetAthleteIds || [])).athleteIds;
 
       const athletes = await storage.getUsersByIds(athleteIds);
       const athleteMap = new Map(athletes.map(a => [a.id, a]));

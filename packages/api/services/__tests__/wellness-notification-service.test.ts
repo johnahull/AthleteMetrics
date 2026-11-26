@@ -55,6 +55,11 @@ vi.mock('../../services/push-notification-service', () => ({
   getPushNotificationService: mockGetPushNotificationService,
 }));
 
+// Organization filtering is covered by tests/integration/wellness-org-scoping.test.ts
+vi.mock('../../lib/wellness-org-scope', () => ({
+  filterTargetsToOrganization: async (_organizationId: string, athleteIds: string[] = [], teamIds: string[] = []) => ({ athleteIds, teamIds }),
+}));
+
 import { sendWellnessRequestNotifications } from '../wellness-notification-service';
 
 describe('sendWellnessRequestNotifications', () => {

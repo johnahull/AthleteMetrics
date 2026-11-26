@@ -18,7 +18,15 @@ const {
   mockCreateWellnessRequest,
   mockGenerateMagicLinkToken,
   mockComputeNextRunAt,
+  mockFilterTargetsToOrganization,
+  mockIsTemplateUsableBy,
+  mockGetWellnessTemplate,
+  mockUpdateWellnessSchedule,
 } = vi.hoisted(() => ({
+  mockFilterTargetsToOrganization: vi.fn(),
+  mockIsTemplateUsableBy: vi.fn(),
+  mockGetWellnessTemplate: vi.fn(),
+  mockUpdateWellnessSchedule: vi.fn(),
   mockSchedule: vi.fn(),
   mockStop: vi.fn(),
   mockGetDueScheduledRequests: vi.fn(),
@@ -41,6 +49,7 @@ vi.mock('../../repositories/wellness-repository', () => ({
     activateScheduledRequest: mockActivateScheduledRequest,
     getSchedulesDueNow: mockGetSchedulesDueNow,
     updateScheduleAfterRun: mockUpdateScheduleAfterRun,
+    updateWellnessSchedule: mockUpdateWellnessSchedule,
   },
 }));
 
@@ -51,6 +60,7 @@ vi.mock('../../services/wellness-notification-service', () => ({
 vi.mock('../../storage', () => ({
   storage: {
     createWellnessRequest: mockCreateWellnessRequest,
+    getWellnessTemplate: mockGetWellnessTemplate,
   },
 }));
 
@@ -62,6 +72,11 @@ vi.mock('../../auth/wellness-access', () => ({
 
 vi.mock('../../lib/wellness-schedule-utils', () => ({
   computeNextRunAt: mockComputeNextRunAt,
+}));
+
+vi.mock('../../lib/wellness-org-scope', () => ({
+  filterTargetsToOrganization: mockFilterTargetsToOrganization,
+  isTemplateUsableBy: mockIsTemplateUsableBy,
 }));
 
 import {
@@ -83,6 +98,9 @@ describe('Wellness Scheduled Job', () => {
     mockGetSchedulesDueNow.mockResolvedValue([]);
     mockSendWellnessRequestNotifications.mockResolvedValue({});
     mockGenerateMagicLinkToken.mockReturnValue('mock-token');
+    mockFilterTargetsToOrganization.mockImplementation(async (_org: string, athleteIds: string[] = [], teamIds: string[] = []) => ({ athleteIds, teamIds }));
+    mockGetWellnessTemplate.mockResolvedValue({ id: 'tmpl-1', organizationId: 'org-1' });
+    mockIsTemplateUsableBy.mockReturnValue(true);
     stopWellnessScheduledJob();
     __resetJobStateForTesting(); // Reset job state between tests
   });
@@ -229,6 +247,43 @@ describe('Wellness Scheduled Job', () => {
         })
       );
       expect(mockSendWellnessRequestNotifications).toHaveBeenCalled();
+    });
+
+    it('uses only targets of the schedule organization and still advances the schedule', async () => {
+      const nextRun = new Date('2025-06-16T09:00:00Z');
+      mockGetSchedulesDueNow.mockResolvedValue([{ ...mockScheduleRecord, targetAthleteIds: ['a-1', 'a-other'], targetTeamIds: ['t-1', 't-other'] }]);
+      mockFilterTargetsToOrganization.mockResolvedValue({ athleteIds: ['a-1'], teamIds: ['t-1'] });
+      mockCreateWellnessRequest.mockResolvedValue({ id: 'new-req', publicToken: 'tok' });
+      mockComputeNextRunAt.mockReturnValue(nextRun);
+
+      startWellnessScheduledJob(mockDb);
+      const cronCallback = mockSchedule.mock.calls[0][1];
+      await cronCallback();
+
+      expect(mockFilterTargetsToOrganization).toHaveBeenCalledWith('org-1', ['a-1', 'a-other'], ['t-1', 't-other']);
+      expect(mockCreateWellnessRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ targetAthleteIds: ['a-1'], targetTeamIds: ['t-1'] })
+      );
+      expect(mockSendWellnessRequestNotifications).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ targetAthleteIds: ['a-1'], targetTeamIds: ['t-1'] }),
+        'user-1',
+        'org-1'
+      );
+      expect(mockUpdateScheduleAfterRun).toHaveBeenCalledWith('sched-1', nextRun, 3);
+    });
+
+    it('pauses a schedule whose template is not usable by its organization, without creating a request', async () => {
+      mockGetSchedulesDueNow.mockResolvedValue([mockScheduleRecord]);
+      mockIsTemplateUsableBy.mockReturnValue(false);
+
+      startWellnessScheduledJob(mockDb);
+      const cronCallback = mockSchedule.mock.calls[0][1];
+      await cronCallback();
+
+      expect(mockCreateWellnessRequest).not.toHaveBeenCalled();
+      expect(mockSendWellnessRequestNotifications).not.toHaveBeenCalled();
+      expect(mockUpdateWellnessSchedule).toHaveBeenCalledWith('sched-1', { status: 'paused' });
     });
 
     it('should increment occurrences and update nextRunAt', async () => {

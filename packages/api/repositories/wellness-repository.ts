@@ -15,6 +15,7 @@ import {
   userTeams,
   users,
   userOrganizations,
+  teams,
   type WellnessTemplate,
   type WellnessRequest,
   type WellnessResponse,
@@ -502,9 +503,13 @@ export class WellnessRepository {
     return response || undefined;
   }
 
-  async getWellnessResponsesByAthlete(userId: string, filters?: { startDate?: string; endDate?: string }): Promise<WellnessResponse[]> {
+  async getWellnessResponsesByAthlete(userId: string, filters?: { startDate?: string; endDate?: string; organizationId?: string }): Promise<WellnessResponse[]> {
     validateUUID(userId, 'userId');
     const conditions: SQL[] = [eq(wellnessResponses.userId, userId), isNull(wellnessResponses.supersededAt)];
+
+    if (filters?.organizationId) {
+      conditions.push(eq(wellnessResponses.organizationId, filters.organizationId));
+    }
 
     if (filters?.startDate) {
       conditions.push(gte(wellnessResponses.date, filters.startDate));
@@ -623,7 +628,7 @@ export class WellnessRepository {
 
   // ==================== Wellness Analytics ====================
 
-  async getTeamWellnessSummary(teamId: string, filters: { startDate: string; endDate: string }): Promise<TeamWellnessSummary> {
+  async getTeamWellnessSummary(teamId: string, filters: { startDate: string; endDate: string; organizationId: string }): Promise<TeamWellnessSummary> {
     // Validate UUID
     validateUUID(teamId, 'teamId');
     const responses = await db
@@ -632,6 +637,7 @@ export class WellnessRepository {
       .where(
         and(
           eq(wellnessResponses.teamId, teamId),
+          eq(wellnessResponses.organizationId, filters.organizationId),
           gte(wellnessResponses.date, filters.startDate),
           lte(wellnessResponses.date, filters.endDate),
           isNull(wellnessResponses.supersededAt)
@@ -674,7 +680,7 @@ export class WellnessRepository {
     };
   }
 
-  async getAthleteWellnessSummary(userId: string, filters: { startDate: string; endDate: string }): Promise<AthleteWellnessSummary> {
+  async getAthleteWellnessSummary(userId: string, filters: { startDate: string; endDate: string; organizationId: string }): Promise<AthleteWellnessSummary> {
     // Validate UUID
     validateUUID(userId, 'userId');
     const responses = await this.getWellnessResponsesByAthlete(userId, filters);
@@ -839,9 +845,18 @@ export class WellnessRepository {
       // Step 2: Build set of all targeted athlete IDs
       const targetAthleteIds = new Set<string>();
 
-      // Add direct athlete targets
+      // Add direct athlete targets that are members of the organization
       if (request.targetAthleteIds && request.targetAthleteIds.length > 0) {
-        request.targetAthleteIds.forEach(id => targetAthleteIds.add(id));
+        const directMembers = await tx
+          .select({ userId: userOrganizations.userId })
+          .from(userOrganizations)
+          .where(
+            and(
+              inArray(userOrganizations.userId, request.targetAthleteIds),
+              eq(userOrganizations.organizationId, organizationId)
+            )
+          );
+        directMembers.forEach(({ userId }) => targetAthleteIds.add(userId));
       }
 
       // Step 3: Expand team targets to athlete IDs
@@ -854,9 +869,11 @@ export class WellnessRepository {
           .from(userTeams)
           .innerJoin(users, eq(userTeams.userId, users.id))
           .innerJoin(userOrganizations, eq(userTeams.userId, userOrganizations.userId))
+          .innerJoin(teams, eq(userTeams.teamId, teams.id))
           .where(
             and(
               inArray(userTeams.teamId, request.targetTeamIds),
+              eq(teams.organizationId, organizationId),
               eq(userTeams.isActive, true),
               // Standing requests count current members only (one-time requests keep their original rule)
               request.isStanding ? isNull(userTeams.leftAt) : undefined,

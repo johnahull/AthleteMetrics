@@ -18,6 +18,7 @@ import {
 } from "@shared/wellness-validation";
 import { wellnessRepository } from "../repositories/wellness-repository";
 import { computeNextRunAt } from "../lib/wellness-schedule-utils";
+import { isTemplateUsableBy, targetsBelongToOrganization } from "../lib/wellness-org-scope";
 import type { WellnessSchedule } from "@shared/wellness-types";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
@@ -55,6 +56,14 @@ export function registerWellnessScheduleRoutes(app: Express) {
         }
 
         const data = validation.data;
+
+        const template = await wellnessRepository.getWellnessTemplate(data.templateId);
+        if (!template || !isTemplateUsableBy(template, orgId)) {
+          return res.status(404).json({ message: "Template not found" });
+        }
+        if (!(await targetsBelongToOrganization(orgId, data.targetAthleteIds, data.targetTeamIds))) {
+          return res.status(400).json({ message: "Targets must be athletes and teams of this organization" });
+        }
 
         // Compute the first next_run_at
         const nextRunAt = computeNextRunAt({

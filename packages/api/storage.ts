@@ -513,7 +513,7 @@ export interface IStorage {
     response: typeof wellnessResponses.$inferInsert & { requestId: string }
   ): Promise<{ response: WellnessResponse; replaced: boolean }>;
   getWellnessResponse(id: string): Promise<WellnessResponse | undefined>;
-  getWellnessResponsesByAthlete(userId: string, filters?: { startDate?: string; endDate?: string }): Promise<WellnessResponse[]>;
+  getWellnessResponsesByAthlete(userId: string, filters?: { startDate?: string; endDate?: string; organizationId?: string }): Promise<WellnessResponse[]>;
   getWellnessResponsesByOrganization(organizationId: string, filters?: { startDate?: string; endDate?: string }): Promise<WellnessResponse[]>;
 
   // Wellness Batch Operations (Performance Optimization)
@@ -523,8 +523,8 @@ export interface IStorage {
   getWellnessTemplatesBatch(templateIds: string[]): Promise<WellnessTemplate[]>;
 
   // Wellness Analytics
-  getTeamWellnessSummary(teamId: string, filters: { startDate: string; endDate: string }): Promise<any>;
-  getAthleteWellnessSummary(userId: string, filters: { startDate: string; endDate: string }): Promise<any>;
+  getTeamWellnessSummary(teamId: string, filters: { startDate: string; endDate: string; organizationId: string }): Promise<any>;
+  getAthleteWellnessSummary(userId: string, filters: { startDate: string; endDate: string; organizationId: string }): Promise<any>;
   getWellnessTrends(organizationId: string, filters: { startDate: string; endDate: string; questionIds?: string[] }): Promise<WellnessTrend[]>;
   getRequestCompletionRate(organizationId: string, requestId: string): Promise<RequestCompletionRate>;
 
@@ -6303,7 +6303,7 @@ export class DatabaseStorage implements IStorage {
     return wellnessRepository.getWellnessResponse(id);
   }
 
-  async getWellnessResponsesByAthlete(userId: string, filters?: { startDate?: string; endDate?: string }): Promise<WellnessResponse[]> {
+  async getWellnessResponsesByAthlete(userId: string, filters?: { startDate?: string; endDate?: string; organizationId?: string }): Promise<WellnessResponse[]> {
     return wellnessRepository.getWellnessResponsesByAthlete(userId, filters);
   }
 
@@ -6341,11 +6341,11 @@ export class DatabaseStorage implements IStorage {
   // ==================== Wellness Analytics ====================
   // Delegated to WellnessRepository for maintainability
 
-  async getTeamWellnessSummary(teamId: string, filters: { startDate: string; endDate: string }): Promise<any> {
+  async getTeamWellnessSummary(teamId: string, filters: { startDate: string; endDate: string; organizationId: string }): Promise<any> {
     return wellnessRepository.getTeamWellnessSummary(teamId, filters);
   }
 
-  async getAthleteWellnessSummary(userId: string, filters: { startDate: string; endDate: string }): Promise<any> {
+  async getAthleteWellnessSummary(userId: string, filters: { startDate: string; endDate: string; organizationId: string }): Promise<any> {
     return wellnessRepository.getAthleteWellnessSummary(userId, filters);
   }
 
