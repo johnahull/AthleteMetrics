@@ -50,7 +50,11 @@ describe('Accounts without a set password cannot sign in with a password', () =>
 
   const uniq = () => `${Date.now()}${seq++}`;
 
-  /** Accept an invitation to a new organization that names only the account's email (no linked account id). */
+  /**
+   * Accept, without signing in, an invitation to a new organization that names only the account's email (no
+   * linked account id). The account is not in that organization, so it cannot be claimed and the acceptance is
+   * refused until its owner signs in (lib/invitation-account.ts).
+   */
   async function acceptByEmail(account: User) {
     const org = await storage.createOrganization({ name: `${PREFIX} Org ${uniq()}`, orgType: 'club', description: 'x' });
     const inviter = await makeWithPassword();
@@ -59,9 +63,9 @@ describe('Accounts without a set password cannot sign in with a password', () =>
       role: 'athlete', invitedBy: inviter.id,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     });
-    return storage.acceptInvitation(inv.token, {
+    await expect(storage.acceptInvitation(inv.token, {
       email: account.emails![0], username: `${PREFIX}${uniq()}e`, password: NEW_PASSWORD, firstName: 'Pending', lastName: 'Account',
-    });
+    })).rejects.toMatchObject({ code: 'SIGN_IN_REQUIRED' });
   }
 
   /** An active account whose password was never set, in the stored shape of `kind`. */
@@ -230,6 +234,8 @@ describe('Accounts without a set password cannot sign in with a password', () =>
     it('accepting an invitation linked to the pending athlete sets a usable password', async () => {
       const athlete = await makePending(kind);
       const org = await storage.createOrganization({ name: `${PREFIX} Org ${uniq()}`, orgType: 'club', description: 'x' });
+      // Claimable only as an athlete of the inviting organization and of no other one
+      await storage.addUserToOrganization(athlete.id, org.id, 'athlete');
       const inviter = await makeWithPassword();
       const inv = await storage.createInvitation({
         email: athlete.emails[0], firstName: 'Pending', lastName: 'Account', organizationId: org.id,

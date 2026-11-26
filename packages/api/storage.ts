@@ -45,6 +45,7 @@ import { eq, desc, asc, and, gte, lte, gt, inArray, sql, arrayContains, or, isNu
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { hashToken } from "./lib/token-hash";
+import { assertMayAcceptFor, InvitationAccountError } from "./lib/invitation-account";
 import { BCRYPT_SALT_ROUNDS } from "@shared/constants";
 import { INVITATION_PENDING_PASSWORD } from "@shared/schema/constants";
 import { verifyUserPassword } from "./auth/pending-password";
@@ -229,7 +230,8 @@ export interface IStorage {
   getInvitationByToken(token: string): Promise<Invitation | undefined>;
   getPendingInvitationsByEmail(email: string): Promise<Invitation[]>;
   updateInvitation(id: string, invitation: Partial<Omit<Invitation, 'id' | 'createdAt'>>): Promise<Invitation>;
-  acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User }>;
+  acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string; actingUserId?: string }): Promise<{ user: User }>;
+  getInvitationAccount(invitation: Pick<Invitation, 'playerId' | 'role' | 'email'>): Promise<{ user: User; organizationIds: string[] } | undefined>;
 
   // Membership Requests
   createMembershipRequest(data: {
@@ -1853,6 +1855,37 @@ export class DatabaseStorage implements IStorage {
       ));
   }
 
+  /**
+   * The existing account an invitation resolves to: the linked athlete (playerId; for a parent invitation
+   * playerId is the CHILD, so the parent is matched by email), otherwise the oldest account with the email.
+   */
+  async getInvitationAccount(
+    invitation: Pick<Invitation, 'playerId' | 'role' | 'email'>,
+    executor: any = db,
+    lockForUpdate = false
+  ): Promise<{ user: User; organizationIds: string[] } | undefined> {
+    // Email match ignores case (invitations and accounts may be typed differently); oldest account first
+    let user: User | undefined = invitation.playerId && invitation.role !== 'parent'
+      ? await this.getUser(invitation.playerId, executor)
+      : (await executor.select().from(users).where(and(
+          sql`lower(${invitation.email}) = ANY(SELECT lower(e) FROM unnest(${users.emails}) AS e)`,
+          whereUserNotDeleted()
+        )).orderBy(asc(users.createdAt)).limit(1))[0];
+    if (!user) return undefined;
+    if (lockForUpdate) {
+      // Serialise concurrent claims of one account (several invitations can link the same athlete):
+      // the row is re-read after the lock, so a claim that committed first makes it a claimed account.
+      await executor.select({ id: users.id }).from(users).where(eq(users.id, user.id)).for('update');
+      user = await this.getUser(user.id, executor);
+      if (!user) return undefined;
+    }
+    const rows: Array<{ organizationId: string }> = await executor
+      .select({ organizationId: userOrganizations.organizationId })
+      .from(userOrganizations)
+      .where(eq(userOrganizations.userId, user.id));
+    return { user, organizationIds: rows.map(r => r.organizationId) };
+  }
+
   async acceptInvitation(
     token: string,
     userInfo: {
@@ -1861,6 +1894,9 @@ export class DatabaseStorage implements IStorage {
       password: string;
       firstName: string;
       lastName: string;
+      // The signed-in user, if any. An existing account is joined only by its owner signed in as it,
+      // or claimed when it is unclaimed (see lib/invitation-account.ts).
+      actingUserId?: string;
       legalAcceptedAt?: string;
       legalAcceptedVersion?: string;
       // COPPA classification computed by the route (age checks live there).
@@ -1904,6 +1940,20 @@ export class DatabaseStorage implements IStorage {
         legalAcceptedVersion: userInfo.legalAcceptedVersion || getLegalAcceptanceTimestamp()
       } : {};
 
+      // An existing account is joined only by its owner signed in as it, or claimed when unclaimed.
+      // Re-checked here, under the invitation lock, even though the route checks first.
+      const account = await this.getInvitationAccount(invitation, tx, true);
+      const { claim } = account
+        ? await assertMayAcceptFor(account.user, account.organizationIds, invitation, userInfo.actingUserId)
+        : { claim: false };
+      // A parent is an adult who is not linked as somebody's child
+      if (account && invitation.role === 'parent') {
+        const [childLink] = await tx.select({ id: parentAthleteLinks.id }).from(parentAthleteLinks)
+          .where(and(eq(parentAthleteLinks.athleteUserId, account.user.id), eq(parentAthleteLinks.isActive, true)))
+          .limit(1);
+        if (childLink) throw new InvitationAccountError("ACCOUNT_NOT_ELIGIBLE");
+      }
+
       // Check if invitation is linked to an existing athlete (playerId).
       // For PARENT invitations playerId stores the CHILD the parent should be
       // linked to — the parent needs their own account (email-match/create
@@ -1912,13 +1962,13 @@ export class DatabaseStorage implements IStorage {
         console.log("Invitation linked to existing athlete:", invitation.playerId);
 
         // Get the existing athlete/user
-        const existingUser = await this.getUser(invitation.playerId, tx);
+        const existingUser = account?.user;
 
         if (!existingUser) {
           throw new Error("Linked athlete not found");
         }
 
-        // Update the existing user with credentials
+        // Set credentials only when claiming an unclaimed account; the signed-in owner keeps theirs.
         // Note: updateUser will hash the password, so pass the plain password
         const coppaUpdate: Partial<InsertUser> = {};
         if (userInfo.coppa) {
@@ -1939,29 +1989,15 @@ export class DatabaseStorage implements IStorage {
           }
         }
         user = await this.updateUser(invitation.playerId, {
-          username: userInfo.username,
-          password: userInfo.password,
-          isActive: true,
+          ...(claim ? { username: userInfo.username, password: userInfo.password, isActive: true } : {}),
           ...coppaUpdate,
           ...legalData
         }, tx);
 
-        console.log("Updated existing athlete with credentials:", user.id);
+        console.log("Updated existing athlete for invitation:", user.id);
       } else {
-        // Check if a user with this email already exists
-        const existingUsers = await this.getUsersByEmail(invitation.email, tx);
-
-        if (existingUsers.length > 0) {
-          // Warn if multiple users found (should be rare after migration)
-          if (existingUsers.length > 1) {
-            console.warn("[Invitation] Multiple users found with email, using oldest:", {
-              email: invitation.email,
-              userIds: existingUsers.map(u => u.id),
-              userCount: existingUsers.length
-            });
-          }
-
-          const existingUser = existingUsers[0]; // Use oldest user (deterministic ordering)
+        if (account) {
+          const existingUser = account.user; // oldest user with the email (deterministic ordering)
 
           // User exists - add them to new org instead of creating duplicate
           console.log("[Invitation] Found existing user with email:", {
@@ -1970,23 +2006,12 @@ export class DatabaseStorage implements IStorage {
             invitationOrg: invitation.organizationId
           });
 
-          // Log if provided username differs from existing (username will be preserved)
-          if (existingUser.username !== userInfo.username) {
-            console.log("[Invitation] Ignoring provided username for existing user:", {
-              providedUsername: userInfo.username,
-              existingUsername: existingUser.username
-            });
-          }
-
-          // Build update data: legal acceptance + optional password for OAuth-only users
+          // Build update data: legal acceptance, plus credentials when claiming an unclaimed account
           const updateData: any = { ...legalData };
-
-          // Update password if user doesn't have one (OAuth-only user). An account whose password was never set
-          // keeps it: an email match alone does not let the invitee choose it (password reset does)
-          if (!existingUser.password) {
+          if (claim) {
+            updateData.username = userInfo.username;
             updateData.password = userInfo.password;
             updateData.isActive = true;
-            console.log("[Invitation] Updating OAuth-only user with password");
           }
 
           // COPPA: non-destructive for identity data — never overwrite an
@@ -2072,7 +2097,10 @@ export class DatabaseStorage implements IStorage {
         organizationId: invitation.organizationId,
         role: orgRole
       });
-      await this.addUserToOrganization(user.id, invitation.organizationId, orgRole, tx);
+      // A parent invitation leaves an existing membership (and its role) as it is
+      if (!(invitation.role === 'parent' && account?.organizationIds.includes(invitation.organizationId))) {
+        await this.addUserToOrganization(user.id, invitation.organizationId, orgRole, tx);
+      }
 
       // NOTE: team membership is added AFTER the transaction commits (see below).
       // It is best-effort (errors are swallowed) and must not run inside the

@@ -14,7 +14,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { db } from "../db";
 import { storage } from "../storage";
-import { organizations, users, invitations, userOrganizations } from "@shared/schema";
+import { organizations, users, invitations, userOrganizations, INVITATION_PENDING_PASSWORD } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { purgeTestRows } from "../../../tests/helpers/purge-test-rows";
 
@@ -194,6 +194,7 @@ describe("Invitation Duplicate User Prevention", () => {
           password: "NewPassword123!", // Different password (should be ignored)
           firstName: "Different", // Different name (should be ignored)
           lastName: "Name",
+          actingUserId: existingUser.id, // an existing account accepts while signed in as itself
         }
       );
 
@@ -276,6 +277,7 @@ describe("Invitation Duplicate User Prevention", () => {
             password: "IgnoredPassword123!",
             firstName: "Ignored",
             lastName: "Name",
+            actingUserId: existingUser.id, // an existing account accepts while signed in as itself
           }
         );
 
@@ -311,8 +313,8 @@ describe("Invitation Duplicate User Prevention", () => {
     });
   });
 
-  describe("Email exists without password (OAuth user) - update with password, add to org", () => {
-    it("should update OAuth-only user with password when accepting invitation", async () => {
+  describe("Email exists without password (OAuth user) - add to org, credentials untouched", () => {
+    it("should add a signed-in OAuth-only user to the org without setting a password", async () => {
       const oauthEmail = `oauthuser${testSuffix}@example.com`;
 
       // Create existing OAuth user (has googleId, no password)
@@ -343,19 +345,19 @@ describe("Invitation Duplicate User Prevention", () => {
         {
           email: oauthEmail,
           username: "newusername", // Should be ignored
-          password: "NewPassword123!", // Should be added to OAuth user
+          password: "NewPassword123!", // Ignored: an invitation never changes an existing account's credentials
           firstName: "Ignored",
           lastName: "Name",
+          actingUserId: oauthUser.id, // signed in with Google
         }
       );
 
       // Should use existing user
       expect(result.user.id).toBe(oauthUser.id);
 
-      // User should now have BOTH OAuth AND password
+      // Credentials unchanged (a password can be added in Account Settings)
       expect(result.user.googleId).toBe(`google-oauth-${timestamp}`);
-      expect(result.user.password).toBeDefined();
-      expect(result.user.password).not.toBeNull();
+      expect(result.user.password).toBeNull();
 
       // Original user data preserved
       expect(result.user.firstName).toBe("OAuth");
@@ -382,17 +384,18 @@ describe("Invitation Duplicate User Prevention", () => {
     it("should use existing playerId flow when invitation has playerId", async () => {
       const athleteEmail = `athlete${testSuffix}@example.com`;
 
-      // Create an existing athlete (inactive, with OAuth ID to satisfy auth constraint)
+      // Create an existing coach-created athlete (inactive, unclaimed: pending placeholder password)
       const [athlete] = await db.insert(users).values({
         emails: [athleteEmail],
         username: `athlete${testSuffix}`,
         firstName: "Athlete",
         lastName: "Player",
         fullName: "Athlete Player",
-        password: null,
-        googleId: `temp-google-${timestamp}-athlete`, // Unique OAuth ID to satisfy constraint
+        password: INVITATION_PENDING_PASSWORD,
         isActive: false, // Not yet activated
       }).returning();
+      // coach-created athletes are on the inviting organization's roster
+      await db.insert(userOrganizations).values({ userId: athlete.id, organizationId: testOrgId, role: "athlete" });
 
       // Create invitation linked to playerId
       const invitation = await storage.createInvitation({
@@ -465,6 +468,7 @@ describe("Invitation Duplicate User Prevention", () => {
           password: "NewPassword123!",
           firstName: "New",
           lastName: "Name",
+          actingUserId: existingUser.id, // an existing account accepts while signed in as itself
         }
       );
 
