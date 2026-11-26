@@ -212,7 +212,18 @@ describe("AuthService", () => {
       expect(result.error).toBe("Your account has been deactivated. Please contact your administrator.");
     });
 
-    it("should reject user with pending invitation", async () => {
+    it("should not say an inactive account is inactive when the password is wrong", async () => {
+      mockStorage.getUserByUsername = vi.fn().mockResolvedValue(mockInactiveUser);
+
+      const result = await service.login({
+        username: "inactiveuser",
+        password: "WrongPassword123!"
+      });
+
+      expect(result.error).toBe("Invalid credentials");
+    });
+
+    it("should answer a pending invitation like a wrong password", async () => {
       mockStorage.getUserByUsername = vi.fn().mockResolvedValue(mockPendingInvitationUser);
 
       const result = await service.login({
@@ -221,7 +232,7 @@ describe("AuthService", () => {
       });
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe("Please complete your registration first");
+      expect(result.error).toBe("Invalid credentials");
     });
 
     it("should reject OAuth-only user with password login", async () => {
@@ -280,15 +291,20 @@ describe("AuthService", () => {
       compare.mockRestore();
     });
 
-    it("does not reserve an attempt for unknown users, OAuth-only or invitation-pending accounts", async () => {
+    it("does not reserve an attempt for unknown users or OAuth-only accounts", async () => {
       mockStorage.getUserByUsername = vi.fn().mockResolvedValue(undefined);
       mockStorage.getUserByEmail = vi.fn().mockResolvedValue(undefined);
       await service.login({ username: "ghost", password: "x" });
       mockStorage.getUserByUsername = vi.fn().mockResolvedValue(mockOAuthUser);
       await service.login({ username: "oauthuser", password: "x" });
+      expect(AuthSecurity.reserveLoginAttempt).not.toHaveBeenCalled();
+    });
+
+    it("counts an attempt on a pending account like a wrong password", async () => {
       mockStorage.getUserByUsername = vi.fn().mockResolvedValue(mockPendingInvitationUser);
       await service.login({ username: "pendinguser", password: "x" });
-      expect(AuthSecurity.reserveLoginAttempt).not.toHaveBeenCalled();
+      expect(AuthSecurity.reserveLoginAttempt).toHaveBeenCalledWith(mockPendingInvitationUser, "0.0.0.0", undefined);
+      expect(AuthSecurity.recordFailedLogin).toHaveBeenCalledWith(mockPendingInvitationUser, "0.0.0.0", undefined);
     });
 
     it("records a failed login (no extra count) for a wrong password and resets on success", async () => {

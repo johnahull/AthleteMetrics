@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
-import bcrypt from 'bcrypt';
+import { verifyUserPassword } from '../auth/pending-password';
+import { COPPA_LOGIN_BLOCKED_STATUSES } from '@shared/coppa-utils';
 import { storage } from '../storage';
 import { AuthSecurity } from '../auth/security';
 import { PasswordResetService } from '../auth/password-reset';
@@ -84,12 +85,29 @@ router.post('/login', enhancedAuthLimiter, async (req: Request, res: Response) =
       });
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    const isPasswordValid = await verifyUserPassword(password, user.password);
     if (!isPasswordValid) {
       await AuthSecurity.recordFailedLogin(user, ipAddress, userAgent);
       return res.status(401).json({
         success: false,
         message: 'Invalid username or password'
+      });
+    }
+
+    // Same account checks as /api/auth/login, after the password so they reveal nothing to a guesser
+    if (user.isActive === false) {
+      await AuthSecurity.releaseLoginAttempt(user);
+      return res.status(403).json({
+        success: false,
+        message: 'Your account has been deactivated. Please contact your administrator.'
+      });
+    }
+    if ((COPPA_LOGIN_BLOCKED_STATUSES as readonly string[]).includes(user.coppaStatus)) {
+      await AuthSecurity.releaseLoginAttempt(user);
+      return res.status(403).json({
+        success: false,
+        coppaStatus: user.coppaStatus,
+        message: 'This account cannot sign in until parental consent is in place'
       });
     }
 

@@ -77,7 +77,7 @@ export function registerUserRoutes(app: Express) {
   app.post("/api/users", createLimiter, requireSiteAdmin, async (req, res) => {
     try {
       const user = await userService.createUser(req.body, req.session.user!.id);
-      res.status(201).json(user);
+      res.status(201).json(toSafeUser(user, "staff"));
     } catch (error) {
       console.error("Create user error:", error);
       const message = error instanceof Error ? error.message : "Failed to create user";
@@ -410,7 +410,7 @@ export function registerUserRoutes(app: Express) {
   app.post("/api/site-admins", siteAdminCreateLimiter, requireSiteAdmin, async (req, res) => {
     try {
       const admin = await userService.createSiteAdmin(req.body, req.session.user!.id);
-      res.status(201).json(admin);
+      res.status(201).json(toSafeUser(admin, "staff"));
     } catch (error) {
       console.error("Create site admin error:", error);
       const message = error instanceof Error ? error.message : "Failed to create site administrator";
