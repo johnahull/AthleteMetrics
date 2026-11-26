@@ -224,6 +224,7 @@ export class PasswordResetService {
       await emailService.sendEmailVerification(email, {
         userName: user?.firstName || 'there',
         verificationLink,
+        accountName: user?.username,
       });
 
       return {

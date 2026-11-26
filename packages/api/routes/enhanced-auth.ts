@@ -417,7 +417,9 @@ router.post('/verify-email', async (req: Request, res: Response) => {
       });
     }
 
-    const result = await PasswordResetService.verifyEmail(token, ipAddress, userAgent, req.session?.user?.id);
+    // An impersonating admin is not the account holder, so that session never counts as the account's own
+    const signedInUserId = req.session?.isImpersonating ? undefined : req.session?.user?.id;
+    const result = await PasswordResetService.verifyEmail(token, ipAddress, userAgent, signedInUserId);
     
     return res.status(200).json(result);
   } catch (error) {

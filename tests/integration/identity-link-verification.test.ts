@@ -15,7 +15,7 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, desc, sql } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
 import {
   users, organizations, measurements, globalAthletes, userGlobalAthleteLinks, globalAthleteClaims, emailVerificationTokens,
@@ -305,7 +305,7 @@ describe('email verification as proof', () => {
     const own = await agent.post('/api/enhanced-auth/request-email-verification').send({});
     expect(own.status).toBe(200);
     expect(own.body.success).toBe(true);
-    expect(emailMocks.sendEmailVerification).toHaveBeenCalledWith(email, expect.anything());
+    expect(emailMocks.sendEmailVerification).toHaveBeenCalledWith(email, expect.objectContaining({ accountName: athlete.username }));
   });
 
   it('a used token from before this check, or redeemed without signing in, verifies the email but proves nothing', async () => {
@@ -329,6 +329,31 @@ describe('email verification as proof', () => {
     const res = await (await login(owner)).post('/api/enhanced-auth/verify-email').send({ token });
     expect(res.body.success).toBe(true);
     expect((await linkOf(athlete.id)).linkStatus).toBe('pending');
+  });
+
+  it('redeeming while a site admin impersonates the token user proves nothing', async () => {
+    const admin = await mkUser('impadmin', [mail('impadmin')], { isSiteAdmin: true });
+    const agent = await login(admin);
+    expect((await agent.post(`/api/admin/impersonate/${athlete.id}`)).status).toBe(200);
+    const { token } = await storage.createEmailVerificationToken(athlete.id, email);
+    const res = await agent.post('/api/enhanced-auth/verify-email').send({ token });
+    expect(res.body.success).toBe(true);
+    expect((await linkOf(athlete.id)).linkStatus).toBe('pending');
+    const [row] = await db.select().from(emailVerificationTokens).where(eq(emailVerificationTokens.userId, athlete.id)).orderBy(desc(emailVerificationTokens.createdAt)).limit(1);
+    expect(row.isUsed).toBe(true);
+    expect(row.identityProofAt).toBeNull();
+  });
+
+  it('a failed "account linked" email leaves notifiedAt empty; the link is still confirmed', async () => {
+    const otherEmail = mail('proof2');
+    const other = await mkUser('proof2', [otherEmail]);
+    await db.insert(userGlobalAthleteLinks).values({ userId: other.id, globalAthleteId: identityId, linkStatus: 'pending', linkType: 'auto_import' });
+    await db.update(globalAthletes).set({ verifiedEmails: sql`array_append(${globalAthletes.verifiedEmails}, ${otherEmail})` }).where(eq(globalAthletes.id, identityId));
+    emailMocks.sendAccountLinkedNotification.mockRejectedValueOnce(new Error('mail down'));
+    await verifyMailbox(other.id, otherEmail);
+    const link = await linkOf(other.id);
+    expect(link.linkStatus).toBe('confirmed');
+    expect(link.notifiedAt).toBeNull();
   });
 
   it('a pending account cannot change its sharing setting', async () => {

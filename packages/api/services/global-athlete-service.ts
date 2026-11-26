@@ -275,30 +275,37 @@ export class GlobalAthleteService extends BaseService {
     }
   }
 
-  /** Email the "account linked" notification; a failure is audited and never fails the link. */
+  /**
+   * Email the "account linked" notification; a failure is audited and never fails the link.
+   * @returns whether the email was sent
+   */
   private async sendLinkedNotification(
     globalAthleteId: string,
     userId: string,
     email: string,
     userName: string,
     globalAthleteName: string
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
       // Get organizations that are already linked to the global athlete
       const linkedOrganizations = await this.getOrganizationsForGlobalAthlete(globalAthleteId);
 
-      await emailService.sendAccountLinkedNotification({
+      const sent = await emailService.sendAccountLinkedNotification({
         email: email,
         userName,
         globalAthleteName,
         linkedOrganizations: linkedOrganizations.map(org => org.name),
       });
+      if (sent === false) {
+        throw new Error("Email service did not send the notification");
+      }
 
       // Audit log for notification
       await this.auditLog(globalAthleteId, "link_notification_sent", userId, "system", {
         email,
         linkedOrganizations: linkedOrganizations.map(org => org.name),
       });
+      return true;
     } catch (error) {
       console.error("Failed to send account linked notification:", error);
       // Audit log for notification failure (but don't fail the link creation)
@@ -306,6 +313,7 @@ export class GlobalAthleteService extends BaseService {
         email,
         error: error instanceof Error ? error.message : "Unknown error",
       }).catch(e => console.error("Failed to log notification failure:", e));
+      return false;
     }
   }
 
@@ -334,12 +342,7 @@ export class GlobalAthleteService extends BaseService {
 
     const others = (await this.getLinkedUsers(link.globalAthleteId)).filter((l) => l.userId !== link.userId);
     const activated = await db.update(userGlobalAthleteLinks)
-      .set({
-        linkStatus: "confirmed",
-        confirmedBy: link.userId,
-        confirmedAt: new Date(),
-        ...(others.length > 0 ? { notifiedAt: new Date() } : {}),
-      })
+      .set({ linkStatus: "confirmed", confirmedBy: link.userId, confirmedAt: new Date() })
       .where(and(eq(userGlobalAthleteLinks.id, link.id), eq(userGlobalAthleteLinks.linkStatus, "pending")))
       .returning({ id: userGlobalAthleteLinks.id });
 
@@ -354,7 +357,11 @@ export class GlobalAthleteService extends BaseService {
       // The account joined an identity other accounts already share: tell the address, as on a direct link
       if (others.length > 0 && identity) {
         const user = await this.storage.getUser(link.userId);
-        await this.sendLinkedNotification(link.globalAthleteId, link.userId, email, user?.fullName ?? "", identity.canonicalFullName);
+        if (await this.sendLinkedNotification(link.globalAthleteId, link.userId, email, user?.fullName ?? "", identity.canonicalFullName)) {
+          await db.update(userGlobalAthleteLinks)
+            .set({ notifiedAt: new Date() })
+            .where(eq(userGlobalAthleteLinks.id, link.id));
+        }
       }
     }
   }

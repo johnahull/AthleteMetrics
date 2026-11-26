@@ -22,11 +22,58 @@ vi.mock('wouter', () => ({
 const mockApiRequest = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/queryClient', () => ({ apiRequest: mockApiRequest }));
 
+// Mock the session (signed out unless a test says otherwise)
+const mockAuth = vi.hoisted(() => ({ user: null as null | { username: string }, isLoading: false, logout: vi.fn() }));
+vi.mock('@/lib/auth', () => ({ useAuth: () => mockAuth }));
+
 const respond = (body: unknown) => ({ json: async () => body });
 
 describe('VerifyEmail Page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockAuth.user = null;
+    mockAuth.isLoading = false;
+  });
+
+  describe('Signed-in confirmation', () => {
+    it('waits for the session check before redeeming', () => {
+      vi.stubGlobal('location', { search: '?token=valid-token' });
+      mockAuth.isLoading = true;
+
+      render(<VerifyEmail />);
+
+      expect(mockApiRequest).not.toHaveBeenCalled();
+    });
+
+    it('names the signed-in account and redeems only after Confirm', async () => {
+      vi.stubGlobal('location', { search: '?token=valid-token' });
+      mockAuth.user = { username: 'jlee' };
+      mockApiRequest.mockResolvedValueOnce(respond({ success: true }));
+
+      render(<VerifyEmail />);
+
+      expect(await screen.findByText(/signed in as/i)).toHaveTextContent('jlee');
+      expect(mockApiRequest).not.toHaveBeenCalled();
+
+      screen.getByRole('button', { name: /confirm/i }).click();
+
+      await waitFor(() => {
+        expect(mockApiRequest).toHaveBeenCalledWith('POST', '/api/enhanced-auth/verify-email', { token: 'valid-token' });
+        expect(screen.getByText('Email Verified!')).toBeInTheDocument();
+      });
+    });
+
+    it('offers to sign out instead, without redeeming', async () => {
+      vi.stubGlobal('location', { search: '?token=valid-token' });
+      mockAuth.user = { username: 'jlee' };
+
+      render(<VerifyEmail />);
+
+      (await screen.findByRole('button', { name: /not you\? sign out/i })).click();
+
+      expect(mockAuth.logout).toHaveBeenCalled();
+      expect(mockApiRequest).not.toHaveBeenCalled();
+    });
   });
 
   afterEach(() => {
