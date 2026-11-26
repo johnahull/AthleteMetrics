@@ -471,9 +471,13 @@ export class WellnessRepository {
     return response || undefined;
   }
 
-  async getWellnessResponsesByAthlete(userId: string, filters?: { startDate?: string; endDate?: string }): Promise<WellnessResponse[]> {
+  async getWellnessResponsesByAthlete(userId: string, filters?: { startDate?: string; endDate?: string; organizationId?: string }): Promise<WellnessResponse[]> {
     validateUUID(userId, 'userId');
     const conditions: SQL[] = [eq(wellnessResponses.userId, userId)];
+
+    if (filters?.organizationId) {
+      conditions.push(eq(wellnessResponses.organizationId, filters.organizationId));
+    }
 
     if (filters?.startDate) {
       conditions.push(gte(wellnessResponses.date, filters.startDate));
@@ -556,7 +560,7 @@ export class WellnessRepository {
 
   // ==================== Wellness Analytics ====================
 
-  async getTeamWellnessSummary(teamId: string, filters: { startDate: string; endDate: string }): Promise<TeamWellnessSummary> {
+  async getTeamWellnessSummary(teamId: string, filters: { startDate: string; endDate: string; organizationId?: string }): Promise<TeamWellnessSummary> {
     // Validate UUID
     validateUUID(teamId, 'teamId');
     const responses = await db
@@ -565,6 +569,7 @@ export class WellnessRepository {
       .where(
         and(
           eq(wellnessResponses.teamId, teamId),
+          filters.organizationId ? eq(wellnessResponses.organizationId, filters.organizationId) : undefined,
           gte(wellnessResponses.date, filters.startDate),
           lte(wellnessResponses.date, filters.endDate)
         )
@@ -606,7 +611,7 @@ export class WellnessRepository {
     };
   }
 
-  async getAthleteWellnessSummary(userId: string, filters: { startDate: string; endDate: string }): Promise<AthleteWellnessSummary> {
+  async getAthleteWellnessSummary(userId: string, filters: { startDate: string; endDate: string; organizationId?: string }): Promise<AthleteWellnessSummary> {
     // Validate UUID
     validateUUID(userId, 'userId');
     const responses = await this.getWellnessResponsesByAthlete(userId, filters);
@@ -759,7 +764,7 @@ export class WellnessRepository {
     return db.transaction(async (tx) => {
       // Step 1: Get the request details
       const request = await tx.query.wellnessRequests.findFirst({
-        where: eq(wellnessRequests.id, requestId),
+        where: and(eq(wellnessRequests.id, requestId), eq(wellnessRequests.organizationId, organizationId)),
       });
 
       if (!request) {

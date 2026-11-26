@@ -51,6 +51,8 @@ import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { getPushNotificationService } from "../services/push-notification-service";
 import type { NotificationPayload } from "../services/push-notification-service";
 import { sendWellnessRequestNotifications } from "../services/wellness-notification-service";
+import { isTemplateUsableBy, getOrganizationMemberIds, targetsBelongToOrganization } from "../lib/wellness-org-scope";
+import { getOrgRole } from "../permissions/measurement-helpers";
 
 // Helper function to check if rate limiting should be bypassed
 const shouldBypassRateLimit = (): boolean => {
@@ -215,10 +217,10 @@ export function registerWellnessRoutes(app: Express) {
     requireOrganizationAccess(),
     async (req: Request, res: Response) => {
       try {
-        const { id } = req.params;
+        const { id, organizationId } = req.params;
 
         const template = await storage.getWellnessTemplate(id);
-        if (!template) {
+        if (!template || !isTemplateUsableBy(template, organizationId)) {
           return res.status(404).json({ message: "Template not found" });
         }
 
@@ -428,7 +430,7 @@ export function registerWellnessRoutes(app: Express) {
 
         // Get the source template
         const sourceTemplate = await storage.getWellnessTemplate(id);
-        if (!sourceTemplate) {
+        if (!sourceTemplate || !isTemplateUsableBy(sourceTemplate, organizationId)) {
           return res.status(404).json({ message: "Template not found" });
         }
 
@@ -482,6 +484,14 @@ export function registerWellnessRoutes(app: Express) {
         }
 
         const data = validation.data;
+
+        const template = await storage.getWellnessTemplate(data.templateId);
+        if (!template || !isTemplateUsableBy(template, organizationId)) {
+          return res.status(404).json({ message: "Template not found" });
+        }
+        if (!(await targetsBelongToOrganization(organizationId, data.targetAthleteIds, data.targetTeamIds))) {
+          return res.status(400).json({ message: "Targets must be athletes and teams of this organization" });
+        }
 
         // Generate public token for all distribution methods
         // Token is used for navigation to submission page regardless of distribution method
@@ -574,7 +584,8 @@ export function registerWellnessRoutes(app: Express) {
         const { id } = req.params;
 
         const request = await storage.getWellnessRequest(id);
-        if (!request) {
+        // A request of another organization looks the same as a missing one
+        if (!request || request.organizationId !== req.params.organizationId) {
           return res.status(404).json({ message: "Request not found" });
         }
 
@@ -713,11 +724,12 @@ export function registerWellnessRoutes(app: Express) {
           }
         }
 
-        // Remove duplicates
+        // Remove duplicates; list only members of the request's organization
         const uniqueAthleteIds = [...new Set(targetAthleteIds)];
+        const memberIds = await getOrganizationMemberIds(request.organizationId, uniqueAthleteIds);
 
         // Batch fetch user details
-        const athletes = await storage.getUsersByIds(uniqueAthleteIds);
+        const athletes = await storage.getUsersByIds(uniqueAthleteIds.filter(id => memberIds.has(id)));
 
         // Get primary team for each athlete
         const athletesWithTeams = await Promise.all(
@@ -757,7 +769,8 @@ export function registerWellnessRoutes(app: Express) {
         const { id } = req.params;
 
         const request = await storage.getWellnessRequest(id);
-        if (!request) {
+        // A request of another organization looks the same as a missing one
+        if (!request || request.organizationId !== req.params.organizationId) {
           return res.status(404).json({ message: "Request not found" });
         }
 
@@ -786,7 +799,8 @@ export function registerWellnessRoutes(app: Express) {
         const { organizationId, id } = req.params;
 
         const request = await storage.getWellnessRequest(id);
-        if (!request) {
+        // A request of another organization looks the same as a missing one
+        if (!request || request.organizationId !== req.params.organizationId) {
           return res.status(404).json({ message: "Request not found" });
         }
 
@@ -924,7 +938,8 @@ export function registerWellnessRoutes(app: Express) {
         const { id } = req.params;
 
         const request = await storage.getWellnessRequest(id);
-        if (!request) {
+        // A request of another organization looks the same as a missing one
+        if (!request || request.organizationId !== req.params.organizationId) {
           return res.status(404).json({ message: "Request not found" });
         }
 
@@ -1551,6 +1566,7 @@ export function registerWellnessRoutes(app: Express) {
     requireOrganizationAccess("coach"),
     async (req: Request, res: Response) => {
       try {
+        const { organizationId } = req.params;
         const { teamId, startDate, endDate } = req.query;
 
         if (!teamId || !startDate || !endDate) {
@@ -1559,9 +1575,14 @@ export function registerWellnessRoutes(app: Express) {
           });
         }
 
+        if (!(await targetsBelongToOrganization(organizationId, [], [teamId as string]))) {
+          return res.status(404).json({ message: "Team not found" });
+        }
+
         const summary = await storage.getTeamWellnessSummary(teamId as string, {
           startDate: startDate as string,
           endDate: endDate as string,
+          organizationId,
         });
 
         res.json(summary);
@@ -1584,7 +1605,7 @@ export function registerWellnessRoutes(app: Express) {
     requireOrganizationAccess(),
     async (req: Request, res: Response) => {
       try {
-        const { athleteId } = req.params;
+        const { athleteId, organizationId } = req.params;
         const { startDate, endDate } = req.query;
 
         if (!startDate || !endDate) {
@@ -1593,14 +1614,22 @@ export function registerWellnessRoutes(app: Express) {
           });
         }
 
-        // Check authorization - athletes can only view their own data
-        if (req.user!.role === 'athlete' && req.user!.id !== athleteId) {
-          return res.status(403).json({ message: "Access denied" });
+        // Own data, otherwise coach / org admin of this organization (role in this organization) or site admin
+        if (req.user!.id !== athleteId) {
+          const role = await getOrgRole(req.user!, organizationId);
+          if (role !== 'coach' && role !== 'org_admin' && role !== 'site_admin') {
+            return res.status(403).json({ message: "Access denied" });
+          }
+        }
+
+        if (!(await targetsBelongToOrganization(organizationId, [athleteId]))) {
+          return res.status(404).json({ message: "Athlete not found" });
         }
 
         const summary = await storage.getAthleteWellnessSummary(athleteId, {
           startDate: startDate as string,
           endDate: endDate as string,
+          organizationId,
         });
 
         res.json(summary);
