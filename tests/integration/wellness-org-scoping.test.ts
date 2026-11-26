@@ -27,6 +27,7 @@ import {
   wellnessRequests,
   wellnessResponses,
   siteSettings,
+  userTeams,
 } from '@shared/schema';
 import { eq, inArray, or } from 'drizzle-orm';
 import crypto from 'crypto';
@@ -459,5 +460,37 @@ describe('stored targets used for sending and submitting', () => {
     expect((await submit(direct, dual.id)).status).toBe(201);
     const viaTeam = await insertRequest(orgA.id, tplA.id, { athletes: [athleteA.id], teams: [teamA.id] });
     expect((await submit(viaTeam, athleteA.id, { selectedAthleteId: dual.id })).status).toBe(201);
+  });
+});
+
+describe('stored rows that predate the scoping', () => {
+  it('magic link submission: a removed team member is not targeted', async () => {
+    const former = await makeUser('former');
+    await storage.addUserToOrganization(former.id, orgA.id, 'athlete');
+    await storage.addUserToTeam(former.id, teamA.id);
+    await db.update(userTeams).set({ isActive: false, leftAt: new Date() }).where(eq(userTeams.userId, former.id));
+    const r = await insertRequest(orgA.id, tplA.id, { teams: [teamA.id] });
+    const res = await request(app).post('/api/wellness/responses').query({ token: r.publicToken, athlete: former.id }).send({
+      requestId: r.id, templateId: tplA.id, date: new Date().toISOString().split('T')[0], responses: { q1: { value: 5, label: 'Sleep' } },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('my-requests: a team of another organization does not list the request', async () => {
+    const foreign = await insertRequest(orgB.id, tplB.id, { teams: [teamA.id] });
+    const own = await insertRequest(orgA.id, tplA.id, { teams: [teamA.id] });
+    const res = await request(app).get('/api/wellness/my-requests').set('Cookie', cookies.dual);
+    expect(res.status).toBe(200);
+    const ids = res.body.map((r: any) => r.id);
+    expect(ids).toContain(own.id);
+    expect(ids).not.toContain(foreign.id);
+  });
+
+  it('template by token: a template of another organization is 404, a system template is served', async () => {
+    const foreign = await insertRequest(orgA.id, tplB.id, { athletes: [athleteA.id] });
+    const system = await insertRequest(orgA.id, tplSys.id, { athletes: [athleteA.id] });
+    const url = (token: string) => `/api/wellness/requests/by-token/${token}/template`;
+    expect((await request(app).get(url(foreign.publicToken!))).status).toBe(404);
+    expect((await request(app).get(url(system.publicToken!))).status).toBe(200);
   });
 });

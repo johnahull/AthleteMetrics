@@ -678,7 +678,7 @@ export function registerWellnessRoutes(app: Express) {
 
         // Get template - token proves legitimate access
         const template = await storage.getWellnessTemplate(request.templateId);
-        if (!template) {
+        if (!template || !isTemplateUsableBy(template, request.organizationId)) {
           return res.status(404).json({ message: "Template not found" });
         }
 
@@ -728,11 +728,10 @@ export function registerWellnessRoutes(app: Express) {
         // Batch fetch user details
         const athletes = await storage.getUsersByIds(uniqueAthleteIds);
 
-        // Get primary team (first team of the request's organization) for each athlete
+        // Get primary team (a current team of the request's organization) for each athlete
         const athletesWithTeams = await Promise.all(
           athletes.map(async (athlete) => {
-            const userTeams = await storage.getUserTeams(athlete.id);
-            const primaryTeam = userTeams.find(ut => ut.team.organizationId === request.organizationId)?.team ?? null;
+            const primaryTeam = await pickResponseTeam(athlete.id, request.organizationId, request.targetTeamIds);
 
             return {
               id: athlete.id,
@@ -1280,7 +1279,7 @@ export function registerWellnessRoutes(app: Express) {
         // This includes requests with targetAthleteIds containing this user
         // and requests with targetTeamIds where the user is a team member
         const userTeams = await storage.getUserTeams(userId);
-        const teamIds = userTeams.filter(ut => ut.isActive && !ut.leftAt).map(ut => ut.teamId);
+        const currentTeams = userTeams.filter(ut => ut.isActive && !ut.leftAt);
 
         // Get user's organizations to scope requests
         const userOrgs = await storage.getUserOrganizations(userId);
@@ -1297,7 +1296,9 @@ export function registerWellnessRoutes(app: Express) {
           }
 
           // Check if any of user's teams are targeted
-          if (request.targetTeamIds && request.targetTeamIds.some((teamId: string) => teamIds.includes(teamId))) {
+          // A team counts only for requests of its own organization
+          if (request.targetTeamIds && currentTeams.some(ut =>
+            ut.team.organizationId === request.organizationId && request.targetTeamIds!.includes(ut.teamId))) {
             return true;
           }
 

@@ -20,7 +20,7 @@ import type { DistributionMethod } from '@shared/wellness-types';
 import { storage } from '../storage';
 import { WellnessAccessService } from '../auth/wellness-access';
 import { computeNextRunAt } from '../lib/wellness-schedule-utils';
-import { filterTargetsToOrganization } from '../lib/wellness-org-scope';
+import { filterTargetsToOrganization, isTemplateUsableBy } from '../lib/wellness-org-scope';
 
 let scheduledTask: ScheduledTask | null = null;
 let isRunning = false;
@@ -145,6 +145,14 @@ async function processRecurringSchedules(
 
   for (const schedule of dueSchedules) {
     try {
+      // A schedule on a missing or another organization's template is paused instead of sending it
+      const template = await storage.getWellnessTemplate(schedule.templateId);
+      if (!template || !isTemplateUsableBy(template, schedule.organizationId)) {
+        await wellnessRepository.updateWellnessSchedule(schedule.id, { status: 'paused' });
+        console.error(`  ❌ Paused schedule ${schedule.id}: template not usable by its organization`);
+        continue;
+      }
+
       // Generate a public token for the new request
       const publicToken = WellnessAccessService.generateMagicLinkToken();
 
