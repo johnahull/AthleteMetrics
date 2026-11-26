@@ -307,14 +307,14 @@ describe("Auth Routes", () => {
         expect(result.error).toContain("deactivated");
       });
 
-      it("should reject user with invitation pending", async () => {
+      it("should answer a pending invitation like a wrong password", async () => {
         const result = await authService.login({
           username: `pending${testSuffix}`,
           password: INVITATION_PENDING_PASSWORD,
         });
 
         expect(result.success).toBe(false);
-        expect(result.error).toContain("complete your registration");
+        expect(result.error).toBe("Invalid credentials");
       });
 
       it("should reject OAuth-only user (Google)", async () => {

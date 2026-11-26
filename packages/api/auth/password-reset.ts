@@ -4,6 +4,7 @@ import { AuthSecurity } from './security';
 import { passwordSchema } from '@shared/password-validation';
 import bcrypt from 'bcrypt';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
+import { verifyUserPassword } from './pending-password';
 import { globalAthleteService } from '../services/global-athlete-service';
 import { emailService } from '../services/email-service';
 
@@ -321,7 +322,7 @@ export class PasswordResetService {
       }
 
       // Verify current password
-      const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+      const isCurrentPasswordValid = await verifyUserPassword(currentPassword, user.password);
       if (!isCurrentPasswordValid) {
         // Log failed password change attempt
         await AuthSecurity.logSecurityEvent({
