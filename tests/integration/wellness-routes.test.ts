@@ -2089,3 +2089,51 @@ describe('Authorization & Cross-Organization Access', () => {
     expect(res.status).toBe(200);
   });
 });
+
+describe('POST .../resend-notifications push link', () => {
+  const savedAppUrl = process.env.APP_URL;
+  afterEach(() => {
+    if (savedAppUrl === undefined) delete process.env.APP_URL;
+    else process.env.APP_URL = savedAppUrl;
+  });
+
+  it('links an athlete_account reminder to the My Requests page', async () => {
+    process.env.APP_URL = 'https://app.example.com';
+    const { getPushNotificationService } = await import('../../packages/api/services/push-notification-service');
+    const sendToUser = vi
+      .spyOn(getPushNotificationService(db), 'sendToUser')
+      .mockResolvedValue({ successful: 1, failed: 0 } as any);
+
+    const template = await storage.createWellnessTemplate({
+      organizationId: testOrg.id,
+      name: 'Reminder Link Template',
+      config: { questions: [] },
+      createdBy: testUser.id,
+    });
+    createdTemplateIds.push(template.id);
+    const req = await storage.createWellnessRequest({
+      organizationId: testOrg.id,
+      templateId: template.id,
+      requestedBy: testUser.id,
+      distributionMethod: 'athlete_account',
+      targetAthleteIds: [testAthlete.id],
+      status: 'active',
+    } as any);
+    createdRequestIds.push(req.id);
+
+    try {
+      const res = await request(app)
+        .post(`/api/organizations/${testOrg.id}/wellness/requests/${req.id}/resend-notifications`)
+        .set('Cookie', coachCookie);
+
+      expect(res.status).toBe(200);
+      expect(sendToUser).toHaveBeenCalledWith(
+        testAthlete.id,
+        expect.objectContaining({ url: 'https://app.example.com/wellness/my-requests' }),
+        testOrg.id
+      );
+    } finally {
+      sendToUser.mockRestore();
+    }
+  });
+});

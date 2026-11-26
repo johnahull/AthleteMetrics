@@ -844,9 +844,9 @@ export function registerWellnessRoutes(app: Express) {
           const athletes = await storage.getUsersByIds(athleteIds);
           const athleteMap = new Map(athletes.map(a => [a.id, a]));
 
-          // Base URL for athlete_account distribution
-          const appUrl = process.env.APP_URL || 'https://athletemetrics.app';
-          const athleteAccountUrl = `${appUrl}/wellness-my-requests`;
+          // Same base-URL chain as password reset and email links; BASE_URL is the magic-link base
+          const appUrl = process.env.APP_URL || process.env.BASE_URL || 'https://athletemetrics.app';
+          const athleteAccountUrl = `${appUrl}/wellness/my-requests`;
 
           // Send push notification to each targeted athlete
           for (const athleteId of athleteIds) {
