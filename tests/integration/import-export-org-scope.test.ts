@@ -12,7 +12,7 @@ process.env.NODE_ENV = process.env.NODE_ENV || 'test';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-secret-key-for-integration-tests-only';
 
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import request from 'supertest';
 import express, { type Express } from 'express';
 import bcrypt from 'bcrypt';
@@ -356,7 +356,8 @@ describe('import/export and athlete list organization scope', () => {
         .field('options', JSON.stringify({ organizationId: orgA, athleteMode: 'smart_import', teamHandling: 'leave_teamless' }))
         .attach('file', csv([`Iescope${tag},Legacy,2001-01-01,No Such Team ${suffix}`]), 'athletes.csv');
       expect(res.status).toBe(403);
-      const rows = await db.select({ id: users.id }).from(users).where(eq(users.lastName, 'Legacy'));
+      const rows = await db.select({ id: users.id }).from(users)
+        .where(and(eq(users.firstName, `Iescope${tag}`), eq(users.lastName, 'Legacy')));
       expect(rows).toHaveLength(0);
     });
   });
