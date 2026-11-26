@@ -6,8 +6,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { storage } from '../storage';
 import { INVITATION_PENDING_PASSWORD, type User } from '@shared/schema';
-import { canManageRole, type Role } from '@shared/role-types';
-import { getOrgRole, type UserForPermission } from '../permissions/measurement-helpers';
+import type { UserForPermission } from '../permissions/measurement-helpers';
 
 /**
  * Checks if user has permission to manage athletes (create/update)
@@ -61,9 +60,11 @@ export async function requireAthleteManagementPermission(
  *
  * Rules (site admins always pass; they are the only ones who may act on a site admin):
  * - The caller needs coach/org_admin IN an organization the target belongs to. A role held in a different
- *   organization never counts (the role comes from `getOrgRole(caller, thatOrg)`, not the session role).
- * - In that organization the caller's role must outrank the target's role there (`canManageRole`): a coach
- *   manages athletes (and parents/guests), an org admin also manages coaches. Nobody manages a peer or a superior.
+ *   organization never counts (the caller's membership in that same organization, as `getOrgRole(caller, thatOrg)`
+ *   gives it, never the session role).
+ * - In that organization the target's role must be one the caller's role manages there (MANAGED_ROLES): a coach
+ *   manages athletes, an org admin manages athletes and coaches. Nobody manages a peer, a superior, or a
+ *   parent/guest member through these routes.
  * - Such an organization is a "managed" organization. One is enough for ordinary profile edits.
  * - Account-level actions (status toggle, delete, email change) affect the whole account in every organization,
  *   so they need every organization of the target to be managed.
@@ -76,20 +77,27 @@ export interface AthleteAuthority {
   managedOrgIds: string[];
 }
 
+/** Target roles each caller role may manage in the same organization. */
+const MANAGED_ROLES: Record<string, readonly string[]> = {
+  org_admin: ['athlete', 'coach'],
+  coach: ['athlete'],
+};
+
 export async function getAthleteAuthority(
   caller: Pick<UserForPermission, 'id' | 'isSiteAdmin' | 'role'>,
   targetId: string
 ): Promise<AthleteAuthority> {
-  const [target, targetOrgs] = await Promise.all([
+  // The caller's memberships are loaded once; a lookup by organization id is what getOrgRole does per call.
+  const [target, targetOrgs, callerOrgs] = await Promise.all([
     storage.getUser(targetId),
     storage.getUserOrganizations(targetId),
+    caller.isSiteAdmin ? Promise.resolve([]) : storage.getUserOrganizations(caller.id),
   ]);
-  const callerRoles = await Promise.all(targetOrgs.map((org) => getOrgRole(caller, org.organizationId)));
+  const callerRoleIn = new Map(callerOrgs.map((org) => [org.organizationId, org.role]));
   const managedOrgIds = targetOrgs
-    .filter((org, i) => {
-      const callerRole = callerRoles[i];
-      return (callerRole === 'org_admin' || callerRole === 'coach') && canManageRole(callerRole, org.role as Role);
-    })
+    .filter((org) =>
+      caller.isSiteAdmin || (MANAGED_ROLES[callerRoleIn.get(org.organizationId) ?? ''] ?? []).includes(org.role)
+    )
     .map((org) => org.organizationId);
   return { target, targetOrgIds: targetOrgs.map((org) => org.organizationId), managedOrgIds };
 }
@@ -155,11 +163,8 @@ function athleteAccessPermission(options: { allowSelf: boolean; wholeAccount: bo
         return res.status(404).json({ message: "Athlete not found" });
       }
 
-      if (authority.target.isSiteAdmin) {
-        return res.status(403).json({ message: "Only a site admin can manage a site admin account" });
-      }
-
-      if (authority.managedOrgIds.length === 0) {
+      // A site admin target gets the same refusal as any other user the caller does not manage
+      if (authority.target.isSiteAdmin || authority.managedOrgIds.length === 0) {
         return res.status(403).json({
           message: "Access denied - you need a coach or organization admin role above this user's role in their organization"
         });

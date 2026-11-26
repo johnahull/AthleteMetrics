@@ -233,8 +233,9 @@ export function registerAthleteRoutes(app: Express) {
 
       const isSelf = currentUser.id === athleteId || currentUser.athleteId === athleteId;
 
-      // Anyone may view themselves; others need a non-athlete role in an organization shared with the athlete
-      // (the role in THAT organization, not the session role, which comes from the first organization by name).
+      // Anyone may view themselves; others need coach/org_admin in an organization shared with the athlete (the role in
+      // THAT organization, not the session role, which comes from the first organization by name). Parents read their
+      // linked children through /api/parent/children/:id, not this route.
       if (!isSelf && !userIsSiteAdmin) {
         // Coaches and org admins can only view athletes from their organization
         // Check if user has access to the same organization as the athlete
@@ -276,11 +277,11 @@ export function registerAthleteRoutes(app: Express) {
           return res.status(403).json({ message: "Access denied - athlete belongs to a different organization" });
         }
 
-        const hasNonAthleteRoleInSharedOrg = userOrgs.some(
-          (org) => allAthleteOrgIds.includes(org.organizationId) && org.role !== "athlete"
+        const isStaffInSharedOrg = userOrgs.some(
+          (org) => allAthleteOrgIds.includes(org.organizationId) && (org.role === "coach" || org.role === "org_admin")
         );
-        if (!hasNonAthleteRoleInSharedOrg) {
-          return res.status(403).json({ message: "Athletes can only view their own profile" });
+        if (!isStaffInSharedOrg) {
+          return res.status(403).json({ message: "Access denied - only coaches and organization admins can view other members' profiles" });
         }
       }
 
@@ -380,7 +381,12 @@ export function registerAthleteRoutes(app: Express) {
         }
       }
 
-      res.status(201).json({ ...toSafeUser(athlete, "staff"), teams: [] });
+      const teams = (await storage.getAthleteTeams(athlete.id)).map((team) => ({
+        id: team.id,
+        name: team.name,
+        organization: team.organization,
+      }));
+      res.status(201).json({ ...toSafeUser(athlete, "staff"), teams });
     } catch (error) {
       console.error("Create athlete error:", error);
       if (error instanceof Error && error.name === 'ZodError') {
@@ -456,21 +462,27 @@ export function registerAthleteRoutes(app: Express) {
           // athlete's first organization for the link scope.
           parentLinkOrgId = athleteOrgs[0]?.organizationId ?? null;
         } else {
-          // Must be org_admin specifically in an org shared with the athlete —
-          // org_admin status in an unrelated org must not combine with a
-          // shared-org coach role (already required by
-          // requireAthleteAccessPermission) to authorize this.
+          // Must be org_admin specifically in an org where the caller manages
+          // this user (authority.managedOrgIds) — org_admin status in another
+          // org, even one the user also belongs to, must not authorize this.
+          const managedOrgIds = authority?.managedOrgIds ?? [];
           const userOrgs = await storage.getUserOrganizations(currentUser.id);
-          const athleteOrgIds = new Set(athleteOrgs.map((org) => org.organizationId));
           const authorizingOrg = userOrgs.find(
-            (org) => org.role === 'org_admin' && athleteOrgIds.has(org.organizationId)
+            (org) => org.role === 'org_admin' && managedOrgIds.includes(org.organizationId)
           );
-          if (!authorizingOrg) {
-            return res.status(403).json({
-              message: "Organization admin or site admin role required to update parent email",
-            });
+          if (authorizingOrg) {
+            parentLinkOrgId = authorizingOrg.organizationId;
+          } else {
+            // The edit dialog always sends parentEmail (null when unset), so an
+            // unchanged value is dropped instead of refusing the whole edit.
+            const normalize = (email: string | null | undefined) => (email ?? "").trim().toLowerCase();
+            if (normalize(validatedData.parentEmail) !== normalize(authority?.target?.parentEmail)) {
+              return res.status(403).json({
+                message: "Organization admin or site admin role required to update parent email",
+              });
+            }
+            delete validatedData.parentEmail;
           }
-          parentLinkOrgId = authorizingOrg.organizationId;
         }
       }
 
@@ -727,6 +739,18 @@ export function registerAthleteRoutes(app: Express) {
             // Skip if athlete has no email
             if (!athlete.emails || athlete.emails.length === 0) {
               return { athleteId, valid: false, reason: 'no_email' };
+            }
+
+            // Only users the caller manages in this organization, and only accounts nobody has activated yet
+            // (an invitation for an activated account would hand its login to whoever holds the email).
+            if (!userIsSiteAdmin) {
+              const authority = await getAthleteAuthority(currentUser, athleteId);
+              if (!authority.managedOrgIds.includes(organizationId)) {
+                return { athleteId, valid: false, reason: 'not_managed' };
+              }
+            }
+            if (isClaimedAccount(athlete)) {
+              return { athleteId, valid: false, reason: 'already_activated' };
             }
 
             return { athleteId, valid: true, athlete };

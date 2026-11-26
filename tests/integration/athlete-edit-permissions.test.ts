@@ -22,7 +22,9 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import { storage } from '../../packages/api/storage';
-import type { Organization, User, Team } from '@shared/schema';
+import { users, userOrganizations, type Organization, type User, type Team } from '@shared/schema';
+import { eq } from 'drizzle-orm';
+import { db } from '../../packages/api/db';
 
 vi.mock('../../packages/api/vite.js', () => ({
   setupVite: vi.fn().mockResolvedValue(undefined),
@@ -33,7 +35,8 @@ import { registerRoutes } from '../../packages/api/routes';
 import { purgeTestRows } from '../helpers/purge-test-rows';
 
 const PASSWORD = 'TestPass123!';
-type OrgRole = 'org_admin' | 'coach' | 'athlete';
+type OrgRole = 'org_admin' | 'coach' | 'athlete' | 'parent';
+const REFUSAL = "Access denied - you need a coach or organization admin role above this user's role in their organization";
 
 describe('Athlete edit permissions', () => {
   // orgA sorts first, so a user who is coach in A and athlete in B has session role "coach".
@@ -60,7 +63,11 @@ describe('Athlete edit permissions', () => {
       firstName: 'Edit',
       lastName: `Perm${uniq}`,
     });
-    for (const [org, role] of memberships) await storage.addUserToOrganization(user.id, org.id, role);
+    for (const [org, role] of memberships) {
+      // storage.addUserToOrganization only takes staff/athlete roles; parent rows are written directly elsewhere too
+      if (role === 'parent') await db.insert(userOrganizations).values({ userId: user.id, organizationId: org.id, role });
+      else await storage.addUserToOrganization(user.id, org.id, role);
+    }
     trackedUserIds.push(user.id);
     return user;
   }
@@ -284,6 +291,7 @@ describe('Athlete edit permissions', () => {
       expect(res.status).toBe(201);
       trackedUserIds.push(res.body.id);
       expect(res.body).not.toHaveProperty('password');
+      expect(res.body.teams.map((t: { id: string }) => t.id)).toEqual([teamA.id]);
       const orgs = await storage.getUserOrganizations(res.body.id);
       expect(orgs.map((o) => o.organizationId)).toEqual([orgA.id]);
       expect(await teamIdsOf(res.body.id)).toEqual([teamA.id]);
@@ -297,6 +305,127 @@ describe('Athlete edit permissions', () => {
       trackedUserIds.push(res.body.id);
       const orgs = await storage.getUserOrganizations(res.body.id);
       expect(orgs.map((o) => o.organizationId)).toEqual([orgB.id]);
+    });
+  });
+
+  describe('review follow-ups', () => {
+    /** What the athlete edit dialog sends on save: every form field, parentEmail null when unset. */
+    const modalPayload = (u: User) => ({
+      firstName: u.firstName,
+      lastName: u.lastName,
+      emails: u.emails,
+      birthDate: '1990-01-01',
+      graduationYear: 2030,
+      school: 'Modal High',
+      sports: [],
+      positions: [],
+      phoneNumbers: [],
+      gender: 'Female',
+      parentEmail: null,
+    });
+
+    it('lets a coach save the full edit-dialog payload for an athlete', async () => {
+      const athlete = await makeUser([[orgA, 'athlete']]);
+      const agent = await agentFor(coachA);
+      const res = await agent.put(`/api/athletes/${athlete.id}`).send(modalPayload(athlete));
+      expect(res.status).toBe(200);
+      expect((await storage.getUser(athlete.id))?.school).toBe('Modal High');
+    });
+
+    it('lets an athlete save the full edit-dialog payload for themselves', async () => {
+      const self = await makeUser([[orgA, 'athlete']]);
+      const agent = await agentFor(self);
+      const res = await agent.put(`/api/athletes/${self.id}`).send(modalPayload(self));
+      expect(res.status).toBe(200);
+      expect((await storage.getUser(self.id))?.school).toBe('Modal High');
+    });
+
+    it('refuses a coach setting a new parent email', async () => {
+      const athlete = await makeUser([[orgA, 'athlete']]);
+      const agent = await agentFor(coachA);
+      const res = await agent.put(`/api/athletes/${athlete.id}`).send({ parentEmail: 'someone@test.com' });
+      expect(res.status).toBe(403);
+      expect((await storage.getUser(athlete.id))?.parentEmail ?? null).toBeNull();
+    });
+
+    it('refuses a parent-email change authorized only by an organization where the caller does not manage the user', async () => {
+      // Caller: coach in A (manages the target there), org admin in B. Target: athlete in A, org admin in B.
+      const caller = await makeUser([[orgA, 'coach'], [orgB, 'org_admin']]);
+      const target = await makeUser([[orgA, 'athlete'], [orgB, 'org_admin']]);
+      const agent = await agentFor(caller);
+      const res = await agent.put(`/api/athletes/${target.id}`).send({ parentEmail: 'redirect@test.com' });
+      expect(res.status).toBe(403);
+      expect((await storage.getUser(target.id))?.parentEmail ?? null).toBeNull();
+    });
+
+    it('refuses a coach changing the email of an OAuth-only account', async () => {
+      const oauth = await makeUnclaimedAthlete([orgA]);
+      await db.update(users).set({ password: null, googleId: `g-${oauth.id}` }).where(eq(users.id, oauth.id));
+      const agent = await agentFor(coachA);
+      const res = await agent.put(`/api/athletes/${oauth.id}`).send({ emails: ['oauth-takeover@test.com'] });
+      expect(res.status).toBe(403);
+    });
+
+    it('refuses an org admin acting on another org admin of the same organization', async () => {
+      const peer = await makeUser([[orgA, 'org_admin']]);
+      const agent = await agentFor(adminA);
+      expect((await agent.put(`/api/athletes/${peer.id}`).send({ school: 'Peer' })).status).toBe(403);
+      expect((await agent.patch(`/api/athletes/${peer.id}/status`).send({ isActive: false })).status).toBe(403);
+      expect((await storage.getUser(peer.id))?.isActive).toBe(true);
+    });
+
+    it('refuses a coach acting on a parent-role member', async () => {
+      const parent = await makeUser([[orgA, 'parent']]);
+      const agent = await agentFor(coachA);
+      expect((await agent.put(`/api/athletes/${parent.id}`).send({ school: 'Parent' })).status).toBe(403);
+      expect((await agent.patch(`/api/athletes/${parent.id}/status`).send({ isActive: false })).status).toBe(403);
+      expect((await storage.getUser(parent.id))?.isActive).toBe(true);
+    });
+
+    it('gives a site-admin target the same refusal as any other unmanaged user', async () => {
+      const agent = await agentFor(adminA);
+      const res = await agent.put(`/api/athletes/${siteAdmin.id}`).send({ school: 'Nope' });
+      expect(res.status).toBe(403);
+      expect(res.body.message).toBe(REFUSAL);
+    });
+
+    it('bulk-deletes only the users the coach manages everywhere', async () => {
+      const onlyA = await makeUser([[orgA, 'athlete']]);
+      const alsoB = await makeUser([[orgA, 'athlete'], [orgB, 'athlete']]);
+      const agent = await agentFor(coachA);
+      const res = await agent.post('/api/athletes/bulk-delete').send({ athleteIds: [onlyA.id, alsoB.id] });
+      expect(res.status).toBe(200);
+      expect(res.body.deleted).toBe(1);
+      expect(await storage.getUser(onlyA.id)).toBeFalsy();
+      expect(await storage.getUser(alsoB.id)).toBeTruthy();
+    });
+
+    it('keeps an athlete on their teams when they send teamIds: [] for themselves', async () => {
+      const self = await makeUser([[orgA, 'athlete']]);
+      await storage.addUserToTeam(self.id, teamA.id);
+      const agent = await agentFor(self);
+      expect((await agent.put(`/api/athletes/${self.id}`).send({ teamIds: [] })).status).toBe(200);
+      expect(await teamIdsOf(self.id)).toEqual([teamA.id]);
+    });
+
+    it('refuses a parent-role member reading an athlete profile, and lets a coach read it', async () => {
+      const parent = await makeUser([[orgA, 'parent']]);
+      const athlete = await makeUser([[orgA, 'athlete']]);
+      expect((await (await agentFor(parent)).get(`/api/athletes/${athlete.id}`)).status).toBe(403);
+      expect((await (await agentFor(coachA)).get(`/api/athletes/${athlete.id}`)).status).toBe(200);
+    });
+
+    it('bulk-invites only unclaimed athletes the caller manages', async () => {
+      const unclaimed = await makeUnclaimedAthlete([orgA]);
+      const claimed = await makeUser([[orgA, 'athlete']]);
+      const otherCoach = await makeUser([[orgA, 'coach']]);
+      const agent = await agentFor(coachA);
+      const res = await agent
+        .post('/api/athletes/bulk-invite')
+        .send({ athleteIds: [unclaimed.id, claimed.id, otherCoach.id], organizationId: orgA.id });
+      expect(res.status).toBe(200);
+      expect(res.body.invited).toBe(1);
+      expect(res.body.skipped).toBe(2);
     });
   });
 });
