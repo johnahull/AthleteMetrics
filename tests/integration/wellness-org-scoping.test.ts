@@ -40,6 +40,11 @@ vi.mock('../../packages/api/services/email-service', () => ({
   },
 }));
 
+const { mockSendToUser } = vi.hoisted(() => ({ mockSendToUser: vi.fn() }));
+vi.mock('../../packages/api/services/push-notification-service', () => ({
+  getPushNotificationService: () => ({ sendToUser: mockSendToUser }),
+}));
+
 const PREFIX = `wos_${Date.now()}`;
 const config = {
   questions: [{ id: 'q1', type: 'scale', label: 'Sleep', scaleMin: 1, scaleMax: 10, required: true }],
@@ -117,8 +122,13 @@ beforeAll(async () => {
     res.json({ success: true });
   });
 
-  await db.delete(siteSettings);
-  await db.insert(siteSettings).values({ aiModel: 'claude-sonnet-5.5', wellnessModuleEnabled: true });
+  // site_settings is a shared singleton: enable the module without replacing the row
+  const [settings] = await db.select().from(siteSettings).limit(1);
+  if (settings) {
+    await db.update(siteSettings).set({ wellnessModuleEnabled: true }).where(eq(siteSettings.id, settings.id));
+  } else {
+    await db.insert(siteSettings).values({ wellnessModuleEnabled: true });
+  }
 
   const { registerWellnessRoutes } = await import('../../packages/api/routes/wellness-routes');
   const { registerWellnessScheduleRoutes } = await import('../../packages/api/routes/wellness-schedule-routes');
@@ -147,6 +157,9 @@ beforeAll(async () => {
   [teamB] = await db.insert(teams).values({ organizationId: orgB.id, name: `${PREFIX} Team B`, level: 'Club' }).returning();
   await storage.addUserToTeam(athleteA.id, teamA.id);
   await storage.addUserToTeam(athleteB.id, teamB.id);
+  // dual is on a team of B (added first) and a team of A
+  await storage.addUserToTeam(dual.id, teamB.id);
+  await storage.addUserToTeam(dual.id, teamA.id);
 
   [tplA] = await db.insert(wellnessTemplates).values({ organizationId: orgA.id, name: `${PREFIX} A`, config }).returning();
   [tplAInactive] = await db.insert(wellnessTemplates).values({ organizationId: orgA.id, name: `${PREFIX} A old`, config, isActive: false }).returning();
@@ -251,11 +264,29 @@ describe('request and schedule targets', () => {
     }
   });
 
-  it('targeted-athletes by token lists only members of the request organization', async () => {
+  it('targeted-athletes by token lists only members of the request organization reached through its own teams', async () => {
     const r = await insertRequest(orgA.id, tplA.id, { athletes: [athleteA.id, athleteB.id], teams: [teamB.id] });
     const res = await request(app).get(`/api/wellness/requests/by-token/${r.publicToken}/targeted-athletes`);
     expect(res.status).toBe(200);
     expect(res.body.athletes.map((a: any) => a.id)).toEqual([athleteA.id]);
+  });
+
+  it('targeted-athletes shows a team of the request organization for an athlete of several organizations', async () => {
+    const r = await insertRequest(orgA.id, tplA.id, { athletes: [dual.id] });
+    const res = await request(app).get(`/api/wellness/requests/by-token/${r.publicToken}/targeted-athletes`);
+    expect(res.body.athletes).toEqual([expect.objectContaining({ id: dual.id, teamId: teamA.id })]);
+  });
+
+  it('duplicate target ids are accepted', async () => {
+    const res = await request(app).post(`/api/organizations/${orgA.id}/wellness/requests`).set('Cookie', cookies.coachA)
+      .send(requestBody({ a: [athleteA.id, athleteA.id], t: [teamA.id, teamA.id] }));
+    expect(res.status).toBe(201);
+  });
+
+  it('a target id in another letter case is rejected with 400', async () => {
+    const res = await request(app).post(`/api/organizations/${orgA.id}/wellness/requests`).set('Cookie', cookies.coachA)
+      .send(requestBody({ a: [athleteA.id.toUpperCase()] }));
+    expect(res.status).toBe(400);
   });
 });
 
@@ -269,6 +300,22 @@ describe('request-by-id routes', () => {
     expect((await request(app).delete(base).set('Cookie', cookies.coachA)).status).toBe(404);
     const [still] = await db.select().from(wellnessRequests).where(eq(wellnessRequests.id, r.id));
     expect(still.status).toBe('active');
+  });
+
+  it('site admin: request of another organization through this organization URL is 404', async () => {
+    const r = await insertRequest(orgB.id, tplB.id, { athletes: [athleteB.id] });
+    const base = `/api/organizations/${orgA.id}/wellness/requests/${r.id}`;
+    expect((await request(app).get(base).set('Cookie', cookies.siteAdmin)).status).toBe(404);
+    expect((await request(app).put(`${base}/cancel`).set('Cookie', cookies.siteAdmin)).status).toBe(404);
+    expect((await request(app).delete(base).set('Cookie', cookies.siteAdmin)).status).toBe(404);
+    expect((await request(app).get(`/api/organizations/${orgB.id}/wellness/requests/${r.id}`).set('Cookie', cookies.siteAdmin)).status).toBe(200);
+  });
+
+  it('completion rate counts only members of the organization reached through its own teams', async () => {
+    const r = await insertRequest(orgA.id, tplA.id, { athletes: [athleteA.id, athleteB.id], teams: [teamA.id, teamB.id] });
+    const res = await request(app).get(`/api/organizations/${orgA.id}/wellness/requests/${r.id}/completion-rate`).set('Cookie', cookies.coachA);
+    // athleteA (direct and team A) and dual (team A); athleteB is not a member of A
+    expect(res.body.total).toBe(2);
   });
 
   it('GET own request: 200', async () => {
@@ -301,6 +348,13 @@ describe('analytics', () => {
     expect(own.body.totalResponses).toBe(2);
     const other = await request(app).get(url).query({ ...range, teamId: teamB.id }).set('Cookie', cookies.coachA);
     expect(other.status).toBe(404);
+  });
+
+  it('team summary: missing or repeated teamId is 400', async () => {
+    const url = `/api/organizations/${orgA.id}/wellness/analytics/team`;
+    expect((await request(app).get(url).query(range).set('Cookie', cookies.coachA)).status).toBe(400);
+    const repeated = await request(app).get(`${url}?teamId=${teamA.id}&teamId=${teamA.id}&startDate=${range.startDate}&endDate=${range.endDate}`).set('Cookie', cookies.coachA);
+    expect(repeated.status).toBe(400);
   });
 
   const athleteUrl = (id: string) => `/api/organizations/${orgA.id}/wellness/analytics/athlete/${id}`;
@@ -342,5 +396,68 @@ describe('analytics', () => {
   it('athlete summary: site admin allowed', async () => {
     const res = await request(app).get(athleteUrl(athleteA.id)).query(range).set('Cookie', cookies.siteAdmin);
     expect(res.status).toBe(200);
+  });
+});
+
+describe('stored targets used for sending and submitting', () => {
+  const today = () => new Date().toISOString().split('T')[0];
+  const submit = (r: any, athlete: string, extra: Record<string, unknown> = {}) =>
+    request(app).post('/api/wellness/responses').query({ token: r.publicToken, athlete })
+      .send({ requestId: r.id, templateId: tplA.id, date: today(), responses: { q1: { value: 6, label: 'Sleep' } }, ...extra });
+
+  it('magic links are generated only for members of the organization reached through its own teams', async () => {
+    const { WellnessAccessService } = await import('../../packages/api/auth/wellness-access');
+    const r = await insertRequest(orgA.id, tplA.id, { athletes: [athleteA.id, athleteB.id], teams: [teamB.id] });
+    const links = await WellnessAccessService.generateMagicLinksForRequest(r.id);
+    expect([...links.keys()]).toEqual([athleteA.id]);
+  });
+
+  it('magic links include an athlete of several organizations targeted directly', async () => {
+    const { WellnessAccessService } = await import('../../packages/api/auth/wellness-access');
+    const r = await insertRequest(orgA.id, tplA.id, { athletes: [dual.id] });
+    const links = await WellnessAccessService.generateMagicLinksForRequest(r.id);
+    expect([...links.keys()]).toEqual([dual.id]);
+  });
+
+  it('athlete account notifications go only to members of the organization', async () => {
+    const { sendWellnessRequestNotifications } = await import('../../packages/api/services/wellness-notification-service');
+    mockSendToUser.mockReset();
+    mockSendToUser.mockResolvedValue({ successful: 1, failed: 0 });
+    await sendWellnessRequestNotifications(
+      { id: crypto.randomUUID(), publicToken: null },
+      { templateId: tplA.id, distributionMethod: 'athlete_account', targetAthleteIds: [athleteA.id, athleteB.id] },
+      coachA.id,
+      orgA.id
+    );
+    expect(mockSendToUser.mock.calls.map(c => c[0])).toEqual([athleteA.id]);
+  });
+
+  it('resend notifications for an athlete account request go only to members of the organization', async () => {
+    mockSendToUser.mockReset();
+    mockSendToUser.mockResolvedValue({ successful: 1, failed: 0 });
+    const [r] = await db.insert(wellnessRequests).values({
+      organizationId: orgA.id, templateId: tplA.id, distributionMethod: 'athlete_account',
+      targetAthleteIds: [athleteA.id, athleteB.id], targetTeamIds: [], status: 'active',
+    }).returning();
+    const res = await request(app).post(`/api/organizations/${orgA.id}/wellness/requests/${r.id}/resend-notifications`).set('Cookie', cookies.coachA);
+    expect(res.status).toBe(200);
+    expect(mockSendToUser.mock.calls.map(c => c[0])).toEqual([athleteA.id]);
+  });
+
+  it('magic link submission: a team of another organization does not make a member targeted', async () => {
+    const r = await insertRequest(orgA.id, tplA.id, { teams: [teamB.id] });
+    expect((await submit(r, dual.id)).status).toBe(403);
+  });
+
+  it('magic link submission: selected athlete reached only through a team of another organization is refused', async () => {
+    const r = await insertRequest(orgA.id, tplA.id, { athletes: [athleteA.id], teams: [teamB.id] });
+    expect((await submit(r, athleteA.id, { selectedAthleteId: dual.id })).status).toBe(403);
+  });
+
+  it('magic link submission: athlete of several organizations targeted directly or through a team of the organization', async () => {
+    const direct = await insertRequest(orgA.id, tplA.id, { athletes: [dual.id] });
+    expect((await submit(direct, dual.id)).status).toBe(201);
+    const viaTeam = await insertRequest(orgA.id, tplA.id, { athletes: [athleteA.id], teams: [teamA.id] });
+    expect((await submit(viaTeam, athleteA.id, { selectedAthleteId: dual.id })).status).toBe(201);
   });
 });

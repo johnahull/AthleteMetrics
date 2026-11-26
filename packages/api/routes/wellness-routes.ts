@@ -51,7 +51,13 @@ import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { getPushNotificationService } from "../services/push-notification-service";
 import type { NotificationPayload } from "../services/push-notification-service";
 import { sendWellnessRequestNotifications } from "../services/wellness-notification-service";
-import { isTemplateUsableBy, getOrganizationMemberIds, targetsBelongToOrganization } from "../lib/wellness-org-scope";
+import {
+  isTemplateUsableBy,
+  getOrganizationMemberIds,
+  filterTargetsToOrganization,
+  targetsBelongToOrganization,
+  getRequestTargetAthleteIds,
+} from "../lib/wellness-org-scope";
 import { getOrgRole } from "../permissions/measurement-helpers";
 
 // Helper function to check if rate limiting should be bypassed
@@ -75,6 +81,11 @@ const createErrorResponse = (message: string, error?: Error) => {
 
 // Helper function to verify if an athlete is targeted by a wellness request
 async function verifyAthleteIsTargeted(request: WellnessRequest, athleteId: string): Promise<boolean> {
+  // Only members of the request's organization, through its own teams, count as targeted
+  if ((await getOrganizationMemberIds(request.organizationId, [athleteId])).size === 0) {
+    return false;
+  }
+
   // Check direct targeting
   if (request.targetAthleteIds?.includes(athleteId)) {
     return true;
@@ -83,7 +94,9 @@ async function verifyAthleteIsTargeted(request: WellnessRequest, athleteId: stri
   // Check team-based targeting
   if (request.targetTeamIds && request.targetTeamIds.length > 0) {
     const athleteTeams = await storage.getUserTeams(athleteId);
-    const athleteTeamIds = athleteTeams.map(ut => ut.team.id);
+    const athleteTeamIds = athleteTeams
+      .filter(ut => ut.team.organizationId === request.organizationId)
+      .map(ut => ut.team.id);
     return request.targetTeamIds.some(teamId => athleteTeamIds.includes(teamId));
   }
 
@@ -696,46 +709,17 @@ export function registerWellnessRoutes(app: Express) {
           return res.status(410).json({ message: "This wellness request has expired" });
         }
 
-        // Collect all target athlete IDs
-        const targetAthleteIds: string[] = [];
-
-        // Add directly targeted athletes
-        if (request.targetAthleteIds) {
-          targetAthleteIds.push(...request.targetAthleteIds);
-        }
-
-        // Add athletes from targeted teams (query userTeams table)
-        if (request.targetTeamIds && request.targetTeamIds.length > 0) {
-          for (const teamId of request.targetTeamIds) {
-            // Query userTeams table to get all active members of this team
-            const teamMembers = await db
-              .select()
-              .from(userTeams)
-              .where(
-                and(
-                  eq(userTeams.teamId, teamId),
-                  eq(userTeams.isActive, true)
-                )
-              );
-
-            // Extract user IDs from team memberships
-            const memberIds = teamMembers.map((member: any) => member.userId);
-            targetAthleteIds.push(...memberIds);
-          }
-        }
-
-        // Remove duplicates; list only members of the request's organization
-        const uniqueAthleteIds = [...new Set(targetAthleteIds)];
-        const memberIds = await getOrganizationMemberIds(request.organizationId, uniqueAthleteIds);
+        // Direct targets and active members of targeted teams, limited to the request's organization
+        const uniqueAthleteIds = await getRequestTargetAthleteIds(request);
 
         // Batch fetch user details
-        const athletes = await storage.getUsersByIds(uniqueAthleteIds.filter(id => memberIds.has(id)));
+        const athletes = await storage.getUsersByIds(uniqueAthleteIds);
 
-        // Get primary team for each athlete
+        // Get primary team (first team of the request's organization) for each athlete
         const athletesWithTeams = await Promise.all(
           athletes.map(async (athlete) => {
             const userTeams = await storage.getUserTeams(athlete.id);
-            const primaryTeam = userTeams.length > 0 ? userTeams[0].team : null;
+            const primaryTeam = userTeams.find(ut => ut.team.organizationId === request.organizationId)?.team ?? null;
 
             return {
               id: athlete.id,
@@ -835,9 +819,10 @@ export function registerWellnessRoutes(app: Express) {
           }
 
           // Get athlete IDs
+          // Magic links are already limited to the organization; direct targets are limited here
           const athleteIds = magicLinks
             ? Array.from(magicLinks.keys())
-            : (request.targetAthleteIds || []);
+            : (await filterTargetsToOrganization(organizationId, request.targetAthleteIds || [])).athleteIds;
 
           const athletes = await storage.getUsersByIds(athleteIds);
           const athleteMap = new Map(athletes.map(a => [a.id, a]));
@@ -1569,17 +1554,17 @@ export function registerWellnessRoutes(app: Express) {
         const { organizationId } = req.params;
         const { teamId, startDate, endDate } = req.query;
 
-        if (!teamId || !startDate || !endDate) {
+        if (typeof teamId !== 'string' || !teamId || !startDate || !endDate) {
           return res.status(400).json({
             message: "teamId, startDate, and endDate are required",
           });
         }
 
-        if (!(await targetsBelongToOrganization(organizationId, [], [teamId as string]))) {
+        if (!(await targetsBelongToOrganization(organizationId, [], [teamId]))) {
           return res.status(404).json({ message: "Team not found" });
         }
 
-        const summary = await storage.getTeamWellnessSummary(teamId as string, {
+        const summary = await storage.getTeamWellnessSummary(teamId, {
           startDate: startDate as string,
           endDate: endDate as string,
           organizationId,

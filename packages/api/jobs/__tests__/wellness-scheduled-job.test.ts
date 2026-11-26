@@ -18,7 +18,9 @@ const {
   mockCreateWellnessRequest,
   mockGenerateMagicLinkToken,
   mockComputeNextRunAt,
+  mockFilterTargetsToOrganization,
 } = vi.hoisted(() => ({
+  mockFilterTargetsToOrganization: vi.fn(),
   mockSchedule: vi.fn(),
   mockStop: vi.fn(),
   mockGetDueScheduledRequests: vi.fn(),
@@ -64,6 +66,10 @@ vi.mock('../../lib/wellness-schedule-utils', () => ({
   computeNextRunAt: mockComputeNextRunAt,
 }));
 
+vi.mock('../../lib/wellness-org-scope', () => ({
+  filterTargetsToOrganization: mockFilterTargetsToOrganization,
+}));
+
 import {
   startWellnessScheduledJob,
   stopWellnessScheduledJob,
@@ -83,6 +89,7 @@ describe('Wellness Scheduled Job', () => {
     mockGetSchedulesDueNow.mockResolvedValue([]);
     mockSendWellnessRequestNotifications.mockResolvedValue({});
     mockGenerateMagicLinkToken.mockReturnValue('mock-token');
+    mockFilterTargetsToOrganization.mockImplementation(async (_org: string, athleteIds: string[] = [], teamIds: string[] = []) => ({ athleteIds, teamIds }));
     stopWellnessScheduledJob();
     __resetJobStateForTesting(); // Reset job state between tests
   });
@@ -229,6 +236,30 @@ describe('Wellness Scheduled Job', () => {
         })
       );
       expect(mockSendWellnessRequestNotifications).toHaveBeenCalled();
+    });
+
+    it('uses only targets of the schedule organization and still advances the schedule', async () => {
+      const nextRun = new Date('2025-06-16T09:00:00Z');
+      mockGetSchedulesDueNow.mockResolvedValue([{ ...mockScheduleRecord, targetAthleteIds: ['a-1', 'a-other'], targetTeamIds: ['t-1', 't-other'] }]);
+      mockFilterTargetsToOrganization.mockResolvedValue({ athleteIds: ['a-1'], teamIds: ['t-1'] });
+      mockCreateWellnessRequest.mockResolvedValue({ id: 'new-req', publicToken: 'tok' });
+      mockComputeNextRunAt.mockReturnValue(nextRun);
+
+      startWellnessScheduledJob(mockDb);
+      const cronCallback = mockSchedule.mock.calls[0][1];
+      await cronCallback();
+
+      expect(mockFilterTargetsToOrganization).toHaveBeenCalledWith('org-1', ['a-1', 'a-other'], ['t-1', 't-other']);
+      expect(mockCreateWellnessRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ targetAthleteIds: ['a-1'], targetTeamIds: ['t-1'] })
+      );
+      expect(mockSendWellnessRequestNotifications).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ targetAthleteIds: ['a-1'], targetTeamIds: ['t-1'] }),
+        'user-1',
+        'org-1'
+      );
+      expect(mockUpdateScheduleAfterRun).toHaveBeenCalledWith('sched-1', nextRun, 3);
     });
 
     it('should increment occurrences and update nextRunAt', async () => {
