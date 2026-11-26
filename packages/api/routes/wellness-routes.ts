@@ -1111,7 +1111,7 @@ export function registerWellnessRoutes(app: Express) {
           }
 
           // SECURITY: a magic link can name any targeted athlete, so it must never write to a standing request
-          if ((req.user as any).accessMethod !== 'authenticated') {
+          if ((req.user as { accessMethod?: string }).accessMethod !== 'authenticated') {
             return res.status(403).json({ message: "Please sign in to submit this check-in" });
           }
 

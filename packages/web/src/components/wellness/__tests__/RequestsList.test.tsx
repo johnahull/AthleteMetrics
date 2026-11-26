@@ -28,6 +28,7 @@ const baseRequest: WellnessRequest = {
   scheduledFor: null,
   expiresAt: null,
   status: 'active',
+  isStanding: false,
   createdAt: new Date('2026-11-01T00:00:00Z'),
 };
 

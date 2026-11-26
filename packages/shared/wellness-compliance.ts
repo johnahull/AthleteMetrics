@@ -27,7 +27,7 @@ export interface RequestCompletionRate {
   windows?: { last7: DayCompliance; last28: DayCompliance };
 }
 
-const DAY_MS =24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const utcDay = (d: Date) => d.toISOString().slice(0, 10);
 
 export function computeDayCompliance(input: {

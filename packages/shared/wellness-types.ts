@@ -194,7 +194,7 @@ export interface WellnessRequest {
   expiresAt: Date | null;
   status: RequestStatus;
   /** Anytime (standing) request: never expires; the athlete may answer it any day */
-  isStanding?: boolean;
+  isStanding: boolean;
   createdAt: Date;
 }
 
