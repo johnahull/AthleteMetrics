@@ -842,11 +842,12 @@ export function registerImportExportRoutes(app: Express) {
         // PERFORMANCE: Pre-load all athletes to avoid N+1 query problem
         // Instead of querying database for each CSV row, load all athletes once and use in-memory lookup
         const organizationId = athleteImportOrgId!;
+        // The legacy body teamId must be a team of the import organization
+        const legacyTeamId: string | undefined = teamId || undefined;
+        if (legacyTeamId && !(await storage.getTeams(organizationId)).some(t => t.id === legacyTeamId)) {
+          return res.status(403).json({ message: "The selected team is not in this organization" });
+        }
         const allAthletes = await storage.getAthletes({ organizationId });
-        // The legacy body teamId is used only when it is a team of the import organization
-        const legacyTeamId = teamId && (await storage.getTeams(organizationId)).some(t => t.id === teamId)
-          ? teamId as string
-          : undefined;
 
         // Create fast lookup map: "firstname:lastname" => athlete
         const athleteMap = new Map(

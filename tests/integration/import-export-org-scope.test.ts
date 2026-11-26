@@ -39,6 +39,8 @@ describe('import/export and athlete list organization scope', () => {
   const teamNameA = `Scope Team A ${suffix}`;
   const teamNameB = `Scope Team B ${suffix}`;
   let coachA: any, athleteA: any, mateA: any, coachB: any, noOrg: any, multi: any, victimB: any, siteAdmin: any;
+  // athlete in the first organization by name (A), coach in the second (B)
+  let mixed: any;
   const cookies: Record<string, string> = {};
 
   const mk = async (name: string, hashed: string, extra: Record<string, unknown> = {}) =>
@@ -83,6 +85,7 @@ describe('import/export and athlete list organization scope', () => {
     multi = await mk('Multi', hashed);
     victimB = await mk('VictimB', hashed);
     siteAdmin = await mk('SiteAdmin', hashed, { isSiteAdmin: true });
+    mixed = await mk('Mixed', hashed);
 
     await db.insert(userOrganizations).values([
       { userId: coachA.id, organizationId: orgA, role: 'coach' },
@@ -92,6 +95,8 @@ describe('import/export and athlete list organization scope', () => {
       { userId: multi.id, organizationId: orgA, role: 'athlete' },
       { userId: multi.id, organizationId: orgB, role: 'athlete' },
       { userId: victimB.id, organizationId: orgB, role: 'athlete' },
+      { userId: mixed.id, organizationId: orgA, role: 'athlete' },
+      { userId: mixed.id, organizationId: orgB, role: 'coach' },
     ]);
     const joinedAt = new Date('2020-01-01');
     await db.insert(userTeams).values([
@@ -106,7 +111,7 @@ describe('import/export and athlete list organization scope', () => {
     });
     await db.insert(measurements).values([row(orgA, '21.11'), row(orgB, '22.22'), row(null, '23.33')]);
 
-    for (const [name, u] of Object.entries({ coachA, athleteA, coachB, noOrg, siteAdmin })) {
+    for (const [name, u] of Object.entries({ coachA, athleteA, coachB, noOrg, siteAdmin, mixed })) {
       const login = await request(app).post('/api/auth/login').send({ username: u.username, password: PASSWORD });
       expect(login.status, `${name} login`).toBe(200);
       cookies[name] = login.headers['set-cookie'][0];
@@ -236,11 +241,10 @@ describe('import/export and athlete list organization scope', () => {
       expect(mate.birthDate).toBe('2010-05-05');
     });
 
-    it('a coach matches only athletes of the organization and cannot attach another organization\'s team', async () => {
+    it('a coach matches only athletes of the organization and not a team of another organization by name', async () => {
       const res = await request(app)
         .post('/api/import/athletes')
         .set('Cookie', cookies.coachA)
-        .field('teamId', teamB)
         .field('options', JSON.stringify({ organizationId: orgA, athleteMode: 'smart_import', teamHandling: 'leave_teamless' }))
         .attach('file', csv([`Iescope${tag},VictimB,2001-01-01,${teamNameB}`]), 'athletes.csv');
       expect(res.status).toBe(200);
@@ -281,6 +285,82 @@ describe('import/export and athlete list organization scope', () => {
     });
   });
 
+
+  describe('a user who is an athlete in the first organization and a coach in the second', () => {
+    for (const path of ['/api/export/athletes', '/api/export/measurements']) {
+      it(`${path}: refused without an organization (first one), allowed for the second`, async () => {
+        expect((await request(app).get(path).set('Cookie', cookies.mixed)).status).toBe(403);
+        expect((await request(app).get(path).query({ organizationId: orgA }).set('Cookie', cookies.mixed)).status).toBe(403);
+        expect((await request(app).get(path).query({ organizationId: orgB }).set('Cookie', cookies.mixed)).status).toBe(200);
+      });
+    }
+
+    it('/api/export/teams: only the organization where they are staff', async () => {
+      const none = await request(app).get('/api/export/teams').set('Cookie', cookies.mixed);
+      expect(none.status).toBe(200);
+      expect(none.text).toContain(teamB);
+      expect(none.text).not.toContain(teamA);
+      expect((await request(app).get('/api/export/teams').query({ organizationId: orgA }).set('Cookie', cookies.mixed)).status).toBe(403);
+      expect((await request(app).get('/api/export/teams').query({ organizationId: orgB }).set('Cookie', cookies.mixed)).status).toBe(200);
+    });
+
+    it('athlete import: refused without an organization (first one), allowed for the second', async () => {
+      const none = await request(app)
+        .post('/api/import/athletes')
+        .set('Cookie', cookies.mixed)
+        .field('preview', 'true')
+        .attach('file', csv([`Iescope${tag},MateA,2001-01-01,${teamNameA}`]), 'athletes.csv');
+      expect(none.status).toBe(403);
+      const second = await request(app)
+        .post('/api/import/athletes')
+        .set('Cookie', cookies.mixed)
+        .field('preview', 'true')
+        .field('options', JSON.stringify({ organizationId: orgB }))
+        .attach('file', csv([`Iescope${tag},VictimB,2010-05-05,${teamNameB}`]), 'athletes.csv');
+      expect(second.status).toBe(200);
+    });
+  });
+
+  describe('other request shapes', () => {
+    it('a repeated organizationId param falls back to the caller\'s own organization', async () => {
+      const res = await request(app)
+        .get('/api/export/athletes')
+        .query({ organizationId: [orgB, orgB] })
+        .set('Cookie', cookies.coachA);
+      expect(res.status).toBe(200);
+      expect(res.text).toContain('AthleteA');
+      expect(res.text).not.toContain(victimB.emails[0]);
+    });
+
+    it('a coach preview lists only teams missing from the organization', async () => {
+      const res = await request(app)
+        .post('/api/import/athletes')
+        .set('Cookie', cookies.coachA)
+        .field('preview', 'true')
+        .field('options', JSON.stringify({ organizationId: orgA }))
+        .attach('file', csv([`Iescope${tag},AthleteA,2010-05-05,${teamNameA}`, `Iescope${tag},MateA,2010-05-05,${teamNameB}`]), 'athletes.csv');
+      expect(res.status).toBe(200);
+      expect(res.body.missingTeams.map((t: any) => t.teamName)).toEqual([teamNameB]);
+    });
+
+    it('the teams export with an organization where the caller is not staff is refused', async () => {
+      const res = await request(app).get('/api/export/teams').query({ organizationId: orgA }).set('Cookie', cookies.athleteA);
+      expect(res.status).toBe(403);
+    });
+
+    it('a legacy teamId of another organization is refused before anything is written', async () => {
+      const res = await request(app)
+        .post('/api/import/athletes')
+        .set('Cookie', cookies.coachA)
+        .field('teamId', teamB)
+        .field('options', JSON.stringify({ organizationId: orgA, athleteMode: 'smart_import', teamHandling: 'leave_teamless' }))
+        .attach('file', csv([`Iescope${tag},Legacy,2001-01-01,No Such Team ${suffix}`]), 'athletes.csv');
+      expect(res.status).toBe(403);
+      const rows = await db.select({ id: users.id }).from(users).where(eq(users.lastName, 'Legacy'));
+      expect(rows).toHaveLength(0);
+    });
+  });
+
   describe('GET /api/athletes', () => {
     it('gives an athlete member teammates\' names only, and their own record in full', async () => {
       const res = await request(app).get('/api/athletes').query({ organizationId: orgA }).set('Cookie', cookies.athleteA);
@@ -293,6 +373,24 @@ describe('import/export and athlete list organization scope', () => {
       const self = res.body.find((a: any) => a.id === athleteA.id);
       expect(self.emails).toEqual([athleteA.emails[0]]);
       expect(self.birthDate).toBeTruthy();
+    });
+
+    it('ignores birth year filters for an athlete member, so they reveal nothing', async () => {
+      const res = await request(app)
+        .get('/api/athletes')
+        .query({ organizationId: orgA, birthYearFrom: 2000, birthYearTo: 2001 })
+        .set('Cookie', cookies.athleteA);
+      expect(res.status).toBe(200);
+      expect(res.body.map((a: any) => a.id)).toContain(mateA.id);
+    });
+
+    it('applies birth year filters for a coach', async () => {
+      const res = await request(app)
+        .get('/api/athletes')
+        .query({ organizationId: orgA, birthYearFrom: 2000, birthYearTo: 2001 })
+        .set('Cookie', cookies.coachA);
+      expect(res.status).toBe(200);
+      expect(res.body.map((a: any) => a.id)).not.toContain(mateA.id);
     });
 
     it('gives a coach the full records', async () => {

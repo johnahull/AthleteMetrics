@@ -130,9 +130,6 @@ export function registerAthleteRoutes(app: Express) {
       if (validatedParams.teamId) filters.teamId = validatedParams.teamId;
       if (validatedParams.search) filters.search = validatedParams.search;
       if (validatedParams.gender) filters.gender = validatedParams.gender;
-      if (validatedParams.birthYearFrom !== undefined) filters.birthYearFrom = validatedParams.birthYearFrom;
-      if (validatedParams.birthYearTo !== undefined) filters.birthYearTo = validatedParams.birthYearTo;
-      if (validatedParams.includeUnknownBirthYear !== undefined) filters.includeUnknownBirthYear = validatedParams.includeUnknownBirthYear;
 
       // For org admins and coaches, automatically filter by their organization unless they're a site admin
       const user = req.session.user;
@@ -164,6 +161,17 @@ export function registerAthleteRoutes(app: Express) {
       // Set the organization filter to the effective org ID
       if (orgAccessResult.effectiveOrgId) {
         filters.organizationId = orgAccessResult.effectiveOrgId;
+      }
+
+      // A plain member (athlete, guest, parent) of the organization gets teammates' names, not their contact, age
+      // or body details; staff of that organization and site admins keep them. Their own record stays complete.
+      // Birth year filters are staff-only too: on a member's request they would reveal the hidden birth year.
+      const viewerRole = orgAccessResult.userOrgs?.find(o => o.organizationId === orgAccessResult.effectiveOrgId)?.role;
+      const viewerIsPlainMember = visibilityForRole(viewerRole, isSiteAdmin(user)) === "member";
+      if (!viewerIsPlainMember) {
+        if (validatedParams.birthYearFrom !== undefined) filters.birthYearFrom = validatedParams.birthYearFrom;
+        if (validatedParams.birthYearTo !== undefined) filters.birthYearTo = validatedParams.birthYearTo;
+        if (validatedParams.includeUnknownBirthYear !== undefined) filters.includeUnknownBirthYear = validatedParams.includeUnknownBirthYear;
       }
 
       console.log('[GET /api/athletes] Filters:', filters);
@@ -199,10 +207,7 @@ export function registerAthleteRoutes(app: Express) {
         isActive: athlete.isActive,
       }));
 
-      // A plain member (athlete, guest, parent) of the organization gets teammates' names, not their contact, age
-      // or body details; staff of that organization and site admins keep them. Their own record stays complete.
-      const viewerRole = orgAccessResult.userOrgs?.find(o => o.organizationId === orgAccessResult.effectiveOrgId)?.role;
-      if (visibilityForRole(viewerRole, isSiteAdmin(user)) === "member") {
+      if (viewerIsPlainMember) {
         return res.json(transformedAthletes.map(a => (a.id === user?.id ? a : withoutPrivateMemberDetails(a))));
       }
 
