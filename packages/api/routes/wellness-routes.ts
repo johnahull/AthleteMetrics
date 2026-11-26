@@ -37,7 +37,7 @@ import {
   submitWellnessResponseSchema,
   generateResponseValidationSchema,
 } from "@shared/wellness-validation";
-import type { WellnessResponse } from "@shared/wellness-types";
+import type { WellnessResponse, WellnessTemplateConfig } from "@shared/wellness-types";
 import type { WellnessTrendDataPoint } from "@shared/wellness-analytics-types";
 import { calculateAthleteStatus, getCommonInjuries, calculateTrend, summarizeEarlierEntry } from "@shared/wellness-status-utils";
 import { WELLNESS_CONSTANTS } from "@shared/wellness-constants";
@@ -85,6 +85,19 @@ async function pickResponseTeam(athleteId: string, organizationId: string | null
   const memberships = (await storage.getUserTeams(athleteId))
     .filter(m => m.isActive && !m.leftAt && m.team.organizationId === organizationId);
   return (memberships.find(m => targetTeamIds?.includes(m.teamId)) ?? memberships[0])?.team ?? null;
+}
+
+// Looks up each row's template in one query; name only the organization's own or system templates
+// (organizationId null)
+async function usableTemplates<T extends { templateId: string; organizationId: string }>(rows: T[]) {
+  const templates = await storage.getWellnessTemplatesBatch([...new Set(rows.map(r => r.templateId))]);
+  const byId = new Map(templates.map(t => [t.id, t]));
+  return (row: T) => {
+    const template = byId.get(row.templateId);
+    return template && (template.organizationId === row.organizationId || template.organizationId === null)
+      ? template
+      : undefined;
+  };
 }
 
 // Helper function to verify if an athlete is targeted by a wellness request
@@ -586,8 +599,9 @@ export function registerWellnessRoutes(app: Express) {
         const status = req.query.status as string | undefined;
 
         const requests = await storage.getWellnessRequests(organizationId, { status: status as any });
+        const templateOf = await usableTemplates(requests);
 
-        res.json(requests);
+        res.json(requests.map(r => ({ ...r, templateName: templateOf(r)?.name })));
       } catch (error: any) {
         console.error("Failed to fetch wellness requests:", error);
         res.status(500).json(createErrorResponse("Failed to fetch wellness requests", error));
@@ -839,9 +853,9 @@ export function registerWellnessRoutes(app: Express) {
           const athletes = await storage.getUsersByIds(athleteIds);
           const athleteMap = new Map(athletes.map(a => [a.id, a]));
 
-          // Base URL for athlete_account distribution
-          const appUrl = process.env.APP_URL || 'https://athletemetrics.app';
-          const athleteAccountUrl = `${appUrl}/wellness-my-requests`;
+          // Same base-URL chain as password reset and email links; BASE_URL is the magic-link base
+          const appUrl = process.env.APP_URL || process.env.BASE_URL || 'https://athletemetrics.app';
+          const athleteAccountUrl = `${appUrl}/wellness/my-requests`;
 
           // Send push notification to each targeted athlete
           for (const athleteId of athleteIds) {
@@ -1314,7 +1328,17 @@ export function registerWellnessRoutes(app: Express) {
           request.isStanding || !respondedRequestIds.has(request.id)
         );
 
-        res.json(pendingRequests);
+        // What the request card shows, so the athlete needs no template lookups
+        const templateOf = await usableTemplates(pendingRequests);
+        res.json(pendingRequests.map(r => {
+          const template = templateOf(r);
+          return {
+            ...r,
+            templateName: template?.name,
+            templateDescription: template?.description ?? undefined,
+            templateQuestionCount: (template?.config as WellnessTemplateConfig | undefined)?.questions.length,
+          };
+        }));
       } catch (error: any) {
         console.error("Failed to fetch athlete wellness requests:", error);
         res.status(500).json(createErrorResponse("Failed to fetch wellness requests", error));
@@ -1351,9 +1375,10 @@ export function registerWellnessRoutes(app: Express) {
         // Apply pagination
         const totalCount = allResponses.length;
         const paginatedResponses = allResponses.slice(offset, offset + limit);
+        const templateOf = await usableTemplates(paginatedResponses);
 
         res.json({
-          responses: paginatedResponses,
+          responses: paginatedResponses.map(r => ({ ...r, templateName: templateOf(r)?.name })),
           pagination: {
             page,
             limit,

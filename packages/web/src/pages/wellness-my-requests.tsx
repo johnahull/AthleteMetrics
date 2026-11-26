@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Calendar, Clock, AlertCircle } from 'lucide-react';
-import type { WellnessRequest, WellnessTemplate } from '@shared/wellness-types';
+import type { WellnessRequest } from '@shared/wellness-types';
 import { Link, useLocation } from 'wouter';
 
 const API_BASE = '';
@@ -30,30 +30,6 @@ export default function WellnessMyRequests() {
       return res.json();
     },
     enabled: !!user,
-  });
-
-  // Fetch templates to display names
-  const templateIds = requests?.map((r) => r.templateId) || [];
-  const {
-    data: templates,
-  } = useQuery<Record<string, WellnessTemplate>>({
-    queryKey: ['wellness-templates-batch', templateIds],
-    queryFn: async () => {
-      const templateMap: Record<string, WellnessTemplate> = {};
-
-      // Fetch all templates in parallel
-      await Promise.all(
-        templateIds.map(async (templateId) => {
-          const res = await fetch(`${API_BASE}/api/wellness/templates/${templateId}`);
-          if (res.ok) {
-            templateMap[templateId] = await res.json();
-          }
-        })
-      );
-
-      return templateMap;
-    },
-    enabled: templateIds.length > 0,
   });
 
   const handleStartQuestionnaire = (request: WellnessRequest) => {
@@ -126,16 +102,16 @@ export default function WellnessMyRequests() {
   const oneTimeRequests = activeRequests.filter((r) => !r.isStanding);
 
   const renderRequestCard = (request: WellnessRequest) => {
-    const template = templates?.[request.templateId];
+    const questionCount = request.templateQuestionCount;
 
     return (
       <Card key={request.id} data-testid="wellness-request-card">
         <CardHeader>
           <div className="flex items-start justify-between">
             <div className="space-y-1">
-              <CardTitle>{template?.name || 'Wellness Check-In'}</CardTitle>
-              {template?.description && (
-                <CardDescription>{template.description}</CardDescription>
+              <CardTitle>{request.templateName || 'Wellness Check-In'}</CardTitle>
+              {request.templateDescription && (
+                <CardDescription>{request.templateDescription}</CardDescription>
               )}
             </div>
             {getStatusBadge(request)}
@@ -158,10 +134,10 @@ export default function WellnessMyRequests() {
               )}
             </div>
 
-            {template && (
+            {questionCount !== undefined && (
               <div className="text-sm text-muted-foreground">
-                {template.config.questions.length} questions •{' '}
-                ~{Math.ceil(template.config.questions.length * 0.5)} min
+                {questionCount} questions •{' '}
+                ~{Math.ceil(questionCount * 0.5)} min
               </div>
             )}
 

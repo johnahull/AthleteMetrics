@@ -2089,3 +2089,143 @@ describe('Authorization & Cross-Organization Access', () => {
     expect(res.status).toBe(200);
   });
 });
+
+describe('POST .../resend-notifications push link', () => {
+  const savedAppUrl = process.env.APP_URL;
+  afterEach(() => {
+    if (savedAppUrl === undefined) delete process.env.APP_URL;
+    else process.env.APP_URL = savedAppUrl;
+  });
+
+  it('links an athlete_account reminder to the My Requests page', async () => {
+    process.env.APP_URL = 'https://app.example.com';
+    const { getPushNotificationService } = await import('../../packages/api/services/push-notification-service');
+    const sendToUser = vi
+      .spyOn(getPushNotificationService(db), 'sendToUser')
+      .mockResolvedValue({ successful: 1, failed: 0 } as any);
+
+    const template = await storage.createWellnessTemplate({
+      organizationId: testOrg.id,
+      name: 'Reminder Link Template',
+      config: { questions: [] },
+      createdBy: testUser.id,
+    });
+    createdTemplateIds.push(template.id);
+    const req = await storage.createWellnessRequest({
+      organizationId: testOrg.id,
+      templateId: template.id,
+      requestedBy: testUser.id,
+      distributionMethod: 'athlete_account',
+      targetAthleteIds: [testAthlete.id],
+      status: 'active',
+    } as any);
+    createdRequestIds.push(req.id);
+
+    try {
+      const res = await request(app)
+        .post(`/api/organizations/${testOrg.id}/wellness/requests/${req.id}/resend-notifications`)
+        .set('Cookie', coachCookie);
+
+      expect(res.status).toBe(200);
+      expect(sendToUser).toHaveBeenCalledWith(
+        testAthlete.id,
+        expect.objectContaining({ url: 'https://app.example.com/wellness/my-requests' }),
+        testOrg.id
+      );
+    } finally {
+      sendToUser.mockRestore();
+    }
+  });
+});
+
+describe('Template names on request and response lists', () => {
+  let otherOrg: any;
+  let ownTpl: any;
+  let systemTpl: any;
+  let foreignTpl: any;
+  const reqIds: Record<string, string> = {};
+  const extraTemplateIds: string[] = [];
+
+  const config = (n: number) => ({
+    questions: Array.from({ length: n }, (_, i) => ({ id: `q${i}`, type: 'scale', label: `Q${i}`, scaleMin: 1, scaleMax: 10, required: false })),
+  });
+
+  beforeAll(async () => {
+    [otherOrg] = await db.insert(organizations).values({ name: `Template Names Other ${Date.now()}`, orgType: 'club' }).returning();
+    ownTpl = await storage.createWellnessTemplate({
+      organizationId: testOrg.id, name: 'Own Morning Check', description: 'Own description', config: config(3), createdBy: testUser.id,
+    } as any);
+    systemTpl = await storage.createWellnessTemplate({
+      organizationId: null, name: 'System Check', description: 'System description', config: config(2), createdBy: testUser.id,
+    } as any);
+    foreignTpl = await storage.createWellnessTemplate({
+      organizationId: otherOrg.id, name: 'Second Org Template', description: 'Second org description', config: config(4), createdBy: testUser.id,
+    } as any);
+    extraTemplateIds.push(ownTpl.id, systemTpl.id, foreignTpl.id);
+  });
+
+  beforeEach(async () => {
+    for (const [key, tpl] of [['own', ownTpl], ['system', systemTpl], ['foreign', foreignTpl]] as const) {
+      const r = await storage.createWellnessRequest({
+        organizationId: testOrg.id,
+        templateId: tpl.id,
+        requestedBy: testUser.id,
+        distributionMethod: 'athlete_account',
+        targetAthleteIds: [testAthlete.id],
+        status: 'active',
+        isStanding: true,
+      } as any);
+      reqIds[key] = r.id;
+      createdRequestIds.push(r.id);
+    }
+  });
+
+  afterAll(async () => {
+    for (const id of extraTemplateIds) {
+      await db.delete(wellnessResponses).where(eq(wellnessResponses.templateId, id));
+      await db.delete(wellnessRequests).where(eq(wellnessRequests.templateId, id));
+      await db.delete(wellnessTemplates).where(eq(wellnessTemplates.id, id));
+    }
+    if (otherOrg) await db.delete(organizations).where(eq(organizations.id, otherOrg.id));
+  });
+
+  it('GET /api/organizations/:id/wellness/requests names the organization\'s own and system templates', async () => {
+    const res = await request(app).get(`/api/organizations/${testOrg.id}/wellness/requests`).set('Cookie', coachCookie);
+
+    expect(res.status).toBe(200);
+    const byId = new Map(res.body.map((r: any) => [r.id, r]));
+    expect((byId.get(reqIds.own) as any).templateName).toBe('Own Morning Check');
+    expect((byId.get(reqIds.system) as any).templateName).toBe('System Check');
+    expect((byId.get(reqIds.foreign) as any).templateName).toBeUndefined();
+    expect(JSON.stringify(res.body)).not.toContain('Second Org Template');
+  });
+
+  it('GET /api/wellness/my-requests includes what the request card shows', async () => {
+    const res = await request(app).get('/api/wellness/my-requests').set('Cookie', athleteCookie);
+
+    expect(res.status).toBe(200);
+    const byId = new Map(res.body.map((r: any) => [r.id, r]));
+    expect(byId.get(reqIds.own)).toMatchObject({
+      templateName: 'Own Morning Check', templateDescription: 'Own description', templateQuestionCount: 3,
+    });
+    expect(byId.get(reqIds.system)).toMatchObject({ templateName: 'System Check', templateQuestionCount: 2 });
+    expect((byId.get(reqIds.foreign) as any).templateName).toBeUndefined();
+    expect(JSON.stringify(res.body)).not.toContain('Second org');
+  });
+
+  it('GET /api/wellness/my-responses names the template of each response', async () => {
+    const rows = await db.insert(wellnessResponses).values([
+      { organizationId: testOrg.id, templateId: ownTpl.id, requestId: reqIds.own, userId: testAthlete.id, userFullName: 'Test Athlete', date: '2025-01-10', submittedAt: new Date('2025-01-10T08:00:00Z'), responses: {} },
+      { organizationId: testOrg.id, templateId: foreignTpl.id, requestId: reqIds.foreign, userId: testAthlete.id, userFullName: 'Test Athlete', date: '2025-01-11', submittedAt: new Date('2025-01-11T08:00:00Z'), responses: {} },
+    ] as any).returning();
+    createdResponseIds.push(...rows.map(r => r.id));
+
+    const res = await request(app).get('/api/wellness/my-responses?limit=100').set('Cookie', athleteCookie);
+
+    expect(res.status).toBe(200);
+    const byId = new Map(res.body.responses.map((r: any) => [r.id, r]));
+    expect((byId.get(rows[0].id) as any).templateName).toBe('Own Morning Check');
+    expect((byId.get(rows[1].id) as any).templateName).toBeUndefined();
+    expect(JSON.stringify(res.body)).not.toContain('Second Org Template');
+  });
+});

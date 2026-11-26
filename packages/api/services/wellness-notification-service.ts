@@ -138,8 +138,9 @@ export async function sendWellnessRequestNotifications(
       const athletes = await storage.getUsersByIds(athleteIds);
       const athleteMap = new Map(athletes.map(a => [a.id, a]));
 
-      const appUrl = process.env.APP_URL || 'https://athletemetrics.app';
-      const athleteAccountUrl = `${appUrl}/wellness-my-requests`;
+      // Same base-URL chain as password reset and email links; BASE_URL is the magic-link base
+      const appUrl = process.env.APP_URL || process.env.BASE_URL || 'https://athletemetrics.app';
+      const athleteAccountUrl = `${appUrl}/wellness/my-requests`;
 
       for (const athleteId of athleteIds) {
         const athlete = athleteMap.get(athleteId);

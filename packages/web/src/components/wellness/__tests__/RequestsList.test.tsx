@@ -122,6 +122,16 @@ describe('RequestsList compliance', () => {
     expect(await screen.findByText('Could not load')).toBeInTheDocument();
   });
 
+  it('shows the template name, or the short template id when there is none', () => {
+    renderList([
+      { ...baseRequest, id: 'req-named', templateName: 'Morning check' },
+      { ...baseRequest, id: 'req-unnamed' },
+    ]);
+
+    expect(screen.getByTestId('request-row-req-named')).toHaveTextContent('Morning check');
+    expect(screen.getByTestId('request-row-req-unnamed')).toHaveTextContent('Template #template');
+  });
+
   it('leaves one-time requests unchanged and does not fetch compliance for them', () => {
     renderList([baseRequest]);
 

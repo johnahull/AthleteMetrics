@@ -198,7 +198,7 @@ export default function RequestsList({ requests, organizationId }: RequestsListP
                       className="cursor-pointer hover:bg-gray-50"
                     >
                       <TableCell>
-                        <p className="font-medium">Template #{request.templateId.slice(0, 8)}</p>
+                        <p className="font-medium">{request.templateName || `Template #${request.templateId.slice(0, 8)}`}</p>
                       </TableCell>
                       <TableCell data-testid={`request-status-${request.id}`}>
                         {getStatusBadge(request.status)}

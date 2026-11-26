@@ -455,7 +455,7 @@ export default function WellnessSubmit() {
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
             <p className="font-semibold">Please sign in to submit this check-in</p>
-            <Link href="/login" className="text-sm underline mt-1 inline-block">Sign in</Link>
+            <Link href={`/login?redirect=${encodeURIComponent(`/wellness/submit/${token}`)}`} className="text-sm underline mt-1 inline-block">Sign in</Link>
           </AlertDescription>
         </Alert>
       </div>

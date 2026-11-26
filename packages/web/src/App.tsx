@@ -500,6 +500,10 @@ function Router() {
           <WellnessMyRequests />
         </RouteWrapper>
       </Route>
+      {/* Older push notifications linked here */}
+      <Route path="/wellness-my-requests">
+        <Redirect to="/wellness/my-requests" />
+      </Route>
       <Route path="/wellness/history">
         <RouteWrapper loadingText="Loading History...">
           <WellnessHistory />

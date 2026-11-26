@@ -243,6 +243,11 @@ describe('WellnessSubmit - standing requests', () => {
 
     expect(await screen.findByText('Please sign in to submit this check-in')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Submit' })).not.toBeInTheDocument();
+    // Sign in returns the athlete to this check-in
+    expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute(
+      'href',
+      `/login?redirect=${encodeURIComponent('/wellness/submit/tok-1')}`
+    );
   });
 
   it('still locks a one-time request after a submission', async () => {

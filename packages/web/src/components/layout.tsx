@@ -80,7 +80,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isLoading && !user && !isPublicRoute) {
-      setLocation("/login");
+      // Return here after sign-in; the login form only follows same-origin paths (safeRedirectPath)
+      setLocation(`/login?redirect=${encodeURIComponent(location + window.location.search)}`);
     }
     // COPPA consent gate: block pending_consent minors from accessing any
     // protected route. Without this, a minor who is authenticated but awaiting
