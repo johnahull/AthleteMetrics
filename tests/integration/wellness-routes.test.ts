@@ -2159,7 +2159,7 @@ describe('Template names on request and response lists', () => {
       organizationId: null, name: 'System Check', description: 'System description', config: config(2), createdBy: testUser.id,
     } as any);
     foreignTpl = await storage.createWellnessTemplate({
-      organizationId: otherOrg.id, name: 'Foreign Secret Name', description: 'Foreign description', config: config(4), createdBy: testUser.id,
+      organizationId: otherOrg.id, name: 'Second Org Template', description: 'Second org description', config: config(4), createdBy: testUser.id,
     } as any);
     extraTemplateIds.push(ownTpl.id, systemTpl.id, foreignTpl.id);
   });
@@ -2189,7 +2189,7 @@ describe('Template names on request and response lists', () => {
     if (otherOrg) await db.delete(organizations).where(eq(organizations.id, otherOrg.id));
   });
 
-  it('GET /api/organizations/:id/wellness/requests names own and system templates, never another organization\'s', async () => {
+  it('GET /api/organizations/:id/wellness/requests names the organization\'s own and system templates', async () => {
     const res = await request(app).get(`/api/organizations/${testOrg.id}/wellness/requests`).set('Cookie', coachCookie);
 
     expect(res.status).toBe(200);
@@ -2197,7 +2197,7 @@ describe('Template names on request and response lists', () => {
     expect((byId.get(reqIds.own) as any).templateName).toBe('Own Morning Check');
     expect((byId.get(reqIds.system) as any).templateName).toBe('System Check');
     expect((byId.get(reqIds.foreign) as any).templateName).toBeUndefined();
-    expect(JSON.stringify(res.body)).not.toContain('Foreign Secret Name');
+    expect(JSON.stringify(res.body)).not.toContain('Second Org Template');
   });
 
   it('GET /api/wellness/my-requests includes what the request card shows', async () => {
@@ -2210,7 +2210,7 @@ describe('Template names on request and response lists', () => {
     });
     expect(byId.get(reqIds.system)).toMatchObject({ templateName: 'System Check', templateQuestionCount: 2 });
     expect((byId.get(reqIds.foreign) as any).templateName).toBeUndefined();
-    expect(JSON.stringify(res.body)).not.toContain('Foreign');
+    expect(JSON.stringify(res.body)).not.toContain('Second org');
   });
 
   it('GET /api/wellness/my-responses names the template of each response', async () => {
@@ -2226,6 +2226,6 @@ describe('Template names on request and response lists', () => {
     const byId = new Map(res.body.responses.map((r: any) => [r.id, r]));
     expect((byId.get(rows[0].id) as any).templateName).toBe('Own Morning Check');
     expect((byId.get(rows[1].id) as any).templateName).toBeUndefined();
-    expect(JSON.stringify(res.body)).not.toContain('Foreign Secret Name');
+    expect(JSON.stringify(res.body)).not.toContain('Second Org Template');
   });
 });

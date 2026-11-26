@@ -79,8 +79,8 @@ async function pickResponseTeam(athleteId: string, organizationId: string | null
   return (memberships.find(m => targetTeamIds?.includes(m.teamId)) ?? memberships[0])?.team ?? null;
 }
 
-// Looks up each row's template in one query; a template is returned only when it belongs to the row's
-// organization or is a system template (organizationId null), so another organization's template never leaks
+// Looks up each row's template in one query; name only the organization's own or system templates
+// (organizationId null)
 async function usableTemplates<T extends { templateId: string; organizationId: string }>(rows: T[]) {
   const templates = await storage.getWellnessTemplatesBatch([...new Set(rows.map(r => r.templateId))]);
   const byId = new Map(templates.map(t => [t.id, t]));

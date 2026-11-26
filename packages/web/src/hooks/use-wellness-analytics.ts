@@ -156,7 +156,8 @@ export function useWellnessAnalytics({
     data: templates,
     isLoading: templatesLoading,
   } = useQuery<WellnessTemplate[]>({
-    queryKey: ['/api/organizations/:orgId/wellness/templates', organizationId, templateIds],
+    // Under the prefix that template edits invalidate
+    queryKey: ['/api/wellness/templates', organizationId, 'analytics', templateIds],
     queryFn: async () => {
       // Fetch all unique templates used in responses (organization-scoped: the public route serves system templates only)
       const templatePromises = templateIds.map(async (templateId) => {
@@ -190,24 +191,23 @@ export function useWellnessAnalytics({
     return grouped;
   }, [responses, templates]);
 
-  // Get scale orientation from first template (for trend calculation)
-  const scaleOrientation = useMemo(() => {
-    if (!templates || templates.length === 0) return 'higher_is_better' as const;
-    return templates[0].config.statusConfig?.scaleOrientation || 'higher_is_better';
-  }, [templates]);
+  // The template with the most responses sets the scale (ties: lowest template id), whatever the response order
+  const primaryTemplate = useMemo(
+    () =>
+      Object.values(responsesByTemplate).sort(
+        (a, b) => b.responses.length - a.responses.length || a.template.id.localeCompare(b.template.id)
+      )[0]?.template,
+    [responsesByTemplate]
+  );
 
-  // Get scale range from first template for trend calculation
+  // Scale orientation for trend calculation
+  const scaleOrientation = primaryTemplate?.config.statusConfig?.scaleOrientation || 'higher_is_better';
+
+  // Scale range for trend calculation
   const scaleRange = useMemo(() => {
-    if (!templates || templates.length === 0) return 10; // Default to 10
-    const firstTemplate = templates[0];
-    const scaleQuestions = firstTemplate.config.questions.filter(q => q.type === 'scale');
-    if (scaleQuestions.length === 0) return 10;
-    const firstScale = scaleQuestions[0];
-    if ('scaleMax' in firstScale) {
-      return firstScale.scaleMax;
-    }
-    return 10;
-  }, [templates]);
+    const firstScale = primaryTemplate?.config.questions.find(q => q.type === 'scale');
+    return firstScale && 'scaleMax' in firstScale ? firstScale.scaleMax : 10; // Default to 10
+  }, [primaryTemplate]);
 
   // Calculate summary statistics from responses
   const summary: WellnessSummary | null = responses
@@ -275,6 +275,7 @@ export function useWellnessAnalytics({
     requests,
     completionRate,
     scaleOrientation,
+    scaleRange,
     isLoading: responsesLoading || trendsLoading || templatesLoading || requestsLoading,
     error: responsesError || trendsError,
     refetch: () => {

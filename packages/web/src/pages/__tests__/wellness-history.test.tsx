@@ -84,4 +84,20 @@ describe('WellnessHistory', () => {
     expect(within(detail).getByText('Left knee')).toBeInTheDocument();
     expect(within(detail).queryByText('[object Object]')).not.toBeInTheDocument();
   });
+
+  it('shows the question labels of a system template when the organization route does not answer', async () => {
+    mockFetch([response('r1', 'Morning check')]);
+    const serve = global.fetch as any;
+    global.fetch = vi.fn(async (url: any) => {
+      const u = String(url);
+      if (u === '/api/wellness/templates/tpl-1') return { ok: true, json: async () => ({ ...template, organizationId: null }) } as Response;
+      if (u.startsWith('/api/organizations/')) return { ok: false, status: 403, json: async () => ({}) } as Response;
+      return serve(url);
+    }) as any;
+    renderPage();
+
+    await userEvent.click(await screen.findByText('Morning check'));
+    const detail = await screen.findByTestId('response-detail');
+    expect(await within(detail).findByText('Energy level')).toBeInTheDocument();
+  });
 });

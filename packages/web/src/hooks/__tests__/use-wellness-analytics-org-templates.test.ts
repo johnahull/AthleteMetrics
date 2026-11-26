@@ -5,10 +5,11 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 import { useWellnessAnalytics } from '../use-wellness-analytics';
+import { useUpdateWellnessTemplate } from '../use-wellness-templates';
 
 const ORG = 'org-123';
 
@@ -61,9 +62,13 @@ function mockServer(responses: unknown[]) {
 describe('useWellnessAnalytics - organization templates', () => {
   let wrapper: React.FC<{ children: React.ReactNode }>;
 
-  beforeEach(() => {
+  const newWrapper = (): React.FC<{ children: React.ReactNode }> => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    wrapper = ({ children }) => React.createElement(QueryClientProvider, { client: queryClient }, children);
+    return ({ children }) => React.createElement(QueryClientProvider, { client: queryClient }, children);
+  };
+
+  beforeEach(() => {
+    wrapper = newWrapper();
   });
 
   const render = () =>
@@ -78,18 +83,65 @@ describe('useWellnessAnalytics - organization templates', () => {
     expect(result.current.responsesByTemplate['system-tpl']?.responses).toHaveLength(1);
   });
 
-  it('with mixed scales, still reads orientation and trend from the first template', async () => {
-    mockServer([
-      response('r1', 'org-tpl', '2025-01-10', 2),
-      response('r2', 'system-tpl', '2025-01-11', 8),
-      response('r3', 'org-tpl', '2025-01-20', 4),
-    ]);
-    const { result } = render();
-
+  const scaleFor = async (responses: unknown[]) => {
+    mockServer(responses);
+    const { result, unmount } = renderHook(
+      () => useWellnessAnalytics({ organizationId: ORG, filters: { dateFrom: '2025-01-01', dateTo: '2025-01-31' } }),
+      { wrapper },
+    );
     await waitFor(() => expect(result.current.templates).toHaveLength(2));
-    // templates follow the order the responses name them, so the organization template comes first here
-    expect(result.current.templates![0].id).toBe('org-tpl');
-    expect(result.current.scaleOrientation).toBe('lower_is_better');
-    expect(['up', 'down', 'stable']).toContain(result.current.summary?.trend);
+    const scale = { orientation: result.current.scaleOrientation, range: result.current.scaleRange };
+    unmount();
+    return scale;
+  };
+
+  it.each([
+    ['org-tpl', 'system-tpl', { orientation: 'lower_is_better', range: 5 }],
+    ['system-tpl', 'org-tpl', { orientation: 'higher_is_better', range: 10 }],
+  ])('with mixed scales, reads orientation and range from the most used template (%s), in any response order', async (most, other, expected) => {
+    const responses = [
+      response('r1', other, '2025-01-10', 2),
+      response('r2', most, '2025-01-11', 4),
+      response('r3', most, '2025-01-20', 3),
+    ];
+
+    expect(await scaleFor(responses)).toEqual(expected);
+    wrapper = newWrapper();
+    expect(await scaleFor([...responses].reverse())).toEqual(expected);
+  });
+
+  it('with equally used templates, picks the lowest template id, in any response order', async () => {
+    const responses = [response('r1', 'system-tpl', '2025-01-10', 8), response('r2', 'org-tpl', '2025-01-11', 2)];
+    const expected = { orientation: 'lower_is_better', range: 5 };
+
+    expect(await scaleFor(responses)).toEqual(expected);
+    wrapper = newWrapper();
+    expect(await scaleFor([...responses].reverse())).toEqual(expected);
+  });
+
+  it('reloads templates after a template is edited', async () => {
+    mockServer([response('r1', 'org-tpl', '2025-01-10', 2)]);
+    const serve = global.fetch as any;
+    let name = 'org-tpl';
+    global.fetch = vi.fn((url: string, init?: RequestInit) => {
+      if (init?.method === 'PUT') {
+        name = 'Renamed';
+        return ok({});
+      }
+      if (url === `/api/organizations/${ORG}/wellness/templates/org-tpl`) return ok({ ...orgTemplate, name });
+      return serve(url);
+    }) as any;
+    const { result } = renderHook(
+      () => ({
+        analytics: useWellnessAnalytics({ organizationId: ORG, filters: { dateFrom: '2025-01-01', dateTo: '2025-01-31' } }),
+        update: useUpdateWellnessTemplate(ORG),
+      }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.analytics.templates?.[0]?.name).toBe('org-tpl'));
+
+    await act(() => result.current.update.mutateAsync({ id: 'org-tpl', updates: { name: 'Renamed' } }));
+
+    await waitFor(() => expect(result.current.analytics.templates?.[0]?.name).toBe('Renamed'));
   });
 });

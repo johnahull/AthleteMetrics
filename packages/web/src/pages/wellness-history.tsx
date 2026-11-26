@@ -52,7 +52,9 @@ export default function WellnessHistory() {
     // Fetch template to show question labels
     try {
       // Organization-scoped: the public template route serves system templates only
-      const res = await fetch(`${API_BASE}/api/organizations/${response.organizationId}/wellness/templates/${response.templateId}`);
+      let res = await fetch(`${API_BASE}/api/organizations/${response.organizationId}/wellness/templates/${response.templateId}`);
+      // System templates stay readable after the athlete leaves the organization
+      if (!res.ok) res = await fetch(`${API_BASE}/api/wellness/templates/${response.templateId}`);
       if (res.ok) {
         const template = await res.json();
         setSelectedTemplate(template);
