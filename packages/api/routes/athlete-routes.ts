@@ -40,6 +40,7 @@ import { MeasurementService } from "../services/measurement-service";
 import { dateStringSchema } from "@shared/date-utils";
 import { z } from "zod";
 import { handleParentEmailUpdate } from "../services/parent-link-helper";
+import { visibilityForRole, withoutPrivateMemberDetails } from "../lib/safe-user";
 // Session types are loaded globally
 
 // Rate limiting for athlete endpoints
@@ -197,6 +198,13 @@ export function registerAthleteRoutes(app: Express) {
         gender: athlete.gender,
         isActive: athlete.isActive,
       }));
+
+      // A plain member (athlete, guest, parent) of the organization gets teammates' names, not their contact, age
+      // or body details; staff of that organization and site admins keep them. Their own record stays complete.
+      const viewerRole = orgAccessResult.userOrgs?.find(o => o.organizationId === orgAccessResult.effectiveOrgId)?.role;
+      if (visibilityForRole(viewerRole, isSiteAdmin(user)) === "member") {
+        return res.json(transformedAthletes.map(a => (a.id === user?.id ? a : withoutPrivateMemberDetails(a))));
+      }
 
       res.json(transformedAthletes);
     } catch (error) {
