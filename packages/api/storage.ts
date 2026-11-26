@@ -35,6 +35,7 @@ import {
 import { parentAthleteLinks } from "@shared/schema/tables/coppa";
 import { omitOrgAiTextUnless } from "./services/ai-style-example";
 import type { WellnessTrend } from "@shared/wellness-types";
+import type { RequestCompletionRate } from "@shared/wellness-compliance";
 import { validateMeasurementValue, MeasurementValueValidationError } from "@shared/measurement-value-validation";
 import { isMovementQualityMetric } from "@shared/peer-comparison-exclusions";
 import { assertFlyInDistanceMatches, assertFlyInDistanceOnUpdate } from "@shared/fly-run-in";
@@ -508,19 +509,24 @@ export interface IStorage {
 
   // Wellness Responses
   createWellnessResponse(response: Partial<WellnessResponse>): Promise<WellnessResponse>;
+  createStandingWellnessResponse(
+    response: typeof wellnessResponses.$inferInsert & { requestId: string }
+  ): Promise<{ response: WellnessResponse; replaced: boolean }>;
   getWellnessResponse(id: string): Promise<WellnessResponse | undefined>;
   getWellnessResponsesByAthlete(userId: string, filters?: { startDate?: string; endDate?: string }): Promise<WellnessResponse[]>;
   getWellnessResponsesByOrganization(organizationId: string, filters?: { startDate?: string; endDate?: string }): Promise<WellnessResponse[]>;
 
   // Wellness Batch Operations (Performance Optimization)
   getTeamRostersBatch(organizationId: string): Promise<Array<{ teamId: string; userId: string; userFullName: string }>>;
+  getLatestLiveSubmissions(organizationId: string): Promise<Array<{ userId: string; submittedAt: Date; date: string }>>;
+  getSupersededResponses(organizationId: string, date: string): Promise<WellnessResponse[]>;
   getWellnessTemplatesBatch(templateIds: string[]): Promise<WellnessTemplate[]>;
 
   // Wellness Analytics
   getTeamWellnessSummary(teamId: string, filters: { startDate: string; endDate: string }): Promise<any>;
   getAthleteWellnessSummary(userId: string, filters: { startDate: string; endDate: string }): Promise<any>;
   getWellnessTrends(organizationId: string, filters: { startDate: string; endDate: string; questionIds?: string[] }): Promise<WellnessTrend[]>;
-  getRequestCompletionRate(organizationId: string, requestId: string): Promise<{ completed: number; total: number; percentage: number }>;
+  getRequestCompletionRate(organizationId: string, requestId: string): Promise<RequestCompletionRate>;
 
   // Goals
   getGoalsByUser(userId: string, filters?: { status?: string }): Promise<Goal[]>;
@@ -6287,6 +6293,12 @@ export class DatabaseStorage implements IStorage {
     return wellnessRepository.createWellnessResponse(response);
   }
 
+  async createStandingWellnessResponse(
+    response: typeof wellnessResponses.$inferInsert & { requestId: string }
+  ): Promise<{ response: WellnessResponse; replaced: boolean }> {
+    return wellnessRepository.createStandingWellnessResponse(response);
+  }
+
   async getWellnessResponse(id: string): Promise<WellnessResponse | undefined> {
     return wellnessRepository.getWellnessResponse(id);
   }
@@ -6308,6 +6320,14 @@ export class DatabaseStorage implements IStorage {
    */
   async getTeamRostersBatch(organizationId: string): Promise<Array<{ teamId: string; userId: string; userFullName: string }>> {
     return wellnessRepository.getTeamRostersBatch(organizationId);
+  }
+
+  async getLatestLiveSubmissions(organizationId: string): Promise<Array<{ userId: string; submittedAt: Date; date: string }>> {
+    return wellnessRepository.getLatestLiveSubmissions(organizationId);
+  }
+
+  async getSupersededResponses(organizationId: string, date: string): Promise<WellnessResponse[]> {
+    return wellnessRepository.getSupersededResponses(organizationId, date);
   }
 
   /**
@@ -6342,7 +6362,7 @@ export class DatabaseStorage implements IStorage {
   async getRequestCompletionRate(
     organizationId: string,
     requestId: string
-  ): Promise<{ completed: number; total: number; percentage: number }> {
+  ): Promise<RequestCompletionRate> {
     return wellnessRepository.getRequestCompletionRate(organizationId, requestId);
   }
 

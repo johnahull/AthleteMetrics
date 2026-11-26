@@ -252,7 +252,27 @@ export const createWellnessRequestSchema = z.object({
   requiresAuth: z.boolean().default(false),
   scheduledFor: z.coerce.date().optional(),
   expiresAt: z.coerce.date().optional(),
+  // Standing (anytime) request: open until cancelled, answered from the athlete's own account
+  isStanding: z.boolean().default(false),
 }).refine(
+  (data) => !data.isStanding || data.distributionMethod === 'athlete_account',
+  {
+    message: 'Standing requests must use athlete accounts',
+    path: ['distributionMethod'],
+  }
+).refine(
+  (data) => !data.isStanding || (!data.expiresAt && !data.scheduledFor),
+  {
+    message: 'Standing requests cannot expire or be scheduled',
+    path: ['expiresAt'],
+  }
+).refine(
+  (data) => !data.isStanding || !!(data.targetAthleteIds?.length || data.targetTeamIds?.length),
+  {
+    message: 'Standing requests require at least one target athlete or team',
+    path: ['targetAthleteIds'],
+  }
+).refine(
   (data) => {
     // For magic_link and qr_code, at least one target must be specified
     if (data.distributionMethod === 'magic_link' || data.distributionMethod === 'qr_code') {
@@ -329,7 +349,12 @@ export const responseDataSchema = z.record(
 export const submitWellnessResponseSchema = z.object({
   requestId: z.string().uuid().optional(),
   templateId: z.string().uuid('Invalid template ID'),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format')
+    // Round-trip: Date.parse rolls impossible dates over ('2026-02-30' -> Mar 2)
+    .refine((d) => {
+      const t = Date.parse(d + 'T00:00:00Z');
+      return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === d;
+    }, 'Date is not a real calendar date'),
   responses: z.record(z.string(), z.any()), // Accept any responses structure, will be validated against template later
   accessMethod: z.string().max(50).optional(),
   athleteName: sanitizedString(200).optional(), // For magic link submissions - sanitized to prevent XSS

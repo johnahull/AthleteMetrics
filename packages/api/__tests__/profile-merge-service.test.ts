@@ -40,6 +40,7 @@ vi.mock('../db', () => ({
         const chain: any = {};
         chain.from = vi.fn().mockReturnValue(chain);
         chain.where = vi.fn().mockReturnValue(chain);
+        chain.orderBy = vi.fn().mockReturnValue(chain);
         chain.set = vi.fn().mockReturnValue(chain);
         chain.for = vi.fn().mockResolvedValue(resolveValue); // FOR UPDATE locking
         chain.returning = vi.fn().mockResolvedValue(resolveValue);
