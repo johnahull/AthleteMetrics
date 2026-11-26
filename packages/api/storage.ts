@@ -46,6 +46,8 @@ import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { hashToken } from "./lib/token-hash";
 import { BCRYPT_SALT_ROUNDS } from "@shared/constants";
+import { INVITATION_PENDING_PASSWORD } from "@shared/schema/constants";
+import { verifyUserPassword } from "./auth/pending-password";
 import { isValidBenchmarkId } from "@shared/benchmark-utils";
 import type { AIPromptOverrides } from "@shared/ai-prompt-overrides";
 import { getPgErrorCode, PG_UNIQUE_VIOLATION } from "./lib/pg-error";
@@ -543,7 +545,7 @@ export class DatabaseStorage implements IStorage {
     // OAuth users may not have a password
     if (!user.password) return null;
 
-    const isValid = await bcrypt.compare(password, user.password);
+    const isValid = await verifyUserPassword(password, user.password);
     return isValid ? user : null;
   }
 
@@ -558,7 +560,7 @@ export class DatabaseStorage implements IStorage {
     // OAuth users may not have a password
     if (!user.password) return null;
 
-    const isValid = await bcrypt.compare(password, user.password);
+    const isValid = await verifyUserPassword(password, user.password);
     return isValid ? user : null;
   }
 
@@ -656,11 +658,12 @@ export class DatabaseStorage implements IStorage {
     const isOAuthUser = ((user as any).googleId || (user as any).appleId) && !user.password;
 
     // For OAuth users, password should be null
-    // For invited users, password might be empty - use a placeholder
+    // For invited users, password might be empty - store the placeholder unhashed: it matches no password
     let hashedPassword: string | null = null;
     if (!isOAuthUser) {
-      const password = user.password || "INVITATION_PENDING";
-      hashedPassword = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
+      hashedPassword = !user.password || user.password === INVITATION_PENDING_PASSWORD
+        ? INVITATION_PENDING_PASSWORD
+        : await bcrypt.hash(user.password, BCRYPT_SALT_ROUNDS);
     }
 
     // Calculate fullName and birthYear from provided data
@@ -799,7 +802,8 @@ export class DatabaseStorage implements IStorage {
       }
     });
 
-    if (user.password) {
+    // The placeholder is stored unhashed (no password set), never as a usable hash
+    if (user.password && user.password !== INVITATION_PENDING_PASSWORD) {
       updateData.password = await bcrypt.hash(user.password, BCRYPT_SALT_ROUNDS);
     }
 
@@ -1977,7 +1981,8 @@ export class DatabaseStorage implements IStorage {
           // Build update data: legal acceptance + optional password for OAuth-only users
           const updateData: any = { ...legalData };
 
-          // Update password if user doesn't have one (OAuth-only user)
+          // Update password if user doesn't have one (OAuth-only user). An account whose password was never set
+          // keeps it: an email match alone does not let the invitee choose it (password reset does)
           if (!existingUser.password) {
             updateData.password = userInfo.password;
             updateData.isActive = true;

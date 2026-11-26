@@ -132,16 +132,17 @@ describe.skip("UserService", () => {
 
       expect(result).toEqual(mockUser);
       expect(mockStorage.getUserByUsername).toHaveBeenCalledWith(mockUsername);
-      expect(bcrypt.hash).toHaveBeenCalledWith(mockPassword, BCRYPT_SALT_ROUNDS);
+      // storage.createUser does the hashing: hashing here too would make the password unusable
+      expect(bcrypt.hash).not.toHaveBeenCalled();
       expect(mockStorage.createUser).toHaveBeenCalledWith(
         expect.objectContaining({
           username: mockUsername,
-          password: mockHashedPassword,
+          password: mockPassword,
         })
       );
     });
 
-    it("should hash password with bcrypt", async () => {
+    it("should pass the password to storage unhashed", async () => {
       const insertData: InsertUser = {
         username: mockUsername,
         emails: [mockEmail],
@@ -155,7 +156,7 @@ describe.skip("UserService", () => {
 
       await userService.createUser(insertData, mockRequestingUserId);
 
-      expect(bcrypt.hash).toHaveBeenCalledWith(mockPassword, BCRYPT_SALT_ROUNDS);
+      expect(mockStorage.createUser).toHaveBeenCalledWith(expect.objectContaining({ password: mockPassword }));
     });
 
     it("should not hash INVITATION_PENDING_PASSWORD", async () => {
@@ -585,7 +586,8 @@ describe.skip("UserService", () => {
 
       expect(result.isSiteAdmin).toBe(true);
       expect(result.role).toBe("site_admin");
-      expect(bcrypt.hash).toHaveBeenCalledWith("AdminPass123!", BCRYPT_SALT_ROUNDS);
+      expect(bcrypt.hash).not.toHaveBeenCalled();
+      expect(mockStorage.createUser).toHaveBeenCalledWith(expect.objectContaining({ password: "AdminPass123!" }));
       expect(mockStorage.createUser).toHaveBeenCalledWith(
         expect.objectContaining({
           username: "newadmin",
