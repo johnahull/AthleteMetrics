@@ -196,6 +196,11 @@ export interface WellnessRequest {
   /** Anytime (standing) request: never expires; the athlete may answer it any day */
   isStanding: boolean;
   createdAt: Date;
+  /** Set by the request lists: the template's name when it is this organization's or a system template */
+  templateName?: string;
+  /** Set by GET /api/wellness/my-requests for the request card */
+  templateDescription?: string;
+  templateQuestionCount?: number;
 }
 
 /**
@@ -246,6 +251,8 @@ export interface WellnessResponse {
   ipAddress: string | null;
   userAgent: string | null;
   createdAt: Date;
+  /** Set by GET /api/wellness/my-responses: the template's name when it is this organization's or a system template */
+  templateName?: string;
 }
 
 /**

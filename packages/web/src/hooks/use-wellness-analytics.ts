@@ -156,11 +156,11 @@ export function useWellnessAnalytics({
     data: templates,
     isLoading: templatesLoading,
   } = useQuery<WellnessTemplate[]>({
-    queryKey: ['/api/wellness/templates', templateIds],
+    queryKey: ['/api/organizations/:orgId/wellness/templates', organizationId, templateIds],
     queryFn: async () => {
-      // Fetch all unique templates used in responses
+      // Fetch all unique templates used in responses (organization-scoped: the public route serves system templates only)
       const templatePromises = templateIds.map(async (templateId) => {
-        const response = await fetch(`/api/wellness/templates/${templateId}`, {
+        const response = await fetch(`/api/organizations/${organizationId}/wellness/templates/${templateId}`, {
           credentials: 'include',
         });
         if (!response.ok) return null;

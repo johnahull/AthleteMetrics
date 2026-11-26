@@ -51,7 +51,8 @@ export default function WellnessHistory() {
 
     // Fetch template to show question labels
     try {
-      const res = await fetch(`${API_BASE}/api/wellness/templates/${response.templateId}`);
+      // Organization-scoped: the public template route serves system templates only
+      const res = await fetch(`${API_BASE}/api/organizations/${response.organizationId}/wellness/templates/${response.templateId}`);
       if (res.ok) {
         const template = await res.json();
         setSelectedTemplate(template);
@@ -119,7 +120,7 @@ export default function WellnessHistory() {
                 <div className="flex items-start justify-between">
                   <div className="space-y-1">
                     <CardTitle className="text-lg">
-                      Wellness Check-In
+                      {response.templateName || 'Wellness Check-In'}
                     </CardTitle>
                     <CardDescription className="flex items-center gap-2">
                       <Calendar className="h-4 w-4" />

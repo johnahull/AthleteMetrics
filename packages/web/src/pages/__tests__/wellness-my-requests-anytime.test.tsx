@@ -92,6 +92,25 @@ describe('WellnessMyRequests - Anytime check-ins', () => {
     expect(screen.queryByTestId('pending-requests-section')).not.toBeInTheDocument();
   });
 
+  it('shows the template details the server sends, without fetching templates', async () => {
+    mockFetch([{ ...oneTimeRequest, templateName: 'Morning check', templateDescription: 'How did you sleep?', templateQuestionCount: 4 }]);
+    renderPage();
+
+    const card = await screen.findByTestId('wellness-request-card');
+    expect(within(card).getByText('Morning check')).toBeInTheDocument();
+    expect(within(card).getByText('How did you sleep?')).toBeInTheDocument();
+    expect(within(card).getByText(/4 questions/)).toBeInTheDocument();
+    expect(vi.mocked(global.fetch).mock.calls.map(c => String(c[0]))).toEqual(['/api/wellness/my-requests']);
+  });
+
+  it('falls back to a generic title when the server sends no template name', async () => {
+    mockFetch([oneTimeRequest]);
+    renderPage();
+
+    const card = await screen.findByTestId('wellness-request-card');
+    expect(within(card).getByText('Wellness Check-In')).toBeInTheDocument();
+  });
+
   it('links to My history', async () => {
     mockFetch([]);
     renderPage();
