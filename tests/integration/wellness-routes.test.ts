@@ -1073,6 +1073,29 @@ describe('Standing (anytime) Wellness Requests', () => {
     expect(res.body).toEqual({ hasSubmitted: false });
   });
 
+  it('POST /api/wellness/responses - a magic-link athlete selection records a targeted athlete and refuses others', async () => {
+    const oneTime = await createStanding({ isStanding: false, distributionMethod: 'magic_link' });
+    const submitAs = (selectedAthleteId: string) =>
+      request(app)
+        .post('/api/wellness/responses')
+        .query({ token: oneTime.publicToken, athlete: testAthlete.id })
+        .send({
+          requestId: oneTime.id,
+          templateId: standingTemplate.id,
+          date: utcDay(0),
+          selectedAthleteId,
+          responses: { q1: { value: 5, label: 'Energy' } },
+        });
+
+    const accepted = await submitAs(testAthlete.id);
+    expect(accepted.status).toBe(201);
+    expect(accepted.body.userId).toBe(testAthlete.id);
+
+    const refused = await submitAs(nonTargetedAthlete.id);
+    expect(refused.status).toBe(403);
+    expect(await rowsFor(oneTime.id)).toHaveLength(1);
+  });
+
   it('POST /api/wellness/responses - a magic-link athlete selection without a requestId is a 400, not a crash', async () => {
     const oneTime = await createStanding({ isStanding: false, distributionMethod: 'magic_link' });
 

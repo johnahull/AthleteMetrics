@@ -1142,12 +1142,9 @@ export function registerWellnessRoutes(app: Express) {
           if (selectedAthleteId) {
             // Athlete selected from dropdown - use real user ID
             // SECURITY: Verify athlete is in targeted list
-            if (!data.requestId) {
-              return res.status(400).json({ message: "requestId is required when selecting an athlete" });
-            }
-            const request = await storage.getWellnessRequest(data.requestId);
+            // Fetched above whenever a requestId was sent (an unknown one already answered 404)
             if (!request) {
-              return res.status(404).json({ message: "Request not found" });
+              return res.status(400).json({ message: "requestId is required when selecting an athlete" });
             }
 
             const isTargeted = await verifyAthleteIsTargeted(request, selectedAthleteId);
