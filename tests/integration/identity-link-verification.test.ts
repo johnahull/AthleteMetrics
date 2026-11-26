@@ -42,6 +42,8 @@ vi.mock('../../packages/api/services/email-service', () => ({
 import { registerRoutes } from '../../packages/api/routes';
 import { storage } from '../../packages/api/storage';
 import { PasswordResetService } from '../../packages/api/auth/password-reset';
+import { globalAthleteService } from '../../packages/api/services/global-athlete-service';
+import { ProfileMergeService } from '../../packages/api/services/profile-merge-service';
 
 const PREFIX = 'ilv_';
 const PASSWORD = 'TestPassword1!';
@@ -215,5 +217,110 @@ describe('read gate on existing links', () => {
     });
     expect(await unified(u)).toEqual([1.111]);
     await db.delete(userGlobalAthleteLinks).where(eq(userGlobalAthleteLinks.userId, u.id));
+  });
+});
+
+describe('new automatic links start pending', () => {
+  let coachB: any;
+  let copyId: string;
+
+  beforeAll(async () => {
+    coachB = await mkUser('coachb', [mail('coachb')], { isEmailVerified: true });
+    await storage.addUserToOrganization(coachB.id, orgB.id, 'coach');
+  });
+
+  it('creating an athlete with the identity email makes a pending link and sends no "account linked" email', async () => {
+    emailMocks.sendAccountLinkedNotification.mockClear();
+    const coach = await login(coachB);
+    const res = await coach.post('/api/athletes').send({ firstName: 'Copy', lastName: 'Ilv', emails: [ownerEmail], birthDate: '2000-01-01' });
+    expect(res.status).toBe(201);
+    copyId = res.body.id;
+    userIds.push(copyId);
+
+    const link = await linkOf(copyId);
+    expect(link.linkStatus).toBe('pending');
+    expect(link.globalAthleteId).toBe(identityId);
+    expect(link.confirmedAt).toBeNull();
+    expect(emailMocks.sendAccountLinkedNotification).not.toHaveBeenCalled();
+  });
+
+  it('verifying another address leaves it pending; verifying the identity address activates it', async () => {
+    const other = mail('copyother');
+    await db.update(users).set({ emails: [ownerEmail, other] }).where(eq(users.id, copyId));
+    await verifyMailbox(copyId, other);
+    expect((await linkOf(copyId)).linkStatus).toBe('pending');
+
+    await verifyMailbox(copyId, ownerEmail);
+    const link = await linkOf(copyId);
+    expect(link.linkStatus).toBe('confirmed');
+    expect(link.confirmedBy).toBe(copyId);
+    expect(await globalAthleteService.getActiveUserGlobalAthleteLink(copyId)).not.toBeNull();
+  });
+
+  it('an identity created from an unverified address gives its creator a pending link', async () => {
+    const u = await mkUser('fresh', [mail('fresh')]);
+    await globalAthleteService.linkAthleteByEmail(u.id, u.emails![0]);
+    expect((await linkOf(u.id)).linkStatus).toBe('pending');
+  });
+
+  it('an account that already redeemed a token for the address gets a confirmed link; the flag alone is not enough', async () => {
+    const email = mail('pre');
+    const proven = await mkUser('pre1', [email]);
+    const { token } = await storage.createEmailVerificationToken(proven.id, email);
+    await storage.verifyEmailToken(token); // redeemed without the hook that links
+    await globalAthleteService.linkAthleteByEmail(proven.id, email);
+    expect((await linkOf(proven.id)).linkStatus).toBe('confirmed');
+
+    const flagged = await mkUser('pre2', [email], { isEmailVerified: true });
+    await globalAthleteService.linkAthleteByEmail(flagged.id, email);
+    expect((await linkOf(flagged.id)).linkStatus).toBe('pending');
+  });
+
+  it('the admin backfill writes pending links for accounts without proof', async () => {
+    const u = await mkUser('backfill', [mail('backfill')]);
+    await storage.addUserToOrganization(u.id, orgB.id, 'athlete');
+    await globalAthleteService.backfillAllAthleteLinks();
+    expect((await linkOf(u.id)).linkStatus).toBe('pending');
+  });
+});
+
+describe('profile merge consolidation', () => {
+  const setup = async (tag: string) => {
+    const org = await mkOrg(tag);
+    const admin = await mkUser(`${tag}admin`, [mail(`${tag}admin`)], { isSiteAdmin: true });
+    const srcEmail = mail(`${tag}src`);
+    const dstEmail = mail(`${tag}dst`);
+    const src = await mkUser(`${tag}src`, [srcEmail]);
+    const dst = await mkUser(`${tag}dst`, [dstEmail]);
+    await storage.addUserToOrganization(src.id, org.id, 'athlete');
+    await storage.addUserToOrganization(dst.id, org.id, 'athlete');
+    return { org, admin, src, dst, srcEmail, dstEmail };
+  };
+
+  it('a proven link moved to an account without proof stops sharing', async () => {
+    const { org, admin, src, dst, srcEmail } = await setup('mg1');
+    await verifyMailbox(src.id, srcEmail);
+    await new ProfileMergeService().mergeProfiles(org.id, src.id, dst.id, admin.id);
+    expect(await linkOf(dst.id)).toBeDefined();
+    expect(await globalAthleteService.getActiveUserGlobalAthleteLink(dst.id)).toBeNull();
+  });
+
+  it('a non-active link neither blocks the merge nor replaces an active one', async () => {
+    const { org, admin, src, dst, dstEmail } = await setup('mg2');
+    await verifyMailbox(dst.id, dstEmail);
+    const dstLink = await linkOf(dst.id);
+    await db.insert(userGlobalAthleteLinks).values({ userId: src.id, globalAthleteId: identityId, linkStatus: 'pending', linkType: 'auto_import' });
+    await new ProfileMergeService().mergeProfiles(org.id, src.id, dst.id, admin.id);
+    expect((await linkOf(dst.id)).id).toBe(dstLink.id);
+    expect(await globalAthleteService.getActiveUserGlobalAthleteLink(dst.id)).not.toBeNull();
+  });
+
+  it('an active source link replaces a non-active target link', async () => {
+    const { org, admin, src, dst, srcEmail } = await setup('mg3');
+    await verifyMailbox(src.id, srcEmail);
+    const srcLink = await linkOf(src.id);
+    await db.insert(userGlobalAthleteLinks).values({ userId: dst.id, globalAthleteId: identityId, linkStatus: 'pending', linkType: 'auto_import' });
+    await new ProfileMergeService().mergeProfiles(org.id, src.id, dst.id, admin.id);
+    expect((await linkOf(dst.id)).id).toBe(srcLink.id);
   });
 });
