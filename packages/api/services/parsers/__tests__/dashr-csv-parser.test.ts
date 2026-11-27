@@ -66,6 +66,34 @@ describe('DashrCsvParser.getSessionDates', () => {
   });
 });
 
+describe('DashrCsvParser run dates', () => {
+  const row = (date: string) => {
+    const cols = new Array(57).fill('');
+    Object.assign(cols, { 0: date, 1: 'Ana', 3: 'Runs', 4: 'Dash', 6: 'Imperial', 26: '4.4', 27: '30' });
+    return cols.join(',');
+  };
+
+  it('reads single-digit months and days (spreadsheet re-save) as the same session', () => {
+    const sessions = parser.getSessionDates(makeCsv([row('1/5/2026 9:05'), row('01/05/2026 09:10:00')]));
+    expect(sessions.map(s => [s.sessionDate, s.drillCount])).toEqual([['2026-01-05', 2]]);
+  });
+
+  it.each(['13/01/2026 09:00:00', '02/30/2026 09:00:00', '1/5/26 9:05', '2026-01-05', '01/05/0000 09:00:00', ''])(
+    'has no session for the unreadable date "%s"',
+    (date) => {
+      expect(parser.getSessionDates(makeCsv([row(date)]))).toEqual([]);
+    },
+  );
+
+  it('warns about rows left out of a session because their date is unreadable', () => {
+    // The comma-only line a spreadsheet leaves behind is not a result row, so it is not counted
+    const blank = ','.repeat(56);
+    const result = parser.parse(makeCsv([row('01/05/2026 09:00:00'), row('yesterday'), row(''), blank]), '2026-01-05');
+    expect(result.athletes[0].drills.filter(d => d.metric === 'DASH_30YD')).toHaveLength(1);
+    expect(result.warnings).toContain('2 row(s) skipped: unreadable Date (expected M/D/YYYY with a 4-digit year)');
+  });
+});
+
 // ============================================================================
 // Speed Value Parsing
 // ============================================================================

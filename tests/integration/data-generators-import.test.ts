@@ -241,7 +241,7 @@ describe.skipIf(!GENERATORS_DIR)('am-data-generators output imports into Athlete
         .set('Cookie', coachCookie)
         .field('source', 'dashr')
         .field('organizationId', orgId)
-        // The import dialog sends the session the user picked; without it the commit dates rows "today".
+        // The import dialog sends the session the user picked (optional for a one-date file).
         .field('sessionDate', DASHR_DATE)
         .attach('file', path.join(tmp, 'dashr.csv'), { filename: 'dashr.csv', contentType: 'text/csv' });
       expect(parse.status).toBe(200);

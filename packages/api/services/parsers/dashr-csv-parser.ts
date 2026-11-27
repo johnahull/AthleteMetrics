@@ -166,13 +166,17 @@ function parseRawCsv(text: string): DashrRow[] {
 }
 
 /**
- * Extract date portion from Dashr timestamp: "MM/DD/YYYY HH:mm:ss" → "YYYY-MM-DD"
+ * Extract date portion from Dashr timestamp: "MM/DD/YYYY HH:mm:ss" → "YYYY-MM-DD".
+ * Month and day may be one digit (a file re-saved in a spreadsheet). Null for anything else.
  */
 function extractDateFromTimestamp(timestamp: string): string | null {
-  const match = timestamp.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  const match = timestamp.match(/^(\d{1,2})\/(\d{1,2})\/([1-9]\d{3})(?!\d)/);
   if (!match) return null;
   const [, month, day, year] = match;
-  return `${year}-${month}-${day}`;
+  const iso = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  // Date rolls 02/30 over into March: only a real calendar date survives the round trip
+  const date = new Date(`${iso}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(iso) ? iso : null;
 }
 
 /**
@@ -528,6 +532,13 @@ export class DashrCsvParser implements DeviceImportParser {
         const date = extractDateFromTimestamp(row['Date'] || '');
         return date === sessionDate;
       });
+      // Result rows only: a spreadsheet re-save can leave comma-only lines behind
+      const unreadable = allRows.filter(
+        row => validateRow(row) === null && !extractDateFromTimestamp(row['Date'] || ''),
+      ).length;
+      if (unreadable > 0) {
+        warnings.push(`${unreadable} row(s) skipped: unreadable Date (expected M/D/YYYY with a 4-digit year)`);
+      }
     }
 
     // Yard flies take their run-in from Start Distance; without the column none can be imported

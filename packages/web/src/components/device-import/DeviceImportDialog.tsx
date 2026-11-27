@@ -384,11 +384,8 @@ export function DeviceImportDialog({
   const handleParse = () => {
     if (!selectedFile) return;
     setStep('parsing');
-    parseMutation.mutate({
-      file: selectedFile,
-      source,
-      sessionDate: selectedSessionDate ?? undefined,
-    });
+    // No session date: a newly chosen file must not be filtered by the previous file's date
+    parseMutation.mutate({ file: selectedFile, source });
   };
 
   const handleSessionConfirm = () => {
@@ -579,6 +576,13 @@ export function DeviceImportDialog({
           </p>
         </div>
 
+        {sessions.length === 1 && (
+          <p className="text-sm" data-testid="session-date">
+            <span className="text-muted-foreground">Session date: </span>
+            <span className="font-medium">{sessions[0].sessionLabel}</span>
+          </p>
+        )}
+
         {/* Summary chips */}
         <div className="flex flex-wrap gap-2 text-sm">
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-800 text-xs font-medium">
@@ -685,6 +689,12 @@ export function DeviceImportDialog({
 
         {/* Summary */}
         <div className="rounded-lg border p-4 space-y-2 text-sm">
+          {sessions.length === 1 && (
+            <div className="flex justify-between" data-testid="session-date">
+              <span className="text-muted-foreground">Session date</span>
+              <span className="font-medium">{sessions[0].sessionLabel}</span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span className="text-muted-foreground">Athletes to import</span>
             <span className="font-medium">{includedCount}</span>
