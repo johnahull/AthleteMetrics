@@ -17,7 +17,7 @@ import {
   userTeams,
   type PeerPercentileCache, type User,
 } from "@shared/schema";
-import { isPeerComparisonExcludedMetric } from "@shared/peer-comparison-exclusions";
+import { isPeerComparisonExcludedMetric, PeerComparisonExcludedMetricError } from "@shared/peer-comparison-exclusions";
 import { eq, and, inArray, gte, lte, isNotNull, sql } from "drizzle-orm";
 import { latestBestFirst } from "./best-of-day-order";
 import { BaseService } from "./base-service";
@@ -105,9 +105,6 @@ export class PeerComparisonService extends BaseService {
     filters?: PeerFilterCriteria
   ): Promise<PercentileResult[]> {
     try {
-      // MQ ordinal scores are excluded from peer comparison in v1 (AM-FEAT-015 D7)
-      const metrics = requestedMetrics.filter(m => !isPeerComparisonExcludedMetric(m));
-
       // Get athlete details
       const athlete = await this.storage.getUser(athleteId);
       if (!athlete) {
@@ -120,16 +117,14 @@ export class PeerComparisonService extends BaseService {
         throw new Error("Athlete has disabled peer comparison display");
       }
 
-      // Get athlete's latest measurements for requested metrics
+      // Metrics that cannot be ranked get no entry in the results
+      const rankable = await this.getRankableMetrics(requestedMetrics);
+      const metrics = requestedMetrics.filter(m => rankable.has(m));
+
+      // Get athlete's latest measurements for those metrics
       const athleteMeasurements = await this.getLatestMeasurements(athleteId, metrics);
 
-      // Batch fetch metric info for all metrics to avoid N+1 queries
-      const metricInfoMap = await this.getMetricInfoBatch(metrics);
-
       const results: PercentileResult[] = [];
-
-      // Cache for peer pool data to avoid duplicate fetches in calculatePercentile
-      const peerPoolCache = new Map<string, { userId: string; value: number }[]>();
 
       for (const metric of metrics) {
         const athleteValue = athleteMeasurements.get(metric);
@@ -138,10 +133,8 @@ export class PeerComparisonService extends BaseService {
         }
 
         // Get or compute distribution for this metric + filter combination
-        // Pass cached metricInfo to avoid N+1 query pattern
-        const metricInfo = metricInfoMap.get(metric) || { lowerIsBetter: false };
+        const metricInfo = rankable.get(metric)!;
         const peerPool = await this.getGlobalPeerPool(metric, filters || {}, metricInfo);
-        peerPoolCache.set(metric, peerPool);
 
         // Compute distribution from peer pool (avoid redundant DB query)
         const distribution = await this.computeDistributionFromPool(metric, peerPool, filters || {});
@@ -200,9 +193,6 @@ export class PeerComparisonService extends BaseService {
     filters?: PeerFilterCriteria
   ): Promise<DistributionData> {
     try {
-      if (isPeerComparisonExcludedMetric(metric)) {
-        throw new Error(`Invalid metric: ${metric} is not available for peer comparison`);
-      }
       return await this.getOrComputeDistribution(metric, filters || {});
     } catch (error) {
       return this.handleError(error, "PeerComparisonService.getDistribution");
@@ -333,10 +323,8 @@ export class PeerComparisonService extends BaseService {
   private async getGlobalPeerPool(
     metric: string,
     filters: PeerFilterCriteria,
-    metricInfo?: { lowerIsBetter: boolean }
+    info: { lowerIsBetter: boolean }
   ): Promise<{ userId: string; value: number }[]> {
-    const info = metricInfo || await this.getMetricInfo(metric);
-
     // Build filter conditions for users - include all users (active and inactive)
     // Inactive users' historical measurements are still valid for peer comparisons
     const userConditions: any[] = [];
@@ -531,6 +519,12 @@ export class PeerComparisonService extends BaseService {
     metric: string,
     filters: PeerFilterCriteria
   ): Promise<DistributionData> {
+    // Before the cache read: a row cached for a now unrankable metric must not be served
+    const info = (await this.getRankableMetrics([metric])).get(metric);
+    if (!info) {
+      throw new PeerComparisonExcludedMetricError(metric, "peer comparison");
+    }
+
     // Check cache first
     const cached = await this.getCachedDistribution(metric, filters);
     if (cached && new Date(cached.expiresAt) > new Date()) {
@@ -550,7 +544,7 @@ export class PeerComparisonService extends BaseService {
     }
 
     // Compute new distribution
-    const peerPool = await this.getGlobalPeerPool(metric, filters);
+    const peerPool = await this.getGlobalPeerPool(metric, filters, info);
     const values = peerPool.map(p => p.value).sort((a, b) => a - b);
 
     const now = new Date();
@@ -574,25 +568,6 @@ export class PeerComparisonService extends BaseService {
     await this.cacheDistribution(distribution);
 
     return distribution;
-  }
-
-  /**
-   * Calculate percentile for a specific value within the peer pool
-   */
-  private async calculatePercentile(
-    athleteValue: number,
-    metric: string,
-    filters: PeerFilterCriteria,
-    lowerIsBetter: boolean
-  ): Promise<number> {
-    const peerPool = await this.getGlobalPeerPool(metric, filters);
-    const values = peerPool.map(p => p.value);
-
-    if (values.length < MIN_SAMPLE_SIZE) {
-      return -1;
-    }
-
-    return this.calculatePercentileFromValues(athleteValue, values, lowerIsBetter);
   }
 
   /**
@@ -782,26 +757,14 @@ export class PeerComparisonService extends BaseService {
   // ========================================================================
 
   /**
-   * Get metric info including lowerIsBetter flag
+   * The metrics that can be ranked against peers, with their direction: site metrics
+   * typed lower or higher is better, Movement Quality excluded. Tracking metrics have
+   * no direction; custom organization metrics and unknown codes have no site metric
+   * row (which the peer cache requires). Retired metrics stay rankable.
    */
-  private async getMetricInfo(metricCode: string): Promise<{ lowerIsBetter: boolean }> {
-    const metric = await db
-      .select({ metricType: siteMetrics.metricType })
-      .from(siteMetrics)
-      .where(eq(siteMetrics.code, metricCode))
-      .limit(1);
-
-    return {
-      // Default to lower_is_better for time-based metrics
-      lowerIsBetter: metric[0]?.metricType === 'lower_is_better',
-    };
-  }
-
-  /**
-   * Batch fetch metric info for multiple metrics (avoids N+1 queries)
-   */
-  private async getMetricInfoBatch(metricCodes: string[]): Promise<Map<string, { lowerIsBetter: boolean }>> {
-    if (metricCodes.length === 0) {
+  private async getRankableMetrics(metricCodes: string[]): Promise<Map<string, { lowerIsBetter: boolean }>> {
+    const codes = metricCodes.filter(code => !isPeerComparisonExcludedMetric(code));
+    if (codes.length === 0) {
       return new Map();
     }
 
@@ -811,16 +774,16 @@ export class PeerComparisonService extends BaseService {
         metricType: siteMetrics.metricType
       })
       .from(siteMetrics)
-      .where(inArray(siteMetrics.code, metricCodes));
+      .where(
+        and(
+          inArray(siteMetrics.code, codes),
+          inArray(siteMetrics.metricType, ["lower_is_better", "higher_is_better"])
+        )
+      );
 
-    const result = new Map<string, { lowerIsBetter: boolean }>();
-    for (const metric of metrics) {
-      result.set(metric.code, {
-        lowerIsBetter: metric.metricType === 'lower_is_better',
-      });
-    }
-
-    return result;
+    return new Map(
+      metrics.map(m => [m.code, { lowerIsBetter: m.metricType === "lower_is_better" }])
+    );
   }
 
   /**

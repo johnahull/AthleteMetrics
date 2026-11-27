@@ -37,6 +37,8 @@ import {
   type PercentileResult,
 } from '@/hooks/usePeerComparison';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
+import { useAvailableMetrics } from '@/hooks/use-available-metrics';
+import { isPeerComparisonExcludedMetric } from '@shared/peer-comparison-exclusions';
 
 interface PeerComparisonCardProps {
   userId: string;
@@ -171,11 +173,20 @@ export function PeerComparisonCard({
   // Check opt-in status
   const { data: peerStatus, isLoading: statusLoading } = usePeerComparisonStatus(userId);
 
+  const { metrics: metricList, isLoading: metricListLoading } = useAvailableMetrics();
+
   // Fetch percentiles (only if opted in)
   const metricsToFetch = useMemo(() => {
+    // The server never ranks these, so they must not use up the slots below.
+    // Codes missing from the list are kept: the server decides for them.
+    const unranked = new Set(
+      metricList.filter((m) => m.isCustom || m.metricType === 'tracking').map((m) => m.code),
+    );
     // Limit to top metrics for dashboard display
-    return availableMetrics.slice(0, compact ? 3 : 5);
-  }, [availableMetrics, compact]);
+    return availableMetrics
+      .filter((code) => !unranked.has(code) && !isPeerComparisonExcludedMetric(code))
+      .slice(0, compact ? 3 : 5);
+  }, [availableMetrics, metricList, compact]);
 
   const {
     data: percentilesData,
@@ -186,11 +197,11 @@ export function PeerComparisonCard({
     athleteId,
     metricsToFetch,
     undefined, // No filters for dashboard summary
-    { enabled: peerStatus?.optedIn === true }
+    { enabled: peerStatus?.optedIn === true && !metricListLoading }
   );
 
   // Loading state
-  if (statusLoading || (peerStatus?.optedIn && percentilesLoading)) {
+  if (statusLoading || (peerStatus?.optedIn && (metricListLoading || percentilesLoading))) {
     return <PeerComparisonSkeleton compact={compact} />;
   }
 
