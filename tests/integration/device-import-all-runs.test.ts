@@ -28,7 +28,7 @@ vi.mock('../../packages/api/services/same-run-sources', async (importOriginal) =
 import { selectSameRunSources } from '../../packages/api/services/same-run-sources';
 
 const DATE = '2026-10-20';
-const METRICS = ['DASH_30YD', 'DASH_20YD', 'DASH_10YD', 'FLY10_TIME_RI10', 'RSI', 'AGILITY_505_M_L', 'AGILITY_505_M_R', 'AGILITY_COD_DEFICIT_M_INTERP'];
+const METRICS = ['FLY10_TIME_RI10', 'DASH_30YD', 'DASH_20YD', 'DASH_10YD', 'RSI', 'AGILITY_505_M_L', 'AGILITY_505_M_R', 'AGILITY_COD_DEFICIT_M_INTERP'];
 const HEADER =
   'Date,First Name,Middle Name,Last Name,Type,Lane ID,Units,Start Distance,Split Time 1,Split Distance 1,Split Speed 1,Start Time 2,Split Distance 2,Split Speed 2,Start Time 3,Split Distance 3,Split Speed 3,Start Time 4,Split Distance 4,Split Speed 4,Start Time 5,Split Distance 5,Split Speed 5,Start Time 6,Split Distance 6,Split Speed 6,Final Time,Final Distance,Final Speed,Jump Distance,Reaction Time,Direction,Weight,Reps,1 RM,Lap Time 1,Lap Time 2,Lap Time 3,Lap Time 4,Lap Time 5,Lap Time 6,Lap Time 7,Lap Time 8,Lap Time 9,RAST Time 1,RAST Time 2,RAST Time 3,RAST Time 4,RAST Time 5,RAST Time 6,Average RSI,Max RSI,RSI,Speed Ratio,Symmetry Score,MultiPlanar Plyometric Index,Custom Event Results';
 
