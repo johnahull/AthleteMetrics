@@ -2,15 +2,14 @@
  * Authentication service handling login, logout, and user session management
  */
 
-import bcrypt from "bcrypt";
 import { z } from "zod";
 import { BaseService } from "./base-service";
 import type { User } from "@shared/schema";
-import { INVITATION_PENDING_PASSWORD } from "@shared/schema";
 import { db } from "../db";
 import { parentAthleteLinks } from "@shared/schema/tables/coppa";
 import { eq, and } from "drizzle-orm";
 import { AuthSecurity } from "../auth/security";
+import { verifyUserPassword } from "../auth/pending-password";
 
 export interface LoginCredentials {
   username: string;
@@ -51,16 +50,6 @@ export class AuthService extends BaseService {
         return { success: false, error: "Invalid credentials" };
       }
 
-      // Check if user is active
-      if (user.isActive === false) {
-        return { success: false, error: "Your account has been deactivated. Please contact your administrator." };
-      }
-
-      // Handle invitation pending state
-      if (user.password === INVITATION_PENDING_PASSWORD) {
-        return { success: false, error: "Please complete your registration first" };
-      }
-
       // Handle OAuth-only users (password is null)
       if (user.password === null) {
         const provider = user.oauthProvider || "social login";
@@ -83,10 +72,16 @@ export class AuthService extends BaseService {
       }
 
       // Verify password
-      const isValidPassword = await bcrypt.compare(password, user.password);
+      const isValidPassword = await verifyUserPassword(password, user.password);
       if (!isValidPassword) {
         await AuthSecurity.recordFailedLogin(user, ipAddress, userAgent);
         return { success: false, error: "Invalid credentials" };
+      }
+
+      // Told only to someone who knows the password, so the answer does not reveal an account's state
+      if (user.isActive === false) {
+        await AuthSecurity.releaseLoginAttempt(user);
+        return { success: false, error: "Your account has been deactivated. Please contact your administrator." };
       }
 
       // MFA: if enabled, a valid TOTP/backup code is required to complete login.

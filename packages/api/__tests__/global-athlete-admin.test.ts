@@ -7,7 +7,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vites
 import { db } from "../db";
 import {
   organizations, users, userOrganizations,
-  globalAthletes, userGlobalAthleteLinks, globalAthleteAuditLog
+  globalAthletes, userGlobalAthleteLinks, globalAthleteAuditLog, emailVerificationTokens
 } from "@shared/schema";
 import { eq, inArray, desc, count } from "drizzle-orm";
 import { GlobalAthleteService } from "../services/global-athlete-service";
@@ -72,6 +72,12 @@ describe("Global Athlete Admin Features", () => {
     }).returning();
     testUser2Id = user2.id;
 
+    // onEmailVerified runs after the account redeemed a verification token for the address; record that proof
+    await db.insert(emailVerificationTokens).values([
+      { userId: testUser1Id, email: TEST_EMAIL_1, token: `used-${testUser1Id}`, isUsed: true, identityProofAt: new Date(), expiresAt: new Date() },
+      { userId: testUser2Id, email: TEST_EMAIL_2, token: `used-${testUser2Id}`, isUsed: true, identityProofAt: new Date(), expiresAt: new Date() },
+    ]);
+
     // Create site admin user
     const [siteAdmin] = await db.insert(users).values({
       username: TEST_SITE_ADMIN_USERNAME,
@@ -117,8 +123,8 @@ describe("Global Athlete Admin Features", () => {
   describe("List All Global Athletes (Admin)", () => {
     it("should return all global athletes with linked user counts", async () => {
       // Create global athletes for both users
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
-      await service.onEmailVerified(testUser2Id, TEST_EMAIL_2);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
+      await service.onEmailVerified(testUser2Id, TEST_EMAIL_2, true);
 
       // Get all global athletes (admin service method)
       const result = await service.getAllGlobalAthletes();
@@ -140,8 +146,8 @@ describe("Global Athlete Admin Features", () => {
     });
 
     it("should support pagination", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
-      await service.onEmailVerified(testUser2Id, TEST_EMAIL_2);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
+      await service.onEmailVerified(testUser2Id, TEST_EMAIL_2, true);
 
       const page1 = await service.getAllGlobalAthletes({ limit: 1, offset: 0 });
       const page2 = await service.getAllGlobalAthletes({ limit: 1, offset: 1 });
@@ -156,8 +162,8 @@ describe("Global Athlete Admin Features", () => {
     });
 
     it("should support search by name or email", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
-      await service.onEmailVerified(testUser2Id, TEST_EMAIL_2);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
+      await service.onEmailVerified(testUser2Id, TEST_EMAIL_2, true);
 
       // Search by email
       const searchByEmail = await service.getAllGlobalAthletes({ search: TEST_EMAIL_1 });
@@ -170,8 +176,8 @@ describe("Global Athlete Admin Features", () => {
     });
 
     it("should escape SQL LIKE wildcards in search to prevent injection", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
-      await service.onEmailVerified(testUser2Id, TEST_EMAIL_2);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
+      await service.onEmailVerified(testUser2Id, TEST_EMAIL_2, true);
 
       // Search with SQL LIKE wildcards - should NOT match everything
       // If wildcards weren't escaped, "%%" would match all records
@@ -199,7 +205,7 @@ describe("Global Athlete Admin Features", () => {
 
   describe("Get Global Athlete Details (Admin)", () => {
     it("should return full global athlete details including linked users", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
 
       const link = await service.getUserGlobalAthleteLink(testUser1Id);
       expect(link).toBeDefined();
@@ -213,7 +219,7 @@ describe("Global Athlete Admin Features", () => {
     });
 
     it("should include organization information for linked users", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
 
       const link = await service.getUserGlobalAthleteLink(testUser1Id);
       const details = await service.getGlobalAthleteDetails(link!.globalAthleteId);
@@ -224,7 +230,7 @@ describe("Global Athlete Admin Features", () => {
     });
 
     it("should include audit log in details", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
 
       const link = await service.getUserGlobalAthleteLink(testUser1Id);
       const details = await service.getGlobalAthleteDetails(link!.globalAthleteId);
@@ -237,7 +243,7 @@ describe("Global Athlete Admin Features", () => {
 
   describe("Admin Force Unlink", () => {
     it("should allow admin to force unlink a user from global athlete", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
 
       const link = await service.getUserGlobalAthleteLink(testUser1Id);
       expect(link).toBeDefined();
@@ -251,7 +257,7 @@ describe("Global Athlete Admin Features", () => {
     });
 
     it("should create audit log entry for admin force unlink", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
 
       const link = await service.getUserGlobalAthleteLink(testUser1Id);
       await service.adminForceUnlink(link!.globalAthleteId, testUser1Id, testSiteAdminId);
@@ -271,7 +277,7 @@ describe("Global Athlete Admin Features", () => {
 
   describe("Admin Toggle Cross-Org Linking", () => {
     it("should allow admin to toggle cross-org linking for a global athlete", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
 
       const link = await service.getUserGlobalAthleteLink(testUser1Id);
       let globalAthlete = await service.getGlobalAthlete(link!.globalAthleteId);
@@ -287,7 +293,7 @@ describe("Global Athlete Admin Features", () => {
     });
 
     it("should create audit log entry for admin privacy change", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
 
       const link = await service.getUserGlobalAthleteLink(testUser1Id);
       await service.adminUpdatePrivacySettings(link!.globalAthleteId, testSiteAdminId, {
@@ -307,8 +313,8 @@ describe("Global Athlete Admin Features", () => {
 
   describe("Get Global Athlete Stats (Admin Dashboard)", () => {
     it("should return aggregate statistics for admin dashboard", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
-      await service.onEmailVerified(testUser2Id, TEST_EMAIL_2);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1, true);
+      await service.onEmailVerified(testUser2Id, TEST_EMAIL_2, true);
 
       const stats = await service.getGlobalAthleteStats();
 

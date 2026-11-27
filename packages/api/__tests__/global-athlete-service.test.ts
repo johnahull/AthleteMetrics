@@ -7,7 +7,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { db } from "../db";
 import {
   organizations, users, userOrganizations, measurements,
-  globalAthletes, userGlobalAthleteLinks, globalAthleteAuditLog
+  globalAthletes, userGlobalAthleteLinks, globalAthleteAuditLog, emailVerificationTokens
 } from "@shared/schema";
 import { eq, inArray } from "drizzle-orm";
 import { GlobalAthleteService } from "../services/global-athlete-service";
@@ -71,6 +71,12 @@ describe("GlobalAthleteService", () => {
     }).returning();
     testUser2Id = user2.id;
 
+    // onEmailVerified runs after the account redeemed a verification token for the address; record that proof
+    await db.insert(emailVerificationTokens).values([
+      { userId: testUser1Id, email: TEST_EMAIL, token: `used-${testUser1Id}`, isUsed: true, identityProofAt: new Date(), expiresAt: new Date() },
+      { userId: testUser2Id, email: TEST_EMAIL, token: `used-${testUser2Id}`, isUsed: true, identityProofAt: new Date(), expiresAt: new Date() },
+    ]);
+
     const [user3] = await db.insert(users).values({
       username: TEST_USER3_USERNAME,
       emails: [TEST_EMAIL_2],
@@ -121,7 +127,7 @@ describe("GlobalAthleteService", () => {
 
   describe("onEmailVerified - Auto-Linking Flow", () => {
     it("should create global athlete when no existing match found", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL, true);
 
       // Should have created a global athlete
       const [globalAthlete] = await db.select()
@@ -146,14 +152,14 @@ describe("GlobalAthleteService", () => {
 
     it("should auto-link to existing global athlete when email matches", async () => {
       // First user verifies email - creates global athlete
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL, true);
 
       const [globalAthlete] = await db.select()
         .from(globalAthletes)
         .where(eq(globalAthletes.primaryEmail, TEST_EMAIL));
 
       // Second user (same email) verifies - should auto-link
-      await service.onEmailVerified(testUser2Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser2Id, TEST_EMAIL, true);
 
       // Should NOT create a new global athlete
       const allGlobalAthletes = await db.select()
@@ -174,7 +180,7 @@ describe("GlobalAthleteService", () => {
 
     it("should not auto-link when global athlete has disabled cross-org linking", async () => {
       // First user verifies email
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL, true);
 
       // Disable cross-org linking
       await db.update(globalAthletes)
@@ -182,7 +188,7 @@ describe("GlobalAthleteService", () => {
         .where(eq(globalAthletes.primaryEmail, TEST_EMAIL));
 
       // Second user verifies - should create separate global athlete
-      await service.onEmailVerified(testUser2Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser2Id, TEST_EMAIL, true);
 
       // Should have two global athletes now
       const allGlobalAthletes = await db.select().from(globalAthletes);
@@ -190,8 +196,8 @@ describe("GlobalAthleteService", () => {
     });
 
     it("should not create duplicate links for same user", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL);
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL); // Call again
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL, true);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL, true); // Call again
 
       const links = await db.select()
         .from(userGlobalAthleteLinks)
@@ -201,7 +207,7 @@ describe("GlobalAthleteService", () => {
     });
 
     it("should create audit log entries", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL, true);
 
       const [globalAthlete] = await db.select()
         .from(globalAthletes)
@@ -218,7 +224,7 @@ describe("GlobalAthleteService", () => {
 
   describe("getUserGlobalAthleteLink", () => {
     it("should return link for user with global athlete", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL, true);
 
       const link = await service.getUserGlobalAthleteLink(testUser1Id);
 
@@ -236,7 +242,7 @@ describe("GlobalAthleteService", () => {
 
   describe("getGlobalAthlete", () => {
     it("should return global athlete by ID", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL, true);
 
       const link = await service.getUserGlobalAthleteLink(testUser1Id);
       const globalAthlete = await service.getGlobalAthlete(link!.globalAthleteId);
@@ -249,8 +255,8 @@ describe("GlobalAthleteService", () => {
   describe("getLinkedUsers", () => {
     it("should return all confirmed linked users for global athlete", async () => {
       // Both users verify
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL);
-      await service.onEmailVerified(testUser2Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL, true);
+      await service.onEmailVerified(testUser2Id, TEST_EMAIL, true);
 
       const link = await service.getUserGlobalAthleteLink(testUser1Id);
       const linkedUsers = await service.getLinkedUsers(link!.globalAthleteId);
@@ -261,8 +267,8 @@ describe("GlobalAthleteService", () => {
     });
 
     it("should filter by shareMeasurements when requested", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL);
-      await service.onEmailVerified(testUser2Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL, true);
+      await service.onEmailVerified(testUser2Id, TEST_EMAIL, true);
 
       // Disable sharing for user2
       await db.update(userGlobalAthleteLinks)
@@ -280,8 +286,8 @@ describe("GlobalAthleteService", () => {
   describe("getUnifiedMeasurements", () => {
     it("should return measurements from all linked users", async () => {
       // Setup global athlete links
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL);
-      await service.onEmailVerified(testUser2Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL, true);
+      await service.onEmailVerified(testUser2Id, TEST_EMAIL, true);
 
       const link = await service.getUserGlobalAthleteLink(testUser1Id);
 
@@ -325,8 +331,8 @@ describe("GlobalAthleteService", () => {
     });
 
     it("should respect shareMeasurements preference", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL);
-      await service.onEmailVerified(testUser2Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL, true);
+      await service.onEmailVerified(testUser2Id, TEST_EMAIL, true);
 
       const link = await service.getUserGlobalAthleteLink(testUser1Id);
 
@@ -371,7 +377,7 @@ describe("GlobalAthleteService", () => {
 
   describe("updatePrivacySettings", () => {
     it("should update allowCrossOrgLinking preference", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL, true);
 
       const link = await service.getUserGlobalAthleteLink(testUser1Id);
       await service.updatePrivacySettings(link!.globalAthleteId, testUser1Id, {
@@ -386,8 +392,8 @@ describe("GlobalAthleteService", () => {
     });
 
     it("should revoke other links when disabling cross-org linking", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL);
-      await service.onEmailVerified(testUser2Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL, true);
+      await service.onEmailVerified(testUser2Id, TEST_EMAIL, true);
 
       const link = await service.getUserGlobalAthleteLink(testUser1Id);
 
@@ -405,7 +411,7 @@ describe("GlobalAthleteService", () => {
     });
 
     it("should create audit log for privacy change", async () => {
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL, true);
 
       const link = await service.getUserGlobalAthleteLink(testUser1Id);
       await service.updatePrivacySettings(link!.globalAthleteId, testUser1Id, {
@@ -435,7 +441,7 @@ describe("GlobalAthleteService", () => {
       });
 
       // Verify email - should trigger backfill
-      await service.onEmailVerified(testUser1Id, TEST_EMAIL);
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL, true);
 
       const link = await service.getUserGlobalAthleteLink(testUser1Id);
       const [measurement] = await db.select()

@@ -33,6 +33,11 @@ describe('EnhancedLoginForm ?redirect', () => {
     expect(await signIn('?redirect=/join/JOINBTA')).toBe('/join/JOINBTA');
   });
 
+  it('returns to the invitation after signing in (the accept-invitation page link format)', async () => {
+    const search = `?redirect=${encodeURIComponent(`/accept-invitation?token=${encodeURIComponent('abc-123')}`)}`;
+    expect(await signIn(search)).toBe('/accept-invitation?token=abc-123');
+  });
+
   it('an unsafe ?redirect falls back to the backend redirectUrl', async () => {
     expect(await signIn('?redirect=//evil.com', '/my-dashboard')).toBe('/my-dashboard');
   });

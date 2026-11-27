@@ -45,7 +45,10 @@ import { eq, desc, asc, and, gte, lte, gt, inArray, sql, arrayContains, or, isNu
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { hashToken } from "./lib/token-hash";
+import { assertMayAcceptFor, InvitationAccountError } from "./lib/invitation-account";
 import { BCRYPT_SALT_ROUNDS } from "@shared/constants";
+import { INVITATION_PENDING_PASSWORD } from "@shared/schema/constants";
+import { verifyUserPassword } from "./auth/pending-password";
 import { isValidBenchmarkId } from "@shared/benchmark-utils";
 import type { AIPromptOverrides } from "@shared/ai-prompt-overrides";
 import { getPgErrorCode, PG_UNIQUE_VIOLATION } from "./lib/pg-error";
@@ -227,7 +230,8 @@ export interface IStorage {
   getInvitationByToken(token: string): Promise<Invitation | undefined>;
   getPendingInvitationsByEmail(email: string): Promise<Invitation[]>;
   updateInvitation(id: string, invitation: Partial<Omit<Invitation, 'id' | 'createdAt'>>): Promise<Invitation>;
-  acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User }>;
+  acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string; actingUserId?: string }): Promise<{ user: User }>;
+  getInvitationAccount(invitation: Pick<Invitation, 'playerId' | 'role' | 'email'>): Promise<{ user: User; organizationIds: string[] } | undefined>;
 
   // Membership Requests
   createMembershipRequest(data: {
@@ -291,7 +295,7 @@ export interface IStorage {
 
   // Email Verification
   createEmailVerificationToken(userId: string, email: string): Promise<{ token: string; expiresAt: Date }>;
-  verifyEmailToken(token: string): Promise<{ success: boolean; userId?: string; email?: string }>;
+  verifyEmailToken(token: string, signedInUserId?: string): Promise<{ success: boolean; userId?: string; email?: string; identityProof?: boolean }>;
   getEmailVerificationToken(token: string): Promise<any>;
 
   // Account Linking (OAuth)
@@ -326,7 +330,7 @@ export interface IStorage {
   }>>;
   getAthlete(id: string): Promise<User | undefined>;
   createAthlete(athlete: Partial<InsertUser>): Promise<User>;
-  updateAthlete(id: string, athlete: Partial<InsertUser>): Promise<User>;
+  updateAthlete(id: string, athlete: Partial<InsertUser>, options?: { teamScopeOrgIds?: string[] }): Promise<User>;
   deleteAthlete(id: string): Promise<void>;
 
   // Measurements
@@ -413,7 +417,7 @@ export interface IStorage {
   updatePasswordChangedAt(userId: string): Promise<void>;
   createEmailVerificationToken(userId: string, email: string): Promise<{ token: string; expiresAt: Date }>;
   getEmailVerificationToken(token: string): Promise<any>;
-  verifyEmailToken(token: string): Promise<{ success: boolean; userId?: string; email?: string }>;
+  verifyEmailToken(token: string, signedInUserId?: string): Promise<{ success: boolean; userId?: string; email?: string; identityProof?: boolean }>;
   getUserRole(userId: string, organizationId: string): Promise<string | null>;
   getUserRoles(userId: string, organizationId?: string): Promise<string[]>;
   updateUserRole(userId: string, organizationId: string, role: string): Promise<boolean>;
@@ -543,7 +547,7 @@ export class DatabaseStorage implements IStorage {
     // OAuth users may not have a password
     if (!user.password) return null;
 
-    const isValid = await bcrypt.compare(password, user.password);
+    const isValid = await verifyUserPassword(password, user.password);
     return isValid ? user : null;
   }
 
@@ -558,7 +562,7 @@ export class DatabaseStorage implements IStorage {
     // OAuth users may not have a password
     if (!user.password) return null;
 
-    const isValid = await bcrypt.compare(password, user.password);
+    const isValid = await verifyUserPassword(password, user.password);
     return isValid ? user : null;
   }
 
@@ -656,11 +660,12 @@ export class DatabaseStorage implements IStorage {
     const isOAuthUser = ((user as any).googleId || (user as any).appleId) && !user.password;
 
     // For OAuth users, password should be null
-    // For invited users, password might be empty - use a placeholder
+    // For invited users, password might be empty - store the placeholder unhashed: it matches no password
     let hashedPassword: string | null = null;
     if (!isOAuthUser) {
-      const password = user.password || "INVITATION_PENDING";
-      hashedPassword = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
+      hashedPassword = !user.password || user.password === INVITATION_PENDING_PASSWORD
+        ? INVITATION_PENDING_PASSWORD
+        : await bcrypt.hash(user.password, BCRYPT_SALT_ROUNDS);
     }
 
     // Calculate fullName and birthYear from provided data
@@ -799,7 +804,8 @@ export class DatabaseStorage implements IStorage {
       }
     });
 
-    if (user.password) {
+    // The placeholder is stored unhashed (no password set), never as a usable hash
+    if (user.password && user.password !== INVITATION_PENDING_PASSWORD) {
       updateData.password = await bcrypt.hash(user.password, BCRYPT_SALT_ROUNDS);
     }
 
@@ -1849,6 +1855,37 @@ export class DatabaseStorage implements IStorage {
       ));
   }
 
+  /**
+   * The existing account an invitation resolves to: the linked athlete (playerId; for a parent invitation
+   * playerId is the CHILD, so the parent is matched by email), otherwise the oldest account with the email.
+   */
+  async getInvitationAccount(
+    invitation: Pick<Invitation, 'playerId' | 'role' | 'email'>,
+    executor: any = db,
+    lockForUpdate = false
+  ): Promise<{ user: User; organizationIds: string[] } | undefined> {
+    // Email match ignores case (invitations and accounts may be typed differently); oldest account first
+    let user: User | undefined = invitation.playerId && invitation.role !== 'parent'
+      ? await this.getUser(invitation.playerId, executor)
+      : (await executor.select().from(users).where(and(
+          sql`lower(${invitation.email}) = ANY(SELECT lower(e) FROM unnest(${users.emails}) AS e)`,
+          whereUserNotDeleted()
+        )).orderBy(asc(users.createdAt)).limit(1))[0];
+    if (!user) return undefined;
+    if (lockForUpdate) {
+      // Serialise concurrent claims of one account (several invitations can link the same athlete):
+      // the row is re-read after the lock, so a claim that committed first makes it a claimed account.
+      await executor.select({ id: users.id }).from(users).where(eq(users.id, user.id)).for('update');
+      user = await this.getUser(user.id, executor);
+      if (!user) return undefined;
+    }
+    const rows: Array<{ organizationId: string }> = await executor
+      .select({ organizationId: userOrganizations.organizationId })
+      .from(userOrganizations)
+      .where(eq(userOrganizations.userId, user.id));
+    return { user, organizationIds: rows.map(r => r.organizationId) };
+  }
+
   async acceptInvitation(
     token: string,
     userInfo: {
@@ -1857,6 +1894,9 @@ export class DatabaseStorage implements IStorage {
       password: string;
       firstName: string;
       lastName: string;
+      // The signed-in user, if any. An existing account is joined only by its owner signed in as it,
+      // or claimed when it is unclaimed (see lib/invitation-account.ts).
+      actingUserId?: string;
       legalAcceptedAt?: string;
       legalAcceptedVersion?: string;
       // COPPA classification computed by the route (age checks live there).
@@ -1900,6 +1940,20 @@ export class DatabaseStorage implements IStorage {
         legalAcceptedVersion: userInfo.legalAcceptedVersion || getLegalAcceptanceTimestamp()
       } : {};
 
+      // An existing account is joined only by its owner signed in as it, or claimed when unclaimed.
+      // Re-checked here, under the invitation lock, even though the route checks first.
+      const account = await this.getInvitationAccount(invitation, tx, true);
+      const { claim } = account
+        ? await assertMayAcceptFor(account.user, account.organizationIds, invitation, userInfo.actingUserId)
+        : { claim: false };
+      // A parent is an adult who is not linked as somebody's child
+      if (account && invitation.role === 'parent') {
+        const [childLink] = await tx.select({ id: parentAthleteLinks.id }).from(parentAthleteLinks)
+          .where(and(eq(parentAthleteLinks.athleteUserId, account.user.id), eq(parentAthleteLinks.isActive, true)))
+          .limit(1);
+        if (childLink) throw new InvitationAccountError("ACCOUNT_NOT_ELIGIBLE");
+      }
+
       // Check if invitation is linked to an existing athlete (playerId).
       // For PARENT invitations playerId stores the CHILD the parent should be
       // linked to — the parent needs their own account (email-match/create
@@ -1908,13 +1962,13 @@ export class DatabaseStorage implements IStorage {
         console.log("Invitation linked to existing athlete:", invitation.playerId);
 
         // Get the existing athlete/user
-        const existingUser = await this.getUser(invitation.playerId, tx);
+        const existingUser = account?.user;
 
         if (!existingUser) {
           throw new Error("Linked athlete not found");
         }
 
-        // Update the existing user with credentials
+        // Set credentials only when claiming an unclaimed account; the signed-in owner keeps theirs.
         // Note: updateUser will hash the password, so pass the plain password
         const coppaUpdate: Partial<InsertUser> = {};
         if (userInfo.coppa) {
@@ -1935,29 +1989,15 @@ export class DatabaseStorage implements IStorage {
           }
         }
         user = await this.updateUser(invitation.playerId, {
-          username: userInfo.username,
-          password: userInfo.password,
-          isActive: true,
+          ...(claim ? { username: userInfo.username, password: userInfo.password, isActive: true } : {}),
           ...coppaUpdate,
           ...legalData
         }, tx);
 
-        console.log("Updated existing athlete with credentials:", user.id);
+        console.log("Updated existing athlete for invitation:", user.id);
       } else {
-        // Check if a user with this email already exists
-        const existingUsers = await this.getUsersByEmail(invitation.email, tx);
-
-        if (existingUsers.length > 0) {
-          // Warn if multiple users found (should be rare after migration)
-          if (existingUsers.length > 1) {
-            console.warn("[Invitation] Multiple users found with email, using oldest:", {
-              email: invitation.email,
-              userIds: existingUsers.map(u => u.id),
-              userCount: existingUsers.length
-            });
-          }
-
-          const existingUser = existingUsers[0]; // Use oldest user (deterministic ordering)
+        if (account) {
+          const existingUser = account.user; // oldest user with the email (deterministic ordering)
 
           // User exists - add them to new org instead of creating duplicate
           console.log("[Invitation] Found existing user with email:", {
@@ -1966,22 +2006,12 @@ export class DatabaseStorage implements IStorage {
             invitationOrg: invitation.organizationId
           });
 
-          // Log if provided username differs from existing (username will be preserved)
-          if (existingUser.username !== userInfo.username) {
-            console.log("[Invitation] Ignoring provided username for existing user:", {
-              providedUsername: userInfo.username,
-              existingUsername: existingUser.username
-            });
-          }
-
-          // Build update data: legal acceptance + optional password for OAuth-only users
+          // Build update data: legal acceptance, plus credentials when claiming an unclaimed account
           const updateData: any = { ...legalData };
-
-          // Update password if user doesn't have one (OAuth-only user)
-          if (!existingUser.password) {
+          if (claim) {
+            updateData.username = userInfo.username;
             updateData.password = userInfo.password;
             updateData.isActive = true;
-            console.log("[Invitation] Updating OAuth-only user with password");
           }
 
           // COPPA: non-destructive for identity data — never overwrite an
@@ -2067,7 +2097,10 @@ export class DatabaseStorage implements IStorage {
         organizationId: invitation.organizationId,
         role: orgRole
       });
-      await this.addUserToOrganization(user.id, invitation.organizationId, orgRole, tx);
+      // A parent invitation leaves an existing membership (and its role) as it is
+      if (!(invitation.role === 'parent' && account?.organizationIds.includes(invitation.organizationId))) {
+        await this.addUserToOrganization(user.id, invitation.organizationId, orgRole, tx);
+      }
 
       // NOTE: team membership is added AFTER the transaction commits (see below).
       // It is best-effort (errors are swallowed) and must not run inside the
@@ -2165,7 +2198,11 @@ export class DatabaseStorage implements IStorage {
     return { token, expiresAt };
   }
 
-  async verifyEmailToken(token: string): Promise<{ success: boolean; userId?: string; email?: string }> {
+  /**
+   * @param signedInUserId - the user of the session that redeems the token, if any. Only when it is the token's
+   *   own user does the redemption also prove mailbox control (identityProof), recorded as identityProofAt.
+   */
+  async verifyEmailToken(token: string, signedInUserId?: string): Promise<{ success: boolean; userId?: string; email?: string; identityProof?: boolean }> {
     // Use transaction with row-level locking to prevent race conditions
     return await db.transaction(async (tx: any) => {
       // Lock the row for update to prevent concurrent verification attempts
@@ -2192,9 +2229,11 @@ export class DatabaseStorage implements IStorage {
         return { success: false };
       }
 
+      const identityProof = !!signedInUserId && signedInUserId === verificationToken.userId;
+
       // Mark token as used (within same transaction)
       await tx.update(emailVerificationTokens)
-        .set({ isUsed: true })
+        .set({ isUsed: true, ...(identityProof ? { identityProofAt: new Date() } : {}) })
         .where(eq(emailVerificationTokens.token, hashToken(token)));
 
       // Mark user's email as verified (within same transaction)
@@ -2205,7 +2244,8 @@ export class DatabaseStorage implements IStorage {
       return {
         success: true,
         userId: verificationToken.userId,
-        email: verificationToken.email
+        email: verificationToken.email,
+        identityProof,
       };
     });
   }
@@ -3551,7 +3591,11 @@ export class DatabaseStorage implements IStorage {
     return athleteResult;
   }
 
-  async updateAthlete(id: string, athlete: Partial<InsertUser>): Promise<User> {
+  /**
+   * `options.teamScopeOrgIds`: when `teamIds` is given, replace only the athlete's teams in these organizations
+   * (the ones the caller manages) and keep the rest. Omitted (site admins) replaces every team.
+   */
+  async updateAthlete(id: string, athlete: Partial<InsertUser>, options?: { teamScopeOrgIds?: string[] }): Promise<User> {
     // List of valid database columns that can be updated
     const validUserColumns = [
       'username', 'emails', 'password', 'firstName', 'lastName',
@@ -3608,7 +3652,7 @@ export class DatabaseStorage implements IStorage {
 
     // Update teams if specified
     if (athlete.teamIds !== undefined) {
-      await this.setAthleteTeams(id, athlete.teamIds);
+      await this.setAthleteTeams(id, athlete.teamIds, options?.teamScopeOrgIds);
     }
 
     // Update any existing user records if name changed
@@ -3736,9 +3780,16 @@ export class DatabaseStorage implements IStorage {
     return await this.removeUserFromTeam(athleteId, teamId);
   }
 
-  async setAthleteTeams(athleteId: string, teamIds: string[]): Promise<void> {
-    // Remove existing teams
-    await db.delete(userTeams).where(eq(userTeams.userId, athleteId));
+  async setAthleteTeams(athleteId: string, teamIds: string[], scopeOrgIds?: string[]): Promise<void> {
+    // Remove existing teams: all of them, or only those in the given organizations
+    if (scopeOrgIds === undefined) {
+      await db.delete(userTeams).where(eq(userTeams.userId, athleteId));
+    } else if (scopeOrgIds.length > 0) {
+      await db.delete(userTeams).where(and(
+        eq(userTeams.userId, athleteId),
+        inArray(userTeams.teamId, db.select({ id: teams.id }).from(teams).where(inArray(teams.organizationId, scopeOrgIds)))
+      ));
+    }
 
     // Add new teams
     if (teamIds.length > 0) {

@@ -8,6 +8,7 @@ import { insertUserSchema, updateProfileSchema, changePasswordSchema, createSite
 import type { User, InsertUser } from "@shared/schema";
 import { z } from "zod";
 import { BCRYPT_SALT_ROUNDS } from "@shared/constants";
+import { verifyUserPassword } from "../auth/pending-password";
 
 export interface UserFilters {
   organizationId?: string;
@@ -49,11 +50,7 @@ export class UserService extends BaseService {
         }
       }
 
-      // Hash password if provided
-      if (validatedData.password && validatedData.password !== INVITATION_PENDING_PASSWORD) {
-        validatedData.password = await bcrypt.hash(validatedData.password, BCRYPT_SALT_ROUNDS);
-      }
-
+      // storage.createUser hashes the password
       const user = await this.storage.createUser(validatedData);
       return user;
     } catch (error) {
@@ -144,7 +141,7 @@ export class UserService extends BaseService {
 
       // Verify current password (skip for invitation pending and OAuth-only accounts)
       if (user.password && user.password !== INVITATION_PENDING_PASSWORD) {
-        const isValidPassword = await bcrypt.compare(currentPassword, user.password);
+        const isValidPassword = await verifyUserPassword(currentPassword, user.password);
         if (!isValidPassword) {
           throw new Error("Current password is incorrect");
         }
@@ -261,15 +258,12 @@ export class UserService extends BaseService {
       // Validate input
       const validatedData = createSiteAdminSchema.parse(adminData);
 
-      // Hash password
-      const hashedPassword = await bcrypt.hash(validatedData.password, BCRYPT_SALT_ROUNDS);
-
       const userData: InsertUser = {
         username: validatedData.username,
         firstName: validatedData.firstName,
         lastName: validatedData.lastName,
         emails: [`${validatedData.username}@admin.local`], // Temporary email based on username
-        password: hashedPassword,
+        password: validatedData.password, // storage.createUser hashes it
         role: "site_admin",
         isSiteAdmin: true,
         isActive: true

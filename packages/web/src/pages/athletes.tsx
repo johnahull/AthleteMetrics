@@ -382,9 +382,10 @@ function AthletesManagement() {
             : "Invitation link copied to clipboard",
         });
       } else {
+        // No link is returned when the athlete already has an account: they sign in to accept
         toast({
           title: "Success",
-          description: "Invitation created",
+          description: "Invitation emailed to the athlete",
         });
       }
     },

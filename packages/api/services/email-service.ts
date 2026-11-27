@@ -120,6 +120,8 @@ interface WelcomeEmailData {
 interface EmailVerificationData {
   userName: string;
   verificationLink: string;
+  /** Username of the account the link verifies, shown so the reader can check it is theirs */
+  accountName?: string;
 }
 
 interface PasswordResetData {
@@ -722,6 +724,9 @@ export class EmailService {
               <p style="margin: 0 0 32px; color: #4a5568; font-size: 16px; line-height: 1.6;">
                 Please verify your email address by clicking the button below:
               </p>
+              ${data.accountName ? `<p style="margin: -16px 0 32px; color: #4a5568; font-size: 14px; line-height: 1.6;">
+                This link is for the AthleteMetrics account <strong>${escapeHtml(data.accountName)}</strong>. If that is not your account, ignore this email.
+              </p>` : ''}
 
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>

@@ -5,7 +5,7 @@
 
 import type { Express } from "express";
 import { z } from "zod";
-import bcrypt from "bcrypt";
+import { verifyUserPassword } from "../auth/pending-password";
 import rateLimit from "express-rate-limit";
 import { eq, and, or, isNull, ne, sql } from "drizzle-orm";
 import { storage } from "../storage";
@@ -461,7 +461,7 @@ export function registerProfileRoutes(app: Express) {
       if (!dbUser.password) {
         return res.status(400).json({ message: "Cannot change password for OAuth-only accounts. Please set a password first." });
       }
-      const isCurrentPasswordValid = await bcrypt.compare(passwordData.currentPassword, dbUser.password);
+      const isCurrentPasswordValid = await verifyUserPassword(passwordData.currentPassword, dbUser.password);
       if (!isCurrentPasswordValid) {
         return res.status(400).json({ message: "Current password is incorrect" });
       }

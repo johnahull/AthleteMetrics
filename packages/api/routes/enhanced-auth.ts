@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
-import bcrypt from 'bcrypt';
+import { verifyUserPassword } from '../auth/pending-password';
+import { COPPA_LOGIN_BLOCKED_STATUSES } from '@shared/coppa-utils';
 import { storage } from '../storage';
 import { AuthSecurity } from '../auth/security';
 import { PasswordResetService } from '../auth/password-reset';
@@ -10,6 +11,7 @@ import rateLimit from 'express-rate-limit';
 import { shouldSkipRateLimiting } from '../utils/rate-limit-utils';
 import { z } from 'zod';
 import { resolveGateDecision } from '../middleware/profile-completion-gate';
+import { isPlaceholderEmail } from '@shared/email-utils';
 
 // Per-IP throttle for the sensitive enhanced-auth endpoints. These previously
 // had no rate limiting, allowing credential stuffing / reset-token probing that
@@ -84,12 +86,29 @@ router.post('/login', enhancedAuthLimiter, async (req: Request, res: Response) =
       });
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    const isPasswordValid = await verifyUserPassword(password, user.password);
     if (!isPasswordValid) {
       await AuthSecurity.recordFailedLogin(user, ipAddress, userAgent);
       return res.status(401).json({
         success: false,
         message: 'Invalid username or password'
+      });
+    }
+
+    // Same account checks as /api/auth/login, after the password so they reveal nothing to a guesser
+    if (user.isActive === false) {
+      await AuthSecurity.releaseLoginAttempt(user);
+      return res.status(403).json({
+        success: false,
+        message: 'Your account has been deactivated. Please contact your administrator.'
+      });
+    }
+    if ((COPPA_LOGIN_BLOCKED_STATUSES as readonly string[]).includes(user.coppaStatus)) {
+      await AuthSecurity.releaseLoginAttempt(user);
+      return res.status(403).json({
+        success: false,
+        coppaStatus: user.coppaStatus,
+        message: 'This account cannot sign in until parental consent is in place'
       });
     }
 
@@ -350,13 +369,26 @@ router.post('/request-email-verification', async (req: Request, res: Response) =
       });
     }
 
-    const { email } = req.body;
     const ipAddress = req.ip || req.connection.remoteAddress || '0.0.0.0';
     const userAgent = req.get('User-Agent');
 
+    // Only an address of the signed-in account: the token is for this account and is emailed to the address.
+    const account = await storage.getUser(user.id);
+    const ownEmails = (account?.emails ?? []).filter((e) => !isPlaceholderEmail(e));
+    const requested = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
+    const email = requested
+      ? ownEmails.find((e) => e.toLowerCase() === requested.toLowerCase())
+      : ownEmails[0];
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Choose an email address of your own account'
+      });
+    }
+
     const result = await PasswordResetService.requestEmailVerification(
       user.id,
-      email || user.email,
+      email,
       ipAddress,
       userAgent
     );
@@ -385,7 +417,9 @@ router.post('/verify-email', async (req: Request, res: Response) => {
       });
     }
 
-    const result = await PasswordResetService.verifyEmail(token, ipAddress, userAgent);
+    // An impersonating admin is not the account holder, so that session never counts as the account's own
+    const signedInUserId = req.session?.isImpersonating ? undefined : req.session?.user?.id;
+    const result = await PasswordResetService.verifyEmail(token, ipAddress, userAgent, signedInUserId);
     
     return res.status(200).json(result);
   } catch (error) {

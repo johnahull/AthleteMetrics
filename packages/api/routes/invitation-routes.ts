@@ -25,9 +25,12 @@ import { db } from "../db";
 import { parentAthleteLinks } from "@shared/schema/tables/coppa";
 import { isUnder13, isMinorAge } from "@shared/coppa-utils";
 import { coppaService } from "../services/coppa-service";
+import { AuthService } from "../services/auth-service";
 import crypto from "crypto";
 import { hashToken } from "../lib/token-hash";
+import { deleteUserSessions } from "../lib/session-helpers";
 import { canManageInvitation } from "../lib/safe-user";
+import { assertMayAcceptFor, canClaimThroughInvitation, InvitationAccountError } from "../lib/invitation-account";
 
 // Rate limiting for invitation endpoints
 const invitationLimiter = rateLimit({
@@ -115,6 +118,15 @@ async function sendInvitationEmailWithTracking(
     console.error(`Failed to send invitation email to ${invitation.email}:`, error);
     return false;
   }
+}
+
+/**
+ * True when accepting needs the invitee to sign in to an existing account. The link is then only
+ * emailed: returning it to the inviter would let them act on that person's invitation.
+ */
+async function linkIsWithheld(invitation: Pick<Invitation, 'playerId' | 'role' | 'email' | 'organizationId'>): Promise<boolean> {
+  const account = await storage.getInvitationAccount(invitation);
+  return !!account && !(await canClaimThroughInvitation(account.user, account.organizationIds, invitation));
 }
 
 // Unified invitation permission checker
@@ -242,6 +254,12 @@ export function registerInvitationRoutes(app: Express) {
           return res.status(403).json({ message: permissionCheck.reason || "Insufficient permissions to invite users" });
         }
 
+        // The athlete must be a member of this organization (same rule as parent invitations)
+        const athleteOrgs = await storage.getUserOrganizations(athleteId);
+        if (!athleteOrgs.some(o => o.organizationId === organizationId)) {
+          return res.status(400).json({ message: "Athlete does not belong to this organization" });
+        }
+
         // Validate team IDs if provided
         if (teamIds && Array.isArray(teamIds) && teamIds.length > 0) {
           for (const teamId of teamIds) {
@@ -317,7 +335,8 @@ export function registerInvitationRoutes(app: Express) {
           return res.status(400).json({ message: "All email addresses already have pending invitations" });
         }
 
-        // Generate invite links and send emails
+        // Generate invite links and send emails. Every invitation here targets the same athlete account.
+        const withholdLinks = await linkIsWithheld(invitations[0]);
         const inviteLinks = [];
         const emailResults = [];
 
@@ -332,7 +351,7 @@ export function registerInvitationRoutes(app: Express) {
 
         return res.status(201).json({
           invitations: invitations.map(inv => ({ id: inv.id, email: inv.email })),
-          inviteLinks,
+          ...(withholdLinks ? {} : { inviteLinks }),
           emailResults,
           athlete: {
             id: athlete.id,
@@ -467,10 +486,11 @@ export function registerInvitationRoutes(app: Express) {
         userAgent: req.get('user-agent')
       });
 
+      const withholdLink = await linkIsWithheld(invitation);
       return res.status(201).json({
         id: invitation.id,
         email: invitation.email,
-        inviteLink,
+        ...(withholdLink ? {} : { inviteLink }),
         emailSent,
         message: `Invitation created for ${firstName || ''} ${lastName || ''} (${email})`.trim()
       });
@@ -838,7 +858,9 @@ export function registerInvitationRoutes(app: Express) {
         // a token bearer (links get forwarded). The accept endpoint applies
         // the stored values server-side; the form only needs to know whether
         // a parent email is on file so it can relax its required field.
-        parentEmailOnFile: Boolean(invitation.parentEmail)
+        parentEmailOnFile: Boolean(invitation.parentEmail),
+        // The invitee already has an account: they sign in to accept instead of creating one
+        requiresSignIn: await linkIsWithheld(invitation),
       };
 
       res.json(responseData);
@@ -936,30 +958,6 @@ export function registerInvitationRoutes(app: Express) {
         }
       }
 
-      // Validate username using shared validation
-      const { validateUsername } = await import('@shared/username-validation');
-      const usernameValidation = validateUsername(username);
-      if (!usernameValidation.valid) {
-        return res.status(400).json({ message: usernameValidation.errors[0] });
-      }
-
-      // Validate password using shared validation
-      const { validatePassword } = await import('@shared/password-requirements');
-      const passwordValidation = validatePassword(password);
-      if (!passwordValidation.valid) {
-        return res.status(400).json({ message: passwordValidation.errors[0] });
-      }
-
-      // Check if username already exists
-      const existingUser = await storage.getUserByUsername(username);
-
-      // Add constant-time delay to prevent timing-based username enumeration
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      if (existingUser) {
-        return res.status(400).json({ message: "Username unavailable. Please choose a different username." });
-      }
-
       // Get invitation (without the isUsed check to track failed attempts)
       const invitation = await storage.getInvitationByToken(token);
 
@@ -1005,6 +1003,49 @@ export function registerInvitationRoutes(app: Express) {
         return res.status(429).json({ message: "Too many failed attempts. This invitation has been locked." });
       }
 
+      // An existing account is joined only by its owner signed in as it, or claimed when it is unclaimed
+      // (lib/invitation-account.ts). Refused before any write, so the token is not consumed or locked.
+      const account = await storage.getInvitationAccount(invitation);
+      let claim = false;
+      if (account) {
+        try {
+          ({ claim } = await assertMayAcceptFor(account.user, account.organizationIds, invitation, req.session.user?.id));
+        } catch (error) {
+          if (error instanceof InvitationAccountError) {
+            return res.status(error.status).json({ code: error.code, message: error.message });
+          }
+          throw error;
+        }
+      }
+      const signedInOwner = !!account && !claim;
+
+      // Username and password are chosen only for a new or claimed account
+      if (!signedInOwner) {
+        // Validate username using shared validation
+        const { validateUsername } = await import('@shared/username-validation');
+        const usernameValidation = validateUsername(username);
+        if (!usernameValidation.valid) {
+          return res.status(400).json({ message: usernameValidation.errors[0] });
+        }
+
+        // Validate password using shared validation
+        const { validatePassword } = await import('@shared/password-requirements');
+        const passwordValidation = validatePassword(password);
+        if (!passwordValidation.valid) {
+          return res.status(400).json({ message: passwordValidation.errors[0] });
+        }
+
+        // Check if username already exists
+        const existingUser = await storage.getUserByUsername(username);
+
+        // Add constant-time delay to prevent timing-based username enumeration
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        if (existingUser) {
+          return res.status(400).json({ message: "Username unavailable. Please choose a different username." });
+        }
+      }
+
       // ── COPPA age classification (P0-11) ────────────────────────────────
       // Effective birthDate precedence: the accepting user's own server-known
       // record > invitation (coach-entered at invite-create) > form value — a
@@ -1020,13 +1061,7 @@ export function registerInvitationRoutes(app: Express) {
       if (invitation.role === 'athlete' && invitation.birthDate) {
         effectiveBirthDate = String(invitation.birthDate);
       }
-      let acceptingUser: Awaited<ReturnType<typeof storage.getUser>> | undefined;
-      if (invitation.role === 'athlete' && invitation.playerId) {
-        acceptingUser = await storage.getUser(invitation.playerId);
-      } else {
-        const usersByEmail = await storage.getUsersByEmail(invitation.email);
-        acceptingUser = usersByEmail[0]; // oldest — same choice acceptInvitation makes
-      }
+      const acceptingUser = account?.user; // same choice acceptInvitation makes
       if (acceptingUser?.birthDate) {
         effectiveBirthDate = String(acceptingUser.birthDate);
       }
@@ -1062,6 +1097,9 @@ export function registerInvitationRoutes(app: Express) {
       }
       const teenMinor = minor && !under13;
 
+      if (minor && invitation.role === 'parent') {
+        return res.status(400).json({ message: "A parent or guardian invitation must be accepted by an adult." });
+      }
       if (under13 && invitation.role !== 'athlete') {
         return res.status(400).json({ message: "This invitation role requires an adult. Please contact your organization." });
       }
@@ -1082,6 +1120,7 @@ export function registerInvitationRoutes(app: Express) {
           lastName,
           legalAcceptedAt,
           legalAcceptedVersion: getLegalAcceptanceTimestamp(), // Format: "2024-12-13"
+          actingUserId: req.session.user?.id,
           ...(effectiveBirthDate ? {
             coppa: {
               birthDate: effectiveBirthDate,
@@ -1125,6 +1164,13 @@ export function registerInvitationRoutes(app: Express) {
       // status, and must not receive a session here that the login route
       // would refuse. consent_revoked is also checked pre-transaction (above,
       // without consuming the token); this is defense in depth against races.
+      // An existing account that is consent-blocked now loses every session it holds, as sign-in would refuse it.
+      if (account && ['consent_revoked', 'pending_consent', 'needs_parent_email'].includes(result.user.coppaStatus ?? '')) {
+        await deleteUserSessions(result.user.id);
+        if (req.session.user?.id === result.user.id) {
+          await new Promise<void>((resolve) => req.session.destroy(() => resolve()));
+        }
+      }
       if (result.user.coppaStatus === 'consent_revoked') {
         return res.status(403).json({
           message: "Parental consent for this account was revoked. Please contact your organization or support to re-initiate consent."
@@ -1208,6 +1254,25 @@ export function registerInvitationRoutes(app: Express) {
         userRole = "site_admin";
       }
 
+      // Already signed in as this account: keep the session, but recompute its role and primary
+      // organization the way sign-in does, since the new membership can change them
+      if (signedInOwner) {
+        const roleContext = await new AuthService().determineUserRoleAndContext(result.user);
+        req.session.user = {
+          ...req.session.user!,
+          role: roleContext.role,
+          primaryOrganizationId: roleContext.primaryOrganizationId,
+          athleteId: roleContext.role === 'athlete' ? result.user.id : undefined,
+        };
+        await new Promise<void>((resolve, reject) => req.session.save(err => err ? reject(err) : resolve()));
+        return res.json({
+          success: true,
+          user: req.session.user,
+          message: "Invitation accepted.",
+          redirectUrl: userRole === "athlete" ? `/athletes/${result.user.id}` : userRole === "parent" ? "/parent/children" : "/",
+        });
+      }
+
       // Log the new user in - regenerate session to prevent session fixation
       req.session.regenerate((err) => {
         if (err) {
@@ -1248,6 +1313,10 @@ export function registerInvitationRoutes(app: Express) {
         });
       });
     } catch (error) {
+      // Refused for the account (e.g. lost a race with a sign-up): not a failed attempt
+      if (error instanceof InvitationAccountError) {
+        return res.status(error.status).json({ code: error.code, message: error.message });
+      }
       console.error("Error accepting invitation:", error);
 
       // Track failed attempt if we have the invitation

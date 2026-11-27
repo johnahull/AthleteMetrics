@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.38.1] - 2026-11-26
+
+### Security
+- Hardened sign-in for accounts that have not completed registration; `/api/enhanced-auth/login` applies the same account checks as `/api/auth/login`.
+- Accepting an invitation for an existing account requires signing in as that account; invite links are not returned for such accounts, and invited athletes must belong to the inviting organization.
+- Editing, deactivating, deleting or inviting an athlete is limited to coaches and org admins who manage that athlete in their organization.
+- Athlete, measurement and team exports and the athlete import work in one organization where the caller is a coach or org admin; athlete members no longer see teammates' contact, age or body details in the athlete list.
+- Automatically linked athlete identities share data only after the account verifies the address while signed in.
+
+### Behaviour changes
+- Invitees who already have an account sign in before accepting.
+- Athletes who have not completed registration see "Invalid credentials" at sign-in; password reset and their invitation still work.
+- Linked records from other organizations are hidden until the athlete uses "Verify your email to restore linked records".
+
+### Deployment notes
+- Migration 0188 adds the nullable column `email_verification_tokens.identity_proof_at` (applied automatically at startup).
+- After deploying, run `scripts/repair-pending-account-passwords.ts` (dry run first, then `--apply`).
+- No new environment variables.
+
 ## [0.38.0] - 2026-11-21
 
 ### Added
