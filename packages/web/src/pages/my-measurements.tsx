@@ -298,6 +298,7 @@ export default function MyMeasurementsPage() {
                   fallbackLabel={
                     metricTypes.find((m) => m.value === metricFilter)?.label ?? metricFilter
                   }
+                  metricType={availableMetrics.find((m) => m.code === metricFilter)?.metricType}
                 />
               </div>
             )}

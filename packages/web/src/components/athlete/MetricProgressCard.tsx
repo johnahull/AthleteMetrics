@@ -210,6 +210,7 @@ export function MetricProgressCard({
             code={metric}
             explanation={explanation}
             fallbackLabel={displayName}
+            metricType={metricType}
           />
         </CardHeader>
         <CardContent>
@@ -280,6 +281,7 @@ export function MetricProgressCard({
               code={metric}
               explanation={explanation}
               fallbackLabel={displayName}
+              metricType={metricType}
               titleSuffix={
                 isDerived ? (
                   <Badge variant="outline" className="text-xs">fx</Badge>

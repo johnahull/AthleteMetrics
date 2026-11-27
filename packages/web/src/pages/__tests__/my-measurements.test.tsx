@@ -16,6 +16,7 @@ let mockUser: EnhancedUser | null = null;
 let mockIsLoading = false;
 let mockMeasurements: Measurement[] = [];
 let mockIsLoadingMeasurements = false;
+let mockExplanations: Record<string, unknown> = {};
 
 // Mock modules
 vi.mock('@/lib/auth', () => ({
@@ -71,7 +72,7 @@ vi.mock('@/hooks/use-toast', () => ({
 vi.mock('@/hooks/use-available-metrics', () => ({
   useAvailableMetrics: vi.fn(() => ({
     metrics: [
-      { code: 'FLY10_TIME', label: '10-Yard Fly', unit: 's' },
+      { code: 'FLY10_TIME', label: '10-Yard Fly', unit: 's', metricType: 'lower_is_better' },
       { code: 'VERTICAL_JUMP', label: 'Vertical Jump', unit: 'in' },
       { code: 'AGILITY_505_YD', label: '5-0-5 Agility', unit: 's' },
     ],
@@ -82,7 +83,7 @@ vi.mock('@/hooks/use-available-metrics', () => ({
 // Mock useAthleteMetricExplanations hook to avoid QueryClient requirement
 vi.mock('@/hooks/useAthleteMetricExplanations', () => ({
   useAthleteMetricExplanations: vi.fn(() => ({
-    explanations: {},
+    explanations: mockExplanations,
     isLoading: false,
     error: null,
   })),
@@ -145,6 +146,7 @@ describe('My Measurements Page', () => {
     };
     mockIsLoading = false;
     mockIsLoadingMeasurements = false;
+    mockExplanations = {};
     mockMeasurements = [
       {
         id: 'm1',
@@ -379,6 +381,30 @@ describe('My Measurements Page', () => {
 
       const filterTrigger = screen.getByRole('combobox', { name: /filter by metric/i });
       expect(filterTrigger).toBeInTheDocument();
+    });
+
+    it('states which direction is better in the header of the filtered metric', async () => {
+      mockExplanations = { FLY10_TIME: { code: 'FLY10_TIME', title: '10-Yard Fly' } };
+      const user = userEvent.setup();
+      render(<MyMeasurementsPage />);
+
+      await user.click(screen.getByRole('combobox', { name: /filter by metric/i }));
+      await user.click(await screen.findByRole('option', { name: '10-Yard Fly' }));
+
+      const header = await screen.findByTestId('metric-explanation-header');
+      expect(within(header).getByText('Lower is better')).toBeInTheDocument();
+    });
+
+    it('shows no direction in the header when the metric type is unknown', async () => {
+      mockExplanations = { VERTICAL_JUMP: { code: 'VERTICAL_JUMP', title: 'Vertical Jump' } };
+      const user = userEvent.setup();
+      render(<MyMeasurementsPage />);
+
+      await user.click(screen.getByRole('combobox', { name: /filter by metric/i }));
+      await user.click(await screen.findByRole('option', { name: 'Vertical Jump' }));
+
+      const header = await screen.findByTestId('metric-explanation-header');
+      expect(within(header).queryByText(/is better/i)).not.toBeInTheDocument();
     });
   });
 

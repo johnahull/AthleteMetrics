@@ -3,7 +3,21 @@ import ReactMarkdown from 'react-markdown';
 import rehypeSanitize from 'rehype-sanitize';
 import { ChevronDown } from 'lucide-react';
 import type { MetricExplanation } from '@shared/metric-explanations';
+import type { MetricType } from '@shared/analytics-types';
 import { cn } from '@/lib/utils';
+
+/**
+ * States which direction is better. Renders nothing for tracking metrics or an
+ * unknown type: a guess must not read as fact.
+ */
+export function MetricDirectionLabel({ metricType }: { metricType?: MetricType }) {
+  if (metricType !== 'lower_is_better' && metricType !== 'higher_is_better') return null;
+  return (
+    <p data-testid="metric-direction-label" className="text-xs font-medium text-slate-600">
+      {metricType === 'lower_is_better' ? 'Lower is better' : 'Higher is better'}
+    </p>
+  );
+}
 
 interface AthleteMetricExplanationProps {
   code: string;
@@ -17,6 +31,8 @@ interface AthleteMetricExplanationProps {
   /** When true, renders a compact variant (used inline in tables/rows). */
   compact?: boolean;
   className?: string;
+  /** The metric's configured type; shows which direction is better. */
+  metricType?: MetricType;
 }
 
 export function AthleteMetricExplanation({
@@ -27,6 +43,7 @@ export function AthleteMetricExplanation({
   titleSuffix,
   compact = false,
   className,
+  metricType,
 }: AthleteMetricExplanationProps) {
   const [open, setOpen] = useState(false);
   const reactId = useId();
@@ -48,6 +65,8 @@ export function AthleteMetricExplanation({
         </span>
         {titleSuffix}
       </div>
+
+      <MetricDirectionLabel metricType={metricType} />
 
       {shortDescription && (
         <p
