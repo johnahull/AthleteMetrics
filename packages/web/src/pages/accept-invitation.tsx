@@ -13,6 +13,7 @@ import { validatePassword, PASSWORD_REQUIREMENTS, getPasswordRequirementsText } 
 import { validateUsername, getUsernameRequirementsText } from '@shared/username-validation';
 import { useContextualLabels } from '@/hooks/useContextualLabels';
 import { isUnder13, isMinorAge } from '@shared/coppa-utils';
+import { useAuth } from '@/lib/auth';
 
 interface InvitationData {
   email: string;
@@ -21,6 +22,7 @@ interface InvitationData {
   playerId?: string; // ID of existing athlete/user if updating
   athleteId?: string;
   parentEmailOnFile?: boolean; // COPPA: coach provided a parent email at invite-create
+  requiresSignIn?: boolean; // the invitee already has an account: sign in to accept
   athleteData?: {
     id: string;
     firstName: string;
@@ -38,6 +40,7 @@ export default function AcceptInvitation() {
   const labels = useContextualLabels();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { user, isLoading: authLoading } = useAuth();
   
   const [token, setToken] = useState<string>('');
   const [invitation, setInvitation] = useState<InvitationData | null>(null);
@@ -72,6 +75,10 @@ export default function AcceptInvitation() {
     try { return isMinorAge(formData.birthDate); } catch { return false; }
   })();
   const teenMinor = minor && !under13;
+
+  // Existing account: accept while signed in (only the membership is added), no account form
+  const signInMode = invitation?.requiresSignIn === true;
+  const loginHref = `/login?redirect=${encodeURIComponent(`/accept-invitation?token=${encodeURIComponent(token)}`)}`;
 
   // D1: Clear parentEmail when minor transitions from true → false
   const prevIsMinorRef = useRef(minor);
@@ -140,24 +147,24 @@ export default function AcceptInvitation() {
       return;
     }
 
-    if (!formData.username.trim()) {
+    if (!signInMode && !formData.username.trim()) {
       setError('Username is required');
       return;
     }
 
     // Validate username using shared validation
     const usernameValidation = validateUsername(formData.username);
-    if (!usernameValidation.valid) {
+    if (!signInMode && !usernameValidation.valid) {
       setError(usernameValidation.errors[0]);
       return;
     }
 
-    if (usernameError) {
+    if (!signInMode && usernameError) {
       setError(usernameError);
       return;
     }
 
-    if (formData.password !== formData.confirmPassword) {
+    if (!signInMode && formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       return;
     }
@@ -170,7 +177,7 @@ export default function AcceptInvitation() {
 
     // Validate password against shared requirements
     const passwordValidation = validatePassword(formData.password);
-    if (!passwordValidation.valid) {
+    if (!signInMode && !passwordValidation.valid) {
       setError(passwordValidation.errors[0]);
       return;
     }
@@ -185,10 +192,12 @@ export default function AcceptInvitation() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          firstName: formData.firstName,
-          lastName: formData.lastName,
-          username: formData.username,
-          password: formData.password,
+          ...(signInMode ? {} : {
+            firstName: formData.firstName,
+            lastName: formData.lastName,
+            username: formData.username,
+            password: formData.password,
+          }),
           legalAcceptedAt: new Date().toISOString(),
           birthDate: formData.birthDate || undefined,
           parentEmail: minor && formData.parentEmail ? formData.parentEmail.trim().toLowerCase() : undefined,
@@ -196,6 +205,11 @@ export default function AcceptInvitation() {
       });
 
       const data = await response.json();
+
+      if (data.code === 'SIGN_IN_REQUIRED') {
+        setInvitation(prev => prev ? { ...prev, requiresSignIn: true } : prev);
+        return;
+      }
 
       if (!response.ok) {
         throw new Error(data.message || 'Failed to accept invitation');
@@ -213,7 +227,12 @@ export default function AcceptInvitation() {
         description: data.message || "Account created successfully",
       });
 
-      // Redirect to appropriate page
+      // Redirect to appropriate page (full reload after joining with an existing account, so the
+      // new membership is loaded)
+      if (signInMode) {
+        window.location.href = data.redirectUrl || '/';
+        return;
+      }
       setLocation(data.redirectUrl || '/');
       
     } catch (err) {
@@ -280,7 +299,7 @@ export default function AcceptInvitation() {
     }
   };
 
-  if (loading) {
+  if (loading || (signInMode && authLoading)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="flex items-center gap-x-2">
@@ -332,6 +351,30 @@ export default function AcceptInvitation() {
                 Go to Login
               </Button>
             </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (signInMode && !user) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="mx-auto w-12 h-12 bg-primary rounded-full flex items-center justify-center mb-4">
+              <UserCheck className="h-6 w-6 text-white" />
+            </div>
+            <CardTitle className="text-2xl font-bold">Sign In to Accept</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-center">
+            <p className="text-sm text-gray-600">
+              An account already exists for <strong className="break-all">{invitation?.email}</strong>.
+              Sign in to that account to accept this invitation.
+            </p>
+            <Button asChild className="w-full" data-testid="button-sign-in-to-accept">
+              <Link href={loginHref}>Sign In</Link>
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -395,8 +438,15 @@ export default function AcceptInvitation() {
             </div>
           )}
 
+          {signInMode && (
+            <p className="text-sm text-gray-600">
+              Signed in as <strong>{user?.username}</strong>. Accepting adds this organization to your account.
+            </p>
+          )}
+
           {/* Account Setup Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
+            {!signInMode && (
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="firstName">First Name</Label>
@@ -421,6 +471,7 @@ export default function AcceptInvitation() {
                 />
               </div>
             </div>
+            )}
             
             {/* Date of Birth — COPPA age gate */}
             <div>
@@ -431,7 +482,7 @@ export default function AcceptInvitation() {
                 value={formData.birthDate}
                 onChange={handleInputChange('birthDate')}
                 max={format(new Date(), 'yyyy-MM-dd')}
-                required
+                required={!signInMode}
               />
             </div>
 
@@ -472,6 +523,7 @@ export default function AcceptInvitation() {
               </div>
             )}
 
+            {!signInMode && (<>
             <div>
               <Label htmlFor="username">Username</Label>
               <div className="relative">
@@ -563,6 +615,7 @@ export default function AcceptInvitation() {
                 </button>
               </div>
             </div>
+            </>)}
 
             {error && (
               <Alert variant="destructive">
@@ -620,22 +673,21 @@ export default function AcceptInvitation() {
               {submitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating Account...
+                  {signInMode ? 'Accepting...' : 'Creating Account...'}
                 </>
               ) : (
-                'Accept Invitation & Create Account'
+                signInMode ? 'Accept Invitation' : 'Accept Invitation & Create Account'
               )}
             </Button>
           </form>
 
+          {!signInMode && (
           <div className="text-center">
-            <button 
-              onClick={() => setLocation('/login')}
-              className="text-sm text-gray-600 hover:text-gray-800"
-            >
+            <Link href={loginHref} className="text-sm text-gray-600 hover:text-gray-800">
               Already have an account? Sign in
-            </button>
+            </Link>
           </div>
+          )}
         </CardContent>
       </Card>
     </div>

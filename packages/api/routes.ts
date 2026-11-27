@@ -727,12 +727,10 @@ export async function registerRoutes(app: Express) {
     // Skip CSRF for certain API endpoints that use other authentication
     // Note: req.path is relative to the mount point, so '/api' prefix is not included
     // - /login and /register: Pre-authentication endpoints
-    // - /invitations/:token/accept: Public endpoint for new users without sessions
-    //   Token format restricted to alphanumeric, dash, and underscore to prevent path traversal
     // - /import/photo, /import/parse-csv, /import/:type: File upload endpoints that use multipart/form-data
     //   SECURITY: Only specific multipart endpoints bypass CSRF, not all /import/* routes
-    // - /invitations/:token/accept: New user registration endpoint (no session yet)
-    //   SECURITY: Protected by: (1) single-use token, (2) SameSite cookies, (3) Referer header check, (4) rate limiting
+    // - /invitations/:token/accept is NOT skipped: anonymous callers already pass above, and a signed-in
+    //   caller accepting adds the invitation's membership to their own account, so it needs the token.
     // Pre-authentication endpoints bypass CSRF since users don't have sessions yet
     // These are protected by: rate limiting, email verification tokens, and SameSite cookies
     const skipCsrfPaths = [
@@ -747,7 +745,6 @@ export async function registerRoutes(app: Express) {
       '/api/wellness/responses'
     ];
     const skipCsrfPatterns = [
-      /^\/invitations\/[a-zA-Z0-9_-]+\/accept$/,  // Invitation acceptance for new users
       /^\/import\/(athletes|measurements)$/  // Dynamic import type endpoints (multipart only)
     ];
     // Note: /api/wellness/responses bypasses CSRF for magic-link access

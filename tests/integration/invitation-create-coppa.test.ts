@@ -260,6 +260,8 @@ describe('POST /api/invitations — COPPA invite-create validation', () => {
       role: 'athlete',
       coppaStatus: 'not_applicable',
     }).returning();
+    // athleteId invitations require the athlete to be on the organization's roster
+    await db.insert(userOrganizations).values({ userId: athlete.id, organizationId: testOrg.id, role: 'athlete' });
 
     const res = await request(app)
       .post('/api/invitations')
@@ -288,6 +290,8 @@ describe('POST /api/invitations — COPPA invite-create validation', () => {
       role: 'athlete',
       coppaStatus: 'not_applicable',
     }).returning();
+    // athleteId invitations require the athlete to be on the organization's roster
+    await db.insert(userOrganizations).values({ userId: athlete.id, organizationId: testOrg.id, role: 'athlete' });
 
     const parentEmail = `${TEST_PREFIX}parent2_${id}@example.com`;
     const res = await request(app)

@@ -161,7 +161,11 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
   const createAthleteMutation = useMutation({
     mutationFn: async (data: { athleteData: InsertAthlete; teamIds: string[] }) => {
       // Create athlete
-      const response = await apiRequest("POST", "/api/athletes", data.athleteData);
+      // Create the athlete in the organization being viewed (the API checks the caller manages it)
+      const response = await apiRequest("POST", "/api/athletes", {
+        ...data.athleteData,
+        ...(organizationContext ? { organizationId: organizationContext } : {}),
+      });
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || "Failed to create athlete");

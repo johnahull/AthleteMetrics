@@ -45,6 +45,7 @@ import {
 } from "@shared/schema";
 import type { User } from "@shared/schema";
 import { EVAL_REPORT_TYPE } from "@shared/eval-report-config";
+import { activeGlobalAthleteLink } from "./global-athlete-service";
 
 /**
  * Result of a merge preview operation
@@ -593,19 +594,23 @@ export class ProfileMergeService extends BaseService {
         }
       }
 
-      // 10. Consolidate Global Athlete links
-      const [sourceLink] = await tx.select()
+      // 10. Consolidate Global Athlete links (an active link wins over a non-active one)
+      const linkWithState = { id: userGlobalAthleteLinks.id, active: sql<boolean>`${activeGlobalAthleteLink}` };
+      const [sourceLink] = await tx.select(linkWithState)
         .from(userGlobalAthleteLinks)
         .where(eq(userGlobalAthleteLinks.userId, sourceUserId));
-      const [targetLink] = await tx.select()
+      const [targetLink] = await tx.select(linkWithState)
         .from(userGlobalAthleteLinks)
         .where(eq(userGlobalAthleteLinks.userId, targetUserId));
 
       if (sourceLink) {
-        if (targetLink) {
-          // Both have links - delete source
+        if (targetLink && (targetLink.active || !sourceLink.active)) {
+          // Both have links - keep the target's
           await tx.delete(userGlobalAthleteLinks).where(eq(userGlobalAthleteLinks.id, sourceLink.id));
         } else {
+          if (targetLink) {
+            await tx.delete(userGlobalAthleteLinks).where(eq(userGlobalAthleteLinks.id, targetLink.id));
+          }
           // Transfer link to target
           await tx.update(userGlobalAthleteLinks)
             .set({ userId: targetUserId })
@@ -884,12 +889,12 @@ export class ProfileMergeService extends BaseService {
   ): Promise<MergeConflict[]> {
     const conflicts: MergeConflict[] = [];
 
-    // Check for Global Athlete conflicts (blocking if different GAs)
+    // Check for Global Athlete conflicts (blocking if different GAs); only active links conflict, the merge keeps the active one
     const [sourceLinkResult, targetLinkResult] = await Promise.all([
       db.select().from(userGlobalAthleteLinks)
-        .where(eq(userGlobalAthleteLinks.userId, sourceUserId)),
+        .where(and(eq(userGlobalAthleteLinks.userId, sourceUserId), activeGlobalAthleteLink)),
       db.select().from(userGlobalAthleteLinks)
-        .where(eq(userGlobalAthleteLinks.userId, targetUserId)),
+        .where(and(eq(userGlobalAthleteLinks.userId, targetUserId), activeGlobalAthleteLink)),
     ]);
 
     const sourceLink = sourceLinkResult[0];

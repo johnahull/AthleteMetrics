@@ -234,6 +234,11 @@ export default function ImportExportPanel() {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('preview', 'true');
+      // The preview checks teams in the organization the import will use
+      const { organizationId } = buildImportOptions();
+      if (organizationId) {
+        formData.append('options', JSON.stringify({ organizationId }));
+      }
 
       const response = await fetch(`/api/import/${type}`, {
         method: 'POST',
@@ -390,6 +395,9 @@ export default function ImportExportPanel() {
     // Add organization ID if available
     if (selectedOrgForTeams) {
       options.organizationId = selectedOrgForTeams;
+    } else if (organizationContext) {
+      // The organization being viewed (a site admin may belong to none)
+      options.organizationId = organizationContext;
     } else if (userOrganizations && userOrganizations.length === 1) {
       options.organizationId = userOrganizations[0].organizationId;
     }

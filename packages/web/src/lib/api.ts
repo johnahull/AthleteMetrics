@@ -23,7 +23,8 @@ export interface ApiError extends Error {
 export interface SingleInvitationResponse {
   id: string;
   email: string;
-  inviteLink: string;
+  /** Absent when the invitee already has an account (they sign in to accept; the link is only emailed) */
+  inviteLink?: string;
   /** Email delivery status. Always present (defaults to false in DB schema if send fails) */
   emailSent: boolean;
   message: string;
@@ -32,7 +33,8 @@ export interface SingleInvitationResponse {
 /** Bulk athlete invitation response (multiple emails for one athlete) */
 export interface BulkAthleteInvitationResponse {
   invitations: Array<{ id: string; email: string }>;
-  inviteLinks: string[];
+  /** Absent when the athlete already has an account (they sign in to accept; the links are only emailed) */
+  inviteLinks?: string[];
   emailResults: Array<{ email: string; sent: boolean }>;
   athlete: {
     id: string;

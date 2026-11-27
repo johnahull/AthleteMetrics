@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { OrgBadge, MultiOrgBadge } from '@/components/athlete/OrgBadge';
+import { VerifyEmailForLinkedRecords } from '@/components/athlete/VerifyEmailForLinkedRecords';
 import { Loader2, AlertCircle, Link2, Building2, BarChart3, Shield, ArrowRight } from 'lucide-react';
 import { Redirect, Link } from 'wouter';
 import { formatValueWithUnit } from '@/lib/metrics';
@@ -66,6 +67,9 @@ export default function UnifiedDashboardPage() {
                 Your global athlete identity will be created automatically when you verify your email address.
                 Once verified, accounts with the same email will be linked together.
               </p>
+              <div className="mb-4">
+                <VerifyEmailForLinkedRecords />
+              </div>
               <Link href="/my-profile">
                 <Button variant="outline">
                   Go to My Profile

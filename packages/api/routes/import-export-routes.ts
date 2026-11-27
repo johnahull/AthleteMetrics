@@ -70,6 +70,28 @@ async function checkImportOrgAccess(
 }
 
 /**
+ * The one organization an export or athlete import works on: the requested one, else the caller's first
+ * membership. The caller needs a coach/org_admin role THERE (never the session role); a user without any
+ * organization is refused instead of getting an unfiltered query. With `siteAdminMayOmit`, a site admin who names
+ * no organization gets `organizationId: undefined`, meaning every organization.
+ */
+async function resolveStaffOrganization(
+  currentUser: { id: string; isSiteAdmin?: boolean; role?: string },
+  requested: unknown,
+  siteAdminMayOmit: boolean,
+): Promise<{ organizationId?: string; error?: string }> {
+  // A repeated query param arrives as an array: only a plain string names an organization
+  const requestedOrgId = typeof requested === 'string' && requested !== '' ? requested : undefined;
+  if (!requestedOrgId && siteAdminMayOmit && isSiteAdmin(currentUser)) return { organizationId: undefined };
+  const organizationId = requestedOrgId ?? (await storage.getUserOrganizations(currentUser.id))[0]?.organizationId;
+  if (!organizationId) return { error: "An organization is required" };
+  if (!isMeasurementWriterRole(await getOrgRole(currentUser, organizationId))) {
+    return { error: "Only coaches and organization admins of this organization can do this" };
+  }
+  return { organizationId };
+}
+
+/**
  * After a weight or height measurement is created, sync the value to the user's profile.
  * Uses the measurement's unit to convert to the profile's storage format (lbs / inches).
  */
@@ -715,6 +737,17 @@ export function registerImportExportRoutes(app: Express) {
         return res.status(403).json({ message: importOrgAccessError });
       }
 
+      // The athlete import (preview included) matches, updates and assigns teams in ONE organization, where the
+      // caller must be coach/org_admin. Resolved before anything is read or written.
+      let athleteImportOrgId: string | undefined;
+      if (type === 'athletes') {
+        const scope = await resolveStaffOrganization(req.session.user!, options.organizationId, false);
+        if (scope.error) {
+          return res.status(403).json({ message: scope.error });
+        }
+        athleteImportOrgId = scope.organizationId;
+      }
+
       const results: any[] = [];
       const errors: any[] = [];
       const warnings: any[] = [];
@@ -777,20 +810,13 @@ export function registerImportExportRoutes(app: Express) {
           }
         }
 
-        // Get current user's organization context
-        const currentUser = req.session.user!;
-        let organizationId: string | undefined;
-        const userOrgs = await storage.getUserOrganizations(currentUser.id);
-        organizationId = userOrgs[0]?.organizationId;
-
-        // Check which teams exist
-        const allTeams = await storage.getTeams();
+        // Check which teams exist in the import organization
+        const allTeams = await storage.getTeams(athleteImportOrgId);
         const missingTeams: any[] = [];
 
         for (const [teamName, info] of teamMap.entries()) {
           const existingTeam = allTeams.find(t =>
-            t.name?.toLowerCase().trim() === teamName.toLowerCase().trim() &&
-            (!organizationId || t.organization?.id === organizationId)
+            t.name?.toLowerCase().trim() === teamName.toLowerCase().trim()
           );
 
           if (!existingTeam) {
@@ -815,16 +841,13 @@ export function registerImportExportRoutes(app: Express) {
       if (type === 'athletes') {
         // PERFORMANCE: Pre-load all athletes to avoid N+1 query problem
         // Instead of querying database for each CSV row, load all athletes once and use in-memory lookup
-        let organizationId: string | undefined = options.organizationId;
-        if (!organizationId) {
-          const currentUser = req.session.user!;
-          const userOrgs = await storage.getUserOrganizations(currentUser.id);
-          organizationId = userOrgs[0]?.organizationId;
+        const organizationId = athleteImportOrgId!;
+        // The legacy body teamId must be a team of the import organization
+        const legacyTeamId: string | undefined = teamId || undefined;
+        if (legacyTeamId && !(await storage.getTeams(organizationId)).some(t => t.id === legacyTeamId)) {
+          return res.status(403).json({ message: "The selected team is not in this organization" });
         }
-
-        const allAthletes = organizationId
-          ? await storage.getAthletes({ organizationId })
-          : await storage.getAthletes();
+        const allAthletes = await storage.getAthletes({ organizationId });
 
         // Create fast lookup map: "firstname:lastname" => athlete
         const athleteMap = new Map(
@@ -970,23 +993,14 @@ export function registerImportExportRoutes(app: Express) {
               role: "athlete"
             };
 
-            // Get organization context
-            let organizationId: string | undefined = options.organizationId;
-            if (!organizationId) {
-              const currentUser = req.session.user!;
-              const userOrgs = await storage.getUserOrganizations(currentUser.id);
-              organizationId = userOrgs[0]?.organizationId;
-            }
-
             // Handle team resolution
-            let targetTeamId: string | undefined = teamId; // Legacy default
+            let targetTeamId: string | undefined = legacyTeamId; // Legacy default
 
             if (teamName && teamName.trim()) {
               const normalizedTeamName = teamName.trim();
-              const allTeams = await storage.getTeams();
+              const allTeams = await storage.getTeams(organizationId);
               let team = allTeams.find(t =>
-                t.name?.toLowerCase().trim() === normalizedTeamName.toLowerCase().trim() &&
-                (!organizationId || t.organization?.id === organizationId)
+                t.name?.toLowerCase().trim() === normalizedTeamName.toLowerCase().trim()
               );
 
               // Handle team creation based on teamHandling mode
@@ -1573,33 +1587,12 @@ export function registerImportExportRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      // Extract organizationId query parameter
-      const { organizationId: requestedOrgId } = req.query;
-
-      // Determine effective organization ID based on user permissions
-      let effectiveOrganizationId: string | undefined;
-
-      if (currentUser.isSiteAdmin) {
-        // Site admins can export from all organizations or a specific one
-        effectiveOrganizationId = requestedOrgId as string | undefined;
-      } else {
-        // Non-site-admin users can only export from their organization(s)
-        const userOrgs = await storage.getUserOrganizations(currentUser.id);
-
-        if (requestedOrgId) {
-          // Validate user has access to requested organization
-          const hasAccess = userOrgs.some(uo => uo.organizationId === requestedOrgId);
-          if (!hasAccess) {
-            return res.status(403).json({
-              message: "You do not have access to export athletes from this organization"
-            });
-          }
-          effectiveOrganizationId = requestedOrgId as string;
-        } else {
-          // Use user's first organization as default
-          effectiveOrganizationId = userOrgs[0]?.organizationId;
-        }
+      // Site admins may export all organizations or one; everyone else one organization where they are staff
+      const scope = await resolveStaffOrganization(currentUser, req.query.organizationId, true);
+      if (scope.error) {
+        return res.status(403).json({ message: scope.error });
       }
+      const effectiveOrganizationId = scope.organizationId;
 
       // Get athletes filtered by organization
       const athletes = await storage.getAthletes({ organizationId: effectiveOrganizationId });
@@ -1679,34 +1672,24 @@ export function registerImportExportRoutes(app: Express) {
       // Extract query parameters for filtering
       const {playerId, teamIds, metric, dateFrom, dateTo, birthYearFrom, birthYearTo, ageFrom, ageTo, search, sport, gender, organizationId } = req.query;
 
-      // Determine effective organization ID based on user permissions
-      let effectiveOrganizationId: string | undefined;
+      // Site admins may export all organizations or one; everyone else one organization where they are staff
+      const scope = await resolveStaffOrganization(currentUser, organizationId, true);
+      if (scope.error) {
+        return res.status(403).json({ message: scope.error });
+      }
+      const effectiveOrganizationId = scope.organizationId;
 
-      if (currentUser.isSiteAdmin) {
-        // Site admins can export from all organizations or a specific one
-        effectiveOrganizationId = organizationId as string | undefined;
-      } else {
-        // Non-site-admin users can only export from their organization(s)
-        const userOrgs = await storage.getUserOrganizations(currentUser.id);
-
-        if (organizationId) {
-          // Validate user has access to requested organization
-          const hasAccess = userOrgs.some(uo => uo.organizationId === organizationId);
-          if (!hasAccess) {
-            return res.status(403).json({
-              message: "You do not have access to export measurements from this organization"
-            });
-          }
-          effectiveOrganizationId = organizationId as string;
-        } else {
-          // Use user's first organization as default
-          effectiveOrganizationId = userOrgs[0]?.organizationId;
+      const requestedTeamIds = typeof teamIds === 'string' && teamIds ? teamIds.split(',') : undefined;
+      if (requestedTeamIds && effectiveOrganizationId) {
+        const orgTeamIds = new Set((await storage.getTeams(effectiveOrganizationId)).map(t => t.id));
+        if (!requestedTeamIds.every(id => orgTeamIds.has(id))) {
+          return res.status(403).json({ message: "One or more teams are not in this organization" });
         }
       }
 
       const filters: MeasurementFilters = {
         playerId: playerId as string,
-        teamIds: teamIds ? (teamIds as string).split(',') : undefined,
+        teamIds: requestedTeamIds,
         metric: metric as string,
         dateFrom: dateFrom as string,
         dateTo: dateTo as string,
@@ -1721,8 +1704,13 @@ export function registerImportExportRoutes(app: Express) {
         includeUnverified: true
       };
 
-      // Get measurements with filtering
-      const measurements = await storage.getMeasurements(filters);
+      // storage.getMeasurements scopes by the ATHLETE's membership; keep only rows that belong to the organization
+      // (strict isolation, as MeasurementService does), and only that organization's teams for the team column.
+      const measurements = (await storage.getMeasurements(filters))
+        .filter(m => !effectiveOrganizationId || m.organizationId === effectiveOrganizationId)
+        .map(m => effectiveOrganizationId && m.user?.teams
+          ? { ...m, user: { ...m.user, teams: m.user.teams.filter((t: any) => t.organization?.id === effectiveOrganizationId) } }
+          : m);
 
       // Transform to CSV format matching import template
       // Headers match client/src/pages/import-export.tsx measurementsTemplate (line 694)
@@ -1834,26 +1822,20 @@ export function registerImportExportRoutes(app: Express) {
       if (currentUser.isSiteAdmin) {
         // Site admins may export a specific org, or all when none is requested.
         teams = await storage.getTeams(requestedOrgId);
-      } else {
-        const userOrgs = await storage.getUserOrganizations(currentUser.id);
-        if (requestedOrgId) {
-          const hasAccess = userOrgs.some(uo => uo.organizationId === requestedOrgId);
-          if (!hasAccess) {
-            return res.status(403).json({
-              message: "You do not have access to export teams from this organization"
-            });
-          }
-          teams = await storage.getTeams(requestedOrgId);
-        } else {
-          // Include teams from ALL of the caller's organizations, not just one.
-          const orgIds = new Set(userOrgs.map(uo => uo.organizationId));
-          if (orgIds.size === 0) {
-            res.setHeader('Content-Type', 'text/csv');
-            res.setHeader('Content-Disposition', 'attachment; filename="teams.csv"');
-            return res.send(csvHeaders.join(','));
-          }
-          teams = (await storage.getTeams()).filter(t => t.organizationId && orgIds.has(t.organizationId));
+      } else if (requestedOrgId) {
+        const scope = await resolveStaffOrganization(currentUser, requestedOrgId, false);
+        if (scope.error) {
+          return res.status(403).json({ message: scope.error });
         }
+        teams = await storage.getTeams(requestedOrgId);
+      } else {
+        // Teams of ALL the organizations where the caller is coach/org_admin, not just one.
+        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+        const orgIds = new Set(userOrgs.filter(uo => isMeasurementWriterRole(uo.role)).map(uo => uo.organizationId));
+        if (orgIds.size === 0) {
+          return res.status(403).json({ message: "Only coaches and organization admins can export teams" });
+        }
+        teams = (await storage.getTeams()).filter(t => t.organizationId && orgIds.has(t.organizationId));
       }
 
       const csvRows = teams.map(team => {

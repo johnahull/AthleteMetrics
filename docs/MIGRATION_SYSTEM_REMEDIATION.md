@@ -53,6 +53,8 @@
 
 > 0187 (`wellness_requests.is_standing` boolean NOT NULL DEFAULT false and `wellness_responses.superseded_at` timestamp, nullable, AM-FEAT-027 anytime wellness survey: a standing request stays open until cancelled, and a same-day resubmit marks the earlier row superseded instead of deleting it; `_down` drops both columns) is provisional: renumber at merge if another branch lands 0187 first (file, `_down`, test `migration-0187-wellness-standing-requests`, tracking row, this line).
 
+> 0188 (`email_verification_tokens.identity_proof_at` timestamp, nullable, no default: set when the token's own user redeemed it while signed in; automatic global athlete links share data only with such a proof, so tokens redeemed earlier prove nothing; `_down` drops the column) is provisional: renumber at merge if another branch lands 0188 first (file, `_down`, test `migration-0188-email-verification-identity-proof`, tracking row, this line).
+
 ## Current State (2025-10-30)
 
 ### Overview
