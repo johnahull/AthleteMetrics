@@ -157,11 +157,10 @@ async function backfillAthleteLinks(): Promise<BackfillStats> {
           await db.insert(userGlobalAthleteLinks).values({
             userId: athlete.id,
             globalAthleteId,
-            linkStatus: 'confirmed',
+            // Nobody proved this address: the link shares nothing until the account verifies it
+            linkStatus: 'pending',
             linkType: 'auto_import',
             proposedBy: athlete.id,
-            confirmedBy: athlete.id,
-            confirmedAt: new Date(),
             shareMeasurements: true,
           }).onConflictDoNothing(); // Silently skip if link already exists
         } catch (error) {
@@ -173,7 +172,7 @@ async function backfillAthleteLinks(): Promise<BackfillStats> {
         // Audit log
         await db.insert(globalAthleteAuditLog).values({
           globalAthleteId,
-          action: 'link_confirmed',
+          action: 'link_proposed',
           actorId: athlete.id,
           actorType: 'system',
           details: {

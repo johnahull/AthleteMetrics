@@ -159,6 +159,18 @@ describe('EmailService', () => {
       const sentEmail = mockSend.mock.calls[0][0];
       expect(sentEmail.html).toContain('John Doe');
       expect(sentEmail.html).toContain('https://example.com/verify-email?token=token123');
+      expect(sentEmail.html).not.toContain('This link is for the AthleteMetrics account');
+    });
+
+    it('names the account the link is for, escaped', async () => {
+      await emailService.sendEmailVerification('user@example.com', {
+        userName: 'John Doe',
+        verificationLink: 'https://example.com/verify-email?token=token123',
+        accountName: 'jdoe<b>',
+      });
+
+      const sentEmail = mockSend.mock.calls[0][0];
+      expect(sentEmail.html).toContain('This link is for the AthleteMetrics account <strong>jdoe&lt;b&gt;</strong>');
     });
   });
 

@@ -25,7 +25,7 @@ import express, { type Express } from 'express';
 import crypto from 'crypto';
 import { db } from '../../packages/api/db';
 import { users, organizations } from '@shared/schema/tables/core';
-import { invitations } from '@shared/schema/tables/membership';
+import { invitations, userOrganizations } from '@shared/schema/tables/membership';
 import { parentAthleteLinks, parentalConsents } from '@shared/schema/tables/coppa';
 import { eq, like, inArray } from 'drizzle-orm';
 
@@ -62,6 +62,8 @@ import { registerRoutes } from '../../packages/api/routes';
 
 import { exactlyAge } from '../shared/age-helpers';
 import { purgeTestRows } from '../helpers/purge-test-rows';
+import { INVITATION_PENDING_PASSWORD } from '@shared/schema';
+import bcrypt from 'bcrypt';
 
 /** Birthday `daysOffset` days from now, born `years` ago. +1 → still (years-1). */
 function ageWithOffset(years: number, daysOffset: number): string {
@@ -433,13 +435,15 @@ describe('POST /api/invitations/:token/accept — COPPA age gate', () => {
       firstName: 'Existing',
       lastName: 'Adult',
       fullName: 'Existing Adult',
-      password: 'placeholder-hash',
+      password: INVITATION_PENDING_PASSWORD, // unclaimed coach-created row: claimable through the invitation
       emails: [`existadult-${ts}@testinvcoppa.local`],
       birthDate: exactlyAge(20),
       role: 'athlete',
       isActive: false,
     }).returning({ id: users.id });
     createdUserIds.push(player.id);
+    // coach-created rows are on the inviting organization's roster
+    await db.insert(userOrganizations).values({ userId: player.id, organizationId: testOrgId, role: 'athlete' });
 
     const token = await seedInvitation({
       email: `existadult-${ts}@testinvcoppa.local`,
@@ -467,13 +471,15 @@ describe('POST /api/invitations/:token/accept — COPPA age gate', () => {
       firstName: 'Existing',
       lastName: 'Minor',
       fullName: 'Existing Minor',
-      password: 'placeholder-hash',
+      password: INVITATION_PENDING_PASSWORD, // unclaimed coach-created row: claimable through the invitation
       emails: [`existu13-${ts}@testinvcoppa.local`],
       birthDate: under13Dob(),
       role: 'athlete',
       isActive: false,
     }).returning({ id: users.id });
     createdUserIds.push(player.id);
+    // coach-created rows are on the inviting organization's roster
+    await db.insert(userOrganizations).values({ userId: player.id, organizationId: testOrgId, role: 'athlete' });
 
     const token = await seedInvitation({
       email: `existu13-${ts}@testinvcoppa.local`,
@@ -503,7 +509,7 @@ describe('POST /api/invitations/:token/accept — COPPA age gate', () => {
       lastName: 'Minor',
       fullName: 'Pending Minor',
       emails: [email],
-      password: 'some-hashed-password',
+      password: INVITATION_PENDING_PASSWORD, // unclaimed coach-created row: claimable through the invitation
       birthDate: under13Dob(),
       coppaStatus: 'pending_consent',
       isMinor: true,
@@ -511,6 +517,8 @@ describe('POST /api/invitations/:token/accept — COPPA age gate', () => {
       role: 'athlete',
     }).returning({ id: users.id });
     createdUserIds.push(existing.id);
+    // coach-created rows are on the inviting organization's roster
+    await db.insert(userOrganizations).values({ userId: existing.id, organizationId: testOrgId, role: 'athlete' });
 
     const token = await seedInvitation({ email });
     const payload = acceptPayload({
@@ -528,7 +536,7 @@ describe('POST /api/invitations/:token/accept — COPPA age gate', () => {
     expect(hasSessionCookie(res)).toBe(false);
   });
 
-  it('Path B: existing adult user (birthDate set) + under-13 form value → existing wins → session', async () => {
+  it('Path B: signed-in existing adult (birthDate set) + under-13 form value → existing wins, stays signed in', async () => {
     const ts = Date.now();
     const email = `existadultb-${ts}@testinvcoppa.local`;
     const [existing] = await db.insert(users).values({
@@ -537,11 +545,11 @@ describe('POST /api/invitations/:token/accept — COPPA age gate', () => {
       lastName: 'AdultB',
       fullName: 'Existing AdultB',
       emails: [email],
-      password: 'some-hashed-password',
+      password: await bcrypt.hash('ValidPass1!!', 4),
       birthDate: exactlyAge(30),
       coppaStatus: 'not_applicable',
       role: 'athlete',
-    }).returning({ id: users.id });
+    }).returning({ id: users.id, username: users.username });
     createdUserIds.push(existing.id);
 
     const token = await seedInvitation({ email });
@@ -550,13 +558,18 @@ describe('POST /api/invitations/:token/accept — COPPA age gate', () => {
       parentEmail: `p-ab-${ts}@testinvcoppa.local`,
     });
 
-    const res = await request(app)
+    // An existing account accepts while signed in as itself
+    const agent = request.agent(app);
+    expect((await agent.post('/api/auth/login').send({ username: existing.username, password: 'ValidPass1!!' })).status).toBe(200);
+    const res = await agent
       .post(`/api/invitations/${token}/accept`)
       .send(payload);
 
     expect(res.status).toBe(200);
     expect(res.body.requiresParentalConsent).toBeFalsy();
-    expect(hasSessionCookie(res)).toBe(true);
+    expect(res.body.user?.id).toBe(existing.id);
+    const [row] = await db.select().from(users).where(eq(users.id, existing.id));
+    expect(row.coppaStatus).toBe('not_applicable');
   });
 
   it('under-13 with parentEmail equal to invitation email → 400', async () => {
@@ -684,13 +697,15 @@ describe('POST /api/invitations/:token/accept — coach-provided COPPA data', ()
       lastName: 'Minor',
       fullName: 'Backfilled Minor',
       emails: [email],
-      password: 'placeholder-hash',
+      password: INVITATION_PENDING_PASSWORD, // unclaimed coach-created row: claimable through the invitation
       birthDate: under13Dob(),
       coppaStatus: 'not_applicable',
       isMinor: false,
       role: 'athlete',
     }).returning({ id: users.id });
     createdUserIds.push(existing.id);
+    // coach-created rows are on the inviting organization's roster
+    await db.insert(userOrganizations).values({ userId: existing.id, organizationId: testOrgId, role: 'athlete' });
 
     const token = await seedInvitation({ email });
     // The child lies with an adult DOB and provides no parent email
@@ -730,13 +745,15 @@ describe('POST /api/invitations/:token/accept — coach-provided COPPA data', ()
       lastName: 'Minor',
       fullName: 'Revoked Minor',
       emails: [`revoked-${ts}@testinvcoppa.local`],
-      password: 'placeholder-hash',
+      password: INVITATION_PENDING_PASSWORD, // unclaimed coach-created row: claimable through the invitation
       birthDate: under13Dob(),
       isMinor: true,
       role: 'athlete',
       coppaStatus: 'consent_revoked',
     }).returning({ id: users.id });
     createdUserIds.push(revoked.id);
+    // coach-created rows are on the inviting organization's roster
+    await db.insert(userOrganizations).values({ userId: revoked.id, organizationId: testOrgId, role: 'athlete' });
 
     const token = await seedInvitation({
       email: `revoked-${ts}@testinvcoppa.local`,
@@ -773,13 +790,15 @@ describe('POST /api/invitations/:token/accept — coach-provided COPPA data', ()
       lastName: 'ParentEmail',
       fullName: 'Needs ParentEmail',
       emails: [email],
-      password: 'placeholder-hash',
+      password: INVITATION_PENDING_PASSWORD, // unclaimed coach-created row: claimable through the invitation
       birthDate: under13Dob(),
       isMinor: true,
       role: 'athlete',
       coppaStatus: 'needs_parent_email',
     }).returning({ id: users.id });
     createdUserIds.push(existing.id);
+    // coach-created rows are on the inviting organization's roster
+    await db.insert(userOrganizations).values({ userId: existing.id, organizationId: testOrgId, role: 'athlete' });
 
     const token = await seedInvitation({ email });
     const payload = acceptPayload({

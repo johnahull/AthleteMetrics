@@ -383,6 +383,7 @@ export function registerRegistrationRoutes(app: Express) {
       const emailSent = await emailService.sendEmailVerification(email, {
         userName: firstName,
         verificationLink,
+        accountName: username,
       });
 
       // Log registration attempt
@@ -579,6 +580,7 @@ export function registerRegistrationRoutes(app: Express) {
       const emailSent = await emailService.sendEmailVerification(email, {
         userName: firstName,
         verificationLink,
+        accountName: username,
       });
 
       console.log(`[ParentRegistration] Parent registered: ${username} (${email}), linkedAthletes: ${linkedCount}, emailSent: ${emailSent}`);
@@ -627,6 +629,7 @@ export function registerRegistrationRoutes(app: Express) {
         await emailService.sendEmailVerification(email, {
           userName: user.firstName,
           verificationLink,
+          accountName: user.username,
         });
 
         console.log(`[Registration] Verification email resent to: ${email}`);

@@ -23,6 +23,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { OrgBadge } from '@/components/athlete/OrgBadge';
+import { VerifyEmailForLinkedRecords } from '@/components/athlete/VerifyEmailForLinkedRecords';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -97,6 +98,9 @@ export default function MyGlobalProfilePage() {
                 Your global athlete profile will be created when you verify your email address.
                 This allows you to link accounts across multiple organizations.
               </p>
+              <div className="mb-4">
+                <VerifyEmailForLinkedRecords />
+              </div>
               <Link href="/my-dashboard">
                 <Button variant="outline">
                   <ArrowLeft className="mr-2 h-4 w-4" />
