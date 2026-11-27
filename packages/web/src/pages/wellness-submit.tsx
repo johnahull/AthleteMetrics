@@ -541,7 +541,10 @@ export default function WellnessSubmit() {
 
           {isStanding && (
             <Alert className="mb-6" data-testid="standing-replace-note">
-              <AlertDescription>Submitting again today replaces today's entry. Your coach can still see the earlier one.</AlertDescription>
+              <AlertDescription>
+                <p>Check-ins are not monitored in real time. They are best done on waking.</p>
+                <p className="mt-2">Submitting again today replaces today's entry. Your coach can still see the earlier one.</p>
+              </AlertDescription>
             </Alert>
           )}
 

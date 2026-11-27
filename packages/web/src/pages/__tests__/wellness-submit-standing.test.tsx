@@ -101,6 +101,7 @@ describe('WellnessSubmit - standing requests', () => {
     expect(await screen.findByText("Submitting again today replaces today's entry. Your coach can still see the earlier one.")).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Submit' })).toBeEnabled();
     expect(screen.queryByTestId('athlete-selector')).not.toBeInTheDocument();
+    expect(screen.getByText('Check-ins are not monitored in real time. They are best done on waking.')).toBeVisible();
   });
 
   it('is not locked even if a prior submission is reported', async () => {
@@ -195,6 +196,7 @@ describe('WellnessSubmit - standing requests', () => {
     renderPage();
 
     await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('one-time draft'));
+    expect(screen.queryByText(/not monitored in real time/)).not.toBeInTheDocument();
   });
 
   it('shows that a cancelled standing request is no longer available instead of the form', async () => {
