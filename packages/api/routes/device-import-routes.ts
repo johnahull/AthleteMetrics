@@ -34,6 +34,9 @@ const SAFE_ERROR_PATTERNS = [
   'Invalid file type',
   'No file uploaded',
   'organizationId required',
+  'No importable rows found',
+  'The selected session date is not in this file',
+  'This import has no session date',
 ];
 
 function isSafeError(message: string): boolean {
@@ -90,7 +93,7 @@ const parseRequestSchema = z.object({
   source: z.enum(['dashr']),
   organizationId: z.string().min(1),
   eventId: z.string().optional(),
-  sessionDate: z.string().optional(),
+  sessionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
 const orgQuerySchema = z.object({

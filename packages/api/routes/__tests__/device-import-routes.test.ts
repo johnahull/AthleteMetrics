@@ -24,21 +24,23 @@ vi.mock('../../storage', () => ({
   },
 }));
 
+const serviceMocks = vi.hoisted(() => ({ parseAndMatch: undefined as any, commitBatch: undefined as any }));
+
 // Mock service to avoid DB calls
 vi.mock('../../services/device-import-service', () => ({
   DeviceImportService: vi.fn().mockImplementation(() => ({
-    parseAndMatch: vi.fn().mockResolvedValue({
+    parseAndMatch: (serviceMocks.parseAndMatch = vi.fn().mockResolvedValue({
       batchId: 'test-batch-id',
       preview: { athletes: [], summary: { totalAthletes: 0, exactMatches: 0, fuzzyMatches: 0, unmatched: 0, totalDrills: 0, outlierCount: 0 } },
       sessions: [],
       warnings: [],
-    }),
-    commitBatch: vi.fn().mockResolvedValue({
+    })),
+    commitBatch: (serviceMocks.commitBatch = vi.fn().mockResolvedValue({
       measurementsCreated: 0,
       measurementsSkipped: 0,
       measurementsReplaced: 0,
       athletesImported: 0,
-    }),
+    })),
     rollbackBatch: vi.fn().mockResolvedValue(undefined),
     getBatches: vi.fn().mockResolvedValue([]),
     getBatchDetail: vi.fn().mockResolvedValue({ id: 'test-batch-id', status: 'completed' }),
@@ -296,5 +298,44 @@ describe('Device Import Routes — Auth', () => {
 
       expect(res.status).toBe(400);
     });
+  });
+});
+
+describe('Device Import Routes — session date errors', () => {
+  const admin = { id: 'admin-1', isSiteAdmin: true, role: 'site_admin' };
+
+  it.each([
+    'No importable rows found. Each row needs a date (M/D/YYYY with a 4-digit year) and a valid result.',
+    'The selected session date is not in this file',
+  ])('returns 400 with "%s" from parse', async (message) => {
+    serviceMocks.parseAndMatch.mockRejectedValueOnce(new Error(message));
+    const res = await request(createApp(admin))
+      .post('/api/import/device/parse')
+      .field('source', 'dashr')
+      .field('organizationId', 'org-1')
+      .attach('file', Buffer.from('Date\n'), { filename: 'test.csv', contentType: 'text/csv' });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe(message);
+  });
+
+  it('returns 400 with the re-upload message from commit', async () => {
+    const message = 'This import has no session date. Upload the file again.';
+    serviceMocks.commitBatch.mockRejectedValueOnce(new Error(message));
+    const res = await request(createApp(admin))
+      .post('/api/import/device/commit')
+      .send({ batchId: '00000000-0000-4000-8000-000000000000', organizationId: 'org-1', duplicateStrategy: 'skip', addMissingEventMetrics: false, athletes: [] });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe(message);
+  });
+
+  it.each(['', '3/5/2019', 'today'])('returns 400 for the malformed sessionDate "%s"', async (sessionDate) => {
+    const res = await request(createApp(admin))
+      .post('/api/import/device/parse')
+      .field('source', 'dashr')
+      .field('organizationId', 'org-1')
+      .field('sessionDate', sessionDate)
+      .attach('file', Buffer.from('Date\n'), { filename: 'test.csv', contentType: 'text/csv' });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('Invalid request');
   });
 });

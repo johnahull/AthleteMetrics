@@ -106,9 +106,17 @@ export class DeviceImportService {
 
     // Get session dates
     const sessions = parser.getSessionDates(file);
+    if (sessions.length === 0) {
+      throw new Error('No importable rows found. Each row needs a date (M/D/YYYY with a 4-digit year) and a valid result.');
+    }
+    if (sessionDate && !sessions.some(s => s.sessionDate === sessionDate)) {
+      throw new Error('The selected session date is not in this file');
+    }
+    // A one-date file needs no choice. A several-date file stays unfiltered, and cannot be committed, until one is chosen
+    const chosenDate = sessionDate ?? (sessions.length === 1 ? sessions[0].sessionDate : undefined);
 
     // Parse CSV
-    const parsed = parser.parse(file, sessionDate);
+    const parsed = parser.parse(file, chosenDate);
 
     // Build candidate pool for matching
     let candidates: Array<{
@@ -196,7 +204,7 @@ export class DeviceImportService {
         organizationId,
         source: `${source}_csv`,
         fileName,
-        sessionDate: sessionDate ?? null,
+        sessionDate: chosenDate ?? null,
         eventId: eventId ?? null,
         eventNameSnapshot,
         parsedPreview: { athletes: previewAthletes, summary },
@@ -208,8 +216,8 @@ export class DeviceImportService {
 
     // When a sessionDate filter is active, return only that session
     // so the client advances to "review" instead of looping back to "session-select"
-    const filteredSessions = sessionDate
-      ? sessions.filter(s => s.sessionDate === sessionDate)
+    const filteredSessions = chosenDate
+      ? sessions.filter(s => s.sessionDate === chosenDate)
       : sessions;
 
     return {
@@ -255,6 +263,10 @@ export class DeviceImportService {
     if (!Array.isArray(preview.athletes)) {
       throw new Error('Batch preview data is malformed (missing athletes array)');
     }
+
+    // Measurements are dated by the run date from the file; the upload date is never a substitute
+    const sessionDate = batch.sessionDate;
+    if (!sessionDate) throw new Error('This import has no session date. Upload the file again.');
 
     // Check event not frozen (if linked)
     if (batch.eventId) {
@@ -376,14 +388,13 @@ export class DeviceImportService {
       // O(1) duplicate checking and orphan split detection in the loop below.
       const affectedAthleteIds = new Set<string>();
       const affectedDates = new Set<string>();
-      const defaultDate = batch.sessionDate ?? batch.createdAt.toISOString().split('T')[0];
       for (const pa of preview.athletes) {
         const ov = overrideMap.get(pa.csvName);
         if (!(ov?.included ?? pa.included)) continue;
         const aid = ov?.matchedAthleteId ?? pa.matchedAthleteId;
         if (!aid) continue;
         affectedAthleteIds.add(aid);
-        affectedDates.add(defaultDate);
+        affectedDates.add(sessionDate);
       }
 
       // Single query: all device-imported measurements for affected athletes/dates
@@ -424,7 +435,7 @@ export class DeviceImportService {
         importedAthleteIds.add(athleteId);
 
         for (const drill of previewAthlete.drills) {
-          const date = defaultDate;
+          const date = sessionDate;
           // One id for the drill row and its split rows: derived metrics can pair splits within one run
           const runId = randomUUID();
 
