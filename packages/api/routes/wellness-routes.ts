@@ -37,9 +37,9 @@ import {
   submitWellnessResponseSchema,
   generateResponseValidationSchema,
 } from "@shared/wellness-validation";
-import type { WellnessRequest, WellnessResponse } from "@shared/wellness-types";
+import type { WellnessResponse, WellnessTemplateConfig } from "@shared/wellness-types";
 import type { WellnessTrendDataPoint } from "@shared/wellness-analytics-types";
-import { calculateAthleteStatus, getCommonInjuries, calculateTrend } from "@shared/wellness-status-utils";
+import { calculateAthleteStatus, getCommonInjuries, calculateTrend, summarizeEarlierEntry } from "@shared/wellness-status-utils";
 import { WELLNESS_CONSTANTS } from "@shared/wellness-constants";
 import { userTeams, userOrganizations } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
@@ -51,6 +51,14 @@ import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { getPushNotificationService } from "../services/push-notification-service";
 import type { NotificationPayload } from "../services/push-notification-service";
 import { sendWellnessRequestNotifications } from "../services/wellness-notification-service";
+import {
+  isTemplateUsableBy,
+  getOrganizationMemberIds,
+  filterTargetsToOrganization,
+  targetsBelongToOrganization,
+  getRequestTargetAthleteIds,
+} from "../lib/wellness-org-scope";
+import { getOrgRole } from "../permissions/measurement-helpers";
 
 // Helper function to check if rate limiting should be bypassed
 const shouldBypassRateLimit = (): boolean => {
@@ -71,8 +79,37 @@ const createErrorResponse = (message: string, error?: Error) => {
   return response;
 };
 
+// The team a response is stamped with: an active membership in the template's organization, preferring a team
+// the request targets
+async function pickResponseTeam(athleteId: string, organizationId: string | null, targetTeamIds?: string[] | null) {
+  const memberships = (await storage.getUserTeams(athleteId))
+    .filter(m => m.isActive && !m.leftAt && m.team.organizationId === organizationId);
+  return (memberships.find(m => targetTeamIds?.includes(m.teamId)) ?? memberships[0])?.team ?? null;
+}
+
+// Looks up each row's template in one query; name only the organization's own or system templates
+// (organizationId null)
+async function usableTemplates<T extends { templateId: string; organizationId: string }>(rows: T[]) {
+  const templates = await storage.getWellnessTemplatesBatch([...new Set(rows.map(r => r.templateId))]);
+  const byId = new Map(templates.map(t => [t.id, t]));
+  return (row: T) => {
+    const template = byId.get(row.templateId);
+    return template && (template.organizationId === row.organizationId || template.organizationId === null)
+      ? template
+      : undefined;
+  };
+}
+
 // Helper function to verify if an athlete is targeted by a wellness request
-async function verifyAthleteIsTargeted(request: WellnessRequest, athleteId: string): Promise<boolean> {
+async function verifyAthleteIsTargeted(
+  request: { organizationId: string; targetAthleteIds?: string[] | null; targetTeamIds?: string[] | null },
+  athleteId: string
+): Promise<boolean> {
+  // Only members of the request's organization, through its own teams, count as targeted
+  if ((await getOrganizationMemberIds(request.organizationId, [athleteId])).size === 0) {
+    return false;
+  }
+
   // Check direct targeting
   if (request.targetAthleteIds?.includes(athleteId)) {
     return true;
@@ -81,7 +118,10 @@ async function verifyAthleteIsTargeted(request: WellnessRequest, athleteId: stri
   // Check team-based targeting
   if (request.targetTeamIds && request.targetTeamIds.length > 0) {
     const athleteTeams = await storage.getUserTeams(athleteId);
-    const athleteTeamIds = athleteTeams.map(ut => ut.team.id);
+    // Only current members: a removed athlete keeps a user_teams row with isActive=false and leftAt set
+    const athleteTeamIds = athleteTeams
+      .filter(ut => ut.isActive && !ut.leftAt && ut.team.organizationId === request.organizationId)
+      .map(ut => ut.team.id);
     return request.targetTeamIds.some(teamId => athleteTeamIds.includes(teamId));
   }
 
@@ -215,10 +255,10 @@ export function registerWellnessRoutes(app: Express) {
     requireOrganizationAccess(),
     async (req: Request, res: Response) => {
       try {
-        const { id } = req.params;
+        const { id, organizationId } = req.params;
 
         const template = await storage.getWellnessTemplate(id);
-        if (!template) {
+        if (!template || !isTemplateUsableBy(template, organizationId)) {
           return res.status(404).json({ message: "Template not found" });
         }
 
@@ -428,7 +468,7 @@ export function registerWellnessRoutes(app: Express) {
 
         // Get the source template
         const sourceTemplate = await storage.getWellnessTemplate(id);
-        if (!sourceTemplate) {
+        if (!sourceTemplate || !isTemplateUsableBy(sourceTemplate, organizationId)) {
           return res.status(404).json({ message: "Template not found" });
         }
 
@@ -483,6 +523,14 @@ export function registerWellnessRoutes(app: Express) {
 
         const data = validation.data;
 
+        const template = await storage.getWellnessTemplate(data.templateId);
+        if (!template || !isTemplateUsableBy(template, organizationId)) {
+          return res.status(404).json({ message: "Template not found" });
+        }
+        if (!(await targetsBelongToOrganization(organizationId, data.targetAthleteIds, data.targetTeamIds))) {
+          return res.status(400).json({ message: "Targets must be athletes and teams of this organization" });
+        }
+
         // Generate public token for all distribution methods
         // Token is used for navigation to submission page regardless of distribution method
         const publicToken = WellnessAccessService.generateMagicLinkToken();
@@ -503,6 +551,7 @@ export function registerWellnessRoutes(app: Express) {
           scheduledFor: data.scheduledFor ? new Date(data.scheduledFor) : undefined,
           expiresAt: data.expiresAt ? new Date(data.expiresAt) : undefined,
           status: isScheduled ? 'scheduled' : 'active',
+          isStanding: data.isStanding,
         });
 
         // Skip notifications for scheduled requests — the cron job will send them when due
@@ -550,8 +599,9 @@ export function registerWellnessRoutes(app: Express) {
         const status = req.query.status as string | undefined;
 
         const requests = await storage.getWellnessRequests(organizationId, { status: status as any });
+        const templateOf = await usableTemplates(requests);
 
-        res.json(requests);
+        res.json(requests.map(r => ({ ...r, templateName: templateOf(r)?.name })));
       } catch (error: any) {
         console.error("Failed to fetch wellness requests:", error);
         res.status(500).json(createErrorResponse("Failed to fetch wellness requests", error));
@@ -574,7 +624,8 @@ export function registerWellnessRoutes(app: Express) {
         const { id } = req.params;
 
         const request = await storage.getWellnessRequest(id);
-        if (!request) {
+        // A request of another organization looks the same as a missing one
+        if (!request || request.organizationId !== req.params.organizationId) {
           return res.status(404).json({ message: "Request not found" });
         }
 
@@ -641,7 +692,7 @@ export function registerWellnessRoutes(app: Express) {
 
         // Get template - token proves legitimate access
         const template = await storage.getWellnessTemplate(request.templateId);
-        if (!template) {
+        if (!template || !isTemplateUsableBy(template, request.organizationId)) {
           return res.status(404).json({ message: "Template not found" });
         }
 
@@ -685,45 +736,16 @@ export function registerWellnessRoutes(app: Express) {
           return res.status(410).json({ message: "This wellness request has expired" });
         }
 
-        // Collect all target athlete IDs
-        const targetAthleteIds: string[] = [];
-
-        // Add directly targeted athletes
-        if (request.targetAthleteIds) {
-          targetAthleteIds.push(...request.targetAthleteIds);
-        }
-
-        // Add athletes from targeted teams (query userTeams table)
-        if (request.targetTeamIds && request.targetTeamIds.length > 0) {
-          for (const teamId of request.targetTeamIds) {
-            // Query userTeams table to get all active members of this team
-            const teamMembers = await db
-              .select()
-              .from(userTeams)
-              .where(
-                and(
-                  eq(userTeams.teamId, teamId),
-                  eq(userTeams.isActive, true)
-                )
-              );
-
-            // Extract user IDs from team memberships
-            const memberIds = teamMembers.map((member: any) => member.userId);
-            targetAthleteIds.push(...memberIds);
-          }
-        }
-
-        // Remove duplicates
-        const uniqueAthleteIds = [...new Set(targetAthleteIds)];
+        // Direct targets and active members of targeted teams, limited to the request's organization
+        const uniqueAthleteIds = await getRequestTargetAthleteIds(request);
 
         // Batch fetch user details
         const athletes = await storage.getUsersByIds(uniqueAthleteIds);
 
-        // Get primary team for each athlete
+        // Get primary team (a current team of the request's organization) for each athlete
         const athletesWithTeams = await Promise.all(
           athletes.map(async (athlete) => {
-            const userTeams = await storage.getUserTeams(athlete.id);
-            const primaryTeam = userTeams.length > 0 ? userTeams[0].team : null;
+            const primaryTeam = await pickResponseTeam(athlete.id, request.organizationId, request.targetTeamIds);
 
             return {
               id: athlete.id,
@@ -757,7 +779,8 @@ export function registerWellnessRoutes(app: Express) {
         const { id } = req.params;
 
         const request = await storage.getWellnessRequest(id);
-        if (!request) {
+        // A request of another organization looks the same as a missing one
+        if (!request || request.organizationId !== req.params.organizationId) {
           return res.status(404).json({ message: "Request not found" });
         }
 
@@ -786,7 +809,8 @@ export function registerWellnessRoutes(app: Express) {
         const { organizationId, id } = req.params;
 
         const request = await storage.getWellnessRequest(id);
-        if (!request) {
+        // A request of another organization looks the same as a missing one
+        if (!request || request.organizationId !== req.params.organizationId) {
           return res.status(404).json({ message: "Request not found" });
         }
 
@@ -821,16 +845,17 @@ export function registerWellnessRoutes(app: Express) {
           }
 
           // Get athlete IDs
+          // Magic links are already limited to the organization; direct targets are limited here
           const athleteIds = magicLinks
             ? Array.from(magicLinks.keys())
-            : (request.targetAthleteIds || []);
+            : (await filterTargetsToOrganization(organizationId, request.targetAthleteIds || [])).athleteIds;
 
           const athletes = await storage.getUsersByIds(athleteIds);
           const athleteMap = new Map(athletes.map(a => [a.id, a]));
 
-          // Base URL for athlete_account distribution
-          const appUrl = process.env.APP_URL || 'https://athletemetrics.app';
-          const athleteAccountUrl = `${appUrl}/wellness-my-requests`;
+          // Same base-URL chain as password reset and email links; BASE_URL is the magic-link base
+          const appUrl = process.env.APP_URL || process.env.BASE_URL || 'https://athletemetrics.app';
+          const athleteAccountUrl = `${appUrl}/wellness/my-requests`;
 
           // Send push notification to each targeted athlete
           for (const athleteId of athleteIds) {
@@ -924,7 +949,8 @@ export function registerWellnessRoutes(app: Express) {
         const { id } = req.params;
 
         const request = await storage.getWellnessRequest(id);
-        if (!request) {
+        // A request of another organization looks the same as a missing one
+        if (!request || request.organizationId !== req.params.organizationId) {
           return res.status(404).json({ message: "Request not found" });
         }
 
@@ -1019,8 +1045,8 @@ export function registerWellnessRoutes(app: Express) {
         }
 
         // Validate requestId belongs to same organization as template (prevents cross-org data leakage)
+        const request = data.requestId ? await storage.getWellnessRequest(data.requestId) : undefined;
         if (data.requestId) {
-          const request = await storage.getWellnessRequest(data.requestId);
           if (!request) {
             return res.status(404).json({ message: "Request not found" });
           }
@@ -1086,6 +1112,33 @@ export function registerWellnessRoutes(app: Express) {
           });
         }
 
+        // Standing (anytime) requests: signed-in, targeted athletes only, while active, for a day near today
+        if (request?.isStanding) {
+          // The answers were validated against data.templateId, so it must be the request's own template
+          if (request.templateId !== data.templateId) {
+            return res.status(400).json({ message: "Template does not match this check-in" });
+          }
+
+          // SECURITY: a magic link can name any targeted athlete, so it must never write to a standing request
+          if ((req.user as { accessMethod?: string }).accessMethod !== 'authenticated') {
+            return res.status(403).json({ message: "Please sign in to submit this check-in" });
+          }
+
+          if (!(await verifyAthleteIsTargeted(request, req.user!.id))) {
+            return res.status(403).json({ message: "You are not part of this check-in" });
+          }
+
+          if (request.status !== 'active') {
+            return res.status(409).json({ message: "This check-in is no longer open" });
+          }
+
+          const oneDayMs = 24 * 60 * 60 * 1000;
+          const todayUtc = Date.parse(new Date().toISOString().split('T')[0]);
+          if (!(Math.abs(Date.parse(data.date) - todayUtc) <= oneDayMs)) {
+            return res.status(400).json({ message: "Check-in date must be yesterday, today or tomorrow" });
+          }
+        }
+
         // Get user details (handle both authenticated and magic link submissions)
         let userId: string;
         let userFullName: string;
@@ -1098,12 +1151,12 @@ export function registerWellnessRoutes(app: Express) {
           if (selectedAthleteId) {
             // Athlete selected from dropdown - use real user ID
             // SECURITY: Verify athlete is in targeted list
-            const request = await storage.getWellnessRequest(data.requestId!);
+            // Fetched above whenever a requestId was sent (an unknown one already answered 404)
             if (!request) {
-              return res.status(404).json({ message: "Request not found" });
+              return res.status(400).json({ message: "requestId is required when selecting an athlete" });
             }
 
-            const isTargeted = await verifyAthleteIsTargeted(request as any, selectedAthleteId);
+            const isTargeted = await verifyAthleteIsTargeted(request, selectedAthleteId);
 
             if (!isTargeted) {
               return res.status(403).json({
@@ -1116,8 +1169,7 @@ export function registerWellnessRoutes(app: Express) {
               return res.status(404).json({ message: "Selected athlete not found" });
             }
 
-            const userTeams = await storage.getUserTeams(selectedAthleteId);
-            const primaryTeam = userTeams.length > 0 ? userTeams[0].team : null;
+            const primaryTeam = await pickResponseTeam(selectedAthleteId, template.organizationId, request.targetTeamIds);
 
             userId = user.id;
             userFullName = user.fullName;
@@ -1138,8 +1190,7 @@ export function registerWellnessRoutes(app: Express) {
           }
 
           // Get team details if user belongs to teams
-          const userTeams = await storage.getUserTeams(req.user!.id);
-          const primaryTeam = userTeams.length > 0 ? userTeams[0].team : null;
+          const primaryTeam = await pickResponseTeam(req.user!.id, template.organizationId, request?.targetTeamIds);
 
           userId = user.id;
           userFullName = user.fullName;
@@ -1148,7 +1199,7 @@ export function registerWellnessRoutes(app: Express) {
         }
 
         // Create response
-        const response = await storage.createWellnessResponse({
+        const responseData = {
           requestId: data.requestId,
           organizationId: template.organizationId || '',
           templateId: data.templateId,
@@ -1162,7 +1213,17 @@ export function registerWellnessRoutes(app: Express) {
           accessMethod: (req.user as any).accessMethod || data.accessMethod || 'authenticated',
           ipAddress: req.ip || req.socket.remoteAddress || null,
           userAgent: req.get('user-agent') || null,
-        });
+        };
+
+        if (request?.isStanding) {
+          const { response, replaced } = await storage.createStandingWellnessResponse({
+            ...responseData,
+            requestId: request.id,
+          });
+          return res.status(201).json({ ...response, replaced });
+        }
+
+        const response = await storage.createWellnessResponse(responseData);
 
         res.status(201).json(response);
       } catch (error: any) {
@@ -1232,7 +1293,7 @@ export function registerWellnessRoutes(app: Express) {
         // This includes requests with targetAthleteIds containing this user
         // and requests with targetTeamIds where the user is a team member
         const userTeams = await storage.getUserTeams(userId);
-        const teamIds = userTeams.map(ut => ut.teamId);
+        const currentTeams = userTeams.filter(ut => ut.isActive && !ut.leftAt);
 
         // Get user's organizations to scope requests
         const userOrgs = await storage.getUserOrganizations(userId);
@@ -1249,7 +1310,9 @@ export function registerWellnessRoutes(app: Express) {
           }
 
           // Check if any of user's teams are targeted
-          if (request.targetTeamIds && request.targetTeamIds.some((teamId: string) => teamIds.includes(teamId))) {
+          // A team counts only for requests of its own organization
+          if (request.targetTeamIds && currentTeams.some(ut =>
+            ut.team.organizationId === request.organizationId && request.targetTeamIds!.includes(ut.teamId))) {
             return true;
           }
 
@@ -1260,12 +1323,22 @@ export function registerWellnessRoutes(app: Express) {
         const userResponses = await storage.getWellnessResponsesByAthlete(userId);
         const respondedRequestIds = new Set(userResponses.map(r => r.requestId));
 
-        // Filter out requests the user has already responded to
+        // Filter out requests the user has already responded to (standing requests stay open for more check-ins)
         const pendingRequests = targetedRequests.filter(request =>
-          !respondedRequestIds.has(request.id)
+          request.isStanding || !respondedRequestIds.has(request.id)
         );
 
-        res.json(pendingRequests);
+        // What the request card shows, so the athlete needs no template lookups
+        const templateOf = await usableTemplates(pendingRequests);
+        res.json(pendingRequests.map(r => {
+          const template = templateOf(r);
+          return {
+            ...r,
+            templateName: template?.name,
+            templateDescription: template?.description ?? undefined,
+            templateQuestionCount: (template?.config as WellnessTemplateConfig | undefined)?.questions.length,
+          };
+        }));
       } catch (error: any) {
         console.error("Failed to fetch athlete wellness requests:", error);
         res.status(500).json(createErrorResponse("Failed to fetch wellness requests", error));
@@ -1302,9 +1375,10 @@ export function registerWellnessRoutes(app: Express) {
         // Apply pagination
         const totalCount = allResponses.length;
         const paginatedResponses = allResponses.slice(offset, offset + limit);
+        const templateOf = await usableTemplates(paginatedResponses);
 
         res.json({
-          responses: paginatedResponses,
+          responses: paginatedResponses.map(r => ({ ...r, templateName: templateOf(r)?.name })),
           pagination: {
             page,
             limit,
@@ -1509,6 +1583,17 @@ export function registerWellnessRoutes(app: Express) {
         const { requestId } = req.params;
         const userId = req.user!.id;
 
+        // A standing request can be answered again any day, so it never counts as submitted
+        const wellnessRequest = await storage.getWellnessRequest(requestId);
+        if (wellnessRequest?.isStanding) {
+          // Only a targeted member of the request's organization learns that it is standing; anyone else just
+          // has nothing submitted
+          const isMember = (await storage.getUserOrganizations(userId))
+            .some(membership => membership.organizationId === wellnessRequest.organizationId);
+          const isTargeted = isMember && await verifyAthleteIsTargeted(wellnessRequest, userId);
+          return res.json(isTargeted ? { hasSubmitted: false, isStanding: true } : { hasSubmitted: false });
+        }
+
         // Get all responses for this user
         const userResponses = await storage.getWellnessResponsesByAthlete(userId);
 
@@ -1551,17 +1636,23 @@ export function registerWellnessRoutes(app: Express) {
     requireOrganizationAccess("coach"),
     async (req: Request, res: Response) => {
       try {
+        const { organizationId } = req.params;
         const { teamId, startDate, endDate } = req.query;
 
-        if (!teamId || !startDate || !endDate) {
+        if (typeof teamId !== 'string' || !teamId || !startDate || !endDate) {
           return res.status(400).json({
             message: "teamId, startDate, and endDate are required",
           });
         }
 
-        const summary = await storage.getTeamWellnessSummary(teamId as string, {
+        if (!(await targetsBelongToOrganization(organizationId, [], [teamId]))) {
+          return res.status(404).json({ message: "Team not found" });
+        }
+
+        const summary = await storage.getTeamWellnessSummary(teamId, {
           startDate: startDate as string,
           endDate: endDate as string,
+          organizationId,
         });
 
         res.json(summary);
@@ -1584,7 +1675,7 @@ export function registerWellnessRoutes(app: Express) {
     requireOrganizationAccess(),
     async (req: Request, res: Response) => {
       try {
-        const { athleteId } = req.params;
+        const { athleteId, organizationId } = req.params;
         const { startDate, endDate } = req.query;
 
         if (!startDate || !endDate) {
@@ -1593,14 +1684,22 @@ export function registerWellnessRoutes(app: Express) {
           });
         }
 
-        // Check authorization - athletes can only view their own data
-        if (req.user!.role === 'athlete' && req.user!.id !== athleteId) {
-          return res.status(403).json({ message: "Access denied" });
+        // Own data, otherwise coach / org admin of this organization (role in this organization) or site admin
+        if (req.user!.id !== athleteId) {
+          const role = await getOrgRole(req.user!, organizationId);
+          if (role !== 'coach' && role !== 'org_admin' && role !== 'site_admin') {
+            return res.status(403).json({ message: "Access denied" });
+          }
+        }
+
+        if (!(await targetsBelongToOrganization(organizationId, [athleteId]))) {
+          return res.status(404).json({ message: "Athlete not found" });
         }
 
         const summary = await storage.getAthleteWellnessSummary(athleteId, {
           startDate: startDate as string,
           endDate: endDate as string,
+          organizationId,
         });
 
         res.json(summary);
@@ -1710,10 +1809,22 @@ export function registerWellnessRoutes(app: Express) {
         const currentDateResponses = allResponses.filter(r => r.date === date);
         const previousDateResponses = allResponses.filter(r => r.date === previousDateStr);
 
-        // Query 3: Batch fetch all unique templates
-        const uniqueTemplateIds = [...new Set(allResponses.map(r => r.templateId))];
+        // Query 3: the selected date's superseded (edited) entries, shown to the coach but never scored or counted
+        const supersededResponses = await storage.getSupersededResponses(organizationId, date);
+        const supersededByUser = new Map<string, typeof supersededResponses>();
+        for (const r of supersededResponses) {
+          if (!supersededByUser.has(r.userId)) supersededByUser.set(r.userId, []);
+          supersededByUser.get(r.userId)!.push(r);
+        }
+
+        // Query 4: Batch fetch all unique templates
+        const uniqueTemplateIds = [...new Set([...allResponses, ...supersededResponses].map(r => r.templateId))];
         const templates = await storage.getWellnessTemplatesBatch(uniqueTemplateIds);
         const templateMap = new Map(templates.map(t => [t.id, t]));
+
+        // Query 5: each athlete's latest live entry, for freshness ("last entry N days ago")
+        const latestSubmissions = await storage.getLatestLiveSubmissions(organizationId);
+        const latestByUser = new Map(latestSubmissions.map(s => [s.userId, s]));
 
         // Log warning if any templates are missing
         const missingTemplates = uniqueTemplateIds.filter(id => !templateMap.has(id));
@@ -1772,6 +1883,12 @@ export function registerWellnessRoutes(app: Express) {
               score: status.score,
               injuries: status.injuries,
               lastSubmission: athleteResponse.submittedAt,
+              // Never dropped: a deleted or invalid template still shows the stored answers and pain
+              earlierEntries: (supersededByUser.get(athleteId) ?? []).map(earlier => {
+                const earlierTemplate = templateMap.get(earlier.templateId);
+                const validated = earlierTemplate ? validateTemplate(earlierTemplate) : null;
+                return summarizeEarlierEntry(earlier as WellnessResponse, validated ?? undefined);
+              }),
             };
           }).filter((a): a is NonNullable<typeof a> => a !== null);
 
@@ -2022,6 +2139,16 @@ export function registerWellnessRoutes(app: Express) {
             commonInjuries,
             athletes: athleteStatuses,
             templateAggregates,
+            // Every roster athlete, including those with no entry on the selected date
+            lastEntries: athleteIds.map(userId => {
+              const latest = latestByUser.get(userId);
+              return {
+                userId,
+                name: teamRoster.find(r => r.userId === userId)?.userFullName ?? null,
+                lastSubmittedAt: latest?.submittedAt ?? null,
+                lastDate: latest?.date ?? null,
+              };
+            }),
           });
         }
 

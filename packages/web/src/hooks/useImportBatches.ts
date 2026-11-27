@@ -16,6 +16,7 @@ export interface ImportBatch {
   sessionDate: string | null;
   eventNameSnapshot: string | null;
   measurementsCreated: number | null;
+  runsImported?: number | null; // Runs still stored; null for a batch imported before runs were recorded
   athletesImported: number | null;
   createdAt: string;
   committedAt: string | null;

@@ -55,9 +55,11 @@ export function PendingTasksBanner() {
   });
 
   // Filter to only active, non-expired requests (memoized to prevent re-render loops)
+  // Standing (anytime) requests are optional and never "due", so they never trigger the banner
   const pendingRequests = useMemo(() =>
     requests?.filter(r =>
       r.status === 'active' &&
+      !r.isStanding &&
       (!r.expiresAt || new Date(r.expiresAt) >= new Date())
     ) || [],
     [requests]

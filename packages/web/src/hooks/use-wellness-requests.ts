@@ -5,6 +5,7 @@ import type {
   CreateWellnessRequest,
   RequestStatus,
 } from '@shared/wellness-types';
+import type { RequestCompletionRate } from '@shared/wellness-compliance';
 
 interface UseWellnessRequestsOptions {
   organizationId: string;
@@ -182,32 +183,23 @@ export function useResendWellnessNotifications(organizationId: string) {
 }
 
 /**
- * Get completion rate for a wellness request
- * Returns { completed: number, total: number, rate: number }
+ * Get completion rate for a wellness request. Standing requests also carry 7- and 28-day compliance
+ * (`standing: true`, `windows`).
  */
 export function useRequestCompletionRate(requestId: string, organizationId: string) {
-  return useQuery<{ completed: number; total: number; rate: number }>({
+  return useQuery<RequestCompletionRate>({
     queryKey: ['/api/wellness/requests/completion', requestId],
     queryFn: async () => {
-      // Fetch the request to get target athletes
-      const request = await apiRequest(
+      const response = await apiRequest(
         'GET',
-        `/api/organizations/${organizationId}/wellness/requests/${requestId}`
-      ).then(res => res.json());
+        `/api/organizations/${organizationId}/wellness/requests/${requestId}/completion-rate`
+      );
 
-      // Calculate total targets
-      const total = (request.targetAthleteIds?.length || 0) + (request.targetTeamIds?.length || 0);
+      if (!response.ok) {
+        throw new Error('Failed to fetch completion rate');
+      }
 
-      // Fetch responses for this request
-      const responses = await apiRequest(
-        'GET',
-        `/api/wellness/responses?requestId=${requestId}`
-      ).then(res => res.json()).catch(() => []);
-
-      const completed = responses.length;
-      const rate = total > 0 ? (completed / total) * 100 : 0;
-
-      return { completed, total, rate };
+      return response.json();
     },
     enabled: !!requestId && !!organizationId,
   });

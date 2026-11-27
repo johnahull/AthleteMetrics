@@ -7,6 +7,7 @@
 import { BaseService } from "./base-service";
 import { retryAuditLog } from "../utils/audit-retry";
 import { positionRank, mayAliasFootballFor } from "./benchmark-tiers";
+import { getMetricTypes } from "../utils/metric-type";
 import { db } from "../db";
 import crypto from "crypto";
 import {
@@ -1254,19 +1255,21 @@ export class BenchmarkService extends BaseService {
       // Get latest measurements for each metric
       const measurements = await this.storage.getMeasurements({ userId: athleteId });
 
-      // Group measurements by metric and get latest for each
-      const latestMeasurements = new Map<string, number>();
+      // Group measurements by metric and get latest for each (measurements are sorted by date, newest first).
+      // Several runs on that date (a device import keeps every run): the date's best by the metric's direction.
+      const metricTypes = await getMetricTypes(applicableBenchmarks.map(b => b.metricCode), organizationId);
+      const latestByMetric = new Map<string, { date: string; value: number }>();
       for (const measurement of measurements) {
-        const existing = latestMeasurements.get(measurement.metric);
-        if (!existing) {
-          // Parse value from decimal string to number
-          const value = typeof measurement.value === 'string'
-            ? parseFloat(measurement.value)
-            : measurement.value;
-          latestMeasurements.set(measurement.metric, value);
-        }
-        // Assuming measurements are already sorted by date (newest first)
+        // Parse value from decimal string to number
+        const value = typeof measurement.value === 'string'
+          ? parseFloat(measurement.value)
+          : measurement.value;
+        const existing = latestByMetric.get(measurement.metric);
+        const better = existing && measurement.date === existing.date &&
+          (metricTypes[measurement.metric] === 'lower_is_better' ? value < existing.value : value > existing.value);
+        if (!existing || better) latestByMetric.set(measurement.metric, { date: measurement.date, value });
       }
+      const latestMeasurements = new Map([...latestByMetric].map(([metric, m]) => [metric, m.value]));
 
       // Evaluate each benchmark
       const status = applicableBenchmarks.map(benchmark => {

@@ -4,7 +4,7 @@
  * Mocks storage, email, push, and WellnessAccessService.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 const {
   mockGetWellnessTemplate,
@@ -53,6 +53,11 @@ vi.mock('../../auth/wellness-access', () => ({
 
 vi.mock('../../services/push-notification-service', () => ({
   getPushNotificationService: mockGetPushNotificationService,
+}));
+
+// Organization filtering is covered by tests/integration/wellness-org-scoping.test.ts
+vi.mock('../../lib/wellness-org-scope', () => ({
+  filterTargetsToOrganization: async (_organizationId: string, athleteIds: string[] = [], teamIds: string[] = []) => ({ athleteIds, teamIds }),
 }));
 
 import { sendWellnessRequestNotifications } from '../wellness-notification-service';
@@ -106,6 +111,38 @@ describe('sendWellnessRequestNotifications', () => {
     expect(mockSendToUser).toHaveBeenCalledWith('a-1', expect.any(Object), orgId);
     expect(results.pushNotifications).toBeDefined();
     expect(results.pushNotifications!.sent).toBe(1);
+  });
+
+  describe('athlete_account push link', () => {
+    const saved = { APP_URL: process.env.APP_URL, BASE_URL: process.env.BASE_URL };
+    afterEach(() => {
+      for (const [k, v] of Object.entries(saved)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    });
+
+    const sentUrl = async () => {
+      await sendWellnessRequestNotifications(
+        request,
+        { templateId: 'tmpl-1', distributionMethod: 'athlete_account', targetAthleteIds: ['a-1'] },
+        userId,
+        orgId
+      );
+      return mockSendToUser.mock.calls[0][1].url;
+    };
+
+    it('opens the My Requests page on APP_URL', async () => {
+      process.env.APP_URL = 'https://app.example.com';
+      process.env.BASE_URL = 'https://base.example.com';
+      expect(await sentUrl()).toBe('https://app.example.com/wellness/my-requests');
+    });
+
+    it('falls back to BASE_URL (the magic-link base) when APP_URL is not set', async () => {
+      delete process.env.APP_URL;
+      process.env.BASE_URL = 'https://base.example.com';
+      expect(await sentUrl()).toBe('https://base.example.com/wellness/my-requests');
+    });
   });
 
   it('should skip push for qr_code distribution', async () => {

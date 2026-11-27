@@ -6,8 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Calendar, Clock, AlertCircle } from 'lucide-react';
-import type { WellnessRequest, WellnessTemplate } from '@shared/wellness-types';
-import { useLocation } from 'wouter';
+import type { WellnessRequest } from '@shared/wellness-types';
+import { Link, useLocation } from 'wouter';
 
 const API_BASE = '';
 
@@ -32,30 +32,6 @@ export default function WellnessMyRequests() {
     enabled: !!user,
   });
 
-  // Fetch templates to display names
-  const templateIds = requests?.map((r) => r.templateId) || [];
-  const {
-    data: templates,
-  } = useQuery<Record<string, WellnessTemplate>>({
-    queryKey: ['wellness-templates-batch', templateIds],
-    queryFn: async () => {
-      const templateMap: Record<string, WellnessTemplate> = {};
-
-      // Fetch all templates in parallel
-      await Promise.all(
-        templateIds.map(async (templateId) => {
-          const res = await fetch(`${API_BASE}/api/wellness/templates/${templateId}`);
-          if (res.ok) {
-            templateMap[templateId] = await res.json();
-          }
-        })
-      );
-
-      return templateMap;
-    },
-    enabled: templateIds.length > 0,
-  });
-
   const handleStartQuestionnaire = (request: WellnessRequest) => {
     // Navigate to submission page with token
     setLocation(`/wellness/submit/${request.publicToken}`);
@@ -71,6 +47,10 @@ export default function WellnessMyRequests() {
   };
 
   const getStatusBadge = (request: WellnessRequest) => {
+    if (request.isStanding) {
+      return <Badge variant="secondary">Anytime</Badge>;
+    }
+
     if (request.status === 'cancelled') {
       return <Badge variant="destructive">Cancelled</Badge>;
     }
@@ -117,13 +97,74 @@ export default function WellnessMyRequests() {
       (!r.expiresAt || new Date(r.expiresAt) >= new Date())
   ) || [];
 
+  // Standing (anytime) requests never expire and stay open after each check-in
+  const anytimeRequests = activeRequests.filter((r) => r.isStanding);
+  const oneTimeRequests = activeRequests.filter((r) => !r.isStanding);
+
+  const renderRequestCard = (request: WellnessRequest) => {
+    const questionCount = request.templateQuestionCount;
+
+    return (
+      <Card key={request.id} data-testid="wellness-request-card">
+        <CardHeader>
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <CardTitle>{request.templateName || 'Wellness Check-In'}</CardTitle>
+              {request.templateDescription && (
+                <CardDescription>{request.templateDescription}</CardDescription>
+              )}
+            </div>
+            {getStatusBadge(request)}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="flex items-center gap-6 text-sm text-muted-foreground">
+              {request.scheduledFor && (
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  <span>Scheduled: {formatDate(request.scheduledFor)}</span>
+                </div>
+              )}
+              {request.expiresAt && (
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4" />
+                  <span>Expires: {formatDate(request.expiresAt)}</span>
+                </div>
+              )}
+            </div>
+
+            {questionCount !== undefined && (
+              <div className="text-sm text-muted-foreground">
+                {questionCount} questions •{' '}
+                ~{Math.ceil(questionCount * 0.5)} min
+              </div>
+            )}
+
+            <Button
+              onClick={() => handleStartQuestionnaire(request)}
+              className="w-full sm:w-auto"
+            >
+              {request.isStanding ? 'Fill out' : 'Start Questionnaire'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
   return (
     <div className="container max-w-4xl mx-auto py-8 px-4">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">My Wellness Requests</h1>
-        <p className="text-muted-foreground">
-          Complete wellness check-ins requested by your coach
-        </p>
+      <div className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">My Wellness Requests</h1>
+          <p className="text-muted-foreground">
+            Complete wellness check-ins requested by your coach
+          </p>
+        </div>
+        <Button asChild variant="outline" size="sm" className="shrink-0">
+          <Link href="/wellness/history">My history</Link>
+        </Button>
       </div>
 
       {activeRequests.length === 0 ? (
@@ -135,59 +176,19 @@ export default function WellnessMyRequests() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold">Pending Requests</h2>
-          {activeRequests.map((request) => {
-            const template = templates?.[request.templateId];
-
-            return (
-              <Card key={request.id} data-testid="wellness-request-card">
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <CardTitle>{template?.name || 'Wellness Check-In'}</CardTitle>
-                      {template?.description && (
-                        <CardDescription>{template.description}</CardDescription>
-                      )}
-                    </div>
-                    {getStatusBadge(request)}
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-6 text-sm text-muted-foreground">
-                      {request.scheduledFor && (
-                        <div className="flex items-center gap-2">
-                          <Calendar className="h-4 w-4" />
-                          <span>Scheduled: {formatDate(request.scheduledFor)}</span>
-                        </div>
-                      )}
-                      {request.expiresAt && (
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4" />
-                          <span>Expires: {formatDate(request.expiresAt)}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {template && (
-                      <div className="text-sm text-muted-foreground">
-                        {template.config.questions.length} questions •{' '}
-                        ~{Math.ceil(template.config.questions.length * 0.5)} min
-                      </div>
-                    )}
-
-                    <Button
-                      onClick={() => handleStartQuestionnaire(request)}
-                      className="w-full sm:w-auto"
-                    >
-                      Start Questionnaire
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+        <div className="space-y-8">
+          {anytimeRequests.length > 0 && (
+            <div className="space-y-4" data-testid="anytime-requests-section">
+              <h2 className="text-lg font-semibold">Anytime check-ins</h2>
+              {anytimeRequests.map(renderRequestCard)}
+            </div>
+          )}
+          {oneTimeRequests.length > 0 && (
+            <div className="space-y-4" data-testid="pending-requests-section">
+              <h2 className="text-lg font-semibold">Pending Requests</h2>
+              {oneTimeRequests.map(renderRequestCard)}
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -413,7 +413,10 @@ export const requireWellnessAccess = (requireAuth: boolean = false) => {
       let isTargetedViaTeam = false;
       if (!isTargetedDirectly && wellnessRequest.targetTeamIds && wellnessRequest.targetTeamIds.length > 0) {
         const athleteTeams = await storage.getUserTeams(athleteId);
-        const athleteTeamIds = athleteTeams.map(ut => ut.teamId);
+        // Only current memberships in teams of the request's organization count
+        const athleteTeamIds = athleteTeams
+          .filter(ut => ut.isActive && !ut.leftAt && ut.team.organizationId === wellnessRequest.organizationId)
+          .map(ut => ut.teamId);
         isTargetedViaTeam = wellnessRequest.targetTeamIds.some((teamId: string) => athleteTeamIds.includes(teamId));
       }
 

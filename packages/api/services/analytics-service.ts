@@ -850,8 +850,8 @@ export class AnalyticsService {
           user_id as athlete_id,
           CAST(value AS NUMERIC) as value,
           date,
-          ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY date ASC) as first_row,
-          ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY date DESC) as last_row
+          -- First day's best run: with only one day of runs, first equals best (no improvement)
+          ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY date ASC, value ${lowerIsBetter ? sql`ASC` : sql`DESC`}) as first_row
         FROM measurements
         WHERE user_id = ANY(${sql.raw(`ARRAY[${athleteIds.map(id => `'${id}'`).join(',')}]::text[]`)})
           AND metric = ${metric}
@@ -1087,16 +1087,27 @@ export class AnalyticsService {
         WHERE m.user_id IN (${athleteIdList})
           AND m.is_verified = true
       ),
+      daily_best AS (
+        -- Several runs on one date count once: that date's best
+        SELECT
+          user_id,
+          metric,
+          lower_is_better,
+          date,
+          CASE WHEN lower_is_better THEN MIN(CAST(value AS NUMERIC)) ELSE MAX(CAST(value AS NUMERIC)) END as value
+        FROM typed_measurements
+        GROUP BY user_id, metric, lower_is_better, date
+      ),
       ranked_measurements AS (
         SELECT
           user_id as athlete_id,
           metric,
           lower_is_better,
-          CAST(value AS NUMERIC) as value,
+          value,
           date,
           -- Same custom code in two organizations with opposite directions: separate series
           ROW_NUMBER() OVER (PARTITION BY user_id, metric, lower_is_better ORDER BY date DESC) as row_num
-        FROM typed_measurements
+        FROM daily_best
       ),
       recent_measurements AS (
         SELECT

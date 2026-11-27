@@ -18,7 +18,8 @@ import {
   type PeerPercentileCache, type User,
 } from "@shared/schema";
 import { isPeerComparisonExcludedMetric } from "@shared/peer-comparison-exclusions";
-import { eq, and, inArray, gte, lte, isNotNull, desc, sql } from "drizzle-orm";
+import { eq, and, inArray, gte, lte, isNotNull, sql } from "drizzle-orm";
+import { latestBestFirst } from "./best-of-day-order";
 import { BaseService } from "./base-service";
 import { activeGlobalAthleteLink } from "./global-athlete-service";
 import { quantileRank, mean, quantile } from "simple-statistics";
@@ -845,7 +846,7 @@ export class PeerComparisonService extends BaseService {
           inArray(measurements.metric, metrics)
         )
       )
-      .orderBy(desc(measurements.date));
+      .orderBy(...latestBestFirst);
 
     // Keep only the latest for each metric
     for (const m of athleteMeasurements) {

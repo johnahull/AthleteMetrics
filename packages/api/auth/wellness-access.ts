@@ -7,9 +7,7 @@
 
 import crypto from 'crypto';
 import { storage } from '../storage';
-import { db } from '../db';
-import { userTeams } from '@shared/schema';
-import { eq, and } from 'drizzle-orm';
+import { getRequestTargetAthleteIds } from '../lib/wellness-org-scope';
 
 export class WellnessAccessService {
   /**
@@ -223,36 +221,8 @@ export class WellnessAccessService {
         throw new Error('Request not found');
       }
 
-      // Collect all target athlete IDs
-      const targetAthleteIds: string[] = [];
-
-      // Add directly targeted athletes
-      if (request.targetAthleteIds) {
-        targetAthleteIds.push(...request.targetAthleteIds);
-      }
-
-      // Add athletes from targeted teams
-      if (request.targetTeamIds) {
-        for (const teamId of request.targetTeamIds) {
-          // Query userTeams table to get all active members of this team
-          const teamMembers = await db
-            .select()
-            .from(userTeams)
-            .where(
-              and(
-                eq(userTeams.teamId, teamId),
-                eq(userTeams.isActive, true)
-              )
-            );
-
-          // Extract user IDs from team memberships
-          const memberIds = teamMembers.map(member => member.userId);
-          targetAthleteIds.push(...memberIds);
-        }
-      }
-
-      // Remove duplicates
-      const uniqueAthleteIds = [...new Set(targetAthleteIds)];
+      // Direct targets and active members of targeted teams, limited to the request's organization
+      const uniqueAthleteIds = await getRequestTargetAthleteIds(request);
 
       // Generate magic link for each athlete
       for (const athleteId of uniqueAthleteIds) {

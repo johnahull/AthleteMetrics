@@ -817,6 +817,7 @@ describe('Wellness Analytics API', () => {
     const summary = await storage.getTeamWellnessSummary(testTeam.id, {
       startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       endDate: new Date().toISOString().split('T')[0],
+      organizationId: testOrg.id,
     });
 
     expect(summary).toBeDefined();
@@ -829,6 +830,7 @@ describe('Wellness Analytics API', () => {
     const summary = await storage.getAthleteWellnessSummary(testAthlete.id, {
       startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       endDate: new Date().toISOString().split('T')[0],
+      organizationId: testOrg.id,
     });
 
     expect(summary).toBeDefined();

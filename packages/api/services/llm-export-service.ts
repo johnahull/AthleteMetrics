@@ -21,7 +21,7 @@ import {
 import { goals } from '@shared/schema/tables/gamification';
 import { wellnessResponses } from '@shared/schema/tables/wellness';
 import { sprintFvProfiles } from '@shared/schema/tables/sprint-fv-profiles';
-import { and, desc, eq, gte, inArray } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNull } from 'drizzle-orm';
 import { formatMeasurement, type DisplayFormat } from '@shared/duration-format';
 import {
   buildMetricExplanationsMap,
@@ -660,7 +660,7 @@ export async function gatherAthleteExportData(
         // wellness_responses.organizationId is a historical stamp (notNull).
         // Scope so only responses entered under the caller's org leak into
         // the export for multi-org athletes.
-        const conditions = [eq(wellnessResponses.userId, athleteId)];
+        const conditions = [eq(wellnessResponses.userId, athleteId), isNull(wellnessResponses.supersededAt)];
         if (organizationId) {
           conditions.push(eq(wellnessResponses.organizationId, organizationId));
         }

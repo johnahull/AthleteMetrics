@@ -47,6 +47,10 @@ import {
 import { useMetricLabels } from '@/hooks/use-metric-labels';
 import { formatValueWithUnit } from '@/lib/metrics';
 import { ChevronDown, ChevronRight, AlertTriangle, Upload, Loader2 } from 'lucide-react';
+import type { MetricType } from '@shared/analytics-types';
+
+/** A run is one attempt at a drill: derived flies and the RSI column are one value per athlete, not runs */
+const isRun = (d: { metric: string; derivedFrom?: string }) => !d.derivedFrom && d.metric !== 'RSI';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -121,6 +125,8 @@ interface AthleteReviewRowProps {
   /** Metric-code → label resolver; hoisted from the parent so we don't
    *  re-call useMetricLabels() once per row. */
   getLabel: (code: string) => string;
+  /** Better/worse direction per metric code (from useMetricLabels) */
+  metricTypes: Record<string, MetricType>;
 }
 
 function AthleteReviewRow({
@@ -131,6 +137,7 @@ function AthleteReviewRow({
   onOverride,
   onIncluded,
   getLabel,
+  metricTypes,
 }: AthleteReviewRowProps) {
   const [open, setOpen] = useState(false);
   const effectiveMatchId = overrideMatchedId ?? athlete.matchedAthleteId;
@@ -138,6 +145,29 @@ function AthleteReviewRow({
     overrideMatchedId && overrideMatchedId !== athlete.matchedAthleteId
       ? 'fuzzy'
       : athlete.matchType;
+
+  // Every run is imported; group them by metric and mark the best value per metric and per split code.
+  // Direction comes from the metric's type; for a metric without one, Dashr times (units 's') are lower is
+  // better and anything else (RSI) higher is better. Only marked when there is more than one value.
+  const isBetter = (code: string, units: string, a: number, b: number) => {
+    const type = metricTypes[code];
+    const higher = type && type !== 'tracking' ? type === 'higher_is_better' : units !== 's';
+    return higher ? a > b : a < b;
+  };
+  const runsByMetric = new Map<string, typeof athlete.drills>();
+  for (const d of athlete.drills) {
+    if (!runsByMetric.has(d.metric)) runsByMetric.set(d.metric, []);
+    runsByMetric.get(d.metric)!.push(d);
+  }
+  const bestOf = (code: string, values: Array<{ value: number; units: string }>) =>
+    values.length < 2
+      ? undefined
+      : values.reduce((best, v) => (isBetter(code, v.units, v.value, best.value) ? v : best)).value;
+  const bestSplit = new Map<string, number | undefined>();
+  for (const code of new Set(athlete.drills.flatMap((d) => d.splits?.map((s) => s.metric) ?? []))) {
+    bestSplit.set(code, bestOf(code, athlete.drills.flatMap((d) => d.splits?.filter((s) => s.metric === code) ?? [])));
+  }
+  const runCount = athlete.drills.filter(isRun).length;
 
   return (
     <>
@@ -185,7 +215,7 @@ function AthleteReviewRow({
 
         {/* Drills summary */}
         <TableCell className="text-sm text-muted-foreground">
-          {athlete.drills.length} drill{athlete.drills.length !== 1 ? 's' : ''}
+          {runCount} run{runCount !== 1 ? 's' : ''}
           {athlete.drills.some((d) => d.isOutlier) && (
             <span className="ml-1 text-yellow-600">
               <AlertTriangle className="inline h-3 w-3" />
@@ -209,30 +239,58 @@ function AthleteReviewRow({
       {open && (
         <TableRow>
           <TableCell colSpan={6} className="bg-muted/30 p-3">
-            <div className="space-y-1 text-xs">
-              {athlete.drills.map((drill, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <span className="text-muted-foreground w-28">{getLabel(drill.metric)}</span>
-                  <span className="font-semibold">
-                    {formatValueWithUnit(drill.value, drill.units)}
-                  </span>
-                  {drill.isOutlier && (
-                    <Badge variant="outline" className="text-yellow-700 border-yellow-300 text-xs">
-                      Outlier: {drill.outlierReason}
-                    </Badge>
-                  )}
-                  {drill.derivedFrom && (
-                    <Badge variant="outline" className="text-blue-700 border-blue-300 text-xs">
-                      Calc: {drill.derivedFrom}
-                    </Badge>
-                  )}
-                  {drill.splits && drill.splits.length > 0 && (
-                    <span className="text-muted-foreground">
-                      ({drill.splits.map((s) => `${getLabel(s.metric)}: ${formatValueWithUnit(s.value, s.units)}`).join(', ')})
-                    </span>
-                  )}
-                </div>
-              ))}
+            <div className="space-y-2 text-xs">
+              {[...runsByMetric].map(([metric, runs]) => {
+                const best = bestOf(metric, runs);
+                return (
+                  <div key={metric} data-testid={`runs-${metric}`}>
+                    <div className="font-medium">
+                      {getLabel(metric)}
+                      {runs.length > 1 && (
+                        <span className="ml-1 font-normal text-muted-foreground">({runs.length} runs)</span>
+                      )}
+                    </div>
+                    {[...runs]
+                      .sort((a, b) => (a.runIndex ?? 0) - (b.runIndex ?? 0))
+                      .map((drill, i) => (
+                        <div
+                          key={`${metric}-${drill.runIndex ?? i}`}
+                          className="flex flex-wrap items-center gap-x-2 gap-y-1 pl-3"
+                        >
+                          {runs.length > 1 && (
+                            <span className="text-muted-foreground w-14">
+                              {drill.runAt ? drill.runAt.slice(11, 19) : `Run ${i + 1}`}
+                            </span>
+                          )}
+                          <span className="font-semibold">
+                            {formatValueWithUnit(drill.value, drill.units)}
+                          </span>
+                          {drill.value === best && (
+                            <Badge className="bg-green-100 text-green-800 border-green-200 text-xs">Best</Badge>
+                          )}
+                          {drill.isOutlier && (
+                            <Badge variant="outline" className="text-yellow-700 border-yellow-300 text-xs">
+                              Outlier: {drill.outlierReason}
+                            </Badge>
+                          )}
+                          {drill.derivedFrom && (
+                            <Badge variant="outline" className="text-blue-700 border-blue-300 text-xs">
+                              Calc: {drill.derivedFrom}
+                            </Badge>
+                          )}
+                          {drill.splits?.map((s) => (
+                            <span key={s.metric} className="text-muted-foreground">
+                              {getLabel(s.metric)}: {formatValueWithUnit(s.value, s.units)}
+                              {s.value === bestSplit.get(s.metric) && (
+                                <Badge className="ml-1 bg-green-100 text-green-800 border-green-200 text-xs">Best</Badge>
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                      ))}
+                  </div>
+                );
+              })}
             </div>
           </TableCell>
         </TableRow>
@@ -258,7 +316,7 @@ export function DeviceImportDialog({
   // Resolve metric labels once for the whole dialog so each AthleteReviewRow
   // doesn't re-subscribe to useAvailableMetrics; getLabel is referentially
   // stable across renders thanks to useCallback inside useMetricLabels.
-  const { getLabel } = useMetricLabels();
+  const { getLabel, types: metricTypes } = useMetricLabels();
 
   const {
     step,
@@ -570,7 +628,7 @@ export function DeviceImportDialog({
                 <TableHead>Athlete</TableHead>
                 <TableHead>Match</TableHead>
                 <TableHead>Assign To</TableHead>
-                <TableHead>Drills</TableHead>
+                <TableHead>Runs</TableHead>
                 <TableHead className="text-center">Include</TableHead>
               </TableRow>
             </TableHeader>
@@ -587,6 +645,7 @@ export function DeviceImportDialog({
                     onOverride={setAthleteOverride}
                     onIncluded={setAthleteIncluded}
                     getLabel={getLabel}
+                    metricTypes={metricTypes ?? {}}
                   />
                 );
               })}
@@ -631,8 +690,10 @@ export function DeviceImportDialog({
             <span className="font-medium">{includedCount}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Total drills</span>
-            <span className="font-medium">{summary.totalDrills}</span>
+            <span className="text-muted-foreground">Runs (every attempt is kept)</span>
+            <span className="font-medium">
+              {preview.athletes.reduce((n, a) => n + a.drills.filter(isRun).length, 0)}
+            </span>
           </div>
           {summary.outlierCount > 0 && (
             <div className="flex justify-between text-yellow-700">
@@ -657,7 +718,7 @@ export function DeviceImportDialog({
                   Skip duplicates
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Existing measurements for the same athlete and date are kept unchanged.
+                  Runs already imported (same athlete, date, drill and run time) are skipped. New run times are added.
                 </p>
               </div>
             </div>
@@ -668,7 +729,7 @@ export function DeviceImportDialog({
                   Replace duplicates
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Existing measurements are overwritten with the imported values.
+                  Runs already imported with the same run time are replaced. Other earlier runs are kept.
                 </p>
               </div>
             </div>
@@ -719,7 +780,7 @@ export function DeviceImportDialog({
   // ── Step: Success ─────────────────────────────────────────────────────────────
   const renderSuccess = () => {
     if (!commitResult) return null;
-    const { measurementsCreated, measurementsSkipped, measurementsReplaced, athletesImported, warnings: commitWarnings } =
+    const { measurementsCreated, runsCreated, measurementsSkipped, measurementsReplaced, athletesImported, warnings: commitWarnings } =
       commitResult;
 
     return (
@@ -738,7 +799,9 @@ export function DeviceImportDialog({
           </div>
           <h3 className="text-lg font-semibold">Import Complete</h3>
           <p className="text-sm text-muted-foreground mt-1">
-            Your data has been successfully imported.
+            {runsCreated != null
+              ? `${runsCreated} run${runsCreated !== 1 ? 's' : ''} imported (${measurementsCreated} measurement rows including splits).`
+              : 'Your data has been successfully imported.'}
           </p>
         </div>
 

@@ -4,15 +4,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import webPush from 'web-push';
+import * as webPush from 'web-push';
 import { PushNotificationService, NotificationPayload } from '../push-notification-service';
 
 // Mock web-push
 vi.mock('web-push', () => ({
-  default: {
-    setVapidDetails: vi.fn(),
-    sendNotification: vi.fn(),
-  },
+  setVapidDetails: vi.fn(),
+  sendNotification: vi.fn(),
 }));
 
 // Valid FCM endpoint for testing (matches VALID_PUSH_ENDPOINT_PATTERNS)

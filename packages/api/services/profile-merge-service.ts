@@ -15,7 +15,7 @@
 
 import { BaseService } from "./base-service";
 import { db } from "../db";
-import { eq, and, sql, inArray } from "drizzle-orm";
+import { eq, and, sql, inArray, isNull, isNotNull, desc } from "drizzle-orm";
 import { z } from "zod";
 import {
   users,
@@ -25,6 +25,8 @@ import {
   goals,
   userAchievements,
   wellnessResponses,
+  wellnessRequests,
+  wellnessSchedules,
   eventRegistrations,
   eventInvitations,
   reportShares,
@@ -411,6 +413,34 @@ export class ProfileMergeService extends BaseService {
         .returning({ id: wellnessResponses.id });
       summary.wellnessResponsesTransferred = wellnessResult.length;
 
+      // Both profiles may have answered the same request on the same day: keep the newest live row of each
+      // (request, date), supersede the rest (never delete), as a standing-request resubmit would
+      const liveRows = await tx.select({
+        id: wellnessResponses.id,
+        requestId: wellnessResponses.requestId,
+        date: wellnessResponses.date,
+        submittedAt: wellnessResponses.submittedAt,
+      })
+        .from(wellnessResponses)
+        .where(and(
+          eq(wellnessResponses.userId, targetUserId),
+          isNotNull(wellnessResponses.requestId),
+          isNull(wellnessResponses.supersededAt)
+        ))
+        .orderBy(desc(wellnessResponses.submittedAt), desc(wellnessResponses.id));
+      const keptDays = new Set<string>();
+      const supersededIds = liveRows.filter(r => {
+        const key = `${r.requestId}|${r.date}`;
+        if (keptDays.has(key)) return true;
+        keptDays.add(key);
+        return false;
+      }).map(r => r.id);
+      if (supersededIds.length > 0) {
+        await tx.update(wellnessResponses)
+          .set({ supersededAt: new Date() })
+          .where(inArray(wellnessResponses.id, supersededIds));
+      }
+
       // 6. Transfer event registrations (handle duplicates)
       const targetRegistrations = await tx.select({ eventId: eventRegistrations.eventId })
         .from(eventRegistrations)
@@ -516,6 +546,19 @@ export class ProfileMergeService extends BaseService {
         .where(eq(athleteNotes.athleteId, sourceUserId))
         .returning({ id: athleteNotes.id });
       summary.athleteNotesTransferred = athleteNotesResult.length;
+
+      // 8e. Re-point wellness request and schedule targets in EVERY organization and status, like step 8d: the
+      // source's responses moved in step 5, so targets must name the surviving athlete for completion rates and
+      // future scheduled requests. A target already listed keeps its place and the source is dropped (no duplicate).
+      for (const table of [wellnessRequests, wellnessSchedules]) {
+        await tx.update(table)
+          .set({
+            targetAthleteIds: sql`CASE WHEN ${targetUserId}::text = ANY(${table.targetAthleteIds})
+              THEN array_remove(${table.targetAthleteIds}, ${sourceUserId}::text)
+              ELSE array_replace(${table.targetAthleteIds}, ${sourceUserId}::text, ${targetUserId}::text) END`,
+          })
+          .where(sql`${sourceUserId}::text = ANY(${table.targetAthleteIds})`);
+      }
 
       // 9. Transfer/merge athlete profile
       const [sourceProfile] = await tx.select()
