@@ -4512,6 +4512,7 @@ export async function generatePDF(report: any, reportData: any, format: 'visual'
         labels: reportData.metricLabels || {},
         durationText,
         metricGroups: reportData.metricGroups,
+        unranked: reportData.unrankedMetrics,
       });
 
       autoTable(doc, {
@@ -4670,8 +4671,13 @@ export async function generatePDF(report: any, reportData: any, format: 'visual'
         doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
         yPos += 6;
 
-        // Sort athletes by this metric
-        const sortedAthletes = await sortAthletesByMetric(reportData.athleteRankings, stat.metric, report.organizationId);
+        // Sort athletes by this metric; a tracking metric has no better direction, so by name, unranked (#805)
+        const unranked: boolean = reportData.unrankedMetrics?.includes(stat.metric) ?? false;
+        const sortedAthletes = unranked
+          ? reportData.athleteRankings
+            .filter((athlete: any) => athlete?.measurements?.[stat.metric] !== undefined)
+            .sort((a: any, b: any) => String(a.userName ?? '').localeCompare(String(b.userName ?? '')))
+          : await sortAthletesByMetric(reportData.athleteRankings, stat.metric, report.organizationId);
         const totalAthletes = sortedAthletes.length;
         const displayedAthletes = sortedAthletes.slice(0, PDF_LIMITS.MAX_ATHLETES_PER_METRIC);
 
@@ -4693,18 +4699,21 @@ export async function generatePDF(report: any, reportData: any, format: 'visual'
             const tierComp = comps?.find((c: any) => c.tierName);
             rowTierColors.push(tierComp?.tierColor || null);
 
+            const valueText = value !== null && value !== undefined ? (durationText(stat.metric, value) ?? `${value.toFixed(2)} ${stat.units || ''}`) : "N/A";
+            if (unranked) return [athlete.userName, valueText, benchmarkLabel || "-"];
             return [
               (idx + 1).toString(),
               athlete.userName,
-              value !== null && value !== undefined ? (durationText(stat.metric, value) ?? `${value.toFixed(2)} ${stat.units || ''}`) : "N/A",
+              valueText,
               percentile !== undefined ? `${percentile.toFixed(0)}th` : "N/A",
               benchmarkLabel || "-",
             ];
           });
+          const benchmarkColumn = unranked ? 2 : 4;
 
           autoTable(doc, {
             startY: yPos,
-            head: [["Rank", "Athlete", "Value", "Percentile", "Benchmarks Met"]],
+            head: [unranked ? ["Athlete", "Value", "Benchmarks Met"] : ["Rank", "Athlete", "Value", "Percentile", "Benchmarks Met"]],
             body: metricRows,
             theme: isVisual ? "striped" : "grid",
             headStyles: { fillColor: colors.accent, fontSize: 9 },
@@ -4712,8 +4721,8 @@ export async function generatePDF(report: any, reportData: any, format: 'visual'
             margin: { left: 14 },
             didParseCell: (data: any) => {
               if (data.section !== 'body') return;
-              // Color the "Benchmarks Met" column (index 4 — matches head: [Rank, Athlete, Value, Percentile, Benchmarks Met])
-              if (data.column.index === 4 && data.row.index < rowTierColors.length) {
+              // Color the "Benchmarks Met" column (the last one in either head above)
+              if (data.column.index === benchmarkColumn && data.row.index < rowTierColors.length) {
                 const colorName = rowTierColors[data.row.index];
                 if (colorName) {
                   data.cell.styles.fillColor = resolveTierTint(colorName);
@@ -4729,7 +4738,7 @@ export async function generatePDF(report: any, reportData: any, format: 'visual'
           if (totalAthletes > PDF_LIMITS.MAX_ATHLETES_PER_METRIC) {
             doc.setFontSize(8);
             doc.setTextColor(100, 100, 100);
-            doc.text(`Showing top ${PDF_LIMITS.MAX_ATHLETES_PER_METRIC} of ${totalAthletes} athletes`, 14, yPos);
+            doc.text(`Showing ${unranked ? 'first' : 'top'} ${PDF_LIMITS.MAX_ATHLETES_PER_METRIC} of ${totalAthletes} athletes`, 14, yPos);
             doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
             yPos += 5;
           }
@@ -4819,6 +4828,7 @@ export async function generatePDF(report: any, reportData: any, format: 'visual'
         showPercentile,
         durationText,
         metricGroups: reportData.metricGroups,
+        unranked: reportData.unrankedMetrics,
       });
 
       autoTable(doc, {
@@ -5329,6 +5339,7 @@ export async function buildReportDataForAI(
           values: [],
           unit: stat.units || "",
           lowerIsBetter: teamMetricTypes[metricCode] === 'lower_is_better',
+          metricType: teamMetricTypes[metricCode],
           average: stat.average,
           median: stat.median,
           min: stat.min,
@@ -5355,6 +5366,7 @@ export async function buildReportDataForAI(
               values: [value],
               unit: individualUnits[metricCode] || '',
               lowerIsBetter: individualMetricTypes[metricCode] === 'lower_is_better',
+              metricType: individualMetricTypes[metricCode],
               percentile: athlete.percentiles?.[metricCode],
               teamAverage: athlete.teamAverages?.[metricCode],
             });

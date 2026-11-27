@@ -26,7 +26,7 @@ import {
   validateAnalyticsFilters,
   parseDecimalValue
 } from "@shared/analytics-utils";
-import { isPeerComparisonExcludedMetric } from "@shared/peer-comparison-exclusions";
+import { isRankableMetric } from "@shared/peer-comparison-exclusions";
 import DOMPurify from "isomorphic-dompurify";
 import { getMetricTypes } from "./utils/metric-type";
 
@@ -324,8 +324,9 @@ export class AnalyticsService {
     }
 
     // Calculate percentile ranks for each metric. MQ scores are ordinal rubric
-    // values and are never ranked against peers (AM-FEAT-015).
-    const rankedMetrics = metrics.filter(metric => !isPeerComparisonExcludedMetric(metric));
+    // values and are never ranked against peers (AM-FEAT-015), nor are tracking
+    // metrics, which have no better direction (#805). A metric with no type stays ranked.
+    const rankedMetrics = metrics.filter(metric => isRankableMetric(metric, metricTypes[metric]));
     const metricPercentiles: Record<string, Record<string, number>> = {};
 
     rankedMetrics.forEach(metric => {

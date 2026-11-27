@@ -17,7 +17,7 @@ import {
   userTeams,
   type PeerPercentileCache, type User,
 } from "@shared/schema";
-import { isPeerComparisonExcludedMetric, PeerComparisonExcludedMetricError } from "@shared/peer-comparison-exclusions";
+import { isPeerComparisonExcludedMetric, isRankableMetric, PeerComparisonExcludedMetricError } from "@shared/peer-comparison-exclusions";
 import { eq, and, inArray, gte, lte, isNotNull, sql } from "drizzle-orm";
 import { latestBestFirst } from "./best-of-day-order";
 import { BaseService } from "./base-service";
@@ -774,15 +774,12 @@ export class PeerComparisonService extends BaseService {
         metricType: siteMetrics.metricType
       })
       .from(siteMetrics)
-      .where(
-        and(
-          inArray(siteMetrics.code, codes),
-          inArray(siteMetrics.metricType, ["lower_is_better", "higher_is_better"])
-        )
-      );
+      .where(inArray(siteMetrics.code, codes));
 
     return new Map(
-      metrics.map(m => [m.code, { lowerIsBetter: m.metricType === "lower_is_better" }])
+      metrics
+        .filter(m => isRankableMetric(m.code, m.metricType))
+        .map(m => [m.code, { lowerIsBetter: m.metricType === "lower_is_better" }])
     );
   }
 

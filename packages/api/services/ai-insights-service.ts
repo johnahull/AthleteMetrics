@@ -16,6 +16,7 @@ import {
   type AITier,
   type SelectableAIModelKey,
 } from "@shared/ai-models";
+import type { MetricType } from "@shared/schema";
 import type { CoachNotes } from "@shared/coach-notes";
 import { JARGON_SWAPS } from "@shared/plain-language";
 import { getMetricMeaning } from "@shared/metric-explanations/meanings";
@@ -465,6 +466,7 @@ export interface ReportData {
     values: number[];
     unit: string;
     lowerIsBetter: boolean;
+    metricType?: MetricType; // 'tracking' has no better direction (#805)
     percentile?: number;
     teamAverage?: number;
     // Team reports: full-roster spread from teamStatistics (values is empty)
@@ -1148,7 +1150,9 @@ export function buildPrompt(reportData: ReportData, overrides?: AIPromptOverride
       const label = sanitizeForPrompt(metric.label);
       // Leading space only when there is a unit, so a unitless metric has no double space
       const unit = sanitizeForPrompt(metric.unit) ? ` ${sanitizeForPrompt(metric.unit)}` : '';
-      const direction = metric.lowerIsBetter ? "lower is better" : "higher is better";
+      const direction = metric.metricType === 'tracking'
+        ? "tracked; no better direction"
+        : metric.lowerIsBetter ? "lower is better" : "higher is better";
       // No trend arrow: values are one best value (individual), not a time series
       const avgValue = metric.values.length > 0
         ? (metric.values.reduce((a, b) => a + b, 0) / metric.values.length).toFixed(2)

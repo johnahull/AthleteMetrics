@@ -41,14 +41,17 @@ export function buildMeasurementRows(args: {
   showPercentile: boolean;
   durationText: DurationText;
   metricGroups?: MetricGroup[];
+  /** Tracking metrics: never ranked, so a dash instead of a percentile */
+  unranked?: string[];
 }): PdfRow[] {
-  const { measurements, percentiles, labels, units, showPercentile, durationText, metricGroups } = args;
+  const { measurements, percentiles, labels, units, showPercentile, durationText, metricGroups, unranked } = args;
   const out: PdfRow[] = [];
   groupedRows(measurements, metricGroups, showPercentile ? 3 : 2, (metric, value) => {
     const label = labels[metric] || metric;
     const unit = units[metric] || '';
     const formatted = durationText(metric, value) ?? `${value.toFixed(2)}${unit ? ` ${unit}` : ''}`;
-    return [showPercentile ? [label, formatted, percentiles?.[metric]?.toFixed(1) || 'N/A'] : [label, formatted]];
+    const percentile = unranked?.includes(metric) ? '-' : percentiles?.[metric]?.toFixed(1) || 'N/A';
+    return [showPercentile ? [label, formatted, percentile] : [label, formatted]];
   }, (rows, heading) => out.push(...(heading ? [heading] : []), ...rows));
   return out;
 }
@@ -128,14 +131,16 @@ export function buildStatsRows(args: {
   labels: Record<string, string>;
   durationText: DurationText;
   metricGroups?: MetricGroup[];
+  /** Tracking metrics: never ranked, so a dash instead of a top performer */
+  unranked?: string[];
 }): PdfRow[] {
-  const { stats, labels, durationText, metricGroups } = args;
+  const { stats, labels, durationText, metricGroups, unranked } = args;
   const fmt = (metric: string, v: number | null) => (v !== null ? (durationText(metric, v) ?? v.toFixed(2)) : 'N/A');
   const out: PdfRow[] = [];
   groupedRows(Object.fromEntries(stats.map((s) => [s.metric, s])), metricGroups, 6, (metric, s) => [[
     labels[metric] || metric,
     fmt(metric, s.average), fmt(metric, s.median), fmt(metric, s.min), fmt(metric, s.max),
-    s.topPerformer?.userName || 'N/A',
+    s.topPerformer?.userName || (unranked?.includes(metric) ? '-' : 'N/A'),
   ]], (rows, heading) => out.push(...(heading ? [heading] : []), ...rows));
   return out;
 }
