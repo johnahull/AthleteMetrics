@@ -5,7 +5,7 @@
 
 import { db } from '../db';
 import { measurements, teams, organizations, users, userTeams, siteMetrics, organizationMetrics, VALID_METRICS, INVITATION_PENDING_PASSWORD } from '@shared/schema';
-import { isPeerComparisonExcludedMetric, PeerComparisonExcludedMetricError } from '@shared/peer-comparison-exclusions';
+import { isPeerComparisonExcludedMetric, isRankableMetric, PeerComparisonExcludedMetricError } from '@shared/peer-comparison-exclusions';
 import { eq, and, gte, lte, lt, ne, desc, inArray, sql } from 'drizzle-orm';
 import { getAthleteIdsForScope } from '../utils/athlete-filters';
 
@@ -644,6 +644,10 @@ export class AnalyticsService {
     }
 
     const { label: metricLabel, metricType } = metricInfo[0];
+    // A tracking metric has no better direction, so athletes are not ranked on it (#805)
+    if (!isRankableMetric(metric, metricType)) {
+      throw new PeerComparisonExcludedMetricError(metric, 'leaderboards');
+    }
     const lowerIsBetter = metricType === 'lower_is_better';
 
     // Get athlete IDs based on scope
@@ -818,6 +822,10 @@ export class AnalyticsService {
     }
 
     const { label: metricLabel, metricType } = metricInfo[0];
+    // A tracking metric has no better direction, so athletes are not ranked on it (#805)
+    if (!isRankableMetric(metric, metricType)) {
+      throw new PeerComparisonExcludedMetricError(metric, 'improvement rankings');
+    }
     const lowerIsBetter = metricType === 'lower_is_better';
 
     // Get athlete IDs based on scope

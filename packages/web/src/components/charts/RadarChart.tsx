@@ -186,7 +186,8 @@ export function RadarChart({
       Object.keys(athlete.metrics).forEach(metric => allMetrics.add(metric));
     });
 
-    const metrics = Array.from(allMetrics);
+    // A tracking metric has no better direction, so it gets no percentile axis
+    const metrics = Array.from(allMetrics).filter(metric => getMetricConfig(metric)?.metricType !== 'tracking');
     // Require at least 2 metrics for meaningful radar chart visualization
     // (reduced from 3+ to support more chart scenarios while maintaining utility)
     if (metrics.length < 2) return null;
@@ -298,7 +299,7 @@ export function RadarChart({
       groupAverages,
       data: processedData // Added for context in the tooltip logic
     };
-  }, [data, statistics, highlightAthlete, effectiveSelectedAthleteIds]);
+  }, [data, statistics, highlightAthlete, effectiveSelectedAthleteIds, getMetricConfig]);
 
   // Chart options
   const options: ChartOptions<'radar'> = {

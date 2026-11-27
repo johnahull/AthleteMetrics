@@ -133,6 +133,7 @@ export function usePerformanceAthleteSelector({
     selectRandom,
 
     // Metric info
+    isTracking: metricType === 'tracking',
     unit,
     metricLabel,
     formatValue,

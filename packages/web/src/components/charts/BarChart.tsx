@@ -75,9 +75,12 @@ export function BarChart({
 
     const firstMetric = data[0]?.metric;
     const metricConfig = firstMetric ? getMetricConfig(firstMetric) : null;
+    // A tracking metric has no better direction, so athletes are listed by name, not ranked
+    const isTracking = getMetricConfig(primaryMetric)?.metricType === 'tracking';
 
     const sortedAthletes = Object.values(athleteData)
       .sort((a, b) => {
+        if (isTracking) return a.athleteName.localeCompare(b.athleteName);
         // Sort by best performance (consider lowerIsBetter)
         return metricConfig?.lowerIsBetter
           ? a.value - b.value // Lower is better (ascending)
@@ -129,7 +132,8 @@ export function BarChart({
       unit,
       durationConfig,
       primaryMetric,
-      isLowerBetter
+      isLowerBetter,
+      isTracking
     };
   }, [data, statistics, highlightAthlete, getMetricConfig]);
 
@@ -251,6 +255,7 @@ export function BarChart({
             const stats = statistics?.[barData?.primaryMetric || ''];
             
             if (!athlete || !stats) return [];
+            if (barData?.isTracking) return [`Team: ${athlete.teamName || 'Independent'}`];
 
             // Calculate percentile rank
             const allValues = data
@@ -335,7 +340,8 @@ export function BarChart({
       </div>
 
       {/* Performance indicators */}
-      <div className="shrink-0 mt-4 grid grid-cols-3 gap-4 text-sm text-center">
+      <div className={`shrink-0 mt-4 grid ${barData.isTracking ? 'grid-cols-2' : 'grid-cols-3'} gap-4 text-sm text-center`}>
+        {!barData.isTracking && (
         <div>
           <div className="font-medium">Best Performance</div>
           <div className="text-lg font-bold text-green-600">
@@ -345,6 +351,7 @@ export function BarChart({
             {getBestPerformingAthlete(barData.primaryMetric, barData.athletes, barData.datasets[0].data, getMetricConfig)?.athleteName}
           </div>
         </div>
+        )}
 
         <div>
           <div className="font-medium">Average</div>
@@ -352,7 +359,7 @@ export function BarChart({
             {show(barData.datasets[0].data.reduce((a, b) => a + b, 0) / barData.datasets[0].data.length)}
           </div>
           <div className="text-xs text-muted-foreground">
-            Top 25 athletes
+            {barData.isTracking ? 'Athletes shown' : 'Top 25 athletes'}
           </div>
         </div>
 

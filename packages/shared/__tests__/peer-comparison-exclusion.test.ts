@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isPeerComparisonExcludedMetric } from '../peer-comparison-exclusions';
+import { isPeerComparisonExcludedMetric, isRankableMetric } from '../peer-comparison-exclusions';
 
 describe('isPeerComparisonExcludedMetric (AM-FEAT-015 D7)', () => {
   it.each([
@@ -22,3 +22,18 @@ describe('isPeerComparisonExcludedMetric (AM-FEAT-015 D7)', () => {
     },
   );
 });
+
+describe('isRankableMetric', () => {
+  it.each([
+    ['VERTICAL_JUMP', 'higher_is_better', true],
+    ['DASH_40YD', 'lower_is_better', true],
+    ['WEIGHT_LBS', 'tracking', false],
+    ['MQ_JUMP', 'higher_is_better', false],
+    // No type known: the metric stays rankable, as before
+    ['UNKNOWN', undefined, true],
+    ['UNKNOWN', null, true],
+  ] as const)('%s typed %s -> %s', (code, type, expected) => {
+    expect(isRankableMetric(code, type)).toBe(expected);
+  });
+});
+

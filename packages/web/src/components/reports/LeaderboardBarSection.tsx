@@ -20,10 +20,13 @@ interface Props {
    *  as unaffiliated. */
   teamName?: string;
   metricGroups?: MetricGroup[];
+  /** Metrics athletes are not ranked on: they get no leaderboard (issue #805) */
+  unrankedMetrics?: string[];
 }
 
-export function LeaderboardBarSection({ athleteRankings, teamStatistics, metricLabels = {}, generatedAt, teamName, metricGroups }: Props) {
+export function LeaderboardBarSection({ athleteRankings, teamStatistics, metricLabels = {}, generatedAt, teamName, metricGroups, unrankedMetrics = [] }: Props) {
   const rows = teamStatistics
+    .filter((stat) => !unrankedMetrics.includes(stat.metric))
     .map((stat) => ({ stat, sorted: sortAthletesByMetric(athleteRankings, stat.metric) }))
     .filter(({ sorted }) => sorted.length > 0);
 

@@ -64,6 +64,16 @@ describe('buildMeasurementRows', () => {
   });
 });
 
+describe('buildMeasurementRows unranked metrics', () => {
+  it('prints a dash, not N/A, in the percentile column of an unranked (tracking) metric', () => {
+    const rows = buildMeasurementRows({
+      measurements: { BODY_WEIGHT: 150, JUMP_CMJ_HOH: 20 }, percentiles: {}, labels, units, showPercentile: true,
+      durationText, unranked: ['BODY_WEIGHT'],
+    });
+    expect(rows).toEqual([['Weight', '150.00 lb', '-'], ['CMJ', '20.00 in', 'N/A']]);
+  });
+});
+
 describe('buildBenchmarkRows', () => {
   const tier = (name: string, order: number, color: string) => ({
     tierName: name, tierOrder: order, tierColor: color, benchmarkName: 'B', athleteValue: 2, isBestTier: true,
@@ -132,6 +142,22 @@ describe('buildStatsRows', () => {
       stats: [stat('DASH_10YD', 402.5)], labels, durationText: (m, v) => (m === 'DASH_10YD' ? `${v}!` : null),
     });
     expect(rows).toEqual([['10 yd', '402.5!', '402.5!', '402.5!', '402.5!', 'Ann']]);
+  });
+});
+
+describe('buildStatsRows unranked metrics', () => {
+  it('prints a dash for the top performer of an unranked (tracking) metric', () => {
+    const rows = buildStatsRows({
+      stats: [
+        { metric: 'BODY_WEIGHT', average: 150, median: 150, min: 150, max: 150 },
+        { metric: 'JUMP_CMJ_HOH', average: 20, median: 20, min: 20, max: 20 },
+      ],
+      labels, durationText, unranked: ['BODY_WEIGHT'],
+    });
+    expect(rows).toEqual([
+      ['Weight', '150.00', '150.00', '150.00', '150.00', '-'],
+      ['CMJ', '20.00', '20.00', '20.00', '20.00', 'N/A'],
+    ]);
   });
 });
 

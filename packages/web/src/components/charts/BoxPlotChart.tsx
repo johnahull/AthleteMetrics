@@ -1295,8 +1295,8 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                 result.push(`Group: ${rawData.groupName}`);
               }
 
-              // Add percentile information
-              if (stats) {
+              // Add percentile information (none for a tracking metric, which has no better direction)
+              if (stats && getMetricConfig(metric)?.metricType !== 'tracking') {
                 const allValues = data
                   .filter(d => d.metric === metric)
                   .map(d => d.value)
@@ -1690,7 +1690,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             {isStatsExpanded && multiGroupStats.metricConfig && (
               <p className="text-xs text-muted-foreground mt-2">
                 {multiGroupStats.metricConfig.label} ({multiGroupStats.metricConfig.displayFormat === 'duration' ? 'mm:ss' : multiGroupStats.metricConfig.unit})
-                {multiGroupStats.metricConfig.lowerIsBetter ? ' - Lower is better' : ' - Higher is better'}
+                {multiGroupStats.metricConfig.metricType === 'tracking' ? '' : multiGroupStats.metricConfig.lowerIsBetter ? ' - Lower is better' : ' - Higher is better'}
               </p>
             )}
           </div>

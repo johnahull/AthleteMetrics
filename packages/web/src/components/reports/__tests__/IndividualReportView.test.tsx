@@ -26,8 +26,9 @@ vi.mock('../CoachingInsightsCard', () => ({ CoachingInsightsCard: () => <div dat
 vi.mock('../ReportMetricsGlossary', () => ({ ReportMetricsGlossary: () => <div data-testid="glossary" /> }));
 vi.mock('../MetricExplanation', () => ({ MetricExplanation: ({ label }: { label: string }) => <span>{label}</span> }));
 vi.mock('@/components/reports/TrendSection', () => ({ TrendSection: () => null }));
-vi.mock('@/components/reports/PercentileRadarSection', () => ({ PercentileRadarSection: () => null }));
-vi.mock('@/components/reports/DistributionSection', () => ({ DistributionSection: () => null }));
+const { sectionProps } = vi.hoisted(() => ({ sectionProps: vi.fn((_name: string, _props: unknown) => null) }));
+vi.mock('@/components/reports/PercentileRadarSection', () => ({ PercentileRadarSection: (p: unknown) => sectionProps('PercentileRadarSection', p) }));
+vi.mock('@/components/reports/DistributionSection', () => ({ DistributionSection: (p: unknown) => sectionProps('DistributionSection', p) }));
 vi.mock('@/components/reports/FvProfileSection', () => ({ FvProfileSection: () => null }));
 vi.mock('@/components/charts/TierProgressChart', () => ({ TierProgressChart: () => null }));
 vi.mock('@/components/charts/BenchmarkStandingBar', () => ({ BenchmarkStandingBar: () => null }));
@@ -44,11 +45,13 @@ const report = {
 function renderWith(
   reportConfig: Record<string, unknown>,
   measurements: Record<string, number> = { VERTICAL_JUMP: 27.5 },
-  extra: { metricFormats?: Record<string, unknown>; teamAverages?: Record<string, number>; sprintRunMeasurements?: unknown[] } = {},
+  extra: { metricFormats?: Record<string, unknown>; teamAverages?: Record<string, number>; sprintRunMeasurements?: unknown[]; unrankedMetrics?: string[]; distributions?: unknown; percentiles?: Record<string, number> } = {},
 ) {
   const data = {
     metricFormats: extra.metricFormats,
     sprintRunMeasurements: extra.sprintRunMeasurements,
+    unrankedMetrics: extra.unrankedMetrics,
+    distributions: extra.distributions,
     reportType: 'individual',
     reportConfig: { metrics: ['VERTICAL_JUMP'], ...reportConfig },
     generatedAt: '2024-03-15T00:00:00Z',
@@ -59,7 +62,7 @@ function renderWith(
       userId: 'ath-1',
       userName: 'Test Athlete',
       measurements,
-      percentiles: { VERTICAL_JUMP: 80 },
+      percentiles: extra.percentiles ?? { VERTICAL_JUMP: 80 },
       teamAverages: extra.teamAverages ?? { VERTICAL_JUMP: 24 },
       benchmarkComparisons: {},
     },
@@ -248,5 +251,19 @@ describe('IndividualReportView — sprint runs section', () => {
   it('hides it when the payload has no rows', () => {
     renderWith({ charts: { sprintRuns: true } });
     expect(screen.queryByRole('heading', { name: /sprint runs/i })).not.toBeInTheDocument();
+  });
+});
+
+describe('IndividualReportView — unranked metrics (issue #805)', () => {
+  it('passes the served unranked list to the radar and distribution sections', () => {
+    sectionProps.mockClear();
+    renderWith(
+      { charts: { radar: true, distribution: true } },
+      { A: 1, B: 2, C: 3 },
+      { percentiles: { A: 1, B: 2, C: 3 }, distributions: { A: { values: [1, 2], athleteValue: 1, direction: 'higher' } }, unrankedMetrics: ['BODY_WEIGHT'] },
+    );
+    const last = (name: string) => sectionProps.mock.calls.filter(([n]) => n === name).slice(-1)[0]?.[1] as { unrankedMetrics?: string[] };
+    expect(last('PercentileRadarSection').unrankedMetrics).toEqual(['BODY_WEIGHT']);
+    expect(last('DistributionSection').unrankedMetrics).toEqual(['BODY_WEIGHT']);
   });
 });

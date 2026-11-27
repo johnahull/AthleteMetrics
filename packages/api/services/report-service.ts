@@ -22,6 +22,7 @@ import {
   type Report,
   type ReportSnapshot,
   type ReportBenchmark,
+  type MetricType,
 } from '@shared/schema';
 import { isUnder13OrUnknownDob } from '@shared/coppa-utils';
 import { eq, and, or, isNull, gte, lte, inArray, desc, sql, like } from 'drizzle-orm';
@@ -29,9 +30,9 @@ import { nanoid } from 'nanoid';
 import { quantileRank, median, mean, min, max, standardDeviation } from 'simple-statistics';
 import { BaseService } from './base-service';
 import { evaluateTierBenchmark as evaluateTierBenchmarkPure } from './benchmark-tiers';
-import { getMetricType } from '../utils/metric-type';
+import { getMetricType, getMetricTypes } from '../utils/metric-type';
 import { type MetricExplanation } from '@shared/metric-explanations';
-import { isPeerComparisonExcludedMetric } from '@shared/peer-comparison-exclusions';
+import { isPeerComparisonExcludedMetric, isRankableMetric } from '@shared/peer-comparison-exclusions';
 import { orderReportData, collectMetricCodes, isGenericReport } from '@shared/metric-order';
 import { getMetricExplanationsMap } from './metric-explanation-service';
 import { assembleTrends } from './report-trends';
@@ -178,6 +179,42 @@ interface IndividualReportData {
   comparisonLabel?: string; // cohort name for the "Where You Stand" caption (undefined = org-wide)
 }
 
+/** Metric codes a served report carries: the codes in its data plus the configured metrics. */
+function reportMetricCodes(data: Record<string, any>): string[] {
+  const configured = Array.isArray(data?.reportConfig?.metrics) ? data.reportConfig.metrics : [];
+  return [...new Set([...collectMetricCodes(data), ...configured.filter((c: unknown): c is string => typeof c === 'string')])];
+}
+
+/** Copy of a report with `unrankedMetrics` set and no percentile, top performer or distribution for those codes. */
+function withoutRanking<T extends Record<string, any>>(data: T, unranked: string[]): T & { unrankedMetrics: string[] } {
+  const skip = new Set(unranked);
+  const omit = (map: unknown) =>
+    map && typeof map === 'object' && !Array.isArray(map)
+      ? Object.fromEntries(Object.entries(map).filter(([code]) => !skip.has(code)))
+      : map;
+  const athlete = (a: any) => {
+    if (!a || typeof a !== 'object') return a;
+    const out = { ...a };
+    if ('percentiles' in a) out.percentiles = omit(a.percentiles);
+    if ('eventPercentiles' in a) out.eventPercentiles = omit(a.eventPercentiles);
+    return out;
+  };
+  const out: Record<string, any> = { ...data, unrankedMetrics: unranked };
+  if (skip.size === 0) return out as T & { unrankedMetrics: string[] };
+  if ('athlete' in data) out.athlete = athlete(data.athlete);
+  if (Array.isArray(data.athleteRankings)) out.athleteRankings = data.athleteRankings.map(athlete);
+  if (Array.isArray(data.teamStatistics)) {
+    out.teamStatistics = data.teamStatistics.map((s: any) => {
+      if (!skip.has(s?.metric)) return s;
+      const { topPerformer: _topPerformer, ...rest } = s;
+      return rest;
+    });
+  }
+  if ('distributions' in data) out.distributions = omit(data.distributions);
+  if ('teamDistributions' in data) out.teamDistributions = omit(data.teamDistributions);
+  return out as T & { unrankedMetrics: string[] };
+}
+
 // Read-only lookups of stored F-V profiles (same pattern as sprint-fv-routes.ts).
 const sprintFvService = new SprintFvService();
 
@@ -210,7 +247,7 @@ export async function isEvalSnapshotRestricted(athleteId: unknown, eventDate: un
 export class ReportService extends BaseService {
   // Cache for metric info to prevent N+1 queries. Keyed by organization + code (custom codes are unique per org
   // only) and cleared at the start of each report build, so an admin edit applies on the next build.
-  private metricInfoCache = new Map<string, { lowerIsBetter: boolean; metricType: string }>();
+  private metricInfoCache = new Map<string, { lowerIsBetter: boolean; metricType: MetricType }>();
 
   /**
    * Get display labels and units for a list of metric codes
@@ -285,16 +322,23 @@ export class ReportService extends BaseService {
     return (await this.orderManyForResponse([data], organizationId))[0];
   }
 
-  /** orderForResponse for several reports of one organization, with a single category lookup. */
+  /**
+   * orderForResponse for several reports of one organization, with a single category and type lookup.
+   * Also the read-time ranking rule (#805): each report gets `unrankedMetrics` (its tracking metric codes) and
+   * loses their percentiles, event percentiles, top performer and distributions, so snapshots stored before
+   * the rule are served without them too.
+   */
   async orderManyForResponse<T>(items: T[], organizationId?: string): Promise<T[]> {
-    const codes = new Set<string>();
-    for (const d of items) {
-      if (isGenericReport(d)) collectMetricCodes(d as any).forEach(c => codes.add(c));
-    }
-    const { categories } = codes.size > 0
-      ? await this.getMetricLabelsAndUnits([...codes], organizationId)
-      : { categories: {} };
-    return items.map(d => (isGenericReport(d) ? orderReportData(d as any, categories) as T : d));
+    const reportCodes = items.map(d => (isGenericReport(d) ? reportMetricCodes(d as any) : []));
+    const codes = [...new Set(reportCodes.flat())];
+    const [{ categories }, types] = codes.length > 0
+      ? await Promise.all([this.getMetricLabelsAndUnits(codes, organizationId), getMetricTypes(codes, organizationId)])
+      : [{ categories: {} }, {} as Record<string, MetricType>];
+    return items.map((d, i) => {
+      if (!isGenericReport(d)) return d;
+      const unranked = reportCodes[i].filter(code => types[code] === 'tracking');
+      return orderReportData(withoutRanking(d as any, unranked), categories) as T;
+    });
   }
 
   /**
@@ -445,7 +489,8 @@ export class ReportService extends BaseService {
           .filter(a => a.measurements[metric] !== undefined)
           .map(a => ({ athleteId: a.userId, athleteName: a.userName, value: a.measurements[metric] }));
         const dist = computeTeamDistribution(athletesForMetric);
-        if (dist) {
+        // A tracking metric has no better direction, so no distribution (#805)
+        if (dist && isRankableMetric(metric, (await this.getMetricInfo(metric, report.organizationId)).metricType)) {
           teamDistributions[metric] = { ...dist, direction: metricDirections[metric] };
         }
       }
@@ -671,6 +716,7 @@ export class ReportService extends BaseService {
           // getMetricInfo memoizes (warmed by the bestPerformances loop), so this
           // is a cache hit; direction lets the histogram annotate the "better" side.
           const info = await this.getMetricInfo(metric, report.organizationId);
+          if (!isRankableMetric(metric, info.metricType)) continue;
           distributions[metric] = { ...dist, direction: info.lowerIsBetter ? 'lower' : 'higher' };
         }
       }
@@ -886,13 +932,16 @@ export class ReportService extends BaseService {
       if (allValues.length > 0) {
         const athleteValue = athletePerformances[metric];
 
+        // Calculate team average (using best performance per athlete, same as team reports)
+        teamAverages[metric] = mean(allValues);
+
+        // A tracking metric has no better direction: an average, but no rank or peer distribution (#805)
+        if (!isRankableMetric(metric, metricInfo.metricType)) continue;
+
         // Calculate percentile rank (returns 0-1, so multiply by 100)
         // For "lower is better" metrics, invert the percentile
         const rank = quantileRank(allValues, athleteValue) * 100;
         percentiles[metric] = metricInfo.lowerIsBetter ? 100 - rank : rank;
-
-        // Calculate team average (using best performance per athlete, same as team reports)
-        teamAverages[metric] = mean(allValues);
 
         // Expose the per-metric peer best-values (EXCLUDING the focal athlete by
         // id) so callers (e.g. distributions) reuse this peer set without a second
@@ -925,6 +974,9 @@ export class ReportService extends BaseService {
       if (athletePerformances[metric] === undefined || isPeerComparisonExcludedMetric(metric)) {
         continue;
       }
+      const metricInfo = await this.getMetricInfo(metric, organizationId);
+      // A tracking metric has no better direction, so no rank (#805)
+      if (!isRankableMetric(metric, metricInfo.metricType)) continue;
 
       // Get all measurements for this metric in the event
       const eventMeasurements = await db
@@ -942,7 +994,6 @@ export class ReportService extends BaseService {
 
       // Get best performance per athlete in the event
       const athleteBestMap = new Map<string, number>();
-      const metricInfo = await this.getMetricInfo(metric, organizationId);
 
       for (const m of eventMeasurements) {
         const value = parseFloat(m.value);
@@ -1614,7 +1665,8 @@ export class ReportService extends BaseService {
         min: Math.min(...values),
         max: Math.max(...values),
         standardDeviation: values.length > 1 ? standardDeviation(values) : 0,
-        topPerformer: topPerformer
+        // A tracking metric has no better direction, so no top performer (#805)
+        topPerformer: topPerformer && isRankableMetric(metric, metricInfo.metricType)
           ? {
               userId: topPerformer.userId,
               userName: topPerformer.userName,
@@ -1709,14 +1761,17 @@ export class ReportService extends BaseService {
 
       const metricInfo = await this.getMetricInfo(metric, organizationId);
       const teamAverage = mean(values);
+      // A tracking metric has no better direction: a team average, but no rank (#805)
+      const ranked = isRankableMetric(metric, metricInfo.metricType);
 
       for (const athlete of athletes) {
         if (athlete.measurements[metric] !== undefined) {
+          athlete.teamAverages[metric] = teamAverage;
+          if (!ranked) continue;
           const rank = quantileRank(values, athlete.measurements[metric]) * 100;
           athlete.percentiles[metric] = metricInfo.lowerIsBetter
             ? 100 - rank
             : rank;
-          athlete.teamAverages[metric] = teamAverage;
 
           // Calculate event percentiles if requested
           // For team reports with event filter, percentiles are already event-based
@@ -1810,7 +1865,10 @@ export class ReportService extends BaseService {
 
     // Calculate composite index if enabled
     if (compositeIndexConfig?.enabled && compositeIndexConfig.weights) {
+      const weighted = Object.keys(compositeIndexConfig.weights);
       for (const athlete of athletes) {
+        // No score, rather than 0, when no weighted metric has a percentile (e.g. only tracking metrics are weighted)
+        if (!weighted.some(metric => athlete.percentiles[metric] !== undefined)) continue;
         athlete.compositeIndex = this.calculateCompositeIndex(
           athlete.measurements,
           compositeIndexConfig.weights,
@@ -1818,8 +1876,10 @@ export class ReportService extends BaseService {
         );
       }
 
-      // Sort by composite index
-      athletes.sort((a, b) => (b.compositeIndex || 0) - (a.compositeIndex || 0));
+      // Sort by composite index; athletes without one last
+      if (athletes.some(a => a.compositeIndex !== undefined)) {
+        athletes.sort((a, b) => (b.compositeIndex ?? -1) - (a.compositeIndex ?? -1));
+      }
     }
 
     return athletes;

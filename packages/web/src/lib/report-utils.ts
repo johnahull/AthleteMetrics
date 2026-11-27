@@ -37,6 +37,19 @@ export function sortAthletesByMetric<T extends { measurements: Record<string, nu
 }
 
 /**
+ * Athletes with a value for the metric, by name: for a metric athletes are not ranked on (issue #805)
+ */
+export function sortAthletesByName<T extends { userName: string; measurements: Record<string, number | undefined> }>(
+  athletes: T[],
+  metricCode: string
+): T[] {
+  if (!Array.isArray(athletes)) return [];
+  return athletes
+    .filter(athlete => athlete?.measurements?.[metricCode] !== undefined)
+    .sort((a, b) => a.userName.localeCompare(b.userName, undefined, { sensitivity: 'base' }));
+}
+
+/**
  * Get benchmark comparison label for an athlete
  */
 export function getBenchmarkLabel<T extends { benchmarkComparisons?: Record<string, Array<{ benchmarkName: string; benchmarkValue: number; meetsOrExceeds: boolean }>> }>(

@@ -199,14 +199,15 @@ export function SwarmChart({
             if (!point.athleteName) return [];
             
             const stats = swarmData?.stats;
-            if (!stats) return [`Team: ${point.teamName || 'Independent'}`];
+            const metricConfig = swarmData?.primaryMetric ? getMetricConfig(swarmData.primaryMetric) : null;
+            // A tracking metric has no better direction, so no percentile
+            if (!stats || metricConfig?.metricType === 'tracking') return [`Team: ${point.teamName || 'Independent'}`];
             
             // Calculate percentile
             const allValues = swarmData?.swarmPoints.map(p => p.y).sort((a, b) => a - b) || [];
             const rank = allValues.filter(v => v < point.y).length;
 
             // For "lower is better" metrics, invert percentile so high percentile = better performance
-            const metricConfig = swarmData?.primaryMetric ? getMetricConfig(swarmData.primaryMetric) : null;
             const rawPercentile = allValues.length > 0 ? (rank / allValues.length) * 100 : 0;
             const percentile = metricConfig?.lowerIsBetter ? 100 - rawPercentile : rawPercentile;
 

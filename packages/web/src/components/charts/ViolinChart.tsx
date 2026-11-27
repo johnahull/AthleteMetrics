@@ -1151,7 +1151,7 @@ export function ViolinChart({
       {metricConfig && (
         <p className="text-xs text-muted-foreground mt-2">
           {metricConfig.label} ({metric && isFly10Metric(metric) ? 's / mph' : durationConfig ? 'mm:ss' : metricConfig.unit})
-          {metricConfig.lowerIsBetter ? ' - Lower is better' : ' - Higher is better'}
+          {metricConfig.metricType === 'tracking' ? '' : metricConfig.lowerIsBetter ? ' - Lower is better' : ' - Higher is better'}
         </p>
       )}
     </div>

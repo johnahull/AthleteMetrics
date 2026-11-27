@@ -15,6 +15,8 @@ vi.mock('@/hooks/use-metric-config', () => ({
         ? null
         : code === 'MILE_RUN'
         ? { label: 'Mile Run', unit: 's', metricType: 'lower_is_better', displayFormat: 'duration' }
+        : code === 'BODY_WEIGHT'
+        ? { label: 'Body Weight', unit: 'lbs', metricType: 'tracking', displayFormat: 'decimal' }
         : { label: '10-Yard Fly Time', unit: 's', metricType: 'lower_is_better', displayFormat: 'decimal' },
     isLoaded: metricConfigState.loaded,
     metricsMap: {},
@@ -71,5 +73,16 @@ describe('AthleteSelector (enhanced)', () => {
       { athleteId: 'a', athleteName: 'Ann', metric: 'MILE_RUN', data: [point(402.5)] },
     ] as TrendData[]);
     expect(screen.getByRole('button', { name: /Top 10/ })).toBeEnabled();
+  });
+
+  it('offers no Top N and no "best performers" text for a tracking metric, listing by name', () => {
+    renderSelector('BODY_WEIGHT', [
+      { athleteId: 'z', athleteName: 'Zed', metric: 'BODY_WEIGHT', data: [point(210)] },
+      { athleteId: 'a', athleteName: 'Ann', metric: 'BODY_WEIGHT', data: [point(150)] },
+    ] as TrendData[]);
+    expect(screen.queryByRole('button', { name: /Top 10/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/performers shown first/)).not.toBeInTheDocument();
+    expect(screen.getByText('Sorted by name')).toBeInTheDocument();
+    expect(screen.getAllByText(/^(Ann|Zed)$/).map(el => el.textContent)).toEqual(['Ann', 'Zed']);
   });
 });

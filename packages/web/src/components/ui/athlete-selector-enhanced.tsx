@@ -42,6 +42,7 @@ export function AthleteSelector({
     unit,
     formatValue,
     isMetricConfigLoaded,
+    isTracking,
     athleteColorMap
   } = usePerformanceAthleteSelector({
     data,
@@ -111,17 +112,20 @@ export function AthleteSelector({
 
       {/* Action Buttons */}
       <div className="flex gap-2 mb-4 flex-wrap">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={selectTopPerformers}
-          // The ranking direction comes from the metric list, so wait for it
-          disabled={!isMetricConfigLoaded}
-          className="flex items-center gap-1"
-        >
-          <Trophy className="w-3 h-3" />
-          Top {maxSelection}
-        </Button>
+        {/* A tracking metric has no better direction, so there are no top performers */}
+        {!isTracking && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={selectTopPerformers}
+            // The ranking direction comes from the metric list, so wait for it
+            disabled={!isMetricConfigLoaded}
+            className="flex items-center gap-1"
+          >
+            <Trophy className="w-3 h-3" />
+            Top {maxSelection}
+          </Button>
+        )}
         <Button
           variant="outline"
           size="sm"
@@ -239,7 +243,7 @@ export function AthleteSelector({
       {/* Footer */}
       <div className="mt-4 pt-3 border-t text-xs text-gray-500 flex justify-between gap-2">
         <span className="min-w-0">
-          Best {metricLabel}{unit && ` (${unit})`} performers shown first
+          {isTracking ? 'Sorted by name' : <>Best {metricLabel}{unit && ` (${unit})`} performers shown first</>}
         </span>
         <span className="shrink-0 whitespace-nowrap">
           {selectedAthleteIds.length}/{maxSelection} selected

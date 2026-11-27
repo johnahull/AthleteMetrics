@@ -769,4 +769,46 @@ describe("MostImprovedCard", () => {
       });
     });
   });
+  describe("Unrankable metrics (issue #805)", () => {
+    const siteRow = (metricCode: string, label: string, metricType: string) => ({
+      metricCode, isEnabled: true, customLabel: null,
+      siteMetric: { label, unit: "", metricType, category: null, description: null },
+    });
+    const mockMetrics = (siteRows: unknown[], customRows: unknown[]) => {
+      (global.fetch as any).mockImplementation((url: string) => {
+        if (url.includes("/custom-metrics")) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(customRows) });
+        }
+        if (url.includes("/api/organizations/org-123/metrics")) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(siteRows) });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ improvements: [], totalAthletes: 0, metric: "FLY10_TIME", metricLabel: "Fly-10", metricType: "lower_is_better" }) });
+      });
+    };
+    const customRow = { id: "c1", code: "CUSTOM_JUMP", label: "Custom Jump", unit: "in", metricType: "higher_is_better", isActive: true };
+    const requestedUrls = () => (global.fetch as any).mock.calls.map((c: unknown[]) => String(c[0])).filter((u: string) => u.includes("/api/analytics/most-improved"));
+
+    it("defaults to the first rankable metric, skipping tracking, Movement Quality and custom metrics", async () => {
+      mockMetrics(
+        [siteRow("BODY_WEIGHT", "Body Weight", "tracking"), siteRow("MQI_TOTAL", "MQI Total", "higher_is_better"), siteRow("FLY10_TIME", "Fly-10", "lower_is_better")],
+        [customRow],
+      );
+      render(<MostImprovedCard organizationId="org-123" timeframe="30d" />, { wrapper: createWrapper() });
+
+      await waitFor(() => expect(screen.getByTestId("most-improved-empty")).toBeInTheDocument());
+      expect(screen.getByRole("combobox")).toHaveTextContent("Fly-10");
+      const urls = requestedUrls();
+      expect(urls.length).toBeGreaterThan(0);
+      expect(urls.every((u: string) => u.includes("metric=FLY10_TIME"))).toBe(true);
+    });
+
+    it("sends no request when no metric is rankable", async () => {
+      mockMetrics([siteRow("BODY_WEIGHT", "Body Weight", "tracking"), siteRow("MQI_TOTAL", "MQI Total", "higher_is_better")], [customRow]);
+      render(<MostImprovedCard organizationId="org-123" timeframe="30d" />, { wrapper: createWrapper() });
+
+      await waitFor(() => expect(screen.getByTestId("most-improved-empty")).toBeInTheDocument());
+      expect(requestedUrls()).toEqual([]);
+      expect(screen.getByRole("combobox")).not.toHaveTextContent(/Body Weight|MQI Total|Custom Jump/);
+    });
+  });
 });

@@ -244,3 +244,21 @@ describe('limited data', () => {
     expect(SYSTEM_PROMPT).toMatch(/no gap in the Key Facts or Areas of Concern.*one line saying so/);
   });
 });
+
+describe('buildPrompt tracking metrics (#805)', () => {
+  it('gives a tracking metric no better direction', () => {
+    const prompt = buildPrompt(individual({
+      metrics: [{ code: 'BODY_WEIGHT', label: 'Body Weight', values: [180], unit: 'lbs', lowerIsBetter: false, metricType: 'tracking' }],
+    }));
+    expect(prompt).toContain('Body Weight: 180.00 lbs (tracked; no better direction)');
+    expect(prompt).not.toMatch(/higher is better|lower is better/);
+  });
+
+  it('team spread line too', () => {
+    const prompt = buildPrompt(team({
+      metrics: [{ ...team().metrics[0], metricType: 'tracking' }],
+    }));
+    expect(prompt).toContain('(tracked; no better direction)');
+    expect(prompt).not.toContain('higher is better');
+  });
+});

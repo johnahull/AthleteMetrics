@@ -19,6 +19,7 @@ import { Download, RotateCcw, Trash2, AlertTriangle, ArrowUpDown, ArrowUp, Arrow
 import { formatValueWithUnit } from "@/lib/metrics";
 import { Gender } from "@shared/schema";
 import { isLowerBetterType } from "@shared/analytics-types";
+import { isRankableMetric } from "@shared/peer-comparison-exclusions";
 import { DATE_CONSTANTS } from "@shared/constants";
 import jsPDF from "jspdf";
 import { useToast } from "@/hooks/use-toast";
@@ -34,8 +35,9 @@ export default function Publish() {
   const { toast } = useToast();
   const { getLabel: getMetricLabel, formats: metricFormats, types: metricTypes } = useMetricLabels();
 
-  // Get available metrics using centralized hook (filters by active+enabled)
-  const { metrics: availableMetrics } = useAvailableMetrics();
+  // Get available metrics using centralized hook (filters by active+enabled); results are ranked,
+  // so only metrics athletes can be ranked on (no tracking or Movement Quality, issue #805)
+  const availableMetrics = useAvailableMetrics().metrics.filter((m) => isRankableMetric(m.code, m.metricType));
 
   const [filters, setFilters] = useState({
     teamIds: [] as string[],

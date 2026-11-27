@@ -4,6 +4,7 @@ import { render, screen } from '@testing-library/react';
 import PublicReport from '../public-report';
 import { usePublicReport } from '@/hooks/use-reports';
 
+const { sectionProps } = vi.hoisted(() => ({ sectionProps: vi.fn((_name: string, _props: unknown) => null) }));
 vi.mock('wouter', () => ({ useRoute: () => [true, { token: 'tok' }] }));
 vi.mock('@/hooks/use-reports', () => ({ usePublicReport: vi.fn() }));
 vi.mock('@/hooks/use-toast', () => ({ useToast: () => ({ toast: vi.fn() }) }));
@@ -13,8 +14,8 @@ vi.mock('@/hooks/useContextualLabels', () => ({
 vi.mock('@/lib/chartExport', () => ({ captureTrendCharts: vi.fn() }));
 // Chart sections are heavy and irrelevant to ordering
 vi.mock('@/components/reports/TrendSection', () => ({ TrendSection: () => null }));
-vi.mock('@/components/reports/PercentileRadarSection', () => ({ PercentileRadarSection: () => null }));
-vi.mock('@/components/reports/DistributionSection', () => ({ DistributionSection: () => null }));
+vi.mock('@/components/reports/PercentileRadarSection', () => ({ PercentileRadarSection: (p: unknown) => sectionProps('PercentileRadarSection', p) }));
+vi.mock('@/components/reports/DistributionSection', () => ({ DistributionSection: (p: unknown) => sectionProps('DistributionSection', p) }));
 vi.mock('@/components/reports/FvProfileSection', () => ({ FvProfileSection: () => null }));
 vi.mock('@/components/athlete/SprintRunsCard', () => ({ SprintRunsCard: () => null }));
 vi.mock('@/components/charts/TierProgressChart', () => ({ TierProgressChart: () => null }));
@@ -22,7 +23,7 @@ vi.mock('@/components/charts/BenchmarkStandingBar', () => ({ BenchmarkStandingBa
 vi.mock('@/components/reports/TeamTrendSection', () => ({ TeamTrendSection: () => null }));
 vi.mock('@/components/reports/TeamBenchmarkStandingSection', () => ({ TeamBenchmarkStandingSection: () => null }));
 vi.mock('@/components/reports/TeamBoxSwarmSection', () => ({ TeamBoxSwarmSection: () => null }));
-vi.mock('@/components/reports/LeaderboardBarSection', () => ({ LeaderboardBarSection: () => null }));
+vi.mock('@/components/reports/LeaderboardBarSection', () => ({ LeaderboardBarSection: (p: unknown) => sectionProps('LeaderboardBarSection', p) }));
 vi.mock('@/components/reports/TierDistributionChartSection', () => ({ TierDistributionChartSection: () => null }));
 vi.mock('@/components/reports/ReportMetricsGlossary', () => ({ ReportMetricsGlossary: () => null }));
 vi.mock('@/components/reports/EvalReportView', () => ({ EvalReportBody: () => <div>eval body</div> }));
@@ -105,5 +106,27 @@ describe('public report: coaching insights', () => {
     show({ reportType: 'eval', model: { athleteName: 'Ben' }, coachingInsights: INSIGHTS });
     expect(screen.getByText('eval body')).toBeInTheDocument();
     expect(screen.queryByText('Coaching Insights')).toBeNull();
+  });
+});
+
+describe('public report: unranked metrics (issue #805)', () => {
+  const propsOf = (name: string) =>
+    sectionProps.mock.calls.filter(([n]) => n === name).map(([, p]) => p as { unrankedMetrics?: string[] });
+
+  it('team: the leaderboard gets the snapshot unranked list', () => {
+    show({ ...team, reportConfig: { ...team.reportConfig, charts: { leaderboard: true } }, unrankedMetrics: ['BODY_WEIGHT'] });
+    expect(propsOf('LeaderboardBarSection').slice(-1)[0]?.unrankedMetrics).toEqual(['BODY_WEIGHT']);
+  });
+
+  it('individual: radar and distribution get the snapshot unranked list', () => {
+    show({
+      ...individual,
+      reportConfig: { ...individual.reportConfig, charts: { radar: true, distribution: true } },
+      athlete: { ...individual.athlete, measurements: { A: 1, B: 2, C: 3 }, percentiles: { A: 1, B: 2, C: 3 } },
+      distributions: { A: { values: [1, 2], athleteValue: 1, direction: 'higher' } },
+      unrankedMetrics: ['BODY_WEIGHT'],
+    });
+    expect(propsOf('PercentileRadarSection').slice(-1)[0]?.unrankedMetrics).toEqual(['BODY_WEIGHT']);
+    expect(propsOf('DistributionSection').slice(-1)[0]?.unrankedMetrics).toEqual(['BODY_WEIGHT']);
   });
 });

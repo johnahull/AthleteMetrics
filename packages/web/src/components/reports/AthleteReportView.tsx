@@ -48,7 +48,7 @@ import { formatMeasurement } from "@shared/duration-format";
 import { resolveTierText } from "@shared/tier-colors";
 import { MetricGroupRowHeading } from "./MetricGroupHeading";
 import { groupedCodes } from "@/lib/metric-groups";
-import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from "@/lib/report-utils";
+import { isLowerBetter, sortAthletesByMetric, sortAthletesByName, getBenchmarkLabel } from "@/lib/report-utils";
 import {
   getPerformanceColor,
   getQuartileBadge,
@@ -372,7 +372,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
     );
   }
 
-  const { teamStatistics, athleteRankings, generatedAt, metricLabels, metricUnits, metricFormats } = reportData;
+  const { teamStatistics, athleteRankings, generatedAt, metricLabels, metricUnits, metricFormats, unrankedMetrics = [] } = reportData;
   const resolveLabel = (code: string) => metricLabels?.[code] ?? getLabel(code);
 
   // Collect all unique benchmark names
@@ -572,7 +572,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
                             </div>
                           </div>
                         ) : (
-                          "N/A"
+                          unrankedMetrics.includes(stat.metric) ? "-" : "N/A"
                         )}
                       </TableCell>
                       <TableCell>
@@ -636,7 +636,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
         <Card>
           <CardHeader>
             <CardTitle>Composite Index Rankings</CardTitle>
-            <CardDescription>{getCompositeIndexDescription(compositeConfig.compositeIndex?.weights, metricLabels)}</CardDescription>
+            <CardDescription>{getCompositeIndexDescription(compositeConfig.compositeIndex?.weights, metricLabels, unrankedMetrics)}</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -651,9 +651,11 @@ function AthleteTeamReportView({ report }: { report: Report }) {
                 {athleteRankings.map((athlete: AthleteRanking, idx: number) => (
                   <TableRow key={athlete.userId}>
                     <TableCell>
-                      <Badge variant={idx < 3 ? "default" : "secondary"}>
-                        #{idx + 1}
-                      </Badge>
+                      {athlete.compositeIndex === undefined ? "-" : (
+                        <Badge variant={idx < 3 ? "default" : "secondary"}>
+                          #{idx + 1}
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell className="font-medium">{athlete.userName}</TableCell>
                     <TableCell>{athlete.compositeIndex?.toFixed(2) || "N/A"}</TableCell>
@@ -670,7 +672,11 @@ function AthleteTeamReportView({ report }: { report: Report }) {
         <div className="space-y-6">
           <h2 className="text-xl font-semibold">Individual Performance by Metric</h2>
           {teamStatistics.map((stat: TeamStatistic) => {
-            const sortedAthletes = sortAthletesByMetric(athleteRankings, stat.metric, metricTypes?.[stat.metric]);
+            // Not ranked (issue #805): listed by name, no rank, percentile or good/bad colours
+            const unranked = unrankedMetrics.includes(stat.metric);
+            const sortedAthletes = unranked
+              ? sortAthletesByName(athleteRankings, stat.metric)
+              : sortAthletesByMetric(athleteRankings, stat.metric, metricTypes?.[stat.metric]);
             if (sortedAthletes.length === 0) return null;
 
             return (
@@ -686,10 +692,10 @@ function AthleteTeamReportView({ report }: { report: Report }) {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-16">Rank</TableHead>
+                        {!unranked && <TableHead className="w-16">Rank</TableHead>}
                         <TableHead>Athlete</TableHead>
                         <TableHead>Value</TableHead>
-                        <TableHead>Percentile</TableHead>
+                        {!unranked && <TableHead>Percentile</TableHead>}
                         <TableHead>Deviation from Avg</TableHead>
                         <TableHead>Z-Score</TableHead>
                       </TableRow>
@@ -711,7 +717,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
 
                         return (
                           <TableRow key={athlete.userId}>
-                            <TableCell>
+                            {!unranked && (<TableCell>
                               <Badge
                                 variant={idx === 0 ? "default" : idx === 1 ? "secondary" : idx === 2 ? "outline" : "secondary"}
                                 className={
@@ -722,7 +728,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
                               >
                                 #{idx + 1}
                               </Badge>
-                            </TableCell>
+                            </TableCell>)}
                             <TableCell className="font-medium">
                               <div className="flex items-center gap-2">
                                 <span>{athlete.userName}</span>
@@ -740,7 +746,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
                                     : (metricFormats?.[stat.metric] ? formatMeasurement(value, metricFormats[stat.metric]) : `${value.toFixed(2)} ${stat.units || ""}`))
                                 : "N/A"}
                             </TableCell>
-                            <TableCell>
+                            {!unranked && (<TableCell>
                               <div className="flex items-center gap-2">
                                 {percentile !== undefined ? (
                                   <span className={`font-semibold ${percentileColor}`}>
@@ -755,10 +761,10 @@ function AthleteTeamReportView({ report }: { report: Report }) {
                                   </Badge>
                                 )}
                               </div>
-                            </TableCell>
+                            </TableCell>)}
                             <TableCell>
                               {deviation !== null && percentDiff !== null ? (
-                                <span className={`font-semibold ${deviationColor}`}>
+                                <span className={`font-semibold ${unranked ? '' : deviationColor}`}>
                                   {deviation > 0 ? "+" : ""}{metricFormats?.[stat.metric] ? formatMeasurement(deviation, metricFormats[stat.metric]) : `${deviation.toFixed(2)} ${stat.units || ""}`}
                                   <span className="text-xs ml-1">
                                     ({percentDiff > 0 ? "+" : ""}{percentDiff.toFixed(1)}%)
@@ -770,7 +776,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
                             </TableCell>
                             <TableCell>
                               {zScore !== null ? (
-                                <span className={`font-semibold ${zScoreColor}`}>
+                                <span className={`font-semibold ${unranked ? '' : zScoreColor}`}>
                                   {zScore > 0 ? "+" : ""}{zScore.toFixed(2)}σ
                                 </span>
                               ) : (

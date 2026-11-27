@@ -67,9 +67,12 @@ export function LineChart({
 
     // Sort athletes by performance for smart defaults
     const metric = data[0]?.metric;
-    const lowerIsBetter = isLowerBetterType(metric, getMetricConfig(metric)?.metricType);
+    const metricType = getMetricConfig(metric)?.metricType;
+    const lowerIsBetter = isLowerBetterType(metric, metricType);
 
     const sortedData = [...data].sort((a, b) => {
+      // A tracking metric has no better direction, so the default pick goes by name
+      if (metricType === 'tracking') return a.athleteName.localeCompare(b.athleteName);
       const aValues = a.data.map(point => point.value);
       const bValues = b.data.map(point => point.value);
       const aBest = lowerIsBetter ? Math.min(...aValues) : Math.max(...aValues);
@@ -83,7 +86,7 @@ export function LineChart({
       name: trend.athleteName,
       color: index
     }));
-  }, [data]);
+  }, [data, getMetricConfig]);
 
   // Initialize smart default selection when data changes and no external selection
   React.useEffect(() => {

@@ -160,5 +160,17 @@ describe('radarDataFromPercentiles', () => {
     expect(md.percentileRanks).toEqual({ VJ: 80, DASH: 65 });
     expect(md.metrics).toEqual({ VJ: 25.5, DASH: 4.9 });
   });
+
+  it('plots only metrics that have a percentile and are not unranked (issue #805)', () => {
+    const md = radarDataFromPercentiles(
+      'u1',
+      'Jordan',
+      { VJ: 80, DASH: 65, BODY_WEIGHT: 50 },
+      { VJ: 25.5, DASH: 4.9, BODY_WEIGHT: 180, MQI_TOTAL: 14 },
+      ['BODY_WEIGHT'],
+    );
+    expect(md.metrics).toEqual({ VJ: 25.5, DASH: 4.9 });
+    expect(md.percentileRanks).toEqual({ VJ: 80, DASH: 65 });
+  });
 });
 
