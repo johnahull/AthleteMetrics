@@ -27,6 +27,7 @@ import { useAvailableMetrics } from "@/hooks/use-available-metrics";
 import { formatValueWithUnit } from "@/lib/metrics";
 import { formatMeasurement } from "@shared/duration-format";
 import type { TimeframePreset } from "@shared/dashboard-timeframe";
+import { isRankableMetric } from "@shared/peer-comparison-exclusions";
 
 interface MostImprovedCardProps {
   organizationId: string;
@@ -48,7 +49,9 @@ export function MostImprovedCard({
   const [, setLocation] = useLocation();
 
   // Get available metrics
-  const { metrics, isLoading: metricsLoading } = useAvailableMetrics();
+  const { metrics: availableMetrics, isLoading: metricsLoading } = useAvailableMetrics();
+  // Only metrics athletes can be ranked on; the server rejects tracking, Movement Quality and custom metrics here (issue #805)
+  const metrics = availableMetrics.filter((m) => !m.isCustom && isRankableMetric(m.code, m.metricType));
 
   // State for selected metric
   const [selectedMetric, setSelectedMetric] = useState<string>("");

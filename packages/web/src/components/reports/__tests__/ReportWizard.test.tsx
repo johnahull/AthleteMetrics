@@ -1376,4 +1376,42 @@ describe('ReportWizard Component', () => {
       ]);
     });
   });
+
+  describe('Composite weights (issue #805)', () => {
+    const next = () => fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+
+    it('offers no weight for a tracking or Movement Quality metric', async () => {
+      mockUseOrganizationMetrics.mockReturnValue({
+        data: [
+          { metricCode: 'FLY10_TIME', siteMetric: { label: '10-Yard Fly', unit: 's', category: 'Speed', metricType: 'lower_is_better' } },
+          { metricCode: 'BODY_WEIGHT', siteMetric: { label: 'Body Weight', unit: 'lbs', category: 'Body', metricType: 'tracking' } },
+          { metricCode: 'MQI_TOTAL', siteMetric: { label: 'MQI Total', unit: '', category: 'Movement', metricType: 'higher_is_better' } },
+        ],
+        isLoading: false,
+        error: null,
+      });
+      renderWithQueryClient(<ReportWizard open={true} onClose={mockOnClose} onSuccess={mockOnSuccess} />);
+
+      await waitFor(() => expect(screen.getByText('Team Report')).toBeInTheDocument());
+      fireEvent.click(screen.getByLabelText(/team Report/i, { exact: false }));
+      next();
+      await waitFor(() => fireEvent.change(screen.getByLabelText(/Report Name/i), { target: { value: 'Composite Test' } }));
+      next();
+      next();
+      await screen.findByText('Select Metrics *');
+      screen.getAllByRole('checkbox').forEach((c) => fireEvent.click(c));
+      next();
+      next();
+      await waitFor(() => expect(screen.getByLabelText('Team A')).toBeInTheDocument());
+      fireEvent.click(screen.getByLabelText('Team A'));
+      next();
+
+      fireEvent.click(screen.getByLabelText(/Enable Composite Index/i));
+      const weights = screen.getByText(/Assign weights to each metric/i).parentElement!;
+      expect(within(weights).getByText('FLY10_TIME')).toBeInTheDocument();
+      expect(within(weights).queryByText('BODY_WEIGHT')).toBeNull();
+      expect(within(weights).queryByText('MQI_TOTAL')).toBeNull();
+      expect(within(weights).getAllByRole('spinbutton')).toHaveLength(1);
+    });
+  });
 });

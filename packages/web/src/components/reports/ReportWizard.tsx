@@ -44,6 +44,7 @@ import { Separator } from "@/components/ui/separator";
 import { TeamAthleteSelector } from "@/components/ui/team-athlete-selector";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { DEFAULT_CHART_SELECTION } from "@shared/report-charts";
+import { isRankableMetric } from "@shared/peer-comparison-exclusions";
 import { MetricPicker } from "./template-fields/MetricPicker";
 import { BenchmarkFields } from "./template-fields/BenchmarkFields";
 import { ChartChoices } from "./template-fields/ChartChoices";
@@ -885,7 +886,11 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                   <p className="text-sm font-medium">
                     Assign weights to each metric (must sum to 1.0)
                   </p>
-                  {selectedMetrics.map((metricCode) => (
+                  {/* A metric athletes are not ranked on has no percentile, so no weight (issue #805) */}
+                  {selectedMetrics.filter((metricCode) => isRankableMetric(
+                    metricCode,
+                    metrics?.find((m) => m.metricCode === metricCode)?.siteMetric.metricType,
+                  )).map((metricCode) => (
                     <div key={metricCode} className="flex items-center gap-2">
                       <Label className="flex-1">{metricCode}</Label>
                       <Input

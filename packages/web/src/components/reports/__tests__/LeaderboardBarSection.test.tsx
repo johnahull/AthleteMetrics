@@ -50,6 +50,19 @@ describe('LeaderboardBarSection', () => {
     expect(document.querySelector('[data-report-chart="leaderboard:FLY"]')).toBeTruthy();
   });
 
+  it('draws no leaderboard for an unranked metric (issue #805)', () => {
+    const withWeight: TeamStatistic[] = [...stats, { ...stats[0], metric: 'BODY_WEIGHT', units: 'lbs' }];
+    const athletes: AthleteRanking[] = rankings.map((a, i) => ({ ...a, measurements: { ...a.measurements, BODY_WEIGHT: 150 + i } }));
+    render(<LeaderboardBarSection athleteRankings={athletes} teamStatistics={withWeight} generatedAt="2024-01-01" unrankedMetrics={['BODY_WEIGHT']} />);
+    expect(document.querySelector('[data-report-chart="leaderboard:FLY"]')).toBeTruthy();
+    expect(document.querySelector('[data-report-chart="leaderboard:BODY_WEIGHT"]')).toBeNull();
+  });
+
+  it('renders nothing when every metric is unranked', () => {
+    const { container } = render(<LeaderboardBarSection athleteRankings={rankings} teamStatistics={stats} generatedAt="2024-01-01" unrankedMetrics={['FLY']} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
   it('renders nothing when no athlete has a value for any configured metric', () => {
     const { container } = render(<LeaderboardBarSection athleteRankings={[]} teamStatistics={stats} generatedAt="2024-01-01" />);
     expect(container).toBeEmptyDOMElement();

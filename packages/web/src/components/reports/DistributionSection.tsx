@@ -17,6 +17,8 @@ interface Props {
   /** Name of the peer cohort (e.g. "Varsity (Male, WR)"); falls back to "your group". */
   comparisonLabel?: string;
   metricGroups?: MetricGroup[];
+  /** Metrics athletes are not ranked on: no "better than" histogram (issue #805) */
+  unrankedMetrics?: string[];
 }
 
 /** Compact number: integers as-is, otherwise one decimal. */
@@ -128,8 +130,9 @@ export function DistributionSection({
   percentiles = {},
   comparisonLabel,
   metricGroups,
+  unrankedMetrics = [],
 }: Props) {
-  const entries = Object.entries(distributions);
+  const entries = Object.entries(distributions).filter(([code]) => !unrankedMetrics.includes(code));
   if (entries.length === 0) return null;
 
   const groupLabel = comparisonLabel ?? 'your group';

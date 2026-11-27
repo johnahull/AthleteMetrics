@@ -344,6 +344,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
           athleteName={athlete.userName}
           percentiles={athlete.percentiles}
           measurements={athlete.measurements}
+          unrankedMetrics={reportData.unrankedMetrics}
         />
       )}
 
@@ -404,6 +405,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
           metricFormats={metricFormats}
           percentiles={athlete.percentiles}
           comparisonLabel={reportData.comparisonLabel}
+          unrankedMetrics={reportData.unrankedMetrics}
         />
       )}
 

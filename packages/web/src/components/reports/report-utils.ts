@@ -178,16 +178,22 @@ export function getMetricsList(
  */
 export function getCompositeIndexDescription(
   weights?: Record<string, number>,
-  metricLabels?: Record<string, string>
+  metricLabels?: Record<string, string>,
+  unrankedMetrics: string[] = []
 ): string {
-  if (!weights || Object.keys(weights).length === 0) {
+  // Unranked metrics have no percentile, so the server leaves them out and spreads their weight over the rest
+  const counted = Object.entries(weights ?? {}).filter(([metricCode]) => !unrankedMetrics.includes(metricCode));
+  if (counted.length === 0) {
     return 'Weighted average of percentiles';
   }
+  const totalWeight = counted.length < Object.keys(weights ?? {}).length
+    ? counted.reduce((sum, [, weight]) => sum + weight, 0)
+    : 1;
 
-  const weightDescriptions = Object.entries(weights)
+  const weightDescriptions = counted
     .map(([metricCode, weight]) => {
       const metricName = metricLabels?.[metricCode] ?? resolveFallbackLabel(metricCode);
-      const percentage = (weight * 100).toFixed(0);
+      const percentage = ((weight / totalWeight) * 100).toFixed(0);
       return `${metricName} (${percentage}%)`;
     })
     .join(', ');

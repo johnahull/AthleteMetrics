@@ -110,6 +110,8 @@ export default function PublicReport() {
   const teamTrends = snapshotData.teamTrends as TeamReportTrends | undefined;
   const teamDistributions = snapshotData.teamDistributions as TeamReportDistributions | undefined;
   const teamMetricDirections = snapshotData.metricDirections as Record<string, 'higher' | 'lower'> | undefined;
+  // Tracking metrics athletes are not ranked on (issue #805); absent on old snapshots = none
+  const unrankedMetrics = snapshotData.unrankedMetrics as string[] | undefined;
 
   // Real produced shapes (mirror IndividualReportView / TeamReportView).
   const athlete = snapshotData.athlete as any;
@@ -332,7 +334,7 @@ export default function PublicReport() {
                                   </div>
                                 </div>
                               ) : (
-                                "N/A"
+                                unrankedMetrics?.includes(stat.metric) ? "-" : "N/A"
                               )}
                             </TableCell>
                             <TableCell>
@@ -370,9 +372,11 @@ export default function PublicReport() {
                       {athleteRankings.map((a: any, idx: number) => (
                         <TableRow key={a.userId}>
                           <TableCell>
-                            <Badge variant={idx < 3 ? "default" : "secondary"}>
-                              #{idx + 1}
-                            </Badge>
+                            {a.compositeIndex === undefined ? "-" : (
+                              <Badge variant={idx < 3 ? "default" : "secondary"}>
+                                #{idx + 1}
+                              </Badge>
+                            )}
                           </TableCell>
                           <TableCell className="font-medium">{a.userName}</TableCell>
                           <TableCell>{a.compositeIndex?.toFixed(2) ?? "N/A"}</TableCell>
@@ -426,6 +430,7 @@ export default function PublicReport() {
                 metricLabels={metricLabels}
                 generatedAt={generatedAt}
                 teamName={snapshotData.comparisonLabel}
+                unrankedMetrics={unrankedMetrics}
               />
             )}
 
@@ -587,6 +592,7 @@ export default function PublicReport() {
                 athleteName={athlete.userName}
                 percentiles={athlete.percentiles}
                 measurements={athlete.measurements}
+                unrankedMetrics={unrankedMetrics}
               />
             )}
 
@@ -653,6 +659,7 @@ export default function PublicReport() {
                 metricFormats={metricFormats}
                 percentiles={snapshotData.athlete?.percentiles}
                 comparisonLabel={snapshotData.comparisonLabel}
+                unrankedMetrics={unrankedMetrics}
               />
             )}
 

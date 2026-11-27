@@ -8,12 +8,13 @@ interface Props {
   athleteName: string;
   percentiles: Record<string, number>;
   measurements: Record<string, number>;
+  /** Metrics athletes are not ranked on: never a spoke (issue #805) */
+  unrankedMetrics?: string[];
 }
 
-export function PercentileRadarSection({ athleteId, athleteName, percentiles, measurements }: Props) {
-  const metricCount = Object.keys(percentiles || {}).length;
-  if (metricCount < 3) return null;
-  const data = [radarDataFromPercentiles(athleteId, athleteName, percentiles, measurements)];
+export function PercentileRadarSection({ athleteId, athleteName, percentiles, measurements, unrankedMetrics }: Props) {
+  const data = [radarDataFromPercentiles(athleteId, athleteName, percentiles || {}, measurements || {}, unrankedMetrics)];
+  if (Object.keys(data[0].metrics).length < 3) return null;
   return (
     <Card data-report-chart="radar" data-report-chart-title="All-around profile">
       <CardHeader><CardTitle>All-Around Profile (percentiles)</CardTitle></CardHeader>

@@ -118,13 +118,25 @@ export function personalBestIndex(series: TrendPoint[], direction: 'higher' | 'l
   return bestIdx;
 }
 
-/** Adapt the report's precomputed percentiles into RadarChart's MultiMetricData. */
+/**
+ * Adapt the report's precomputed percentiles into RadarChart's MultiMetricData. Only metrics with a
+ * percentile that are not unranked become spokes: RadarChart plots a missing percentile as the 50th.
+ */
 export function radarDataFromPercentiles(
   athleteId: string,
   athleteName: string,
   percentiles: Record<string, number>,
   measurements: Record<string, number>,
+  unrankedMetrics: string[] = [],
 ): MultiMetricData {
-  return { athleteId, athleteName, metrics: { ...measurements }, percentileRanks: { ...percentiles } };
+  const codes = Object.keys(measurements).filter(
+    (code) => percentiles[code] !== undefined && !unrankedMetrics.includes(code),
+  );
+  return {
+    athleteId,
+    athleteName,
+    metrics: Object.fromEntries(codes.map((code) => [code, measurements[code]])),
+    percentileRanks: Object.fromEntries(codes.map((code) => [code, percentiles[code]])),
+  };
 }
 

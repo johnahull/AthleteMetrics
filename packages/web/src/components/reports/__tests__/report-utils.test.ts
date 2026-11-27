@@ -271,6 +271,11 @@ describe('report-utils', () => {
       expect(result).toContain('Weighted average of percentiles:');
     });
 
+    it('omits unranked metrics and shows the remaining weights as shares of what is left (issue #805)', () => {
+      const result = getCompositeIndexDescription({ FLY10_TIME: 0.4, VERTICAL_JUMP: 0.4, BODY_WEIGHT: 0.2 }, mockMetricLabels, ['BODY_WEIGHT']);
+      expect(result).toBe('Weighted average of percentiles: 10-Yard Fly (50%), Vertical Jump (50%)');
+    });
+
     it('should handle fractional weights correctly', () => {
       const weights = {
         FLY10_TIME: 0.333,

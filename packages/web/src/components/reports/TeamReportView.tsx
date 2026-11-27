@@ -45,7 +45,7 @@ import {
   calculateDeviationStats,
   calculateTierDistributions,
 } from "./report-utils";
-import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from "@/lib/report-utils";
+import { isLowerBetter, sortAthletesByMetric, sortAthletesByName, getBenchmarkLabel } from "@/lib/report-utils";
 import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
 import { formatMeasurement } from "@shared/duration-format";
 import type { Report, TeamReportData, TeamStatistic, AthleteRanking, PdfFormat, TeamReportConfig } from "@/types/report-types";
@@ -144,13 +144,13 @@ export function TeamReportView({ report }: TeamReportViewProps) {
     );
   }
 
-  const { teamStatistics, athleteRankings, generatedAt, metricLabels, metricUnits, metricFormats, metricExplanations, teamTrends, teamDistributions } = reportData;
+  const { teamStatistics, athleteRankings, generatedAt, metricLabels, metricUnits, metricFormats, metricExplanations, teamTrends, teamDistributions, unrankedMetrics = [] } = reportData;
   const resolveLabel = (code: string) => metricLabels?.[code] ?? getLabel(code);
   const teamMetricCodes = Array.isArray(teamStatistics) ? teamStatistics.map((s: TeamStatistic) => s.metric) : [];
   const statByMetric = new Map<string, TeamStatistic>(Array.isArray(teamStatistics) ? teamStatistics.map((s: TeamStatistic) => [s.metric, s]) : []);
   // A metric nobody has a value for gets no card, so it must not leave its group heading behind
   const sortedByMetric = new Map<string, AthleteRanking[]>(
-    teamMetricCodes.map((c: string) => [c, sortAthletesByMetric(athleteRankings, c, metricTypes?.[c])]),
+    teamMetricCodes.map((c: string) => [c, unrankedMetrics.includes(c) ? sortAthletesByName(athleteRankings, c) : sortAthletesByMetric(athleteRankings, c, metricTypes?.[c])]),
   );
   const codesWithAthletes = teamMetricCodes.filter((c: string) => sortedByMetric.get(c)!.length > 0);
   const hasMeasurements = Array.isArray(athleteRankings) && athleteRankings.length > 0;
@@ -390,7 +390,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                             </div>
                           </div>
                         ) : (
-                          "N/A"
+                          unrankedMetrics.includes(stat.metric) ? "-" : "N/A"
                         )}
                       </TableCell>
                       <TableCell>
@@ -496,7 +496,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
         <Card>
           <CardHeader>
             <CardTitle>Composite Index Rankings</CardTitle>
-            <CardDescription>{getCompositeIndexDescription(compositeConfig.compositeIndex?.weights, metricLabels)}</CardDescription>
+            <CardDescription>{getCompositeIndexDescription(compositeConfig.compositeIndex?.weights, metricLabels, unrankedMetrics)}</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -511,9 +511,11 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                 {athleteRankings.map((athlete: AthleteRanking, idx: number) => (
                   <TableRow key={athlete.userId}>
                     <TableCell>
-                      <Badge variant={idx < 3 ? "default" : "secondary"}>
-                        #{idx + 1}
-                      </Badge>
+                      {athlete.compositeIndex === undefined ? "-" : (
+                        <Badge variant={idx < 3 ? "default" : "secondary"}>
+                          #{idx + 1}
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell className="font-medium">{athlete.userName}</TableCell>
                     <TableCell>{athlete.compositeIndex?.toFixed(2) || "N/A"}</TableCell>
@@ -537,6 +539,8 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                 if (!stat) return null;
                 // codesWithAthletes already dropped metrics nobody recorded
                 const sortedAthletes = sortedByMetric.get(code)!;
+                // Not ranked (issue #805): listed by name, no rank, percentile or good/bad colours
+                const unranked = unrankedMetrics.includes(stat.metric);
 
                 return (
                   <Card key={stat.metric}>
@@ -551,10 +555,10 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="w-16">Rank</TableHead>
+                            {!unranked && <TableHead className="w-16">Rank</TableHead>}
                             <TableHead>Athlete</TableHead>
                             <TableHead>Value</TableHead>
-                            <TableHead>Percentile</TableHead>
+                            {!unranked && <TableHead>Percentile</TableHead>}
                             <TableHead>Deviation from Avg</TableHead>
                             <TableHead>Z-Score</TableHead>
                           </TableRow>
@@ -576,7 +580,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
 
                             return (
                               <TableRow key={athlete.userId}>
-                                <TableCell>
+                                {!unranked && (<TableCell>
                                   <Badge
                                     variant={idx === 0 ? "default" : idx === 1 ? "secondary" : idx === 2 ? "outline" : "secondary"}
                                     className={
@@ -587,7 +591,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                                   >
                                     #{idx + 1}
                                   </Badge>
-                                </TableCell>
+                                </TableCell>)}
                                 <TableCell className="font-medium">
                                   <div className="flex items-center gap-2">
                                     <span>{athlete.userName}</span>
@@ -616,7 +620,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                                         : (metricFormats?.[stat.metric] ? formatMeasurement(value, metricFormats[stat.metric]) : `${value.toFixed(2)} ${stat.units || ''}`))
                                     : "N/A"}
                                 </TableCell>
-                                <TableCell>
+                                {!unranked && (<TableCell>
                                   <div className="flex items-center gap-2">
                                     {percentile !== undefined ? (
                                       <span className={`font-semibold ${percentileColor}`}>
@@ -631,10 +635,10 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                                       </Badge>
                                     )}
                                   </div>
-                                </TableCell>
+                                </TableCell>)}
                                 <TableCell>
                                   {deviation !== null && percentDiff !== null ? (
-                                    <span className={`font-semibold ${deviationColor}`}>
+                                    <span className={`font-semibold ${unranked ? '' : deviationColor}`}>
                                       {deviation > 0 ? '+' : ''}{metricFormats?.[stat.metric] ? formatMeasurement(deviation, metricFormats[stat.metric]) : `${deviation.toFixed(2)} ${stat.units || ''}`}
                                       <span className="text-xs ml-1">
                                         ({percentDiff > 0 ? '+' : ''}{percentDiff.toFixed(1)}%)
@@ -646,7 +650,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                                 </TableCell>
                                 <TableCell>
                                   {zScore !== null ? (
-                                    <span className={`font-semibold ${zScoreColor}`}>
+                                    <span className={`font-semibold ${unranked ? '' : zScoreColor}`}>
                                       {zScore > 0 ? '+' : ''}{zScore.toFixed(2)}σ
                                     </span>
                                   ) : (
@@ -702,6 +706,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
           metricLabels={metricLabels}
           generatedAt={generatedAt}
           teamName={resolvedTeamName}
+          unrankedMetrics={unrankedMetrics}
         />
       )}
 

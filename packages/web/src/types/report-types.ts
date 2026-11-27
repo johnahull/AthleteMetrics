@@ -128,6 +128,8 @@ export interface TeamReportData {
   comparisonLabel?: string;
   /** Metric groups in display order; absent on data from before grouping existed */
   metricGroups?: MetricGroup[];
+  /** Tracking metric codes athletes are not ranked on (issue #805); absent = none */
+  unrankedMetrics?: string[];
 }
 
 export interface IndividualAthleteData {
@@ -163,6 +165,8 @@ export interface IndividualReportData {
   comparisonLabel?: string; // cohort name for the "Where You Stand" caption (undefined = org-wide)
   /** Metric groups in display order; absent on data from before grouping existed */
   metricGroups?: MetricGroup[];
+  /** Tracking metric codes athletes are not ranked on (issue #805); absent = none */
+  unrankedMetrics?: string[];
 }
 
 export type PdfFormat = 'visual' | 'simplified';

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from '../report-utils';
+import { isLowerBetter, sortAthletesByMetric, sortAthletesByName, getBenchmarkLabel } from '../report-utils';
 
 // MILE_RUN is not in the hard-coded lower-is-better list: only its type says lower is better
 describe('report-utils: direction from the metric list', () => {
@@ -32,5 +32,17 @@ describe('report-utils: direction from the metric list', () => {
       },
     };
     expect(getBenchmarkLabel(athlete, 'MILE_RUN', 'lower_is_better')).toBe('Elite');
+  });
+});
+
+describe('sortAthletesByName (issue #805)', () => {
+  it('lists athletes with a value for the metric by name, not by value', () => {
+    const athletes = [
+      { userName: 'Zoe', measurements: { BODY_WEIGHT: 120 } },
+      { userName: 'adam', measurements: { BODY_WEIGHT: 200 } },
+      { userName: 'Mia', measurements: {} },
+      { userName: 'Ben', measurements: { BODY_WEIGHT: 150 } },
+    ];
+    expect(sortAthletesByName(athletes, 'BODY_WEIGHT').map((a) => a.userName)).toEqual(['adam', 'Ben', 'Zoe']);
   });
 });
