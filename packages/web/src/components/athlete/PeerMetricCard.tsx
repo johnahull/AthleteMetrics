@@ -27,7 +27,7 @@ import { DistributionBoxPlot } from '@/components/charts/DistributionBoxPlot';
 import { formatValueWithUnit } from '@/lib/metrics';
 import { useMetricLabels } from '@/hooks/use-metric-labels';
 import { formatMeasurement } from '@shared/duration-format';
-import { AthleteMetricExplanation } from './AthleteMetricExplanation';
+import { AthleteMetricExplanation, MetricDirectionLabel } from './AthleteMetricExplanation';
 import type { MetricExplanation } from '@shared/metric-explanations';
 
 export interface BenchmarkStatus {
@@ -90,7 +90,7 @@ export function PeerMetricCard({
   explanation,
 }: PeerMetricCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const { formats, getUnit } = useMetricLabels();
+  const { formats, getUnit, types } = useMetricLabels();
 
   // Fetch detailed distribution data when expanded
   const {
@@ -103,6 +103,7 @@ export function PeerMetricCard({
   );
 
   const displayName = explanation?.title ?? result.metric;
+  const metricType = types?.[result.metric];
   const durationFormat = formats[result.metric];
   // A duration value is shown as m:ss, which carries no unit
   const units = durationFormat ? '' : getUnit(result.metric);
@@ -119,9 +120,12 @@ export function PeerMetricCard({
     return (
       <Card className="hover:shadow-md transition-shadow">
         <CardContent className="p-4">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="font-medium text-gray-900">{displayName}</h3>
-            <span className="text-sm text-gray-500">
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <div className="min-w-0">
+              <h3 className="font-medium text-gray-900">{displayName}</h3>
+              <MetricDirectionLabel metricType={metricType} />
+            </div>
+            <span className="text-sm text-gray-500 whitespace-nowrap">
               {formatValueWithUnit(formatValue(result.athleteValue), units)}
             </span>
           </div>
@@ -146,6 +150,7 @@ export function PeerMetricCard({
               explanation={explanation}
               fallbackLabel={displayName}
               titleClassName="text-base"
+              metricType={metricType}
             />
           </div>
           <span className="text-lg font-semibold text-gray-800 whitespace-nowrap">
