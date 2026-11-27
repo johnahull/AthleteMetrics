@@ -23,6 +23,8 @@ vi.mock('@/hooks/use-metric-config', () => ({
       unit: 's',
       category: 'Speed',
       displayOrder: 1,
+      metricType: code === 'BODY_WEIGHT' ? 'tracking' : 'lower_is_better',
+      lowerIsBetter: code !== 'BODY_WEIGHT',
     }),
   }),
 }));
@@ -253,6 +255,14 @@ describe('MultiLineChart', () => {
       const singleAthleteData = mockTrendData.filter(t => t.athleteId === 'athlete1');
       render(<MultiLineChart {...defaultProps} data={singleAthleteData} />);
       expect(screen.getByText(/different line styles represent different metrics/i)).toBeInTheDocument();
+    });
+
+    it('shows a better-direction arrow for a ranked metric but none for a tracking metric', () => {
+      const weightData = mockTrendData.map(t => ({ ...t, metric: 'BODY_WEIGHT' }));
+      render(<MultiLineChart {...defaultProps} data={[...mockTrendData, ...weightData]} />);
+      const legendText = (label: string) => screen.getByText(label, { exact: false }).closest('span')?.textContent;
+      expect(legendText('DASH_40YD')).toContain('↓');
+      expect(legendText('BODY_WEIGHT')).not.toMatch(/[↑↓]/);
     });
   });
 

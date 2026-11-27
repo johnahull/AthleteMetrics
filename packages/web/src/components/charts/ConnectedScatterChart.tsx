@@ -19,9 +19,11 @@ import { Scatter } from 'react-chartjs-2';
 import type {
   TrendData,
   ChartConfiguration,
-  StatisticalSummary
+  StatisticalSummary,
+  MetricType
 } from '@shared/analytics-types';
 import { useMetricConfig } from '@/hooks/use-metric-config';
+import { getPerformanceQuadrantLabels as getTrackingQuadrantLabels } from '@/utils/chart-calculations';
 import { durationAxis } from './utils/durationAxis';
 import { formatMeasurement } from '@shared/duration-format';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -101,7 +103,7 @@ interface ConnectedScatterChartProps {
 }
 
 // Performance quadrant labels based on metric types
-function getPerformanceQuadrantLabels(xMetric: string, yMetric: string, getMetricConfig: (code: string) => { label: string; unit: string; lowerIsBetter: boolean; category?: string } | null) {
+function getPerformanceQuadrantLabels(xMetric: string, yMetric: string, getMetricConfig: (code: string) => { label: string; unit: string; lowerIsBetter: boolean; metricType?: MetricType; category?: string } | null) {
   const xConfig = getMetricConfig(xMetric);
   const yConfig = getMetricConfig(yMetric);
 
@@ -111,6 +113,11 @@ function getPerformanceQuadrantLabels(xMetric: string, yMetric: string, getMetri
   // Get clean metric names (remove common suffixes)
   const xName = xConfig?.label.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || xMetric;
   const yName = yConfig?.label.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || yMetric;
+
+  // A tracking axis has no better direction: neutral High/Low labels (names stand in for the codes)
+  if (xConfig?.metricType === 'tracking' || yConfig?.metricType === 'tracking') {
+    return getTrackingQuadrantLabels(xName, yName, xConfig?.metricType, yConfig?.metricType);
+  }
 
   // Generate contextual descriptions based on metric combination
   const getDescriptions = () => {

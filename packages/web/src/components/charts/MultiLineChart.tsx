@@ -509,6 +509,8 @@ export function MultiLineChart({
                 const unit = metricConfig?.displayFormat === 'duration' ? 'mm:ss' : metricConfig?.unit || '';
                 const label = metricConfig?.label || metric;
                 const isLowerBetter = metricConfig?.lowerIsBetter;
+                // A tracking metric has no better direction, so no arrow
+                const arrow = metricConfig?.metricType === 'tracking' ? '' : isLowerBetter ? ' ↓' : ' ↑';
                 const style = getMetricStyle(index);
 
                 return (
@@ -521,9 +523,9 @@ export function MultiLineChart({
                       <span className="text-xs">
                         <strong>{style.name}:</strong> {label}
                         {isFly10Metric(metric) ? (
-                          <> (s / mph) {isLowerBetter ? '↓' : '↑'}</>
+                          <> (s / mph){arrow}</>
                         ) : (
-                          <> ({unit}) {isLowerBetter ? '↓' : '↑'}</>
+                          <> ({unit}){arrow}</>
                         )}
                       </span>
                     </div>

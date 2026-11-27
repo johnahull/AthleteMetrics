@@ -77,4 +77,21 @@ describe('LineChart default top-N selection', () => {
     metricConfigState.config = { label: 'Vertical Jump', unit: 'in', metricType: 'higher_is_better', displayFormat: 'decimal' };
     expect(pickedAthletes('VERTICAL_JUMP').sort()).toEqual(['Mid', 'Slow']);
   });
+
+  it('picks athletes by name, not by value, for a tracking metric', () => {
+    metricConfigState.config = { label: 'Body Weight', unit: 'lbs', metricType: 'tracking', displayFormat: 'decimal' };
+    render(
+      <LineChart
+        data={[
+          trend('Cy', 'BODY_WEIGHT', [100]),
+          trend('Dee', 'BODY_WEIGHT', [10]),
+          trend('Bob', 'BODY_WEIGHT', [60]),
+          trend('Amy', 'BODY_WEIGHT', [70]),
+        ]}
+        config={config}
+        maxAthletes={2}
+      />
+    );
+    expect(screen.getAllByTestId('dataset').map(el => el.textContent).sort()).toEqual(['Amy', 'Bob']);
+  });
 });

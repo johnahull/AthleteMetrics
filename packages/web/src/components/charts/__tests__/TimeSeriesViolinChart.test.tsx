@@ -13,8 +13,9 @@ import type { TrendData, ChartConfiguration, StatisticalSummary } from '@shared/
 vi.mock('@/hooks/use-metric-config', () => ({
   useMetricConfig: () => ({
     getMetricConfig: (code: string) => {
-      const metricMap: Record<string, { label: string; unit: string; lowerIsBetter?: boolean }> = {
+      const metricMap: Record<string, { label: string; unit: string; lowerIsBetter?: boolean; metricType?: string }> = {
         'FLY10_TIME': { label: '10-Yard Fly Time', unit: 's', lowerIsBetter: true },
+        'BODY_WEIGHT': { label: 'Body Weight', unit: 'lbs', lowerIsBetter: false, metricType: 'tracking' },
         'VERTICAL_JUMP': { label: 'Vertical Jump', unit: 'in', lowerIsBetter: false },
         'DASH_40YD': { label: '40-Yard Dash', unit: 's', lowerIsBetter: true },
       };
@@ -26,6 +27,7 @@ vi.mock('@/hooks/use-metric-config', () => ({
         category: 'Speed',
         displayOrder: 1,
         lowerIsBetter: metric.lowerIsBetter,
+        metricType: metric.metricType,
       };
     },
   }),
@@ -587,6 +589,20 @@ describe('TimeSeriesViolinChart', () => {
 
       expect(screen.getByText(/Vertical Jump/i)).toBeInTheDocument();
       expect(screen.getByText(/Higher is better/i)).toBeInTheDocument();
+    });
+
+    it('gives no better direction for a tracking metric', () => {
+      render(
+        <TimeSeriesViolinChart
+          data={mockTrendData.map(trend => ({ ...trend, metric: 'BODY_WEIGHT' }))}
+          selectedDates={selectedDates}
+          metric="BODY_WEIGHT"
+          config={mockConfig}
+        />
+      );
+
+      expect(screen.getByText(/Body Weight/i)).toBeInTheDocument();
+      expect(screen.queryByText(/is better/i)).not.toBeInTheDocument();
     });
 
     it('should format values appropriately for different metrics', () => {
