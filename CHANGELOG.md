@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.39.0] - 2026-11-26
+
+### Added
+- Anytime wellness surveys (AM-FEAT-027): a coach assigns a template to athletes once, and each athlete fills it in whenever they like. One live entry per athlete and day; a second submit keeps the earlier entry, which the coach can still see through an "Edited" marker. Anytime requests accept signed-in submissions only. Request lists show 7- and 28-day compliance, and status cards show the last entry date (#794)
+- Safety note on the Anytime check-in page: "Check-ins are not monitored in real time. They are best done on waking." (#800)
+
+### Changed
+- Device import keeps every run of a drill, not only the fastest. Readers pick the best value, so the best splits of a day are no longer lost. The import review lists each run and marks the best one (#791)
+- Device import detects duplicates by run time: separate sessions on one day are all kept, and skip or replace acts only on the same run (#792)
+- Dependencies: `web-push` 4, `nanoid` 6, `@anthropic-ai/sdk` 1.11, `express-rate-limit` 8.7.5 (#785, #787, #788, #789)
+
+### Fixed
+- Latest and best values are chosen correctly when an athlete has several runs on one day, and Sprint F-V uses the splits of one run (#790)
+- Organization and team analytics pick the best value before the row limit, so large organizations get correct results (#793)
+- Wellness: sign-in returns to the check-in, notification links open My Requests, profile merge keeps wellness targets, and organization template names and answer values display correctly (#796)
+
+### Security
+- Wellness templates, requests, schedules, targets and summaries are limited to the organization they are requested for (#795)
+
+### Deployment notes
+- Migration 0187 adds `wellness_requests.is_standing`, `wellness_responses.superseded_at` and a partial index (applied automatically).
+- No backfill: earlier imports keep one run per drill.
+- No new environment variables.
+
 ## [0.38.1] - 2026-11-26
 
 ### Security
