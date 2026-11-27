@@ -33,14 +33,19 @@ const WEIGHT = 'TST_BODY_WT';
 const FLY = 'FLY10_TIME';
 const FLY_RI = 'FLY10_TIME_RI10';
 
+// The default seed also creates FLY_RI, which other files rely on: delete it only if this file created it
+let createdFlyRi = false;
+
 const seedMetrics = async () => {
-  await db.execute(sql`
+  const inserted = await db.execute(sql`
     INSERT INTO site_metrics (code, label, category, unit, metric_type, is_system_default, is_active, display_order, decimal_precision)
     VALUES
       (${WEIGHT}, 'Test body weight', 'Anthropometrics', 'lb', 'tracking', false, true, 900, 1),
       (${FLY_RI}, 'Test fly run-in 10', 'Speed', 's', 'lower_is_better', false, true, 901, 2)
     ON CONFLICT (code) DO NOTHING
+    RETURNING code
   `);
+  createdFlyRi = Array.from(inserted).some((row) => (row as { code: string }).code === FLY_RI);
   await db.execute(sql`
     INSERT INTO site_metrics (
       code, label, category, unit, metric_type, is_system_default, is_active, display_order, decimal_precision,
@@ -74,7 +79,8 @@ describe('Anchored derived metric (MOMENTUM-like)', () => {
     if (createdUserIds.length > 0) {
       await db.delete(measurements).where(inArray(measurements.userId, createdUserIds));
     }
-    await db.execute(sql`DELETE FROM site_metrics WHERE code IN (${DERIVED}, ${WEIGHT}, ${FLY_RI})`);
+    await db.execute(sql`DELETE FROM site_metrics WHERE code IN (${DERIVED}, ${WEIGHT})`);
+    if (createdFlyRi) await db.execute(sql`DELETE FROM site_metrics WHERE code = ${FLY_RI}`);
   });
 
   beforeEach(async () => {
