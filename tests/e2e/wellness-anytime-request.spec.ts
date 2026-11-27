@@ -63,7 +63,7 @@ async function openRequestsTab(page: Page): Promise<void> {
 
 /** Answer the template's required scale question and submit; expects the standing success card */
 async function submitCheckIn(page: Page): Promise<boolean> {
-  await expect(page.getByTestId('standing-replace-note')).toBeVisible();
+  await expect(page.getByTestId('standing-replace-note')).toContainText('not monitored in real time');
   // Standing requests use the signed-in athlete: no name picker
   await expect(page.getByTestId('athlete-selector')).toHaveCount(0);
   const slider = page.getByRole('slider').first();
@@ -265,7 +265,7 @@ test.describe.serial('Wellness Anytime requests', () => {
     await page.click('button[type="submit"]');
 
     await page.waitForURL(url => url.pathname === `/wellness/submit/${publicToken}`);
-    await expect(page.getByTestId('standing-replace-note')).toBeVisible();
+    await expect(page.getByTestId('standing-replace-note')).toContainText('not monitored in real time');
     await page.context().close();
   });
 });
